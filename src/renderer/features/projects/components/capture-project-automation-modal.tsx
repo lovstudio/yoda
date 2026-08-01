@@ -1,18 +1,22 @@
-import { Loader2, WandSparkles } from 'lucide-react';
+import { Bot, Loader2, Package, TerminalSquare, WandSparkles } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { Branch } from '@shared/git';
 import type { QuickAction } from '@shared/project-settings';
+import type { CompiledQuickAction, ProjectPackageScript } from '@shared/quick-actions';
 import { taskNameFromPrompt } from '@shared/task-name';
 import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import {
   asMounted,
   getProjectSettingsStore,
   getProjectStore,
+  getRepositoryStore,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { rpc } from '@renderer/lib/ipc';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
@@ -26,6 +30,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from '@renderer/lib/u
 import { Input } from '@renderer/lib/ui/input';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
+import { cn } from '@renderer/utils/utils';
 
 type CaptureProjectAutomationModalArgs = {
   projectId: string;
@@ -33,10 +38,14 @@ type CaptureProjectAutomationModalArgs = {
 };
 
 type Props = BaseModalProps<void> & CaptureProjectAutomationModalArgs;
-type InputMode = 'describe' | 'command';
+type InputMode = 'package' | 'command' | 'describe';
 
 function genId(): string {
   return crypto.randomUUID();
+}
+
+function compiledContent(result: CompiledQuickAction): string {
+  return result.kind === 'command' ? result.command : result.instruction;
 }
 
 export const CaptureProjectAutomationModal = observer(function CaptureProjectAutomationModal({
@@ -46,15 +55,20 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
   onClose,
 }: Props) {
   const { t } = useTranslation();
+  const { navigate } = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [scriptsLoading, setScriptsLoading] = useState(true);
+  const [scriptsFailed, setScriptsFailed] = useState(false);
+  const [scripts, setScripts] = useState<ProjectPackageScript[]>([]);
+  const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
   const [compiling, setCompiling] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [inputMode, setInputMode] = useState<InputMode>('describe');
+  const [inputMode, setInputMode] = useState<InputMode>('package');
   const [intent, setIntent] = useState('');
-  const [command, setCommand] = useState('');
+  const [manualCommand, setManualCommand] = useState('');
+  const [compiled, setCompiled] = useState<CompiledQuickAction | null>(null);
   const [compiledIntent, setCompiledIntent] = useState<string | null>(null);
-  const [explanation, setExplanation] = useState('');
   const [label, setLabel] = useState('');
   const [labelOverridden, setLabelOverridden] = useState(false);
   const [quickActionId] = useState(() => genId());
@@ -76,33 +90,72 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     if (!settingsStore) {
       setError(t('projects.projectNotReady'));
       setLoading(false);
+      setScriptsLoading(false);
       return;
     }
     setError(null);
     setLoading(true);
-    void (async () => {
-      await settingsStore.pageData.load();
-      if (cancelled) return;
-      setLoading(false);
-    })();
+    setScriptsLoading(true);
+    setScriptsFailed(false);
+    void settingsStore.pageData
+      .load()
+      .catch(() => {
+        if (!cancelled) setError(t('projects.settings.loadFailed'));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    void rpc.quickActions
+      .discover(projectId)
+      .then((items) => {
+        if (cancelled) return;
+        setScripts(items);
+        setSelectedScriptId((current) => current ?? items[0]?.id ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setScriptsFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setScriptsLoading(false);
+      });
     return () => {
       cancelled = true;
     };
-  }, [settingsStore, t]);
+  }, [projectId, settingsStore, t]);
 
+  const selectedScript = scripts.find((script) => script.id === selectedScriptId) ?? null;
   const cleanedIntent = intent.trim();
-  const cleanedCommand = command.trim();
-  const hasIntent = cleanedIntent.length > 0;
-  const hasCommand = cleanedCommand.length > 0;
-  const hasCurrentGeneratedCommand = compiledIntent === cleanedIntent && hasIntent && hasCommand;
+  const cleanedManualCommand = manualCommand.trim();
+  const hasCurrentAnalysis =
+    compiled !== null && compiledIntent === cleanedIntent && cleanedIntent.length > 0;
   const isLocalProject = projectData?.type === 'local';
   const runtimeCanCompile = runtimeId === 'codex' || runtimeId === 'claude';
   const compilationUnavailable = !isLocalProject || !runtimeCanCompile || createDisabled;
-  const commandSource = inputMode === 'describe' ? cleanedIntent : cleanedCommand;
-  const suggestedLabel = useMemo(() => taskNameFromPrompt(commandSource), [commandSource]);
-  const showCommandField = inputMode === 'command' || compiledIntent !== null;
-  const commandNeedsRefresh =
-    inputMode === 'describe' && compiledIntent !== null && compiledIntent !== cleanedIntent;
+  const actionContent =
+    inputMode === 'package'
+      ? (selectedScript?.command ?? '')
+      : inputMode === 'command'
+        ? cleanedManualCommand
+        : compiled
+          ? compiledContent(compiled).trim()
+          : cleanedIntent;
+  const suggestedLabel = useMemo(
+    () =>
+      inputMode === 'package' && selectedScript
+        ? selectedScript.label
+        : inputMode === 'describe' && hasCurrentAnalysis && compiled
+          ? compiled.label
+          : taskNameFromPrompt(actionContent),
+    [actionContent, compiled, hasCurrentAnalysis, inputMode, selectedScript]
+  );
+  const analysisNeedsRefresh =
+    inputMode === 'describe' && compiled !== null && compiledIntent !== cleanedIntent;
+  const hasAction =
+    inputMode === 'package'
+      ? selectedScript !== null
+      : inputMode === 'command'
+        ? cleanedManualCommand.length > 0
+        : hasCurrentAnalysis && actionContent.length > 0;
 
   useEffect(() => {
     if (labelOverridden) return;
@@ -115,7 +168,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
   };
 
   const handleCompile = async () => {
-    if (!hasIntent) {
+    if (!cleanedIntent) {
       setError(t('sidebar.captureAutomation.intentRequired'));
       return;
     }
@@ -131,8 +184,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
         intent: cleanedIntent,
         runtimeId,
       });
-      setCommand(result.command);
-      setExplanation(result.explanation);
+      setCompiled(result);
       setCompiledIntent(cleanedIntent);
       if (!labelOverridden) setLabel(result.label);
     } catch (compileError) {
@@ -146,29 +198,51 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     }
   };
 
-  const saveQuickAction = async (): Promise<QuickAction | null> => {
+  const buildAction = (): QuickAction | null => {
+    const cleanedLabel =
+      label.trim() || suggestedLabel || t('sidebar.captureAutomation.defaultLabel');
+    if (inputMode === 'package' && selectedScript) {
+      return {
+        id: quickActionId,
+        label: cleanedLabel,
+        command: selectedScript.command,
+        kind: 'command',
+      };
+    }
+    if (inputMode === 'command' && cleanedManualCommand) {
+      return {
+        id: quickActionId,
+        label: cleanedLabel,
+        command: cleanedManualCommand,
+        kind: 'command',
+      };
+    }
+    if (inputMode === 'describe' && hasCurrentAnalysis && compiled) {
+      return {
+        id: quickActionId,
+        label: cleanedLabel,
+        command: compiledContent(compiled).trim(),
+        kind: compiled.kind,
+        sourceIntent: cleanedIntent,
+      };
+    }
+    return null;
+  };
+
+  const saveQuickAction = async (action: QuickAction): Promise<boolean> => {
     const currentSettings = settingsStore?.settings;
     if (!settingsStore || !currentSettings) {
       setError(t('projects.projectNotReady'));
-      return null;
+      return false;
     }
-    if (!cleanedCommand) {
-      setError(t('sidebar.captureAutomation.commandRequired'));
-      return null;
-    }
-    const cleanedLabel =
-      label.trim() || suggestedLabel || t('sidebar.captureAutomation.defaultLabel');
-    const action: QuickAction = {
-      id: quickActionId,
-      label: cleanedLabel,
-      command: cleanedCommand,
-      kind: 'shell',
-      ...(inputMode === 'describe' && cleanedIntent ? { sourceIntent: cleanedIntent } : {}),
-    };
     const currentActions = currentSettings.quickActions ?? [];
-    const nextActions = currentActions.some((item) => item.id === action.id)
-      ? currentActions.map((item) => (item.id === action.id ? action : item))
-      : [...currentActions, action];
+    const existing = currentActions.find(
+      (item) => item.kind === action.kind && item.command.trim() === action.command.trim()
+    );
+    const savedAction = existing ? { ...action, id: existing.id } : action;
+    const nextActions = existing
+      ? currentActions.map((item) => (item.id === existing.id ? savedAction : item))
+      : [...currentActions, savedAction];
     const nextSettings = JSON.parse(
       JSON.stringify({
         ...currentSettings,
@@ -176,49 +250,59 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
       })
     ) as typeof currentSettings;
     const updateRes = await settingsStore.save(nextSettings);
-    if (!updateRes.success) {
-      setError(t('projects.settings.saveFailed'));
-      return null;
-    }
-    return action;
+    return updateRes.success;
   };
 
   const handleSubmit = async () => {
     if (loading || submitting) return;
+    const action = buildAction();
+    if (!action) {
+      setError(
+        inputMode === 'describe'
+          ? t('sidebar.captureAutomation.analyzeBeforeRun')
+          : t('sidebar.captureAutomation.commandRequired')
+      );
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
       const project = asMounted(getProjectStore(projectId));
-      if (!project || project.data.type !== 'local') {
+      if (!project) {
         setError(t('sidebar.captureAutomation.executionUnavailable'));
         return;
       }
-      if (!cleanedCommand) {
-        setError(t('sidebar.captureAutomation.commandRequired'));
-        return;
-      }
-      if (inputMode === 'describe' && !hasCurrentGeneratedCommand) {
-        setError(t('sidebar.captureAutomation.generateBeforeSave'));
-        return;
-      }
 
-      const action = await saveQuickAction();
-      if (!action) return;
-
-      try {
-        const result = await runProjectQuickAction({ project, action });
-        if (result.kind !== 'shell') {
-          setError(t('sidebar.captureAutomation.savedButExecutionFailed'));
+      let defaultBranch: Branch | undefined;
+      if (action.kind === 'skill') {
+        const repository = getRepositoryStore(projectId);
+        if (!repository || !runtimeId) {
+          setError(t('sidebar.captureAutomation.skillExecutionUnavailable'));
           return;
         }
-        onSuccess();
-      } catch (executionError) {
-        setError(
-          t('sidebar.captureAutomation.savedButExecutionFailedWithReason', {
-            error:
-              executionError instanceof Error ? executionError.message : String(executionError),
-          })
-        );
+        await Promise.all([repository.localData.load(), repository.remoteData.load()]);
+        defaultBranch = repository.defaultBranch;
+        if (!defaultBranch) {
+          setError(t('sidebar.captureAutomation.skillExecutionUnavailable'));
+          return;
+        }
+      }
+
+      const result = await runProjectQuickAction({
+        project,
+        action,
+        runtimeId,
+        defaultBranch,
+      });
+      const saved = await saveQuickAction(action);
+      if (!saved) {
+        setError(t('sidebar.captureAutomation.executedButSaveFailed'));
+        return;
+      }
+      onSuccess();
+      if (result.kind === 'skill') {
+        navigate('task', { projectId, taskId: result.taskId });
       }
     } catch (submitError) {
       setError(
@@ -232,7 +316,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
   };
 
   const handlePrimaryAction = async () => {
-    if (inputMode === 'describe' && !hasCurrentGeneratedCommand) {
+    if (inputMode === 'describe' && !hasCurrentAnalysis) {
       await handleCompile();
       return;
     }
@@ -243,11 +327,13 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     loading ||
     compiling ||
     submitting ||
-    (inputMode === 'describe'
-      ? hasCurrentGeneratedCommand
-        ? !isLocalProject
-        : !hasIntent || compilationUnavailable
-      : !hasCommand || !isLocalProject);
+    (inputMode === 'package'
+      ? scriptsLoading || !selectedScript
+      : inputMode === 'command'
+        ? !cleanedManualCommand
+        : hasCurrentAnalysis
+          ? !actionContent
+          : !cleanedIntent || compilationUnavailable);
 
   return (
     <>
@@ -268,14 +354,89 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
                 setError(null);
               }}
             >
-              <ToggleGroupItem value="describe" className="flex-1">
-                {t('sidebar.captureAutomation.describeMode')}
+              <ToggleGroupItem value="package" className="flex-1">
+                <Package className="size-3.5" />
+                {t('sidebar.captureAutomation.packageMode')}
               </ToggleGroupItem>
               <ToggleGroupItem value="command" className="flex-1">
+                <TerminalSquare className="size-3.5" />
                 {t('sidebar.captureAutomation.commandMode')}
+              </ToggleGroupItem>
+              <ToggleGroupItem value="describe" className="flex-1">
+                <WandSparkles className="size-3.5" />
+                {t('sidebar.captureAutomation.describeMode')}
               </ToggleGroupItem>
             </ToggleGroup>
           </Field>
+
+          {inputMode === 'package' ? (
+            <Field>
+              <FieldLabel>{t('sidebar.captureAutomation.packageScriptLabel')}</FieldLabel>
+              <FieldDescription>
+                {t('sidebar.captureAutomation.packageScriptDescription')}
+              </FieldDescription>
+              <div className="max-h-56 overflow-y-auto rounded-md border border-border p-1">
+                {scriptsLoading ? (
+                  <div className="flex items-center gap-2 px-3 py-4 text-xs text-foreground-muted">
+                    <Loader2 className="size-3.5 animate-spin" />
+                    {t('sidebar.captureAutomation.loadingScripts')}
+                  </div>
+                ) : scriptsFailed ? (
+                  <p className="px-3 py-4 text-xs text-destructive">
+                    {t('sidebar.captureAutomation.loadScriptsFailed')}
+                  </p>
+                ) : scripts.length === 0 ? (
+                  <p className="px-3 py-4 text-xs text-foreground-muted">
+                    {t('sidebar.captureAutomation.noPackageScripts')}
+                  </p>
+                ) : (
+                  scripts.map((script) => {
+                    const selected = script.id === selectedScriptId;
+                    return (
+                      <button
+                        key={script.id}
+                        type="button"
+                        data-package-script-id={script.id}
+                        aria-pressed={selected}
+                        className={cn(
+                          'flex w-full flex-col gap-0.5 rounded-sm px-3 py-2 text-left outline-none transition-colors',
+                          'hover:bg-background-quaternary focus-visible:ring-2 focus-visible:ring-ring',
+                          selected && 'bg-background-quaternary'
+                        )}
+                        onClick={() => setSelectedScriptId(script.id)}
+                      >
+                        <span className="text-sm font-medium">{script.label}</span>
+                        <span className="font-mono text-[11px] text-foreground-muted">
+                          {script.command}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </Field>
+          ) : null}
+
+          {inputMode === 'command' ? (
+            <Field>
+              <FieldLabel htmlFor="quick-action-command">
+                {t('sidebar.captureAutomation.directCommandLabel')}
+              </FieldLabel>
+              <Textarea
+                id="quick-action-command"
+                rows={4}
+                value={manualCommand}
+                onChange={(event) => setManualCommand(event.currentTarget.value)}
+                disabled={loading}
+                placeholder={t('sidebar.captureAutomation.commandPlaceholder')}
+                autoFocus
+                className="font-mono text-xs"
+              />
+              <FieldDescription>
+                {t('sidebar.captureAutomation.directCommandDescription')}
+              </FieldDescription>
+            </Field>
+          ) : null}
 
           {inputMode === 'describe' ? (
             <Field>
@@ -294,7 +455,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
               <FieldDescription>
                 {t('sidebar.captureAutomation.intentDescription')}
               </FieldDescription>
-              {hasIntent && compilationUnavailable && !hasCurrentGeneratedCommand ? (
+              {cleanedIntent && compilationUnavailable && !hasCurrentAnalysis ? (
                 <FieldDescription className="text-destructive">
                   {t('sidebar.captureAutomation.compilationUnavailable')}
                 </FieldDescription>
@@ -302,46 +463,67 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
             </Field>
           ) : null}
 
-          {showCommandField ? (
+          {inputMode === 'describe' && compiled ? (
             <Field>
-              <FieldLabel htmlFor="quick-action-command">
-                {t(
-                  inputMode === 'describe'
-                    ? 'sidebar.captureAutomation.generatedCommandLabel'
-                    : 'sidebar.captureAutomation.directCommandLabel'
-                )}
-              </FieldLabel>
+              <div className="flex items-center justify-between gap-3">
+                <FieldLabel htmlFor="quick-action-generated-content">
+                  {t(
+                    compiled.kind === 'command'
+                      ? 'sidebar.captureAutomation.generatedCommandLabel'
+                      : 'sidebar.captureAutomation.generatedSkillLabel'
+                  )}
+                </FieldLabel>
+                <span className="flex items-center gap-1 rounded-full bg-background-quaternary px-2 py-0.5 text-[11px] text-foreground-muted">
+                  {compiled.kind === 'command' ? (
+                    <TerminalSquare className="size-3" />
+                  ) : (
+                    <Bot className="size-3" />
+                  )}
+                  {t(
+                    compiled.kind === 'command'
+                      ? 'sidebar.captureAutomation.commandKind'
+                      : 'sidebar.captureAutomation.skillKind'
+                  )}
+                </span>
+              </div>
               <Textarea
-                id="quick-action-command"
+                id="quick-action-generated-content"
                 rows={4}
-                value={command}
-                onChange={(event) => setCommand(event.currentTarget.value)}
+                value={compiledContent(compiled)}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  setCompiled((current) =>
+                    current?.kind === 'command'
+                      ? { ...current, command: value }
+                      : current?.kind === 'skill'
+                        ? { ...current, instruction: value }
+                        : current
+                  );
+                }}
                 disabled={loading || compiling}
-                placeholder={t('sidebar.captureAutomation.commandPlaceholder')}
-                autoFocus={inputMode === 'command'}
-                className="font-mono text-xs"
+                className={compiled.kind === 'command' ? 'font-mono text-xs' : undefined}
               />
               <FieldDescription>
                 {t(
-                  inputMode === 'describe'
+                  compiled.kind === 'command'
                     ? 'sidebar.captureAutomation.generatedCommandDescription'
-                    : 'sidebar.captureAutomation.directCommandDescription'
+                    : 'sidebar.captureAutomation.generatedSkillDescription'
                 )}
               </FieldDescription>
-              {commandNeedsRefresh ? (
+              {analysisNeedsRefresh ? (
                 <FieldDescription className="text-status-in-progress">
-                  {t('sidebar.captureAutomation.commandNeedsRefresh')}
+                  {t('sidebar.captureAutomation.analysisNeedsRefresh')}
                 </FieldDescription>
               ) : null}
-              {inputMode === 'describe' && explanation ? (
-                <FieldDescription>
-                  {t('sidebar.captureAutomation.commandEvidence', { explanation })}
-                </FieldDescription>
-              ) : null}
+              <FieldDescription>
+                {t('sidebar.captureAutomation.analysisEvidence', {
+                  explanation: compiled.explanation,
+                })}
+              </FieldDescription>
             </Field>
           ) : null}
 
-          {showCommandField && hasCommand ? (
+          {hasAction ? (
             <Field className="border-t border-border pt-5">
               <FieldLabel htmlFor="quick-action-label">
                 {t('sidebar.captureAutomation.actionLabel')}
@@ -367,24 +549,24 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
           {compiling ? (
             <>
               <Loader2 className="size-3.5 animate-spin" />
-              {t('sidebar.captureAutomation.generatingCommand')}
+              {t('sidebar.captureAutomation.analyzing')}
             </>
           ) : submitting ? (
             <>
               <Loader2 className="size-3.5 animate-spin" />
-              {t('sidebar.captureAutomation.savingAndRunning')}
+              {t('sidebar.captureAutomation.runningAndSaving')}
             </>
-          ) : inputMode === 'describe' && !hasCurrentGeneratedCommand ? (
+          ) : inputMode === 'describe' && !hasCurrentAnalysis ? (
             <>
               <WandSparkles className="size-3.5" />
               {t(
                 compiledIntent === null
-                  ? 'sidebar.captureAutomation.generateCommand'
-                  : 'sidebar.captureAutomation.regenerateCommand'
+                  ? 'sidebar.captureAutomation.analyze'
+                  : 'sidebar.captureAutomation.analyzeAgain'
               )}
             </>
           ) : (
-            t('sidebar.captureAutomation.saveAndRun')
+            t('sidebar.captureAutomation.runAndSave')
           )}
         </ConfirmButton>
       </DialogFooter>

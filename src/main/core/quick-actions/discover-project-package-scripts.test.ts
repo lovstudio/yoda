@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FileSystemProvider } from '@main/core/fs/types';
-import { discoverProjectLaunchCommands } from './discover-project-launch-commands';
+import { discoverProjectPackageScripts } from './discover-project-package-scripts';
 
 function manifestReader(
   packageJson: Record<string, unknown>,
@@ -15,8 +15,8 @@ function manifestReader(
   };
 }
 
-describe('discoverProjectLaunchCommands', () => {
-  it('uses the declared package manager and returns launch-oriented scripts in priority order', async () => {
+describe('discoverProjectPackageScripts', () => {
+  it('uses the declared package manager and returns every package script in manifest order', async () => {
     const fs = manifestReader({
       packageManager: 'pnpm@10.28.2',
       scripts: {
@@ -29,11 +29,17 @@ describe('discoverProjectLaunchCommands', () => {
       },
     });
 
-    await expect(discoverProjectLaunchCommands(fs)).resolves.toEqual([
+    await expect(discoverProjectPackageScripts(fs)).resolves.toEqual([
       {
-        id: 'package.json:dev',
-        label: 'dev',
-        command: 'pnpm run dev',
+        id: 'package.json:lint',
+        label: 'lint',
+        command: 'pnpm run lint',
+        source: 'package.json',
+      },
+      {
+        id: 'package.json:mobile:ios',
+        label: 'mobile:ios',
+        command: 'pnpm run mobile:ios',
         source: 'package.json',
       },
       {
@@ -43,21 +49,27 @@ describe('discoverProjectLaunchCommands', () => {
         source: 'package.json',
       },
       {
+        id: 'package.json:build',
+        label: 'build',
+        command: 'pnpm run build',
+        source: 'package.json',
+      },
+      {
+        id: 'package.json:dev',
+        label: 'dev',
+        command: 'pnpm run dev',
+        source: 'package.json',
+      },
+      {
         id: 'package.json:preview',
         label: 'preview',
         command: 'pnpm run preview',
         source: 'package.json',
       },
-      {
-        id: 'package.json:mobile:ios',
-        label: 'mobile:ios',
-        command: 'pnpm run mobile:ios',
-        source: 'package.json',
-      },
     ]);
   });
 
-  it('falls back to the repository lockfile and detects aliases that delegate to dev', async () => {
+  it('falls back to the repository lockfile', async () => {
     const fs = manifestReader(
       {
         scripts: {
@@ -68,11 +80,17 @@ describe('discoverProjectLaunchCommands', () => {
       ['yarn.lock']
     );
 
-    await expect(discoverProjectLaunchCommands(fs)).resolves.toEqual([
+    await expect(discoverProjectPackageScripts(fs)).resolves.toEqual([
       {
         id: 'package.json:d',
         label: 'd',
         command: 'yarn run d',
+        source: 'package.json',
+      },
+      {
+        id: 'package.json:test',
+        label: 'test',
+        command: 'yarn run test',
         source: 'package.json',
       },
     ]);
@@ -82,6 +100,6 @@ describe('discoverProjectLaunchCommands', () => {
     const fs = manifestReader({});
     vi.mocked(fs.read).mockRejectedValue(new Error('missing'));
 
-    await expect(discoverProjectLaunchCommands(fs)).resolves.toEqual([]);
+    await expect(discoverProjectPackageScripts(fs)).resolves.toEqual([]);
   });
 });
