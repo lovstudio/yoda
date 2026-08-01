@@ -414,6 +414,67 @@ describe('resolveCodexThreadIdForConversation', () => {
     ).toEqual({ id: 'forked-thread', title: 'Original provider title' });
   });
 
+  it('resumes a discovered session from its latest reachable rewind fork', () => {
+    const rootRolloutPath = join(dir, 'discovered-root.jsonl');
+    const forkedRolloutPath = join(dir, 'discovered-fork.jsonl');
+    writeFileSync(
+      rootRolloutPath,
+      JSON.stringify({
+        type: 'session_meta',
+        payload: { id: 'discovered-root', cwd: '/repo' },
+      })
+    );
+    writeFileSync(
+      forkedRolloutPath,
+      JSON.stringify({
+        type: 'session_meta',
+        payload: {
+          id: 'discovered-fork',
+          forked_from_id: 'discovered-root',
+          cwd: '/repo',
+        },
+      })
+    );
+    insertThread(statePath, {
+      id: 'discovered-root',
+      cwd: '/repo',
+      title: 'Discovered session',
+      createdAtMs: Date.parse('2026-08-01T01:57:02.000Z'),
+      updatedAtMs: Date.parse('2026-08-01T02:23:20.000Z'),
+      rolloutPath: rootRolloutPath,
+    });
+    insertThread(statePath, {
+      id: 'discovered-fork',
+      cwd: '/repo',
+      title: 'Discovered session',
+      createdAtMs: Date.parse('2026-08-01T02:23:22.000Z'),
+      updatedAtMs: Date.parse('2026-08-01T03:01:19.000Z'),
+      rolloutPath: forkedRolloutPath,
+    });
+
+    expect(
+      resolveAgentResumeSession(
+        {
+          id: 'yoda-conversation',
+          projectId: 'project-1',
+          taskId: 'task-1',
+          runtimeId: 'codex',
+          title: 'Discovered session',
+          createdAt: '2026-08-01 01:57:02',
+          lastInteractedAt: '2026-08-01T02:39:59.000Z',
+          isInitialConversation: true,
+          sessionSource: {
+            catalogId: 'catalog-1',
+            runtimeId: 'codex',
+            sessionId: 'discovered-root',
+            stateRoot: dir,
+          },
+        },
+        '/repo'
+      )
+    ).toEqual({ sessionId: 'discovered-fork', sessionTitle: 'Discovered session' });
+  });
+
   it('keeps a provider fork reserved by another Yoda conversation separate', () => {
     const rootRolloutPath = join(dir, 'reserved-root.jsonl');
     const forkedRolloutPath = join(dir, 'reserved-fork.jsonl');

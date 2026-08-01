@@ -5,7 +5,7 @@ import {
   readCodexThreadRolloutPath,
   resolveCodexStatePath,
 } from '@main/core/session-title/codex-title-source';
-import { resolveCodexThreadForConversation } from './codex-session-id';
+import { resolveAgentResumeSession } from './codex-session-id';
 import { getConversationAgentSessionId } from './conversation-session-source';
 import { getCodexSessionContext } from './getCodexSessionContext';
 
@@ -260,22 +260,13 @@ async function resolveCodexRolloutContext(conversation: Conversation, cwd: strin
   if (conversation.runtimeId !== 'codex') return null;
   const source = conversation.sessionSource;
   const statePath = resolveCodexStatePath(source?.stateRoot);
-  const thread = source
-    ? { id: source.sessionId, title: conversation.title }
-    : resolveCodexThreadForConversation({
-        conversationId: conversation.id,
-        cwd,
-        title: conversation.title,
-        createdAt: conversation.createdAt,
-        lastInteractedAt: conversation.lastInteractedAt,
-        statePath,
-      });
-  if (thread) {
-    const rolloutPath = readCodexThreadRolloutPath(statePath, thread.id);
+  const session = resolveAgentResumeSession(conversation, cwd);
+  if (session) {
+    const rolloutPath = readCodexThreadRolloutPath(statePath, session.sessionId);
     if (rolloutPath) {
       return {
-        threadId: thread.id,
-        title: thread.title ?? conversation.title,
+        threadId: session.sessionId,
+        title: session.sessionTitle ?? conversation.title,
         rolloutPath,
       };
     }

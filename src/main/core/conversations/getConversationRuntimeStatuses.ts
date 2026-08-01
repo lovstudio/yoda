@@ -131,20 +131,19 @@ async function deriveStatus(args: {
   } else if (provider === 'codex') {
     const startedAtMs = parseTimestampMs(createdAt);
     const reservedThreadIds = await getReservedCodexThreadIds(conversationId);
-    const threadId =
-      sessionSource?.runtimeId === 'codex'
-        ? sessionSource.sessionId
-        : resolveCodexThreadIdForConversation({
-            conversationId,
-            cwd,
-            title: title ?? undefined,
-            createdAt,
-            reservedThreadIds,
-          });
     const statePath =
       sessionSource?.runtimeId === 'codex'
         ? resolveCodexStatePath(sessionSource.stateRoot)
         : undefined;
+    const threadId = resolveCodexThreadIdForConversation({
+      conversationId:
+        sessionSource?.runtimeId === 'codex' ? sessionSource.sessionId : conversationId,
+      cwd,
+      title: title ?? undefined,
+      createdAt,
+      statePath,
+      reservedThreadIds,
+    });
     const verdict = await readCodexTurnVerdict(
       conversationId,
       cwd && startedAtMs !== undefined

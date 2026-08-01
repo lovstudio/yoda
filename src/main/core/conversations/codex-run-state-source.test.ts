@@ -330,35 +330,55 @@ describe('resolveCodexRolloutPathForConversation', () => {
     ).resolves.toEqual({ state: 'idle', lastStartedAt: at });
   });
 
-  it('prefers an explicit resumed thread over the most recently updated thread in the same cwd', () => {
+  it('prefers an explicit resumed thread over the most recently updated thread in the same cwd', async () => {
     dir = mkdtempSync(join(tmpdir(), 'yoda-codex-run-state-'));
     const statePath = join(dir, 'state_5.sqlite');
+    const resumedRolloutPath = join(dir, 'resumed.jsonl');
+    const otherRolloutPath = join(dir, 'other.jsonl');
+    const startedAtMs = Date.parse('2026-07-11T07:00:00.000Z');
     createStateDb(statePath);
+    writeFileSync(
+      resumedRolloutPath,
+      `${line({ type: 'task_started', turn_id: 'resumed' })}\n${line({
+        type: 'task_complete',
+        turn_id: 'resumed',
+      })}\n`
+    );
+    writeFileSync(otherRolloutPath, `${line({ type: 'task_started', turn_id: 'other' })}\n`);
     insertThread(statePath, {
       id: 'resumed-thread',
       cwd: '/shared-repo',
-      rolloutPath: '/rollouts/resumed.jsonl',
+      rolloutPath: resumedRolloutPath,
       createdAtMs: Date.parse('2026-07-09T01:37:01.000Z'),
       updatedAtMs: Date.parse('2026-07-09T02:00:00.000Z'),
     });
     insertThread(statePath, {
       id: 'other-task-thread',
       cwd: '/shared-repo',
-      rolloutPath: '/rollouts/other.jsonl',
+      rolloutPath: otherRolloutPath,
       createdAtMs: Date.parse('2026-07-10T03:48:19.000Z'),
-      updatedAtMs: Date.parse('2026-07-11T06:51:15.000Z'),
+      updatedAtMs: Date.parse('2026-07-11T06:59:59.000Z'),
     });
 
     expect(
       resolveCodexRolloutPathForConversation({
         conversationId: 'yoda-conversation',
         cwd: '/shared-repo',
-        startedAtMs: Date.parse('2026-07-11T07:00:00.000Z'),
+        startedAtMs,
         isResuming: true,
         threadId: 'resumed-thread',
         statePath,
       })
-    ).toBe('/rollouts/resumed.jsonl');
+    ).toBe(resumedRolloutPath);
+    await expect(
+      readCodexTurnVerdict('yoda-conversation', {
+        cwd: '/shared-repo',
+        startedAtMs,
+        isResuming: true,
+        threadId: 'resumed-thread',
+        statePath,
+      })
+    ).resolves.toEqual({ state: 'idle', lastStartedAt: at });
   });
 
   it('initializes a watcher from the bounded tail of a large historical rollout', async () => {
