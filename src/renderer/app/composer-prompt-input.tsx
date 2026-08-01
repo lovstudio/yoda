@@ -268,6 +268,52 @@ function measureComposerMenuPosition(anchor: HTMLElement): ComposerMenuPosition 
   };
 }
 
+function useComposerMenuPosition(
+  anchorRef: RefObject<HTMLDivElement | null>
+): ComposerMenuPosition | null {
+  const [position, setPosition] = useState<ComposerMenuPosition | null>(null);
+
+  const updatePosition = useCallback(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    setPosition(measureComposerMenuPosition(anchor));
+  }, [anchorRef]);
+
+  useLayoutEffect(() => {
+    updatePosition();
+    const anchor = anchorRef.current;
+    if (!anchor) return undefined;
+
+    const observer = new ResizeObserver(updatePosition);
+    observer.observe(anchor);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [anchorRef, updatePosition]);
+
+  return position;
+}
+
+function composerMenuStyle(position: ComposerMenuPosition): CSSProperties {
+  const style: CSSProperties = {
+    left: position.left,
+    position: 'fixed',
+    width: position.width,
+    maxHeight: position.maxHeight,
+  };
+  if (position.side === 'top') {
+    style.bottom = position.offset;
+  } else {
+    style.top = position.offset;
+  }
+  return style;
+}
+
 function isTargetInSkillShortcutMenu(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest('[data-skill-shortcut-menu]') !== null;
 }
@@ -1144,6 +1190,7 @@ export function ComposerPromptInput({
             )}
             {pathCompletionOpen && activePathMention && (
               <PathCompletionMenu
+                anchorRef={inputAnchorRef}
                 items={pathCompletionItems}
                 activeIndex={activePathCompletionIndex}
                 loading={pathCompletionLoading}
@@ -1388,6 +1435,7 @@ export function ComposerPromptInput({
 }
 
 interface PathCompletionMenuProps {
+  anchorRef: RefObject<HTMLDivElement | null>;
   items: PathCompletionItem[];
   activeIndex: number;
   loading: boolean;
@@ -1403,6 +1451,7 @@ interface PathCompletionMenuProps {
 }
 
 function PathCompletionMenu({
+  anchorRef,
   items,
   activeIndex,
   loading,
@@ -1412,12 +1461,24 @@ function PathCompletionMenu({
   onActiveIndexChange,
   onSelect,
 }: PathCompletionMenuProps) {
-  if (!loading && !error && items.length === 0 && !showEmpty) return null;
+  const activeItemRef = useRef<HTMLButtonElement>(null);
+  const position = useComposerMenuPosition(anchorRef);
 
-  return (
+  useEffect(() => {
+    activeItemRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex, position]);
+
+  if (!loading && !error && items.length === 0 && !showEmpty) return null;
+  if (!position || typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
+      data-path-completion-menu
       role="listbox"
-      className="absolute left-3 right-3 top-full z-40 mt-1 max-h-64 overflow-hidden rounded-lg border border-border bg-background-quaternary py-1 text-sm text-foreground shadow-lg ring-1 ring-foreground/5"
+      className="fixed z-[60] flex flex-col overflow-hidden rounded-lg border border-border bg-background-quaternary text-sm text-foreground shadow-lg ring-1 ring-foreground/5"
+      style={composerMenuStyle(position)}
+      onMouseDown={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
     >
       {loading && items.length === 0 ? (
         <div className="flex items-center gap-2 px-3 py-2 text-foreground-muted">
@@ -1429,13 +1490,14 @@ function PathCompletionMenu({
       ) : items.length === 0 && showEmpty ? (
         <div className="px-3 py-2 text-foreground-muted">{labels.noResults}</div>
       ) : items.length === 0 ? null : (
-        <div className="max-h-64 overflow-y-auto">
+        <div className="min-h-0 overflow-y-auto py-1">
           {items.map((item, index) => {
             const Icon = item.type === 'dir' ? Folder : FileText;
             const active = index === activeIndex;
             return (
               <button
                 key={`${item.type}:${item.path}`}
+                ref={active ? activeItemRef : undefined}
                 type="button"
                 role="option"
                 aria-selected={active}
@@ -1456,7 +1518,8 @@ function PathCompletionMenu({
           })}
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1495,48 +1558,14 @@ function SkillShortcutMenu({
   onSelect,
 }: SkillShortcutMenuProps) {
   const activeItemRef = useRef<HTMLButtonElement>(null);
-  const [position, setPosition] = useState<ComposerMenuPosition | null>(null);
-
-  const updatePosition = useCallback(() => {
-    const anchor = anchorRef.current;
-    if (!anchor) return;
-    setPosition(measureComposerMenuPosition(anchor));
-  }, [anchorRef]);
+  const position = useComposerMenuPosition(anchorRef);
 
   useEffect(() => {
     activeItemRef.current?.scrollIntoView({ block: 'nearest' });
   }, [activeIndex, position]);
 
-  useLayoutEffect(() => {
-    updatePosition();
-    const anchor = anchorRef.current;
-    if (!anchor) return undefined;
-
-    const observer = new ResizeObserver(updatePosition);
-    observer.observe(anchor);
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
-    };
-  }, [anchorRef, updatePosition, items.length, loading, showEmpty]);
-
   if (!loading && items.length === 0 && !showEmpty) return null;
   if (!position || typeof document === 'undefined') return null;
-
-  const style: CSSProperties = {
-    left: position.left,
-    width: position.width,
-    maxHeight: position.maxHeight,
-  };
-  if (position.side === 'top') {
-    style.bottom = position.offset;
-  } else {
-    style.top = position.offset;
-  }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'ArrowDown') {
@@ -1568,7 +1597,7 @@ function SkillShortcutMenu({
     <div
       data-skill-shortcut-menu
       className="fixed z-[60] flex flex-col overflow-hidden rounded-lg border border-border bg-background-quaternary text-sm text-foreground shadow-lg ring-1 ring-foreground/5"
-      style={style}
+      style={composerMenuStyle(position)}
       onBlurCapture={(event) => {
         const nextTarget = event.relatedTarget;
         if (isTargetInSkillShortcutMenu(nextTarget)) return;
