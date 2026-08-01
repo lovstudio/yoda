@@ -3369,7 +3369,9 @@
     "unset": "unset",
     "runtimeInfo": {
       "version": "Version",
-      "latestVersion": "Latest v{{version}}",
+      "versionMenu": "Version details",
+      "latestVersionLabel": "Latest version",
+      "versionHistory": "View version history",
       "updateAvailable": "v{{version}} available",
       "model": "Model",
       "executable": "Executable",
@@ -3380,8 +3382,6 @@
         "official-api": "Official API",
         "yoda-maas": "Yoda MaaS"
       },
-      "configDetected": "Detected",
-      "configMissing": "Not created",
       "clientDefault": "Client default",
       "agentOverride": "Agent override",
       "currentSession": "Current session",

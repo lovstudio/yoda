@@ -3369,7 +3369,9 @@
     "unset": "未设置",
     "runtimeInfo": {
       "version": "版本",
-      "latestVersion": "最新 v{{version}}",
+      "versionMenu": "版本详情",
+      "latestVersionLabel": "最新版本",
+      "versionHistory": "查看历史版本",
       "updateAvailable": "可更新至 v{{version}}",
       "model": "模型",
       "executable": "可执行文件",
@@ -3380,8 +3382,6 @@
         "official-api": "官方 API",
         "yoda-maas": "Yoda 中转渠道"
       },
-      "configDetected": "已检测",
-      "configMissing": "尚未创建",
       "clientDefault": "客户端默认",
       "agentOverride": "Agent 覆盖",
       "currentSession": "当前会话",

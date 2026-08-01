@@ -3,6 +3,7 @@ import {
   getRuntimeAccountProfile,
   getUninstallCommandForRuntime,
   getUpdateCommandForRuntime,
+  getVersionHistoryUrlForRuntime,
   isValidRuntimeId,
   RUNTIME_IDS,
   RUNTIMES,
@@ -26,6 +27,18 @@ describe('runtime update commands', () => {
 
   it('does not fall back to an install command', () => {
     expect(getUpdateCommandForRuntime('claude')).toBeNull();
+  });
+});
+
+describe('runtime version history', () => {
+  it('returns the registered official Codex release archive', () => {
+    expect(getVersionHistoryUrlForRuntime('codex')).toBe(
+      'https://github.com/openai/codex/releases'
+    );
+  });
+
+  it('does not guess a release archive from a documentation URL', () => {
+    expect(getVersionHistoryUrlForRuntime('claude')).toBeNull();
   });
 });
 
