@@ -2340,13 +2340,15 @@
     },
     "addSubtask": {
       "title": "添加子任务",
-      "existingLabel": "选择已有任务",
+      "existingLabel": "添加已有任务",
       "searchPlaceholder": "搜索可添加的任务…",
       "noResults": "没有匹配的已有任务",
-      "newLabel": "或新建任务",
-      "newPlaceholder": "输入新子任务名称",
+      "newLabel": "新建子任务",
+      "newPlaceholder": "描述要完成的子任务；可选择 Skill 或添加附件…",
+      "executionHint": "仅创建会把任务加入当前层级；创建并运行会同时启动 Agent 会话。任务名称取自输入内容的第一行。",
       "addExisting": "添加",
-      "createAndAdd": "新建并添加",
+      "createOnly": "仅创建",
+      "createAndRun": "创建并运行 Agent",
       "failed": "添加子任务失败"
     },
     "createParent": {
