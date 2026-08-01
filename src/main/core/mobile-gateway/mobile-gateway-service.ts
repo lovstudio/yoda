@@ -19,6 +19,7 @@ import {
   MOBILE_APP_DEFAULT_INSTALL_URL,
   MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
   MOBILE_GATEWAY_DEFAULT_PORT,
+  MOBILE_INPUT_ATTACHMENT_MAX_COUNT,
   MOBILE_SESSION_CONTENT_MAX_CHARS,
   MOBILE_SESSION_INPUT_MAX_CHARS,
   MOBILE_SESSION_TRANSCRIPT_MAX_CHARS,
@@ -27,6 +28,11 @@ import {
   type MobileCreateDemandResponse,
   type MobileDashboardSnapshot,
   type MobileGatewayConnectionInfo,
+  type MobileInputAttachmentChunkRequest,
+  type MobileInputAttachmentCompleteResponse,
+  type MobileInputAttachmentCreateRequest,
+  type MobileInputAttachmentCreateResponse,
+  type MobileInputAttachmentDiscardResponse,
   type MobileProjectSummary,
   type MobileSessionContentSource,
   type MobileSessionDetail,
@@ -63,6 +69,7 @@ import {
 import { getConversationRuntimeStatuses } from '@main/core/conversations/getConversationRuntimeStatuses';
 import { getConversationSessionInfo } from '@main/core/conversations/getConversationSessionInfo';
 import { getConversationsForTask } from '@main/core/conversations/getConversationsForTask';
+import { injectConversationPrompt } from '@main/core/conversations/injectConversationPrompt';
 import { subscribeConversationTranscriptChanges } from '@main/core/conversations/transcript-feed';
 import { getProjectById, getProjects } from '@main/core/projects/operations/getProjects';
 import { openProject } from '@main/core/projects/operations/openProject';
@@ -75,6 +82,10 @@ import { getTasks } from '@main/core/tasks/operations/getTasks';
 import { taskManager } from '@main/core/tasks/task-manager';
 import { workspaceRegistry } from '@main/core/workspaces/workspace-registry';
 import { log } from '@main/lib/logger';
+import {
+  MobileInputAttachmentError,
+  MobileInputAttachmentStore,
+} from './mobile-input-attachment-store';
 import {
   MOBILE_SESSION_RECONNECT_RETRY_MS,
   MobileSessionEventStream,
@@ -521,8 +532,16 @@ function normalizeCreateDemandRequest(body: unknown): MobileCreateDemandRequest 
 
   const value = body as Record<string, unknown>;
   const prompt = typeof value.prompt === 'string' ? value.prompt.trim() : '';
-  if (!prompt) {
+  const attachmentIds = normalizeAttachmentIds(value.attachmentIds);
+  if (!prompt && attachmentIds.length === 0) {
     throw new MobileGatewayError(400, 'missing_prompt', 'Prompt is required.');
+  }
+  if (prompt.length > MOBILE_SESSION_INPUT_MAX_CHARS) {
+    throw new MobileGatewayError(
+      413,
+      'prompt_too_large',
+      `Prompt must be ${MOBILE_SESSION_INPUT_MAX_CHARS} characters or fewer.`
+    );
   }
 
   return {
@@ -530,6 +549,7 @@ function normalizeCreateDemandRequest(body: unknown): MobileCreateDemandRequest 
     projectId: typeof value.projectId === 'string' ? value.projectId.trim() || null : null,
     title: typeof value.title === 'string' ? value.title.trim() || undefined : undefined,
     provider: typeof value.provider === 'string' ? value.provider.trim() || undefined : undefined,
+    attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
   };
 }
 
@@ -540,7 +560,8 @@ function normalizeSessionInputRequest(body: unknown): MobileSessionInputRequest 
 
   const value = body as Record<string, unknown>;
   const input = typeof value.input === 'string' ? value.input.trim() : '';
-  if (!input) {
+  const attachmentIds = normalizeAttachmentIds(value.attachmentIds);
+  if (!input && attachmentIds.length === 0) {
     throw new MobileGatewayError(400, 'missing_input', 'Input is required.');
   }
   if (input.length > MOBILE_SESSION_INPUT_MAX_CHARS) {
@@ -554,7 +575,38 @@ function normalizeSessionInputRequest(body: unknown): MobileSessionInputRequest 
   return {
     input,
     submit: typeof value.submit === 'boolean' ? value.submit : true,
+    attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
   };
+}
+
+function normalizeAttachmentIds(value: unknown): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new MobileGatewayError(400, 'invalid_attachments', 'Attachment ids must be an array.');
+  }
+  if (value.length > MOBILE_INPUT_ATTACHMENT_MAX_COUNT) {
+    throw new MobileGatewayError(
+      400,
+      'too_many_attachments',
+      `A request can include up to ${MOBILE_INPUT_ATTACHMENT_MAX_COUNT} images.`
+    );
+  }
+  return value.map((attachmentId) => {
+    if (
+      typeof attachmentId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        attachmentId
+      )
+    ) {
+      throw new MobileGatewayError(400, 'invalid_attachment_id', 'Attachment id is invalid.');
+    }
+    return attachmentId;
+  });
+}
+
+function promptWithImageMarkers(prompt: string, imageCount: number): string {
+  const markers = Array.from({ length: imageCount }, (_, index) => `{{yoda-image:${index}}}`);
+  return [prompt.trim(), ...markers].filter(Boolean).join('\n\n');
 }
 
 function isRuntimeId(value: string): value is RuntimeId {
@@ -585,6 +637,7 @@ function resolveTaskActivityStatus(
 
 export class MobileGatewayService {
   private server: http.Server | null = null;
+  private attachmentStore: MobileInputAttachmentStore | null = null;
   private readonly sessionEventStreams = new Set<MobileSessionEventStream>();
   private readonly sessionEventEpoch = randomUUID();
   private sessionEventSequence = 0;
@@ -603,9 +656,17 @@ export class MobileGatewayService {
     this.host = process.env.YODA_MOBILE_GATEWAY_HOST?.trim() || '0.0.0.0';
     this.port = parsePort(process.env.YODA_MOBILE_GATEWAY_PORT);
     this.token = mobileGatewayToken();
+    this.attachmentStore = new MobileInputAttachmentStore(
+      path.join(app.getPath('userData'), 'mobile-input-attachments')
+    );
+    await this.attachmentStore.initialize();
 
     this.server = http.createServer((req, res) => {
       void this.handleRequest(req, res).catch((e: unknown) => {
+        if (e instanceof MobileInputAttachmentError) {
+          writeError(res, new MobileGatewayError(e.status, e.code, e.message));
+          return;
+        }
         if (e instanceof MobileGatewayError) {
           writeError(res, e);
           return;
@@ -833,6 +894,51 @@ export class MobileGatewayService {
     }
 
     const segments = pathSegments(url.pathname);
+    const isAttachmentRoute = segments[0] === 'v1' && segments[1] === 'attachments';
+    if (req.method === 'POST' && isAttachmentRoute && segments.length === 2) {
+      const body = (await readJsonBody(req)) as MobileInputAttachmentCreateRequest;
+      const response: MobileInputAttachmentCreateResponse =
+        await this.requireAttachmentStore().create(body);
+      writeJson(res, 201, response);
+      return;
+    }
+    if (
+      req.method === 'POST' &&
+      isAttachmentRoute &&
+      segments.length === 4 &&
+      segments[2] &&
+      segments[3] === 'chunks'
+    ) {
+      const body = (await readJsonBody(req)) as MobileInputAttachmentChunkRequest;
+      writeJson(res, 200, await this.requireAttachmentStore().append(segments[2], body));
+      return;
+    }
+    if (
+      req.method === 'POST' &&
+      isAttachmentRoute &&
+      segments.length === 4 &&
+      segments[2] &&
+      segments[3] === 'complete'
+    ) {
+      const response: MobileInputAttachmentCompleteResponse = {
+        attachment: await this.requireAttachmentStore().complete(segments[2]),
+      };
+      writeJson(res, 200, response);
+      return;
+    }
+    if (
+      req.method === 'POST' &&
+      isAttachmentRoute &&
+      segments.length === 4 &&
+      segments[2] &&
+      segments[3] === 'discard'
+    ) {
+      await this.requireAttachmentStore().discard(segments[2]);
+      const response: MobileInputAttachmentDiscardResponse = { ok: true };
+      writeJson(res, 200, response);
+      return;
+    }
+
     const isTaskSessionsRoute =
       segments[0] === 'v1' &&
       segments[1] === 'projects' &&
@@ -1189,6 +1295,43 @@ export class MobileGatewayService {
       throw new MobileGatewayError(404, 'session_not_found', 'Mobile session was not found.');
     }
 
+    const attachmentIds = params.attachmentIds ?? [];
+    const attachments = this.requireAttachmentStore().resolve(attachmentIds);
+    if (attachments.length > 0) {
+      const project = await this.requireProject(projectId);
+      if (project.type !== 'local') {
+        throw new MobileGatewayError(
+          400,
+          'attachments_ssh_unsupported',
+          'Image input is available for local projects only.'
+        );
+      }
+      if (params.submit === false) {
+        throw new MobileGatewayError(
+          400,
+          'attachments_require_submit',
+          'Image input must be submitted in the same request.'
+        );
+      }
+      const sent = await injectConversationPrompt({
+        projectId,
+        taskId,
+        conversationId,
+        runtime: conversation.runtimeId,
+        prompt: promptWithImageMarkers(params.input, attachments.length),
+        imagePaths: attachments.map((attachment) => attachment.filePath),
+      });
+      if (!sent) {
+        throw new MobileGatewayError(
+          409,
+          'session_not_live',
+          'This session is not currently accepting input.'
+        );
+      }
+      this.requireAttachmentStore().release(attachmentIds);
+      return { ok: true, generatedAt: new Date().toISOString() };
+    }
+
     const payload = buildPromptInjectionPayload(params.input);
     if (!payload) {
       throw new MobileGatewayError(400, 'missing_input', 'Input is required.');
@@ -1386,11 +1529,23 @@ export class MobileGatewayService {
   ): Promise<MobileCreateDemandResponse> {
     const projectId = params.projectId || INTERNAL_PROJECT_ID;
     const project = await this.ensureProjectOpen(projectId);
+    const attachmentIds = params.attachmentIds ?? [];
+    const attachments = this.requireAttachmentStore().resolve(attachmentIds);
+    if (attachments.length > 0 && project.type !== 'local') {
+      throw new MobileGatewayError(
+        400,
+        'attachments_ssh_unsupported',
+        'Image input is available for local projects only.'
+      );
+    }
+    const initialPrompt = promptWithImageMarkers(params.prompt, attachments.length);
     const provider = await this.resolveProvider(params.provider);
     const taskId = randomUUID();
     const conversationId = randomUUID();
     const existingTaskNames = (await getTasks(projectId)).map((task) => task.name);
-    const generatedName = generateTaskName({ title: params.title || params.prompt });
+    const generatedName = generateTaskName({
+      title: params.title || params.prompt || 'Image request',
+    });
     const taskName = ensureUniqueTaskSlug(generatedName, existingTaskNames);
     const sourceBranch = await this.resolveSourceBranch(project, projectId);
 
@@ -1405,14 +1560,17 @@ export class MobileGatewayService {
         projectId,
         taskId,
         runtime: provider,
-        title: taskNameFromPrompt(params.prompt) || 'Mobile request',
-        initialPrompt: params.prompt,
+        title: taskNameFromPrompt(params.prompt) || 'Mobile image request',
+        initialPrompt,
+        imagePaths: attachments.map((attachment) => attachment.filePath),
       },
     });
 
     if (!result.success) {
       throw new MobileGatewayError(422, 'create_task_failed', mapCreateTaskError(result.error));
     }
+
+    this.requireAttachmentStore().release(attachmentIds);
 
     return {
       task: this.mapTask(result.data.task, resolveTaskActivityStatus(result.data.task, [])),
@@ -1432,6 +1590,17 @@ export class MobileGatewayService {
       throw new MobileGatewayError(424, 'project_open_failed', mapOpenProjectError(result.error));
     }
     return project;
+  }
+
+  private requireAttachmentStore(): MobileInputAttachmentStore {
+    if (!this.attachmentStore) {
+      throw new MobileGatewayError(
+        503,
+        'attachment_store_unavailable',
+        'Mobile image input is not initialized.'
+      );
+    }
+    return this.attachmentStore;
   }
 
   private async resolveProvider(provider: string | undefined): Promise<RuntimeId> {

@@ -8,11 +8,28 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Yoda Mobile to choose images for your Agent requests."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Yoda Mobile to turn your voice into editable request text.",
+          "speechRecognitionPermission": "Allow Yoda Mobile to recognize speech for Agent requests."
+        }
+      ]
+    ],
     "ios": {
       "bundleIdentifier": "ai.lovstudio.yoda.mobile",
       "supportsTablet": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
+        "NSMicrophoneUsageDescription": "Yoda Mobile uses the microphone for voice input.",
+        "NSSpeechRecognitionUsageDescription": "Yoda Mobile turns speech into editable request text.",
         "NSLocalNetworkUsageDescription": "Yoda Mobile connects directly to the Yoda desktop app when both devices are on the same local network.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true

@@ -14,6 +14,7 @@ import {
 import {
   ActivityIndicator,
   AppState,
+  Image,
   KeyboardAvoidingView,
   Linking,
   PanResponder,
@@ -33,6 +34,7 @@ import {
   type TextStyle,
 } from 'react-native';
 import {
+  appendMobileVoiceTranscript,
   MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
   MOBILE_SESSION_INPUT_MAX_CHARS,
   parseMobilePairingUrl,
@@ -50,6 +52,7 @@ import {
 } from '../../../src/shared/mobile-relay';
 import {
   createDemand,
+  discardInputAttachment,
   fetchSessionDetail,
   fetchSnapshot,
   fetchTaskSessions,
@@ -61,7 +64,13 @@ import {
   selectMobileConnectionBootstrapFallback,
 } from './connection-bootstrap';
 import { clearConnection, loadConnection, saveConnection } from './connection-storage';
+import {
+  pickMobileInputImages,
+  uploadMobileInputImages,
+  type MobileImageDraft,
+} from './input-media';
 import { subscribeSessionEvents } from './session-event-stream';
+import { startMobileVoiceInput, type MobileVoiceInputSession } from './voice-input';
 
 const COLORS = {
   page: '#F7F7F2',
@@ -617,6 +626,7 @@ export function App() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [demandProjectId, setDemandProjectId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
+  const [demandImages, setDemandImages] = useState<MobileImageDraft[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -832,24 +842,33 @@ export function App() {
   }, [loadDashboard]);
 
   const handleSubmitDemand = useCallback(async () => {
-    if (!connection || !prompt.trim() || submitting) return;
+    if (!connection || (!prompt.trim() && demandImages.length === 0) || submitting) return;
     setSubmitting(true);
+    let attachmentIds: string[] = [];
     try {
+      attachmentIds = await uploadMobileInputImages(connection, demandImages);
       const result = await createDemand(connection, {
         projectId: demandProjectId,
         prompt: prompt.trim(),
+        attachmentIds,
       });
       setPrompt('');
+      setDemandImages([]);
       setSelectedProjectId(result.task.projectId);
       setHomeTab('tasks');
       await loadDashboard(true);
       setError(null);
     } catch (e) {
+      await Promise.all(
+        attachmentIds.map((attachmentId) =>
+          discardInputAttachment(connection, attachmentId).catch(() => undefined)
+        )
+      );
       setError(errorMessage(e));
     } finally {
       setSubmitting(false);
     }
-  }, [connection, demandProjectId, loadDashboard, prompt, submitting]);
+  }, [connection, demandImages, demandProjectId, loadDashboard, prompt, submitting]);
 
   if (booting) {
     return (
@@ -975,12 +994,15 @@ export function App() {
 
                 {homeTab === 'request' ? (
                   <DemandComposer
+                    images={demandImages}
                     projects={visibleProjects}
                     prompt={prompt}
                     selectedProjectId={demandProjectId}
                     submitting={submitting}
                     onPromptChange={setPrompt}
                     onProjectChange={setDemandProjectId}
+                    onImagesChange={setDemandImages}
+                    onMediaError={setError}
                     onSubmit={handleSubmitDemand}
                   />
                 ) : null}
@@ -1603,29 +1625,41 @@ function ProjectChip({
 }
 
 function DemandComposer({
+  images,
   projects,
   prompt,
   selectedProjectId,
   submitting,
   onPromptChange,
   onProjectChange,
+  onImagesChange,
+  onMediaError,
   onSubmit,
 }: {
+  images: MobileImageDraft[];
   projects: MobileProjectSummary[];
   prompt: string;
   selectedProjectId: string | null;
   submitting: boolean;
   onPromptChange: (prompt: string) => void;
   onProjectChange: (projectId: string | null) => void;
+  onImagesChange: (images: MobileImageDraft[]) => void;
+  onMediaError: (message: string) => void;
   onSubmit: () => void;
 }) {
-  const canSubmit = prompt.trim().length > 0 && !submitting;
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+  const imagesEnabled = selectedProjectId === null || selectedProject?.type === 'local';
+  const canSubmit =
+    (prompt.trim().length > 0 || images.length > 0) &&
+    (images.length === 0 || imagesEnabled) &&
+    !submitting;
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>New request</Text>
       </View>
       <TextInput
+        maxLength={MOBILE_SESSION_INPUT_MAX_CHARS}
         multiline
         placeholder="Describe the requirement..."
         placeholderTextColor="#9A958C"
@@ -1633,6 +1667,15 @@ function DemandComposer({
         textAlignVertical="top"
         value={prompt}
         onChangeText={onPromptChange}
+      />
+      <InputMediaControls
+        disabled={submitting}
+        images={images}
+        imagesEnabled={imagesEnabled}
+        value={prompt}
+        onChange={onPromptChange}
+        onError={onMediaError}
+        onImagesChange={onImagesChange}
       />
       <ScrollView
         horizontal
@@ -1880,6 +1923,7 @@ function SessionDetailScreen({
   const [outputMode, setOutputMode] = useState<SessionOutputMode>('rendered');
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [sessionInput, setSessionInput] = useState('');
+  const [sessionImages, setSessionImages] = useState<MobileImageDraft[]>([]);
   const [sendingInput, setSendingInput] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -2044,17 +2088,29 @@ function SessionDetailScreen({
 
   const handleSendInput = useCallback(async () => {
     const input = sessionInput.trim();
-    if (!input || !detail?.session.acceptsInput || sendingInput) return;
+    if ((!input && sessionImages.length === 0) || !detail?.session.acceptsInput || sendingInput)
+      return;
 
     setSendingInput(true);
+    let attachmentIds: string[] = [];
     try {
-      await sendSessionInput(connection, task.projectId, task.id, sessionId, { input });
+      attachmentIds = await uploadMobileInputImages(connection, sessionImages);
+      await sendSessionInput(connection, task.projectId, task.id, sessionId, {
+        input,
+        attachmentIds,
+      });
       setSessionInput('');
+      setSessionImages([]);
       setBottomState(true);
       await loadDetail(true);
       scrollToBottom(true);
       setError(null);
     } catch (e) {
+      await Promise.all(
+        attachmentIds.map((attachmentId) =>
+          discardInputAttachment(connection, attachmentId).catch(() => undefined)
+        )
+      );
       setError(errorMessage(e));
     } finally {
       setSendingInput(false);
@@ -2066,6 +2122,7 @@ function SessionDetailScreen({
     scrollToBottom,
     sendingInput,
     sessionId,
+    sessionImages,
     sessionInput,
     setBottomState,
     task.id,
@@ -2166,10 +2223,16 @@ function SessionDetailScreen({
           <SessionInputComposer
             live={detail?.session.running ?? false}
             acceptsInput={detail?.session.acceptsInput ?? false}
+            images={sessionImages}
+            imagesEnabled={
+              projects.find((project) => project.id === task.projectId)?.type === 'local'
+            }
             runtimeStatus={detail?.session.runtimeStatus ?? null}
             sending={sendingInput}
             value={sessionInput}
             onChange={setSessionInput}
+            onError={setError}
+            onImagesChange={setSessionImages}
             onSend={handleSendInput}
           />
         </View>
@@ -2212,24 +2275,216 @@ function SessionNavigationBar({
   );
 }
 
+function InputMediaControls({
+  compact = false,
+  disabled,
+  images,
+  imagesEnabled,
+  value,
+  onChange,
+  onError,
+  onImagesChange,
+}: {
+  compact?: boolean;
+  disabled: boolean;
+  images: MobileImageDraft[];
+  imagesEnabled: boolean;
+  value: string;
+  onChange: (value: string) => void;
+  onError: (message: string) => void;
+  onImagesChange: (images: MobileImageDraft[]) => void;
+}) {
+  const [pickingImages, setPickingImages] = useState(false);
+  const [voiceStarting, setVoiceStarting] = useState(false);
+  const [voiceActive, setVoiceActive] = useState(false);
+  const voiceBaseValueRef = useRef('');
+  const voiceSessionRef = useRef<MobileVoiceInputSession | null>(null);
+
+  const disposeVoiceSession = useCallback(() => {
+    voiceSessionRef.current?.dispose();
+    voiceSessionRef.current = null;
+    setVoiceActive(false);
+    setVoiceStarting(false);
+  }, []);
+
+  useEffect(
+    () => () => {
+      voiceSessionRef.current?.abort();
+      voiceSessionRef.current?.dispose();
+      voiceSessionRef.current = null;
+    },
+    []
+  );
+
+  const handlePickImages = useCallback(async () => {
+    if (disabled || pickingImages || !imagesEnabled) return;
+    setPickingImages(true);
+    try {
+      const picked = await pickMobileInputImages(images.length);
+      if (picked.length > 0) onImagesChange([...images, ...picked]);
+    } catch (error) {
+      onError(errorMessage(error));
+    } finally {
+      setPickingImages(false);
+    }
+  }, [disabled, images, imagesEnabled, onError, onImagesChange, pickingImages]);
+
+  const handleVoiceInput = useCallback(async () => {
+    if (disabled || voiceStarting) return;
+    if (voiceActive) {
+      voiceSessionRef.current?.stop();
+      return;
+    }
+    if (Constants.appOwnership === 'expo') {
+      onError(
+        'Voice input is available in the Yoda Mobile development build. In Expo Go, use the keyboard microphone.'
+      );
+      return;
+    }
+
+    voiceBaseValueRef.current = value;
+    setVoiceStarting(true);
+    try {
+      const session = await startMobileVoiceInput({
+        onEnd: disposeVoiceSession,
+        onError: (message) => {
+          onError(message);
+          disposeVoiceSession();
+        },
+        onResult: (transcript) => {
+          onChange(
+            appendMobileVoiceTranscript(voiceBaseValueRef.current, transcript).slice(
+              0,
+              MOBILE_SESSION_INPUT_MAX_CHARS
+            )
+          );
+        },
+      });
+      voiceSessionRef.current = session;
+      setVoiceStarting(false);
+      setVoiceActive(true);
+    } catch (error) {
+      disposeVoiceSession();
+      onError(errorMessage(error));
+    }
+  }, [disabled, disposeVoiceSession, onChange, onError, value, voiceActive, voiceStarting]);
+
+  return (
+    <View style={[styles.inputMediaShell, compact ? styles.inputMediaShellCompact : null]}>
+      {images.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.inputImageRail}
+        >
+          {images.map((image) => (
+            <View key={image.id} style={styles.inputImagePreview}>
+              <Image source={{ uri: image.uri }} style={styles.inputImage} />
+              <Pressable
+                accessibilityLabel={`Remove ${image.name}`}
+                accessibilityRole="button"
+                disabled={disabled}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.inputImageRemove,
+                  pressed ? styles.buttonPressed : null,
+                ]}
+                onPress={() =>
+                  onImagesChange(images.filter((candidate) => candidate.id !== image.id))
+                }
+              >
+                <Ionicons color={COLORS.surface} name="close-outline" size={15} />
+              </Pressable>
+            </View>
+          ))}
+        </ScrollView>
+      ) : null}
+      <View style={styles.inputMediaToolbar}>
+        <View style={styles.inputMediaActions}>
+          <Pressable
+            accessibilityLabel="Attach images"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: disabled || !imagesEnabled }}
+            disabled={disabled || !imagesEnabled || pickingImages}
+            style={({ pressed }) => [
+              styles.inputMediaButton,
+              disabled || !imagesEnabled ? styles.buttonDisabled : null,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={() => void handlePickImages()}
+          >
+            {pickingImages ? (
+              <ActivityIndicator color={COLORS.charcoal} size="small" />
+            ) : (
+              <Ionicons color={COLORS.charcoal} name="images-outline" size={18} />
+            )}
+            <Text style={styles.inputMediaButtonText}>Image</Text>
+          </Pressable>
+          <Pressable
+            accessibilityLabel={voiceActive ? 'Stop voice input' : 'Start voice input'}
+            accessibilityRole="button"
+            accessibilityState={{ busy: voiceStarting, disabled }}
+            disabled={disabled || voiceStarting}
+            style={({ pressed }) => [
+              styles.inputMediaButton,
+              voiceActive ? styles.inputMediaButtonActive : null,
+              disabled ? styles.buttonDisabled : null,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={() => void handleVoiceInput()}
+          >
+            {voiceStarting ? (
+              <ActivityIndicator color={COLORS.charcoal} size="small" />
+            ) : (
+              <Ionicons
+                color={voiceActive ? COLORS.red : COLORS.charcoal}
+                name={voiceActive ? 'stop-circle-outline' : 'mic-outline'}
+                size={18}
+              />
+            )}
+            <Text style={styles.inputMediaButtonText}>{voiceActive ? 'Listening…' : 'Voice'}</Text>
+          </Pressable>
+        </View>
+        {!imagesEnabled ? (
+          <Text style={styles.inputMediaHint}>Images require a local project.</Text>
+        ) : images.length > 0 ? (
+          <Text style={styles.inputMediaHint}>{images.length}/4 images</Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 function SessionInputComposer({
   live,
   acceptsInput,
+  images,
+  imagesEnabled,
   runtimeStatus,
   sending,
   value,
   onChange,
+  onError,
+  onImagesChange,
   onSend,
 }: {
   live: boolean;
   acceptsInput: boolean;
+  images: MobileImageDraft[];
+  imagesEnabled: boolean;
   runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
   sending: boolean;
   value: string;
   onChange: (value: string) => void;
+  onError: (message: string) => void;
+  onImagesChange: (images: MobileImageDraft[]) => void;
   onSend: () => void;
 }) {
-  const canSend = acceptsInput && value.trim().length > 0 && !sending;
+  const canSend =
+    acceptsInput &&
+    (value.trim().length > 0 || images.length > 0) &&
+    (images.length === 0 || imagesEnabled) &&
+    !sending;
   return (
     <View style={styles.sessionInputBar}>
       <SessionRuntimeStatus
@@ -2237,6 +2492,16 @@ function SessionInputComposer({
         live={live}
         runtimeStatus={runtimeStatus}
         valueLength={value.length}
+      />
+      <InputMediaControls
+        compact
+        disabled={sending || !acceptsInput}
+        images={images}
+        imagesEnabled={imagesEnabled}
+        value={value}
+        onChange={onChange}
+        onError={onError}
+        onImagesChange={onImagesChange}
       />
       <View style={styles.sessionInputRow}>
         <TextInput
@@ -3007,6 +3272,83 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 10,
     paddingBottom: 10,
+  },
+  inputMediaShell: {
+    gap: 8,
+  },
+  inputMediaShellCompact: {
+    marginTop: -1,
+  },
+  inputImageRail: {
+    gap: 9,
+    paddingRight: 8,
+  },
+  inputImagePreview: {
+    position: 'relative',
+    width: 62,
+    height: 62,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 9,
+    backgroundColor: COLORS.page,
+  },
+  inputImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  inputImageRemove: {
+    position: 'absolute',
+    top: -7,
+    right: -7,
+    width: 23,
+    height: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.surface,
+    borderRadius: 12,
+    backgroundColor: COLORS.charcoal,
+  },
+  inputMediaToolbar: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  inputMediaActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  inputMediaButton: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 17,
+    backgroundColor: COLORS.page,
+    paddingHorizontal: 11,
+  },
+  inputMediaButtonActive: {
+    borderColor: '#E9B8B4',
+    backgroundColor: '#FFF1F0',
+  },
+  inputMediaButtonText: {
+    color: COLORS.charcoal,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  inputMediaHint: {
+    flexShrink: 1,
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'right',
   },
   sessionSendButton: {
     width: 44,
