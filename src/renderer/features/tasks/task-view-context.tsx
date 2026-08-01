@@ -2,32 +2,20 @@ import { observer } from 'mobx-react-lite';
 import { createContext, useContext, type ReactNode } from 'react';
 import { ProjectViewWrapper } from '@renderer/features/projects/components/project-view-wrapper';
 import { type ProvisionedTask } from '@renderer/features/tasks/stores/task';
-import {
-  asProvisioned,
-  getTaskStore,
-  taskViewKind,
-  type TaskViewKind,
-} from '@renderer/features/tasks/stores/task-selectors';
+import { type TaskViewKind } from '@renderer/features/tasks/stores/task-selectors';
 
 const ProvisionedTaskContext = createContext<ProvisionedTask | null>(null);
 
-export const ProvisionedTaskProvider = observer(function ProvisionedTaskProvider({
-  projectId,
-  taskId,
+/** Uses the ready-state owner's captured task so provider and branch cannot disagree. */
+export function ProvisionedTaskProvider({
+  task,
   children,
 }: {
-  projectId: string;
-  taskId: string;
+  task: ProvisionedTask;
   children: ReactNode;
 }) {
-  const provisioned = asProvisioned(getTaskStore(projectId, taskId));
-  if (!provisioned) return null;
-  return (
-    <ProvisionedTaskContext.Provider value={provisioned}>
-      {children}
-    </ProvisionedTaskContext.Provider>
-  );
-});
+  return <ProvisionedTaskContext.Provider value={task}>{children}</ProvisionedTaskContext.Provider>;
+}
 
 /** Nullable. For components that also render outside a task view (e.g. the composer popover). */
 export function useProvisionedTaskOrNull(): ProvisionedTask | null {
@@ -49,6 +37,13 @@ interface TaskViewContext {
   projectId: string;
   taskId: string;
   /**
+   * Captured by the same owner that decides whether ProvisionedTaskProvider is
+   * mounted. Consumers must use this snapshot instead of independently
+   * deriving the task state, otherwise a child can observe `ready` one render
+   * before its provider boundary is installed.
+   */
+  kind: TaskViewKind;
+  /**
    * True when this task view is HOSTED as a non-primary pane (a split-view
    * extra) rather than owning the global route + app-tab strip. Hosted panes
    * render their own self-contained chrome and must not show the global
@@ -63,16 +58,18 @@ export const TaskViewWrapper = observer(function TaskViewWrapper({
   children,
   projectId,
   taskId,
+  kind,
   hosted = false,
 }: {
   children: ReactNode;
   projectId: string;
   taskId: string;
+  kind: TaskViewKind;
   hosted?: boolean;
 }) {
   return (
     <ProjectViewWrapper projectId={projectId}>
-      <TaskViewContext.Provider value={{ projectId, taskId, hosted }}>
+      <TaskViewContext.Provider value={{ projectId, taskId, kind, hosted }}>
         {children}
       </TaskViewContext.Provider>
     </ProjectViewWrapper>
@@ -93,6 +90,5 @@ export function useIsHostedTaskView(): boolean {
 }
 
 export function useTaskViewKind(): TaskViewKind {
-  const { projectId, taskId } = useTaskViewContext();
-  return taskViewKind(getTaskStore(projectId, taskId), projectId);
+  return useTaskViewContext().kind;
 }

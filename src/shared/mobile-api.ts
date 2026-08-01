@@ -7,6 +7,23 @@ export const MOBILE_APP_DEFAULT_INSTALL_URL = 'https://lovstudio.ai/yoda/mobile'
 export const MOBILE_SESSION_CONTENT_MAX_CHARS = 120_000;
 export const MOBILE_SESSION_TRANSCRIPT_MAX_CHARS = 240_000;
 export const MOBILE_SESSION_INPUT_MAX_CHARS = 20_000;
+export const MOBILE_INPUT_ATTACHMENT_MAX_COUNT = 4;
+export const MOBILE_INPUT_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+/** Keeps the base64 JSON request comfortably below the gateway and Relay 128 KiB limit. */
+export const MOBILE_INPUT_ATTACHMENT_CHUNK_BYTES = 48 * 1024;
+
+export function appendMobileVoiceTranscript(baseValue: string, transcript: string): string {
+  const normalized = transcript.trim();
+  if (!normalized) return baseValue;
+  if (!baseValue) return normalized;
+  if (/\s$/.test(baseValue)) return `${baseValue}${normalized}`;
+  const previous = baseValue.at(-1) ?? '';
+  const next = normalized[0] ?? '';
+  const joinsWithoutSpace =
+    /[\p{Script=Han}，。！？：；、]/u.test(previous) ||
+    /[\p{Script=Han}，。！？：；、]/u.test(next);
+  return `${baseValue}${joinsWithoutSpace ? '' : ' '}${normalized}`;
+}
 
 export type MobilePairingConnection = {
   baseUrl: string;
@@ -82,7 +99,81 @@ export type MobileProjectSummary = {
   isInternal: boolean;
   isOpen: boolean;
   updatedAt: string;
+  /** Latest task interaction or project metadata update. Optional for older desktop gateways. */
+  lastActivityAt?: string;
 };
+
+export type MobileProjectSortMode = 'recent' | 'name' | 'open';
+
+const MOBILE_SQLITE_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
+
+export function parseMobileTimestamp(value: string | null | undefined): number {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const normalized = MOBILE_SQLITE_TIMESTAMP_RE.test(value) ? `${value.replace(' ', 'T')}Z` : value;
+  const timestamp = Date.parse(normalized);
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+}
+
+export function getMobileProjectActivityById(
+  projects: readonly Pick<MobileProjectSummary, 'id' | 'updatedAt' | 'lastActivityAt'>[],
+  tasks: readonly {
+    projectId: string;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    lastInteractedAt?: string | null;
+  }[]
+): Map<string, string> {
+  const activityByProjectId = new Map(
+    projects.map((project) => [project.id, project.lastActivityAt ?? project.updatedAt] as const)
+  );
+
+  for (const task of tasks) {
+    const activityAt = task.lastInteractedAt ?? task.createdAt ?? task.updatedAt;
+    if (!activityAt) continue;
+    const currentActivityAt = activityByProjectId.get(task.projectId);
+    if (parseMobileTimestamp(activityAt) > parseMobileTimestamp(currentActivityAt)) {
+      activityByProjectId.set(task.projectId, activityAt);
+    }
+  }
+
+  return activityByProjectId;
+}
+
+function mobileProjectActivityAt(project: MobileProjectSummary): number {
+  return parseMobileTimestamp(project.lastActivityAt ?? project.updatedAt);
+}
+
+export function sortMobileProjects(
+  projects: readonly MobileProjectSummary[],
+  mode: MobileProjectSortMode
+): MobileProjectSummary[] {
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+  return projects
+    .map((project, index) => ({
+      project,
+      index,
+      activityAt: mobileProjectActivityAt(project),
+    }))
+    .sort((a, b) => {
+      if (mode === 'name') {
+        return (
+          collator.compare(
+            a.project.displayName || a.project.name,
+            b.project.displayName || b.project.name
+          ) || a.index - b.index
+        );
+      }
+      if (mode === 'open') {
+        return (
+          Number(b.project.isOpen) - Number(a.project.isOpen) ||
+          b.activityAt - a.activityAt ||
+          a.index - b.index
+        );
+      }
+      return b.activityAt - a.activityAt || a.index - b.index;
+    })
+    .map(({ project }) => project);
+}
 
 export type MobileTaskSummary = {
   id: string;
@@ -121,6 +212,7 @@ export type MobileCreateDemandRequest = {
   prompt: string;
   title?: string;
   provider?: string;
+  attachmentIds?: string[];
 };
 
 export type MobileCreateDemandResponse = {
@@ -190,11 +282,47 @@ export type MobileSessionDetail = {
 export type MobileSessionInputRequest = {
   input: string;
   submit?: boolean;
+  attachmentIds?: string[];
 };
 
 export type MobileSessionInputResponse = {
   ok: true;
   generatedAt: string;
+};
+
+export type MobileInputAttachmentKind = 'image';
+
+export type MobileInputAttachment = {
+  id: string;
+  kind: MobileInputAttachmentKind;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+};
+
+export type MobileInputAttachmentCreateRequest = Omit<MobileInputAttachment, 'id'>;
+
+export type MobileInputAttachmentCreateResponse = {
+  attachmentId: string;
+  chunkSizeBytes: number;
+};
+
+export type MobileInputAttachmentChunkRequest = {
+  offset: number;
+  dataBase64: string;
+};
+
+export type MobileInputAttachmentChunkResponse = {
+  attachmentId: string;
+  receivedBytes: number;
+};
+
+export type MobileInputAttachmentCompleteResponse = {
+  attachment: MobileInputAttachment;
+};
+
+export type MobileInputAttachmentDiscardResponse = {
+  ok: true;
 };
 
 export type MobileGatewayMode = 'development' | 'production';

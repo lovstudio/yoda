@@ -330,6 +330,13 @@
       "when": 1785469748680,
       "tag": "0046_fast_old_lace",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1785518147025,
+      "tag": "0047_puzzling_carlie_cooper",
+      "breakpoints": true
     }
   ]
 }

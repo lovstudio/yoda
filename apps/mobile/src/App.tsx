@@ -14,6 +14,7 @@ import {
 import {
   ActivityIndicator,
   AppState,
+  Image,
   KeyboardAvoidingView,
   Linking,
   PanResponder,
@@ -33,10 +34,15 @@ import {
   type TextStyle,
 } from 'react-native';
 import {
+  appendMobileVoiceTranscript,
+  getMobileProjectActivityById,
   MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
   MOBILE_SESSION_INPUT_MAX_CHARS,
   parseMobilePairingUrl,
+  parseMobileTimestamp,
+  sortMobileProjects,
   type MobileDashboardSnapshot,
+  type MobileProjectSortMode,
   type MobileProjectSummary,
   type MobileSessionDetail,
   type MobileSessionSummary,
@@ -50,6 +56,7 @@ import {
 } from '../../../src/shared/mobile-relay';
 import {
   createDemand,
+  discardInputAttachment,
   fetchSessionDetail,
   fetchSnapshot,
   fetchTaskSessions,
@@ -61,7 +68,13 @@ import {
   selectMobileConnectionBootstrapFallback,
 } from './connection-bootstrap';
 import { clearConnection, loadConnection, saveConnection } from './connection-storage';
+import {
+  pickMobileInputImages,
+  uploadMobileInputImages,
+  type MobileImageDraft,
+} from './input-media';
 import { subscribeSessionEvents } from './session-event-stream';
+import { startMobileVoiceInput, type MobileVoiceInputSession } from './voice-input';
 
 const COLORS = {
   page: '#F7F7F2',
@@ -483,7 +496,7 @@ function tokenizeInlineMarkdown(value: string): InlineMarkdownToken[] {
 
 function formatTimestamp(value?: string): string {
   if (!value) return 'No activity yet';
-  const date = new Date(value);
+  const date = new Date(parseMobileTimestamp(value));
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString([], {
     month: 'short',
@@ -617,6 +630,7 @@ export function App() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [demandProjectId, setDemandProjectId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
+  const [demandImages, setDemandImages] = useState<MobileImageDraft[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -747,10 +761,14 @@ export function App() {
     return () => clearInterval(timer);
   }, [connection, loadDashboard]);
 
-  const visibleProjects = useMemo(
-    () => snapshot?.projects.filter((project) => !project.isInternal) ?? [],
-    [snapshot]
-  );
+  const visibleProjects = useMemo(() => {
+    const projects = snapshot?.projects.filter((project) => !project.isInternal) ?? [];
+    const activityByProjectId = getMobileProjectActivityById(projects, snapshot?.tasks ?? []);
+    return projects.map((project) => ({
+      ...project,
+      lastActivityAt: activityByProjectId.get(project.id) ?? project.updatedAt,
+    }));
+  }, [snapshot]);
 
   const openProjectIds = useMemo(
     () =>
@@ -832,24 +850,33 @@ export function App() {
   }, [loadDashboard]);
 
   const handleSubmitDemand = useCallback(async () => {
-    if (!connection || !prompt.trim() || submitting) return;
+    if (!connection || (!prompt.trim() && demandImages.length === 0) || submitting) return;
     setSubmitting(true);
+    let attachmentIds: string[] = [];
     try {
+      attachmentIds = await uploadMobileInputImages(connection, demandImages);
       const result = await createDemand(connection, {
         projectId: demandProjectId,
         prompt: prompt.trim(),
+        attachmentIds,
       });
       setPrompt('');
+      setDemandImages([]);
       setSelectedProjectId(result.task.projectId);
       setHomeTab('tasks');
       await loadDashboard(true);
       setError(null);
     } catch (e) {
+      await Promise.all(
+        attachmentIds.map((attachmentId) =>
+          discardInputAttachment(connection, attachmentId).catch(() => undefined)
+        )
+      );
       setError(errorMessage(e));
     } finally {
       setSubmitting(false);
     }
-  }, [connection, demandProjectId, loadDashboard, prompt, submitting]);
+  }, [connection, demandImages, demandProjectId, loadDashboard, prompt, submitting]);
 
   if (booting) {
     return (
@@ -975,12 +1002,15 @@ export function App() {
 
                 {homeTab === 'request' ? (
                   <DemandComposer
+                    images={demandImages}
                     projects={visibleProjects}
                     prompt={prompt}
                     selectedProjectId={demandProjectId}
                     submitting={submitting}
                     onPromptChange={setPrompt}
                     onProjectChange={setDemandProjectId}
+                    onImagesChange={setDemandImages}
+                    onMediaError={setError}
                     onSubmit={handleSubmitDemand}
                   />
                 ) : null}
@@ -1603,29 +1633,41 @@ function ProjectChip({
 }
 
 function DemandComposer({
+  images,
   projects,
   prompt,
   selectedProjectId,
   submitting,
   onPromptChange,
   onProjectChange,
+  onImagesChange,
+  onMediaError,
   onSubmit,
 }: {
+  images: MobileImageDraft[];
   projects: MobileProjectSummary[];
   prompt: string;
   selectedProjectId: string | null;
   submitting: boolean;
   onPromptChange: (prompt: string) => void;
   onProjectChange: (projectId: string | null) => void;
+  onImagesChange: (images: MobileImageDraft[]) => void;
+  onMediaError: (message: string) => void;
   onSubmit: () => void;
 }) {
-  const canSubmit = prompt.trim().length > 0 && !submitting;
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+  const imagesEnabled = selectedProjectId === null || selectedProject?.type === 'local';
+  const canSubmit =
+    (prompt.trim().length > 0 || images.length > 0) &&
+    (images.length === 0 || imagesEnabled) &&
+    !submitting;
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>New request</Text>
       </View>
       <TextInput
+        maxLength={MOBILE_SESSION_INPUT_MAX_CHARS}
         multiline
         placeholder="Describe the requirement..."
         placeholderTextColor="#9A958C"
@@ -1634,27 +1676,20 @@ function DemandComposer({
         value={prompt}
         onChangeText={onPromptChange}
       />
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.rail}
-      >
-        <ProjectChip
-          active={selectedProjectId === null}
-          label="Drafts"
-          meta="Default"
-          onPress={() => onProjectChange(null)}
-        />
-        {projects.map((project) => (
-          <ProjectChip
-            key={project.id}
-            active={selectedProjectId === project.id}
-            label={project.displayName}
-            meta={project.isOpen ? 'Open' : 'Will open'}
-            onPress={() => onProjectChange(project.id)}
-          />
-        ))}
-      </ScrollView>
+      <InputMediaControls
+        disabled={submitting}
+        images={images}
+        imagesEnabled={imagesEnabled}
+        value={prompt}
+        onChange={onPromptChange}
+        onError={onMediaError}
+        onImagesChange={onImagesChange}
+      />
+      <DemandProjectAccordion
+        projects={projects}
+        selectedProjectId={selectedProjectId}
+        onProjectChange={onProjectChange}
+      />
       <Pressable
         accessibilityLabel="Submit new mobile request"
         disabled={!canSubmit}
@@ -1675,6 +1710,189 @@ function DemandComposer({
         )}
       </Pressable>
     </View>
+  );
+}
+
+function DemandProjectAccordion({
+  projects,
+  selectedProjectId,
+  onProjectChange,
+}: {
+  projects: MobileProjectSummary[];
+  selectedProjectId: string | null;
+  onProjectChange: (projectId: string | null) => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const [sortMode, setSortMode] = useState<MobileProjectSortMode>('recent');
+  const sortedProjects = useMemo(
+    () => sortMobileProjects(projects, sortMode),
+    [projects, sortMode]
+  );
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+  const selectedLabel = selectedProject?.displayName ?? 'Drafts';
+  const selectedMeta = selectedProject
+    ? `Active ${formatTimestamp(selectedProject.lastActivityAt ?? selectedProject.updatedAt)}`
+    : 'Default workspace';
+
+  return (
+    <View style={styles.projectAccordion}>
+      <Pressable
+        accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} project selection`}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        style={({ pressed }) => [
+          styles.projectAccordionTrigger,
+          expanded ? styles.projectAccordionTriggerExpanded : null,
+          pressed ? styles.buttonPressed : null,
+        ]}
+        onPress={() => setExpanded((current) => !current)}
+      >
+        <View style={styles.projectAccordionTriggerIcon}>
+          <Ionicons color={COLORS.charcoal} name="folder-open-outline" size={18} />
+        </View>
+        <View style={styles.projectAccordionTriggerBody}>
+          <Text style={styles.projectAccordionEyebrow}>Project</Text>
+          <Text style={styles.projectAccordionTitle} numberOfLines={1}>
+            {selectedLabel}
+          </Text>
+          <Text style={styles.projectAccordionMeta} numberOfLines={1}>
+            {selectedMeta}
+          </Text>
+        </View>
+        <Ionicons
+          color={COLORS.muted}
+          name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+          size={18}
+        />
+      </Pressable>
+
+      {expanded ? (
+        <View style={styles.projectAccordionList}>
+          <View style={styles.projectAccordionSort}>
+            <Text style={styles.projectAccordionSortLabel}>Sort projects</Text>
+            <View accessibilityRole="radiogroup" style={styles.projectAccordionSortOptions}>
+              <DemandProjectSortOption
+                active={sortMode === 'recent'}
+                label="Recent"
+                onPress={() => setSortMode('recent')}
+              />
+              <DemandProjectSortOption
+                active={sortMode === 'name'}
+                label="Name"
+                onPress={() => setSortMode('name')}
+              />
+              <DemandProjectSortOption
+                active={sortMode === 'open'}
+                label="Open"
+                onPress={() => setSortMode('open')}
+              />
+            </View>
+          </View>
+          <DemandProjectOption
+            icon="documents-outline"
+            label="Drafts"
+            meta="Default workspace"
+            selected={selectedProjectId === null}
+            onPress={() => {
+              onProjectChange(null);
+              setExpanded(false);
+            }}
+          />
+          {sortedProjects.map((project) => (
+            <DemandProjectOption
+              key={project.id}
+              icon={project.isOpen ? 'desktop-outline' : 'folder-outline'}
+              label={project.displayName}
+              meta={`Active ${formatTimestamp(project.lastActivityAt ?? project.updatedAt)}`}
+              selected={selectedProjectId === project.id}
+              onPress={() => {
+                onProjectChange(project.id);
+                setExpanded(false);
+              }}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function DemandProjectSortOption({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={`Sort projects by ${label.toLowerCase()}`}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: active }}
+      style={({ pressed }) => [
+        styles.projectAccordionSortOption,
+        active ? styles.projectAccordionSortOptionActive : null,
+        pressed ? styles.buttonPressed : null,
+      ]}
+      onPress={onPress}
+    >
+      <Text
+        style={[
+          styles.projectAccordionSortOptionText,
+          active ? styles.projectAccordionSortOptionTextActive : null,
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function DemandProjectOption({
+  icon,
+  label,
+  meta,
+  selected,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  meta: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={`${label}, ${meta}`}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected }}
+      style={({ pressed }) => [
+        styles.projectAccordionOption,
+        selected ? styles.projectAccordionOptionSelected : null,
+        pressed ? styles.buttonPressed : null,
+      ]}
+      onPress={onPress}
+    >
+      <View
+        style={[
+          styles.projectAccordionOptionIcon,
+          selected ? styles.projectAccordionOptionIconSelected : null,
+        ]}
+      >
+        <Ionicons color={selected ? COLORS.surface : COLORS.muted} name={icon} size={17} />
+      </View>
+      <View style={styles.projectAccordionOptionBody}>
+        <Text style={styles.projectAccordionOptionLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        <Text style={styles.projectAccordionOptionMeta} numberOfLines={1}>
+          {meta}
+        </Text>
+      </View>
+      {selected ? <Ionicons color={COLORS.charcoal} name="checkmark-circle" size={20} /> : null}
+    </Pressable>
   );
 }
 
@@ -1880,6 +2098,7 @@ function SessionDetailScreen({
   const [outputMode, setOutputMode] = useState<SessionOutputMode>('rendered');
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [sessionInput, setSessionInput] = useState('');
+  const [sessionImages, setSessionImages] = useState<MobileImageDraft[]>([]);
   const [sendingInput, setSendingInput] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -2044,17 +2263,29 @@ function SessionDetailScreen({
 
   const handleSendInput = useCallback(async () => {
     const input = sessionInput.trim();
-    if (!input || !detail?.session.acceptsInput || sendingInput) return;
+    if ((!input && sessionImages.length === 0) || !detail?.session.acceptsInput || sendingInput)
+      return;
 
     setSendingInput(true);
+    let attachmentIds: string[] = [];
     try {
-      await sendSessionInput(connection, task.projectId, task.id, sessionId, { input });
+      attachmentIds = await uploadMobileInputImages(connection, sessionImages);
+      await sendSessionInput(connection, task.projectId, task.id, sessionId, {
+        input,
+        attachmentIds,
+      });
       setSessionInput('');
+      setSessionImages([]);
       setBottomState(true);
       await loadDetail(true);
       scrollToBottom(true);
       setError(null);
     } catch (e) {
+      await Promise.all(
+        attachmentIds.map((attachmentId) =>
+          discardInputAttachment(connection, attachmentId).catch(() => undefined)
+        )
+      );
       setError(errorMessage(e));
     } finally {
       setSendingInput(false);
@@ -2066,6 +2297,7 @@ function SessionDetailScreen({
     scrollToBottom,
     sendingInput,
     sessionId,
+    sessionImages,
     sessionInput,
     setBottomState,
     task.id,
@@ -2166,10 +2398,16 @@ function SessionDetailScreen({
           <SessionInputComposer
             live={detail?.session.running ?? false}
             acceptsInput={detail?.session.acceptsInput ?? false}
+            images={sessionImages}
+            imagesEnabled={
+              projects.find((project) => project.id === task.projectId)?.type === 'local'
+            }
             runtimeStatus={detail?.session.runtimeStatus ?? null}
             sending={sendingInput}
             value={sessionInput}
             onChange={setSessionInput}
+            onError={setError}
+            onImagesChange={setSessionImages}
             onSend={handleSendInput}
           />
         </View>
@@ -2212,24 +2450,216 @@ function SessionNavigationBar({
   );
 }
 
+function InputMediaControls({
+  compact = false,
+  disabled,
+  images,
+  imagesEnabled,
+  value,
+  onChange,
+  onError,
+  onImagesChange,
+}: {
+  compact?: boolean;
+  disabled: boolean;
+  images: MobileImageDraft[];
+  imagesEnabled: boolean;
+  value: string;
+  onChange: (value: string) => void;
+  onError: (message: string) => void;
+  onImagesChange: (images: MobileImageDraft[]) => void;
+}) {
+  const [pickingImages, setPickingImages] = useState(false);
+  const [voiceStarting, setVoiceStarting] = useState(false);
+  const [voiceActive, setVoiceActive] = useState(false);
+  const voiceBaseValueRef = useRef('');
+  const voiceSessionRef = useRef<MobileVoiceInputSession | null>(null);
+
+  const disposeVoiceSession = useCallback(() => {
+    voiceSessionRef.current?.dispose();
+    voiceSessionRef.current = null;
+    setVoiceActive(false);
+    setVoiceStarting(false);
+  }, []);
+
+  useEffect(
+    () => () => {
+      voiceSessionRef.current?.abort();
+      voiceSessionRef.current?.dispose();
+      voiceSessionRef.current = null;
+    },
+    []
+  );
+
+  const handlePickImages = useCallback(async () => {
+    if (disabled || pickingImages || !imagesEnabled) return;
+    setPickingImages(true);
+    try {
+      const picked = await pickMobileInputImages(images.length);
+      if (picked.length > 0) onImagesChange([...images, ...picked]);
+    } catch (error) {
+      onError(errorMessage(error));
+    } finally {
+      setPickingImages(false);
+    }
+  }, [disabled, images, imagesEnabled, onError, onImagesChange, pickingImages]);
+
+  const handleVoiceInput = useCallback(async () => {
+    if (disabled || voiceStarting) return;
+    if (voiceActive) {
+      voiceSessionRef.current?.stop();
+      return;
+    }
+    if (Constants.appOwnership === 'expo') {
+      onError(
+        'Voice input is available in the Yoda Mobile development build. In Expo Go, use the keyboard microphone.'
+      );
+      return;
+    }
+
+    voiceBaseValueRef.current = value;
+    setVoiceStarting(true);
+    try {
+      const session = await startMobileVoiceInput({
+        onEnd: disposeVoiceSession,
+        onError: (message) => {
+          onError(message);
+          disposeVoiceSession();
+        },
+        onResult: (transcript) => {
+          onChange(
+            appendMobileVoiceTranscript(voiceBaseValueRef.current, transcript).slice(
+              0,
+              MOBILE_SESSION_INPUT_MAX_CHARS
+            )
+          );
+        },
+      });
+      voiceSessionRef.current = session;
+      setVoiceStarting(false);
+      setVoiceActive(true);
+    } catch (error) {
+      disposeVoiceSession();
+      onError(errorMessage(error));
+    }
+  }, [disabled, disposeVoiceSession, onChange, onError, value, voiceActive, voiceStarting]);
+
+  return (
+    <View style={[styles.inputMediaShell, compact ? styles.inputMediaShellCompact : null]}>
+      {images.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.inputImageRail}
+        >
+          {images.map((image) => (
+            <View key={image.id} style={styles.inputImagePreview}>
+              <Image source={{ uri: image.uri }} style={styles.inputImage} />
+              <Pressable
+                accessibilityLabel={`Remove ${image.name}`}
+                accessibilityRole="button"
+                disabled={disabled}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.inputImageRemove,
+                  pressed ? styles.buttonPressed : null,
+                ]}
+                onPress={() =>
+                  onImagesChange(images.filter((candidate) => candidate.id !== image.id))
+                }
+              >
+                <Ionicons color={COLORS.surface} name="close-outline" size={15} />
+              </Pressable>
+            </View>
+          ))}
+        </ScrollView>
+      ) : null}
+      <View style={styles.inputMediaToolbar}>
+        <View style={styles.inputMediaActions}>
+          <Pressable
+            accessibilityLabel="Attach images"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: disabled || !imagesEnabled }}
+            disabled={disabled || !imagesEnabled || pickingImages}
+            style={({ pressed }) => [
+              styles.inputMediaButton,
+              disabled || !imagesEnabled ? styles.buttonDisabled : null,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={() => void handlePickImages()}
+          >
+            {pickingImages ? (
+              <ActivityIndicator color={COLORS.charcoal} size="small" />
+            ) : (
+              <Ionicons color={COLORS.charcoal} name="images-outline" size={18} />
+            )}
+            <Text style={styles.inputMediaButtonText}>Image</Text>
+          </Pressable>
+          <Pressable
+            accessibilityLabel={voiceActive ? 'Stop voice input' : 'Start voice input'}
+            accessibilityRole="button"
+            accessibilityState={{ busy: voiceStarting, disabled }}
+            disabled={disabled || voiceStarting}
+            style={({ pressed }) => [
+              styles.inputMediaButton,
+              voiceActive ? styles.inputMediaButtonActive : null,
+              disabled ? styles.buttonDisabled : null,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={() => void handleVoiceInput()}
+          >
+            {voiceStarting ? (
+              <ActivityIndicator color={COLORS.charcoal} size="small" />
+            ) : (
+              <Ionicons
+                color={voiceActive ? COLORS.red : COLORS.charcoal}
+                name={voiceActive ? 'stop-circle-outline' : 'mic-outline'}
+                size={18}
+              />
+            )}
+            <Text style={styles.inputMediaButtonText}>{voiceActive ? 'Listening…' : 'Voice'}</Text>
+          </Pressable>
+        </View>
+        {!imagesEnabled ? (
+          <Text style={styles.inputMediaHint}>Images require a local project.</Text>
+        ) : images.length > 0 ? (
+          <Text style={styles.inputMediaHint}>{images.length}/4 images</Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 function SessionInputComposer({
   live,
   acceptsInput,
+  images,
+  imagesEnabled,
   runtimeStatus,
   sending,
   value,
   onChange,
+  onError,
+  onImagesChange,
   onSend,
 }: {
   live: boolean;
   acceptsInput: boolean;
+  images: MobileImageDraft[];
+  imagesEnabled: boolean;
   runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
   sending: boolean;
   value: string;
   onChange: (value: string) => void;
+  onError: (message: string) => void;
+  onImagesChange: (images: MobileImageDraft[]) => void;
   onSend: () => void;
 }) {
-  const canSend = acceptsInput && value.trim().length > 0 && !sending;
+  const canSend =
+    acceptsInput &&
+    (value.trim().length > 0 || images.length > 0) &&
+    (images.length === 0 || imagesEnabled) &&
+    !sending;
   return (
     <View style={styles.sessionInputBar}>
       <SessionRuntimeStatus
@@ -2237,6 +2667,16 @@ function SessionInputComposer({
         live={live}
         runtimeStatus={runtimeStatus}
         valueLength={value.length}
+      />
+      <InputMediaControls
+        compact
+        disabled={sending || !acceptsInput}
+        images={images}
+        imagesEnabled={imagesEnabled}
+        value={value}
+        onChange={onChange}
+        onError={onError}
+        onImagesChange={onImagesChange}
       />
       <View style={styles.sessionInputRow}>
         <TextInput
@@ -3008,6 +3448,83 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 10,
   },
+  inputMediaShell: {
+    gap: 8,
+  },
+  inputMediaShellCompact: {
+    marginTop: -1,
+  },
+  inputImageRail: {
+    gap: 9,
+    paddingRight: 8,
+  },
+  inputImagePreview: {
+    position: 'relative',
+    width: 62,
+    height: 62,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 9,
+    backgroundColor: COLORS.page,
+  },
+  inputImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  inputImageRemove: {
+    position: 'absolute',
+    top: -7,
+    right: -7,
+    width: 23,
+    height: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.surface,
+    borderRadius: 12,
+    backgroundColor: COLORS.charcoal,
+  },
+  inputMediaToolbar: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  inputMediaActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  inputMediaButton: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 17,
+    backgroundColor: COLORS.page,
+    paddingHorizontal: 11,
+  },
+  inputMediaButtonActive: {
+    borderColor: '#E9B8B4',
+    backgroundColor: '#FFF1F0',
+  },
+  inputMediaButtonText: {
+    color: COLORS.charcoal,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  inputMediaHint: {
+    flexShrink: 1,
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
   sessionSendButton: {
     width: 44,
     height: 44,
@@ -3451,6 +3968,142 @@ const styles = StyleSheet.create({
   },
   projectChipMetaActive: {
     color: '#D8D4CB',
+  },
+  projectAccordion: {
+    width: '100%',
+  },
+  projectAccordionTrigger: {
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+  },
+  projectAccordionTriggerExpanded: {
+    borderBottomWidth: 0,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  projectAccordionTriggerIcon: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#EFEEE7',
+  },
+  projectAccordionTriggerBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+  },
+  projectAccordionEyebrow: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  projectAccordionTitle: {
+    color: COLORS.ink,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  projectAccordionMeta: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  projectAccordionList: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: COLORS.line,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    backgroundColor: COLORS.surface,
+  },
+  projectAccordionSort: {
+    gap: 7,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.faint,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+  projectAccordionSortLabel: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  projectAccordionSortOptions: {
+    flexDirection: 'row',
+    gap: 3,
+    borderRadius: 8,
+    backgroundColor: COLORS.page,
+    padding: 3,
+  },
+  projectAccordionSortOption: {
+    minHeight: 32,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+  },
+  projectAccordionSortOptionActive: {
+    backgroundColor: COLORS.charcoal,
+  },
+  projectAccordionSortOptionText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  projectAccordionSortOptionTextActive: {
+    color: COLORS.surface,
+  },
+  projectAccordionOption: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.faint,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+  projectAccordionOptionSelected: {
+    backgroundColor: '#EFEEE7',
+  },
+  projectAccordionOptionIcon: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: COLORS.page,
+  },
+  projectAccordionOptionIconSelected: {
+    backgroundColor: COLORS.charcoal,
+  },
+  projectAccordionOptionBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 3,
+  },
+  projectAccordionOptionLabel: {
+    color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  projectAccordionOptionMeta: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '600',
   },
   taskRow: {
     borderWidth: 1,

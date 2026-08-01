@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { buildProjectDeepLink } from '@shared/deep-links';
 import type { QuickAction } from '@shared/project-settings';
 import { ensureUniqueTaskSlug } from '@shared/task-name';
+import { openNewTask, resolveNewTaskOpenMode } from '@renderer/app/open-new-task';
 import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import {
   isUnregisteredProject,
@@ -47,6 +48,7 @@ import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
 import { ProjectActionsMenu, ProjectContextMenu } from './project-menu';
 import { SidebarItemMiniButton, SidebarMenuButton, SidebarMenuRow } from './sidebar-primitives';
+import { useSidebarHoverIntent } from './use-sidebar-hover-intent';
 
 const UNREGISTERED_PHASE_KEY: Record<UnregisteredProject['phase'], string> = {
   'creating-repo': 'sidebar.phase.creatingRepo',
@@ -146,6 +148,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     prefetchRepository();
     void settingsStore?.pageData.load();
   }, [prefetchRepository, settingsStore]);
+  const projectMenuDataIntent = useSidebarHoverIntent(prefetchProjectMenuData);
 
   const handleRunQuickAction = useCallback(
     async (action: QuickAction) => {
@@ -187,13 +190,16 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     const repo = getRepositoryStore(projectId);
     const defaultBranch = repo?.defaultBranch;
     const isUnborn = repo?.isUnborn ?? false;
+    const openMode = await resolveNewTaskOpenMode();
     // Express mode requires a runnable runtime config. Fall back to the home
-    // view whenever any prerequisite is missing so the user can fix it there.
-    if (!expressMode || !mounted || !expressProviderId || !defaultBranch) {
+    // composer whenever any prerequisite is missing so the user can fix it
+    // there. An explicit floating-window preference takes priority over
+    // one-click creation: the `+` button must obey the chosen opening mode.
+    if (openMode === 'modal' || !expressMode || !mounted || !expressProviderId || !defaultBranch) {
       void getProjectManagerStore()
         .mountProject(projectId)
         .catch(() => {});
-      navigate('home', { projectId });
+      openNewTask(openMode, projectId);
       return;
     }
     const strategyKind = homeDraft?.strategyKind ?? 'new-branch';
@@ -345,7 +351,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
       (expressProviderId || quickActions.some((action) => action.kind === 'command'))
         ? (action: QuickAction) => void handleRunQuickAction(action)
         : undefined,
-    onMenuOpen: prefetchProjectMenuData,
+    onMenuOpen: projectMenuDataIntent.runNow,
     onRename: project.state === 'unregistered' ? undefined : () => showRenameProject({ projectId }),
     onMovePath:
       project.state === 'unregistered' ? undefined : () => showMoveProjectPath({ projectId }),
@@ -381,7 +387,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
         aria-expanded={isExpanded}
         aria-busy={project.state === 'unregistered' || isLoadingProjectSessions}
         onMouseDown={(e) => e.preventDefault()}
-        onMouseEnter={prefetchProjectMenuData}
+        onPointerEnter={projectMenuDataIntent.schedule}
+        onPointerLeave={projectMenuDataIntent.cancel}
         onClick={(e) => {
           // Alt/Option pins the project into the global side pane; a plain
           // click toggles its task list as usual.
@@ -476,7 +483,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
               'transition-opacity duration-150',
               isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'
             )}
-            onPointerEnter={() => prefetchRepository()}
+            onPointerEnter={projectMenuDataIntent.schedule}
             onClick={(e) => {
               e.stopPropagation();
               void handleAddTask();

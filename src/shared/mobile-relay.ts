@@ -174,6 +174,7 @@ export function parseMobileRelayHostFrame(value: unknown): MobileRelayHostFrame 
 const MOBILE_RELAY_ALLOWED_PATHS = [
   /^\/v1\/snapshot$/,
   /^\/v1\/demands$/,
+  /^\/v1\/attachments(?:\/[0-9a-f-]+\/(?:chunks|complete|discard))?$/i,
   /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions$/,
   /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions\/[^/?]+(?:\/input|\/events)?$/,
 ];
@@ -181,6 +182,7 @@ const MOBILE_RELAY_ALLOWED_PATHS = [
 export function isAllowedMobileRelayRequest(method: string, path: string): boolean {
   const normalizedMethod = method.toUpperCase();
   if (!['GET', 'POST'].includes(normalizedMethod)) return false;
+  if (path.startsWith('/v1/attachments') && normalizedMethod !== 'POST') return false;
   return MOBILE_RELAY_ALLOWED_PATHS.some((pattern) => pattern.test(path));
 }
 

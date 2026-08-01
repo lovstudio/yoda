@@ -4,7 +4,7 @@
 
 - `src/main/core/pty/` — `local-pty.ts`, `ssh2-pty.ts`, `pty.ts`, `pty-env.ts`, `pty-session-registry.ts`, `spawn-utils.ts`, `exit-signals.ts`, `controller.ts`
 - `src/main/core/terminals/` — terminal lifecycle, local and SSH terminal providers
-- `src/main/core/terminals/workspace-terminal-service.ts` — task-free project/global terminals and allowlisted runtime actions
+- `src/main/core/terminals/workspace-terminal-service.ts` — task-free project/global terminals, persisted project-terminal reattachment, and allowlisted runtime actions
 - `src/main/core/conversations/impl/agent-event-classifiers/` — per-provider terminal output parsers
 - `src/main/core/agent-hooks/` — hook server, event enrichment, OS notifications, hook config writer
 
@@ -38,3 +38,5 @@
 - provider startup is single-flight per session; stop/delete/detach must
   invalidate an in-flight start before unregistering, and any stale or failed
   spawn must kill its own PTY without touching a newer generation
+- project-root terminals follow the global tmux policy, persist outside the
+  task-terminal table, and must participate in detach/terminate app shutdown

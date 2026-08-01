@@ -2345,7 +2345,7 @@ export const HomeComposer = observer(function HomeComposer({
               )}
             />
             {renderComposerSettingsButton()}
-            {runMode === 'normal' && renderAddCompareButton()}
+            {!taskScopedTarget && runMode === 'normal' && renderAddCompareButton()}
           </div>
         )}
       </div>

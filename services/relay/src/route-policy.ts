@@ -63,7 +63,17 @@ function assertAllowedUpstreamRoute(method: string, segments: string[]): boolean
     if (segments[1] === 'snapshot') return false;
   }
   if (method === 'POST' && segments.length === 2 && segments[0] === 'v1') {
-    if (segments[1] === 'demands') return false;
+    if (segments[1] === 'demands' || segments[1] === 'attachments') return false;
+  }
+  if (
+    method === 'POST' &&
+    segments.length === 4 &&
+    segments[0] === 'v1' &&
+    segments[1] === 'attachments' &&
+    segments[2] &&
+    ['chunks', 'complete', 'discard'].includes(segments[3] ?? '')
+  ) {
+    return false;
   }
 
   if (!isSessionsPrefix(segments)) {

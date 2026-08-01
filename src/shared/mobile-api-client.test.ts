@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchSnapshot } from '../../apps/mobile/src/api-client';
+import { fetchSnapshot, uploadInputImage } from '../../apps/mobile/src/api-client';
 import { MOBILE_RELAY_BASE_URL } from './mobile-relay';
 
 const relayConnection = {
@@ -49,5 +49,62 @@ describe('mobile API connectivity diagnostics', () => {
       fetchSnapshot({ baseUrl: 'http://192.168.1.20:3879', token: 'dev-token' })
     ).rejects.toThrow('Check Local Network permission, Wi-Fi');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('uploads image data in ordered chunks before completing it', async () => {
+    const connection = { baseUrl: 'http://127.0.0.1:3879', token: 'dev-token' };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ attachmentId: 'attachment-1', chunkSizeBytes: 6 }), {
+          status: 201,
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ attachmentId: 'attachment-1', receivedBytes: 6 }), {
+          status: 200,
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ attachmentId: 'attachment-1', receivedBytes: 7 }), {
+          status: 200,
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            attachment: {
+              id: 'attachment-1',
+              kind: 'image',
+              name: 'photo.jpg',
+              mimeType: 'image/jpeg',
+              sizeBytes: 7,
+            },
+          }),
+          { status: 200 }
+        )
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      uploadInputImage(connection, {
+        base64: Buffer.from('1234567').toString('base64'),
+        mimeType: 'image/jpeg',
+        name: 'photo.jpg',
+      })
+    ).resolves.toMatchObject({ id: 'attachment-1', sizeBytes: 7 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      offset: 0,
+      dataBase64: Buffer.from('123456').toString('base64'),
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toEqual({
+      offset: 6,
+      dataBase64: Buffer.from('7').toString('base64'),
+    });
+    expect(fetchMock.mock.calls[3]?.[0]).toBe(
+      'http://127.0.0.1:3879/v1/attachments/attachment-1/complete'
+    );
   });
 });
