@@ -75,7 +75,7 @@ import {
 import { WorkspaceResourceMetric } from './workspace-resource-metric';
 import { WORKSPACE_RESOURCE_QUERY_TIMING } from './workspace-resource-monitoring';
 import { WorkspaceResourceTrend } from './workspace-resource-trend';
-import { getQuotaWindowLabel } from './workspace-runtime-bar-format';
+import { getDistinctAgentTaskTitle, getQuotaWindowLabel } from './workspace-runtime-bar-format';
 
 type WorkspaceAgentSession = Omit<AppAgentSessionResource, 'runtimeId' | 'title' | 'taskTitle'> & {
   runtimeId?: AppAgentSessionResource['runtimeId'];
@@ -990,16 +990,17 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   t('workspaceRuntime.agents.taskFallback', {
                     id: session.taskId.slice(0, 8),
                   });
+                const taskContext = getDistinctAgentTaskTitle(title, taskTitle);
                 const config = session.runtimeId ? agentConfig[session.runtimeId] : undefined;
                 return (
                   <button
                     key={agentSessionKey(session)}
                     type="button"
                     aria-label={t('workspaceRuntime.agents.openSession', { title })}
-                    className="flex w-full min-w-0 items-start gap-2.5 rounded-md px-2 py-2 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                    className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
                     onClick={() => openAgentSession(session)}
                   >
-                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center">
+                    <span className="flex size-6 shrink-0 items-center justify-center">
                       {config ? (
                         <AgentLogo
                           logo={config.logo}
@@ -1012,41 +1013,42 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                         <Bot aria-hidden className="size-4" />
                       )}
                     </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                          {title}
-                        </span>
-                        <span className="shrink-0 font-mono text-[10px] tabular-nums text-foreground-passive">
-                          {formatBytes(session.memoryBytes)}
-                        </span>
+                    <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] grid-rows-2 items-center gap-x-2 gap-y-0.5">
+                      <span className="truncate text-sm leading-5 text-foreground" title={title}>
+                        {title}
                       </span>
-                      <span className="mt-0.5 block truncate text-[11px] text-foreground-passive">
-                        {taskTitle}
+                      <span className="font-mono text-[10px] leading-4 tabular-nums text-foreground-passive">
+                        {formatBytes(session.memoryBytes)}
                       </span>
-                      <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-background-2 px-1.5 py-0.5 text-foreground-muted">
+                      <span className="col-span-2 flex min-w-0 items-center gap-1.5 text-[10px] leading-4">
+                        {taskContext ? (
+                          <span
+                            className="min-w-0 flex-1 truncate text-[11px] text-foreground-passive"
+                            title={taskContext}
+                          >
+                            {taskContext}
+                          </span>
+                        ) : null}
+                        <span className="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-sm bg-background-2 px-1 text-foreground-muted">
                           <AgentStatusIndicator
                             status={session.status}
                             disableTooltip
-                            boxClassName="size-3"
+                            boxClassName="size-3.5"
                           />
                           {t(`agentStatus.${session.status}`)}
                         </span>
                         <span
                           className={cn(
-                            'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5',
-                            session.tmuxBacked
-                              ? 'bg-status-in-review/10 text-status-in-review'
-                              : 'bg-background-2 text-foreground-passive'
+                            'inline-flex h-4 shrink-0 items-center gap-0.5 rounded-sm bg-background-2 px-1',
+                            session.tmuxBacked ? 'text-foreground-muted' : 'text-foreground-passive'
                           )}
                         >
-                          <Boxes aria-hidden className="size-3" />
+                          <Boxes aria-hidden className="size-2.5" />
                           {session.tmuxBacked
                             ? t('workspaceRuntime.agents.tmuxRunning')
                             : t('workspaceRuntime.agents.noTmux')}
                         </span>
-                        <span className="font-mono tabular-nums text-foreground-passive">
+                        <span className="ml-auto shrink-0 font-mono tabular-nums text-foreground-passive">
                           {Math.round(session.cpuPercent)}% CPU · PID {session.pid ?? '—'}
                         </span>
                       </span>

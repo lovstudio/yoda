@@ -9,6 +9,18 @@ export interface QuotaWindowLabel {
   value: number;
 }
 
+function normalizeSessionLabel(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+}
+
+export function getDistinctAgentTaskTitle(sessionTitle: string, taskTitle: string): string | null {
+  const trimmedTaskTitle = taskTitle.trim();
+
+  return normalizeSessionLabel(sessionTitle) === normalizeSessionLabel(trimmedTaskTitle)
+    ? null
+    : trimmedTaskTitle;
+}
+
 const QUOTA_WINDOW_UNITS: ReadonlyArray<{
   minutes: number;
   translationKey: QuotaWindowLabelKey;
