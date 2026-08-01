@@ -4,13 +4,12 @@ import path from 'node:path';
 import {
   MOBILE_INPUT_ATTACHMENT_CHUNK_BYTES,
   MOBILE_INPUT_ATTACHMENT_MAX_BYTES,
-  MOBILE_INPUT_ATTACHMENT_MAX_COUNT,
   type MobileInputAttachment,
   type MobileInputAttachmentChunkRequest,
   type MobileInputAttachmentCreateRequest,
 } from '@shared/mobile-api';
 
-const MAX_ACTIVE_ATTACHMENTS = 32;
+const MAX_PENDING_ATTACHMENT_UPLOADS = 32;
 const STORED_ATTACHMENT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
@@ -144,7 +143,10 @@ export class MobileInputAttachmentStore {
     attachmentId: string;
     chunkSizeBytes: number;
   }> {
-    if (this.records.size >= MAX_ACTIVE_ATTACHMENTS) {
+    const pendingUploadCount = [...this.records.values()].filter(
+      (attachment) => !attachment.complete
+    ).length;
+    if (pendingUploadCount >= MAX_PENDING_ATTACHMENT_UPLOADS) {
       throw new MobileInputAttachmentError(
         429,
         'too_many_pending_attachments',
@@ -250,13 +252,6 @@ export class MobileInputAttachmentStore {
         400,
         'duplicate_attachment',
         'The same image cannot be attached more than once.'
-      );
-    }
-    if (uniqueIds.length > MOBILE_INPUT_ATTACHMENT_MAX_COUNT) {
-      throw new MobileInputAttachmentError(
-        400,
-        'too_many_attachments',
-        `A request can include up to ${MOBILE_INPUT_ATTACHMENT_MAX_COUNT} images.`
       );
     }
     return uniqueIds.map((id) => {

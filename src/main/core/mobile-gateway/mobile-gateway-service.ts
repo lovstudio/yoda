@@ -20,7 +20,6 @@ import {
   MOBILE_APP_DEFAULT_INSTALL_URL,
   MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
   MOBILE_GATEWAY_DEFAULT_PORT,
-  MOBILE_INPUT_ATTACHMENT_MAX_COUNT,
   MOBILE_SESSION_CONTENT_MAX_CHARS,
   MOBILE_SESSION_INPUT_MAX_CHARS,
   MOBILE_SESSION_TRANSCRIPT_MAX_CHARS,
@@ -584,13 +583,6 @@ function normalizeAttachmentIds(value: unknown): string[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) {
     throw new MobileGatewayError(400, 'invalid_attachments', 'Attachment ids must be an array.');
-  }
-  if (value.length > MOBILE_INPUT_ATTACHMENT_MAX_COUNT) {
-    throw new MobileGatewayError(
-      400,
-      'too_many_attachments',
-      `A request can include up to ${MOBILE_INPUT_ATTACHMENT_MAX_COUNT} images.`
-    );
   }
   return value.map((attachmentId) => {
     if (
