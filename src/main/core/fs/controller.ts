@@ -6,11 +6,13 @@ import { planEventChannel } from '@shared/events/appEvents';
 import { fsWatchEventChannel } from '@shared/events/fsEvents';
 import { createRPCController } from '@shared/ipc/rpc';
 import { err, ok } from '@shared/result';
+import { SshExecutionContext } from '@main/core/execution-context/ssh-execution-context';
 import { LocalFileSystem } from '@main/core/fs/impl/local-fs';
 import { SshFileSystem } from '@main/core/fs/impl/ssh-fs';
 import { getProjectById } from '@main/core/projects/operations/getProjects';
 import { projectManager } from '@main/core/projects/project-manager';
 import { sshConnectionManager } from '@main/core/ssh/ssh-connection-manager';
+import { resolveRemoteHome } from '@main/core/ssh/utils';
 import { events } from '@main/lib/events';
 import { resolveWorkspace } from '../projects/utils';
 import {
@@ -31,7 +33,7 @@ const watcherRegistry = new Map<string, FileWatcher>();
 const watcherLabeledPaths = new Map<string, Map<string, string[]>>();
 
 type PathCompletionOptions = ListOptions & {
-  pathKind?: 'relative' | 'absolute';
+  pathKind?: 'relative' | 'absolute' | 'home';
 };
 
 // Clipboard images carry no filesystem path, so the renderer ships the bytes
@@ -189,6 +191,34 @@ export const filesController = createRPCController({
           entity: 'project' as const,
           detail: undefined,
         });
+      }
+
+      if (pathKind === 'home') {
+        if (projectData.type === 'ssh') {
+          const proxy = await sshConnectionManager.connect(projectData.connectionId);
+          const remoteContext = new SshExecutionContext(proxy);
+          const remoteHome = await resolveRemoteHome(remoteContext).finally(() => {
+            remoteContext.dispose();
+          });
+          const homeFs = new SshFileSystem(proxy, remoteHome);
+          return ok(
+            await homeFs.list(dirPath, {
+              recursive: false,
+              includeHidden: true,
+              maxEntries: 100,
+              ...listOptions,
+            })
+          );
+        }
+
+        return ok(
+          await listLocalRelativePath(homedir(), dirPath, {
+            recursive: false,
+            includeHidden: true,
+            maxEntries: 100,
+            ...listOptions,
+          })
+        );
       }
 
       if (pathKind === 'absolute') {

@@ -23,7 +23,7 @@ describe('path mention autocomplete helpers', () => {
 
   it('splits relative path queries', () => {
     expect(splitPathMentionQuery('src/ren')).toEqual({
-      isAbsolute: false,
+      pathKind: 'relative',
       directoryPath: 'src',
       namePrefix: 'ren',
       preserveDotSlash: false,
@@ -32,9 +32,24 @@ describe('path mention autocomplete helpers', () => {
 
   it('splits absolute path queries', () => {
     expect(splitPathMentionQuery('/Users/mark/project/src/ren')).toEqual({
-      isAbsolute: true,
+      pathKind: 'absolute',
       directoryPath: '/Users/mark/project/src',
       namePrefix: 'ren',
+      preserveDotSlash: false,
+    });
+  });
+
+  it('splits home path queries without exposing the expanded home directory', () => {
+    expect(splitPathMentionQuery('~/Documents/pro')).toEqual({
+      pathKind: 'home',
+      directoryPath: 'Documents',
+      namePrefix: 'pro',
+      preserveDotSlash: false,
+    });
+    expect(splitPathMentionQuery('~')).toEqual({
+      pathKind: 'home',
+      directoryPath: '.',
+      namePrefix: '',
       preserveDotSlash: false,
     });
   });
@@ -44,6 +59,13 @@ describe('path mention autocomplete helpers', () => {
     expect(
       buildPathCompletionItems([{ path: 'src/renderer', type: 'dir' }], parts)[0]?.insertText
     ).toBe('./src/renderer/');
+  });
+
+  it('preserves the home prefix in completion text', () => {
+    const parts = splitPathMentionQuery('~/Doc');
+    expect(
+      buildPathCompletionItems([{ path: 'Documents', type: 'dir' }], parts)[0]?.insertText
+    ).toBe('~/Documents/');
   });
 
   it('filters and sorts completion items by prefix and type', () => {
