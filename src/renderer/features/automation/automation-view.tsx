@@ -7,6 +7,7 @@ import {
   Folder,
   History,
   Loader2,
+  Lock,
   MoreHorizontal,
   Pause,
   Pencil,
@@ -126,12 +127,19 @@ function draftToInput(draft: AutomationDraft): AutomationCreateInput {
   };
 }
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
+function formatTime(iso: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+  }).format(new Date(iso));
+}
+
+function orderAutomations(items: Automation[]): Automation[] {
+  return [...items].sort((left, right) => {
+    if (left.status === right.status) return 0;
+    return left.status === 'active' ? -1 : 1;
   });
 }
 
@@ -161,7 +169,7 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
   const [draft, setDraft] = useState<AutomationDraft>(() => makeDraft(DEFAULT_PROVIDER));
 
   const defaultProvider = isValidRuntimeId(defaultRuntime) ? defaultRuntime : DEFAULT_PROVIDER;
-  const items = useMemo(() => automationsData ?? [], [automationsData]);
+  const items = useMemo(() => orderAutomations(automationsData ?? []), [automationsData]);
   const history = useMemo(() => historyData ?? [], [historyData]);
   const activeItems = useMemo(() => items.filter((item) => item.status === 'active'), [items]);
   const pausedItems = useMemo(() => items.filter((item) => item.status === 'paused'), [items]);
@@ -407,7 +415,8 @@ function AutomationSummary({
   pausedCount: number;
   nextAutomation: Automation | undefined;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage ?? i18n.language;
 
   return (
     <section
@@ -427,7 +436,7 @@ function AutomationSummary({
           {nextAutomation?.nextRunAt
             ? t('automation.summary.next', {
                 name: nextAutomation.title,
-                time: formatTime(nextAutomation.nextRunAt),
+                time: formatTime(nextAutomation.nextRunAt, locale),
               })
             : t('automation.summary.noSchedule')}
         </span>
@@ -572,26 +581,23 @@ const AutomationCard = observer(function AutomationCard({
   onToggle: (entry: Automation) => void;
   onOpenTask: (taskId: string) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const runtime = RUNTIMES.find((item) => item.id === entry.runtime);
   const detected = appState.dependencies.agentStatuses[entry.runtime]?.status === 'available';
   const syncedFromCodex = entry.source === 'codex';
   const scheduleLabel =
     entry.triggerKind === 'cron'
       ? entry.nextRunAt
-        ? t('automation.nextRunLabel', { time: formatTime(entry.nextRunAt) })
+        ? t('automation.nextRunLabel', { time: formatTime(entry.nextRunAt, locale) })
         : t('automation.schedule.pending')
       : t('automation.schedule.manual');
   const runStyle = lastRun ? RUN_STATUS_STYLES[lastRun.status] : null;
   const RunStatusIcon = runStyle?.icon;
+  const lastRunAt = lastRun?.startedAt ?? entry.lastRunAt;
 
   return (
-    <article
-      className={cn(
-        'group overflow-hidden rounded-xl border border-border/80 bg-background-secondary transition-[border-color,box-shadow,opacity] hover:border-border-strong',
-        entry.status === 'paused' && 'opacity-80'
-      )}
-    >
+    <article className="group overflow-hidden rounded-xl border border-border/80 bg-background-secondary transition-[border-color,box-shadow] hover:border-border-strong">
       <div className="p-4">
         <div className="flex items-start gap-3">
           <span
@@ -602,11 +608,7 @@ const AutomationCard = observer(function AutomationCard({
                 : 'border-border bg-background text-foreground-muted'
             )}
           >
-            {entry.status === 'active' ? (
-              <Workflow className="size-4" />
-            ) : (
-              <Pause className="size-4" />
-            )}
+            <Workflow className="size-4" />
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -686,10 +688,10 @@ const AutomationCard = observer(function AutomationCard({
             )}
           >
             <Bot className="size-3.5" />
-            {runtime?.name ?? entry.runtime}
+            {t('automation.card.runner', { name: runtime?.name ?? entry.runtime })}
           </span>
-          {lastRun &&
-            (lastRun.taskId ? (
+          {lastRunAt &&
+            (lastRun?.taskId ? (
               <button
                 type="button"
                 className="inline-flex items-center gap-1.5 rounded-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
@@ -697,28 +699,38 @@ const AutomationCard = observer(function AutomationCard({
                 onClick={() => onOpenTask(lastRun.taskId as string)}
               >
                 <History className="size-3.5" />
-                {t('automation.card.lastRun')} <RelativeTime value={lastRun.startedAt} />
+                {t('automation.card.lastRun')} <RelativeTime value={lastRunAt} />
               </button>
             ) : (
               <span className="inline-flex items-center gap-1.5">
                 <History className="size-3.5" />
-                {t('automation.card.lastRun')} <RelativeTime value={lastRun.startedAt} />
+                {t('automation.card.lastRun')} <RelativeTime value={lastRunAt} />
               </span>
             ))}
-          {syncedFromCodex && (
-            <span
-              className="inline-flex items-center gap-1.5"
-              title={t('automation.source.codexHint')}
-            >
-              <RefreshCw className="size-3.5" />
-              {t('automation.source.codexManaged')}
-            </span>
-          )}
         </div>
       </div>
 
-      {!syncedFromCodex && (
-        <footer className="flex flex-wrap items-center justify-end gap-3 border-t border-border/70 bg-background/40 px-4 py-2">
+      <footer className="flex min-h-12 flex-wrap items-center justify-between gap-3 border-t border-border/70 bg-background/40 px-4 py-2">
+        <span
+          className="inline-flex items-center gap-1.5 text-xs text-foreground-muted"
+          title={syncedFromCodex ? t('automation.source.codexHint') : undefined}
+        >
+          {syncedFromCodex ? (
+            <RefreshCw className="size-3.5" />
+          ) : (
+            <Settings2 className="size-3.5" />
+          )}
+          {syncedFromCodex
+            ? t('automation.source.codexManaged')
+            : t('automation.source.yodaManaged')}
+        </span>
+
+        {syncedFromCodex ? (
+          <Badge variant="outline" className="gap-1.5 text-foreground-muted">
+            <Lock className="size-3" />
+            {t('automation.source.readOnly')}
+          </Badge>
+        ) : (
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-2 text-xs text-foreground-muted">
               {entry.status === 'active'
@@ -751,8 +763,8 @@ const AutomationCard = observer(function AutomationCard({
               {isRunning ? t('automation.actions.running') : t('automation.actions.runNow')}
             </Button>
           </div>
-        </footer>
-      )}
+        )}
+      </footer>
     </article>
   );
 });
