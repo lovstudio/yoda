@@ -69,6 +69,7 @@ import {
   selectMobileConnectionBootstrapFallback,
 } from './connection-bootstrap';
 import { clearConnection, loadConnection, saveConnection } from './connection-storage';
+import { prepareCreatedDemandNavigation } from './demand-navigation';
 import {
   pickMobileInputImages,
   uploadMobileInputImages,
@@ -851,7 +852,8 @@ export function App() {
   }, [loadDashboard]);
 
   const handleSubmitDemand = useCallback(async () => {
-    if (!connection || (!prompt.trim() && demandImages.length === 0) || submitting) return;
+    if (!connection || !snapshot || (!prompt.trim() && demandImages.length === 0) || submitting)
+      return;
     setSubmitting(true);
     let attachmentIds: string[] = [];
     try {
@@ -863,8 +865,13 @@ export function App() {
       });
       setPrompt('');
       setDemandImages([]);
-      setSelectedProjectId(result.task.projectId);
-      setHomeTab('tasks');
+      const destination = prepareCreatedDemandNavigation(snapshot, result.task);
+      setSnapshot(destination.snapshot);
+      setHomeTab(destination.homeTab);
+      setTaskScope(destination.taskScope);
+      setSelectedProjectId(destination.selectedProjectId);
+      setSelectedTaskId(destination.selectedTaskId);
+      setSelectedSessionId(destination.selectedSessionId);
       await loadDashboard(true);
       setError(null);
     } catch (e) {
@@ -877,7 +884,7 @@ export function App() {
     } finally {
       setSubmitting(false);
     }
-  }, [connection, demandImages, demandProjectId, loadDashboard, prompt, submitting]);
+  }, [connection, demandImages, demandProjectId, loadDashboard, prompt, snapshot, submitting]);
 
   if (booting) {
     return (
