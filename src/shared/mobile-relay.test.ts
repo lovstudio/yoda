@@ -104,4 +104,15 @@ describe('mobile relay contract', () => {
       })
     ).toMatchObject({ type: 'request.start', method: 'GET' });
   });
+
+  it('allows chunked mobile image upload routes through Relay', () => {
+    expect(isAllowedMobileRelayRequest('POST', '/v1/attachments')).toBe(true);
+    expect(
+      isAllowedMobileRelayRequest(
+        'POST',
+        '/v1/attachments/123e4567-e89b-12d3-a456-426614174000/chunks'
+      )
+    ).toBe(true);
+    expect(isAllowedMobileRelayRequest('GET', '/v1/attachments')).toBe(false);
+  });
 });

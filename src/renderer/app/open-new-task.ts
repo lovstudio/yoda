@@ -23,16 +23,20 @@ export function openNewTask(mode: NewTaskOpenMode, projectId?: string): void {
   appState.navigation.navigate('home', projectId ? { projectId } : undefined);
 }
 
-export async function openNewTaskFromPreference(projectId?: string): Promise<void> {
+export async function resolveNewTaskOpenMode(): Promise<NewTaskOpenMode> {
   const cached = queryClient.getQueryData<{ value: InterfaceSettings }>([
     'appSettings',
     'interface',
     'meta',
   ]);
-  const mode =
+  return (
     cached?.value.newTaskOpenMode ??
     (await (rpc.appSettings.get('interface') as Promise<InterfaceSettings>)
       .then((settings) => settings.newTaskOpenMode)
-      .catch(() => 'home' as const));
-  openNewTask(mode, projectId);
+      .catch(() => 'home' as const))
+  );
+}
+
+export async function openNewTaskFromPreference(projectId?: string): Promise<void> {
+  openNewTask(await resolveNewTaskOpenMode(), projectId);
 }

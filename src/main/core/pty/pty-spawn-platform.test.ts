@@ -311,4 +311,22 @@ describe('resolveLocalPtySpawn - POSIX', () => {
       "'export CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN='\\''1'\\''; claude --resume conv-1'"
     );
   });
+
+  it('guards a reusable tmux session with the resolved agent thread identity', () => {
+    const result = resolveLocalPtySpawn({
+      platform: 'linux',
+      env: posixEnv,
+      intent: {
+        kind: 'run-command',
+        cwd: '/repo',
+        command: { kind: 'argv', command: 'codex', args: ['resume', 'fork-thread'] },
+        tmuxSessionName: 'agent-session',
+        tmuxSessionIdentity: 'fork-thread',
+      },
+    });
+
+    expect(result.args[1]).toContain('@yoda_agent_session_id');
+    expect(result.args[1]).toContain('[ "$current_identity" = \'fork-thread\' ]');
+    expect(result.args[1]).toContain('kill-session -t "agent-session"');
+  });
 });

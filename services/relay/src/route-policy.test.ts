@@ -10,6 +10,13 @@ describe('resolveForwardableMobileRoute', () => {
   it.each([
     ['GET', '/v1/devices/desktop-1/v1/snapshot', '/v1/snapshot', false],
     ['POST', '/v1/devices/desktop-1/v1/demands', '/v1/demands', false],
+    ['POST', '/v1/devices/desktop-1/v1/attachments', '/v1/attachments', false],
+    [
+      'POST',
+      '/v1/devices/desktop-1/v1/attachments/123e4567-e89b-12d3-a456-426614174000/chunks',
+      '/v1/attachments/123e4567-e89b-12d3-a456-426614174000/chunks',
+      false,
+    ],
     [
       'GET',
       '/v1/devices/desktop-1/v1/projects/project%20one/tasks/task-1/sessions',

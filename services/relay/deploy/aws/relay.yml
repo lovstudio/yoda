@@ -177,6 +177,10 @@ Resources:
           PUBLIC_URL_PARAMETER='${RelayPublicBaseUrl}'
           TOKEN=$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$SECRET_ID" --query SecretString --output text)
           PUBLIC_URL=$(aws ssm get-parameter --region "$REGION" --name "$PUBLIC_URL_PARAMETER" --query Parameter.Value --output text)
+          ENV_FILE=/run/yoda-relay.env
+          umask 077
+          printf 'LOVSTUDIO_RELAY_SERVICE_TOKEN=%s\n' "$TOKEN" >"$ENV_FILE"
+          unset TOKEN
           aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com"
           docker pull "$IMAGE_URI"
           docker rm -f yoda-relay >/dev/null 2>&1 || true
@@ -187,7 +191,7 @@ Resources:
             -e NODE_ENV=production \
             -e YODA_RELAY_PUBLIC_BASE_URL="$PUBLIC_URL" \
             -e LOVSTUDIO_BASE_URL=https://lovstudio.ai \
-            -e LOVSTUDIO_RELAY_SERVICE_TOKEN="$TOKEN" \
+            --env-file "$ENV_FILE" \
             "$IMAGE_URI"
           SCRIPT
           chmod 0750 /opt/yoda-relay/run.sh

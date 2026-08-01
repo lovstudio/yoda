@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildTmuxShellLine,
@@ -58,6 +59,66 @@ describe('buildTmuxShellLine', () => {
 
     expect(line).toContain("'export CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN='\\''1'\\''; claude'");
     expect(line).not.toContain('INVALID-NAME');
+  });
+
+  it('reuses tmux only when it is bound to the requested agent thread', () => {
+    const line = buildTmuxShellLine(
+      'agent-session',
+      'codex resume current-thread',
+      undefined,
+      undefined,
+      'current-thread'
+    );
+
+    expect(line).toContain(
+      'tmux -L yoda -f /dev/null show-options -v -t "agent-session" @yoda_agent_session_id'
+    );
+    expect(line).toContain('[ "$current_identity" = \'current-thread\' ]');
+    expect(line).toContain(
+      'tmux -L yoda -f /dev/null list-panes -t "agent-session" -F "#{pane_start_command}"'
+    );
+    expect(line).toContain("grep -F -- 'current-thread'");
+    expect(line).toContain('tmux -L yoda -f /dev/null kill-session -t "agent-session"');
+    expect(line).toContain(
+      'tmux -L yoda -f /dev/null set-option -t "agent-session" @yoda_agent_session_id \'current-thread\''
+    );
+  });
+
+  it('keeps the legacy attach-or-create path for terminals without an agent identity', () => {
+    const line = buildTmuxShellLine('terminal-session', 'exec /bin/zsh -il');
+
+    expect(line).not.toContain('@yoda_agent_session_id');
+    expect(line).not.toContain('kill-session');
+  });
+
+  it('accepts a provisional identity once and upgrades it to the resolved thread', () => {
+    const line = buildTmuxShellLine(
+      'agent-session',
+      'codex resume resolved-thread',
+      undefined,
+      undefined,
+      'resolved-thread',
+      ['conversation-id']
+    );
+
+    expect(line).toContain('[ "$current_identity" = \'conversation-id\' ]');
+    expect(line).toContain("grep -F -- 'conversation-id'");
+    expect(line).toContain("@yoda_agent_session_id 'resolved-thread'");
+  });
+
+  it('emits valid POSIX shell syntax for identity-guarded reconnects', () => {
+    if (process.platform === 'win32') return;
+    const line = buildTmuxShellLine(
+      'agent-session',
+      'codex resume current-thread',
+      { cols: 120, rows: 40 },
+      undefined,
+      'current-thread'
+    );
+
+    const parsed = spawnSync('/bin/sh', ['-n'], { input: line, encoding: 'utf8' });
+
+    expect(parsed.status, parsed.stderr).toBe(0);
   });
 
   it('preserves real newlines in the command line instead of escaping to literal \\n', () => {

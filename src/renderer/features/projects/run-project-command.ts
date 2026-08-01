@@ -6,6 +6,7 @@ import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
 import type { Branch } from '@shared/git';
 import type { QuickAction } from '@shared/project-settings';
 import type { RuntimeId } from '@shared/runtime-registry';
+import type { QuickActionTaskSource } from '@shared/tasks';
 import type { MountedProject } from '@renderer/features/projects/stores/project';
 import { rpc } from '@renderer/lib/ipc';
 import { log } from '@renderer/utils/logger';
@@ -21,13 +22,15 @@ export async function runProjectCommand(args: {
   action: QuickAction;
   runtimeId: RuntimeId | null;
   defaultBranch: Branch | undefined;
+  quickActionSource?: Omit<QuickActionTaskSource, 'conversationId'>;
+  onTaskCreated?: (taskId: string) => void;
 }): Promise<string | null> {
-  const { project, action, runtimeId, defaultBranch } = args;
+  const { project, action, runtimeId, defaultBranch, quickActionSource, onTaskCreated } = args;
   const command = runtimeId ? applyAgentCommandPrefix(runtimeId, action.command) : '';
   if (!command || !runtimeId || !defaultBranch) return null;
 
   let initialPrompt = command;
-  if (shouldAttachReleaseChangelogContext(command)) {
+  if (!quickActionSource && shouldAttachReleaseChangelogContext(command)) {
     try {
       const summaries = await rpc.conversations.getProjectDeliverySummaries(project.data.id, 8);
       initialPrompt = appendDeliverySummaryContext(command, summaries, 'release');
@@ -42,14 +45,16 @@ export async function runProjectCommand(args: {
   const taskName = createQuickActionTaskName(project, action.label);
 
   const taskId = crypto.randomUUID();
-  await project.taskManager.createTask({
+  const conversationId = crypto.randomUUID();
+  const createPromise = project.taskManager.createTask({
     id: taskId,
     projectId: project.data.id,
     name: taskName,
     sourceBranch: defaultBranch,
     strategy: { kind: 'no-worktree' },
+    quickActionSource: quickActionSource ? { ...quickActionSource, conversationId } : undefined,
     initialConversation: {
-      id: crypto.randomUUID(),
+      id: conversationId,
       projectId: project.data.id,
       taskId,
       runtime: runtimeId,
@@ -57,5 +62,7 @@ export async function runProjectCommand(args: {
       initialPrompt,
     },
   });
+  onTaskCreated?.(taskId);
+  await createPromise;
   return taskId;
 }

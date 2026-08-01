@@ -1,12 +1,18 @@
-import type {
-  MobileApiError,
-  MobileCreateDemandRequest,
-  MobileCreateDemandResponse,
-  MobileDashboardSnapshot,
-  MobileSessionDetail,
-  MobileSessionInputRequest,
-  MobileSessionInputResponse,
-  MobileTaskSessionsResponse,
+import {
+  MOBILE_INPUT_ATTACHMENT_MAX_BYTES,
+  type MobileApiError,
+  type MobileCreateDemandRequest,
+  type MobileCreateDemandResponse,
+  type MobileDashboardSnapshot,
+  type MobileInputAttachment,
+  type MobileInputAttachmentChunkResponse,
+  type MobileInputAttachmentCompleteResponse,
+  type MobileInputAttachmentCreateResponse,
+  type MobileInputAttachmentDiscardResponse,
+  type MobileSessionDetail,
+  type MobileSessionInputRequest,
+  type MobileSessionInputResponse,
+  type MobileTaskSessionsResponse,
 } from '../../../src/shared/mobile-api';
 import { MOBILE_RELAY_BASE_URL } from '../../../src/shared/mobile-relay';
 
@@ -198,4 +204,80 @@ export function createDemand(
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+function base64ByteLength(value: string): number {
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+  return Math.floor((value.length * 3) / 4) - padding;
+}
+
+export async function uploadInputImage(
+  connection: MobileConnection,
+  input: { base64: string; mimeType: string; name: string }
+): Promise<MobileInputAttachment> {
+  const sizeBytes = base64ByteLength(input.base64);
+  if (sizeBytes <= 0 || sizeBytes > MOBILE_INPUT_ATTACHMENT_MAX_BYTES) {
+    throw new Error(
+      `Each image must be smaller than ${Math.floor(MOBILE_INPUT_ATTACHMENT_MAX_BYTES / 1024 / 1024)} MB.`
+    );
+  }
+
+  const created = await request<MobileInputAttachmentCreateResponse>(
+    connection,
+    '/v1/attachments',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'image',
+        mimeType: input.mimeType,
+        name: input.name,
+        sizeBytes,
+      }),
+    }
+  );
+
+  try {
+    const rawBytesPerChunk = created.chunkSizeBytes - (created.chunkSizeBytes % 3);
+    if (!Number.isSafeInteger(rawBytesPerChunk) || rawBytesPerChunk < 3) {
+      throw new Error('Desktop returned an invalid image upload chunk size.');
+    }
+    const base64CharsPerChunk = (rawBytesPerChunk / 3) * 4;
+    let offset = 0;
+    for (let cursor = 0; cursor < input.base64.length; cursor += base64CharsPerChunk) {
+      const dataBase64 = input.base64.slice(cursor, cursor + base64CharsPerChunk);
+      const chunk = await request<MobileInputAttachmentChunkResponse>(
+        connection,
+        `/v1/attachments/${encodeURIComponent(created.attachmentId)}/chunks`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ offset, dataBase64 }),
+        }
+      );
+      offset = chunk.receivedBytes;
+    }
+    const completed = await request<MobileInputAttachmentCompleteResponse>(
+      connection,
+      `/v1/attachments/${encodeURIComponent(created.attachmentId)}/complete`,
+      { method: 'POST', body: '{}' }
+    );
+    return completed.attachment;
+  } catch (error) {
+    await request<MobileInputAttachmentDiscardResponse>(
+      connection,
+      `/v1/attachments/${encodeURIComponent(created.attachmentId)}/discard`,
+      { method: 'POST', body: '{}' }
+    ).catch(() => undefined);
+    throw error;
+  }
+}
+
+export function discardInputAttachment(
+  connection: MobileConnection,
+  attachmentId: string
+): Promise<MobileInputAttachmentDiscardResponse> {
+  return request<MobileInputAttachmentDiscardResponse>(
+    connection,
+    `/v1/attachments/${encodeURIComponent(attachmentId)}/discard`,
+    { method: 'POST', body: '{}' }
+  );
 }

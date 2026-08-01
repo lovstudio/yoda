@@ -8,13 +8,12 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { buildProjectDeepLink } from '@shared/deep-links';
 import type { QuickAction } from '@shared/project-settings';
-import type { ProjectLaunchCommand } from '@shared/quick-actions';
 import { ensureUniqueTaskSlug } from '@shared/task-name';
-import { runProjectLaunchCommand } from '@renderer/features/projects/run-project-launch-command';
+import { openNewTask, resolveNewTaskOpenMode } from '@renderer/app/open-new-task';
 import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import {
   isUnregisteredProject,
@@ -49,6 +48,7 @@ import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
 import { ProjectActionsMenu, ProjectContextMenu } from './project-menu';
 import { SidebarItemMiniButton, SidebarMenuButton, SidebarMenuRow } from './sidebar-primitives';
+import { useSidebarHoverIntent } from './use-sidebar-hover-intent';
 
 const UNREGISTERED_PHASE_KEY: Record<UnregisteredProject['phase'], string> = {
   'creating-repo': 'sidebar.phase.creatingRepo',
@@ -56,8 +56,6 @@ const UNREGISTERED_PHASE_KEY: Record<UnregisteredProject['phase'], string> = {
   registering: 'sidebar.phase.registering',
   error: 'sidebar.phase.error',
 };
-
-const LAUNCH_COMMAND_CACHE_MS = 5_000;
 
 export const SidebarProjectItem = observer(function SidebarProjectItem({
   projectId,
@@ -80,12 +78,6 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   const showMoveProjectPath = useShowModal('moveProjectPathModal');
   const showConfirmRemoveProject = useShowModal('confirmActionModal');
   const [isMenuOpen, setMenuOpen] = useState(false);
-  const [launchCommands, setLaunchCommands] = useState<ProjectLaunchCommand[]>([]);
-  const [launchCommandsLoading, setLaunchCommandsLoading] = useState(false);
-  const [launchCommandsFailed, setLaunchCommandsFailed] = useState(false);
-  const launchCommandsLoadedPath = useRef<string | null>(null);
-  const launchCommandsLoadedAt = useRef(0);
-  const launchCommandsRequest = useRef<Promise<void> | null>(null);
 
   const project = getProjectStore(projectId);
   const mountedProject = asMounted(project);
@@ -125,8 +117,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   );
 
   const { value: homeDraft } = useAppSettingsKey('homeDraft');
-  const quickActions =
-    settingsStore?.settings?.quickActions ?? homeDraft?.defaultQuickActions ?? [];
+  const quickActions = settingsStore?.settings?.quickActions ?? [];
   const expressMode = homeDraft?.expressMode ?? false;
   const expressConnectionId =
     mountedProject?.data?.type === 'ssh' ? mountedProject.data.connectionId : undefined;
@@ -153,48 +144,11 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
 
   const isExpanded = sidebarStore.expandedProjectIds.has(projectId);
 
-  const loadLaunchCommands = useCallback(() => {
-    const mounted = asMounted(getProjectStore(projectId));
-    if (!mounted || mounted.data.type !== 'local') return;
-    const projectPath = mounted.data.path;
-    const cacheIsFresh =
-      launchCommandsLoadedPath.current === projectPath &&
-      Date.now() - launchCommandsLoadedAt.current < LAUNCH_COMMAND_CACHE_MS;
-    if (cacheIsFresh || launchCommandsRequest.current) return;
-
-    setLaunchCommandsLoading(true);
-    setLaunchCommandsFailed(false);
-    if (launchCommandsLoadedPath.current !== projectPath) setLaunchCommands([]);
-    const request = rpc.quickActions
-      .discover(projectId)
-      .then((commands) => {
-        const current = asMounted(getProjectStore(projectId));
-        if (!current || current.data.type !== 'local' || current.data.path !== projectPath) return;
-        launchCommandsLoadedPath.current = projectPath;
-        launchCommandsLoadedAt.current = Date.now();
-        setLaunchCommands(commands);
-      })
-      .catch((error) => {
-        log.warn('project launch command discovery failed', {
-          projectId,
-          error: String(error),
-        });
-        setLaunchCommandsFailed(true);
-      })
-      .finally(() => {
-        if (launchCommandsRequest.current === request) {
-          launchCommandsRequest.current = null;
-          setLaunchCommandsLoading(false);
-        }
-      });
-    launchCommandsRequest.current = request;
-  }, [projectId]);
-
   const prefetchProjectMenuData = useCallback(() => {
     prefetchRepository();
     void settingsStore?.pageData.load();
-    loadLaunchCommands();
-  }, [loadLaunchCommands, prefetchRepository, settingsStore]);
+  }, [prefetchRepository, settingsStore]);
+  const projectMenuDataIntent = useSidebarHoverIntent(prefetchProjectMenuData);
 
   const handleRunQuickAction = useCallback(
     async (action: QuickAction) => {
@@ -202,7 +156,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
       const repository = getRepositoryStore(projectId);
       if (!mounted) return;
       try {
-        if (action.kind !== 'shell') {
+        if (action.kind === 'skill') {
           if (!repository) return;
           await Promise.all([repository.localData.load(), repository.remoteData.load()]);
         }
@@ -212,7 +166,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
           runtimeId: expressProviderId,
           defaultBranch: repository?.defaultBranch,
         });
-        if (result.kind === 'agent') {
+        if (result.kind === 'skill') {
           navigate('task', { projectId, taskId: result.taskId });
         }
       } catch (error) {
@@ -231,43 +185,21 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     [expressProviderId, navigate, projectId, t]
   );
 
-  const handleRunLaunchCommand = useCallback(
-    async (launchCommand: ProjectLaunchCommand) => {
-      const mounted = asMounted(getProjectStore(projectId));
-      if (!mounted) return;
-      try {
-        await runProjectLaunchCommand({
-          project: mounted,
-          launchCommand,
-        });
-      } catch (error) {
-        log.warn('sidebar launch command failed', {
-          projectId,
-          commandId: launchCommand.id,
-          error: String(error),
-        });
-        toast({
-          title: t('sidebar.captureAutomation.runFailed'),
-          description: error instanceof Error ? error.message : String(error),
-          variant: 'destructive',
-        });
-      }
-    },
-    [projectId, t]
-  );
-
   const handleAddTask = useCallback(async () => {
     const mounted = mountedProject;
     const repo = getRepositoryStore(projectId);
     const defaultBranch = repo?.defaultBranch;
     const isUnborn = repo?.isUnborn ?? false;
+    const openMode = await resolveNewTaskOpenMode();
     // Express mode requires a runnable runtime config. Fall back to the home
-    // view whenever any prerequisite is missing so the user can fix it there.
-    if (!expressMode || !mounted || !expressProviderId || !defaultBranch) {
+    // composer whenever any prerequisite is missing so the user can fix it
+    // there. An explicit floating-window preference takes priority over
+    // one-click creation: the `+` button must obey the chosen opening mode.
+    if (openMode === 'modal' || !expressMode || !mounted || !expressProviderId || !defaultBranch) {
       void getProjectManagerStore()
         .mountProject(projectId)
         .catch(() => {});
-      navigate('home', { projectId });
+      openNewTask(openMode, projectId);
       return;
     }
     const strategyKind = homeDraft?.strategyKind ?? 'new-branch';
@@ -412,21 +344,14 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     onManageQuickActions:
       project.state === 'unregistered' ? undefined : () => showManageQuickActions({ projectId }),
     quickActions,
-    launchCommands,
-    launchCommandsLoading,
-    launchCommandsFailed,
-    onRunLaunchCommand:
-      project.state === 'mounted' &&
-      mountedProject?.data.type === 'local' &&
-      launchCommands.length > 0
-        ? (command: ProjectLaunchCommand) => void handleRunLaunchCommand(command)
-        : undefined,
+    canRunQuickAction: (action: QuickAction) =>
+      action.kind === 'command' || Boolean(expressProviderId),
     onRunQuickAction:
       project.state === 'mounted' &&
-      (expressProviderId || (mountedProject?.data.type === 'local' && quickActions.length > 0))
+      (expressProviderId || quickActions.some((action) => action.kind === 'command'))
         ? (action: QuickAction) => void handleRunQuickAction(action)
         : undefined,
-    onMenuOpen: prefetchProjectMenuData,
+    onMenuOpen: projectMenuDataIntent.runNow,
     onRename: project.state === 'unregistered' ? undefined : () => showRenameProject({ projectId }),
     onMovePath:
       project.state === 'unregistered' ? undefined : () => showMoveProjectPath({ projectId }),
@@ -462,7 +387,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
         aria-expanded={isExpanded}
         aria-busy={project.state === 'unregistered' || isLoadingProjectSessions}
         onMouseDown={(e) => e.preventDefault()}
-        onMouseEnter={prefetchProjectMenuData}
+        onPointerEnter={projectMenuDataIntent.schedule}
+        onPointerLeave={projectMenuDataIntent.cancel}
         onClick={(e) => {
           // Alt/Option pins the project into the global side pane; a plain
           // click toggles its task list as usual.
@@ -557,7 +483,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
               'transition-opacity duration-150',
               isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'
             )}
-            onPointerEnter={() => prefetchRepository()}
+            onPointerEnter={projectMenuDataIntent.schedule}
             onClick={(e) => {
               e.stopPropagation();
               void handleAddTask();

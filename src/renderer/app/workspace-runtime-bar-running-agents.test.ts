@@ -28,6 +28,17 @@ describe('workspace agent sessions', () => {
     expect(source).toContain('Math.round(session.cpuPercent)');
   });
 
+  it('keeps every session compact and removes repeated task context', () => {
+    const sessionListStart = source.indexOf('agentSessions.map((session)');
+    const sessionListEnd = source.indexOf("t('workspaceRuntime.agents.empty')", sessionListStart);
+    const sessionList = source.slice(sessionListStart, sessionListEnd);
+
+    expect(sessionList).toContain('getDistinctAgentTaskTitle(title, taskTitle)');
+    expect(sessionList).toContain('grid-rows-2');
+    expect(sessionList).toContain('col-span-2 flex min-w-0 items-center');
+    expect(sessionList).not.toContain('mt-1.5 flex flex-wrap');
+  });
+
   it('keeps the idle trigger compact and only adds meaningful active state', () => {
     expect(source).toContain(': String(agentSessionCount)');
     expect(source).toContain("t('workspaceRuntime.agents.triggerAttention'");

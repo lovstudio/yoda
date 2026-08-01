@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { getQuotaWindowLabel } from './workspace-runtime-bar-format';
+import { getDistinctAgentTaskTitle, getQuotaWindowLabel } from './workspace-runtime-bar-format';
+
+describe('getDistinctAgentTaskTitle', () => {
+  it('removes a repeated task title from the compact session row', () => {
+    expect(
+      getDistinctAgentTaskTitle('快捷操作命令与 Skill 模式', '快捷操作命令与   Skill 模式')
+    ).toBeNull();
+    expect(getDistinctAgentTaskTitle('Build Release', ' build release ')).toBeNull();
+  });
+
+  it('preserves distinct task context', () => {
+    expect(getDistinctAgentTaskTitle('修复登录状态', '桌面端授权')).toBe('桌面端授权');
+  });
+});
 
 describe('getQuotaWindowLabel', () => {
   it.each([

@@ -27,16 +27,37 @@ import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-se
 import { LocalTerminalProvider } from '@main/core/terminals/impl/local-terminal-provider';
 import type { TerminalProvider } from '@main/core/terminals/terminal-provider';
 import {
+  deletePersistedWorkspaceTerminal,
+  getPersistedWorkspaceTerminals,
+  persistWorkspaceTerminal,
+  renamePersistedWorkspaceTerminal,
+} from '@main/core/terminals/workspace-terminal-persistence';
+import {
   acquireProjectViewWorkspace,
   projectViewWorkspaceIdForProvider,
 } from '@main/core/workspaces/project-view-workspace';
-import { workspaceRegistry } from '@main/core/workspaces/workspace-registry';
+import { workspaceRegistry, type TeardownMode } from '@main/core/workspaces/workspace-registry';
 
 const MAX_NAME_CHARS = 200;
 
 type WorkspaceTerminalRecord = {
   terminal: Terminal;
   provider: TerminalProvider;
+};
+
+export type ActiveWorkspaceTerminalSession = {
+  sessionId: string;
+  terminalId: string;
+  projectId: string;
+  scopeId: string;
+  name: string;
+  detachable: boolean;
+};
+
+export type ActiveWorkspaceTerminalSessionSummary = {
+  running: number;
+  keepable: number;
+  nonKeepableSessions: ActiveWorkspaceTerminalSession[];
 };
 
 function requireTerminalIdentity(params: CreateTerminalParams): void {
@@ -147,6 +168,10 @@ export async function resolveRuntimeActionCommand({
  */
 export class WorkspaceTerminalService {
   private readonly records = new Map<string, WorkspaceTerminalRecord>();
+  private readonly loadedScopes = new Set<string>();
+  private readonly scopeLoadOperations = new Map<string, Promise<void>>();
+  private readonly projectProviders = new Map<string, TerminalProvider>();
+  private readonly providerLoadOperations = new Map<string, Promise<TerminalProvider>>();
   private readonly globalProvider = new LocalTerminalProvider({
     projectId: GLOBAL_TERMINAL_PROJECT_ID,
     scopeId: GLOBAL_TERMINAL_SCOPE_ID,
@@ -157,7 +182,8 @@ export class WorkspaceTerminalService {
   });
 
   async getTerminals(projectId: string, scopeId: string): Promise<Terminal[]> {
-    await this.resolveProvider(projectId, scopeId);
+    const provider = await this.resolveProvider(projectId, scopeId);
+    await this.ensureScopeLoaded(projectId, scopeId, provider);
     return Array.from(this.records.values())
       .map(({ terminal }) => terminal)
       .filter((terminal) => terminal.projectId === projectId && terminal.taskId === scopeId);
@@ -169,18 +195,29 @@ export class WorkspaceTerminalService {
     if (existing) return existing.terminal;
 
     const provider = await this.resolveProvider(params.projectId, params.taskId);
-    const terminal: Terminal = {
+    let terminal: Terminal = {
       id: params.id,
       projectId: params.projectId,
       taskId: params.taskId,
       name: params.name.trim(),
     };
+    const persisted = this.isPersistedProjectScope(params.projectId, params.taskId);
+    if (persisted) {
+      terminal = await persistWorkspaceTerminal(terminal);
+    }
     this.records.set(terminal.id, { terminal, provider });
     try {
       await provider.spawnTerminal(terminal, params.initialSize);
       return terminal;
     } catch (error) {
       this.records.delete(terminal.id);
+      if (persisted) {
+        await deletePersistedWorkspaceTerminal(
+          terminal.projectId,
+          terminal.taskId,
+          terminal.id
+        ).catch(() => {});
+      }
       throw error;
     }
   }
@@ -199,14 +236,58 @@ export class WorkspaceTerminalService {
       return;
     }
     this.records.delete(terminalId);
+    if (this.isPersistedProjectScope(projectId, taskId)) {
+      await deletePersistedWorkspaceTerminal(projectId, taskId, terminalId);
+    }
     await record.provider.killTerminal(terminalId);
   }
 
-  renameTerminal(terminalId: string, name: string): void {
+  async renameTerminal(terminalId: string, name: string): Promise<void> {
     const record = this.records.get(terminalId);
     const normalized = name.trim();
     if (!record || !normalized || normalized.length > MAX_NAME_CHARS) return;
+    if (this.isPersistedProjectScope(record.terminal.projectId, record.terminal.taskId)) {
+      await renamePersistedWorkspaceTerminal(terminalId, normalized);
+    }
     record.terminal.name = normalized;
+  }
+
+  getActiveSessionSummary(): ActiveWorkspaceTerminalSessionSummary {
+    const sessions = Array.from(this.records.values()).map(({ terminal, provider }) => {
+      const sessionId = makePtySessionId(terminal.projectId, terminal.taskId, terminal.id);
+      return {
+        sessionId,
+        terminalId: terminal.id,
+        projectId: terminal.projectId,
+        scopeId: terminal.taskId,
+        name: terminal.name,
+        detachable: provider.isTerminalDetachable(terminal.id),
+      };
+    });
+    return {
+      running: sessions.length,
+      keepable: sessions.filter((session) => session.detachable).length,
+      nonKeepableSessions: sessions.filter((session) => !session.detachable),
+    };
+  }
+
+  async dispose(mode: TeardownMode): Promise<void> {
+    const providers = new Set(Array.from(this.records.values()).map(({ provider }) => provider));
+    await Promise.all(
+      Array.from(providers).map((provider) =>
+        mode === 'terminate' ? provider.destroyAll() : provider.detachAll()
+      )
+    );
+    await Promise.all(
+      Array.from(this.projectProviders.keys()).map((scopeId) =>
+        workspaceRegistry.release(scopeId, mode)
+      )
+    );
+    this.records.clear();
+    this.loadedScopes.clear();
+    this.scopeLoadOperations.clear();
+    this.projectProviders.clear();
+    this.providerLoadOperations.clear();
   }
 
   async runRuntimeAction(
@@ -241,9 +322,72 @@ export class WorkspaceTerminalService {
     if (!project) throw new Error('Project not found.');
     const expectedScopeId = projectViewWorkspaceIdForProvider(project);
     if (scopeId !== expectedScopeId) throw new Error('Invalid project Terminal scope.');
-    const existing = workspaceRegistry.get(expectedScopeId);
-    const workspace = existing ?? (await acquireProjectViewWorkspace(project));
-    return workspace.terminals;
+    const cached = this.projectProviders.get(scopeId);
+    if (cached && workspaceRegistry.get(scopeId)?.terminals === cached) return cached;
+    if (cached) {
+      this.projectProviders.delete(scopeId);
+      this.loadedScopes.delete(`${projectId}\0${scopeId}`);
+      for (const [terminalId, record] of this.records) {
+        if (record.terminal.projectId === projectId && record.terminal.taskId === scopeId) {
+          this.records.delete(terminalId);
+        }
+      }
+    }
+
+    const existingOperation = this.providerLoadOperations.get(scopeId);
+    if (existingOperation) return existingOperation;
+    const operation = acquireProjectViewWorkspace(project)
+      .then((workspace) => {
+        this.projectProviders.set(scopeId, workspace.terminals);
+        return workspace.terminals;
+      })
+      .finally(() => {
+        if (this.providerLoadOperations.get(scopeId) === operation) {
+          this.providerLoadOperations.delete(scopeId);
+        }
+      });
+    this.providerLoadOperations.set(scopeId, operation);
+    return operation;
+  }
+
+  private isPersistedProjectScope(projectId: string, scopeId: string): boolean {
+    return projectId !== GLOBAL_TERMINAL_PROJECT_ID && scopeId !== GLOBAL_TERMINAL_SCOPE_ID;
+  }
+
+  private ensureScopeLoaded(
+    projectId: string,
+    scopeId: string,
+    provider: TerminalProvider
+  ): Promise<void> {
+    if (!this.isPersistedProjectScope(projectId, scopeId)) return Promise.resolve();
+    const key = `${projectId}\0${scopeId}`;
+    if (this.loadedScopes.has(key)) return Promise.resolve();
+    const existing = this.scopeLoadOperations.get(key);
+    if (existing) return existing;
+
+    const operation = getPersistedWorkspaceTerminals(projectId, scopeId)
+      .then(async (terminals) => {
+        await Promise.all(
+          terminals.map(async (terminal) => {
+            if (this.records.has(terminal.id)) return;
+            this.records.set(terminal.id, { terminal, provider });
+            try {
+              await provider.spawnTerminal(terminal);
+            } catch (error) {
+              this.records.delete(terminal.id);
+              throw error;
+            }
+          })
+        );
+        this.loadedScopes.add(key);
+      })
+      .finally(() => {
+        if (this.scopeLoadOperations.get(key) === operation) {
+          this.scopeLoadOperations.delete(key);
+        }
+      });
+    this.scopeLoadOperations.set(key, operation);
+    return operation;
   }
 }
 

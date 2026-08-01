@@ -1,0 +1,98 @@
+import { act, useState } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { ProvisionedTask } from '@renderer/features/tasks/stores/task';
+import {
+  TaskViewWrapper,
+  useProvisionedTask,
+  useTaskViewKind,
+} from '@renderer/features/tasks/task-view-context';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+function task(taskId: string): ProvisionedTask {
+  return { taskId } as ProvisionedTask;
+}
+
+function StatefulReadyProbe() {
+  const currentTaskId = useProvisionedTask().taskId;
+  const [mountedForTaskId] = useState(currentTaskId);
+  return <span>{`${mountedForTaskId}:${currentTaskId}`}</span>;
+}
+
+function ReadyGuard() {
+  const kind = useTaskViewKind();
+  return kind === 'ready' ? <StatefulReadyProbe /> : <span>not-ready</span>;
+}
+
+describe('TaskViewWrapper snapshot transitions', () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  it('replaces the ready subtree when the routed task identity changes', async () => {
+    await act(async () => {
+      root.render(
+        <TaskViewWrapper
+          projectId="project-1"
+          taskId="task-a"
+          kind="ready"
+          provisionedTask={task('task-a')}
+        >
+          <ReadyGuard />
+        </TaskViewWrapper>
+      );
+    });
+    expect(host.textContent).toBe('task-a:task-a');
+
+    await act(async () => {
+      root.render(
+        <TaskViewWrapper
+          projectId="project-1"
+          taskId="task-b"
+          kind="ready"
+          provisionedTask={task('task-b')}
+        >
+          <ReadyGuard />
+        </TaskViewWrapper>
+      );
+    });
+
+    expect(host.textContent).toBe('task-b:task-b');
+  });
+
+  it('removes ready consumers before publishing a non-ready snapshot', async () => {
+    await act(async () => {
+      root.render(
+        <TaskViewWrapper
+          projectId="project-1"
+          taskId="task-a"
+          kind="ready"
+          provisionedTask={task('task-a')}
+        >
+          <ReadyGuard />
+        </TaskViewWrapper>
+      );
+    });
+
+    await act(async () => {
+      root.render(
+        <TaskViewWrapper projectId="project-1" taskId="task-b" kind="creating">
+          <ReadyGuard />
+        </TaskViewWrapper>
+      );
+    });
+
+    expect(host.textContent).toBe('not-ready');
+  });
+});

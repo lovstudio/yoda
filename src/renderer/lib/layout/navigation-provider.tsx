@@ -90,7 +90,7 @@ export function useWorkspaceRouteSnapshot(): WorkspaceRouteSnapshot {
       // Keep the wrapper params in the same MobX snapshot as the view
       // components. Separate subscriptions can commit in different React
       // renders, briefly pairing a task MainPanel with a non-task WrapView
-      // (and therefore no ProvisionedTaskProvider).
+      // (and therefore no task-view state snapshot).
       wrapParams: (appState.navigation.viewParamsStore[viewId] ?? {}) as Record<string, unknown>,
     };
   });

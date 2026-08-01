@@ -282,18 +282,19 @@ export class LocalConversationProvider implements ConversationProvider {
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       const codexThreadId =
         isResuming && conversation.runtimeId === 'codex'
-          ? (conversation.sessionSource?.sessionId ??
-            resolveCodexThreadIdForConversation({
-              conversationId: conversation.id,
-              cwd: this.taskPath,
-              title: conversation.title,
-              createdAt: conversation.createdAt,
-              lastInteractedAt: conversation.lastInteractedAt,
-              statePath: resolveCodexStatePath(
-                resolveRuntimeStateDirectory('codex', sessionProviderConfig)
-              ),
-              reservedThreadIds,
-            }))
+          ? conversation.sessionSource
+            ? resolveAgentResumeSessionId(conversation, this.taskPath, { reservedThreadIds })
+            : resolveCodexThreadIdForConversation({
+                conversationId: conversation.id,
+                cwd: this.taskPath,
+                title: conversation.title,
+                createdAt: conversation.createdAt,
+                lastInteractedAt: conversation.lastInteractedAt,
+                statePath: resolveCodexStatePath(
+                  resolveRuntimeStateDirectory('codex', sessionProviderConfig)
+                ),
+                reservedThreadIds,
+              })
           : undefined;
       const effectiveIsResuming =
         isResuming && (conversation.runtimeId !== 'codex' || codexThreadId !== undefined);
@@ -433,6 +434,11 @@ export class LocalConversationProvider implements ConversationProvider {
               tmuxSessionName,
               tmuxSize: initialSize,
               tmuxEnv: resolveRuntimeTmuxEnv(providerEnv),
+              tmuxSessionIdentity: agentSessionId,
+              tmuxSessionIdentityAliases:
+                conversation.runtimeId === 'codex' && !conversation.sessionSource
+                  ? [conversation.id]
+                  : undefined,
             },
           });
 

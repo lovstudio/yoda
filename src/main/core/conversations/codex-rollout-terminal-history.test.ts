@@ -1,6 +1,11 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import {
   formatCodexRolloutTerminalHistory,
+  loadCodexRolloutTerminalHistoryForConversation,
   parseCodexRolloutShareImages,
   parseCodexRolloutTranscript,
 } from './codex-rollout-terminal-history';
@@ -132,6 +137,93 @@ describe('formatCodexRolloutTerminalHistory', () => {
     expect(history).toContain('[Start sub-agent 2026-06-04T01:00:05.000Z]');
     expect(history).not.toContain('Duplicate response text');
     expect(history).not.toContain('Patch fallback should be hidden');
+  });
+
+  it('loads terminal replay from the latest rewind fork of a discovered session', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'yoda-codex-terminal-lineage-'));
+    const statePath = join(directory, 'state_5.sqlite');
+    const rootRolloutPath = join(directory, 'root.jsonl');
+    const forkedRolloutPath = join(directory, 'forked.jsonl');
+
+    try {
+      createStateDb(statePath);
+      writeFileSync(
+        rootRolloutPath,
+        [
+          {
+            timestamp: '2026-08-01T01:57:02.000Z',
+            type: 'session_meta',
+            payload: { id: 'root-thread', cwd: '/repo' },
+          },
+          {
+            timestamp: '2026-08-01T02:23:20.000Z',
+            type: 'event_msg',
+            payload: { type: 'agent_message', message: 'Stale root ending' },
+          },
+        ]
+          .map((row) => JSON.stringify(row))
+          .join('\n')
+      );
+      writeFileSync(
+        forkedRolloutPath,
+        [
+          {
+            timestamp: '2026-08-01T02:23:22.000Z',
+            type: 'session_meta',
+            payload: {
+              id: 'forked-thread',
+              forked_from_id: 'root-thread',
+              cwd: '/repo',
+            },
+          },
+          {
+            timestamp: '2026-08-01T02:59:38.000Z',
+            type: 'event_msg',
+            payload: { type: 'agent_message', message: 'Latest continuation content' },
+          },
+        ]
+          .map((row) => JSON.stringify(row))
+          .join('\n')
+      );
+      insertThread(statePath, {
+        id: 'root-thread',
+        rolloutPath: rootRolloutPath,
+        createdAtMs: Date.parse('2026-08-01T01:57:02.000Z'),
+        updatedAtMs: Date.parse('2026-08-01T02:23:20.000Z'),
+      });
+      insertThread(statePath, {
+        id: 'forked-thread',
+        rolloutPath: forkedRolloutPath,
+        createdAtMs: Date.parse('2026-08-01T02:23:22.000Z'),
+        updatedAtMs: Date.parse('2026-08-01T03:01:19.000Z'),
+      });
+
+      const history = await loadCodexRolloutTerminalHistoryForConversation({
+        cwd: '/repo',
+        conversation: {
+          id: 'yoda-conversation',
+          projectId: 'project-1',
+          taskId: 'task-1',
+          runtimeId: 'codex',
+          title: 'Discovered session',
+          createdAt: '2026-08-01 01:57:02',
+          lastInteractedAt: '2026-08-01T02:39:59.000Z',
+          isInitialConversation: true,
+          sessionSource: {
+            catalogId: 'catalog-1',
+            runtimeId: 'codex',
+            sessionId: 'root-thread',
+            stateRoot: directory,
+          },
+        },
+      });
+
+      expect(history).toContain('Thread: forked-thread');
+      expect(history).toContain('Latest continuation content');
+      expect(history).not.toContain('Stale root ending');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
 
@@ -456,4 +548,61 @@ function mixedModernRollout(): string {
   ]
     .map((row) => JSON.stringify(row))
     .join('\n');
+}
+
+function createStateDb(statePath: string): void {
+  const db = new Database(statePath);
+  try {
+    db.exec(`
+      CREATE TABLE threads (
+        id TEXT PRIMARY KEY,
+        rollout_path TEXT NOT NULL DEFAULT '',
+        cwd TEXT NOT NULL,
+        title TEXT NOT NULL,
+        first_user_message TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        created_at_ms INTEGER,
+        updated_at_ms INTEGER
+      );
+    `);
+  } finally {
+    db.close();
+  }
+}
+
+function insertThread(
+  statePath: string,
+  args: { id: string; rolloutPath: string; createdAtMs: number; updatedAtMs: number }
+): void {
+  const db = new Database(statePath);
+  try {
+    db.prepare(
+      `
+        INSERT INTO threads (
+          id,
+          rollout_path,
+          cwd,
+          title,
+          first_user_message,
+          created_at,
+          updated_at,
+          created_at_ms,
+          updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    ).run(
+      args.id,
+      args.rolloutPath,
+      '/repo',
+      'Discovered session',
+      'Discovered session',
+      Math.floor(args.createdAtMs / 1000),
+      Math.floor(args.updatedAtMs / 1000),
+      args.createdAtMs,
+      args.updatedAtMs
+    );
+  } finally {
+    db.close();
+  }
 }

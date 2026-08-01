@@ -7,6 +7,168 @@ export const MOBILE_APP_DEFAULT_INSTALL_URL = 'https://lovstudio.ai/yoda/mobile'
 export const MOBILE_SESSION_CONTENT_MAX_CHARS = 120_000;
 export const MOBILE_SESSION_TRANSCRIPT_MAX_CHARS = 240_000;
 export const MOBILE_SESSION_INPUT_MAX_CHARS = 20_000;
+export const MOBILE_INPUT_ATTACHMENT_MAX_COUNT = 4;
+export const MOBILE_INPUT_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+/** Keeps the base64 JSON request comfortably below the gateway and Relay 128 KiB limit. */
+export const MOBILE_INPUT_ATTACHMENT_CHUNK_BYTES = 48 * 1024;
+export const MOBILE_SPEECH_CONTEXT_MAX_STRINGS = 50;
+
+const MOBILE_SPEECH_BASE_CONTEXTUAL_STRINGS = [
+  'Yoda',
+  'Yoda Mobile',
+  'LovStudio',
+  '手工川',
+  '手工川工作室',
+  'Agent',
+  'Codex',
+  'Claude',
+  'ChatGPT',
+  'OpenAI',
+  'Git',
+  'GitHub',
+  'worktree',
+  'MCP',
+  'TypeScript',
+  'JavaScript',
+  'React',
+  'React Native',
+  'Expo',
+  'Electron',
+  'pnpm',
+  'Vercel',
+  'Tauri',
+  'macOS',
+  'iOS',
+  'Android',
+] as const;
+
+type MobileSpeechLocale = {
+  language: string;
+  region: string | null;
+  tag: string;
+};
+
+const MOBILE_SPEECH_LANGUAGE_DEFAULTS: Record<string, string> = {
+  de: 'de-DE',
+  en: 'en-US',
+  es: 'es-ES',
+  fr: 'fr-FR',
+  it: 'it-IT',
+  pt: 'pt-BR',
+  yue: 'yue-CN',
+  zh: 'zh-CN',
+};
+
+function parseMobileSpeechLocale(value: string): MobileSpeechLocale | null {
+  const tag = value.trim().replace(/_/g, '-');
+  if (!tag) return null;
+  const parts = tag.split('-').filter(Boolean);
+  const language = parts[0]?.toLowerCase() ?? '';
+  if (!/^[a-z]{2,3}$/.test(language)) return null;
+  const regionPart = parts.slice(1).find((part) => /^[a-z]{2}$|^\d{3}$/i.test(part));
+  return {
+    language,
+    region: regionPart?.toUpperCase() ?? null,
+    tag,
+  };
+}
+
+export function resolveMobileSpeechLocale(
+  preferredLocales: readonly string[],
+  supportedLocales: readonly string[]
+): string {
+  const preferred = preferredLocales
+    .map(parseMobileSpeechLocale)
+    .filter((locale): locale is MobileSpeechLocale => locale !== null);
+  const supported = supportedLocales
+    .map(parseMobileSpeechLocale)
+    .filter((locale): locale is MobileSpeechLocale => locale !== null);
+
+  for (const candidate of preferred) {
+    const exact = supported.find(
+      (locale) => locale.tag.toLowerCase() === candidate.tag.toLowerCase()
+    );
+    if (exact) return exact.tag;
+  }
+  for (const candidate of preferred) {
+    if (!candidate.region) continue;
+    const regional = supported.find(
+      (locale) => locale.language === candidate.language && locale.region === candidate.region
+    );
+    if (regional) return regional.tag;
+  }
+  for (const candidate of preferred) {
+    const languageDefault = MOBILE_SPEECH_LANGUAGE_DEFAULTS[candidate.language];
+    const preferredDefault = supported.find(
+      (locale) => locale.tag.toLowerCase() === languageDefault?.toLowerCase()
+    );
+    if (preferredDefault) return preferredDefault.tag;
+    const languageMatch = supported.find((locale) => locale.language === candidate.language);
+    if (languageMatch) return languageMatch.tag;
+  }
+
+  const chineseFallback = supported.find((locale) => locale.tag.toLowerCase() === 'zh-cn');
+  if (chineseFallback) return chineseFallback.tag;
+  if (supported[0]) return supported[0].tag;
+  const firstPreferred = preferred[0];
+  return firstPreferred
+    ? (MOBILE_SPEECH_LANGUAGE_DEFAULTS[firstPreferred.language] ?? firstPreferred.tag)
+    : 'zh-CN';
+}
+
+export function appendMobileVoiceTranscript(baseValue: string, transcript: string): string {
+  const normalized = transcript.trim();
+  if (!normalized) return baseValue;
+  if (!baseValue) return normalized;
+  if (/\s$/.test(baseValue)) return `${baseValue}${normalized}`;
+  const previous = baseValue.at(-1) ?? '';
+  const next = normalized[0] ?? '';
+  const joinsWithoutSpace =
+    /[\p{Script=Han}，。！？：；、]/u.test(previous) ||
+    /[\p{Script=Han}，。！？：；、]/u.test(next);
+  return `${baseValue}${joinsWithoutSpace ? '' : ' '}${normalized}`;
+}
+
+function normalizeMobileSpeechContext(value: string): string {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+function splitMobileSpeechContext(value: string): string[] {
+  const normalized = normalizeMobileSpeechContext(value);
+  if (!normalized) return [];
+  if (normalized.length <= 64) return [normalized];
+
+  return normalized
+    .split(/[，。！？；：,.!?;:]+/u)
+    .map(normalizeMobileSpeechContext)
+    .filter((candidate) => candidate.length >= 2 && candidate.length <= 64);
+}
+
+/**
+ * Builds the native speech recognizer's biasing vocabulary. Current project/session context takes
+ * priority over the stable product and development vocabulary when the platform enforces a limit.
+ */
+export function buildMobileSpeechContextualStrings(
+  contextValues: readonly (string | null | undefined)[]
+): string[] {
+  const contextualStrings: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of [...contextValues, ...MOBILE_SPEECH_BASE_CONTEXTUAL_STRINGS]) {
+    if (!value) continue;
+    for (const candidate of splitMobileSpeechContext(value)) {
+      const key = candidate.toLocaleLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      contextualStrings.push(candidate);
+      if (contextualStrings.length === MOBILE_SPEECH_CONTEXT_MAX_STRINGS) {
+        return contextualStrings;
+      }
+    }
+  }
+
+  return contextualStrings;
+}
 
 export type MobilePairingConnection = {
   baseUrl: string;
@@ -82,7 +244,81 @@ export type MobileProjectSummary = {
   isInternal: boolean;
   isOpen: boolean;
   updatedAt: string;
+  /** Latest task interaction or project metadata update. Optional for older desktop gateways. */
+  lastActivityAt?: string;
 };
+
+export type MobileProjectSortMode = 'recent' | 'name' | 'open';
+
+const MOBILE_SQLITE_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
+
+export function parseMobileTimestamp(value: string | null | undefined): number {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const normalized = MOBILE_SQLITE_TIMESTAMP_RE.test(value) ? `${value.replace(' ', 'T')}Z` : value;
+  const timestamp = Date.parse(normalized);
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+}
+
+export function getMobileProjectActivityById(
+  projects: readonly Pick<MobileProjectSummary, 'id' | 'updatedAt' | 'lastActivityAt'>[],
+  tasks: readonly {
+    projectId: string;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    lastInteractedAt?: string | null;
+  }[]
+): Map<string, string> {
+  const activityByProjectId = new Map(
+    projects.map((project) => [project.id, project.lastActivityAt ?? project.updatedAt] as const)
+  );
+
+  for (const task of tasks) {
+    const activityAt = task.lastInteractedAt ?? task.createdAt ?? task.updatedAt;
+    if (!activityAt) continue;
+    const currentActivityAt = activityByProjectId.get(task.projectId);
+    if (parseMobileTimestamp(activityAt) > parseMobileTimestamp(currentActivityAt)) {
+      activityByProjectId.set(task.projectId, activityAt);
+    }
+  }
+
+  return activityByProjectId;
+}
+
+function mobileProjectActivityAt(project: MobileProjectSummary): number {
+  return parseMobileTimestamp(project.lastActivityAt ?? project.updatedAt);
+}
+
+export function sortMobileProjects(
+  projects: readonly MobileProjectSummary[],
+  mode: MobileProjectSortMode
+): MobileProjectSummary[] {
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+  return projects
+    .map((project, index) => ({
+      project,
+      index,
+      activityAt: mobileProjectActivityAt(project),
+    }))
+    .sort((a, b) => {
+      if (mode === 'name') {
+        return (
+          collator.compare(
+            a.project.displayName || a.project.name,
+            b.project.displayName || b.project.name
+          ) || a.index - b.index
+        );
+      }
+      if (mode === 'open') {
+        return (
+          Number(b.project.isOpen) - Number(a.project.isOpen) ||
+          b.activityAt - a.activityAt ||
+          a.index - b.index
+        );
+      }
+      return b.activityAt - a.activityAt || a.index - b.index;
+    })
+    .map(({ project }) => project);
+}
 
 export type MobileTaskSummary = {
   id: string;
@@ -121,6 +357,7 @@ export type MobileCreateDemandRequest = {
   prompt: string;
   title?: string;
   provider?: string;
+  attachmentIds?: string[];
 };
 
 export type MobileCreateDemandResponse = {
@@ -190,11 +427,47 @@ export type MobileSessionDetail = {
 export type MobileSessionInputRequest = {
   input: string;
   submit?: boolean;
+  attachmentIds?: string[];
 };
 
 export type MobileSessionInputResponse = {
   ok: true;
   generatedAt: string;
+};
+
+export type MobileInputAttachmentKind = 'image';
+
+export type MobileInputAttachment = {
+  id: string;
+  kind: MobileInputAttachmentKind;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+};
+
+export type MobileInputAttachmentCreateRequest = Omit<MobileInputAttachment, 'id'>;
+
+export type MobileInputAttachmentCreateResponse = {
+  attachmentId: string;
+  chunkSizeBytes: number;
+};
+
+export type MobileInputAttachmentChunkRequest = {
+  offset: number;
+  dataBase64: string;
+};
+
+export type MobileInputAttachmentChunkResponse = {
+  attachmentId: string;
+  receivedBytes: number;
+};
+
+export type MobileInputAttachmentCompleteResponse = {
+  attachment: MobileInputAttachment;
+};
+
+export type MobileInputAttachmentDiscardResponse = {
+  ok: true;
 };
 
 export type MobileGatewayMode = 'development' | 'production';

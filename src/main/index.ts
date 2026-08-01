@@ -13,7 +13,10 @@ import { registerWindowIpc } from './app/window-ipc';
 import { yodaAccountService } from './core/account/services/yoda-account-service';
 import { agentHookService } from './core/agent-hooks/agent-hook-service';
 import { aiLabService } from './core/ai-lab/ai-lab-service';
-import { resolveQuitAgentSessionsDecision } from './core/app/quit-agent-sessions';
+import {
+  combineActiveSessionSummaries,
+  resolveQuitAgentSessionsDecision,
+} from './core/app/quit-agent-sessions';
 import { appService } from './core/app/service';
 import { automationScheduler } from './core/automation/automation-scheduler';
 import { agentSessionRuntimeStore } from './core/conversations/agent-session-runtime';
@@ -40,6 +43,7 @@ import { appSettingsService } from './core/settings/settings-service';
 import { resumePendingTaskArchives } from './core/tasks/operations/archiveTask';
 import { taskManager } from './core/tasks/task-manager';
 import { roomConductor } from './core/team-rooms/conductor';
+import { workspaceTerminalService } from './core/terminals/workspace-terminal-service';
 import { updateService } from './core/updates/update-service';
 import { viewStateService } from './core/view-state/view-state-service';
 import type { TeardownMode } from './core/workspaces/workspace-registry';
@@ -334,6 +338,7 @@ function prepareShutdown(mode: TeardownMode): Promise<void> {
       prSyncScheduler.dispose();
       promptSourceService.dispose();
       automationScheduler.dispose();
+      await workspaceTerminalService.dispose(mode);
       const [extensionResult, gitWatcherResult, projectManagerResult] = await Promise.allSettled([
         extensionMarketplaceService.dispose(),
         gitWatcherRegistry.dispose(),
@@ -370,7 +375,10 @@ app.on('before-quit', (event) => {
 
   event.preventDefault();
 
-  const summary = taskManager.getActiveAgentSessionSummary();
+  const summary = combineActiveSessionSummaries(
+    taskManager.getActiveAgentSessionSummary(),
+    workspaceTerminalService.getActiveSessionSummary()
+  );
   if (summary.running <= 0) {
     beginShutdown('terminate');
     return;

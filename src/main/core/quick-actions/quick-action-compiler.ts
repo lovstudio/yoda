@@ -16,6 +16,7 @@ export async function compileQuickAction(input: {
   intent: string;
   projectPath: string;
   runtimeId: RuntimeId;
+  executionSummary?: string;
 }) {
   const intent = input.intent.trim();
   if (!intent) throw new Error('Describe the operation to compile.');
@@ -36,7 +37,7 @@ export async function compileQuickAction(input: {
   const result = await runAgentCli({
     command: commandPath,
     args: buildCompilationArgs(input.runtimeId),
-    stdin: buildQuickActionCompilationPrompt(intent, input.projectPath),
+    stdin: buildQuickActionCompilationPrompt(intent, input.projectPath, input.executionSummary),
     cwd: input.projectPath,
     env: {
       ...buildExternalToolEnv(resolveRuntimeBaseEnv(process.env, providerConfig, input.runtimeId)),

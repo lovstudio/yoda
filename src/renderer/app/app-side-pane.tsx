@@ -23,18 +23,18 @@ import {
 } from '@renderer/app/view-registry';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { SelfContainedTaskPane } from '@renderer/features/tasks/split-view/tiled-task-grid';
-import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
+import {
+  asProvisioned,
+  getTaskStore,
+  taskViewKind,
+} from '@renderer/features/tasks/stores/task-selectors';
 import { OVERVIEW_TAB_ID } from '@renderer/features/tasks/tabs/tab-manager-store';
 import {
   buildTaskWindowTarget,
   getTabMeta,
   openTaskTabInWindow,
 } from '@renderer/features/tasks/tabs/tab-meta';
-import {
-  ProvisionedTaskProvider,
-  TaskViewWrapper,
-  useProvisionedTask,
-} from '@renderer/features/tasks/task-view-context';
+import { TaskViewWrapper, useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { SidebarPinnedContent } from '@renderer/features/tasks/view/sidebar-pinned-content';
 import { ChipContextMenu } from '@renderer/lib/components/chip-context-menu';
 import { FilePathMenuItems } from '@renderer/lib/components/file-path-actions';
@@ -380,11 +380,11 @@ export const AppSidePane = observer(function AppSidePane() {
         {pins.map((pin) => (
           <Activity key={pin.id} mode={activePinId === pin.id ? 'visible' : 'hidden'}>
             {pin.kind === 'task' ? (
-              <TaskViewWrapper projectId={pin.projectId} taskId={pin.taskId}>
-                <ProvisionedTaskProvider projectId={pin.projectId} taskId={pin.taskId}>
-                  <ShellPinnedTaskBody tabId={pin.tabId} />
-                </ProvisionedTaskProvider>
-              </TaskViewWrapper>
+              <ShellPinnedTaskHost
+                projectId={pin.projectId}
+                taskId={pin.taskId}
+                tabId={pin.tabId}
+              />
             ) : pin.kind === 'task-view' ? (
               <div className="h-full min-h-0 overflow-hidden">
                 <SelfContainedTaskPane projectId={pin.projectId} taskId={pin.taskId} />
@@ -396,6 +396,42 @@ export const AppSidePane = observer(function AppSidePane() {
         ))}
       </div>
     </div>
+  );
+});
+
+/** Keeps a task pin's provider boundary aligned with its captured task-state snapshot. */
+const ShellPinnedTaskHost = observer(function ShellPinnedTaskHost({
+  projectId,
+  taskId,
+  tabId,
+}: {
+  projectId: string;
+  taskId: string;
+  tabId: string;
+}) {
+  const taskStore = getTaskStore(projectId, taskId);
+  const kind = taskViewKind(taskStore, projectId);
+  const provisioned = asProvisioned(taskStore);
+
+  if (kind !== 'ready') {
+    return (
+      <TaskViewWrapper projectId={projectId} taskId={taskId} kind={kind}>
+        {null}
+      </TaskViewWrapper>
+    );
+  }
+
+  if (!provisioned) return null;
+
+  return (
+    <TaskViewWrapper
+      projectId={projectId}
+      taskId={taskId}
+      kind={kind}
+      provisionedTask={provisioned}
+    >
+      <ShellPinnedTaskBody tabId={tabId} />
+    </TaskViewWrapper>
   );
 });
 

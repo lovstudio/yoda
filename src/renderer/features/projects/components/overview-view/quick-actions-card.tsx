@@ -1,9 +1,9 @@
-import { Play, Plus, Settings2 } from 'lucide-react';
+import { Bot, Plus, Settings2, TerminalSquare } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { QuickAction } from '@shared/project-settings';
-import { openFeature } from '@renderer/features/features/feature-navigation';
+import { projectDisplayName } from '@shared/projects';
 import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import {
   asMounted,
@@ -11,7 +11,6 @@ import {
   getProjectStore,
   getRepositoryStore,
 } from '@renderer/features/projects/stores/project-selectors';
-import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -29,22 +28,20 @@ export const QuickActionsCard = observer(function QuickActionsCard({
   const settingsStore = getProjectSettingsStore(projectId);
   const repo = getRepositoryStore(projectId);
   const showManage = useShowModal('manageQuickActionsModal');
-  const showCreateFeature = useShowModal('createFeatureModal');
+  const showCapture = useShowModal('captureProjectAutomationModal');
 
-  const { value: homeDraft } = useAppSettingsKey('homeDraft');
   const connectionId = project?.data?.type === 'ssh' ? project.data.connectionId : undefined;
   const { runtimeId } = useEffectiveRuntime(connectionId);
 
-  const projectActions = settingsStore?.settings?.quickActions;
-  const globalDefaults = homeDraft?.defaultQuickActions ?? [];
-  const actions: QuickAction[] = projectActions ?? globalDefaults;
+  const actions: QuickAction[] = settingsStore?.settings?.quickActions ?? [];
 
   const [runningId, setRunningId] = useState<string | null>(null);
 
-  const handleNewRequirement = () => {
-    showCreateFeature({
+  const handleCreate = () => {
+    if (!project) return;
+    showCapture({
       projectId,
-      onSuccess: (feature) => openFeature(projectId, feature.id),
+      projectName: projectDisplayName(project.data),
     });
   };
 
@@ -52,7 +49,7 @@ export const QuickActionsCard = observer(function QuickActionsCard({
     if (!project) return;
     setRunningId(action.id);
     try {
-      if (action.kind !== 'shell') {
+      if (action.kind === 'skill') {
         await Promise.all([repo?.localData.load(), repo?.remoteData.load()]);
       }
       const result = await runProjectQuickAction({
@@ -61,7 +58,7 @@ export const QuickActionsCard = observer(function QuickActionsCard({
         runtimeId,
         defaultBranch: repo?.defaultBranch,
       });
-      if (result.kind === 'agent') {
+      if (result.kind === 'skill') {
         navigate('task', { projectId, taskId: result.taskId });
       }
     } catch (err) {
@@ -86,23 +83,30 @@ export const QuickActionsCard = observer(function QuickActionsCard({
         </Button>
       </header>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" onClick={handleNewRequirement}>
+        <Button variant="outline" size="sm" onClick={handleCreate} disabled={!project}>
           <Plus className="size-3.5" />
-          {t('projects.quickActions.newRequirement')}
+          {t('sidebar.captureAutomation.createLabel')}
         </Button>
+        {actions.length === 0 ? (
+          <span className="self-center text-xs text-foreground-muted">
+            {t('projects.quickActions.empty')}
+          </span>
+        ) : null}
         {actions.map((action) => (
           <Button
             key={action.id}
             variant="outline"
             size="sm"
             disabled={
-              !project ||
-              runningId !== null ||
-              (action.kind === 'shell' ? project.data.type !== 'local' : !runtimeId)
+              !project || runningId !== null || (action.kind === 'skill' ? !runtimeId : false)
             }
             onClick={() => void handleRun(action)}
           >
-            <Play className="size-3.5" />
+            {action.kind === 'command' ? (
+              <TerminalSquare className="size-3.5" />
+            ) : (
+              <Bot className="size-3.5" />
+            )}
             {runningId === action.id
               ? t('projects.quickActions.running', { label: action.label })
               : action.label}

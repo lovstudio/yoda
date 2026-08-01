@@ -44,15 +44,27 @@ export const shareableProjectScriptsSettingsSchema = z.object({
   teardown: z.string().optional(),
 });
 
+const quickActionKindSchema = z.preprocess(
+  (value) => {
+    // Keep project files written by older Yoda versions readable while exposing
+    // the product model users actually interact with: a quick action is either
+    // a deterministic command or a reusable Skill instruction.
+    if (value === undefined || value === 'agent') return 'skill';
+    if (value === 'shell') return 'command';
+    return value;
+  },
+  z.enum(['command', 'skill'])
+);
+
 export const quickActionSchema = z.object({
   id: z.string(),
   label: z.string(),
   command: z.string(),
   /**
-   * Agent actions open an inspectable Yoda task so failures can be fixed in
-   * context. Shell actions run as standard persisted task terminals.
+   * Skill actions open an inspectable Yoda task so intelligent work can
+   * continue in context. Commands run in the shared project Terminal.
    */
-  kind: z.enum(['agent', 'shell']).default('agent'),
+  kind: quickActionKindSchema,
   sourceIntent: z.string().optional(),
 });
 
