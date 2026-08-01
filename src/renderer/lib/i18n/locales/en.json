@@ -2340,13 +2340,15 @@
     },
     "addSubtask": {
       "title": "Add subtask",
-      "existingLabel": "Choose an existing task",
+      "existingLabel": "Add an existing task",
       "searchPlaceholder": "Search tasks to add...",
       "noResults": "No matching existing tasks",
-      "newLabel": "Or create a task",
-      "newPlaceholder": "Enter a new subtask name",
+      "newLabel": "Create a subtask",
+      "newPlaceholder": "Describe the subtask; choose a Skill or add attachments...",
+      "executionHint": "Create only adds the task to this hierarchy. Create and run also starts an Agent session. The first line becomes the task name.",
       "addExisting": "Add",
-      "createAndAdd": "Create and add",
+      "createOnly": "Create only",
+      "createAndRun": "Create and run Agent",
       "failed": "Failed to add subtask"
     },
     "createParent": {

@@ -1,19 +1,22 @@
-import { Check, ListPlus, Search } from 'lucide-react';
+import { Bot, Check, ListPlus, Search } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ensureUniqueTaskDisplayName, taskNameFromPrompt } from '@shared/task-name';
 import {
-  ensureUniqueTaskDisplayName,
-  liveTransformTaskDisplayName,
-  MAX_TASK_NAME_LENGTH,
-  normalizeTaskDisplayName,
-} from '@shared/task-name';
-import { getRepositoryStore } from '@renderer/features/projects/stores/project-selectors';
+  getProjectStore,
+  getRepositoryStore,
+  mountedProjectData,
+} from '@renderer/features/projects/stores/project-selectors';
+import { initialConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
+import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { registeredTaskData, type TaskStore } from '@renderer/features/tasks/stores/task';
 import {
   getTaskManagerStore,
   isTaskDescendantOf,
 } from '@renderer/features/tasks/stores/task-selectors';
+import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
@@ -26,12 +29,14 @@ import {
 import { Field, FieldGroup, FieldLabel } from '@renderer/lib/ui/field';
 import { Input } from '@renderer/lib/ui/input';
 import { cn } from '@renderer/utils/utils';
+import { ComposerPromptInput } from './composer-prompt-input';
+import { serializePromptWithTokens, type PromptToken } from './prompt-attachment-tokens';
 
 /**
- * Adds a child to a task without starting an agent session. The child can be
- * an existing task from the same project or a fresh session-less grouping
- * task. The main process validates the hierarchy again when an existing task
- * is re-parented.
+ * Adds an existing child task or creates a new one. New tasks can remain a
+ * session-less hierarchy node or start their initial Agent session immediately.
+ * The main process validates the hierarchy again when an existing task is
+ * re-parented.
  */
 export const NewSubtaskModal = observer(function NewSubtaskModal({
   onSuccess,
@@ -43,10 +48,15 @@ export const NewSubtaskModal = observer(function NewSubtaskModal({
   parentTaskId: string;
 }) {
   const { t } = useTranslation();
+  const { navigate } = useNavigate();
   const taskManager = getTaskManagerStore(projectId);
+  const projectData = mountedProjectData(getProjectStore(projectId));
+  const connectionId = projectData?.type === 'ssh' ? projectData.connectionId : undefined;
+  const { runtimeId, setRuntimeOverride, createDisabled } = useEffectiveRuntime(connectionId);
   const [query, setQuery] = useState('');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [newTaskName, setNewTaskName] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [promptTokens, setPromptTokens] = useState<PromptToken[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,51 +77,93 @@ export const NewSubtaskModal = observer(function NewSubtaskModal({
         store.data.name.toLowerCase().includes(query.trim().toLowerCase())
       )
     : candidates;
-  const normalizedNewTaskName = normalizeTaskDisplayName(newTaskName);
-  const canSubmit = selectedTaskId !== null || normalizedNewTaskName.length > 0;
+  const newTaskName = taskNameFromPrompt(prompt);
+  const canCreate = selectedTaskId !== null || newTaskName.length > 0;
+  const canCreateAndRun =
+    selectedTaskId === null && newTaskName.length > 0 && runtimeId !== null && !createDisabled;
 
-  const handleSubmit = useCallback(async () => {
-    if (!taskManager || !canSubmit) return;
-    setIsSubmitting(true);
-    setError(null);
-    try {
-      if (selectedTaskId) {
-        const child = taskManager.tasks.get(selectedTaskId);
-        if (!child) throw new Error(t('tasks.addSubtask.failed'));
-        const result = await child.setParentTask(parentTaskId);
-        if (result && !result.success) {
-          throw new Error(t('tasks.addSubtask.failed'));
-        }
-      } else {
-        const sourceBranch = getRepositoryStore(projectId)?.defaultBranch;
-        if (!sourceBranch) throw new Error(t('tasks.addSubtask.failed'));
-        const existingNames = Array.from(taskManager.tasks.values(), (store) => store.data.name);
-        await taskManager.createTask({
-          id: crypto.randomUUID(),
-          projectId,
-          name: ensureUniqueTaskDisplayName(normalizedNewTaskName, existingNames),
-          sourceBranch,
-          strategy: { kind: 'no-worktree' },
-          parentTaskId,
-        });
+  const clearPromptTokens = useCallback(() => {
+    setPromptTokens((current) => {
+      for (const token of current) {
+        if (token.previewUrl) URL.revokeObjectURL(token.previewUrl);
       }
-      onSuccess();
-    } catch (submissionError) {
-      setError(
-        submissionError instanceof Error ? submissionError.message : t('tasks.addSubtask.failed')
-      );
-      setIsSubmitting(false);
-    }
-  }, [
-    taskManager,
-    canSubmit,
-    selectedTaskId,
-    parentTaskId,
-    projectId,
-    normalizedNewTaskName,
-    onSuccess,
-    t,
-  ]);
+      return [];
+    });
+  }, []);
+
+  const handleSubmit = useCallback(
+    async (runAgent: boolean) => {
+      if (!taskManager || !canCreate) return;
+      if (runAgent && !canCreateAndRun) return;
+      setIsSubmitting(true);
+      setError(null);
+      try {
+        if (selectedTaskId) {
+          const child = taskManager.tasks.get(selectedTaskId);
+          if (!child) throw new Error(t('tasks.addSubtask.failed'));
+          const result = await child.setParentTask(parentTaskId);
+          if (result && !result.success) {
+            throw new Error(t('tasks.addSubtask.failed'));
+          }
+        } else {
+          const sourceBranch = getRepositoryStore(projectId)?.defaultBranch;
+          if (!sourceBranch) throw new Error(t('tasks.addSubtask.failed'));
+          const existingNames = Array.from(taskManager.tasks.values(), (store) => store.data.name);
+          const taskId = crypto.randomUUID();
+          const serializedPrompt = serializePromptWithTokens(prompt, promptTokens, {
+            imagesAsPaths: false,
+          });
+          const initialPrompt = serializedPrompt.text.trim();
+          const initialConversation =
+            runAgent && runtimeId
+              ? {
+                  id: crypto.randomUUID(),
+                  projectId,
+                  taskId,
+                  runtime: runtimeId,
+                  title: initialConversationTitle(runtimeId, initialPrompt || undefined, []),
+                  initialPrompt: initialPrompt || undefined,
+                  imagePaths:
+                    serializedPrompt.imagePaths.length > 0
+                      ? serializedPrompt.imagePaths
+                      : undefined,
+                }
+              : undefined;
+          await taskManager.createTask({
+            id: taskId,
+            projectId,
+            name: ensureUniqueTaskDisplayName(newTaskName, existingNames),
+            sourceBranch,
+            strategy: { kind: 'no-worktree' },
+            parentTaskId,
+            ...(initialConversation ? { initialConversation } : {}),
+          });
+          if (runAgent) navigate('task', { projectId, taskId });
+        }
+        onSuccess();
+      } catch (submissionError) {
+        setError(
+          submissionError instanceof Error ? submissionError.message : t('tasks.addSubtask.failed')
+        );
+        setIsSubmitting(false);
+      }
+    },
+    [
+      taskManager,
+      canCreate,
+      canCreateAndRun,
+      selectedTaskId,
+      parentTaskId,
+      projectId,
+      newTaskName,
+      prompt,
+      promptTokens,
+      runtimeId,
+      navigate,
+      onSuccess,
+      t,
+    ]
+  );
 
   return (
     <>
@@ -129,7 +181,6 @@ export const NewSubtaskModal = observer(function NewSubtaskModal({
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={t('tasks.addSubtask.searchPlaceholder')}
-                autoFocus
               />
             </div>
             <div className="max-h-52 overflow-y-auto rounded-md border border-border">
@@ -139,7 +190,8 @@ export const NewSubtaskModal = observer(function NewSubtaskModal({
                   type="button"
                   onClick={() => {
                     setSelectedTaskId(store.data.id);
-                    setNewTaskName('');
+                    setPrompt('');
+                    clearPromptTokens();
                     setError(null);
                   }}
                   className={cn(
@@ -160,16 +212,40 @@ export const NewSubtaskModal = observer(function NewSubtaskModal({
           </Field>
           <Field>
             <FieldLabel>{t('tasks.addSubtask.newLabel')}</FieldLabel>
-            <Input
-              value={newTaskName}
-              onChange={(event) => {
-                setNewTaskName(liveTransformTaskDisplayName(event.target.value));
-                setSelectedTaskId(null);
-                setError(null);
-              }}
-              placeholder={t('tasks.addSubtask.newPlaceholder')}
-              maxLength={MAX_TASK_NAME_LENGTH}
-            />
+            <div className="flex flex-col gap-2">
+              <AgentSelector
+                value={runtimeId}
+                onChange={setRuntimeOverride}
+                connectionId={connectionId}
+                disabled={isSubmitting}
+              />
+              <ComposerPromptInput
+                value={prompt}
+                onChange={(value) => {
+                  setPrompt(value);
+                  setSelectedTaskId(null);
+                  setError(null);
+                }}
+                tokens={promptTokens}
+                onTokensChange={(tokens) => {
+                  setPromptTokens(tokens);
+                  setSelectedTaskId(null);
+                  setError(null);
+                }}
+                runtimeId={runtimeId}
+                projectId={projectId}
+                projectPath={projectData?.type === 'local' ? projectData.path : undefined}
+                runHostKind={projectData?.type === 'ssh' ? 'ssh' : 'local'}
+                placeholder={t('tasks.addSubtask.newPlaceholder')}
+                disabled={isSubmitting}
+                canSubmit={canCreateAndRun}
+                showSubmitButton={false}
+                onSubmit={() => void handleSubmit(true)}
+                autoFocus
+                textareaClassName="min-h-24 text-sm"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">{t('tasks.addSubtask.executionHint')}</p>
           </Field>
         </FieldGroup>
         {error && <p className="text-xs text-destructive">{error}</p>}
@@ -178,10 +254,33 @@ export const NewSubtaskModal = observer(function NewSubtaskModal({
         <Button variant="outline" onClick={onClose}>
           {t('common.cancel')}
         </Button>
-        <ConfirmButton onClick={() => void handleSubmit()} disabled={!canSubmit || isSubmitting}>
-          <ListPlus className="size-4" />
-          {selectedTaskId ? t('tasks.addSubtask.addExisting') : t('tasks.addSubtask.createAndAdd')}
-        </ConfirmButton>
+        {selectedTaskId ? (
+          <ConfirmButton
+            onClick={() => void handleSubmit(false)}
+            disabled={!canCreate || isSubmitting}
+          >
+            <ListPlus className="size-4" />
+            {t('tasks.addSubtask.addExisting')}
+          </ConfirmButton>
+        ) : (
+          <>
+            <Button
+              variant="outline"
+              onClick={() => void handleSubmit(false)}
+              disabled={!canCreate || isSubmitting}
+            >
+              <ListPlus className="size-4" />
+              {t('tasks.addSubtask.createOnly')}
+            </Button>
+            <ConfirmButton
+              onClick={() => void handleSubmit(true)}
+              disabled={!canCreateAndRun || isSubmitting}
+            >
+              <Bot className="size-4" />
+              {t('tasks.addSubtask.createAndRun')}
+            </ConfirmButton>
+          </>
+        )}
       </DialogFooter>
     </>
   );
