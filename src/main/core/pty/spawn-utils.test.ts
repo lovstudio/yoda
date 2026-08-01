@@ -122,6 +122,22 @@ describe('resolveSshCommand', () => {
     expect(result).toContain('conv-1');
   });
 
+  it('guards a remote tmux session with the resolved agent thread identity', () => {
+    const result = resolveSshCommand(
+      'agent',
+      makeAgentConfig({
+        tmuxSessionName: 'agent-session',
+        tmuxSessionIdentity: 'fork-thread',
+      }),
+      undefined,
+      zshProfile
+    );
+
+    expect(result).toContain('@yoda_agent_session_id');
+    expect(result).toContain('fork-thread');
+    expect(result).toContain('kill-session');
+  });
+
   it('launches remote general terminals with the captured remote shell', () => {
     const result = resolveSshCommand('general', makeGeneralConfig(), undefined, zshProfile);
 

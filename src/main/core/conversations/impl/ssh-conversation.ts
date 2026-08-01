@@ -203,6 +203,7 @@ export class SshConversationProvider implements ConversationProvider {
         shellSetup: this.shellSetup,
         tmuxSessionName,
         tmuxEnv: resolveRuntimeTmuxEnv(providerEnv),
+        tmuxSessionIdentity: conversation.id,
         autoApprove: conversation.autoApprove ?? false,
         resume: isResuming,
       };

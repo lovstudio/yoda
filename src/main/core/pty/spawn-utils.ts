@@ -26,7 +26,14 @@ function posixShellLineForSsh(
       return {
         cwd: cfg.cwd,
         line: cfg.tmuxSessionName
-          ? buildTmuxShellLine(cfg.tmuxSessionName, line, undefined, cfg.tmuxEnv)
+          ? buildTmuxShellLine(
+              cfg.tmuxSessionName,
+              line,
+              undefined,
+              cfg.tmuxEnv,
+              cfg.tmuxSessionIdentity,
+              cfg.tmuxSessionIdentityAliases
+            )
           : line,
       };
     }

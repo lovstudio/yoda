@@ -13,6 +13,7 @@ const TMUX_LIST_MAX_BUFFER = 128 * 1024;
 const TMUX_LIST_FORMAT_SEPARATOR = '\u001f';
 // tmux renders control bytes in format output using their octal escape.
 const TMUX_LIST_OUTPUT_SEPARATOR = '\\037';
+const YODA_TMUX_SESSION_IDENTITY_OPTION = '@yoda_agent_session_id';
 
 export type TmuxSessionMarker = {
   sessionName: string;
@@ -43,7 +44,9 @@ export function buildTmuxShellLine(
   sessionName: string,
   commandLine: string,
   size?: { cols: number; rows: number },
-  environment?: Record<string, string>
+  environment?: Record<string, string>,
+  sessionIdentity?: string,
+  compatibleSessionIdentities: string[] = []
 ): string {
   const quotedName = JSON.stringify(sessionName);
   // Single-quote (not JSON.stringify): JSON escapes a real newline into the
@@ -79,8 +82,53 @@ export function buildTmuxShellLine(
     `set-window-option -t ${quotedName} aggressive-resize on`
   );
   const attach = tmuxCommandShellLine(`attach-session -t ${quotedName}`);
-  const prep = `${hideStatus} && ${enableMouse} && ${hideCopyModePositionOnWheel} && ${trackClient}`;
-  return `(${checkExists} && ${prep} && ${attach}) || (${newSession} && ${prep} && ${attach})`;
+  const markIdentity = sessionIdentity
+    ? tmuxCommandShellLine(
+        `set-option -t ${quotedName} ${YODA_TMUX_SESSION_IDENTITY_OPTION} ${quotePosixValue(sessionIdentity)}`
+      )
+    : null;
+  const prep = [hideStatus, enableMouse, hideCopyModePositionOnWheel, trackClient, markIdentity]
+    .filter((command): command is string => command !== null)
+    .join(' && ');
+  if (!sessionIdentity) {
+    return `(${checkExists} && ${prep} && ${attach}) || (${newSession} && ${prep} && ${attach})`;
+  }
+
+  // A Yoda app restart reconnects to the stable tmux name. Codex rollbacks,
+  // however, can move the conversation to a newer fork while the surviving
+  // tmux pane still runs the old root thread. Attaching that pane silently
+  // ignores the freshly resolved `resume <current-thread>` command. Persist an
+  // explicit identity and replace only a pane that belongs to another thread.
+  // For sessions created before this marker existed, inspect the original pane
+  // command once so an already-correct live process is preserved and upgraded.
+  const readIdentity = tmuxCommandShellLine(
+    `show-options -v -t ${quotedName} ${YODA_TMUX_SESSION_IDENTITY_OPTION}`
+  );
+  const readPaneCommand = tmuxCommandShellLine(
+    `list-panes -t ${quotedName} -F ${JSON.stringify('#{pane_start_command}')}`
+  );
+  const killSession = tmuxCommandShellLine(`kill-session -t ${quotedName}`);
+  const acceptedIdentities = [sessionIdentity, ...compatibleSessionIdentities].filter(
+    (identity, index, identities) => identity && identities.indexOf(identity) === index
+  );
+  const markedIdentityMatches = acceptedIdentities
+    .map((identity) => `[ "$current_identity" = ${quotePosixValue(identity)} ]`)
+    .join(' || ');
+  const legacyPaneMatches = acceptedIdentities
+    .map(
+      (identity) =>
+        `{ [ -z "$current_identity" ] && ${readPaneCommand} 2>/dev/null | grep -F -- ${quotePosixValue(identity)} >/dev/null; }`
+    )
+    .join(' || ');
+  const identityMatches = `${markedIdentityMatches} || ${legacyPaneMatches}`;
+  const createAndAttach = `${newSession} && ${prep} && ${attach}`;
+  return (
+    `if ${checkExists}; then ` +
+    `current_identity="$(${readIdentity} 2>/dev/null || true)"; ` +
+    `if ${identityMatches}; then ${prep} && ${attach}; ` +
+    `else (${killSession} 2>/dev/null || true) && ${createAndAttach}; fi; ` +
+    `else ${createAndAttach}; fi`
+  );
 }
 
 export function makeTmuxSessionName(sessionId: string): string {
