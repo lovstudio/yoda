@@ -865,7 +865,19 @@ export function App() {
       });
       setPrompt('');
       setDemandImages([]);
-      const destination = prepareCreatedDemandNavigation(snapshot, result.task);
+      let createdSessionId = result.sessionId?.trim();
+      if (!createdSessionId) {
+        const createdTaskSessions = await fetchTaskSessions(
+          connection,
+          result.task.projectId,
+          result.task.id
+        );
+        createdSessionId = createdTaskSessions.sessions[0]?.id;
+      }
+      if (!createdSessionId) {
+        throw new Error('The created task did not return a session.');
+      }
+      const destination = prepareCreatedDemandNavigation(snapshot, result.task, createdSessionId);
       setSnapshot(destination.snapshot);
       setHomeTab(destination.homeTab);
       setTaskScope(destination.taskScope);

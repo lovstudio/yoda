@@ -361,6 +361,7 @@ export type MobileCreateDemandRequest = {
 
 export type MobileCreateDemandResponse = {
   task: MobileTaskSummary;
+  sessionId: string;
   warning?: string;
 };
 

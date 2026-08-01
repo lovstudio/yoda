@@ -1571,6 +1571,7 @@ export class MobileGatewayService {
 
     return {
       task: this.mapTask(result.data.task, resolveTaskActivityStatus(result.data.task, [])),
+      sessionId: conversationId,
       warning: result.data.warning ? mapCreateTaskWarning(result.data.warning) : undefined,
     };
   }
