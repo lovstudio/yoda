@@ -49,6 +49,7 @@ import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
 import { ProjectActionsMenu, ProjectContextMenu } from './project-menu';
 import { SidebarItemMiniButton, SidebarMenuButton, SidebarMenuRow } from './sidebar-primitives';
+import { useSidebarHoverIntent } from './use-sidebar-hover-intent';
 
 const UNREGISTERED_PHASE_KEY: Record<UnregisteredProject['phase'], string> = {
   'creating-repo': 'sidebar.phase.creatingRepo',
@@ -195,6 +196,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     void settingsStore?.pageData.load();
     loadLaunchCommands();
   }, [loadLaunchCommands, prefetchRepository, settingsStore]);
+  const projectMenuDataIntent = useSidebarHoverIntent(prefetchProjectMenuData);
 
   const handleRunQuickAction = useCallback(
     async (action: QuickAction) => {
@@ -426,7 +428,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
       (expressProviderId || (mountedProject?.data.type === 'local' && quickActions.length > 0))
         ? (action: QuickAction) => void handleRunQuickAction(action)
         : undefined,
-    onMenuOpen: prefetchProjectMenuData,
+    onMenuOpen: projectMenuDataIntent.runNow,
     onRename: project.state === 'unregistered' ? undefined : () => showRenameProject({ projectId }),
     onMovePath:
       project.state === 'unregistered' ? undefined : () => showMoveProjectPath({ projectId }),
@@ -462,7 +464,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
         aria-expanded={isExpanded}
         aria-busy={project.state === 'unregistered' || isLoadingProjectSessions}
         onMouseDown={(e) => e.preventDefault()}
-        onMouseEnter={prefetchProjectMenuData}
+        onPointerEnter={projectMenuDataIntent.schedule}
+        onPointerLeave={projectMenuDataIntent.cancel}
         onClick={(e) => {
           // Alt/Option pins the project into the global side pane; a plain
           // click toggles its task list as usual.
@@ -557,7 +560,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
               'transition-opacity duration-150',
               isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'
             )}
-            onPointerEnter={() => prefetchRepository()}
+            onPointerEnter={projectMenuDataIntent.schedule}
             onClick={(e) => {
               e.stopPropagation();
               void handleAddTask();
