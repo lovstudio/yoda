@@ -3,6 +3,7 @@ import {
   Bookmark,
   ChevronRight,
   GitBranch,
+  ListPlus,
   Loader2,
   MoreHorizontal,
   Users,
@@ -135,6 +136,8 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
       ? (treeTrail?.slice(-treeDepth) ?? Array.from({ length: treeDepth }, () => false))
       : [];
   const hasChildren = rowVariant === 'underProject' && childCount > 0;
+  const isParentTask = childCount > 0;
+  const canQuickCreateSubtask = isParentTask && Boolean(menuActions.onCreateSubtask);
   const isCollapsed = hasChildren && sidebarStore.collapsedTaskIds.has(taskId);
   // Root-level parents swap pl-8 for a project-style mini-button slot (same 32px
   // name offset), so the hover-only chevron aligns with the project row's chevron
@@ -423,21 +426,34 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
                   </SidebarItemMiniButton>
                 }
               />
-              <SidebarItemMiniButton
-                type="button"
-                aria-label={t('sidebar.archiveTask')}
-                disabled={isArchiving}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setArchiveConfirming(true);
-                }}
-              >
-                {isArchiving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Archive className="h-4 w-4" />
-                )}
-              </SidebarItemMiniButton>
+              {canQuickCreateSubtask ? (
+                <SidebarItemMiniButton
+                  type="button"
+                  aria-label={t('tasks.context.createSubtask')}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    menuActions.onCreateSubtask?.();
+                  }}
+                >
+                  <ListPlus className="h-4 w-4" />
+                </SidebarItemMiniButton>
+              ) : (
+                <SidebarItemMiniButton
+                  type="button"
+                  aria-label={t('sidebar.archiveTask')}
+                  disabled={isArchiving}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setArchiveConfirming(true);
+                  }}
+                >
+                  {isArchiving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Archive className="h-4 w-4" />
+                  )}
+                </SidebarItemMiniButton>
+              )}
             </>
           )}
         </div>
