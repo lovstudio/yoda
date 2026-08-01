@@ -500,6 +500,7 @@ export async function readCodexTurnVerdict(
           cwd: options.cwd,
           startedAtMs: options.startedAtMs,
           isResuming: options.isResuming,
+          threadId: options.threadId,
           statePath,
         })
       : readCodexThreadRolloutPath(

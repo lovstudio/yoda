@@ -326,7 +326,7 @@ describe('LocalConversationProvider', () => {
     mocks.ensureCodexThreadUnarchived.mockResolvedValue(undefined);
     mocks.sendLiteralToTmuxSession.mockResolvedValue(undefined);
     mocks.resolveAgentResumeSessionId.mockImplementation((conversation: Conversation) => {
-      return conversation.id;
+      return conversation.sessionSource?.sessionId ?? conversation.id;
     });
     mocks.resolveCodexThreadIdForConversation.mockReturnValue('conv-1');
     mocks.resolveAvailableTmuxSessionName.mockResolvedValue(undefined);

@@ -41,9 +41,19 @@ export function resolveAgentResumeSession(
   }
 
   if (conversation.sessionSource?.runtimeId === 'codex') {
+    const source = conversation.sessionSource;
+    const thread = resolveCodexThreadForConversation({
+      conversationId: source.sessionId,
+      cwd,
+      title: conversation.title,
+      createdAt: conversation.createdAt,
+      lastInteractedAt: conversation.lastInteractedAt,
+      statePath: resolveCodexStatePath(source.stateRoot),
+      reservedThreadIds: options.reservedThreadIds,
+    });
     return {
-      sessionId: conversation.sessionSource.sessionId,
-      sessionTitle: conversation.title,
+      sessionId: thread?.id ?? source.sessionId,
+      sessionTitle: thread?.title ?? conversation.title,
     };
   }
 
