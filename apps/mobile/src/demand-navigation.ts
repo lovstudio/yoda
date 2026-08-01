@@ -2,7 +2,8 @@ import type { MobileDashboardSnapshot, MobileTaskSummary } from '../../../src/sh
 
 export function prepareCreatedDemandNavigation(
   snapshot: MobileDashboardSnapshot,
-  task: MobileTaskSummary
+  task: MobileTaskSummary,
+  sessionId: string
 ) {
   return {
     snapshot: {
@@ -13,6 +14,6 @@ export function prepareCreatedDemandNavigation(
     taskScope: 'all' as const,
     selectedProjectId: task.projectId,
     selectedTaskId: task.id,
-    selectedSessionId: null,
+    selectedSessionId: sessionId,
   };
 }
