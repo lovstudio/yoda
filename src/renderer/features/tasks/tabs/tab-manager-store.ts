@@ -237,14 +237,13 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
    * Phase 2 top-level tab bridge, injected by the task view layer. When set,
    * open/activate intents are forwarded to the top-level app tab strip instead
    * of mutating internal order — the route replay then re-enters with
-   * `applyingKey` set to the target identity and runs the internal logic.
+   * `applying` set to the target identity and runs the internal logic.
    *
-   * `applyingKey` (instead of a boolean) keeps rapid interactions correct: a
-   * NEW target arriving while a replay is awaiting still forwards — only the
-   * replay's own re-entry runs internally.
+   * The key keeps a NEW target arriving during a replay independent; the token
+   * prevents an older replay from clearing a newer replay of the same target.
    */
   topLevelBridge: {
-    applyingKey: string | null;
+    applying: { key: string; token: symbol } | null;
     open: (target: TaskWindowTabTarget) => void;
   } | null = null;
 
@@ -575,7 +574,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     }
     // Replay re-entry for the same target runs internally; anything else is a
     // fresh user intent and surfaces as a top-level tab.
-    if (bridge.applyingKey === JSON.stringify(target)) {
+    if (bridge.applying?.key === JSON.stringify(target)) {
       log.debug('[tab-sync] forward: replay re-entry, running internally', target);
       return false;
     }

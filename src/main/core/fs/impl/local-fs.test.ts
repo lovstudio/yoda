@@ -4,7 +4,12 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FileWatchEvent } from '@shared/fs';
 import { FileSystemError } from '../types';
-import { LocalFileSystem } from './local-fs';
+import {
+  LOCAL_WATCH_EVENT_BATCH_SIZE,
+  LOCAL_WATCH_MAX_PENDING_EVENTS,
+  LOCAL_WATCH_MAX_WAIT_MS,
+  LocalFileSystem,
+} from './local-fs';
 
 const parcelWatcherMock = vi.hoisted(() => ({
   subscribe: vi.fn(),
@@ -31,6 +36,8 @@ describe('LocalFileSystem', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
     parcelWatcherMock.subscribe.mockReset();
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
@@ -614,6 +621,151 @@ describe('LocalFileSystem', () => {
       });
 
       expect(received).toEqual([{ type: 'create', entryType: 'file', path: 'src/visible.ts' }]);
+
+      watcher.close();
+    });
+
+    it('coalesces repeated path events before resolving file metadata', async () => {
+      let onNativeEvents: MockWatcherCallback | undefined;
+      const unsubscribe = vi.fn();
+
+      parcelWatcherMock.subscribe.mockImplementation(
+        (_root: string, callback: MockWatcherCallback) => {
+          onNativeEvents = callback;
+          return Promise.resolve({ unsubscribe });
+        }
+      );
+
+      const received: FileWatchEvent[][] = [];
+      const watcher = fsService.watch((events) => received.push(events), { debounceMs: 1 });
+      const visibleFile = path.join(tempDir, 'coalesced.ts');
+      fs.writeFileSync(visibleFile, 'const value = true;');
+
+      onNativeEvents?.(null, [
+        { type: 'create', path: visibleFile },
+        { type: 'update', path: visibleFile },
+        { type: 'update', path: visibleFile },
+      ]);
+
+      await vi.waitFor(() => {
+        expect(received).toHaveLength(1);
+      });
+      expect(received[0]).toEqual([{ type: 'create', entryType: 'file', path: 'coalesced.ts' }]);
+
+      watcher.close();
+    });
+
+    it('flushes by max wait while continuous events keep resetting the debounce timer', async () => {
+      vi.useFakeTimers();
+      let onNativeEvents: MockWatcherCallback | undefined;
+      const unsubscribe = vi.fn();
+
+      parcelWatcherMock.subscribe.mockImplementation(
+        (_root: string, callback: MockWatcherCallback) => {
+          onNativeEvents = callback;
+          return Promise.resolve({ unsubscribe });
+        }
+      );
+
+      const received: FileWatchEvent[][] = [];
+      const watcher = fsService.watch((events) => received.push(events), { debounceMs: 250 });
+      const busyPath = path.join(tempDir, 'busy.ts');
+
+      onNativeEvents?.(null, [{ type: 'delete', path: busyPath }]);
+      for (let elapsed = 200; elapsed < LOCAL_WATCH_MAX_WAIT_MS; elapsed += 200) {
+        await vi.advanceTimersByTimeAsync(200);
+        onNativeEvents?.(null, [{ type: 'delete', path: busyPath }]);
+      }
+
+      await vi.advanceTimersByTimeAsync(LOCAL_WATCH_MAX_WAIT_MS - 801);
+      expect(received).toHaveLength(0);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(received).toEqual([[{ type: 'delete', entryType: 'file', path: 'busy.ts' }]]);
+
+      watcher.close();
+    });
+
+    it('flushes a full pending buffer in bounded batches', async () => {
+      let onNativeEvents: MockWatcherCallback | undefined;
+      const unsubscribe = vi.fn();
+
+      parcelWatcherMock.subscribe.mockImplementation(
+        (_root: string, callback: MockWatcherCallback) => {
+          onNativeEvents = callback;
+          return Promise.resolve({ unsubscribe });
+        }
+      );
+
+      const received: FileWatchEvent[][] = [];
+      const watcher = fsService.watch((events) => received.push(events), {
+        debounceMs: 10_000,
+      });
+      const nativeEvents = Array.from({ length: LOCAL_WATCH_MAX_PENDING_EVENTS }, (_, index) => ({
+        type: 'delete' as const,
+        path: path.join(tempDir, `deleted-${index}.ts`),
+      }));
+
+      onNativeEvents?.(null, nativeEvents);
+
+      await vi.waitFor(() => {
+        expect(received.flat()).toHaveLength(LOCAL_WATCH_MAX_PENDING_EVENTS);
+      });
+      expect(received).toHaveLength(
+        Math.ceil(LOCAL_WATCH_MAX_PENDING_EVENTS / LOCAL_WATCH_EVENT_BATCH_SIZE)
+      );
+      expect(received.every((batch) => batch.length <= LOCAL_WATCH_EVENT_BATCH_SIZE)).toBe(true);
+
+      watcher.close();
+    });
+
+    it('keeps delivery bounded when async metadata resolution stalls across full buffers', async () => {
+      vi.useFakeTimers();
+      let onNativeEvents: MockWatcherCallback | undefined;
+      const unsubscribe = vi.fn();
+
+      parcelWatcherMock.subscribe.mockImplementation(
+        (_root: string, callback: MockWatcherCallback) => {
+          onNativeEvents = callback;
+          return Promise.resolve({ unsubscribe });
+        }
+      );
+      const statSpy = vi
+        .spyOn(fs.promises, 'stat')
+        .mockImplementation(
+          () => new Promise<Awaited<ReturnType<typeof fs.promises.stat>>>(() => {})
+        );
+      const received: FileWatchEvent[][] = [];
+      const watcher = fsService.watch((events) => received.push(events), {
+        debounceMs: 10_000,
+      });
+      const rounds = 3;
+      const sharedPath = path.join(tempDir, 'shared.ts');
+
+      for (let round = 0; round < rounds; round++) {
+        onNativeEvents?.(
+          null,
+          Array.from({ length: LOCAL_WATCH_MAX_PENDING_EVENTS }, (_, index) => {
+            const isSharedPath = index === 0 && round < 2;
+            return {
+              type: round === 0 && isSharedPath ? ('create' as const) : ('update' as const),
+              path: isSharedPath ? sharedPath : path.join(tempDir, `round-${round}-${index}.ts`),
+            };
+          })
+        );
+      }
+
+      await vi.advanceTimersByTimeAsync(LOCAL_WATCH_MAX_WAIT_MS);
+
+      const delivered = received.flat();
+      expect(delivered).toHaveLength(LOCAL_WATCH_MAX_PENDING_EVENTS * rounds - 1);
+      expect(received.every((batch) => batch.length <= LOCAL_WATCH_EVENT_BATCH_SIZE)).toBe(true);
+      expect(delivered.filter((event) => event.path === 'shared.ts')).toEqual([
+        { type: 'create', entryType: 'file', path: 'shared.ts' },
+      ]);
+      // Only create events require metadata. Modify/delete floods must not create
+      // unresolved stat batches, and at most one active delivery may remain.
+      expect(statSpy).toHaveBeenCalledOnce();
 
       watcher.close();
     });

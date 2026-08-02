@@ -16,6 +16,7 @@ import { getTerminalsPaneSize } from '@renderer/features/tasks/terminals/termina
 import { rpc } from '@renderer/lib/ipc';
 
 const WORKSPACE_TERMINAL_PANE_ID = 'workspace-terminal';
+export const WORKSPACE_TERMINAL_SCOPE_LIMIT = 16;
 
 class WorkspaceTerminalScopeStore {
   readonly manager: TerminalManagerStore;
@@ -28,6 +29,11 @@ class WorkspaceTerminalScopeStore {
   ) {
     this.manager = new TerminalManagerStore(projectId, scopeId, workspaceTerminalGateway);
     this.tabs = new TerminalTabViewStore(this.manager);
+  }
+
+  dispose(): void {
+    this.tabs.dispose();
+    this.manager.dispose();
   }
 }
 
@@ -146,6 +152,16 @@ export class WorkspaceTerminalStore {
     this.isOpen = false;
   }
 
+  dispose(): void {
+    const retainedScopes = [...this.scopes.values()];
+    this.scopes.clear();
+    this.activeScope = null;
+    this.isOpen = false;
+    this.error = null;
+    this.followsActiveProject = false;
+    for (const scope of retainedScopes) scope.dispose();
+  }
+
   private async openScope(scope: WorkspaceTerminalScopeStore, ensureTerminal: boolean) {
     runInAction(() => {
       this.activeScope = scope;
@@ -155,7 +171,7 @@ export class WorkspaceTerminalStore {
     try {
       await scope.manager.load();
       if (ensureTerminal && scope.tabs.tabs.length === 0) {
-        const terminal = await scope.manager.createDefaultTerminal();
+        const terminal = await scope.manager.ensureDefaultTerminal();
         scope.tabs.setActiveTab(terminal.id);
       }
     } catch (error) {
@@ -173,10 +189,31 @@ export class WorkspaceTerminalStore {
   ): WorkspaceTerminalScopeStore {
     const key = `${projectId}\0${scopeId}`;
     const existing = this.scopes.get(key);
-    if (existing) return existing;
+    if (existing) {
+      this.scopes.delete(key);
+      this.scopes.set(key, existing);
+      return existing;
+    }
     const scope = new WorkspaceTerminalScopeStore(projectId, scopeId, sourceProjectId);
     this.scopes.set(key, scope);
+    this.evictLeastRecentlyUsedScopes(scope);
     return scope;
+  }
+
+  private evictLeastRecentlyUsedScopes(newScope: WorkspaceTerminalScopeStore): void {
+    while (this.scopes.size > WORKSPACE_TERMINAL_SCOPE_LIMIT) {
+      let candidate: [string, WorkspaceTerminalScopeStore] | undefined;
+      for (const entry of this.scopes) {
+        const [, scope] = entry;
+        if (scope === this.activeScope || scope === newScope) continue;
+        candidate = entry;
+        break;
+      }
+      if (!candidate) return;
+      const [key, scope] = candidate;
+      this.scopes.delete(key);
+      scope.dispose();
+    }
   }
 }
 

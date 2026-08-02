@@ -59,7 +59,7 @@ import {
   buildRemoteSshCommand,
   buildRemoteTerminalExecArgs,
 } from '@main/utils/remoteOpenIn';
-import { sampleProcessTrees } from './agent-process-sampler';
+import { sampleProcessTrees, TtlSingleFlightSampler } from './agent-process-sampler';
 import {
   checkCommand,
   checkMacApp,
@@ -77,6 +77,7 @@ import {
 
 const FONT_CACHE_TTL_MS = 5 * 60 * 1_000;
 const IDLE_SESSION_SWEEP_INTERVAL_MS = 30_000;
+export const RESOURCE_SNAPSHOT_CACHE_TTL_MS = 4_000;
 
 type RemoteTerminalLaunchAttempt = {
   file: string;
@@ -96,6 +97,9 @@ class AppService implements IInitializable, IDisposable {
   private cachedInstalledFonts: { fonts: string[]; fetchedAt: number } | null = null;
   private _unsubscribes: Array<() => void> = [];
   private readonly mainEventLoopHistogram = monitorEventLoopDelay({ resolution: 20 });
+  private readonly resourceSnapshotSampler = new TtlSingleFlightSampler<AppResourceSnapshot>(
+    RESOURCE_SNAPSHOT_CACHE_TTL_MS
+  );
   private rendererPerformance: RendererPerformanceSample | null = null;
   private idleSessionSweepTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -125,6 +129,7 @@ class AppService implements IInitializable, IDisposable {
     for (const unsub of this._unsubscribes) unsub();
     this._unsubscribes = [];
     this.mainEventLoopHistogram.disable();
+    this.resourceSnapshotSampler.clear();
     if (this.idleSessionSweepTimer) {
       clearInterval(this.idleSessionSweepTimer);
       this.idleSessionSweepTimer = null;
@@ -143,6 +148,10 @@ class AppService implements IInitializable, IDisposable {
   }
 
   async getResourceSnapshot(): Promise<AppResourceSnapshot> {
+    return this.resourceSnapshotSampler.sample(() => this.sampleResourceSnapshot());
+  }
+
+  private async sampleResourceSnapshot(): Promise<AppResourceSnapshot> {
     const processes = app
       .getAppMetrics()
       .map((metric) => ({

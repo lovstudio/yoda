@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   applyPathCompletion,
   buildPathCompletionItems,
+  buildPathCompletionRequest,
   findActivePathMention,
+  rebaseHomePathCompletionEntries,
+  shouldIncludeHiddenPathCompletions,
   splitPathMentionQuery,
 } from './path-mention-autocomplete';
 
@@ -28,6 +31,25 @@ describe('path mention autocomplete helpers', () => {
       namePrefix: 'ren',
       preserveDotSlash: false,
     });
+  });
+
+  it('preserves parent-relative completion paths outside the project', () => {
+    const parts = splitPathMentionQuery('../');
+    expect(parts).toEqual({
+      pathKind: 'relative',
+      directoryPath: '..',
+      namePrefix: '',
+      preserveDotSlash: false,
+    });
+    expect(
+      buildPathCompletionItems(
+        [
+          { path: '../project', type: 'dir' },
+          { path: '../sibling', type: 'dir' },
+        ],
+        parts
+      ).map((item) => item.insertText)
+    ).toEqual(['../project/', '../sibling/']);
   });
 
   it('splits absolute path queries', () => {
@@ -66,6 +88,46 @@ describe('path mention autocomplete helpers', () => {
     expect(
       buildPathCompletionItems([{ path: 'Documents', type: 'dir' }], parts)[0]?.insertText
     ).toBe('~/Documents/');
+  });
+
+  it('resolves local home queries outside the project through an absolute request', () => {
+    const parts = splitPathMentionQuery('~/Documents/pro');
+    expect(buildPathCompletionRequest(parts, '/Users/tester/')).toEqual({
+      pathKind: 'absolute',
+      directoryPath: '/Users/tester/Documents',
+    });
+    expect(
+      rebaseHomePathCompletionEntries(
+        [
+          { path: '/Users/tester/Documents/projects', type: 'dir' },
+          { path: '/Users/another/private', type: 'dir' },
+        ],
+        parts,
+        '/Users/tester/'
+      )
+    ).toEqual([{ path: 'Documents/projects', type: 'dir' }]);
+  });
+
+  it('keeps project-relative, absolute, and remote-home requests distinct', () => {
+    expect(buildPathCompletionRequest(splitPathMentionQuery('src/renderer'))).toEqual({
+      pathKind: 'relative',
+      directoryPath: 'src',
+    });
+    expect(buildPathCompletionRequest(splitPathMentionQuery('/opt/tools'))).toEqual({
+      pathKind: 'absolute',
+      directoryPath: '/opt',
+    });
+    expect(buildPathCompletionRequest(splitPathMentionQuery('~/tools'))).toEqual({
+      pathKind: 'home',
+      directoryPath: '.',
+    });
+  });
+
+  it('only includes hidden entries after the user types a dot prefix', () => {
+    expect(shouldIncludeHiddenPathCompletions(splitPathMentionQuery('~/'))).toBe(false);
+    expect(shouldIncludeHiddenPathCompletions(splitPathMentionQuery('~/.'))).toBe(true);
+    expect(shouldIncludeHiddenPathCompletions(splitPathMentionQuery('~/.config/'))).toBe(false);
+    expect(shouldIncludeHiddenPathCompletions(splitPathMentionQuery('~/.config/.'))).toBe(true);
   });
 
   it('filters and sorts completion items by prefix and type', () => {

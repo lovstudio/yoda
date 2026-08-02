@@ -4,6 +4,7 @@ import {
   type CreateConversationParams,
   type ForkConversationAtPromptParams,
   type ForkConversationParams,
+  type SessionRuntimeOverrides,
 } from '@shared/conversations';
 import type { PendingAction } from '@shared/events/agent-run-state';
 import {
@@ -51,7 +52,7 @@ export class ConversationManagerStore {
       conversations: observable,
       taskStatus: computed,
     });
-    if (preloaded && preloaded.length > 0) {
+    if (preloaded !== undefined) {
       this._loaded = true;
       const owned = preloaded.filter((conversation) => this._belongsHere(conversation));
       for (const conversation of owned) {
@@ -538,7 +539,7 @@ export class ConversationManagerStore {
     initialSize?: { cols: number; rows: number },
     tmuxOverride?: boolean,
     enableSkillKey?: string,
-    modelOverride?: string
+    runtimeOverrides?: SessionRuntimeOverrides
   ): Promise<void> {
     const store = this.conversations.get(conversationId);
     if (!store) return;
@@ -556,7 +557,7 @@ export class ConversationManagerStore {
         effectiveSize,
         tmuxOverride,
         enableSkillKey,
-        modelOverride
+        runtimeOverrides
       );
       await store.session.reconnect();
       if (effectiveSize) {

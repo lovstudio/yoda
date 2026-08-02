@@ -3,7 +3,7 @@ import type { ClaudeSessionPrompt, Conversation } from '@shared/conversations';
 import { getTaskMenuConversation } from '@renderer/features/tasks/components/task-menu-session-info';
 import {
   resolveSessionPrompts,
-  SESSION_PROMPTS_REFRESH_MS,
+  startVisibleSessionRefresh,
 } from '@renderer/features/tasks/session-prompts';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { buildConversationTree, type ConversationTreeNode } from './conversation-tree-model';
@@ -78,10 +78,10 @@ export function useSessionPromptTree(active: boolean): {
     };
 
     void loadAll();
-    const interval = setInterval(() => void refreshCurrent(), SESSION_PROMPTS_REFRESH_MS);
+    const stopRefresh = startVisibleSessionRefresh(refreshCurrent, { runImmediately: false });
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stopRefresh();
     };
     // The primitive lineage key intentionally represents the freshly derived array.
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -204,6 +204,10 @@ export const runtimeCustomConfigEntrySchema = z.object({
   env: z.record(z.string(), z.string()).optional(),
   /** Default model for new sessions when an Agent/slot does not override it. */
   defaultModel: z.string().optional(),
+  /** Default Codex reasoning effort for new sessions. */
+  defaultReasoningEffort: z.string().optional(),
+  /** Default Codex Fast mode for new sessions. */
+  defaultFastMode: z.boolean().optional(),
   namingModel: z.string().optional(),
   namingCommand: z.string().optional(),
 });

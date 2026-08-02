@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Terminal } from '@shared/terminals';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { Pty, PtyExitInfo } from '@main/core/pty/pty';
+import {
+  TERMINAL_SPAWN_TIMEOUT_MS,
+  TerminalSpawnCancelledError,
+  TerminalSpawnTimeoutError,
+} from '@main/core/terminals/terminal-provider';
 import { LocalTerminalProvider } from './local-terminal-provider';
 
 const mocks = vi.hoisted(() => ({
@@ -162,13 +167,52 @@ describe('LocalTerminalProvider start lifecycle', () => {
     mocks.resolveTmuxSessionName.mockReturnValueOnce(tmux.promise);
     const provider = createProvider();
     const start = provider.spawnTerminal(terminal);
+    const cancelled = expect(start).rejects.toBeInstanceOf(TerminalSpawnCancelledError);
 
     await provider.killTerminal(terminal.id);
+    await cancelled;
 
     expect(mocks.cancelRegistration).toHaveBeenCalledWith(sessionId, 1);
     expect(mocks.unregister).toHaveBeenCalledWith(sessionId);
     tmux.resolve(undefined);
-    await start;
+    await Promise.resolve();
+    expect(mocks.spawnLocalPty).not.toHaveBeenCalled();
+    expect(mocks.register).not.toHaveBeenCalled();
+  });
+
+  it('honors hydration cancellation without allowing a late local spawn', async () => {
+    const tmux = deferred<string | undefined>();
+    mocks.resolveTmuxSessionName.mockReturnValueOnce(tmux.promise);
+    const provider = createProvider();
+    const controller = new AbortController();
+    const start = provider.spawnTerminal(terminal, undefined, undefined, {
+      signal: controller.signal,
+    });
+    const cancelled = expect(start).rejects.toBeInstanceOf(TerminalSpawnCancelledError);
+
+    controller.abort();
+    await cancelled;
+    tmux.resolve(undefined);
+    await Promise.resolve();
+
+    expect(mocks.cancelRegistration).toHaveBeenCalledWith(sessionId, 1);
+    expect(mocks.spawnLocalPty).not.toHaveBeenCalled();
+    expect(mocks.register).not.toHaveBeenCalled();
+  });
+
+  it('times out a hung local start and prevents it from spawning late', async () => {
+    const tmux = deferred<string | undefined>();
+    mocks.resolveTmuxSessionName.mockReturnValueOnce(tmux.promise);
+    const provider = createProvider();
+    const start = provider.spawnTerminal(terminal);
+    const timedOut = expect(start).rejects.toBeInstanceOf(TerminalSpawnTimeoutError);
+
+    await vi.advanceTimersByTimeAsync(TERMINAL_SPAWN_TIMEOUT_MS);
+    await timedOut;
+    tmux.resolve(undefined);
+    await Promise.resolve();
+
+    expect(mocks.cancelRegistration).toHaveBeenCalledWith(sessionId, 1);
     expect(mocks.spawnLocalPty).not.toHaveBeenCalled();
     expect(mocks.register).not.toHaveBeenCalled();
   });
@@ -180,13 +224,15 @@ describe('LocalTerminalProvider start lifecycle', () => {
       mocks.resolveTmuxSessionName.mockReturnValueOnce(tmux.promise);
       const provider = createProvider();
       const start = provider.spawnTerminal(terminal);
+      const cancelled = expect(start).rejects.toBeInstanceOf(TerminalSpawnCancelledError);
 
       await provider[method]();
+      await cancelled;
 
       expect(mocks.cancelRegistration).toHaveBeenCalledWith(sessionId, 1);
       expect(mocks.unregister).toHaveBeenCalledWith(sessionId);
       tmux.resolve(undefined);
-      await start;
+      await Promise.resolve();
       expect(mocks.spawnLocalPty).not.toHaveBeenCalled();
       expect(mocks.register).not.toHaveBeenCalled();
     }
@@ -198,7 +244,9 @@ describe('LocalTerminalProvider start lifecycle', () => {
       void provider.killTerminal(terminal.id);
     });
 
-    await provider.spawnTerminal(terminal);
+    await expect(provider.spawnTerminal(terminal)).rejects.toBeInstanceOf(
+      TerminalSpawnCancelledError
+    );
 
     expect(spawned).toHaveLength(1);
     expect(spawned[0].kill).toHaveBeenCalled();
@@ -214,7 +262,9 @@ describe('LocalTerminalProvider start lifecycle', () => {
       replacement = provider.spawnTerminal(terminal);
     });
 
-    await provider.spawnTerminal(terminal);
+    await expect(provider.spawnTerminal(terminal)).rejects.toBeInstanceOf(
+      TerminalSpawnCancelledError
+    );
     if (!replacement) throw new Error('replacement start was not scheduled');
     await replacement;
 

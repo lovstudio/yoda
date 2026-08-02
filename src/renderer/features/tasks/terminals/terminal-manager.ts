@@ -3,6 +3,7 @@ import { makePtySessionId } from '@shared/ptySessionId';
 import { type CreateTerminalParams, type Terminal } from '@shared/terminals';
 import { rpc } from '@renderer/lib/ipc';
 import { PtySession } from '@renderer/lib/pty/pty-session';
+import { log } from '@renderer/utils/logger';
 import { nextTerminalName } from './terminal-tabs';
 
 export type TerminalManagerGateway = {
@@ -43,6 +44,11 @@ export class TerminalManagerStore {
   readonly taskId: string;
   private _loaded = false;
   private _loadPromise: Promise<void> | null = null;
+  private _ensureDefaultPromise: Promise<Terminal> | null = null;
+  private _disposed = false;
+  private _generation = 0;
+  private readonly _pendingDeletionStores = new Set<TerminalStore>();
+  private readonly _disposeObservation: () => void;
   terminals = observable.map<string, TerminalStore>();
 
   constructor(
@@ -55,28 +61,39 @@ export class TerminalManagerStore {
     makeObservable(this, {
       terminals: observable,
     });
-    onBecomeObserved(this, 'terminals', () => {
-      if (this._loaded) return;
-      void this.load();
+    this._disposeObservation = onBecomeObserved(this, 'terminals', () => {
+      if (this._loaded || this._disposed) return;
+      void this.load().catch((error) => {
+        if (!this._disposed) {
+          log.error('TerminalManagerStore: failed to load terminals', error);
+        }
+      });
     });
   }
 
-  async load() {
+  async load(): Promise<void> {
+    if (this._disposed) return;
     if (this._loadPromise) return this._loadPromise;
     if (this._loaded) return;
+    const generation = this._generation;
     this._loaded = true;
     const loadPromise = this.gateway
       .getTerminals(this.projectId, this.taskId)
       .then((terminals) => {
+        if (!this.isCurrentGeneration(generation)) return;
         runInAction(() => {
           for (const terminal of terminals) {
+            // A terminal may have been created locally while this snapshot was
+            // in flight. Keep that store (and its deferred PtySession) so the
+            // matching create response can finish the optimistic lifecycle.
+            if (this.terminals.has(terminal.id)) continue;
             const store = new TerminalStore(terminal);
             this.terminals.set(terminal.id, store);
           }
         });
       })
       .catch((error) => {
-        this._loaded = false;
+        if (this.isCurrentGeneration(generation)) this._loaded = false;
         throw error;
       })
       .finally(() => {
@@ -87,6 +104,7 @@ export class TerminalManagerStore {
   }
 
   async createTerminal(params: CreateTerminalParams): Promise<Terminal> {
+    const generation = this.requireActiveGeneration();
     const optimistic: Terminal = {
       id: params.id,
       projectId: params.projectId,
@@ -94,26 +112,46 @@ export class TerminalManagerStore {
       name: params.name,
     };
 
+    let store!: TerminalStore;
+    let ownsOptimisticStore = false;
     runInAction(() => {
-      const store = new TerminalStore(optimistic, { deferConnection: true });
+      const existing = this.terminals.get(params.id);
+      if (existing) {
+        store = existing;
+        return;
+      }
+      store = new TerminalStore(optimistic, { deferConnection: true });
+      ownsOptimisticStore = true;
       this.terminals.set(params.id, store);
     });
 
     try {
       const terminal = await this.gateway.createTerminal(params);
+      if (!this.isCurrentGeneration(generation)) {
+        await this.cleanupLateCreatedTerminal(terminal);
+        return terminal;
+      }
+      if (this.terminals.get(params.id) !== store) {
+        // The optimistic terminal was deleted while creation was still in
+        // flight. Its earlier delete may have reached main before create was
+        // persisted, so delete the late backend result again (idempotently).
+        await this.cleanupLateCreatedTerminal(terminal);
+        return terminal;
+      }
       runInAction(() => {
-        const store = this.terminals.get(params.id);
-        if (store) {
-          Object.assign(store.data, terminal);
-          store.session.enableConnection();
-        }
+        Object.assign(store.data, terminal);
+        store.session.enableConnection();
       });
       return terminal;
     } catch (err) {
-      runInAction(() => {
-        this.terminals.get(params.id)?.dispose();
-        this.terminals.delete(params.id);
-      });
+      if (this.isCurrentGeneration(generation) && ownsOptimisticStore) {
+        runInAction(() => {
+          if (this.terminals.get(params.id) === store) {
+            this.terminals.delete(params.id);
+          }
+        });
+        if (!this._pendingDeletionStores.has(store)) store.dispose();
+      }
       throw err;
     }
   }
@@ -123,6 +161,33 @@ export class TerminalManagerStore {
     const name = nextTerminalName(names);
     const id = crypto.randomUUID();
     return this.createTerminal({ id, projectId: this.projectId, taskId: this.taskId, name });
+  }
+
+  /**
+   * Ensures an empty terminal surface gets one default terminal. Unlike the
+   * explicit "new terminal" action, concurrent callers share one attempt and a
+   * failed backend request is not retried until another user/lifecycle action
+   * asks again.
+   */
+  ensureDefaultTerminal(): Promise<Terminal> {
+    if (this._ensureDefaultPromise) return this._ensureDefaultPromise;
+    if (this._disposed) return Promise.reject(new Error('Terminal manager has been disposed.'));
+    const generation = this.requireActiveGeneration();
+    const operation = (async () => {
+      await this.load();
+      if (!this.isCurrentGeneration(generation)) {
+        throw new Error('Terminal manager has been disposed.');
+      }
+      const existing = this.terminals.values().next().value as TerminalStore | undefined;
+      if (existing) return existing.data;
+      return this.createDefaultTerminal();
+    })().finally(() => {
+      if (this._ensureDefaultPromise === operation) {
+        this._ensureDefaultPromise = null;
+      }
+    });
+    this._ensureDefaultPromise = operation;
+    return operation;
   }
 
   async createNamedTerminal({
@@ -169,12 +234,15 @@ export class TerminalManagerStore {
   }
 
   async deleteTerminal(terminalId: string): Promise<void> {
+    if (this._disposed) return;
     const store = this.terminals.get(terminalId);
     if (!store) return;
+    const generation = this._generation;
 
     runInAction(() => {
       this.terminals.delete(terminalId);
     });
+    this._pendingDeletionStores.add(store);
 
     try {
       await this.gateway.deleteTerminal({
@@ -182,18 +250,37 @@ export class TerminalManagerStore {
         taskId: this.taskId,
         terminalId,
       });
+      this._pendingDeletionStores.delete(store);
+      if (this.isCurrentGeneration(generation)) {
+        const driftedStore = this.terminals.get(terminalId);
+        if (driftedStore) {
+          runInAction(() => {
+            if (this.terminals.get(terminalId) === driftedStore) {
+              this.terminals.delete(terminalId);
+            }
+          });
+          driftedStore.dispose();
+        }
+      }
       store.dispose();
     } catch (err) {
-      runInAction(() => {
-        this.terminals.set(terminalId, store);
-      });
+      this._pendingDeletionStores.delete(store);
+      if (this.isCurrentGeneration(generation) && !this.terminals.has(terminalId)) {
+        runInAction(() => {
+          this.terminals.set(terminalId, store);
+        });
+      } else {
+        store.dispose();
+      }
       throw err;
     }
   }
 
   async renameTerminal(terminalId: string, name: string): Promise<void> {
+    if (this._disposed) return;
     const store = this.terminals.get(terminalId);
     if (!store) return;
+    const generation = this._generation;
 
     const previousName = store.data.name;
 
@@ -204,10 +291,52 @@ export class TerminalManagerStore {
     try {
       await this.gateway.renameTerminal(terminalId, name);
     } catch (err) {
-      runInAction(() => {
-        store.data.name = previousName;
-      });
+      if (this.isCurrentGeneration(generation) && this.terminals.get(terminalId) === store) {
+        runInAction(() => {
+          store.data.name = previousName;
+        });
+      }
       throw err;
+    }
+  }
+
+  dispose(): void {
+    if (this._disposed) return;
+    this._disposed = true;
+    this._generation += 1;
+    this._disposeObservation();
+    this._loadPromise = null;
+    this._ensureDefaultPromise = null;
+
+    const stores = new Set([...this.terminals.values(), ...this._pendingDeletionStores]);
+    for (const store of stores) store.dispose();
+    this._pendingDeletionStores.clear();
+    runInAction(() => {
+      this.terminals.clear();
+    });
+  }
+
+  private isCurrentGeneration(generation: number): boolean {
+    return !this._disposed && this._generation === generation;
+  }
+
+  private requireActiveGeneration(): number {
+    if (this._disposed) throw new Error('Terminal manager has been disposed.');
+    return this._generation;
+  }
+
+  private async cleanupLateCreatedTerminal(terminal: Terminal): Promise<void> {
+    try {
+      await this.gateway.deleteTerminal({
+        projectId: terminal.projectId,
+        taskId: terminal.taskId,
+        terminalId: terminal.id,
+      });
+    } catch (error) {
+      log.error(
+        'TerminalManagerStore: failed to clean up a terminal created after disposal',
+        error
+      );
     }
   }
 }
@@ -215,6 +344,7 @@ export class TerminalManagerStore {
 export class TerminalStore {
   data: Terminal;
   session: PtySession;
+  private _disposed = false;
 
   constructor(terminal: Terminal, options?: { deferConnection?: boolean }) {
     this.data = terminal;
@@ -227,7 +357,9 @@ export class TerminalStore {
     makeObservable(this, { data: observable, session: observable });
   }
 
-  dispose() {
+  dispose(): void {
+    if (this._disposed) return;
+    this._disposed = true;
     this.session.dispose();
   }
 }

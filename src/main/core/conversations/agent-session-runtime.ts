@@ -101,16 +101,24 @@ function eventForRendererStatus(
 }
 
 /**
- * Backstop: a session stuck in a running state with no transition for this long
- * is overwhelmingly a missed terminal event (e.g. codex crashed mid-turn without
- * writing `turn_aborted`, or the rollout never bound), not a genuinely long turn.
- * Force it to idle so the spinner stops. Generous on purpose — deterministic
- * sources (rollout tailer, hooks) handle the normal case.
+ * Backstop for heuristic sessions that never received an authoritative run
+ * state source. Deterministic Claude/Codex sources are exempt because a valid
+ * tool call may run silently for longer than this threshold.
  */
 const WATCHDOG_STALE_MS = 30 * 60_000;
 const WATCHDOG_SWEEP_INTERVAL_MS = 60_000;
 
-type Entry = { session: AgentSessionKey; state: RunState };
+type Entry = {
+  session: AgentSessionKey;
+  state: RunState;
+  watchdogProtected: boolean;
+};
+
+const AUTHORITATIVE_RUN_STATE_SOURCES = new Set([
+  'codex-rollout',
+  'claude-transcript',
+  'claude-session-activity',
+]);
 
 class AgentSessionRuntimeStore {
   private entries = new Map<string, Entry>();
@@ -142,8 +150,9 @@ class AgentSessionRuntimeStore {
 
   private sweepStale(): void {
     const now = Date.now();
-    for (const { session, state } of this.entries.values()) {
+    for (const { session, state, watchdogProtected } of this.entries.values()) {
       if (state.status !== 'working' && state.status !== 'awaiting-input') continue;
+      if (watchdogProtected) continue;
       if (now - state.updatedAt < WATCHDOG_STALE_MS) continue;
       this.dispatch(session, { kind: 'watchdog-idle', at: now }, 'watchdog');
     }
@@ -156,9 +165,16 @@ class AgentSessionRuntimeStore {
    */
   dispatch(session: AgentSessionKey, event: RunStateEvent, source: string): RunState {
     const key = keyFor(session);
-    const prev = this.entries.get(key)?.state ?? initialRunState();
+    const previousEntry = this.entries.get(key);
+    const prev = previousEntry?.state ?? initialRunState();
     const next = reduceRunState(prev, event);
-    this.entries.set(key, { session, state: next });
+    const remainsRunning =
+      isAgentSessionRunningStatus(prev.status) && isAgentSessionRunningStatus(next.status);
+    const watchdogProtected =
+      isAgentSessionRunningStatus(next.status) &&
+      (AUTHORITATIVE_RUN_STATE_SOURCES.has(source) ||
+        (remainsRunning && previousEntry?.watchdogProtected === true));
+    this.entries.set(key, { session, state: next, watchdogProtected });
     const statusChanged = prev.status !== next.status;
     const pendingActionChanged = !samePendingAction(prev.pendingAction, next.pendingAction);
     if (statusChanged || pendingActionChanged) {
@@ -201,7 +217,7 @@ class AgentSessionRuntimeStore {
     const key = keyFor(session);
     const previous = this.entries.get(key)?.state;
     const state = initialRunState(status, at);
-    this.entries.set(key, { session, state });
+    this.entries.set(key, { session, state, watchdogProtected: false });
     if (!previous || previous.status !== state.status) this.notifyListeners(session, state);
   }
 

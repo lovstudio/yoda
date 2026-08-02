@@ -5,7 +5,32 @@ import {
 } from '@main/core/ssh/remote-shell-profile';
 import type { SshClientProxy } from '@main/core/ssh/ssh-client-proxy';
 import { quoteShellArg } from '@main/utils/shellEscape';
+import { openSshExecChannel } from './ssh-exec-channel-limiter';
 import type { ExecOptions, ExecResult, IExecutionContext } from './types';
+
+function abortReason(signal: AbortSignal): unknown {
+  return signal.reason ?? new DOMException('Aborted', 'AbortError');
+}
+
+function waitWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(abortReason(signal));
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      callback();
+    };
+    const onAbort = () => finish(() => reject(abortReason(signal)));
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error))
+    );
+  });
+}
 
 /**
  * Builds the full shell command string to send over SSH.
@@ -38,64 +63,65 @@ export class SshExecutionContext implements IExecutionContext {
   }
 
   async exec(command: string, args: string[] = [], opts: ExecOptions = {}): Promise<ExecResult> {
-    const { signal } = opts;
-    const profile = await this.proxy.getRemoteShellProfile();
-    const full = buildSshCommand(this.root, command, args, profile);
-    const combined = this._signal(signal);
+    const operation = this._operationSignal(opts.signal, opts.timeout);
+    try {
+      const profile = await waitWithSignal(this.proxy.getRemoteShellProfile(), operation.signal);
+      const full = buildSshCommand(this.root, command, args, profile);
+      const client = this.proxy.client;
+      const stream = await openSshExecChannel(client, full, operation.signal);
 
-    return new Promise((resolve, reject) => {
-      if (combined.aborted) {
-        reject(combined.reason ?? new DOMException('Aborted', 'AbortError'));
-        return;
-      }
-
-      this.proxy.client.exec(full, (execErr, stream) => {
-        if (execErr) return reject(execErr);
-
+      return await new Promise((resolve, reject) => {
         let stdout = '';
         let stderr = '';
         let settled = false;
 
-        const onAbort = () => {
+        const finish = (callback: () => void) => {
           if (settled) return;
           settled = true;
-          stream.destroy();
-          reject(combined.reason ?? new DOMException('Aborted', 'AbortError'));
+          operation.signal.removeEventListener('abort', onAbort);
+          callback();
         };
-        combined.addEventListener('abort', onAbort, { once: true });
+        const onAbort = () =>
+          finish(() => {
+            try {
+              stream.destroy();
+            } catch {}
+            reject(abortReason(operation.signal));
+          });
+
+        if (operation.signal.aborted) {
+          onAbort();
+          return;
+        }
+        operation.signal.addEventListener('abort', onAbort, { once: true });
 
         stream.on('data', (d: Buffer) => {
-          stdout += d.toString('utf-8');
+          if (!settled) stdout += d.toString('utf-8');
         });
         stream.stderr.on('data', (d: Buffer) => {
-          stderr += d.toString('utf-8');
+          if (!settled) stderr += d.toString('utf-8');
         });
 
         stream.on('close', (code: number | null) => {
-          combined.removeEventListener('abort', onAbort);
-          if (settled) return;
-          settled = true;
-          if ((code ?? 0) === 0) {
-            resolve({ stdout, stderr });
-          } else {
-            reject(
-              Object.assign(new Error(stderr || `Process exited with code ${code}`), {
-                stdout,
-                stderr,
-              })
-            );
-          }
+          finish(() => {
+            if ((code ?? 0) === 0) {
+              resolve({ stdout, stderr });
+            } else {
+              reject(
+                Object.assign(new Error(stderr || `Process exited with code ${code}`), {
+                  stdout,
+                  stderr,
+                })
+              );
+            }
+          });
         });
 
-        stream.on('error', (err: Error) => {
-          combined.removeEventListener('abort', onAbort);
-          if (!settled) {
-            settled = true;
-            reject(err);
-          }
-        });
+        stream.on('error', (error: Error) => finish(() => reject(error)));
       });
-    });
+    } finally {
+      operation.dispose();
+    }
   }
 
   async execStreaming(
@@ -104,64 +130,75 @@ export class SshExecutionContext implements IExecutionContext {
     onChunk: (chunk: string) => boolean,
     opts: { signal?: AbortSignal } = {}
   ): Promise<void> {
-    const { signal } = opts;
-    const profile = await this.proxy.getRemoteShellProfile();
-    const full = buildSshCommand(this.root, command, args, profile);
-    const combined = this._signal(signal);
+    const operation = this._operationSignal(opts.signal);
+    try {
+      const profile = await waitWithSignal(this.proxy.getRemoteShellProfile(), operation.signal);
+      const full = buildSshCommand(this.root, command, args, profile);
+      const client = this.proxy.client;
+      const stream = await openSshExecChannel(client, full, operation.signal);
 
-    return new Promise((resolve, reject) => {
-      if (combined.aborted) {
-        reject(combined.reason ?? new DOMException('Aborted', 'AbortError'));
-        return;
-      }
-
-      this.proxy.client.exec(full, (execErr, stream) => {
-        if (execErr) return reject(execErr);
-
+      await new Promise<void>((resolve, reject) => {
         let settled = false;
 
-        const onAbort = () => {
+        const finish = (callback: () => void) => {
           if (settled) return;
           settled = true;
-          stream.destroy();
-          reject(combined.reason ?? new DOMException('Aborted', 'AbortError'));
+          operation.signal.removeEventListener('abort', onAbort);
+          callback();
         };
-        combined.addEventListener('abort', onAbort, { once: true });
+        const onAbort = () =>
+          finish(() => {
+            try {
+              stream.destroy();
+            } catch {}
+            reject(abortReason(operation.signal));
+          });
+
+        if (operation.signal.aborted) {
+          onAbort();
+          return;
+        }
+        operation.signal.addEventListener('abort', onAbort, { once: true });
 
         stream.setEncoding('utf8');
         stream.on('data', (chunk: string) => {
           if (settled) return;
-          if (!onChunk(chunk)) {
-            stream.destroy();
-          }
+          if (!onChunk(chunk)) stream.destroy();
         });
-
-        stream.on('close', () => {
-          combined.removeEventListener('abort', onAbort);
-          if (!settled) {
-            settled = true;
-            resolve();
-          }
-        });
-
-        stream.on('error', (err: Error) => {
-          combined.removeEventListener('abort', onAbort);
-          if (!settled) {
-            settled = true;
-            reject(err);
-          }
-        });
+        stream.on('close', () => finish(resolve));
+        stream.on('error', (error: Error) => finish(() => reject(error)));
       });
-    });
+    } finally {
+      operation.dispose();
+    }
   }
 
   dispose(): void {
     this._lifetime.abort();
   }
 
-  private _signal(callerSignal?: AbortSignal): AbortSignal {
+  private _operationSignal(
+    callerSignal?: AbortSignal,
+    timeoutMs?: number
+  ): { signal: AbortSignal; dispose: () => void } {
     const signals: AbortSignal[] = [this._lifetime.signal];
     if (callerSignal) signals.push(callerSignal);
-    return AbortSignal.any(signals);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (timeoutMs !== undefined && timeoutMs > 0) {
+      const timeout = new AbortController();
+      timer = setTimeout(() => {
+        const error = new Error(`Operation timed out after ${timeoutMs}ms`);
+        error.name = 'TimeoutError';
+        timeout.abort(error);
+      }, timeoutMs);
+      timer.unref?.();
+      signals.push(timeout.signal);
+    }
+    return {
+      signal: AbortSignal.any(signals),
+      dispose: () => {
+        if (timer) clearTimeout(timer);
+      },
+    };
   }
 }

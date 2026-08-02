@@ -187,12 +187,74 @@ describe('WorkspaceTerminalService', () => {
     await expect(
       service.getTerminals('project-1', 'local:project-1:project-view')
     ).resolves.toEqual([expect.objectContaining({ id: 'terminal-1', name: 'Start locally' })]);
-    expect(mocks.spawnTerminal).toHaveBeenCalledWith(expect.objectContaining({ id: 'terminal-1' }));
+    expect(mocks.spawnTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'terminal-1' }),
+      undefined,
+      undefined,
+      expect.objectContaining({ signal: expect.any(AbortSignal), timeoutMs: 15_000 })
+    );
 
     await service.getTerminals('project-1', 'local:project-1:project-view');
     expect(mocks.acquireWorkspace).toHaveBeenCalledTimes(1);
     expect(mocks.getPersistedTerminals).toHaveBeenCalledTimes(1);
     expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1);
+  });
+
+  it('rolls back provider tracking and persistence when project terminal creation fails', async () => {
+    const terminalProvider = {
+      spawnTerminal: mocks.spawnTerminal,
+      isTerminalDetachable: mocks.isTerminalDetachable,
+      killTerminal: mocks.killTerminal,
+      destroyAll: mocks.destroyAll,
+      detachAll: mocks.detachAll,
+    };
+    mocks.getProject.mockReturnValue({ projectId: 'project-1' });
+    mocks.getWorkspace.mockReturnValue({ terminals: terminalProvider });
+    mocks.spawnTerminal.mockRejectedValueOnce(new Error('SSH channel failed'));
+    const service = new WorkspaceTerminalService();
+
+    await expect(
+      service.createTerminal({
+        id: 'terminal-failed',
+        projectId: 'project-1',
+        taskId: 'local:project-1:project-view',
+        name: 'Terminal 1',
+      })
+    ).rejects.toThrow('SSH channel failed');
+
+    expect(mocks.killTerminal).toHaveBeenCalledWith('terminal-failed');
+    expect(mocks.deletePersistedTerminal).toHaveBeenCalledWith(
+      'project-1',
+      'local:project-1:project-view',
+      'terminal-failed'
+    );
+    expect(service.getActiveSessionSummary()).toMatchObject({ running: 0 });
+  });
+
+  it('keeps persisted terminals visible when a hydration attempt fails', async () => {
+    const terminalProvider = {
+      spawnTerminal: mocks.spawnTerminal,
+      isTerminalDetachable: mocks.isTerminalDetachable,
+      killTerminal: mocks.killTerminal,
+      destroyAll: mocks.destroyAll,
+      detachAll: mocks.detachAll,
+    };
+    mocks.getProject.mockReturnValue({ projectId: 'project-1' });
+    mocks.getWorkspace.mockReturnValue({ terminals: terminalProvider });
+    mocks.getPersistedTerminals.mockResolvedValue([
+      {
+        id: 'terminal-offline',
+        projectId: 'project-1',
+        taskId: 'local:project-1:project-view',
+        name: 'Reconnect me',
+      },
+    ]);
+    mocks.spawnTerminal.mockRejectedValueOnce(new Error('connection unavailable'));
+    const service = new WorkspaceTerminalService();
+
+    await expect(
+      service.getTerminals('project-1', 'local:project-1:project-view')
+    ).resolves.toEqual([expect.objectContaining({ id: 'terminal-offline' })]);
   });
 
   it('summarizes tmux-backed project terminals for the app quit decision', async () => {

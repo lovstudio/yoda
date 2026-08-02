@@ -289,6 +289,19 @@ describe('SshConversationProvider registration lifecycle', () => {
     expect(pty.killCalls).toBe(0);
   });
 
+  it('detaches silence tracking when stop removes the live PTY', async () => {
+    const detach = vi.fn();
+    mocks.attachSilenceReconciler.mockReturnValue(detach);
+    const pty = new FakePty();
+    mocks.openSsh2Pty.mockResolvedValue({ success: true, data: pty });
+    provider = createProvider();
+
+    await provider.startSession(conversation);
+    await provider.stopSession(conversation.id);
+
+    expect(detach).toHaveBeenCalledOnce();
+  });
+
   it('rolls back the PTY and registry when queued-input drain throws', async () => {
     const pty = new FakePty();
     pty.writeError = new Error('write failed');

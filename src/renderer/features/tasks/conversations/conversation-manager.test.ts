@@ -1,3 +1,4 @@
+import { autorun } from 'mobx';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
 import { agentSessionStatusChangedChannel } from '@shared/events/agentEvents';
@@ -123,6 +124,17 @@ describe('ConversationManagerStore', () => {
     new ConversationManagerStore('project-1', 'task-1', [conversation]);
 
     expect(mocks.ptyConnectMock).not.toHaveBeenCalled();
+  });
+
+  it('treats an empty preload as loaded when conversations become observed', async () => {
+    const store = new ConversationManagerStore('project-1', 'task-1', []);
+    const stopObserving = autorun(() => store.conversations.size);
+
+    await flushPromises();
+
+    expect(mocks.getConversationsForTaskMock).not.toHaveBeenCalled();
+    stopObserving();
+    store.dispose();
   });
 
   it('propagates user prompt timestamps to the owning task', async () => {
@@ -354,10 +366,14 @@ describe('ConversationManagerStore', () => {
     );
   });
 
-  it('passes a selected model when restarting the current session', async () => {
+  it('passes selected runtime parameters when restarting the current session', async () => {
     const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
 
-    await store.restartConversation('conversation-1', undefined, undefined, undefined, 'o4-mini');
+    await store.restartConversation('conversation-1', undefined, undefined, undefined, {
+      model: 'o4-mini',
+      reasoningEffort: 'high',
+      fastMode: true,
+    });
 
     expect(mocks.restartConversationMock).toHaveBeenCalledWith(
       'project-1',
@@ -366,7 +382,7 @@ describe('ConversationManagerStore', () => {
       undefined,
       undefined,
       undefined,
-      'o4-mini'
+      { model: 'o4-mini', reasoningEffort: 'high', fastMode: true }
     );
   });
 

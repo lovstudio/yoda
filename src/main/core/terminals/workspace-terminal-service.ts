@@ -24,6 +24,7 @@ import { projectManager } from '@main/core/projects/project-manager';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { argvToInteractiveShellLine } from '@main/core/pty/pty-spawn-platform';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
+import { hydratePersistedTerminals } from '@main/core/tasks/terminal-hydration';
 import { LocalTerminalProvider } from '@main/core/terminals/impl/local-terminal-provider';
 import type { TerminalProvider } from '@main/core/terminals/terminal-provider';
 import {
@@ -37,8 +38,22 @@ import {
   projectViewWorkspaceIdForProvider,
 } from '@main/core/workspaces/project-view-workspace';
 import { workspaceRegistry, type TeardownMode } from '@main/core/workspaces/workspace-registry';
+import { log } from '@main/lib/logger';
 
 const MAX_NAME_CHARS = 200;
+const ROLLBACK_KILL_TIMEOUT_MS = 2_000;
+
+function withRollbackTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error('Workspace terminal rollback timed out.')),
+      ROLLBACK_KILL_TIMEOUT_MS
+    );
+    timer.unref?.();
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 type WorkspaceTerminalRecord = {
   terminal: Terminal;
@@ -211,12 +226,22 @@ export class WorkspaceTerminalService {
       return terminal;
     } catch (error) {
       this.records.delete(terminal.id);
+      const cleanupOperations: Promise<unknown>[] = [
+        withRollbackTimeout(Promise.resolve().then(() => provider.killTerminal(terminal.id))),
+      ];
       if (persisted) {
-        await deletePersistedWorkspaceTerminal(
-          terminal.projectId,
-          terminal.taskId,
-          terminal.id
-        ).catch(() => {});
+        cleanupOperations.push(
+          deletePersistedWorkspaceTerminal(terminal.projectId, terminal.taskId, terminal.id)
+        );
+      }
+      const cleanupResults = await Promise.allSettled(cleanupOperations);
+      for (const result of cleanupResults) {
+        if (result.status === 'rejected') {
+          log.warn('WorkspaceTerminalService: failed to roll back terminal creation', {
+            terminalId: terminal.id,
+            error: String(result.reason),
+          });
+        }
       }
       throw error;
     }
@@ -367,17 +392,18 @@ export class WorkspaceTerminalService {
 
     const operation = getPersistedWorkspaceTerminals(projectId, scopeId)
       .then(async (terminals) => {
-        await Promise.all(
-          terminals.map(async (terminal) => {
-            if (this.records.has(terminal.id)) return;
-            this.records.set(terminal.id, { terminal, provider });
-            try {
-              await provider.spawnTerminal(terminal);
-            } catch (error) {
-              this.records.delete(terminal.id);
-              throw error;
-            }
-          })
+        const terminalsToHydrate = terminals.filter((terminal) => {
+          if (this.records.has(terminal.id)) return false;
+          this.records.set(terminal.id, { terminal, provider });
+          return true;
+        });
+        await hydratePersistedTerminals(
+          provider,
+          terminalsToHydrate,
+          'WorkspaceTerminalService: hydrate',
+          {
+            shouldHydrate: (terminal) => this.records.get(terminal.id)?.provider === provider,
+          }
         );
         this.loadedScopes.add(key);
       })

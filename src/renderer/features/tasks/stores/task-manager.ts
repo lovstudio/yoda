@@ -169,8 +169,6 @@ function handleCreateTaskWarning(warning: CreateTaskWarning): void {
 
 type TaskViewPreload = {
   savedSnapshot: TaskViewSnapshot | undefined;
-  preloadedConversations: Conversation[];
-  conversationsLoadFailed: boolean;
 };
 
 type TaskViewPreloadEntry = {
@@ -187,6 +185,7 @@ export class TaskManagerStore {
   private readonly _settingsStore: ProjectSettingsStore;
   private readonly _baseRef: string;
   private _loadPromise: Promise<void> | null = null;
+  private _disposed = false;
   private _teardownPromises = new Map<string, Promise<void>>();
   private _provisionPromises = new Map<string, Promise<void>>();
   private _taskViewPreloads = new Map<string, TaskViewPreloadEntry>();
@@ -195,6 +194,9 @@ export class TaskManagerStore {
   private _unsubPrSyncProgress: (() => void) | null = null;
   private _unsubProvisionProgress: (() => void) | null = null;
   private _unsubConversationMoved: (() => void) | null = null;
+  private _unsubTaskStatusUpdated: (() => void) | null = null;
+  private _unsubTaskArchived: (() => void) | null = null;
+  private _unsubTaskRenamed: (() => void) | null = null;
   private _disposeRepositoryReaction: (() => void) | null = null;
 
   tasks = observable.map<string, TaskStore>();
@@ -222,38 +224,53 @@ export class TaskManagerStore {
       archivingTaskIds: observable,
     });
 
-    events.on(taskStatusUpdatedChannel, ({ taskId, projectId: evtProjectId, status }) => {
-      if (evtProjectId !== this.projectId) return;
-      const store = this.tasks.get(taskId);
-      if (store && isProvisioned(store)) {
-        runInAction(() => {
-          store.data.status = status as TaskLifecycleStatus;
-        });
+    this._unsubTaskStatusUpdated = events.on(
+      taskStatusUpdatedChannel,
+      ({ taskId, projectId: evtProjectId, status }) => {
+        if (evtProjectId !== this.projectId) return;
+        const store = this.tasks.get(taskId);
+        if (store && isProvisioned(store)) {
+          runInAction(() => {
+            store.data.status = status as TaskLifecycleStatus;
+          });
+        }
       }
-    });
+    );
 
     // Archives complete in the main process and may outlive the renderer that
     // initiated them (reload mid-archive) — reconcile from the event too.
-    events.on(taskArchivedChannel, ({ taskId, projectId: evtProjectId }) => {
-      if (evtProjectId !== this.projectId) return;
-      this.setTaskArchiving(taskId, false);
-      const store = this.tasks.get(taskId);
-      if (store && isRegistered(store) && !store.data.archivedAt) {
+    this._unsubTaskArchived = events.on(
+      taskArchivedChannel,
+      ({ taskId, projectId: evtProjectId }) => {
+        if (evtProjectId !== this.projectId) return;
+        this.setTaskArchiving(taskId, false);
+        const store = this.tasks.get(taskId);
+        if (!store || !isRegistered(store)) return;
         runInAction(() => {
-          store.data.archivedAt = new Date().toISOString();
+          const archivedData = {
+            ...store.data,
+            archivedAt: store.data.archivedAt ?? new Date().toISOString(),
+          };
+          // Main owns the archive teardown. Dispose an existing renderer task
+          // view and invalidate any provisioning UI immediately so neither a
+          // stale view nor a late RPC completion can revive terminal reactions.
+          store.transitionToUnprovisioned(archivedData, 'idle');
         });
       }
-    });
+    );
 
-    events.on(taskRenamedChannel, ({ taskId, projectId: evtProjectId, name, isUserNamed }) => {
-      if (evtProjectId !== this.projectId) return;
-      const store = this.tasks.get(taskId);
-      if (!store) return;
-      runInAction(() => {
-        store.data.name = name;
-        store.data.isUserNamed = isUserNamed;
-      });
-    });
+    this._unsubTaskRenamed = events.on(
+      taskRenamedChannel,
+      ({ taskId, projectId: evtProjectId, name, isUserNamed }) => {
+        if (evtProjectId !== this.projectId) return;
+        const store = this.tasks.get(taskId);
+        if (!store) return;
+        runInAction(() => {
+          store.data.name = name;
+          store.data.isUserNamed = isUserNamed;
+        });
+      }
+    );
 
     this._unsubConversationMoved = events.on(conversationMovedChannel, (event) => {
       const { conversation, sourceTaskId, targetTaskId } = event;
@@ -349,6 +366,7 @@ export class TaskManagerStore {
   }
 
   loadTasks(): Promise<void> {
+    if (this._disposed) return Promise.resolve();
     if (!this._loadPromise) {
       runInAction(() => {
         this.taskLoadState = 'loading';
@@ -376,8 +394,10 @@ export class TaskManagerStore {
    * session imported by another local app immediately before a deep link.
    */
   async ensureTaskLoaded(taskId: string): Promise<boolean> {
+    if (this._disposed) return false;
     if (this.tasks.has(taskId)) return true;
     await this.loadTasks();
+    if (this._disposed) return false;
     if (this.tasks.has(taskId)) return true;
 
     runInAction(() => {
@@ -398,6 +418,7 @@ export class TaskManagerStore {
   }
 
   private _mergeLoadedTasks(tasks: Task[]): void {
+    if (this._disposed) return;
     const addedTaskIds: string[] = [];
     runInAction(() => {
       for (const task of tasks) {
@@ -528,12 +549,9 @@ export class TaskManagerStore {
     const taskViewPreload = this._getTaskViewPreload(taskId);
     const promise = Promise.all([rpc.tasks.provisionTask(taskId), taskViewPreload])
       .then(([result, preload]) => {
-        if (preload.conversationsLoadFailed) {
-          toast.error('Failed to load conversations');
-        }
         runInAction(() => {
           const current = this.tasks.get(taskId);
-          if (current && isUnprovisioned(current)) {
+          if (current && isUnprovisioned(current) && !current.data.archivedAt) {
             current.transitionToProvisioned(
               { ...current.data },
               result.path,
@@ -542,7 +560,7 @@ export class TaskManagerStore {
               this._baseRef,
               preload.savedSnapshot,
               result.sshConnectionId ?? undefined,
-              preload.preloadedConversations
+              result.conversations
             );
             current.activate();
           }
@@ -551,7 +569,7 @@ export class TaskManagerStore {
       .catch((err: unknown) => {
         runInAction(() => {
           const current = this.tasks.get(taskId);
-          if (current && isUnprovisioned(current)) {
+          if (current && isUnprovisioned(current) && !current.data.archivedAt) {
             current.phase = 'provision-error';
             current.errorMessage = err instanceof Error ? err.message : String(err);
           }
@@ -602,23 +620,9 @@ export class TaskManagerStore {
     }
     if (cached) this._taskViewPreloads.delete(taskId);
 
-    const conversations = rpc.conversations
-      .getConversationsForTask(this.projectId, taskId)
-      .then((data) => ({ data, failed: false }))
-      .catch((error: unknown) => {
-        log.warn('TaskManagerStore: failed to pre-load conversations during provision', {
-          taskId,
-          error,
-        });
-        return { data: [] as Conversation[], failed: true };
-      });
-    const promise = Promise.all([viewStateCache.get(`task:${taskId}`), conversations]).then(
-      ([savedSnapshot, conversationResult]) => ({
-        savedSnapshot: savedSnapshot as TaskViewSnapshot | undefined,
-        preloadedConversations: conversationResult.data,
-        conversationsLoadFailed: conversationResult.failed,
-      })
-    );
+    const promise = viewStateCache.get(`task:${taskId}`).then((savedSnapshot) => ({
+      savedSnapshot: savedSnapshot as TaskViewSnapshot | undefined,
+    }));
 
     this._taskViewPreloads.set(taskId, { startedAt: now, promise });
     while (this._taskViewPreloads.size > TASK_VIEW_PRELOAD_LIMIT) {
@@ -981,6 +985,14 @@ export class TaskManagerStore {
   }
 
   dispose(): void {
+    if (this._disposed) return;
+    this._disposed = true;
+    this._unsubTaskStatusUpdated?.();
+    this._unsubTaskStatusUpdated = null;
+    this._unsubTaskArchived?.();
+    this._unsubTaskArchived = null;
+    this._unsubTaskRenamed?.();
+    this._unsubTaskRenamed = null;
     this._unsubPrUpdated?.();
     this._unsubPrUpdated = null;
     this._unsubPrSyncProgress?.();
@@ -992,5 +1004,13 @@ export class TaskManagerStore {
     this._disposeRepositoryReaction?.();
     this._disposeRepositoryReaction = null;
     this._taskViewPreloads.clear();
+    this._loadPromise = null;
+    this._teardownPromises.clear();
+    this._provisionPromises.clear();
+    for (const task of this.tasks.values()) task.dispose();
+    runInAction(() => {
+      this.tasks.clear();
+      this.archivingTaskIds.clear();
+    });
   }
 }

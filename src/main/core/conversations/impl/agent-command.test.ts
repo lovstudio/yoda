@@ -348,6 +348,78 @@ describe('buildAgentCommand', () => {
     expect(result.args).not.toContain('gpt-5.6-codex');
   });
 
+  it('applies Codex reasoning and Fast defaults to new sessions', () => {
+    const result = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig: {
+        ...runtimeConfigDefaults.codex,
+        defaultReasoningEffort: 'xhigh',
+        defaultFastMode: true,
+      },
+      sessionId: 'conv-1',
+    });
+
+    expect(result.args).toEqual([
+      '-c',
+      'model_reasoning_effort="xhigh"',
+      '-c',
+      'service_tier="fast"',
+    ]);
+  });
+
+  it('only applies Codex reasoning and Fast settings on resume when explicitly requested', () => {
+    const providerConfig = {
+      ...runtimeConfigDefaults.codex,
+      defaultReasoningEffort: 'xhigh',
+      defaultFastMode: true,
+    };
+    const inherited = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig,
+      sessionId: 'conv-1',
+      isResuming: true,
+    });
+    const overridden = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig,
+      sessionId: 'conv-1',
+      isResuming: true,
+      reasoningEffort: 'high',
+      fastMode: false,
+    });
+
+    expect(inherited.args).toEqual(['resume', 'conv-1']);
+    expect(overridden.args).toEqual([
+      'resume',
+      'conv-1',
+      '-c',
+      'model_reasoning_effort="high"',
+      '-c',
+      'service_tier="default"',
+    ]);
+  });
+
+  it('normalizes duplicate Codex inference config so the managed values win', () => {
+    const result = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig: {
+        ...runtimeConfigDefaults.codex,
+        defaultArgs: ['-c', 'model_reasoning_effort="low"', '--config=service_tier="fast"'],
+        extraArgs: '-c=model_reasoning_effort="ultra" --config service_tier="flex"',
+      },
+      sessionId: 'conv-1',
+      reasoningEffort: 'high',
+      fastMode: false,
+    });
+
+    expect(result.args).toEqual([
+      '-c',
+      'model_reasoning_effort="high"',
+      '-c',
+      'service_tier="default"',
+    ]);
+  });
+
   it('keeps only the Agent model when defaults and extra args also select models', () => {
     const result = buildAgentCommand({
       runtimeId: 'codex',

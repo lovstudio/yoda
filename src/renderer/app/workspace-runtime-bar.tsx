@@ -43,11 +43,12 @@ import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conv
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import {
   resolveSessionPrompts,
-  SESSION_PROMPTS_REFRESH_MS,
+  startVisibleSessionRefresh,
 } from '@renderer/features/tasks/session-prompts';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { AgentInfoCard } from '@renderer/lib/components/agent-selector/agent-info-card';
+import type { SessionModelSettings } from '@renderer/lib/components/agent-selector/session-model-editor';
 import { runtimeSnapshotQueryKey } from '@renderer/lib/components/agent-selector/use-runtime-snapshot';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
@@ -75,7 +76,10 @@ import {
   workspaceResourceHistoryStore,
 } from './workspace-resource-history';
 import { WorkspaceResourceMetric } from './workspace-resource-metric';
-import { WORKSPACE_RESOURCE_QUERY_TIMING } from './workspace-resource-monitoring';
+import {
+  WORKSPACE_RESOURCE_QUERY_KEY,
+  WORKSPACE_RESOURCE_QUERY_TIMING,
+} from './workspace-resource-monitoring';
 import { WorkspaceResourceTrend } from './workspace-resource-trend';
 import { getDistinctAgentTaskTitle, getQuotaWindowLabel } from './workspace-runtime-bar-format';
 
@@ -114,10 +118,12 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const [isCompacting, setIsCompacting] = useState(false);
   const [isResettingAccountUsage, setIsResettingAccountUsage] = useState(false);
   const [isRuntimePopoverOpen, setIsRuntimePopoverOpen] = useState(false);
-  const [sessionModelOverride, setSessionModelOverride] = useState<{
-    conversationId: string;
-    model: string;
-  } | null>(null);
+  const [sessionRuntimeOverride, setSessionRuntimeOverride] = useState<
+    | (SessionModelSettings & {
+        conversationId: string;
+      })
+    | null
+  >(null);
   const [isAgentPopoverOpen, setIsAgentPopoverOpen] = useState(false);
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
   const [isConfigPopoverOpen, setIsConfigPopoverOpen] = useState(false);
@@ -275,11 +281,16 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     conversation: activeConversation,
     connectionId,
   });
-  const optimisticSessionModel =
-    sessionModelOverride && sessionModelOverride.conversationId === activeConversation?.id
-      ? sessionModelOverride.model
+  const optimisticSessionSettings =
+    sessionRuntimeOverride && sessionRuntimeOverride.conversationId === activeConversation?.id
+      ? sessionRuntimeOverride
       : null;
+  const optimisticSessionModel = optimisticSessionSettings?.model ?? null;
   const activeSessionModel = optimisticSessionModel ?? sessionModelDetails?.model ?? null;
+  const displayedReasoningEffort =
+    optimisticSessionSettings?.reasoningEffort ?? sessionModelDetails?.reasoningEffort ?? null;
+  const displayedFastMode =
+    optimisticSessionSettings?.fastMode ?? sessionModelDetails?.fastMode ?? false;
   const displayedModel =
     activeSessionModel ??
     runtimeSnapshot?.model.defaultModel ??
@@ -287,13 +298,17 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     null;
   useEffect(() => {
     if (
-      sessionModelOverride &&
-      sessionModelOverride.conversationId === activeConversation?.id &&
-      sessionModelDetails?.model === sessionModelOverride.model
+      sessionRuntimeOverride &&
+      sessionRuntimeOverride.conversationId === activeConversation?.id &&
+      sessionModelDetails?.model === sessionRuntimeOverride.model &&
+      (sessionRuntimeOverride.reasoningEffort === undefined ||
+        sessionModelDetails.reasoningEffort === sessionRuntimeOverride.reasoningEffort) &&
+      (sessionRuntimeOverride.fastMode === undefined ||
+        sessionModelDetails.fastMode === sessionRuntimeOverride.fastMode)
     ) {
-      setSessionModelOverride(null);
+      setSessionRuntimeOverride(null);
     }
-  }, [activeConversation?.id, sessionModelDetails?.model, sessionModelOverride]);
+  }, [activeConversation?.id, sessionModelDetails, sessionRuntimeOverride]);
   const dependency = runtimeId
     ? connectionId
       ? appState.dependencies.getRemote(connectionId).data?.[runtimeId]
@@ -346,7 +361,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     ? `MaaS (${selectedMaasConnection?.displayName ?? getMaasPlatformDefinition(selectedMaasPlatformId).name})`
     : 'MaaS';
   const { data: resourceSnapshot } = useQuery({
-    queryKey: ['app', 'resourceSnapshot'],
+    queryKey: WORKSPACE_RESOURCE_QUERY_KEY,
     queryFn: () => rpc.app.getResourceSnapshot(),
     ...WORKSPACE_RESOURCE_QUERY_TIMING,
   });
@@ -448,11 +463,10 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         }
       });
 
-    void load();
-    const interval = window.setInterval(() => void load(), SESSION_PROMPTS_REFRESH_MS);
+    const stopRefresh = startVisibleSessionRefresh(load);
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      stopRefresh();
     };
   }, [activeConversation, provisionedTask]);
 
@@ -520,7 +534,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     appState.sidePane.pinView('settings', { tab: 'models' });
   };
 
-  const restartCurrentSessionWithModel = async (model: string) => {
+  const restartCurrentSessionWithModel = async (settings: SessionModelSettings) => {
     if (!provisionedTask || !activeConversation || !runtime?.modelFlagOnResume) {
       throw new Error(t('workspaceRuntime.model.restartUnavailable'));
     }
@@ -529,9 +543,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       undefined,
       undefined,
       undefined,
-      model
+      settings
     );
-    setSessionModelOverride({ conversationId: activeConversation.id, model });
+    setSessionRuntimeOverride({ conversationId: activeConversation.id, ...settings });
   };
 
   const handleAccountUsagePopoverOpen = (open: boolean) => {
@@ -663,9 +677,14 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   <span className="max-w-52 truncate font-mono text-[10px] text-foreground">
                     {displayedModel}
                   </span>
-                  {sessionModelDetails?.reasoningEffort ? (
+                  {displayedReasoningEffort ? (
                     <span className="max-w-16 truncate rounded-sm bg-background-2 px-1 font-mono text-[9px] text-foreground-passive @max-[960px]:hidden">
-                      {sessionModelDetails.reasoningEffort}
+                      {displayedReasoningEffort}
+                    </span>
+                  ) : null}
+                  {displayedFastMode ? (
+                    <span className="rounded-sm bg-violet-500/15 px-1 text-[9px] font-medium text-violet-700 @max-[960px]:hidden dark:text-violet-300">
+                      {t('workspaceRuntime.model.fastSpeed')}
                     </span>
                   ) : null}
                 </>
@@ -686,7 +705,8 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                 modelEditing={
                   activeConversation && runtime?.modelFlagOnResume
                     ? {
-                        reasoningEffort: sessionModelDetails?.reasoningEffort,
+                        reasoningEffort: displayedReasoningEffort,
+                        fastMode: displayedFastMode,
                         onRestartWithModel: restartCurrentSessionWithModel,
                         onManageModels: manageModels,
                         allowDefaultChange: !connectionId,
@@ -1417,6 +1437,7 @@ function ContextProgressBar({
 type ActiveSessionModelDetails = {
   model: string | null;
   reasoningEffort: string | null;
+  fastMode: boolean | null;
 };
 
 function useActiveSessionModelDetails({
@@ -1451,12 +1472,13 @@ function useActiveSessionModelDetails({
           conversation.createdAt ?? null,
           'harness'
         );
-        return context
-          ? {
-              model: context.model,
-              reasoningEffort: context.turnContexts.at(-1)?.effort ?? null,
-            }
-          : null;
+        if (!context) return null;
+        const currentTurn = context.turnContexts.at(-1);
+        return {
+          model: context.model,
+          reasoningEffort: currentTurn?.effort ?? null,
+          fastMode: isCodexFastServiceTier(currentTurn?.serviceTier),
+        };
       }
       if (runtimeId === 'claude') {
         const sessionId =
@@ -1464,7 +1486,7 @@ function useActiveSessionModelDetails({
             ? conversation.sessionSource.sessionId
             : conversation.id;
         const metadata = await rpc.conversations.getClaudeSessionMetadata(cwd, sessionId);
-        return metadata ? { model: metadata.model, reasoningEffort: null } : null;
+        return metadata ? { model: metadata.model, reasoningEffort: null, fastMode: null } : null;
       }
       return null;
     },
@@ -1473,6 +1495,10 @@ function useActiveSessionModelDetails({
     refetchInterval: supportedRuntime && cwd && conversation ? 5_000 : false,
     refetchOnWindowFocus: true,
   });
+}
+
+function isCodexFastServiceTier(serviceTier: string | null | undefined): boolean {
+  return serviceTier === 'fast' || serviceTier === 'priority';
 }
 
 function ContextMetric({ label, value }: { label: string; value: string }) {

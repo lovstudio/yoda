@@ -117,6 +117,23 @@ const WATCH_IGNORED_NAMES = [
 // @parcel/watcher native stack overflow on long paths, see parcel-bundler/watcher#250).
 const WATCH_IGNORED_SET = new Set(WATCH_IGNORED_NAMES);
 
+export const LOCAL_WATCH_EVENT_BATCH_SIZE = 256;
+export const LOCAL_WATCH_MAX_PENDING_EVENTS = 2_048;
+export const LOCAL_WATCH_MAX_WAIT_MS = 1_000;
+const LOCAL_WATCH_STAT_CONCURRENCY = 16;
+
+type PendingLocalWatchEvent = {
+  type: 'create' | 'delete' | 'modify';
+  path: string;
+  absolutePath: string;
+};
+
+type ActiveLocalWatchDelivery = {
+  batch: PendingLocalWatchEvent[];
+  cancelled: boolean;
+  absorbed: boolean;
+};
+
 // Returns true if any path segment matches an ignored directory name.
 function isWatchIgnored(relPath: string): boolean {
   const segments = relPath.split('/');
@@ -759,23 +776,182 @@ export class LocalFileSystem implements FileSystemProvider {
     options: { debounceMs?: number } = {}
   ): FileWatcher {
     const stabilityMs = options.debounceMs ?? 200;
-    let pending: FileWatchEvent[] = [];
+    const pendingByPath = new Map<string, PendingLocalWatchEvent>();
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    let maxWaitTimer: ReturnType<typeof setTimeout> | null = null;
+    let activeDelivery: ActiveLocalWatchDelivery | null = null;
     // Set when the async subscribe resolves; used by close() if it resolves after close() is called.
     let resolvedSub: parcelWatcher.AsyncSubscription | null = null;
     let closed = false;
 
-    const flush = () => {
-      if (pending.length) {
-        callback(pending);
-        pending = [];
+    const clearFlushTimers = () => {
+      if (flushTimer) clearTimeout(flushTimer);
+      if (maxWaitTimer) clearTimeout(maxWaitTimer);
+      flushTimer = null;
+      maxWaitTimer = null;
+    };
+
+    const resolveEvent = async (event: PendingLocalWatchEvent): Promise<FileWatchEvent> => {
+      let entryType: FileWatchEvent['entryType'] = 'file';
+      // Only create events need a type for tree insertion. Modify/delete
+      // consumers ignore entryType, so avoid filesystem metadata work for the
+      // overwhelmingly common editor/build update stream.
+      if (event.type === 'create') {
+        try {
+          entryType = (await fs.stat(event.absolutePath)).isDirectory() ? 'directory' : 'file';
+        } catch {
+          // File removed between the event and the stat — preserve the previous file fallback.
+        }
+      }
+      return { type: event.type, entryType, path: event.path };
+    };
+
+    const resolveEventSync = (event: PendingLocalWatchEvent): FileWatchEvent => {
+      let entryType: FileWatchEvent['entryType'] = 'file';
+      if (event.type === 'create') {
+        try {
+          entryType = statSync(event.absolutePath).isDirectory() ? 'directory' : 'file';
+        } catch {
+          // Match the asynchronous path when the file disappears before metadata resolution.
+        }
+      }
+      return { type: event.type, entryType, path: event.path };
+    };
+
+    const resolveBatch = async (batch: PendingLocalWatchEvent[]): Promise<FileWatchEvent[]> => {
+      const resolved = new Array<FileWatchEvent>(batch.length);
+      let nextIndex = 0;
+      const workerCount = Math.min(LOCAL_WATCH_STAT_CONCURRENCY, batch.length);
+      await Promise.all(
+        Array.from({ length: workerCount }, async () => {
+          while (nextIndex < batch.length) {
+            const index = nextIndex++;
+            resolved[index] = await resolveEvent(batch[index]);
+          }
+        })
+      );
+      return resolved;
+    };
+
+    const deliverEvents = (events: FileWatchEvent[]) => {
+      if (closed || events.length === 0) return;
+      try {
+        callback(events);
+      } catch (error: unknown) {
+        log.error('Failed to deliver file watch events', { error });
       }
     };
 
-    const enqueue = (evt: FileWatchEvent) => {
-      pending.push(evt);
+    const mergePendingEvent = (
+      target: Map<string, PendingLocalWatchEvent>,
+      event: PendingLocalWatchEvent
+    ) => {
+      const previous = target.get(event.path);
+      // A create followed by modifications still needs to reach consumers as a create so
+      // newly-created files and directories are added to the tree. Other sequences converge
+      // on the latest observable state for that path.
+      const coalesced =
+        previous?.type === 'create' && event.type === 'modify'
+          ? { ...event, type: 'create' as const }
+          : event;
+      target.set(event.path, coalesced);
+    };
+
+    const takePendingBatch = (): PendingLocalWatchEvent[] => {
+      const batch: PendingLocalWatchEvent[] = [];
+      for (const [path, event] of pendingByPath) {
+        batch.push(event);
+        pendingByPath.delete(path);
+        if (batch.length === LOCAL_WATCH_EVENT_BATCH_SIZE) break;
+      }
+      return batch;
+    };
+
+    const emergencyFlush = () => {
+      // There can be at most one active batch plus the bounded pending map. If asynchronous
+      // metadata resolution or IPC delivery stalls long enough to fill the map again, absorb
+      // both into one fixed-size snapshot and deliver it synchronously in bounded chunks. This
+      // applies backpressure without creating another unresolved promise or reordering a newer
+      // event ahead of the active batch.
+      const merged = new Map<string, PendingLocalWatchEvent>();
+      if (activeDelivery && !activeDelivery.absorbed) {
+        activeDelivery.cancelled = true;
+        activeDelivery.absorbed = true;
+        for (const event of activeDelivery.batch) mergePendingEvent(merged, event);
+      }
+      for (const event of pendingByPath.values()) mergePendingEvent(merged, event);
+      pendingByPath.clear();
+
+      const pending = Array.from(merged.values());
+      for (let offset = 0; offset < pending.length; offset += LOCAL_WATCH_EVENT_BATCH_SIZE) {
+        const batch = pending.slice(offset, offset + LOCAL_WATCH_EVENT_BATCH_SIZE);
+        deliverEvents(batch.map(resolveEventSync));
+      }
+    };
+
+    const startAsyncDelivery = (batch: PendingLocalWatchEvent[]) => {
+      const delivery: ActiveLocalWatchDelivery = {
+        batch,
+        cancelled: false,
+        absorbed: false,
+      };
+      activeDelivery = delivery;
+
+      void resolveBatch(batch)
+        .then((events) => {
+          if (!delivery.cancelled) deliverEvents(events);
+        })
+        .catch((error: unknown) => {
+          log.error('Failed to resolve file watch events', { error });
+        })
+        .finally(() => {
+          if (activeDelivery !== delivery) return;
+          activeDelivery = null;
+          if (!closed && pendingByPath.size > 0) flush(false);
+        });
+    };
+
+    const flush = (forceBackpressure: boolean) => {
+      if (closed) {
+        clearFlushTimers();
+        return;
+      }
+
+      if (activeDelivery) {
+        if (forceBackpressure) {
+          clearFlushTimers();
+          emergencyFlush();
+        } else {
+          if (flushTimer) clearTimeout(flushTimer);
+          flushTimer = null;
+        }
+        return;
+      }
+
+      clearFlushTimers();
+      if (pendingByPath.size === 0) return;
+
+      startAsyncDelivery(takePendingBatch());
+
+      if (pendingByPath.size > 0) {
+        maxWaitTimer = setTimeout(() => flush(true), LOCAL_WATCH_MAX_WAIT_MS);
+      }
+    };
+
+    const scheduleFlush = () => {
       if (flushTimer) clearTimeout(flushTimer);
-      flushTimer = setTimeout(flush, stabilityMs);
+      flushTimer = setTimeout(() => flush(false), stabilityMs);
+      maxWaitTimer ??= setTimeout(() => flush(true), LOCAL_WATCH_MAX_WAIT_MS);
+    };
+
+    const enqueue = (event: PendingLocalWatchEvent) => {
+      mergePendingEvent(pendingByPath, event);
+
+      if (pendingByPath.size >= LOCAL_WATCH_MAX_PENDING_EVENTS) {
+        flush(true);
+      } else {
+        scheduleFlush();
+      }
     };
 
     const toRel = (absPath: string) => relative(this.projectPath, absPath).replace(/\\/g, '/');
@@ -794,16 +970,8 @@ export class LocalFileSystem implements FileSystemProvider {
             // filtering to prevent @parcel/watcher native stack overflow on long paths).
             if (isWatchIgnored(rel)) continue;
 
-            let entryType: 'file' | 'directory' = 'file';
-            if (e.type !== 'delete') {
-              try {
-                entryType = statSync(e.path).isDirectory() ? 'directory' : 'file';
-              } catch {
-                // File removed between the event and the stat — treat as file.
-              }
-            }
             const type = e.type === 'update' ? ('modify' as const) : e.type;
-            enqueue({ type, entryType, path: rel });
+            enqueue({ type, path: rel, absolutePath: e.path });
           }
         }
         // No native ignore option: glob matching in native code causes stack overflow
@@ -825,7 +993,9 @@ export class LocalFileSystem implements FileSystemProvider {
       update(_paths: string[]) {},
       close() {
         closed = true;
-        if (flushTimer) clearTimeout(flushTimer);
+        clearFlushTimers();
+        pendingByPath.clear();
+        if (activeDelivery) activeDelivery.cancelled = true;
         if (resolvedSub) void resolvedSub.unsubscribe();
       },
     };

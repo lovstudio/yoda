@@ -98,7 +98,8 @@ export class LifecycleMap<T, E> {
   /**
    * Tears down a resource with deduplication.
    * - If already tearing down, returns the existing promise.
-   * - If not found in the active map, returns `null` — caller decides what to do.
+   * - If provisioning, waits and tears down any late successful value.
+   * - If neither active nor provisioning, returns `null` — caller decides what to do.
    * - Otherwise runs: preTeardown → run() → _active.delete() → postTeardown.
    * - postTeardown always fires (via finally), even if run() fails.
    */
@@ -110,21 +111,53 @@ export class LifecycleMap<T, E> {
     if (inFlight) return inFlight;
 
     const value = this._active.get(id);
-    if (value === undefined) return null;
+    if (value !== undefined) return this._startTeardown(id, value, run);
 
+    const provisioning = this._provisioning.get(id);
+    if (!provisioning) return null;
+
+    // A teardown request can race an in-flight provision (for example, archive
+    // while a workspace is still booting). Queue cleanup behind that provision
+    // so a late success cannot repopulate the active map after teardown returned.
     const promise = (async () => {
-      try {
-        await this._hooks.preTeardown?.(id, value);
-        const result = await run(value);
-        return result.success ? ok<void>() : err(result.error);
-      } finally {
-        this._active.delete(id);
-        this._tearingDown.delete(id);
-        await this._hooks.postTeardown?.(id, value);
-      }
-    })();
+      await provisioning.catch(() => undefined);
+      const provisionedValue = this._active.get(id);
+      if (provisionedValue === undefined) return ok<void>();
+      return this._runTeardown(id, provisionedValue, run);
+    })().finally(() => {
+      if (this._tearingDown.get(id) === promise) this._tearingDown.delete(id);
+    });
 
     this._tearingDown.set(id, promise as Promise<Result<void, E>>);
     return promise;
+  }
+
+  private _startTeardown<TE>(
+    id: string,
+    value: T,
+    run: (value: T) => Promise<Result<void, TE>>
+  ): Promise<Result<void, TE>> {
+    const promise = this._runTeardown(id, value, run).finally(() => {
+      if (this._tearingDown.get(id) === promise) this._tearingDown.delete(id);
+    });
+    this._tearingDown.set(id, promise as Promise<Result<void, E>>);
+    return promise;
+  }
+
+  private async _runTeardown<TE>(
+    id: string,
+    value: T,
+    run: (value: T) => Promise<Result<void, TE>>
+  ): Promise<Result<void, TE>> {
+    try {
+      await this._hooks.preTeardown?.(id, value);
+      const result = await run(value);
+      return result.success ? ok<void>() : err(result.error);
+    } finally {
+      this._active.delete(id);
+      // The owning promise removes itself from _tearingDown. Keeping that
+      // cleanup outside this method avoids deleting a newer teardown entry.
+      await this._hooks.postTeardown?.(id, value);
+    }
   }
 }

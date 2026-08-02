@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { agentSessionRuntimeStore, type AgentSessionKey } from './agent-session-runtime';
 
 vi.mock('@main/lib/events', () => ({
@@ -51,5 +51,64 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0]?.[0]).toMatchObject({ status: 'idle' });
     unsubscribe();
+  });
+});
+
+describe('AgentSessionRuntimeStore watchdog', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    agentSessionRuntimeStore.initialize();
+  });
+
+  afterEach(() => {
+    agentSessionRuntimeStore.dispose();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it.each(['codex-rollout', 'claude-transcript', 'claude-session-activity'])(
+    'does not clear a long-running turn backed by %s',
+    (source) => {
+      agentSessionRuntimeStore.dispatch(
+        session,
+        { kind: 'turn-started', at: 0, force: true },
+        source
+      );
+
+      vi.advanceTimersByTime(31 * 60_000);
+
+      expect(agentSessionRuntimeStore.getStatus(session)).toBe('working');
+    }
+  );
+
+  it('does not carry authoritative protection into a later heuristic turn', () => {
+    agentSessionRuntimeStore.dispatch(
+      session,
+      { kind: 'turn-started', at: 0, force: true },
+      'codex-rollout'
+    );
+    agentSessionRuntimeStore.dispatch(session, { kind: 'turn-completed', at: 1 }, 'codex-rollout');
+    agentSessionRuntimeStore.dispatch(
+      session,
+      { kind: 'turn-started', at: 2, force: true },
+      'renderer:test'
+    );
+
+    vi.advanceTimersByTime(31 * 60_000);
+
+    expect(agentSessionRuntimeStore.getStatus(session)).toBe('idle');
+  });
+
+  it('still clears a stale heuristic working state', () => {
+    agentSessionRuntimeStore.dispatch(
+      session,
+      { kind: 'turn-started', at: 0, force: true },
+      'renderer:test'
+    );
+
+    vi.advanceTimersByTime(31 * 60_000);
+
+    expect(agentSessionRuntimeStore.getStatus(session)).toBe('idle');
   });
 });

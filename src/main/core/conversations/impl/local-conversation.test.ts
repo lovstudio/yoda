@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
 import { ptyDataChannel, ptyExitChannel } from '@shared/events/ptyEvents';
 import { makePtySessionId } from '@shared/ptySessionId';
+import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-reconciler';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { Pty, PtyExitInfo } from '@main/core/pty/pty';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
@@ -374,6 +375,23 @@ describe('LocalConversationProvider', () => {
     await vi.advanceTimersByTimeAsync(1_000);
 
     expect(spawned).toHaveLength(1);
+  });
+
+  it('detaches silence tracking once when stop races the PTY exit callback', async () => {
+    const detach = vi.fn();
+    const attachSpy = vi.spyOn(agentSilenceReconciler, 'attach').mockReturnValue(detach);
+    try {
+      const provider = createProvider();
+      await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+      const pty = spawned[0].pty;
+
+      await provider.stopSession(conversation.id);
+      pty.emitExit({ exitCode: 0 });
+
+      expect(detach).toHaveBeenCalledOnce();
+    } finally {
+      attachSpy.mockRestore();
+    }
   });
 
   it('accepts optimistic input while async startup is still preparing the PTY', async () => {
