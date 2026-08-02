@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ensureWorkspaceSchemaCompatibility,
   getBundledMigrationCount,
+  getBundledMigrationRecords,
   runBundledMigrations,
 } from './migrations';
 
@@ -157,6 +158,49 @@ describe('runBundledMigrations', () => {
       expect(columnExists(db, 'tasks', 'sidebar_workspace_id')).toBe(true);
       expect(indexExists(db, 'idx_tasks_sidebar_workspace_id')).toBe(true);
       expect(countAppliedMigrations(db)).toBe(getBundledMigrationCount());
+    } finally {
+      db.close();
+    }
+  });
+
+  it('runs the squashed tail when the applied migration count exceeds the bundled journal', () => {
+    // Simulates an upgrade from a release whose migration journal was longer
+    // (squashed/renumbered since): the DB records more applied migrations than
+    // the bundled journal contains, and the shared prefix hashes match while
+    // the tail (0045-0047) was never applied.
+    const db = new Database(':memory:');
+    try {
+      createMigrationTable(db);
+
+      const records = getBundledMigrationRecords();
+      expect(records.length).toBe(getBundledMigrationCount());
+
+      const shared = records.filter((record) => record.idx < 45);
+      const insert = db.prepare('INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)');
+      shared.forEach((record) => insert.run(record.hash, record.when));
+      for (let i = 0; i < 20; i += 1) {
+        insert.run(`legacy-extra-${i}`, 5000 + i);
+      }
+      expect(countAppliedMigrations(db)).toBeGreaterThan(getBundledMigrationCount());
+
+      db.exec(`
+        CREATE TABLE prompt_groups (
+          name text PRIMARY KEY NOT NULL,
+          created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
+        );
+        CREATE TABLE tasks (id text PRIMARY KEY NOT NULL);
+        CREATE TABLE projects (id text PRIMARY KEY NOT NULL);
+      `);
+
+      expect(() => runBundledMigrations(db)).not.toThrow();
+
+      expect(columnExists(db, 'prompt_groups', 'sort_order')).toBe(true);
+      expect(columnExists(db, 'tasks', 'is_long_term')).toBe(true);
+      expect(columnExists(db, 'workspace_terminals', 'id')).toBe(true);
+      expect(indexExists(db, 'idx_workspace_terminals_project_scope')).toBe(true);
+      expect(countAppliedMigrations(db)).toBe(
+        shared.length + 20 + (records.length - shared.length)
+      );
     } finally {
       db.close();
     }
