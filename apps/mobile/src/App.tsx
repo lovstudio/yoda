@@ -1714,16 +1714,6 @@ function DemandComposer({
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>New request</Text>
       </View>
-      <TextInput
-        maxLength={MOBILE_SESSION_INPUT_MAX_CHARS}
-        multiline
-        placeholder="Describe the requirement..."
-        placeholderTextColor="#9A958C"
-        style={styles.promptInput}
-        textAlignVertical="top"
-        value={prompt}
-        onChangeText={onPromptChange}
-      />
       <InputMediaControls
         disabled={submitting}
         images={images}
@@ -1737,6 +1727,18 @@ function DemandComposer({
         onChange={onPromptChange}
         onError={onMediaError}
         onImagesChange={onImagesChange}
+        input={
+          <TextInput
+            maxLength={MOBILE_SESSION_INPUT_MAX_CHARS}
+            multiline
+            placeholder="Describe the requirement..."
+            placeholderTextColor="#9A958C"
+            style={styles.composerTextInput}
+            textAlignVertical="center"
+            value={prompt}
+            onChangeText={onPromptChange}
+          />
+        }
       />
       <DemandProjectPickerSheet
         open={projectPickerOpen}
@@ -2532,6 +2534,9 @@ function InputMediaControls({
   disabled,
   images,
   imagesEnabled,
+  input,
+  canSubmit = false,
+  onSubmit,
   projectSelector,
   speechContext = [],
   value,
@@ -2543,6 +2548,9 @@ function InputMediaControls({
   disabled: boolean;
   images: MobileImageDraft[];
   imagesEnabled: boolean;
+  input: ReactNode;
+  canSubmit?: boolean;
+  onSubmit?: () => void;
   projectSelector?: {
     label: string;
     onPress: () => void;
@@ -2554,9 +2562,12 @@ function InputMediaControls({
   onImagesChange: (images: MobileImageDraft[]) => void;
 }) {
   const [pickingImages, setPickingImages] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
   const [voiceStarting, setVoiceStarting] = useState(false);
   const [voiceActive, setVoiceActive] = useState(false);
   const voiceBaseValueRef = useRef('');
+  const voicePressActiveRef = useRef(false);
   const voiceSessionRef = useRef<MobileVoiceInputSession | null>(null);
 
   const disposeVoiceSession = useCallback(() => {
@@ -2580,7 +2591,10 @@ function InputMediaControls({
     setPickingImages(true);
     try {
       const picked = await pickMobileInputImages();
-      if (picked.length > 0) onImagesChange([...images, ...picked]);
+      if (picked.length > 0) {
+        onImagesChange([...images, ...picked]);
+        setToolsOpen(false);
+      }
     } catch (error) {
       onError(errorMessage(error));
     } finally {
@@ -2588,12 +2602,8 @@ function InputMediaControls({
     }
   }, [disabled, images, imagesEnabled, onError, onImagesChange, pickingImages]);
 
-  const handleVoiceInput = useCallback(async () => {
-    if (disabled || voiceStarting) return;
-    if (voiceActive) {
-      voiceSessionRef.current?.stop();
-      return;
-    }
+  const startVoiceInput = useCallback(async () => {
+    if (disabled || voiceStarting || voiceActive) return;
     if (Constants.appOwnership === 'expo') {
       onError(
         'Voice input is available in the Yoda Mobile development build. In Expo Go, use the keyboard microphone.'
@@ -2623,6 +2633,7 @@ function InputMediaControls({
       voiceSessionRef.current = session;
       setVoiceStarting(false);
       setVoiceActive(true);
+      if (!voicePressActiveRef.current) session.stop();
     } catch (error) {
       disposeVoiceSession();
       onError(errorMessage(error));
@@ -2637,6 +2648,22 @@ function InputMediaControls({
     voiceActive,
     voiceStarting,
   ]);
+
+  const stopVoiceInput = useCallback(() => {
+    voicePressActiveRef.current = false;
+    voiceSessionRef.current?.stop();
+  }, []);
+
+  const handleVoicePressIn = useCallback(() => {
+    voicePressActiveRef.current = true;
+    void startVoiceInput();
+  }, [startVoiceInput]);
+
+  const toggleVoiceMode = useCallback(() => {
+    if (disabled) return;
+    if (voiceMode) stopVoiceInput();
+    setVoiceMode((current) => !current);
+  }, [disabled, stopVoiceInput, voiceMode]);
 
   return (
     <View style={[styles.inputMediaShell, compact ? styles.inputMediaShellCompact : null]}>
@@ -2668,82 +2695,134 @@ function InputMediaControls({
           ))}
         </ScrollView>
       ) : null}
-      <View style={styles.inputMediaToolbar}>
-        <View style={styles.inputMediaActions}>
-          {projectSelector ? (
-            <Pressable
-              accessibilityHint="Opens a scrollable project list"
-              accessibilityLabel={`Choose project, current project ${projectSelector.label}`}
-              accessibilityRole="button"
-              accessibilityState={{ disabled }}
-              disabled={disabled}
-              style={({ pressed }) => [
-                styles.inputMediaButton,
-                styles.inputMediaProjectButton,
-                disabled ? styles.buttonDisabled : null,
-                pressed ? styles.buttonPressed : null,
-              ]}
-              onPress={projectSelector.onPress}
-            >
-              <Ionicons color={COLORS.charcoal} name="folder-outline" size={18} />
-              <Text numberOfLines={1} style={styles.inputMediaButtonText}>
-                {projectSelector.label}
-              </Text>
-              <Ionicons color={COLORS.muted} name="chevron-down-outline" size={13} />
-            </Pressable>
-          ) : null}
+      {projectSelector ? (
+        <View style={styles.inputMediaContextRow}>
+          <Pressable
+            accessibilityHint="Opens a scrollable project list"
+            accessibilityLabel={`Choose project, current project ${projectSelector.label}`}
+            accessibilityRole="button"
+            accessibilityState={{ disabled }}
+            disabled={disabled}
+            style={({ pressed }) => [
+              styles.inputMediaProjectButton,
+              disabled ? styles.buttonDisabled : null,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={projectSelector.onPress}
+          >
+            <Ionicons color={COLORS.charcoal} name="folder-outline" size={16} />
+            <Text numberOfLines={1} style={styles.inputMediaProjectText}>
+              {projectSelector.label}
+            </Text>
+            <Ionicons color={COLORS.muted} name="chevron-down-outline" size={13} />
+          </Pressable>
+          <Text style={styles.inputMediaContextHint}>选择任务归属</Text>
+        </View>
+      ) : null}
+      <View style={styles.wechatComposerRow}>
+        <Pressable
+          accessibilityLabel={voiceMode ? 'Switch to keyboard input' : 'Switch to voice input'}
+          accessibilityRole="button"
+          accessibilityState={{ disabled }}
+          disabled={disabled}
+          hitSlop={5}
+          style={({ pressed }) => [
+            styles.composerModeButton,
+            voiceMode ? styles.composerModeButtonActive : null,
+            disabled ? styles.buttonDisabled : null,
+            pressed ? styles.buttonPressed : null,
+          ]}
+          onPress={toggleVoiceMode}
+        >
+          <Ionicons
+            color={voiceMode ? COLORS.green : COLORS.charcoal}
+            name={voiceMode ? 'keypad-outline' : 'mic-outline'}
+            size={25}
+          />
+        </Pressable>
+        {voiceMode ? (
+          <Pressable
+            accessibilityHint="Hold while speaking. Release to turn speech into editable text."
+            accessibilityLabel={
+              voiceActive ? 'Listening. Release to finish voice input' : 'Hold to speak'
+            }
+            accessibilityRole="button"
+            accessibilityState={{ busy: voiceStarting, disabled }}
+            disabled={disabled || voiceStarting}
+            style={({ pressed }) => [
+              styles.voiceHoldButton,
+              voiceActive || pressed ? styles.voiceHoldButtonActive : null,
+              disabled ? styles.buttonDisabled : null,
+            ]}
+            onPressIn={handleVoicePressIn}
+            onPressOut={stopVoiceInput}
+          >
+            {voiceStarting ? (
+              <ActivityIndicator color={COLORS.green} size="small" />
+            ) : (
+              <Ionicons
+                color={voiceActive ? COLORS.green : COLORS.charcoal}
+                name="mic-outline"
+                size={18}
+              />
+            )}
+            <Text style={styles.voiceHoldButtonText}>
+              {voiceActive ? '松开发送语音' : '按住说话'}
+            </Text>
+          </Pressable>
+        ) : (
+          <View style={styles.composerTextShell}>{input}</View>
+        )}
+        <Pressable
+          accessibilityLabel={canSubmit && onSubmit ? 'Send message' : 'More input tools'}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: disabled || (canSubmit && !onSubmit) }}
+          disabled={disabled || (canSubmit && !onSubmit)}
+          hitSlop={5}
+          style={({ pressed }) => [
+            styles.composerTrailingButton,
+            canSubmit && onSubmit ? styles.composerSendButton : null,
+            disabled ? styles.buttonDisabled : null,
+            pressed ? styles.buttonPressed : null,
+          ]}
+          onPress={() => {
+            if (canSubmit && onSubmit) onSubmit();
+            else setToolsOpen((current) => !current);
+          }}
+        >
+          <Ionicons
+            color={canSubmit && onSubmit ? COLORS.surface : COLORS.charcoal}
+            name={canSubmit && onSubmit ? 'arrow-up-outline' : 'add-outline'}
+            size={28}
+          />
+        </Pressable>
+      </View>
+      {toolsOpen ? (
+        <View style={styles.inputToolsTray}>
           <Pressable
             accessibilityLabel="Attach images"
             accessibilityRole="button"
             accessibilityState={{ disabled: disabled || !imagesEnabled }}
             disabled={disabled || !imagesEnabled || pickingImages}
             style={({ pressed }) => [
-              styles.inputMediaButton,
+              styles.inputTool,
               disabled || !imagesEnabled ? styles.buttonDisabled : null,
               pressed ? styles.buttonPressed : null,
             ]}
             onPress={() => void handlePickImages()}
           >
-            {pickingImages ? (
-              <ActivityIndicator color={COLORS.charcoal} size="small" />
-            ) : (
-              <Ionicons color={COLORS.charcoal} name="images-outline" size={18} />
-            )}
-            <Text style={styles.inputMediaButtonText}>Image</Text>
+            <View style={styles.inputToolIcon}>
+              {pickingImages ? (
+                <ActivityIndicator color={COLORS.charcoal} size="small" />
+              ) : (
+                <Ionicons color={COLORS.charcoal} name="images-outline" size={25} />
+              )}
+            </View>
+            <Text style={styles.inputToolText}>图片</Text>
           </Pressable>
-          <Pressable
-            accessibilityLabel={voiceActive ? 'Stop voice input' : 'Start voice input'}
-            accessibilityRole="button"
-            accessibilityState={{ busy: voiceStarting, disabled }}
-            disabled={disabled || voiceStarting}
-            style={({ pressed }) => [
-              styles.inputMediaButton,
-              voiceActive ? styles.inputMediaButtonActive : null,
-              disabled ? styles.buttonDisabled : null,
-              pressed ? styles.buttonPressed : null,
-            ]}
-            onPress={() => void handleVoiceInput()}
-          >
-            {voiceStarting ? (
-              <ActivityIndicator color={COLORS.charcoal} size="small" />
-            ) : (
-              <Ionicons
-                color={voiceActive ? COLORS.red : COLORS.charcoal}
-                name={voiceActive ? 'stop-circle-outline' : 'mic-outline'}
-                size={18}
-              />
-            )}
-            <Text style={styles.inputMediaButtonText}>{voiceActive ? 'Listening…' : 'Voice'}</Text>
-          </Pressable>
+          {!imagesEnabled ? <Text style={styles.inputMediaHint}>图片仅支持本地项目</Text> : null}
         </View>
-        {!imagesEnabled ? (
-          <Text style={styles.inputMediaHint}>Images require a local project.</Text>
-        ) : images.length > 0 ? (
-          <Text style={styles.inputMediaHint}>
-            {images.length} {images.length === 1 ? 'image' : 'images'}
-          </Text>
-        ) : null}
-      </View>
+      ) : null}
     </View>
   );
 }
@@ -2798,47 +2877,31 @@ function SessionInputComposer({
       />
       <InputMediaControls
         compact
+        canSubmit={canSend}
         disabled={sending || !canContinue}
         images={images}
         imagesEnabled={imagesEnabled}
+        input={
+          <TextInput
+            autoCapitalize="sentences"
+            maxLength={MOBILE_SESSION_INPUT_MAX_CHARS}
+            multiline
+            placeholder="Send a follow-up..."
+            placeholderTextColor="#9A958C"
+            scrollEnabled
+            style={styles.composerTextInput}
+            textAlignVertical="center"
+            value={value}
+            onChangeText={onChange}
+          />
+        }
+        onSubmit={onSend}
         speechContext={speechContext}
         value={value}
         onChange={onChange}
         onError={onError}
         onImagesChange={onImagesChange}
       />
-      <View style={styles.sessionInputRow}>
-        <TextInput
-          autoCapitalize="sentences"
-          maxLength={MOBILE_SESSION_INPUT_MAX_CHARS}
-          multiline
-          placeholder="Send a follow-up..."
-          placeholderTextColor="#9A958C"
-          scrollEnabled
-          style={styles.sessionInput}
-          textAlignVertical="top"
-          value={value}
-          onChangeText={onChange}
-        />
-        <Pressable
-          accessibilityLabel="Send input to session"
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !canSend }}
-          disabled={!canSend}
-          style={({ pressed }) => [
-            styles.sessionSendButton,
-            !canSend ? styles.buttonDisabled : null,
-            pressed ? styles.buttonPressed : null,
-          ]}
-          onPress={onSend}
-        >
-          {sending ? (
-            <ActivityIndicator color={COLORS.surface} />
-          ) : (
-            <Ionicons color={COLORS.surface} name="arrow-up-outline" size={20} />
-          )}
-        </Pressable>
-      </View>
     </View>
   );
 }
@@ -3541,7 +3604,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 9,
     paddingBottom: Platform.OS === 'ios' ? 10 : 12,
-    gap: 7,
+    gap: 8,
   },
   sessionRunStatus: {
     minHeight: 52,
@@ -3576,26 +3639,6 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 11,
     fontWeight: '700',
-  },
-  sessionInputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 9,
-  },
-  sessionInput: {
-    minHeight: 44,
-    maxHeight: 112,
-    flex: 1,
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 8,
-    backgroundColor: COLORS.page,
-    color: COLORS.ink,
-    fontSize: 15,
-    lineHeight: 21,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 10,
   },
   inputMediaShell: {
     gap: 8,
@@ -3634,61 +3677,134 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: COLORS.charcoal,
   },
-  inputMediaToolbar: {
-    minHeight: 34,
+  inputMediaContextRow: {
+    minHeight: 26,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 8,
   },
-  inputMediaActions: {
-    minWidth: 0,
-    flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 7,
-  },
-  inputMediaButton: {
-    minHeight: 34,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 17,
-    backgroundColor: COLORS.page,
-    paddingHorizontal: 11,
-  },
   inputMediaProjectButton: {
-    maxWidth: 124,
-    borderColor: '#C9C5BB',
+    maxWidth: 184,
+    minHeight: 26,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 13,
     backgroundColor: '#EFEEE7',
+    paddingHorizontal: 8,
   },
-  inputMediaButtonActive: {
-    borderColor: '#E9B8B4',
-    backgroundColor: '#FFF1F0',
-  },
-  inputMediaButtonText: {
+  inputMediaProjectText: {
+    minWidth: 0,
+    flexShrink: 1,
     color: COLORS.charcoal,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
   },
+  inputMediaContextHint: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '600',
+  },
   inputMediaHint: {
+    alignSelf: 'center',
     flexShrink: 1,
     color: COLORS.muted,
     fontSize: 11,
     fontWeight: '600',
-    textAlign: 'right',
   },
-  sessionSendButton: {
-    width: 44,
+  wechatComposerRow: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  composerModeButton: {
+    width: 34,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  composerModeButtonActive: {
+    borderRadius: 17,
+    backgroundColor: '#EAF7F2',
+  },
+  composerTextShell: {
+    minWidth: 0,
+    flex: 1,
+  },
+  composerTextInput: {
+    minHeight: 44,
+    maxHeight: 112,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 7,
+    backgroundColor: COLORS.surface,
+    color: COLORS.ink,
+    fontSize: 16,
+    lineHeight: 22,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
+  },
+  voiceHoldButton: {
+    minHeight: 44,
+    minWidth: 0,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    borderWidth: 1,
+    borderColor: '#CFCDC6',
+    borderRadius: 7,
+    backgroundColor: '#F2F1EC',
+  },
+  voiceHoldButtonActive: {
+    borderColor: '#93C6B8',
+    backgroundColor: '#EAF7F2',
+  },
+  voiceHoldButtonText: {
+    color: COLORS.charcoal,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  composerTrailingButton: {
+    width: 38,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  composerSendButton: {
+    width: 42,
     borderRadius: 8,
-    backgroundColor: COLORS.charcoal,
+    backgroundColor: COLORS.green,
+  },
+  inputToolsTray: {
+    minHeight: 112,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    borderRadius: 8,
+    backgroundColor: '#F0F0EC',
+    padding: 12,
+  },
+  inputTool: {
+    width: 66,
+    alignItems: 'center',
+    gap: 6,
+  },
+  inputToolIcon: {
+    width: 52,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+  },
+  inputToolText: {
+    color: COLORS.charcoal,
+    fontSize: 12,
+    fontWeight: '700',
   },
   homeShell: {
     flex: 1,
@@ -3973,17 +4089,6 @@ const styles = StyleSheet.create({
     color: COLORS.ink,
     fontSize: 16,
     paddingHorizontal: 14,
-  },
-  promptInput: {
-    minHeight: 118,
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 8,
-    backgroundColor: COLORS.surface,
-    color: COLORS.ink,
-    fontSize: 16,
-    lineHeight: 22,
-    padding: 14,
   },
   primaryButton: {
     height: 48,
