@@ -82,10 +82,11 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
 
     useImperativeHandle(ref, () => ({ focus }), [focus]);
 
-    const handleFocus = () => {
-      focus();
-    };
-
+    // xterm normally focuses its own helper textarea from its mousedown handler.
+    // Keep this as a fallback for clicks on the surrounding empty host, but do
+    // not also focus on `click`: the latter runs after xterm's native focus and
+    // can recreate the helper textarea's focus state immediately after an
+    // image clipboard paste.
     const handleMouseDown: React.MouseEventHandler<HTMLDivElement> = (event) => {
       if (event.button !== 0) return;
       focus();
@@ -190,7 +191,6 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
             overflow: 'hidden',
             filter: contentFilter || undefined,
           }}
-          onClick={handleFocus}
           onMouseDownCapture={handleSecondaryMouseEvent}
           onMouseDown={handleMouseDown}
           onMouseUpCapture={handleSecondaryMouseEvent}
