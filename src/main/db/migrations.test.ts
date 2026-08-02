@@ -176,7 +176,9 @@ describe('runBundledMigrations', () => {
       expect(records.length).toBe(getBundledMigrationCount());
 
       const shared = records.filter((record) => record.idx < 45);
-      const insert = db.prepare('INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)');
+      const insert = db.prepare(
+        'INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)'
+      );
       shared.forEach((record) => insert.run(record.hash, record.when));
       for (let i = 0; i < 20; i += 1) {
         insert.run(`legacy-extra-${i}`, 5000 + i);
