@@ -14,6 +14,29 @@ type JournalEntry = { idx: number; when: number; tag: string; breakpoints: boole
 
 const migrationEntries = (journal as { entries: JournalEntry[] }).entries;
 
+type BundledMigrationRecord = { idx: number; tag: string; when: number; hash: string };
+
+/**
+ * Resolve every bundled migration to its SQL content hash. The journal is
+ * squashed/renumbered between releases, so positions (`idx`) are not stable
+ * across versions — the content hash recorded in `__drizzle_migrations` is the
+ * only identity that survives a renumber.
+ */
+function resolveBundledMigrationRecords(): BundledMigrationRecord[] {
+  return migrationEntries.map((entry) => {
+    const sqlKey = Object.keys(sqlFiles).find((k) => k.includes(entry.tag));
+    if (!sqlKey) throw new Error(`Missing bundled SQL for migration: ${entry.tag}`);
+    return {
+      idx: entry.idx,
+      tag: entry.tag,
+      when: entry.when,
+      hash: createHash('sha256').update(sqlFiles[sqlKey]).digest('hex'),
+    };
+  });
+}
+
+const bundledMigrationRecords = resolveBundledMigrationRecords();
+
 function quoteIdentifier(identifier: string): string {
   return `"${identifier.split('"').join('""')}"`;
 }
@@ -33,6 +56,18 @@ function getAppliedMigrationCount(connection: BetterSqlite3.Database): number {
     | { count: number }
     | undefined;
   return row?.count ?? 0;
+}
+
+function getAppliedMigrationHashes(connection: BetterSqlite3.Database): Set<string> {
+  const rows = connection.prepare('SELECT hash FROM __drizzle_migrations').all() as Array<{
+    hash: string;
+  }>;
+  return new Set(rows.map((row) => row.hash));
+}
+
+/** @internal exposed for tests */
+export function getBundledMigrationRecords(): BundledMigrationRecord[] {
+  return bundledMigrationRecords;
 }
 
 function tableExists(connection: BetterSqlite3.Database, tableName: string): boolean {
@@ -121,19 +156,26 @@ export function runBundledMigrations(connection: BetterSqlite3.Database): void {
 
   const appliedMigrationCount = getAppliedMigrationCount(connection);
 
+  // When the applied migration count exceeds the bundled journal, the journal
+  // was squashed/renumbered between releases: positions (`idx`) no longer line
+  // up, and skipping by count would silently skip every bundled migration,
+  // leaving the schema stale (e.g. "no such column" at runtime). In that case
+  // fall back to content hashes and run only migrations whose SQL was never
+  // applied before.
+  const historyRenumbered = appliedMigrationCount > bundledMigrationRecords.length;
+  const appliedHashes = historyRenumbered ? getAppliedMigrationHashes(connection) : null;
+
   connection.transaction(() => {
-    for (const entry of migrationEntries) {
-      if (entry.idx < appliedMigrationCount) continue;
+    for (const record of bundledMigrationRecords) {
+      if (record.idx < appliedMigrationCount && !historyRenumbered) continue;
+      if (historyRenumbered && appliedHashes?.has(record.hash)) continue;
 
-      const sqlKey = Object.keys(sqlFiles).find((k) => k.includes(entry.tag));
-      if (!sqlKey) throw new Error(`Missing bundled SQL for migration: ${entry.tag}`);
-
-      const sql = sqlFiles[sqlKey];
-      const hash = createHash('sha256').update(sql).digest('hex');
-
-      if (entry.tag === '0021_polite_unus' && workspaceSchemaPartiallyExists(connection)) {
+      if (record.tag === '0021_polite_unus' && workspaceSchemaPartiallyExists(connection)) {
         ensureWorkspaceSchemaCompatibility(connection);
       } else {
+        const sqlKey = Object.keys(sqlFiles).find((k) => k.includes(record.tag));
+        if (!sqlKey) throw new Error(`Missing bundled SQL for migration: ${record.tag}`);
+        const sql = sqlFiles[sqlKey];
         for (const stmt of sql.split('--> statement-breakpoint')) {
           const trimmed = stmt.trim();
           if (trimmed) connection.exec(trimmed);
@@ -142,7 +184,7 @@ export function runBundledMigrations(connection: BetterSqlite3.Database): void {
 
       connection
         .prepare('INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)')
-        .run(hash, entry.when);
+        .run(record.hash, record.when);
     }
   })();
 
