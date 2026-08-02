@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchSnapshot, uploadInputImage } from '../../apps/mobile/src/api-client';
+import { fetchProfile, fetchSnapshot, uploadInputImage } from '../../apps/mobile/src/api-client';
 import { MOBILE_RELAY_BASE_URL } from './mobile-relay';
 
 const relayConnection = {
@@ -49,6 +49,26 @@ describe('mobile API connectivity diagnostics', () => {
       fetchSnapshot({ baseUrl: 'http://192.168.1.20:3879', token: 'dev-token' })
     ).rejects.toThrow('Check Local Network permission, Wi-Fi');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads the mobile profile through the protected profile endpoint', async () => {
+    const connection = { baseUrl: 'http://127.0.0.1:3879/', token: 'dev-token' };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ generatedAt: '2026-08-02T00:00:00.000Z' }), { status: 200 })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchProfile(connection)).resolves.toMatchObject({
+      generatedAt: '2026-08-02T00:00:00.000Z',
+    });
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:3879/v1/profile', {
+      headers: {
+        Authorization: 'Bearer dev-token',
+        'Content-Type': 'application/json',
+      },
+    });
   });
 
   it('uploads image data in ordered chunks before completing it', async () => {

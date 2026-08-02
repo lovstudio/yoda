@@ -44,6 +44,7 @@ import {
   parseMobileTimestamp,
   sortMobileProjects,
   type MobileDashboardSnapshot,
+  type MobileProfileSnapshot,
   type MobileProjectSortMode,
   type MobileProjectSummary,
   type MobileSessionDetail,
@@ -59,6 +60,7 @@ import {
 import {
   createDemand,
   discardInputAttachment,
+  fetchProfile,
   fetchSessionDetail,
   fetchSnapshot,
   fetchTaskSessions,
@@ -115,7 +117,7 @@ type ConnectDraft = {
 };
 
 type TaskScope = 'all' | 'open' | 'inProgress' | 'review';
-type HomeTab = 'home' | 'tasks' | 'request' | 'projects';
+type HomeTab = 'home' | 'tasks' | 'request' | 'profile';
 type SessionOutputMode = 'rendered' | 'raw';
 
 type ReadableOutputBlock = {
@@ -169,11 +171,11 @@ function homeTabTitle(tab: HomeTab): { eyebrow: string; title: string; subtitle:
         title: 'Start work',
         subtitle: 'Send a requirement to the desktop agent.',
       };
-    case 'projects':
+    case 'profile':
       return {
-        eyebrow: 'Projects',
-        title: 'Project directory',
-        subtitle: 'Open workspaces and local repositories.',
+        eyebrow: '我的',
+        title: '我的工作台',
+        subtitle: '查看账号、用量、工作进度与云端服务。',
       };
     case 'home':
       return {
@@ -522,6 +524,56 @@ function formatTimestamp(value?: string): string {
   });
 }
 
+function formatCompactNumber(value: number): string {
+  return new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(
+    value
+  );
+}
+
+function formatTokenCount(value: number | null): string {
+  return value === null ? '尚无数据' : `${formatCompactNumber(value)} tokens`;
+}
+
+function formatProfileTime(value: string | null): string {
+  if (!value) return '尚未同步';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '尚未同步';
+  return date.toLocaleString('zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function accountStateLabel(state: MobileProfileSnapshot['account']['state']): string {
+  switch (state) {
+    case 'signed-in':
+      return '已登录';
+    case 'session-expired':
+      return '需要重新登录';
+    case 'signed-out':
+      return '未登录';
+  }
+}
+
+function relayStateLabel(
+  status: NonNullable<MobileProfileSnapshot['cloud']['relay']>['status']
+): string {
+  switch (status) {
+    case 'active':
+      return '已启用';
+    case 'trial':
+      return '试用中';
+    case 'expired':
+      return '已到期';
+    case 'revoked':
+      return '已停用';
+    case 'none':
+      return '未开通';
+  }
+}
+
 function projectName(projects: MobileProjectSummary[], projectId: string): string {
   return projects.find((project) => project.id === projectId)?.displayName ?? 'Unknown project';
 }
@@ -639,6 +691,7 @@ export function App() {
     token: '',
   });
   const [snapshot, setSnapshot] = useState<MobileDashboardSnapshot | null>(null);
+  const [profile, setProfile] = useState<MobileProfileSnapshot | null>(null);
   const [homeTab, setHomeTab] = useState<HomeTab>('home');
   const [selectedProjectId, setSelectedProjectId] = useState('all');
   const [taskScope, setTaskScope] = useState<TaskScope>('all');
@@ -648,6 +701,8 @@ export function App() {
   const [prompt, setPrompt] = useState('');
   const [demandImages, setDemandImages] = useState<MobileImageDraft[]>([]);
   const [loading, setLoading] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [demandUploadProgress, setDemandUploadProgress] =
@@ -707,6 +762,7 @@ export function App() {
     setConnectDraft(next);
     setConnection(next);
     setSnapshot(null);
+    setProfile(null);
     setHomeTab('home');
     setSelectedProjectId('all');
     setTaskScope('all');
@@ -770,6 +826,24 @@ export function App() {
     [connection]
   );
 
+  const loadProfile = useCallback(
+    async (quiet = false) => {
+      if (!connection) return;
+      if (!quiet) setProfileLoading(true);
+      setProfileError(null);
+      try {
+        const next = await fetchProfile(connection);
+        setProfile(next);
+        setProfileError(null);
+      } catch (e) {
+        setProfileError(errorMessage(e));
+      } finally {
+        if (!quiet) setProfileLoading(false);
+      }
+    },
+    [connection]
+  );
+
   useEffect(() => {
     if (!connection) return;
     void loadDashboard(false);
@@ -778,6 +852,11 @@ export function App() {
     }, POLL_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [connection, loadDashboard]);
+
+  useEffect(() => {
+    if (homeTab !== 'profile' || profile || profileLoading || profileError) return;
+    void loadProfile(false);
+  }, [homeTab, loadProfile, profile, profileError, profileLoading]);
 
   const visibleProjects = useMemo(() => {
     const projects = snapshot?.projects.filter((project) => !project.isInternal) ?? [];
@@ -863,9 +942,12 @@ export function App() {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadDashboard(false);
+    await Promise.all([
+      loadDashboard(false),
+      homeTab === 'profile' ? loadProfile(false) : Promise.resolve(),
+    ]);
     setRefreshing(false);
-  }, [loadDashboard]);
+  }, [homeTab, loadDashboard, loadProfile]);
 
   const handleSubmitDemand = useCallback(async () => {
     if (!connection || !snapshot || (!prompt.trim() && demandImages.length === 0) || submitting)
@@ -997,6 +1079,7 @@ export function App() {
                 void clearConnection();
                 setConnection(null);
                 setSnapshot(null);
+                setProfile(null);
                 setSelectedTaskId(null);
                 setSelectedSessionId(null);
               }}
@@ -1059,17 +1142,26 @@ export function App() {
                   />
                 ) : null}
 
-                {homeTab === 'projects' ? (
-                  <ProjectDirectory
+                {homeTab === 'profile' ? (
+                  <MyProfileScreen
+                    error={profileError}
+                    loading={profileLoading}
+                    profile={profile}
                     projects={visibleProjects}
-                    selectedProjectId={selectedProjectId}
-                    onSelect={(projectId) => {
+                    snapshot={snapshot}
+                    onOpenProject={(projectId) => {
                       setSelectedProjectId(projectId);
                       setTaskScope('all');
                       setSelectedTaskId(null);
                       setSelectedSessionId(null);
                       setHomeTab('tasks');
                     }}
+                    onOpenTasks={() => {
+                      setSelectedProjectId('all');
+                      setTaskScope('all');
+                      setHomeTab('tasks');
+                    }}
+                    onRetry={() => void loadProfile(false)}
                   />
                 ) : null}
               </>
@@ -1438,64 +1530,256 @@ function TaskScopeControl({
   );
 }
 
-function ProjectDirectory({
+function MyProfileScreen({
+  error,
+  loading,
+  profile,
   projects,
-  selectedProjectId,
-  onSelect,
+  snapshot,
+  onOpenProject,
+  onOpenTasks,
+  onRetry,
 }: {
+  error: string | null;
+  loading: boolean;
+  profile: MobileProfileSnapshot | null;
   projects: MobileProjectSummary[];
-  selectedProjectId: string;
-  onSelect: (projectId: string) => void;
+  snapshot: MobileDashboardSnapshot;
+  onOpenProject: (projectId: string) => void;
+  onOpenTasks: () => void;
+  onRetry: () => void;
+}) {
+  const account = profile?.account;
+  const relay = profile?.cloud.relay;
+  const recentProjects = sortMobileProjects(projects, 'recent').slice(0, 3);
+  const displayName = account?.displayName || 'Yoda 用户';
+  const avatarInitial = displayName.slice(0, 1).toLocaleUpperCase();
+
+  return (
+    <View style={styles.profileScreen}>
+      {error ? <Notice message={error} retrying={loading} tone="error" onRetry={onRetry} /> : null}
+
+      <View style={styles.profileAccountCard}>
+        <View style={styles.profileAccountMain}>
+          <View style={styles.profileAvatar}>
+            {account?.avatarUrl ? (
+              <Image source={{ uri: account.avatarUrl }} style={styles.profileAvatarImage} />
+            ) : (
+              <Text style={styles.profileAvatarText}>{avatarInitial}</Text>
+            )}
+          </View>
+          <View style={styles.profileAccountText}>
+            <Text style={styles.profileAccountName} numberOfLines={1}>
+              {displayName}
+            </Text>
+            <Text style={styles.profileAccountMeta} numberOfLines={1}>
+              {account?.email || '在桌面端登录 LovStudio 以启用云端服务'}
+            </Text>
+          </View>
+        </View>
+        <View
+          style={[
+            styles.profileStatePill,
+            account?.state === 'signed-in' ? styles.profileStatePillActive : null,
+          ]}
+        >
+          <Text
+            style={[
+              styles.profileStateText,
+              account?.state === 'signed-in' ? styles.profileStateTextActive : null,
+            ]}
+          >
+            {account ? accountStateLabel(account.state) : loading ? '正在加载' : '暂不可用'}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>工作概览</Text>
+          <Pressable accessibilityRole="button" onPress={onOpenTasks}>
+            <Text style={styles.sectionAction}>查看任务</Text>
+          </Pressable>
+        </View>
+        <View style={styles.profileMetricsGrid}>
+          <ProfileMetric
+            icon="folder-open-outline"
+            label="项目"
+            value={snapshot.metrics.projectCount}
+          />
+          <ProfileMetric
+            icon="flash-outline"
+            label="进行中"
+            value={snapshot.metrics.inProgressTaskCount}
+          />
+          <ProfileMetric
+            icon="checkmark-done-outline"
+            label="待审阅"
+            value={snapshot.metrics.reviewTaskCount}
+          />
+        </View>
+        <View style={styles.profileProjectList}>
+          {recentProjects.length === 0 ? (
+            <Text style={styles.profileEmptyText}>还没有可查看的项目。</Text>
+          ) : (
+            recentProjects.map((project) => (
+              <Pressable
+                key={project.id}
+                accessibilityLabel={`查看项目 ${project.displayName}`}
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.profileProjectRow,
+                  pressed ? styles.buttonPressed : null,
+                ]}
+                onPress={() => onOpenProject(project.id)}
+              >
+                <Ionicons
+                  color={project.isOpen ? COLORS.green : COLORS.muted}
+                  name={project.isOpen ? 'desktop-outline' : 'folder-outline'}
+                  size={18}
+                />
+                <Text style={styles.profileProjectName} numberOfLines={1}>
+                  {project.displayName}
+                </Text>
+                <Text style={styles.profileProjectState}>
+                  {project.isOpen ? '已打开' : '未打开'}
+                </Text>
+                <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={16} />
+              </Pressable>
+            ))
+          )}
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>本地用量</Text>
+          <Text style={styles.sectionMeta}>来自此桌面的会话记录</Text>
+        </View>
+        <View style={styles.profileUsageCard}>
+          <View style={styles.profileUsagePrimary}>
+            <Text style={styles.profileUsageLabel}>累计处理</Text>
+            <Text style={styles.profileUsageValue}>
+              {formatTokenCount(profile?.usage.totalTokens ?? null)}
+            </Text>
+          </View>
+          <View style={styles.profileUsageDivider} />
+          <View style={styles.profileUsageStats}>
+            <ProfileDataCell
+              label="会话"
+              value={profile ? String(profile.usage.sessionCount) : '—'}
+            />
+            <ProfileDataCell
+              label="已完成任务"
+              value={profile ? String(profile.usage.tasksArchived) : '—'}
+            />
+            <ProfileDataCell
+              label="代码变更"
+              value={
+                profile
+                  ? `+${formatCompactNumber(profile.usage.linesAdded)} / -${formatCompactNumber(profile.usage.linesDeleted)}`
+                  : '—'
+              }
+            />
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>云端服务</Text>
+          <Text style={styles.sectionMeta}>桌面端统一管理</Text>
+        </View>
+        <View style={styles.profileCloudCard}>
+          <CloudStatusRow
+            icon="radio-outline"
+            label="Yoda Relay"
+            value={relay ? relayStateLabel(relay.status) : '登录后可用'}
+            detail={
+              relay
+                ? `${relay.onlineDeviceCount}/${relay.deviceCount} 台设备在线${relay.accessEndsAt ? ` · 有效至 ${formatProfileTime(relay.accessEndsAt)}` : ''}`
+                : '让手机在外网也能连接这台桌面设备'
+            }
+            active={relay?.status === 'active' || relay?.status === 'trial'}
+          />
+          <View style={styles.profileCloudDivider} />
+          <CloudStatusRow
+            icon="cloud-done-outline"
+            label="设置同步"
+            value={
+              profile?.cloud.settings.signedIn
+                ? profile.cloud.settings.autoSyncEnabled
+                  ? '自动同步已开启'
+                  : '自动同步已关闭'
+                : '登录后可用'
+            }
+            detail={`最近同步：${formatProfileTime(profile?.cloud.settings.lastSyncedAt ?? null)}`}
+            active={Boolean(
+              profile?.cloud.settings.signedIn && profile.cloud.settings.autoSyncEnabled
+            )}
+          />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function ProfileMetric({
+  icon,
+  label,
+  value,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: number;
 }) {
   return (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Projects</Text>
-        <Text style={styles.sectionMeta}>{projects.length}</Text>
+    <View style={styles.profileMetric}>
+      <Ionicons color={COLORS.muted} name={icon} size={17} />
+      <Text style={styles.profileMetricValue}>{value}</Text>
+      <Text style={styles.profileMetricLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function ProfileDataCell({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.profileDataCell}>
+      <Text style={styles.profileDataValue} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={styles.profileDataLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function CloudStatusRow({
+  active,
+  detail,
+  icon,
+  label,
+  value,
+}: {
+  active: boolean;
+  detail: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.profileCloudRow}>
+      <View style={[styles.profileCloudIcon, active ? styles.profileCloudIconActive : null]}>
+        <Ionicons color={active ? COLORS.green : COLORS.muted} name={icon} size={18} />
       </View>
-      {projects.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons color={COLORS.muted} name="folder-open-outline" size={22} />
-          <Text style={styles.emptyText}>No projects available.</Text>
-        </View>
-      ) : (
-        projects.map((project) => (
-          <Pressable
-            key={project.id}
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.projectDirectoryRow,
-              selectedProjectId === project.id ? styles.projectDirectoryRowActive : null,
-              pressed ? styles.buttonPressed : null,
-            ]}
-            onPress={() => onSelect(project.id)}
-          >
-            <View style={styles.projectDirectoryIcon}>
-              <Ionicons
-                color={project.isOpen ? COLORS.green : COLORS.muted}
-                name={project.isOpen ? 'desktop-outline' : 'folder-outline'}
-                size={18}
-              />
-            </View>
-            <View style={styles.projectDirectoryBody}>
-              <Text style={styles.projectDirectoryName} numberOfLines={1}>
-                {project.displayName}
-              </Text>
-              <Text style={styles.projectDirectoryPath} numberOfLines={1}>
-                {project.path}
-              </Text>
-            </View>
-            <Text
-              style={[
-                styles.projectDirectoryStatus,
-                project.isOpen ? styles.projectDirectoryStatusOpen : null,
-              ]}
-            >
-              {project.isOpen ? 'Open' : 'Idle'}
-            </Text>
-          </Pressable>
-        ))
-      )}
+      <View style={styles.profileCloudBody}>
+        <Text style={styles.profileCloudLabel}>{label}</Text>
+        <Text style={styles.profileCloudDetail} numberOfLines={2}>
+          {detail}
+        </Text>
+      </View>
+      <Text style={[styles.profileCloudValue, active ? styles.profileCloudValueActive : null]}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -1515,7 +1799,7 @@ function HomeTabBar({
     { icon: 'grid-outline', label: 'Home', value: 'home' },
     { icon: 'checkmark-circle-outline', label: 'Tasks', value: 'tasks' },
     { icon: 'add-circle-outline', label: 'New', value: 'request' },
-    { icon: 'folder-open-outline', label: 'Projects', value: 'projects' },
+    { icon: 'person-circle-outline', label: '我的', value: 'profile' },
   ];
 
   return (
@@ -4138,6 +4422,235 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 13,
     fontWeight: '600',
+  },
+  profileScreen: {
+    gap: 18,
+  },
+  profileAccountCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: COLORS.charcoal,
+    borderRadius: 8,
+    backgroundColor: COLORS.charcoal,
+    padding: 15,
+  },
+  profileAccountMain: {
+    minWidth: 0,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+  },
+  profileAvatar: {
+    width: 46,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderRadius: 23,
+    backgroundColor: '#E7E4DC',
+  },
+  profileAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  profileAvatarText: {
+    color: COLORS.charcoal,
+    fontSize: 19,
+    fontWeight: '800',
+  },
+  profileAccountText: {
+    minWidth: 0,
+    flex: 1,
+    gap: 3,
+  },
+  profileAccountName: {
+    color: COLORS.surface,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  profileAccountMeta: {
+    color: '#D8D4CB',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  profileStatePill: {
+    borderRadius: 12,
+    backgroundColor: '#555A60',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  profileStatePillActive: {
+    backgroundColor: '#EAF7F2',
+  },
+  profileStateText: {
+    color: '#E7E4DC',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  profileStateTextActive: {
+    color: COLORS.green,
+  },
+  profileMetricsGrid: {
+    flexDirection: 'row',
+    gap: 9,
+  },
+  profileMetric: {
+    minWidth: 0,
+    flex: 1,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    padding: 11,
+  },
+  profileMetricValue: {
+    color: COLORS.ink,
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  profileMetricLabel: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  profileProjectList: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+  },
+  profileProjectRow: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.faint,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  profileProjectName: {
+    minWidth: 0,
+    flex: 1,
+    color: COLORS.ink,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  profileProjectState: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  profileEmptyText: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '600',
+    padding: 13,
+  },
+  profileUsageCard: {
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    padding: 14,
+  },
+  profileUsagePrimary: {
+    gap: 3,
+  },
+  profileUsageLabel: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  profileUsageValue: {
+    color: COLORS.ink,
+    fontSize: 27,
+    fontWeight: '800',
+  },
+  profileUsageDivider: {
+    height: 1,
+    marginVertical: 13,
+    backgroundColor: COLORS.faint,
+  },
+  profileUsageStats: {
+    flexDirection: 'row',
+    gap: 9,
+  },
+  profileDataCell: {
+    minWidth: 0,
+    flex: 1,
+    gap: 3,
+  },
+  profileDataValue: {
+    color: COLORS.ink,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  profileDataLabel: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  profileCloudCard: {
+    gap: 12,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    padding: 13,
+  },
+  profileCloudRow: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  profileCloudIcon: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#EFEEE7',
+  },
+  profileCloudIconActive: {
+    backgroundColor: '#EAF7F2',
+  },
+  profileCloudBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+  },
+  profileCloudLabel: {
+    color: COLORS.ink,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  profileCloudDetail: {
+    color: COLORS.muted,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
+  },
+  profileCloudValue: {
+    maxWidth: 100,
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  profileCloudValueActive: {
+    color: COLORS.green,
+  },
+  profileCloudDivider: {
+    height: 1,
+    backgroundColor: COLORS.faint,
   },
   section: {
     gap: 12,

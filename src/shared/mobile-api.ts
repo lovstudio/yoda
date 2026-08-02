@@ -351,6 +351,44 @@ export type MobileDashboardSnapshot = {
   metrics: MobileDashboardMetrics;
 };
 
+/**
+ * The mobile-only account overview. It intentionally contains display data
+ * and aggregate counters only; credentials and desktop settings never leave
+ * the desktop gateway.
+ */
+export type MobileProfileSnapshot = {
+  generatedAt: string;
+  account: {
+    state: 'signed-in' | 'signed-out' | 'session-expired';
+    displayName: string | null;
+    email: string | null;
+    avatarUrl: string | null;
+  };
+  usage: {
+    totalTokens: number | null;
+    sessionCount: number;
+    tasksTotal: number;
+    tasksArchived: number;
+    linesAdded: number;
+    linesDeleted: number;
+  };
+  cloud: {
+    relay: {
+      status: 'none' | 'trial' | 'active' | 'expired' | 'revoked';
+      configured: boolean;
+      accessEndsAt: string | null;
+      deviceCount: number;
+      onlineDeviceCount: number;
+    } | null;
+    settings: {
+      signedIn: boolean;
+      autoSyncEnabled: boolean;
+      lastSyncedAt: string | null;
+      cloudUpdatedAt: string | null;
+    };
+  };
+};
+
 export type MobileCreateDemandRequest = {
   projectId?: string | null;
   prompt: string;

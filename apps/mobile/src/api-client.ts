@@ -9,6 +9,7 @@ import {
   type MobileInputAttachmentCompleteResponse,
   type MobileInputAttachmentCreateResponse,
   type MobileInputAttachmentDiscardResponse,
+  type MobileProfileSnapshot,
   type MobileSessionDetail,
   type MobileSessionInputRequest,
   type MobileSessionInputResponse,
@@ -157,6 +158,10 @@ async function request<T>(
 
 export function fetchSnapshot(connection: MobileConnection): Promise<MobileDashboardSnapshot> {
   return request<MobileDashboardSnapshot>(connection, '/v1/snapshot');
+}
+
+export function fetchProfile(connection: MobileConnection): Promise<MobileProfileSnapshot> {
+  return request<MobileProfileSnapshot>(connection, '/v1/profile');
 }
 
 export function fetchTaskSessions(
