@@ -99,6 +99,8 @@ type PendingAcceptanceTask = {
   updatedAt: string;
 };
 
+type AgentPanelTab = 'all' | 'working' | 'needs-reply' | 'pending-acceptance';
+
 const RUNTIME_BAR_ACTION_CLASS =
   'flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border';
 const RUNTIME_BAR_ACTION_LABEL_CLASS = 'hidden @min-[1441px]:inline';
@@ -119,6 +121,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const { navigate } = useNavigate();
   const showDoctorModal = useShowModal('doctorModal');
   const showConfirmActionModal = useShowModal('confirmActionModal');
+  const showArchiveWithNote = useShowModal('archiveTaskWithNoteModal');
   const showResourceDetailsModal = useShowModal('workspaceResourceDetailsModal');
   const { value: interfaceSettings, update: updateInterfaceSettings } =
     useAppSettingsKey('interface');
@@ -135,6 +138,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     | null
   >(null);
   const [isAgentPopoverOpen, setIsAgentPopoverOpen] = useState(false);
+  const [agentPanelTab, setAgentPanelTab] = useState<AgentPanelTab>('all');
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
   const [isConfigPopoverOpen, setIsConfigPopoverOpen] = useState(false);
   const [isSkillPopoverOpen, setIsSkillPopoverOpen] = useState(false);
@@ -421,7 +425,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const attentionAgentCount = agentSessions.filter(
     (session) => session.status === 'awaiting-input'
   ).length;
-  const tmuxSessionCount = agentSessions.filter((session) => session.tmuxBacked).length;
   const pendingAcceptanceTasks: PendingAcceptanceTask[] = Array.from(
     appState.projects.projects.values()
   ).flatMap((project) => {
@@ -443,6 +446,12 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     });
   });
   pendingAcceptanceTasks.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+  const displayedAgentSessions = agentSessions.filter((session) => {
+    if (agentPanelTab === 'all') return true;
+    if (agentPanelTab === 'working') return session.status === 'working';
+    if (agentPanelTab === 'needs-reply') return session.status === 'awaiting-input';
+    return false;
+  });
   const agentTriggerText =
     attentionAgentCount > 0
       ? t('workspaceRuntime.agents.triggerAttention', {
@@ -673,8 +682,16 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     openTaskTarget({ projectId: task.projectId, taskId: task.taskId }, navigate);
   };
 
-  const removeFromPendingAcceptance = (task: PendingAcceptanceTask) => {
+  const restorePendingAcceptanceTask = (task: PendingAcceptanceTask) => {
     void getTaskStore(task.projectId, task.taskId)?.setNeedsReview(false);
+  };
+
+  const archivePendingAcceptanceTask = (task: PendingAcceptanceTask) => {
+    showArchiveWithNote({
+      projectId: task.projectId,
+      taskId: task.taskId,
+      taskName: task.taskName,
+    });
   };
 
   const openResourceDetails = (kind: WorkspaceResourceDetailKind) => {
@@ -1119,120 +1136,137 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               {t('workspaceRuntime.agents.description')}
             </div>
           </div>
-          <div className="grid grid-cols-5 gap-px bg-border">
+          <div className="grid grid-cols-4 gap-px bg-border">
             <WorkspaceResourceMetric
               label={t('workspaceRuntime.agents.sessions')}
               value={String(agentSessionCount)}
+              ariaLabel={t('workspaceRuntime.agents.sessions')}
+              controls="agent-panel-list"
+              expanded={agentPanelTab === 'all'}
+              selected={agentPanelTab === 'all'}
+              onClick={() => setAgentPanelTab('all')}
             />
             <WorkspaceResourceMetric
               label={t('workspaceRuntime.agents.working')}
               value={String(workingAgentCount)}
+              ariaLabel={t('workspaceRuntime.agents.working')}
+              controls="agent-panel-list"
+              expanded={agentPanelTab === 'working'}
+              selected={agentPanelTab === 'working'}
+              onClick={() => setAgentPanelTab('working')}
             />
             <WorkspaceResourceMetric
               label={t('workspaceRuntime.agents.attention')}
               value={String(attentionAgentCount)}
-            />
-            <WorkspaceResourceMetric
-              label={t('workspaceRuntime.agents.tmux')}
-              value={String(tmuxSessionCount)}
+              ariaLabel={t('workspaceRuntime.agents.attention')}
+              controls="agent-panel-list"
+              expanded={agentPanelTab === 'needs-reply'}
+              selected={agentPanelTab === 'needs-reply'}
+              onClick={() => setAgentPanelTab('needs-reply')}
             />
             <WorkspaceResourceMetric
               label={t('workspaceRuntime.agents.pendingAcceptance')}
               value={String(pendingAcceptanceTasks.length)}
+              ariaLabel={t('workspaceRuntime.agents.pendingAcceptance')}
+              controls="agent-panel-list"
+              expanded={agentPanelTab === 'pending-acceptance'}
+              selected={agentPanelTab === 'pending-acceptance'}
+              onClick={() => setAgentPanelTab('pending-acceptance')}
             />
           </div>
-          {agentSessions.length > 0 ? (
-            <div className="max-h-80 overflow-y-auto p-2">
-              {agentSessions.map((session) => {
-                const title =
-                  (session.runtimeId
-                    ? formatConversationTitleForDisplay(
-                        session.runtimeId,
-                        session.title ?? ''
-                      ).trim()
-                    : session.title?.trim()) ||
-                  t('workspaceRuntime.agents.sessionFallback', {
-                    id: session.conversationId.slice(0, 8),
-                  });
-                const taskTitle =
-                  session.taskTitle?.trim() ||
-                  t('workspaceRuntime.agents.taskFallback', {
-                    id: session.taskId.slice(0, 8),
-                  });
-                const taskContext = getDistinctAgentTaskTitle(title, taskTitle);
-                const config = session.runtimeId ? agentConfig[session.runtimeId] : undefined;
-                return (
-                  <button
-                    key={agentSessionKey(session)}
-                    type="button"
-                    aria-label={t('workspaceRuntime.agents.openSession', { title })}
-                    className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-                    onClick={() => openAgentSession(session)}
-                  >
-                    <span className="flex size-6 shrink-0 items-center justify-center">
-                      {config ? (
-                        <AgentLogo
-                          logo={config.logo}
-                          alt={config.alt}
-                          isSvg={config.isSvg}
-                          invertInDark={config.invertInDark}
-                          className="size-4"
-                        />
-                      ) : (
-                        <Bot aria-hidden className="size-4" />
-                      )}
-                    </span>
-                    <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] grid-rows-2 items-center gap-x-2 gap-y-0.5">
-                      <span className="truncate text-sm leading-5 text-foreground" title={title}>
-                        {title}
-                      </span>
-                      <span className="font-mono text-[10px] leading-4 tabular-nums text-foreground-passive">
-                        {formatBytes(session.memoryBytes)}
-                      </span>
-                      <span className="col-span-2 flex min-w-0 items-center gap-1.5 text-[10px] leading-4">
-                        {taskContext ? (
-                          <span
-                            className="min-w-0 flex-1 truncate text-[11px] text-foreground-passive"
-                            title={taskContext}
-                          >
-                            {taskContext}
-                          </span>
-                        ) : null}
-                        <span className="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-sm bg-background-2 px-1 text-foreground-muted">
-                          <AgentStatusIndicator
-                            status={session.status}
-                            disableTooltip
-                            boxClassName="size-3.5"
+          {agentPanelTab !== 'pending-acceptance' ? (
+            displayedAgentSessions.length > 0 ? (
+              <div id="agent-panel-list" className="max-h-80 overflow-y-auto p-2">
+                {displayedAgentSessions.map((session) => {
+                  const title =
+                    (session.runtimeId
+                      ? formatConversationTitleForDisplay(
+                          session.runtimeId,
+                          session.title ?? ''
+                        ).trim()
+                      : session.title?.trim()) ||
+                    t('workspaceRuntime.agents.sessionFallback', {
+                      id: session.conversationId.slice(0, 8),
+                    });
+                  const taskTitle =
+                    session.taskTitle?.trim() ||
+                    t('workspaceRuntime.agents.taskFallback', {
+                      id: session.taskId.slice(0, 8),
+                    });
+                  const taskContext = getDistinctAgentTaskTitle(title, taskTitle);
+                  const config = session.runtimeId ? agentConfig[session.runtimeId] : undefined;
+                  return (
+                    <button
+                      key={agentSessionKey(session)}
+                      type="button"
+                      aria-label={t('workspaceRuntime.agents.openSession', { title })}
+                      className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                      onClick={() => openAgentSession(session)}
+                    >
+                      <span className="flex size-6 shrink-0 items-center justify-center">
+                        {config ? (
+                          <AgentLogo
+                            logo={config.logo}
+                            alt={config.alt}
+                            isSvg={config.isSvg}
+                            invertInDark={config.invertInDark}
+                            className="size-4"
                           />
-                          {t(`agentStatus.${session.status}`)}
+                        ) : (
+                          <Bot aria-hidden className="size-4" />
+                        )}
+                      </span>
+                      <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] grid-rows-2 items-center gap-x-2 gap-y-0.5">
+                        <span className="truncate text-sm leading-5 text-foreground" title={title}>
+                          {title}
                         </span>
-                        <span
-                          className={cn(
-                            'inline-flex h-4 shrink-0 items-center gap-0.5 rounded-sm bg-background-2 px-1',
-                            session.tmuxBacked ? 'text-foreground-muted' : 'text-foreground-passive'
-                          )}
-                        >
-                          <Boxes aria-hidden className="size-2.5" />
-                          {session.tmuxBacked
-                            ? t('workspaceRuntime.agents.tmuxRunning')
-                            : t('workspaceRuntime.agents.noTmux')}
+                        <span className="font-mono text-[10px] leading-4 tabular-nums text-foreground-passive">
+                          {formatBytes(session.memoryBytes)}
                         </span>
-                        <span className="ml-auto shrink-0 font-mono tabular-nums text-foreground-passive">
-                          {Math.round(session.cpuPercent)}% CPU · PID {session.pid ?? '—'}
+                        <span className="col-span-2 flex min-w-0 items-center gap-1.5 text-[10px] leading-4">
+                          {taskContext ? (
+                            <span
+                              className="min-w-0 flex-1 truncate text-[11px] text-foreground-passive"
+                              title={taskContext}
+                            >
+                              {taskContext}
+                            </span>
+                          ) : null}
+                          <span className="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-sm bg-background-2 px-1 text-foreground-muted">
+                            <AgentStatusIndicator
+                              status={session.status}
+                              disableTooltip
+                              boxClassName="size-3.5"
+                            />
+                            {t(`agentStatus.${session.status}`)}
+                          </span>
+                          {session.tmuxBacked ? (
+                            <span title={t('workspaceRuntime.agents.tmuxRunning')}>
+                              <Boxes
+                                aria-label={t('workspaceRuntime.agents.tmuxRunning')}
+                                className="size-3 shrink-0 text-foreground-passive"
+                              />
+                            </span>
+                          ) : null}
+                          <span className="ml-auto shrink-0 font-mono tabular-nums text-foreground-passive">
+                            {Math.round(session.cpuPercent)}% CPU · PID {session.pid ?? '—'}
+                          </span>
                         </span>
                       </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="px-3 py-6 text-center text-xs text-foreground-passive">
-              {t('workspaceRuntime.agents.empty')}
-            </div>
-          )}
-          {pendingAcceptanceTasks.length > 0 ? (
-            <div className="border-t border-border p-2">
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div
+                id="agent-panel-list"
+                className="px-3 py-6 text-center text-xs text-foreground-passive"
+              >
+                {t('workspaceRuntime.agents.empty')}
+              </div>
+            )
+          ) : pendingAcceptanceTasks.length > 0 ? (
+            <div id="agent-panel-list" className="p-2">
               <div className="px-1 py-1.5">
                 <div className="text-sm font-medium">
                   {t('workspaceRuntime.agents.pendingAcceptanceQueue')}
@@ -1272,15 +1306,30 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                       variant="ghost"
                       size="sm"
                       className="shrink-0"
-                      onClick={() => removeFromPendingAcceptance(task)}
+                      onClick={() => restorePendingAcceptanceTask(task)}
                     >
-                      {t('workspaceRuntime.agents.removeFromPendingAcceptance')}
+                      {t('workspaceRuntime.agents.restorePendingAcceptance')}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => archivePendingAcceptanceTask(task)}
+                    >
+                      {t('workspaceRuntime.agents.archivePendingAcceptance')}
                     </Button>
                   </div>
                 ))}
               </div>
             </div>
-          ) : null}
+          ) : (
+            <div
+              id="agent-panel-list"
+              className="px-3 py-6 text-center text-xs text-foreground-passive"
+            >
+              {t('workspaceRuntime.agents.pendingAcceptanceEmpty')}
+            </div>
+          )}
         </PopoverContent>
       </Popover>
       <Popover open={isResourcePopoverOpen} onOpenChange={setIsResourcePopoverOpen}>

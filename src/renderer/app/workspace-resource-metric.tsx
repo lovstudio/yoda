@@ -8,6 +8,7 @@ type WorkspaceResourceMetricProps = {
   ariaLabel?: string;
   controls?: string;
   expanded?: boolean;
+  selected?: boolean;
   opensDialog?: boolean;
   onClick?: () => void;
 };
@@ -19,6 +20,7 @@ export function WorkspaceResourceMetric({
   ariaLabel,
   controls,
   expanded,
+  selected = false,
   opensDialog,
   onClick,
 }: WorkspaceResourceMetricProps) {
@@ -48,7 +50,10 @@ export function WorkspaceResourceMetric({
       aria-haspopup={opensDialog ? 'dialog' : undefined}
       aria-label={ariaLabel}
       title={title}
-      className="bg-background p-2.5 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+      className={cn(
+        'bg-background p-2.5 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring',
+        selected && 'bg-background-2'
+      )}
       onClick={onClick}
     >
       {content}

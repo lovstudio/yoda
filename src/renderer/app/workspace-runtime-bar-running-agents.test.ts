@@ -14,7 +14,7 @@ describe('workspace agent sessions', () => {
 
   it('lists every live session in a dedicated agent module and opens its target', () => {
     expect(source).toContain("t('workspaceRuntime.agents.title')");
-    expect(source).toContain('agentSessions.map((session)');
+    expect(source).toContain('displayedAgentSessions.map((session)');
     expect(source).toContain('setIsAgentPopoverOpen(false)');
     expect(source).toMatch(
       /openTaskTarget\(\s*\{\s*projectId: session\.projectId,\s*taskId: session\.taskId,\s*conversationId: session\.conversationId,\s*\},\s*navigate\s*\)/
@@ -26,10 +26,27 @@ describe('workspace agent sessions', () => {
     expect(source).toContain('t(`agentStatus.${session.status}`)');
     expect(source).toContain('formatBytes(session.memoryBytes)');
     expect(source).toContain('Math.round(session.cpuPercent)');
+    expect(source).not.toContain('const tmuxSessionCount');
+  });
+
+  it('uses metrics as tabs so the session and acceptance lists never render together', () => {
+    expect(source).toContain(
+      "type AgentPanelTab = 'all' | 'working' | 'needs-reply' | 'pending-acceptance'"
+    );
+    expect(source).toContain('const displayedAgentSessions = agentSessions.filter');
+    expect(source).toContain("agentPanelTab !== 'pending-acceptance'");
+    expect(source).toContain('displayedAgentSessions.map((session)');
+    expect(source).toContain('pendingAcceptanceTasks.map((task)');
+  });
+
+  it('keeps restore and archive actions with each pending-acceptance task', () => {
+    expect(source).toContain('restorePendingAcceptanceTask(task)');
+    expect(source).toContain('archivePendingAcceptanceTask(task)');
+    expect(source).toContain('showArchiveWithNote({');
   });
 
   it('keeps every session compact and removes repeated task context', () => {
-    const sessionListStart = source.indexOf('agentSessions.map((session)');
+    const sessionListStart = source.indexOf('displayedAgentSessions.map((session)');
     const sessionListEnd = source.indexOf("t('workspaceRuntime.agents.empty')", sessionListStart);
     const sessionList = source.slice(sessionListStart, sessionListEnd);
 
