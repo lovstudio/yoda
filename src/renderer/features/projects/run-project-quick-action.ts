@@ -6,7 +6,9 @@ import type { MountedProject } from '@renderer/features/projects/stores/project'
 import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 import { runProjectCommand } from './run-project-command';
 
-export type ProjectQuickActionRunResult = { kind: 'command' } | { kind: 'skill'; taskId: string };
+export type ProjectQuickActionRunResult =
+  | { kind: 'command'; terminalId: string }
+  | { kind: 'skill'; taskId: string };
 
 /**
  * The single execution boundary for a project quick action.
@@ -32,8 +34,13 @@ export async function runProjectQuickAction(args: {
     onTaskCreated,
   } = args;
   if (action.kind === 'command') {
-    await workspaceTerminalStore.runCommand(project.data, action.command, action.label);
-    return { kind: 'command' };
+    const terminalId = await workspaceTerminalStore.runCommand(
+      project.data,
+      action.command,
+      action.label,
+      action.id
+    );
+    return { kind: 'command', terminalId };
   }
 
   const taskId = await runProjectCommand({

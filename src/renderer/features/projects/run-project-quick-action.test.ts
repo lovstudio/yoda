@@ -33,7 +33,7 @@ const shellAction: QuickAction = {
 describe('runProjectQuickAction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.runCommand.mockResolvedValue(undefined);
+    mocks.runCommand.mockResolvedValue('terminal-1');
   });
 
   it('runs a shell action in the project terminal without creating or resolving a task', async () => {
@@ -45,12 +45,13 @@ describe('runProjectQuickAction', () => {
         action: shellAction,
         defaultBranch,
       })
-    ).resolves.toEqual({ kind: 'command' });
+    ).resolves.toEqual({ kind: 'command', terminalId: 'terminal-1' });
 
     expect(mocks.runCommand).toHaveBeenCalledWith(
       localProject.data,
       'pnpm run dev',
-      'Start locally'
+      'Start locally',
+      'start'
     );
     expect(mocks.createTask).not.toHaveBeenCalled();
     expect(mocks.runProjectCommand).not.toHaveBeenCalled();
@@ -63,11 +64,12 @@ describe('runProjectQuickAction', () => {
 
     await expect(
       runProjectQuickAction({ project: remoteProject, action: shellAction })
-    ).resolves.toEqual({ kind: 'command' });
+    ).resolves.toEqual({ kind: 'command', terminalId: 'terminal-1' });
     expect(mocks.runCommand).toHaveBeenCalledWith(
       remoteProject.data,
       'pnpm run dev',
-      'Start locally'
+      'Start locally',
+      'start'
     );
   });
 

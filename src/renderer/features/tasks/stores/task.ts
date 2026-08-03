@@ -41,6 +41,7 @@ export type UnregisteredTaskData = {
   setupError?: string;
   setupRequiresBranchName?: boolean;
   sidebarWorkspaceId?: string;
+  quickActionId?: string;
 };
 
 export class ProvisionedTask {

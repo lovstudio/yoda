@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { createScriptTerminalId } from './terminals';
+import { createScriptTerminalId, quickActionTerminalId } from './terminals';
+
+describe('quickActionTerminalId', () => {
+  it('keeps one bounded terminal identity per project action', () => {
+    const first = quickActionTerminalId('project-1', 'start');
+
+    expect(first).toBe(quickActionTerminalId('project-1', 'start'));
+    expect(first).not.toBe(quickActionTerminalId('project-1', 'test'));
+    expect(first).not.toBe(quickActionTerminalId('project-2', 'start'));
+    expect(first.length).toBeLessThanOrEqual(200);
+  });
+});
 
 describe('createScriptTerminalId', () => {
   it('is deterministic for the same project/scope/script tuple', async () => {

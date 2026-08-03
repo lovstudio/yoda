@@ -14,6 +14,10 @@ import { buildProjectDeepLink } from '@shared/deep-links';
 import type { QuickAction } from '@shared/project-settings';
 import { ensureUniqueTaskSlug } from '@shared/task-name';
 import { openNewTask, resolveNewTaskOpenMode } from '@renderer/app/open-new-task';
+import {
+  getRunningProjectQuickActionTarget,
+  openProjectQuickActionTarget,
+} from '@renderer/features/projects/project-quick-action-target';
 import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import {
   isUnregisteredProject,
@@ -43,6 +47,7 @@ import {
 } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
+import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
@@ -118,6 +123,14 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
 
   const { value: homeDraft } = useAppSettingsKey('homeDraft');
   const quickActions = settingsStore?.settings?.quickActions ?? [];
+  const quickActionTargets = new Map(
+    mountedProject
+      ? quickActions.flatMap((action) => {
+          const target = getRunningProjectQuickActionTarget(mountedProject, action);
+          return target ? [[action.id, target] as const] : [];
+        })
+      : []
+  );
   const expressMode = homeDraft?.expressMode ?? false;
   const expressConnectionId =
     mountedProject?.data?.type === 'ssh' ? mountedProject.data.connectionId : undefined;
@@ -147,7 +160,11 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   const prefetchProjectMenuData = useCallback(() => {
     prefetchRepository();
     void settingsStore?.pageData.load();
-  }, [prefetchRepository, settingsStore]);
+    const mounted = asMounted(getProjectStore(projectId));
+    if (mounted) {
+      void workspaceTerminalStore.prefetchProjectTerminals(mounted.data).catch(() => {});
+    }
+  }, [prefetchRepository, projectId, settingsStore]);
   const projectMenuDataIntent = useSidebarHoverIntent(prefetchProjectMenuData);
 
   const handleRunQuickAction = useCallback(
@@ -183,6 +200,37 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
       }
     },
     [expressProviderId, navigate, projectId, t]
+  );
+
+  const handleNavigateQuickAction = useCallback(
+    (action: QuickAction) => {
+      void (async () => {
+        const mounted = asMounted(getProjectStore(projectId));
+        if (!mounted) return;
+        const target = getRunningProjectQuickActionTarget(mounted, action);
+        if (
+          target &&
+          (await openProjectQuickActionTarget(mounted, target, (taskId) => {
+            navigate('task', { projectId, taskId });
+          }))
+        ) {
+          return;
+        }
+        await handleRunQuickAction(action);
+      })().catch((error) => {
+        log.warn('sidebar quick action navigation failed', {
+          projectId,
+          actionId: action.id,
+          error: String(error),
+        });
+        toast({
+          title: t('sidebar.captureAutomation.runFailed'),
+          description: error instanceof Error ? error.message : String(error),
+          variant: 'destructive',
+        });
+      });
+    },
+    [handleRunQuickAction, navigate, projectId, t]
   );
 
   const openTaskComposer = useCallback(async () => {
@@ -361,12 +409,17 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     onManageQuickActions:
       project.state === 'unregistered' ? undefined : () => showManageQuickActions({ projectId }),
     quickActions,
+    isQuickActionRunning: (action: QuickAction) => quickActionTargets.has(action.id),
     canRunQuickAction: (action: QuickAction) =>
       action.kind === 'command' || Boolean(expressProviderId),
     onRunQuickAction:
       project.state === 'mounted' &&
       (expressProviderId || quickActions.some((action) => action.kind === 'command'))
         ? (action: QuickAction) => void handleRunQuickAction(action)
+        : undefined,
+    onNavigateQuickAction:
+      project.state === 'mounted'
+        ? (action: QuickAction) => handleNavigateQuickAction(action)
         : undefined,
     onMenuOpen: projectMenuDataIntent.runNow,
     onRename: project.state === 'unregistered' ? undefined : () => showRenameProject({ projectId }),

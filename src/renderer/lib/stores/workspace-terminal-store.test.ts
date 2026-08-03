@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   projectTerminalScopeId,
+  quickActionTerminalId,
   type CreateTerminalParams,
   type Terminal,
 } from '@shared/terminals';
@@ -111,6 +112,52 @@ describe('WorkspaceTerminalStore', () => {
     expect(store.manager?.taskId).toBe('local:project-1:project-view');
     expect(store.tabs?.activeTabId).toBe(terminalId);
     expect(mocks.createWorkspaceTerminal).toHaveBeenCalledTimes(1);
+  });
+
+  it('tracks a running quick action and navigates back to its existing Terminal', async () => {
+    const store = new WorkspaceTerminalStore();
+    const project = { id: 'project-1', type: 'local', path: '/repo' } as const;
+    const terminalId = quickActionTerminalId(project.id, 'start');
+
+    await expect(
+      store.runCommand(project as never, 'pnpm run dev', 'Start locally', 'start')
+    ).resolves.toBe(terminalId);
+
+    expect(store.isQuickActionRunning(project as never, 'start')).toBe(true);
+    expect(mocks.createWorkspaceTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({ id: terminalId })
+    );
+
+    store.close();
+    await expect(store.openQuickActionTerminal(project as never, 'start')).resolves.toBe(true);
+    expect(store.isOpen).toBe(true);
+    expect(store.tabs?.activeTabId).toBe(terminalId);
+
+    await store.runCommand(project as never, 'pnpm run dev', 'Start locally', 'start');
+    expect(mocks.createWorkspaceTerminal).toHaveBeenCalledTimes(1);
+    expect(mocks.sendInput).toHaveBeenCalledTimes(1);
+
+    await store.manager?.deleteTerminal(terminalId);
+    expect(store.isQuickActionRunning(project as never, 'start')).toBe(false);
+  });
+
+  it('discovers persisted quick action Terminals before opening the drawer', async () => {
+    const store = new WorkspaceTerminalStore();
+    const project = { id: 'project-1', type: 'local', path: '/repo' } as const;
+    const terminal: Terminal = {
+      id: quickActionTerminalId(project.id, 'start'),
+      projectId: project.id,
+      taskId: projectTerminalScopeId(project.type, project.id),
+      name: 'Start locally',
+    };
+    mocks.getWorkspaceTerminals.mockResolvedValue([terminal]);
+
+    await store.prefetchProjectTerminals(project as never);
+
+    expect(store.isOpen).toBe(false);
+    expect(store.isQuickActionRunning(project as never, 'start')).toBe(true);
+    await expect(store.openQuickActionTerminal(project as never, 'start')).resolves.toBe(true);
+    expect(store.tabs?.activeTabId).toBe(terminal.id);
   });
 
   it('opens runtime actions as ordinary global Terminal tabs', async () => {
