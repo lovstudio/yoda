@@ -58,9 +58,13 @@ import {
 } from '@shared/projects';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
+import type { SettingsSyncStatus } from '@shared/settings-sync';
 import { ensureUniqueTaskSlug, taskNameFromPrompt } from '@shared/task-name';
 import type { CreateTaskError, CreateTaskWarning, Task } from '@shared/tasks';
-import { yodaAccountService } from '@main/core/account/services/yoda-account-service';
+import {
+  yodaAccountService,
+  type SessionState,
+} from '@main/core/account/services/yoda-account-service';
 import { yodaCommerceService } from '@main/core/account/services/yoda-commerce-service';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { loadClaudeTranscript } from '@main/core/conversations/claude-transcript';
@@ -1042,8 +1046,23 @@ export class MobileGatewayService {
 
   private async getProfileSnapshot(): Promise<MobileProfileSnapshot> {
     const [session, settings, usage] = await Promise.all([
-      yodaAccountService.getSession(),
-      settingsSyncService.getStatus(),
+      yodaAccountService.getSession().catch((error: unknown): SessionState => {
+        log.warn('MobileGateway: unable to load account profile', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return { user: null, isSignedIn: false, hasAccount: false };
+      }),
+      settingsSyncService.getStatus().catch((error: unknown): SettingsSyncStatus => {
+        log.warn('MobileGateway: unable to load settings sync profile', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return {
+          signedIn: false,
+          autoSyncEnabled: false,
+          lastSyncedAt: null,
+          cloudUpdatedAt: null,
+        };
+      }),
       getUsageOverview().catch((error: unknown) => {
         log.warn('MobileGateway: unable to load usage profile', {
           error: error instanceof Error ? error.message : String(error),
