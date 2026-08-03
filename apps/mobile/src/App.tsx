@@ -1162,11 +1162,8 @@ export function App() {
               </>
             ) : null}
           </ScrollView>
-          <HomeTabBar
-            activeTab={homeTab}
-            onNewRequest={() => setNewTaskOpen(true)}
-            onSelect={setHomeTab}
-          />
+          <FloatingNewTaskButton onPress={() => setNewTaskOpen(true)} />
+          <HomeTabBar activeTab={homeTab} onSelect={setHomeTab} />
         </View>
       </KeyboardAvoidingView>
       <NewTaskModal
@@ -1850,23 +1847,37 @@ function CloudStatusRow({
   );
 }
 
+function FloatingNewTaskButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityLabel="新建任务"
+      accessibilityRole="button"
+      style={({ pressed }) => [
+        styles.floatingNewTaskButton,
+        pressed ? styles.floatingNewTaskButtonPressed : null,
+      ]}
+      onPress={onPress}
+    >
+      <Ionicons color={COLORS.surface} name="add-outline" size={20} />
+      <Text style={styles.floatingNewTaskButtonText}>新建任务</Text>
+    </Pressable>
+  );
+}
+
 function HomeTabBar({
   activeTab,
-  onNewRequest,
   onSelect,
 }: {
   activeTab: HomeTab;
-  onNewRequest: () => void;
   onSelect: (tab: HomeTab) => void;
 }) {
   const tabs: Array<{
     icon: keyof typeof Ionicons.glyphMap;
     label: string;
-    value: HomeTab | null;
+    value: HomeTab;
   }> = [
-    { icon: 'grid-outline', label: 'Home', value: 'home' },
-    { icon: 'checkmark-circle-outline', label: 'Tasks', value: 'tasks' },
-    { icon: 'add-circle-outline', label: '新建', value: null },
+    { icon: 'grid-outline', label: '首页', value: 'home' },
+    { icon: 'checkmark-circle-outline', label: '任务', value: 'tasks' },
     { icon: 'person-circle-outline', label: '我的', value: 'profile' },
   ];
 
@@ -1884,7 +1895,7 @@ function HomeTabBar({
               active ? styles.bottomTabItemActive : null,
               pressed ? styles.buttonPressed : null,
             ]}
-            onPress={() => (tab.value ? onSelect(tab.value) : onNewRequest())}
+            onPress={() => onSelect(tab.value)}
           >
             <Ionicons color={active ? COLORS.surface : COLORS.muted} name={tab.icon} size={19} />
             <Text style={[styles.bottomTabLabel, active ? styles.bottomTabLabelActive : null]}>
@@ -5568,6 +5579,33 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
     fontSize: 12,
     lineHeight: 17,
+  },
+  floatingNewTaskButton: {
+    position: 'absolute',
+    right: 18,
+    bottom: Platform.OS === 'ios' ? 76 : 70,
+    zIndex: 4,
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    borderRadius: 24,
+    backgroundColor: COLORS.charcoal,
+    paddingHorizontal: 17,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  floatingNewTaskButtonPressed: {
+    backgroundColor: '#4B5258',
+    transform: [{ scale: 0.98 }],
+  },
+  floatingNewTaskButtonText: {
+    color: COLORS.surface,
+    fontSize: 14,
+    fontWeight: '800',
   },
   bottomTabBar: {
     flexDirection: 'row',
