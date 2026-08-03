@@ -38,7 +38,6 @@ import {
 import { TreeGuideSlot } from '@renderer/lib/components/tree-guide-slot';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
 import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
-import { Badge } from '@renderer/lib/ui/badge';
 import { branchColor } from '@renderer/utils/branch-color';
 import { cn } from '@renderer/utils/utils';
 import { PrBadge } from '../../lib/components/pr-badge';
@@ -88,10 +87,6 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   // current view.
   const isActive = params.taskId === taskId && params.projectId === projectId;
   const [isMenuOpen, setMenuOpen] = useState(false);
-  // The sidebar archive button is a two-step confirm: the first click arms it
-  // (turns it into a confirm badge), the second click archives. Anything that
-  // moves focus away — leaving the row, opening the menu — disarms it.
-  const [isArchiveConfirming, setArchiveConfirming] = useState(false);
 
   const task = getTaskStore(projectId, taskId)!;
   const taskManager = getTaskManagerStore(projectId);
@@ -230,9 +225,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           e.preventDefault();
           taskPreloadIntent.runNow();
         }}
-        onMouseLeave={() => setArchiveConfirming(false)}
         onClick={(e) => {
-          setArchiveConfirming(false);
           // Alt/Option pins the task into the global side pane (landing
           // on its session, like a normal open); a plain click navigates.
           if (e.altKey) {
@@ -376,75 +369,49 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         <div
           className={cn(
             'items-center gap-0.5',
-            isMenuOpen || isArchiving || isArchiveConfirming
+            isMenuOpen || isArchiving
               ? 'flex'
               : hasAgentNotification
                 ? 'hidden'
                 : 'hidden group-hover/row:flex'
           )}
         >
-          {isArchiveConfirming ? (
-            <Badge
-              render={
-                <button
-                  type="button"
-                  aria-label={t('sidebar.confirmArchive')}
-                  disabled={isArchiving}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setArchiveConfirming(false);
-                    // Quick archive defaults to NO pre-archive skill — the skill
-                    // flow lives in the right-click menu's archive submenu.
-                    menuActions.onArchiveQuick();
-                  }}
-                />
-              }
-              className="h-6 cursor-pointer bg-destructive px-2.5 text-[11px] font-semibold uppercase tracking-wide text-destructive-foreground shadow-sm hover:bg-destructive/90"
-            >
-              {t('sidebar.confirmArchive')}
-            </Badge>
-          ) : (
-            <>
-              <TaskActionsMenu
-                {...menuActions}
-                open={isMenuOpen}
-                onOpenChange={(open) => {
-                  if (open) setArchiveConfirming(false);
-                  setMenuOpen(open);
-                }}
-                trigger={
-                  <SidebarItemMiniButton
-                    type="button"
-                    aria-label={t('sidebar.runScripts.menuLabel')}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                  </SidebarItemMiniButton>
-                }
-              />
+          <TaskActionsMenu
+            {...menuActions}
+            open={isMenuOpen}
+            onOpenChange={setMenuOpen}
+            trigger={
               <SidebarItemMiniButton
                 type="button"
-                aria-label={t('sidebar.archiveTask')}
-                disabled={isArchiving}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setArchiveConfirming(true);
-                }}
+                aria-label={t('sidebar.runScripts.menuLabel')}
+                onClick={(e) => e.stopPropagation()}
               >
-                {isArchiving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Archive className="h-4 w-4" />
-                )}
+                <MoreHorizontal className="h-4 w-4" />
               </SidebarItemMiniButton>
-            </>
-          )}
+            }
+          />
+          <SidebarItemMiniButton
+            type="button"
+            aria-label={t('sidebar.archiveTask')}
+            disabled={isArchiving}
+            onClick={(e) => {
+              e.stopPropagation();
+              // Sidebar quick archive intentionally skips the note dialog and
+              // pre-archive command. Those remain available from the menu.
+              menuActions.onArchiveQuick();
+            }}
+          >
+            {isArchiving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Archive className="h-4 w-4" />
+            )}
+          </SidebarItemMiniButton>
         </div>
         <div
           className={cn(
             'items-center',
-            isMenuOpen || isArchiving || isArchiveConfirming
+            isMenuOpen || isArchiving
               ? 'hidden'
               : hasAgentNotification
                 ? 'flex'
