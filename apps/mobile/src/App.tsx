@@ -158,23 +158,20 @@ function taskScopeLabel(scope: TaskScope): string {
   }
 }
 
-function homeTabTitle(tab: HomeTab): { eyebrow: string; title: string; subtitle: string } {
+function homeTabTitle(tab: HomeTab): { title: string; subtitle: string } {
   switch (tab) {
     case 'tasks':
       return {
-        eyebrow: '任务',
         title: '任务队列',
         subtitle: '集中查看进行中的会话与任务状态。',
       };
     case 'profile':
       return {
-        eyebrow: '我的',
         title: '我的工作台',
         subtitle: '查看账号、用量、工作进度与云端服务。',
       };
     case 'home':
       return {
-        eyebrow: 'Yoda Mobile',
         title: 'Command center',
         subtitle: 'Monitor desktop work and keep requests moving.',
       };
@@ -1381,15 +1378,6 @@ function HomeHeader({ tab }: { tab: HomeTab }) {
   const copy = homeTabTitle(tab);
   return (
     <View style={styles.homeHeader}>
-      <View style={styles.homeHeaderTop}>
-        <View style={styles.homeBrandRow}>
-          <YodaBrandMark size={36} />
-          <View>
-            <Text style={styles.kicker}>{copy.eyebrow}</Text>
-            <Text style={styles.homeProductName}>Yoda Mobile</Text>
-          </View>
-        </View>
-      </View>
       <Text style={styles.homeTitle}>{copy.title}</Text>
       <Text style={styles.homeSubtitle}>{copy.subtitle}</Text>
     </View>
@@ -4326,23 +4314,6 @@ const styles = StyleSheet.create({
   },
   homeHeader: {
     gap: 9,
-  },
-  homeHeaderTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  homeBrandRow: {
-    minWidth: 0,
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  homeProductName: {
-    color: COLORS.muted,
-    fontSize: 12,
-    fontWeight: '700',
   },
   homeTitle: {
     color: COLORS.ink,
