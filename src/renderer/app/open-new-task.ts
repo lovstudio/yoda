@@ -1,4 +1,5 @@
 import type { InterfaceSettings } from '@shared/app-settings';
+import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { rpc } from '@renderer/lib/ipc';
 import { showModal } from '@renderer/lib/modal/modal-provider';
 import { queryClient } from '@renderer/lib/query-client';
@@ -39,4 +40,26 @@ export async function resolveNewTaskOpenMode(): Promise<NewTaskOpenMode> {
 
 export async function openNewTaskFromPreference(projectId?: string): Promise<void> {
   openNewTask(await resolveNewTaskOpenMode(), projectId);
+}
+
+/**
+ * Creates from the user's current location. Inside a project task, the next
+ * unit of work belongs to that task, so open the child-task composer with an
+ * initial Agent session as the primary action. Other surfaces retain the
+ * user's normal new-task opening preference.
+ */
+export async function openNewTaskFromCurrentContext(
+  projectId?: string,
+  parentTaskId?: string
+): Promise<void> {
+  if (projectId && parentTaskId && projectId !== INTERNAL_PROJECT_ID) {
+    showModal('newSubtaskModal', {
+      projectId,
+      parentTaskId,
+      initialAction: 'create-and-run',
+    });
+    return;
+  }
+
+  await openNewTaskFromPreference(projectId);
 }

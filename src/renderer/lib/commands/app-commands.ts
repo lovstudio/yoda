@@ -1,4 +1,5 @@
-import { openNewTaskFromPreference } from '@renderer/app/open-new-task';
+import { INTERNAL_PROJECT_ID } from '@shared/projects';
+import { openNewTaskFromCurrentContext } from '@renderer/app/open-new-task';
 import { applyHistoryEntry } from '@renderer/lib/components/nav-buttons';
 import { showModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -14,9 +15,11 @@ function createAppCommandProvider(): CommandProvider {
       // when navigation changes.
       const viewId = appState.navigation.currentViewId;
       const params = appState.navigation.viewParamsStore[viewId] as
-        | { projectId?: string }
+        | { projectId?: string; taskId?: string }
         | undefined;
       const projectId = params?.projectId;
+      const taskId =
+        viewId === 'task' && projectId !== INTERNAL_PROJECT_ID ? params?.taskId : undefined;
 
       const commands: AppCommand[] = [
         {
@@ -43,12 +46,16 @@ function createAppCommandProvider(): CommandProvider {
 
       commands.push({
         id: 'app.newTask',
-        label: 'New Task',
-        description: projectId ? 'Create a new task in this project' : 'Create a new task',
+        label: taskId ? 'New Subtask and Start Session' : 'New Task',
+        description: taskId
+          ? 'Create a child task with an Agent session'
+          : projectId
+            ? 'Create a new task in this project'
+            : 'Create a new task',
         shortcutKey: 'newTask',
         group: 'App',
         execute() {
-          void openNewTaskFromPreference(projectId);
+          void openNewTaskFromCurrentContext(projectId, taskId);
         },
       });
 

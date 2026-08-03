@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { openNewTask, openNewTaskFromPreference } from './open-new-task';
+import {
+  openNewTask,
+  openNewTaskFromCurrentContext,
+  openNewTaskFromPreference,
+} from './open-new-task';
 
 const mocks = vi.hoisted(() => ({
   getSettings: vi.fn(),
@@ -83,5 +87,24 @@ describe('openNewTask', () => {
     await openNewTaskFromPreference('project-1');
 
     expect(mocks.navigate).toHaveBeenCalledWith('home', { projectId: 'project-1' });
+  });
+
+  it('creates a child task with a Session when invoked inside an open task', async () => {
+    await openNewTaskFromCurrentContext('project-1', 'task-1');
+
+    expect(mocks.showModal).toHaveBeenCalledWith('newSubtaskModal', {
+      projectId: 'project-1',
+      parentTaskId: 'task-1',
+      initialAction: 'create-and-run',
+    });
+    expect(mocks.getSettings).not.toHaveBeenCalled();
+  });
+
+  it('keeps the normal new-task flow outside a task', async () => {
+    mocks.getSettings.mockResolvedValue({ newTaskOpenMode: 'modal' });
+
+    await openNewTaskFromCurrentContext('project-1');
+
+    expect(mocks.showModal).toHaveBeenCalledWith('newTaskModal', {});
   });
 });
