@@ -66,13 +66,25 @@ export class WorkspaceTerminalStore {
     return this.activeScope?.sourceProjectId ?? null;
   }
 
-  async toggleProject(project: MountedProject['data']): Promise<void> {
-    const scopeId = projectTerminalScopeId(project.type, project.id);
-    if (this.isOpen && this.activeScope?.scopeId === scopeId) {
+  async toggleForRuntimeBar(project: MountedProject['data'] | null): Promise<void> {
+    if (this.isOpen) {
       this.close();
       return;
     }
-    await this.openProject(project);
+
+    // Closing the drawer only changes presentation. Its active scope remains
+    // the identity of the Terminal that the runtime-bar button must restore,
+    // even when the current route belongs to another project.
+    if (this.activeScope) {
+      await this.openScope(this.activeScope, false);
+      return;
+    }
+
+    if (project) {
+      await this.openProject(project);
+      return;
+    }
+    await this.openGlobal();
   }
 
   async openProject(
@@ -83,14 +95,6 @@ export class WorkspaceTerminalStore {
     const scopeId = projectTerminalScopeId(project.type, project.id);
     const scope = this.getOrCreateScope(project.id, scopeId, project.id);
     await this.openScope(scope, options.ensureTerminal ?? true);
-  }
-
-  async toggleGlobal(): Promise<void> {
-    if (this.isOpen && this.activeScope?.scopeId === GLOBAL_TERMINAL_SCOPE_ID) {
-      this.close();
-      return;
-    }
-    await this.openGlobal();
   }
 
   async openGlobal(options: { ensureTerminal?: boolean } = {}): Promise<void> {

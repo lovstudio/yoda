@@ -490,15 +490,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   }, [provisionedTask, taskTerminalVisible, workspaceTerminalOpen]);
 
   const toggleTerminal = () => {
-    if (workspaceTerminalOpen) {
-      workspaceTerminalStore.close();
-      return;
-    }
-    if (activeMountedProject) {
-      void workspaceTerminalStore.toggleProject(activeMountedProject.data).catch(() => {});
-      return;
-    }
-    void workspaceTerminalStore.toggleGlobal().catch(() => {});
+    void workspaceTerminalStore.toggleForRuntimeBar(activeMountedProjectData).catch(() => {});
   };
 
   const compactContext = async () => {

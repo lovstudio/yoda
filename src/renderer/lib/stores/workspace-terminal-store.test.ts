@@ -93,16 +93,22 @@ describe('WorkspaceTerminalStore', () => {
     expect(mocks.createTaskTerminal).not.toHaveBeenCalled();
   });
 
-  it('reopens the quick action Terminal with its existing tab after it is closed', async () => {
+  it('reopens the quick action scope instead of the currently routed project', async () => {
     const store = new WorkspaceTerminalStore();
-    const project = { id: 'project-1', type: 'local', path: '/repo' } as const;
+    const quickActionProject = { id: 'project-1', type: 'local', path: '/repo-1' } as const;
+    const routedProject = { id: 'project-2', type: 'local', path: '/repo-2' } as const;
 
-    await store.runCommand(project as never, 'pnpm run dev', 'Start locally');
+    await store.runCommand(quickActionProject as never, 'pnpm run dev', 'Start locally');
     const terminalId = mocks.createWorkspaceTerminal.mock.calls[0]?.[0].id;
-    store.close();
-    await store.toggleProject(project as never);
+    await store.toggleForRuntimeBar(routedProject as never);
+
+    expect(store.isOpen).toBe(false);
+
+    await store.toggleForRuntimeBar(routedProject as never);
 
     expect(store.isOpen).toBe(true);
+    expect(store.activeProjectId).toBe('project-1');
+    expect(store.manager?.taskId).toBe('local:project-1:project-view');
     expect(store.tabs?.activeTabId).toBe(terminalId);
     expect(mocks.createWorkspaceTerminal).toHaveBeenCalledTimes(1);
   });

@@ -15,11 +15,12 @@ describe('Workspace runtime bar Terminal ownership', () => {
     const toggleEnd = source.indexOf('\n  };', toggleStart);
     const toggleSource = source.slice(toggleStart, toggleEnd);
 
-    expect(toggleSource).toContain('workspaceTerminalStore.close()');
     expect(toggleSource).toContain(
-      'workspaceTerminalStore.toggleProject(activeMountedProject.data)'
+      'workspaceTerminalStore.toggleForRuntimeBar(activeMountedProjectData)'
     );
-    expect(toggleSource).toContain('workspaceTerminalStore.toggleGlobal()');
+    expect(toggleSource).not.toContain('workspaceTerminalStore.close()');
+    expect(toggleSource).not.toContain('workspaceTerminalStore.toggleProject');
+    expect(toggleSource).not.toContain('workspaceTerminalStore.toggleGlobal');
     expect(toggleSource).not.toContain('setTerminalDrawerOpen');
     expect(toggleSource).not.toContain('taskTerminalVisible');
   });
