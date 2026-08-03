@@ -48,6 +48,19 @@ function quickActionSource(setupData: string | null): QuickActionTaskSource | un
   }
 }
 
+function quickActionId(setupData: string | null): string | undefined {
+  if (!setupData) return undefined;
+  try {
+    const parsed = JSON.parse(setupData) as {
+      params?: { quickActionId?: unknown };
+    };
+    const actionId = parsed.params?.quickActionId;
+    return typeof actionId === 'string' && actionId.trim() ? actionId : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function mapTaskRowToTask(
   row: TaskRow,
   prs: PullRequest[] = [],
@@ -88,5 +101,6 @@ export function mapTaskRowToTask(
     sidebarWorkspaceId: row.sidebarWorkspaceId ?? undefined,
     parentTaskId: row.parentTaskId ?? undefined,
     quickActionSource: quickActionSource(row.setupData),
+    quickActionId: quickActionId(row.setupData),
   };
 }

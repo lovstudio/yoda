@@ -311,6 +311,7 @@
       "analysisEvidence": "Decision: {{explanation}}",
       "commandKind": "Command",
       "skillKind": "Skill",
+      "running": "Running",
       "actionLabel": "Name (optional)",
       "actionLabelPlaceholder": "Local start",
       "analyze": "Analyze execution type",

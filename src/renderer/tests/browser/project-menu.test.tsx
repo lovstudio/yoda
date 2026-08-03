@@ -17,6 +17,7 @@ const translations: Record<string, string> = {
   'sidebar.captureAutomation.noCommands': 'No previously run quick actions.',
   'sidebar.captureAutomation.commandKind': 'Command',
   'sidebar.captureAutomation.skillKind': 'Skill',
+  'sidebar.captureAutomation.running': 'Running',
   'projects.quickActions.manage': 'Manage quick actions',
 };
 
@@ -251,6 +252,53 @@ describe('ProjectMenu quick actions submenu', () => {
       expect(onCaptureAutomation).toHaveBeenCalledTimes(1);
       await act(async () => manageActionsItem?.click());
       expect(onManageQuickActions).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it.each([
+    ['context', 'context-menu-item'],
+    ['dropdown', 'dropdown-menu-item'],
+  ] as const)(
+    'shows a running action and navigates to its existing run in the %s menu',
+    async (surface, itemSlot) => {
+      const { ProjectActionsMenu, ProjectContextMenu } = await import(
+        '@renderer/features/sidebar/project-menu'
+      );
+      const onRunQuickAction = vi.fn();
+      const onNavigateQuickAction = vi.fn();
+      const actions = {
+        ...requiredActions(),
+        quickActions: [savedAction],
+        canRunQuickAction: () => false,
+        isQuickActionRunning: () => true,
+        onRunQuickAction,
+        onNavigateQuickAction,
+        onCaptureAutomation: vi.fn(),
+      };
+
+      await act(async () => {
+        root.render(
+          surface === 'context'
+            ? createElement(ProjectContextMenu, {
+                ...actions,
+                children: createElement('div', null, 'Example project'),
+              })
+            : createElement(ProjectActionsMenu, {
+                ...actions,
+                trigger: createElement('button', null, 'More'),
+              })
+        );
+      });
+
+      const item = Array.from(
+        host.querySelectorAll<HTMLButtonElement>(`button[data-slot="${itemSlot}"]`)
+      ).find((candidate) => candidate.textContent?.includes(savedAction.label));
+
+      expect(item?.textContent).toContain('Running');
+      expect(item?.disabled).toBe(false);
+      await act(async () => item?.click());
+      expect(onNavigateQuickAction).toHaveBeenCalledWith(savedAction);
+      expect(onRunQuickAction).not.toHaveBeenCalled();
     }
   );
 });

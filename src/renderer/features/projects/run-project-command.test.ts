@@ -58,6 +58,9 @@ describe('runProjectCommand', () => {
       initialConversation: { id: string; initialPrompt: string };
     };
     expect(params.id).toBe(taskId);
+    expect(mocks.createTask.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ quickActionId: action.id })
+    );
     expect(params.quickActionSource).toEqual({
       prompt: action.command,
       invokedSkill: false,

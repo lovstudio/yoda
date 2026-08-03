@@ -464,6 +464,7 @@ export class TaskManagerStore {
           setupStatus: 'pending',
           setupRequiresBranchName,
           sidebarWorkspaceId,
+          quickActionId: params.quickActionId,
         })
       );
     });

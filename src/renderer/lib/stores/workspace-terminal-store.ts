@@ -4,6 +4,7 @@ import {
   GLOBAL_TERMINAL_PROJECT_ID,
   GLOBAL_TERMINAL_SCOPE_ID,
   projectTerminalScopeId,
+  quickActionTerminalId,
   type WorkspaceTerminalAction,
 } from '@shared/terminals';
 import type { MountedProject } from '@renderer/features/projects/stores/project';
@@ -43,11 +44,13 @@ export class WorkspaceTerminalStore {
   activeScope: WorkspaceTerminalScopeStore | null = null;
   private followsActiveProject = false;
   private readonly scopes = new Map<string, WorkspaceTerminalScopeStore>();
+  private readonly quickActionRuns = new Map<string, Promise<string>>();
 
   constructor() {
-    makeAutoObservable<this, 'scopes'>(this, {
+    makeAutoObservable<this, 'quickActionRuns' | 'scopes'>(this, {
       activeScope: observable.ref,
       scopes: false,
+      quickActionRuns: false,
       manager: computed,
       tabs: computed,
       activeProjectId: computed,
@@ -114,7 +117,57 @@ export class WorkspaceTerminalStore {
     await this.openProject(project, { ensureTerminal: false });
   }
 
-  async runCommand(project: MountedProject['data'], command: string, label: string): Promise<void> {
+  isQuickActionRunning(project: MountedProject['data'], actionId: string): boolean {
+    const scope = this.getScope(project);
+    return Boolean(scope?.manager.terminals.has(quickActionTerminalId(project.id, actionId)));
+  }
+
+  async prefetchProjectTerminals(project: MountedProject['data']): Promise<void> {
+    const scopeId = projectTerminalScopeId(project.type, project.id);
+    const scope = this.getOrCreateScope(project.id, scopeId, project.id);
+    await scope.manager.load();
+  }
+
+  async openQuickActionTerminal(
+    project: MountedProject['data'],
+    actionId: string
+  ): Promise<boolean> {
+    await this.openProject(project, { ensureTerminal: false });
+    const scope = this.activeScope;
+    if (!scope) return false;
+    const terminalId = quickActionTerminalId(project.id, actionId);
+    if (!scope.manager.terminals.has(terminalId)) return false;
+    scope.tabs.setActiveTab(terminalId);
+    return true;
+  }
+
+  async runCommand(
+    project: MountedProject['data'],
+    command: string,
+    label: string,
+    actionId?: string
+  ): Promise<string> {
+    const runKey = actionId ? `${project.id}\0${actionId}` : null;
+    const pending = runKey ? this.quickActionRuns.get(runKey) : undefined;
+    if (pending) return pending;
+
+    const operation = this.runCommandOnce(project, command, label, actionId);
+    if (runKey) this.quickActionRuns.set(runKey, operation);
+    try {
+      return await operation;
+    } finally {
+      if (runKey && this.quickActionRuns.get(runKey) === operation) {
+        this.quickActionRuns.delete(runKey);
+      }
+    }
+  }
+
+  private async runCommandOnce(
+    project: MountedProject['data'],
+    command: string,
+    label: string,
+    actionId?: string
+  ): Promise<string> {
     const normalizedCommand = command.trim();
     if (!normalizedCommand) throw new Error('The quick action command is empty.');
     if (normalizedCommand.length > 32_000) {
@@ -124,12 +177,19 @@ export class WorkspaceTerminalStore {
     await this.openProject(project, { ensureTerminal: false });
     const scope = this.activeScope;
     if (!scope) throw new Error('The project Terminal is unavailable.');
+    const terminalId = actionId ? quickActionTerminalId(project.id, actionId) : undefined;
+    if (terminalId && scope.manager.terminals.has(terminalId)) {
+      scope.tabs.setActiveTab(terminalId);
+      return terminalId;
+    }
     const terminal = await scope.manager.createCommandTerminal({
+      id: terminalId,
       command: normalizedCommand,
       label,
       initialSize: getTerminalsPaneSize(WORKSPACE_TERMINAL_PANE_ID),
     });
     scope.tabs.setActiveTab(terminal.id);
+    return terminal.id;
   }
 
   async runRuntimeAction(runtimeId: RuntimeId, action: WorkspaceTerminalAction): Promise<void> {
@@ -163,6 +223,7 @@ export class WorkspaceTerminalStore {
     this.isOpen = false;
     this.error = null;
     this.followsActiveProject = false;
+    this.quickActionRuns.clear();
     for (const scope of retainedScopes) scope.dispose();
   }
 
@@ -202,6 +263,11 @@ export class WorkspaceTerminalStore {
     this.scopes.set(key, scope);
     this.evictLeastRecentlyUsedScopes(scope);
     return scope;
+  }
+
+  private getScope(project: MountedProject['data']): WorkspaceTerminalScopeStore | undefined {
+    const scopeId = projectTerminalScopeId(project.type, project.id);
+    return this.scopes.get(`${project.id}\0${scopeId}`);
   }
 
   private evictLeastRecentlyUsedScopes(newScope: WorkspaceTerminalScopeStore): void {

@@ -48,6 +48,7 @@ describe('mapTaskRowToTask', () => {
               conversationId: 'conversation-1',
               invokedSkill: true,
             },
+            quickActionId: 'release',
           },
         })
       )
@@ -58,6 +59,7 @@ describe('mapTaskRowToTask', () => {
       conversationId: 'conversation-1',
       invokedSkill: true,
     });
+    expect(task.quickActionId).toBe('release');
   });
 
   it('ignores incomplete quick-action metadata', () => {

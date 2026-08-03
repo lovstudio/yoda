@@ -65,6 +65,8 @@ export type Task = {
   parentTaskId?: string;
   /** Natural-language quick-action entry that may be distilled after the task finishes. */
   quickActionSource?: QuickActionTaskSource;
+  /** Saved quick action that started this task, used to return to its live run. */
+  quickActionId?: string;
 };
 
 export type TaskBootstrapStatus =
@@ -118,6 +120,8 @@ export type CreateTaskParams = {
   parentTaskId?: string;
   /** Marks a natural-language quick-action task for non-blocking post-run distillation. */
   quickActionSource?: QuickActionTaskSource;
+  /** Saved quick action that started this task. */
+  quickActionId?: string;
 };
 
 export type SetTaskParentError =

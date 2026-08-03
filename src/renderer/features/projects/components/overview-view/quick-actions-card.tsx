@@ -1,9 +1,13 @@
 import { Bot, Plus, Settings2, TerminalSquare } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { QuickAction } from '@shared/project-settings';
 import { projectDisplayName } from '@shared/projects';
+import {
+  getRunningProjectQuickActionTarget,
+  openProjectQuickActionTarget,
+} from '@renderer/features/projects/project-quick-action-target';
 import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import {
   asMounted,
@@ -14,6 +18,7 @@ import {
 import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
+import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 import { Button } from '@renderer/lib/ui/button';
 import { log } from '@renderer/utils/logger';
 
@@ -34,8 +39,21 @@ export const QuickActionsCard = observer(function QuickActionsCard({
   const { runtimeId } = useEffectiveRuntime(connectionId);
 
   const actions: QuickAction[] = settingsStore?.settings?.quickActions ?? [];
+  const actionTargets = new Map(
+    project
+      ? actions.flatMap((action) => {
+          const target = getRunningProjectQuickActionTarget(project, action);
+          return target ? [[action.id, target] as const] : [];
+        })
+      : []
+  );
 
   const [runningId, setRunningId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!project) return;
+    void workspaceTerminalStore.prefetchProjectTerminals(project.data).catch(() => {});
+  }, [project]);
 
   const handleCreate = () => {
     if (!project) return;
@@ -47,6 +65,15 @@ export const QuickActionsCard = observer(function QuickActionsCard({
 
   const handleRun = async (action: QuickAction) => {
     if (!project) return;
+    const target = getRunningProjectQuickActionTarget(project, action);
+    if (
+      target &&
+      (await openProjectQuickActionTarget(project, target, (taskId) => {
+        navigate('task', { projectId, taskId });
+      }))
+    ) {
+      return;
+    }
     setRunningId(action.id);
     try {
       if (action.kind === 'skill') {
@@ -98,7 +125,9 @@ export const QuickActionsCard = observer(function QuickActionsCard({
             variant="outline"
             size="sm"
             disabled={
-              !project || runningId !== null || (action.kind === 'skill' ? !runtimeId : false)
+              !project ||
+              runningId !== null ||
+              (!actionTargets.has(action.id) && action.kind === 'skill' ? !runtimeId : false)
             }
             onClick={() => void handleRun(action)}
           >
@@ -107,9 +136,10 @@ export const QuickActionsCard = observer(function QuickActionsCard({
             ) : (
               <Bot className="size-3.5" />
             )}
-            {runningId === action.id
-              ? t('projects.quickActions.running', { label: action.label })
-              : action.label}
+            {action.label}
+            {runningId === action.id || actionTargets.has(action.id) ? (
+              <span className="text-[10px] text-success">{t('projects.quickActions.running')}</span>
+            ) : null}
           </Button>
         ))}
       </div>

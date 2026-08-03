@@ -309,6 +309,7 @@
       "analysisEvidence": "判断依据：{{explanation}}",
       "commandKind": "命令",
       "skillKind": "Skill",
+      "running": "运行中",
       "actionLabel": "名称（可选）",
       "actionLabelPlaceholder": "本地启动",
       "analyze": "分析执行方式",

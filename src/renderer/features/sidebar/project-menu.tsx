@@ -74,7 +74,9 @@ interface ProjectMenuActions {
   onManageQuickActions?: () => void;
   quickActions?: QuickAction[];
   canRunQuickAction?: (action: QuickAction) => boolean;
+  isQuickActionRunning?: (action: QuickAction) => boolean;
   onRunQuickAction?: (action: QuickAction) => void;
+  onNavigateQuickAction?: (action: QuickAction) => void;
   onMenuOpen?: () => void;
   onRename?: () => void;
   onMovePath?: () => void;
@@ -296,6 +298,57 @@ async function copyProjectPath(path: string, t: TFunction) {
   }
 }
 
+function QuickActionMenuItemContent({
+  action,
+  running,
+}: {
+  action: QuickAction;
+  running: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <>
+      {action.kind === 'command' ? (
+        <TerminalSquare className="size-4" />
+      ) : (
+        <Bot className="size-4" />
+      )}
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate">{action.label}</span>
+        <span className="truncate text-[10px] text-foreground-passive">
+          {t(
+            action.kind === 'command'
+              ? 'sidebar.captureAutomation.commandKind'
+              : 'sidebar.captureAutomation.skillKind'
+          )}
+          {' · '}
+          {action.command}
+        </span>
+      </span>
+      {running ? (
+        <span className="ml-2 flex shrink-0 items-center gap-1 text-[10px] text-success">
+          <span className="size-1.5 rounded-full bg-success motion-safe:animate-pulse" />
+          {t('sidebar.captureAutomation.running')}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+function quickActionMenuState(actions: ProjectMenuActions, action: QuickAction) {
+  const running = actions.isQuickActionRunning?.(action) === true;
+  return {
+    running,
+    disabled: running
+      ? !actions.onNavigateQuickAction
+      : !actions.onRunQuickAction || actions.canRunQuickAction?.(action) === false,
+    select: () => {
+      if (running) actions.onNavigateQuickAction?.(action);
+      else actions.onRunQuickAction?.(action);
+    },
+  };
+}
+
 function ProjectQuickActionsContextSubmenu({ actions }: { actions: ProjectMenuActions }) {
   const { t } = useTranslation();
   const quickActions = actions.quickActions ?? [];
@@ -307,36 +360,21 @@ function ProjectQuickActionsContextSubmenu({ actions }: { actions: ProjectMenuAc
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="min-w-72 max-w-96">
         {quickActions.length > 0
-          ? quickActions.map((action) => (
-              <ContextMenuItem
-                key={action.id}
-                disabled={
-                  !actions.onRunQuickAction || actions.canRunQuickAction?.(action) === false
-                }
-                onClick={(event) => {
-                  event.stopPropagation();
-                  actions.onRunQuickAction?.(action);
-                }}
-              >
-                {action.kind === 'command' ? (
-                  <TerminalSquare className="size-4" />
-                ) : (
-                  <Bot className="size-4" />
-                )}
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate">{action.label}</span>
-                  <span className="truncate text-[10px] text-foreground-passive">
-                    {t(
-                      action.kind === 'command'
-                        ? 'sidebar.captureAutomation.commandKind'
-                        : 'sidebar.captureAutomation.skillKind'
-                    )}
-                    {' · '}
-                    {action.command}
-                  </span>
-                </span>
-              </ContextMenuItem>
-            ))
+          ? quickActions.map((action) => {
+              const state = quickActionMenuState(actions, action);
+              return (
+                <ContextMenuItem
+                  key={action.id}
+                  disabled={state.disabled}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    state.select();
+                  }}
+                >
+                  <QuickActionMenuItemContent action={action} running={state.running} />
+                </ContextMenuItem>
+              );
+            })
           : null}
         {quickActions.length === 0 ? (
           <ContextMenuItem disabled>{t('sidebar.captureAutomation.noCommands')}</ContextMenuItem>
@@ -376,36 +414,21 @@ function ProjectQuickActionsDropdownSubmenu({ actions }: { actions: ProjectMenuA
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="min-w-72 max-w-96">
         {quickActions.length > 0
-          ? quickActions.map((action) => (
-              <DropdownMenuItem
-                key={action.id}
-                disabled={
-                  !actions.onRunQuickAction || actions.canRunQuickAction?.(action) === false
-                }
-                onClick={(event) => {
-                  event.stopPropagation();
-                  actions.onRunQuickAction?.(action);
-                }}
-              >
-                {action.kind === 'command' ? (
-                  <TerminalSquare className="size-4" />
-                ) : (
-                  <Bot className="size-4" />
-                )}
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate">{action.label}</span>
-                  <span className="truncate text-[10px] text-foreground-passive">
-                    {t(
-                      action.kind === 'command'
-                        ? 'sidebar.captureAutomation.commandKind'
-                        : 'sidebar.captureAutomation.skillKind'
-                    )}
-                    {' · '}
-                    {action.command}
-                  </span>
-                </span>
-              </DropdownMenuItem>
-            ))
+          ? quickActions.map((action) => {
+              const state = quickActionMenuState(actions, action);
+              return (
+                <DropdownMenuItem
+                  key={action.id}
+                  disabled={state.disabled}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    state.select();
+                  }}
+                >
+                  <QuickActionMenuItemContent action={action} running={state.running} />
+                </DropdownMenuItem>
+              );
+            })
           : null}
         {quickActions.length === 0 ? (
           <DropdownMenuItem disabled>{t('sidebar.captureAutomation.noCommands')}</DropdownMenuItem>

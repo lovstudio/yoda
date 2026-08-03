@@ -191,15 +191,17 @@ export class TerminalManagerStore {
   }
 
   async createNamedTerminal({
+    id,
     label,
     initialSize,
   }: {
+    id?: string;
     label: string;
     initialSize?: { cols: number; rows: number };
   }): Promise<Terminal> {
     const names = Array.from(this.terminals.values()).map((terminal) => terminal.data.name);
     return this.createTerminal({
-      id: crypto.randomUUID(),
+      id: id ?? crypto.randomUUID(),
       projectId: this.projectId,
       taskId: this.taskId,
       name: nextCommandTerminalName(label, names),
@@ -208,10 +210,12 @@ export class TerminalManagerStore {
   }
 
   async createCommandTerminal({
+    id,
     command,
     label,
     initialSize,
   }: {
+    id?: string;
     command: string;
     label: string;
     initialSize?: { cols: number; rows: number };
@@ -220,6 +224,7 @@ export class TerminalManagerStore {
     if (!normalizedCommand) throw new Error('Terminal command is empty.');
 
     const terminal = await this.createNamedTerminal({
+      id,
       label,
       initialSize,
     });

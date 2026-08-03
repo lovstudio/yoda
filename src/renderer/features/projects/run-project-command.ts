@@ -52,6 +52,7 @@ export async function runProjectCommand(args: {
     name: taskName,
     sourceBranch: defaultBranch,
     strategy: { kind: 'no-worktree' },
+    quickActionId: action.id,
     quickActionSource: quickActionSource ? { ...quickActionSource, conversationId } : undefined,
     initialConversation: {
       id: conversationId,
