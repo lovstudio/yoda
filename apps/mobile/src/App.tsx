@@ -117,7 +117,7 @@ type ConnectDraft = {
 };
 
 type TaskScope = 'all' | 'open' | 'inProgress' | 'review';
-type HomeTab = 'home' | 'tasks' | 'request' | 'profile';
+type HomeTab = 'home' | 'tasks' | 'profile';
 type SessionOutputMode = 'rendered' | 'raw';
 
 type ReadableOutputBlock = {
@@ -147,13 +147,13 @@ type InlineMarkdownToken =
 function taskScopeLabel(scope: TaskScope): string {
   switch (scope) {
     case 'open':
-      return 'Open project tasks';
+      return '已打开项目';
     case 'inProgress':
-      return 'In progress';
+      return '进行中';
     case 'review':
-      return 'Review tasks';
+      return '待审阅';
     case 'all':
-      return 'Active tasks';
+      return '全部任务';
   }
 }
 
@@ -161,15 +161,9 @@ function homeTabTitle(tab: HomeTab): { eyebrow: string; title: string; subtitle:
   switch (tab) {
     case 'tasks':
       return {
-        eyebrow: 'Tasks',
-        title: 'Work queue',
-        subtitle: 'Review running sessions and active branches.',
-      };
-    case 'request':
-      return {
-        eyebrow: 'New request',
-        title: 'Start work',
-        subtitle: 'Send a requirement to the desktop agent.',
+        eyebrow: '任务',
+        title: '任务队列',
+        subtitle: '集中查看进行中的会话与任务状态。',
       };
     case 'profile':
       return {
@@ -260,11 +254,11 @@ function mobileInputUploadProgressText(progress: MobileInputUploadProgress): str
     progress.totalBytes > 0
       ? Math.min(100, Math.round((progress.uploadedBytes / progress.totalBytes) * 100))
       : 0;
-  return `${percentage}% · ${progress.completedImages}/${progress.totalImages} images`;
+  return `${percentage}% · ${progress.completedImages}/${progress.totalImages} 张图片`;
 }
 
 function mobileInputUploadLabel(progress: MobileInputUploadProgress): string {
-  return `Uploading ${mobileInputUploadProgressText(progress)}`;
+  return `正在上传 ${mobileInputUploadProgressText(progress)}`;
 }
 
 function runtimeColor(status: MobileSessionSummary['runtimeStatus']): string {
@@ -709,6 +703,7 @@ export function App() {
   const [snapshot, setSnapshot] = useState<MobileDashboardSnapshot | null>(null);
   const [profile, setProfile] = useState<MobileProfileSnapshot | null>(null);
   const [homeTab, setHomeTab] = useState<HomeTab>('home');
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState('all');
   const [taskScope, setTaskScope] = useState<TaskScope>('all');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -780,6 +775,7 @@ export function App() {
     setSnapshot(null);
     setProfile(null);
     setHomeTab('home');
+    setNewTaskOpen(false);
     setSelectedProjectId('all');
     setTaskScope('all');
     setSelectedTaskId(null);
@@ -1000,6 +996,7 @@ export function App() {
       const destination = prepareCreatedDemandNavigation(snapshot, result.task, createdSessionId);
       setSnapshot(destination.snapshot);
       setHomeTab(destination.homeTab);
+      setNewTaskOpen(false);
       setTaskScope(destination.taskScope);
       setSelectedProjectId(destination.selectedProjectId);
       setSelectedTaskId(destination.selectedTaskId);
@@ -1089,17 +1086,7 @@ export function App() {
               />
             }
           >
-            <HomeHeader
-              tab={homeTab}
-              onDisconnect={() => {
-                void clearConnection();
-                setConnection(null);
-                setSnapshot(null);
-                setProfile(null);
-                setSelectedTaskId(null);
-                setSelectedSessionId(null);
-              }}
-            />
+            <HomeHeader tab={homeTab} />
 
             {error ? (
               <Notice
@@ -1118,7 +1105,7 @@ export function App() {
                     projects={visibleProjects}
                     recentTasks={recentTasks}
                     snapshot={snapshot}
-                    onNewRequest={() => setHomeTab('request')}
+                    onNewRequest={() => setNewTaskOpen(true)}
                     onOpenTask={setSelectedTaskId}
                     onOpenTasks={() => setHomeTab('tasks')}
                     onSelectScope={handleMetricSelect}
@@ -1142,22 +1129,6 @@ export function App() {
                   />
                 ) : null}
 
-                {homeTab === 'request' ? (
-                  <DemandComposer
-                    images={demandImages}
-                    projects={visibleProjects}
-                    prompt={prompt}
-                    selectedProjectId={demandProjectId}
-                    submitting={submitting}
-                    uploadProgress={demandUploadProgress}
-                    onPromptChange={setPrompt}
-                    onProjectChange={setDemandProjectId}
-                    onImagesChange={setDemandImages}
-                    onMediaError={setError}
-                    onSubmit={handleSubmitDemand}
-                  />
-                ) : null}
-
                 {homeTab === 'profile' ? (
                   <MyProfileScreen
                     error={profileError}
@@ -1177,15 +1148,42 @@ export function App() {
                       setTaskScope('all');
                       setHomeTab('tasks');
                     }}
+                    onDisconnect={() => {
+                      void clearConnection();
+                      setConnection(null);
+                      setSnapshot(null);
+                      setProfile(null);
+                      setSelectedTaskId(null);
+                      setSelectedSessionId(null);
+                    }}
                     onRetry={() => void loadProfile(false)}
                   />
                 ) : null}
               </>
             ) : null}
           </ScrollView>
-          <HomeTabBar activeTab={homeTab} onSelect={setHomeTab} />
+          <HomeTabBar
+            activeTab={homeTab}
+            onNewRequest={() => setNewTaskOpen(true)}
+            onSelect={setHomeTab}
+          />
         </View>
       </KeyboardAvoidingView>
+      <NewTaskModal
+        images={demandImages}
+        open={newTaskOpen}
+        projects={visibleProjects}
+        prompt={prompt}
+        selectedProjectId={demandProjectId}
+        submitting={submitting}
+        uploadProgress={demandUploadProgress}
+        onClose={() => setNewTaskOpen(false)}
+        onImagesChange={setDemandImages}
+        onMediaError={setError}
+        onProjectChange={setDemandProjectId}
+        onPromptChange={setPrompt}
+        onSubmit={handleSubmitDemand}
+      />
     </SafeAreaView>
   );
 }
@@ -1350,7 +1348,7 @@ function Notice({
   );
 }
 
-function HomeHeader({ tab, onDisconnect }: { tab: HomeTab; onDisconnect: () => void }) {
+function HomeHeader({ tab }: { tab: HomeTab }) {
   const copy = homeTabTitle(tab);
   return (
     <View style={styles.homeHeader}>
@@ -1361,12 +1359,9 @@ function HomeHeader({ tab, onDisconnect }: { tab: HomeTab; onDisconnect: () => v
           </View>
           <View>
             <Text style={styles.kicker}>{copy.eyebrow}</Text>
-            <Text style={styles.homeConnection}>Desktop connected</Text>
+            <Text style={styles.homeProductName}>Yoda Mobile</Text>
           </View>
         </View>
-        <Pressable accessibilityLabel="Disconnect" style={styles.iconButton} onPress={onDisconnect}>
-          <Ionicons color={COLORS.charcoal} name="log-out-outline" size={21} />
-        </Pressable>
       </View>
       <Text style={styles.homeTitle}>{copy.title}</Text>
       <Text style={styles.homeSubtitle}>{copy.subtitle}</Text>
@@ -1419,7 +1414,7 @@ function HomeDashboard({
             onPress={onNewRequest}
           >
             <Ionicons color={COLORS.surface} name="add-outline" size={18} />
-            <Text style={styles.quickActionPrimaryText}>New request</Text>
+            <Text style={styles.quickActionPrimaryText}>新建任务</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -1430,7 +1425,7 @@ function HomeDashboard({
             onPress={onOpenTasks}
           >
             <Ionicons color={COLORS.charcoal} name="list-outline" size={18} />
-            <Text style={styles.quickActionSecondaryText}>Tasks</Text>
+            <Text style={styles.quickActionSecondaryText}>查看任务</Text>
           </Pressable>
         </View>
       </View>
@@ -1439,9 +1434,9 @@ function HomeDashboard({
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent work</Text>
+          <Text style={styles.sectionTitle}>最近工作</Text>
           <Pressable accessibilityRole="button" onPress={onOpenTasks}>
-            <Text style={styles.sectionAction}>View all</Text>
+            <Text style={styles.sectionAction}>查看全部</Text>
           </Pressable>
         </View>
         {primaryTask ? (
@@ -1463,7 +1458,7 @@ function HomeDashboard({
         ) : (
           <View style={styles.emptyState}>
             <Ionicons color={COLORS.muted} name="sparkles-outline" size={22} />
-            <Text style={styles.emptyText}>No active tasks yet.</Text>
+            <Text style={styles.emptyText}>还没有任务。</Text>
           </View>
         )}
       </View>
@@ -1493,7 +1488,7 @@ function TasksWorkspace({
   return (
     <>
       <TaskScopeControl selectedScope={selectedScope} onSelectScope={onSelectScope} />
-      <ProjectRail
+      <TaskProjectScopeControl
         projects={visibleProjects}
         selectedProjectId={selectedProjectId}
         onSelect={onSelectProject}
@@ -1501,7 +1496,7 @@ function TasksWorkspace({
       <TaskList
         projects={projects}
         tasks={tasks}
-        title={selectedProjectId === 'all' ? taskScopeLabel(selectedScope) : 'Project tasks'}
+        title={selectedProjectId === 'all' ? taskScopeLabel(selectedScope) : '项目任务'}
         onOpenTask={onOpenTask}
       />
     </>
@@ -1516,10 +1511,10 @@ function TaskScopeControl({
   onSelectScope: (scope: TaskScope) => void;
 }) {
   const scopes: Array<{ label: string; value: TaskScope }> = [
-    { label: 'All', value: 'all' },
-    { label: 'Open', value: 'open' },
-    { label: 'Running', value: 'inProgress' },
-    { label: 'Review', value: 'review' },
+    { label: '全部', value: 'all' },
+    { label: '已打开', value: 'open' },
+    { label: '进行中', value: 'inProgress' },
+    { label: '待审阅', value: 'review' },
   ];
   return (
     <View style={styles.scopeControl}>
@@ -1554,6 +1549,7 @@ function MyProfileScreen({
   snapshot,
   onOpenProject,
   onOpenTasks,
+  onDisconnect,
   onRetry,
 }: {
   error: string | null;
@@ -1563,6 +1559,7 @@ function MyProfileScreen({
   snapshot: MobileDashboardSnapshot;
   onOpenProject: (projectId: string) => void;
   onOpenTasks: () => void;
+  onDisconnect: () => void;
   onRetry: () => void;
 }) {
   const account = profile?.account;
@@ -1703,20 +1700,24 @@ function MyProfileScreen({
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>云端服务</Text>
-          <Text style={styles.sectionMeta}>桌面端统一管理</Text>
+          <Text style={styles.sectionTitle}>登录与同步</Text>
+          <Text style={styles.sectionMeta}>当前设备</Text>
         </View>
         <View style={styles.profileCloudCard}>
           <CloudStatusRow
-            icon="radio-outline"
-            label="Yoda Relay"
-            value={relay ? relayStateLabel(relay.status) : '登录后可用'}
-            detail={
-              relay
-                ? `${relay.onlineDeviceCount} / ${relay.deviceCount} 台设备在线${relay.accessEndsAt ? ` · 有效至 ${formatProfileTime(relay.accessEndsAt)}` : ''}`
-                : '让手机在外网也能连接这台桌面设备'
-            }
-            active={relay?.status === 'active' || relay?.status === 'trial'}
+            icon="person-circle-outline"
+            label="LovStudio 账户"
+            value={account ? accountStateLabel(account.state) : '暂不可用'}
+            detail={account?.email || '在桌面端登录后可使用同步与云端服务'}
+            active={account?.state === 'signed-in'}
+          />
+          <View style={styles.profileCloudDivider} />
+          <CloudStatusRow
+            icon="desktop-outline"
+            label="当前桌面"
+            value="已连接"
+            detail="此手机正在同步这台 Yoda 桌面设备"
+            active
           />
           <View style={styles.profileCloudDivider} />
           <CloudStatusRow
@@ -1733,6 +1734,38 @@ function MyProfileScreen({
             active={Boolean(
               profile?.cloud.settings.signedIn && profile.cloud.settings.autoSyncEnabled
             )}
+          />
+          <Pressable
+            accessibilityLabel="断开当前桌面"
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.disconnectDesktopButton,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={onDisconnect}
+          >
+            <Ionicons color={COLORS.muted} name="log-out-outline" size={17} />
+            <Text style={styles.disconnectDesktopButtonText}>断开当前桌面</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>云端服务</Text>
+          <Text style={styles.sectionMeta}>桌面端统一管理</Text>
+        </View>
+        <View style={styles.profileCloudCard}>
+          <CloudStatusRow
+            icon="radio-outline"
+            label="Yoda Relay"
+            value={relay ? relayStateLabel(relay.status) : '登录后可用'}
+            detail={
+              relay
+                ? `${relay.onlineDeviceCount} / ${relay.deviceCount} 台设备在线${relay.accessEndsAt ? ` · 有效至 ${formatProfileTime(relay.accessEndsAt)}` : ''}`
+                : '让手机在外网也能连接这台桌面设备'
+            }
+            active={relay?.status === 'active' || relay?.status === 'trial'}
           />
         </View>
       </View>
@@ -1819,19 +1852,21 @@ function CloudStatusRow({
 
 function HomeTabBar({
   activeTab,
+  onNewRequest,
   onSelect,
 }: {
   activeTab: HomeTab;
+  onNewRequest: () => void;
   onSelect: (tab: HomeTab) => void;
 }) {
   const tabs: Array<{
     icon: keyof typeof Ionicons.glyphMap;
     label: string;
-    value: HomeTab;
+    value: HomeTab | null;
   }> = [
     { icon: 'grid-outline', label: 'Home', value: 'home' },
     { icon: 'checkmark-circle-outline', label: 'Tasks', value: 'tasks' },
-    { icon: 'add-circle-outline', label: 'New', value: 'request' },
+    { icon: 'add-circle-outline', label: '新建', value: null },
     { icon: 'person-circle-outline', label: '我的', value: 'profile' },
   ];
 
@@ -1849,7 +1884,7 @@ function HomeTabBar({
               active ? styles.bottomTabItemActive : null,
               pressed ? styles.buttonPressed : null,
             ]}
-            onPress={() => onSelect(tab.value)}
+            onPress={() => (tab.value ? onSelect(tab.value) : onNewRequest())}
           >
             <Ionicons color={active ? COLORS.surface : COLORS.muted} name={tab.icon} size={19} />
             <Text style={[styles.bottomTabLabel, active ? styles.bottomTabLabelActive : null]}>
@@ -1873,25 +1908,25 @@ function Metrics({
 }) {
   const metrics = [
     {
-      label: 'Projects',
+      label: '项目',
       value: snapshot.metrics.projectCount,
       icon: 'folder-outline',
       scope: 'all',
     },
     {
-      label: 'Open',
+      label: '已打开',
       value: snapshot.metrics.openProjectCount,
       icon: 'desktop-outline',
       scope: 'open',
     },
     {
-      label: 'Progress',
+      label: '进行中',
       value: snapshot.metrics.inProgressTaskCount,
       icon: 'flash-outline',
       scope: 'inProgress',
     },
     {
-      label: 'Review',
+      label: '待审阅',
       value: snapshot.metrics.reviewTaskCount,
       icon: 'checkmark-done-outline',
       scope: 'review',
@@ -1921,7 +1956,7 @@ function Metrics({
   );
 }
 
-function ProjectRail({
+function TaskProjectScopeControl({
   projects,
   selectedProjectId,
   onSelect,
@@ -1930,66 +1965,51 @@ function ProjectRail({
   selectedProjectId: string;
   onSelect: (projectId: string) => void;
 }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+  const isAllProjects = selectedProjectId === 'all';
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Projects</Text>
+        <Text style={styles.sectionTitle}>项目范围</Text>
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.rail}
+      <Pressable
+        accessibilityLabel={`选择任务项目范围，当前${isAllProjects ? '所有项目' : (selectedProject?.displayName ?? '所有项目')}`}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.taskProjectScope, pressed ? styles.buttonPressed : null]}
+        onPress={() => setPickerOpen(true)}
       >
-        <ProjectChip
-          active={selectedProjectId === 'all'}
-          label="All"
-          meta={`${projects.length}`}
-          onPress={() => onSelect('all')}
-        />
-        {projects.map((project) => (
-          <ProjectChip
-            key={project.id}
-            active={selectedProjectId === project.id}
-            label={project.displayName}
-            meta={project.isOpen ? 'Open' : 'Idle'}
-            onPress={() => onSelect(project.id)}
-          />
-        ))}
-      </ScrollView>
+        <View style={styles.taskProjectScopeIcon}>
+          <Ionicons color={COLORS.charcoal} name="folder-open-outline" size={19} />
+        </View>
+        <View style={styles.taskProjectScopeBody}>
+          <Text style={styles.taskProjectScopeLabel} numberOfLines={1}>
+            {isAllProjects ? '所有项目' : (selectedProject?.displayName ?? '所有项目')}
+          </Text>
+          <Text style={styles.taskProjectScopeMeta} numberOfLines={1}>
+            {isAllProjects ? '不限定项目，可随时切换' : '仅查看这个项目中的任务'}
+          </Text>
+        </View>
+        <Ionicons color={COLORS.muted} name="chevron-down-outline" size={20} />
+      </Pressable>
+      <ProjectPickerSheet
+        eyebrow="任务范围"
+        open={pickerOpen}
+        projects={projects}
+        selectedProjectId={isAllProjects ? null : selectedProjectId}
+        title="选择项目范围"
+        unscopedOption={{
+          icon: 'layers-outline',
+          label: '所有项目',
+          meta: '不限定项目',
+        }}
+        onClose={() => setPickerOpen(false)}
+        onProjectChange={(projectId) => {
+          onSelect(projectId ?? 'all');
+          setPickerOpen(false);
+        }}
+      />
     </View>
-  );
-}
-
-function ProjectChip({
-  active,
-  label,
-  meta,
-  onPress,
-}: {
-  active: boolean;
-  label: string;
-  meta: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.projectChip,
-        active ? styles.projectChipActive : null,
-        pressed ? styles.buttonPressed : null,
-      ]}
-      onPress={onPress}
-    >
-      <Text
-        style={[styles.projectChipLabel, active ? styles.projectChipLabelActive : null]}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
-      <Text style={[styles.projectChipMeta, active ? styles.projectChipMetaActive : null]}>
-        {meta}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -2029,7 +2049,7 @@ function DemandComposer({
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>New request</Text>
+        <Text style={styles.sectionTitle}>任务说明</Text>
       </View>
       <InputMediaControls
         disabled={submitting}
@@ -2048,7 +2068,7 @@ function DemandComposer({
           <TextInput
             maxLength={MOBILE_SESSION_INPUT_MAX_CHARS}
             multiline
-            placeholder="Describe the requirement..."
+            placeholder="描述你想完成的工作…"
             placeholderTextColor="#9A958C"
             style={styles.composerTextInput}
             textAlignVertical="center"
@@ -2057,10 +2077,17 @@ function DemandComposer({
           />
         }
       />
-      <DemandProjectPickerSheet
+      <ProjectPickerSheet
+        eyebrow="新建任务"
         open={projectPickerOpen}
         projects={projects}
         selectedProjectId={selectedProjectId}
+        title="选择项目"
+        unscopedOption={{
+          icon: 'documents-outline',
+          label: '草稿箱',
+          meta: '不归属具体项目',
+        }}
         onClose={() => setProjectPickerOpen(false)}
         onProjectChange={(projectId) => {
           onProjectChange(projectId);
@@ -2081,13 +2108,13 @@ function DemandComposer({
           <>
             <ActivityIndicator color={COLORS.surface} />
             <Text style={styles.primaryButtonText}>
-              {uploadProgress ? mobileInputUploadLabel(uploadProgress) : 'Starting…'}
+              {uploadProgress ? mobileInputUploadLabel(uploadProgress) : '正在创建…'}
             </Text>
           </>
         ) : (
           <>
             <Ionicons color={COLORS.surface} name="arrow-up-outline" size={18} />
-            <Text style={styles.primaryButtonText}>Start request</Text>
+            <Text style={styles.primaryButtonText}>开始任务</Text>
           </>
         )}
       </Pressable>
@@ -2095,16 +2122,81 @@ function DemandComposer({
   );
 }
 
-function DemandProjectPickerSheet({
+function NewTaskModal({
+  open,
+  onClose,
+  ...composerProps
+}: Omit<Parameters<typeof DemandComposer>[0], 'onSubmit'> & {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <Modal
+      animationType="fade"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      transparent
+      visible={open}
+      onRequestClose={onClose}
+    >
+      <KeyboardAvoidingView
+        accessibilityViewIsModal
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.newTaskOverlay}
+      >
+        <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
+        <SafeAreaView style={styles.newTaskWindow}>
+          <View style={styles.newTaskWindowHeader}>
+            <View>
+              <Text style={styles.newTaskWindowEyebrow}>新建任务</Text>
+              <Text style={styles.newTaskWindowTitle}>开始一项工作</Text>
+            </View>
+            <Pressable
+              accessibilityLabel="关闭新建任务窗口"
+              accessibilityRole="button"
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.newTaskWindowClose,
+                pressed ? styles.buttonPressed : null,
+              ]}
+              onPress={onClose}
+            >
+              <Ionicons color={COLORS.charcoal} name="close-outline" size={22} />
+            </Pressable>
+          </View>
+          <ScrollView
+            contentContainerStyle={styles.newTaskWindowContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <DemandComposer {...composerProps} />
+          </ScrollView>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+function ProjectPickerSheet({
+  eyebrow,
   open,
   projects,
   selectedProjectId,
+  title,
+  unscopedOption,
   onClose,
   onProjectChange,
 }: {
+  eyebrow: string;
   open: boolean;
   projects: MobileProjectSummary[];
   selectedProjectId: string | null;
+  title: string;
+  unscopedOption: {
+    icon: keyof typeof Ionicons.glyphMap;
+    label: string;
+    meta: string;
+  };
   onClose: () => void;
   onProjectChange: (projectId: string | null) => void;
 }) {
@@ -2128,11 +2220,11 @@ function DemandProjectPickerSheet({
           <View style={styles.projectPickerHandle} />
           <View style={styles.projectPickerHeader}>
             <View style={styles.projectPickerTitleBlock}>
-              <Text style={styles.projectPickerEyebrow}>New request</Text>
-              <Text style={styles.projectPickerTitle}>Choose a project</Text>
+              <Text style={styles.projectPickerEyebrow}>{eyebrow}</Text>
+              <Text style={styles.projectPickerTitle}>{title}</Text>
             </View>
             <Pressable
-              accessibilityLabel="Close project picker"
+              accessibilityLabel="关闭项目选择"
               accessibilityRole="button"
               hitSlop={8}
               style={({ pressed }) => [
@@ -2145,21 +2237,21 @@ function DemandProjectPickerSheet({
             </Pressable>
           </View>
           <View style={styles.projectPickerSort}>
-            <Text style={styles.projectPickerSortLabel}>Sort projects</Text>
+            <Text style={styles.projectPickerSortLabel}>项目排序</Text>
             <View accessibilityRole="radiogroup" style={styles.projectPickerSortOptions}>
               <DemandProjectSortOption
                 active={sortMode === 'recent'}
-                label="Recent"
+                label="最近"
                 onPress={() => setSortMode('recent')}
               />
               <DemandProjectSortOption
                 active={sortMode === 'name'}
-                label="Name"
+                label="名称"
                 onPress={() => setSortMode('name')}
               />
               <DemandProjectSortOption
                 active={sortMode === 'open'}
-                label="Open"
+                label="已打开"
                 onPress={() => setSortMode('open')}
               />
             </View>
@@ -2170,15 +2262,15 @@ function DemandProjectPickerSheet({
             keyboardShouldPersistTaps="handled"
             style={styles.projectPickerListViewport}
           >
-            <DemandProjectOption
-              icon="documents-outline"
-              label="Drafts"
-              meta="Default workspace"
+            <ProjectPickerOption
+              icon={unscopedOption.icon}
+              label={unscopedOption.label}
+              meta={unscopedOption.meta}
               selected={selectedProjectId === null}
               onPress={() => onProjectChange(null)}
             />
             {sortedProjects.map((project) => (
-              <DemandProjectOption
+              <ProjectPickerOption
                 key={project.id}
                 icon={project.isOpen ? 'desktop-outline' : 'folder-outline'}
                 label={project.displayName}
@@ -2227,7 +2319,7 @@ function DemandProjectSortOption({
   );
 }
 
-function DemandProjectOption({
+function ProjectPickerOption({
   icon,
   label,
   meta,
@@ -4186,8 +4278,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: COLORS.charcoal,
   },
-  homeConnection: {
-    color: COLORS.green,
+  homeProductName: {
+    color: COLORS.muted,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -4715,6 +4807,22 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: COLORS.faint,
   },
+  disconnectDesktopButton: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.page,
+  },
+  disconnectDesktopButtonText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
   section: {
     gap: 12,
   },
@@ -4772,40 +4880,87 @@ const styles = StyleSheet.create({
   scopeButtonTextActive: {
     color: COLORS.ink,
   },
-  rail: {
-    gap: 9,
-    paddingRight: 2,
-  },
-  projectChip: {
-    width: 126,
-    minHeight: 58,
+  taskProjectScope: {
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
     borderWidth: 1,
     borderColor: COLORS.line,
     borderRadius: 8,
     backgroundColor: COLORS.surface,
     paddingHorizontal: 12,
-    paddingVertical: 9,
-    justifyContent: 'space-between',
+    paddingVertical: 10,
   },
-  projectChipActive: {
-    borderColor: COLORS.charcoal,
-    backgroundColor: COLORS.charcoal,
+  taskProjectScopeIcon: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#EFEEE7',
   },
-  projectChipLabel: {
+  taskProjectScopeBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 3,
+  },
+  taskProjectScopeLabel: {
     color: COLORS.ink,
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '800',
   },
-  projectChipLabelActive: {
-    color: COLORS.surface,
-  },
-  projectChipMeta: {
+  taskProjectScopeMeta: {
     color: COLORS.muted,
     fontSize: 12,
     fontWeight: '600',
   },
-  projectChipMetaActive: {
-    color: '#D8D4CB',
+  newTaskOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 14,
+    backgroundColor: 'rgba(23, 23, 23, 0.42)',
+  },
+  newTaskWindow: {
+    maxHeight: '88%',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 18,
+    backgroundColor: COLORS.surface,
+  },
+  newTaskWindowHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.faint,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 14,
+  },
+  newTaskWindowEyebrow: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  newTaskWindowTitle: {
+    color: COLORS.ink,
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  newTaskWindowClose: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 19,
+    backgroundColor: COLORS.page,
+  },
+  newTaskWindowContent: {
+    padding: 18,
   },
   projectPickerOverlay: {
     flex: 1,
