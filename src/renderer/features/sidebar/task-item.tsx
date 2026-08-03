@@ -385,49 +385,46 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
                 : 'hidden group-hover/row:flex'
           )}
         >
-          <>
-            <TaskActionsMenu
-              {...menuActions}
-              open={isMenuOpen}
-              onOpenChange={setMenuOpen}
-              trigger={
-                <SidebarItemMiniButton
-                  type="button"
-                  aria-label={t('sidebar.runScripts.menuLabel')}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </SidebarItemMiniButton>
-              }
-            />
-            {canQuickCreateSubtask ? (
+          <TaskActionsMenu
+            {...menuActions}
+            open={isMenuOpen}
+            onOpenChange={setMenuOpen}
+            trigger={
               <SidebarItemMiniButton
                 type="button"
-                aria-label={t('tasks.context.createSubtask')}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  menuActions.onCreateSubtask?.();
-                }}
+                aria-label={t('sidebar.runScripts.menuLabel')}
+                onClick={(e) => e.stopPropagation()}
               >
-                <ListPlus className="h-4 w-4" />
+                <MoreHorizontal className="h-4 w-4" />
               </SidebarItemMiniButton>
-            ) : (
-              <SidebarItemMiniButton
-                type="button"
-                aria-label={t('sidebar.archiveTask')}
-                disabled={isArchiving}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Match the shared task menu's direct-archive item: it
-                  // opens the same note dialog instead of a sidebar-only
-                  // two-step confirmation that bypasses the shared flow.
-                  menuActions.onArchive();
-                }}
-              >
-                <Archive className="h-4 w-4" />
-              </SidebarItemMiniButton>
-            )}
-          </>
+            }
+          />
+          {canQuickCreateSubtask ? (
+            <SidebarItemMiniButton
+              type="button"
+              aria-label={t('tasks.context.createSubtask')}
+              onClick={(e) => {
+                e.stopPropagation();
+                menuActions.onCreateSubtask?.();
+              }}
+            >
+              <ListPlus className="h-4 w-4" />
+            </SidebarItemMiniButton>
+          ) : (
+            <SidebarItemMiniButton
+              type="button"
+              aria-label={t('sidebar.archiveTask')}
+              disabled={isArchiving}
+              onClick={(e) => {
+                e.stopPropagation();
+                // The sidebar icon archives immediately. The overflow menu
+                // retains the optional-note and pre-archive-command flows.
+                menuActions.onArchiveQuick();
+              }}
+            >
+              <Archive className="h-4 w-4" />
+            </SidebarItemMiniButton>
+          )}
         </div>
         <div
           className={cn(
