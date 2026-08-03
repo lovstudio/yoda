@@ -2232,6 +2232,7 @@
       "copyFailed": "The value could not be copied to the clipboard.",
       "createSubtask": "New subtask",
       "addSubtask": "Add subtask...",
+      "createSubtaskAndRun": "New subtask and start session...",
       "setParent": "Set parent task...",
       "createParent": "Add parent task (group)",
       "moveToProject": "Move to project",

@@ -2232,6 +2232,7 @@
       "copyFailed": "无法复制到剪贴板。",
       "createSubtask": "新建子任务",
       "addSubtask": "添加子任务…",
+      "createSubtaskAndRun": "新建子任务并启动 Session…",
       "setParent": "设置父任务…",
       "createParent": "增设父任务（分组）",
       "moveToProject": "移动到项目",
