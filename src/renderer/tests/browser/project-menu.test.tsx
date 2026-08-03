@@ -154,7 +154,12 @@ describe('ProjectMenu quick actions submenu', () => {
     );
     const onCreateTask = vi.fn();
     const onCreateTaskAndRun = vi.fn();
-    const actions = { ...requiredActions(), onCreateTask, onCreateTaskAndRun };
+    const actions = {
+      ...requiredActions(),
+      onCreateTask,
+      onCreateTaskAndRun,
+      onOpenDetails: vi.fn(),
+    };
 
     await act(async () => {
       root.render(
@@ -175,6 +180,11 @@ describe('ProjectMenu quick actions submenu', () => {
     );
     const createTaskItem = items.find((item) => item.textContent === 'sidebar.newTask');
     const createAndRunItem = items.find((item) => item.textContent === 'sidebar.newTaskAndRun');
+    const openDetailsItem = items.find((item) => item.textContent === 'sidebar.openProjectDetails');
+
+    expect(createTaskItem?.nextElementSibling).toBe(createAndRunItem);
+    expect(createAndRunItem?.nextElementSibling?.tagName).toBe('HR');
+    expect(createAndRunItem?.nextElementSibling?.nextElementSibling).toBe(openDetailsItem);
 
     await act(async () => createTaskItem?.click());
     expect(onCreateTask).toHaveBeenCalledTimes(1);
