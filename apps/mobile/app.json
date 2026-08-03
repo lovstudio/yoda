@@ -26,6 +26,7 @@
     ],
     "ios": {
       "bundleIdentifier": "ai.lovstudio.yoda.mobile",
+      "requireFullScreen": true,
       "supportsTablet": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
