@@ -194,6 +194,11 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     navigate('task', { projectId, taskId });
   };
 
+  const handleToggleSubtasks = () => {
+    if (!hasChildren) return;
+    sidebarStore.toggleTaskCollapsed(taskId);
+  };
+
   // Alt/Option-click pins the WHOLE task UI into the global side pane — opening
   // it there behaves exactly like routing to the task, just wrapped in the pane
   // (the self-contained pane auto-provisions and owns its own tab strip).
@@ -228,6 +233,9 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         data-sidebar-project-id={projectId}
         data-sidebar-task-id={taskId}
         isActive={isActive}
+        role={hasChildren ? 'button' : undefined}
+        tabIndex={hasChildren ? 0 : undefined}
+        aria-expanded={hasChildren ? !isCollapsed : undefined}
         onPointerEnter={taskPreloadIntent.schedule}
         onPointerLeave={taskPreloadIntent.cancel}
         onMouseDown={(e) => {
@@ -241,7 +249,20 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
             pinTaskToSidePane();
             return;
           }
+          // Parent tasks act as task groups in the sidebar, like project rows:
+          // clicking their row toggles the child subtree instead of navigating
+          // away from the list. The context menu still exposes "打开任务".
+          if (hasChildren) {
+            handleToggleSubtasks();
+            return;
+          }
           handleOpenDetails();
+        }}
+        onKeyDown={(e) => {
+          if (!hasChildren || (e.key !== 'Enter' && e.key !== ' ')) return;
+          e.preventDefault();
+          e.stopPropagation();
+          handleToggleSubtasks();
         }}
         onDoubleClick={(e) => {
           e.stopPropagation();
@@ -257,7 +278,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               className="shrink-0 transition-opacity duration-150 opacity-0 group-hover/row:opacity-100"
               onClick={(e) => {
                 e.stopPropagation();
-                sidebarStore.toggleTaskCollapsed(taskId);
+                handleToggleSubtasks();
               }}
             >
               <ChevronRight
@@ -289,7 +310,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => {
                           e.stopPropagation();
-                          sidebarStore.toggleTaskCollapsed(taskId);
+                          handleToggleSubtasks();
                         }}
                       >
                         <ChevronRight
