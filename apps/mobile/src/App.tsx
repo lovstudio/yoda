@@ -34,6 +34,7 @@ import {
   type StyleProp,
   type TextStyle,
 } from 'react-native';
+import yodaMarkSource from '../../../src/assets/images/yoda/yoda_logo.png';
 import {
   appendMobileVoiceTranscript,
   canContinueMobileSession,
@@ -1206,9 +1207,7 @@ function ConnectionScreen({
         style={styles.flex}
       >
         <ScrollView contentContainerStyle={styles.connectionContent}>
-          <View style={styles.brandMark}>
-            <Ionicons color={COLORS.surface} name="git-network-outline" size={25} />
-          </View>
+          <YodaBrandMark size={52} />
           <Text style={styles.connectionTitle}>Connect to desktop</Text>
           <Text style={styles.connectionCopy}>
             Scan once from the desktop sidebar. Yoda Mobile securely remembers this device and
@@ -1351,9 +1350,7 @@ function HomeHeader({ tab }: { tab: HomeTab }) {
     <View style={styles.homeHeader}>
       <View style={styles.homeHeaderTop}>
         <View style={styles.homeBrandRow}>
-          <View style={styles.homeBrandMark}>
-            <Ionicons color={COLORS.surface} name="git-network-outline" size={18} />
-          </View>
+          <YodaBrandMark size={36} />
           <View>
             <Text style={styles.kicker}>{copy.eyebrow}</Text>
             <Text style={styles.homeProductName}>Yoda Mobile</Text>
@@ -1363,6 +1360,17 @@ function HomeHeader({ tab }: { tab: HomeTab }) {
       <Text style={styles.homeTitle}>{copy.title}</Text>
       <Text style={styles.homeSubtitle}>{copy.subtitle}</Text>
     </View>
+  );
+}
+
+function YodaBrandMark({ size }: { size: number }) {
+  return (
+    <Image
+      accessibilityLabel="Yoda"
+      accessibilityRole="image"
+      source={yodaMarkSource}
+      style={{ width: size, height: size }}
+    />
   );
 }
 
@@ -4242,14 +4250,6 @@ const styles = StyleSheet.create({
     padding: 24,
     gap: 18,
   },
-  brandMark: {
-    width: 52,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 8,
-    backgroundColor: COLORS.charcoal,
-  },
   connectionTitle: {
     color: COLORS.ink,
     fontSize: 30,
@@ -4279,14 +4279,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-  },
-  homeBrandMark: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 8,
-    backgroundColor: COLORS.charcoal,
   },
   homeProductName: {
     color: COLORS.muted,
