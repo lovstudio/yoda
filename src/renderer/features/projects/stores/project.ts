@@ -58,6 +58,7 @@ export class MountedProject {
   }
 
   dispose(): void {
+    this.taskManager.dispose();
     this.repository.dispose();
     this.prSync.dispose();
     this.settings.dispose();

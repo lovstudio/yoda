@@ -362,6 +362,16 @@ export type CodexTurnContext = {
   approvalPolicy: string | null;
   sandboxPolicy: string | null;
   effort: string | null;
+  serviceTier: string | null;
+};
+
+export type SessionRuntimeOverrides = {
+  /** Model selected for this launch. Resume-time support is runtime-specific. */
+  model?: string | null;
+  /** Codex reasoning effort for this launch, for example `medium` or `xhigh`. */
+  reasoningEffort?: string | null;
+  /** Codex Fast mode. `false` explicitly selects standard routing. */
+  fastMode?: boolean;
 };
 
 export type CodexSessionContext = {

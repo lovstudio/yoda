@@ -170,7 +170,16 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
     // Subtask tree entries — projectless Drafts tasks stay flat for now.
     onCreateSubtask:
       projectId !== INTERNAL_PROJECT_ID && task.state !== 'unregistered'
-        ? () => showCreateSubtask({ projectId, parentTaskId: taskId })
+        ? () => showCreateSubtask({ projectId, parentTaskId: taskId, initialAction: 'create-only' })
+        : undefined,
+    onCreateSubtaskAndRun:
+      projectId !== INTERNAL_PROJECT_ID && task.state !== 'unregistered'
+        ? () =>
+            showCreateSubtask({
+              projectId,
+              parentTaskId: taskId,
+              initialAction: 'create-and-run',
+            })
         : undefined,
     onSetParent:
       projectId !== INTERNAL_PROJECT_ID && task.state !== 'unregistered'

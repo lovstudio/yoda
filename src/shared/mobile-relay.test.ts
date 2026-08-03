@@ -21,6 +21,7 @@ describe('mobile relay contract', () => {
 
   it('only allows the narrow mobile API surface', () => {
     expect(isAllowedMobileRelayRequest('GET', '/v1/snapshot')).toBe(true);
+    expect(isAllowedMobileRelayRequest('GET', '/v1/profile')).toBe(true);
     expect(isAllowedMobileRelayRequest('POST', '/v1/demands')).toBe(true);
     expect(
       isAllowedMobileRelayRequest(

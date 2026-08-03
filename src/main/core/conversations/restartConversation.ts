@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import type { Conversation } from '@shared/conversations';
+import type { Conversation, SessionRuntimeOverrides } from '@shared/conversations';
 import { skillsService } from '@main/core/skills/SkillsService';
 import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
@@ -40,8 +40,8 @@ export async function restartConversation(
   tmuxOverride?: boolean,
   /** Add a newly installed skill to an explicit session allowlist before restarting. */
   enableSkillKey?: string,
-  /** Explicit model override for this restart; the runtime persists it with the native session. */
-  modelOverride?: string
+  /** Explicit model and inference overrides for this restarted runtime session. */
+  runtimeOverrides?: SessionRuntimeOverrides
 ): Promise<void> {
   const [row] = await db
     .select()
@@ -81,6 +81,6 @@ export async function restartConversation(
     undefined,
     tmuxOverride,
     undefined,
-    modelOverride
+    runtimeOverrides
   );
 }

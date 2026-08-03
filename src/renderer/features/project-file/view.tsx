@@ -8,7 +8,7 @@ import { BinaryRenderer } from '@renderer/lib/editor/binary-renderer';
 import { FileErrorRenderer } from '@renderer/lib/editor/file-error-renderer';
 import { ImageRenderer } from '@renderer/lib/editor/image-renderer';
 import { PdfRenderer } from '@renderer/lib/editor/pdf-renderer';
-import { SvgRenderer } from '@renderer/lib/editor/svg-renderer';
+import { SvgPreview } from '@renderer/lib/editor/svg-renderer';
 import { TooLargeRenderer } from '@renderer/lib/editor/too-large-renderer';
 import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { modelRegistry } from '@renderer/lib/monaco/monaco-model-registry';
@@ -119,17 +119,23 @@ const ProjectFileContent = observer(function ProjectFileContent({
         {isMonaco ? (
           <ProjectFileEditor session={session} />
         ) : (
-          <NonTextRenderer file={session.fileTab} />
+          <NonTextRenderer file={session.fileTab} modelRootPath={session.lifecycle.modelRootPath} />
         )}
       </div>
     </div>
   );
 });
 
-function NonTextRenderer({ file }: { file: FileTabStore }) {
+function NonTextRenderer({ file, modelRootPath }: { file: FileTabStore; modelRootPath: string }) {
   switch (file.renderer.kind) {
     case 'svg':
-      return <SvgRenderer filePath={file.path} />;
+      return (
+        <SvgPreview
+          filePath={file.path}
+          modelRootPath={modelRootPath}
+          onShowSource={() => file.updateRenderer(() => ({ kind: 'svg-source' }))}
+        />
+      );
     case 'image':
       return <ImageRenderer file={file} />;
     case 'pdf':

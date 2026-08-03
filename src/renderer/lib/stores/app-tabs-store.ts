@@ -1,4 +1,5 @@
 import { action, computed, makeObservable, observable, reaction, toJS } from 'mobx';
+import type { TaskWindowTabTarget } from '@shared/task-window';
 import type { AppTabsSnapshot } from '@shared/view-state';
 import { migratePersistedViewRoute } from '@renderer/app/route-migrations';
 import type { ViewId, WrapParams } from '@renderer/app/view-registry';
@@ -201,6 +202,7 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
       replayNonce: observable,
       visibleTabs: computed,
       start: action,
+      openTaskScope: action,
       openTab: action,
       replaceActiveTab: action,
       stickTab: action,
@@ -220,6 +222,12 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
    *   the destination scope — the strip swaps to that scope's set.
    */
   start(): void {
+    // App state is retained across renderer HMR. Re-starting route sync must
+    // replace the prior reaction; otherwise every sidebar navigation gets
+    // replayed by every retained listener and their target fallbacks race.
+    this.disposer?.();
+    this.disposer = null;
+
     if (this.tabs.length === 0) {
       const tab: AppTabEntry = {
         id: createTabId(),
@@ -447,6 +455,43 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
 
     // Global view scopes: the single stored tab (the active one) is the set.
     return stored;
+  }
+
+  /**
+   * Enters a task through one explicit route when its destination is already
+   * known. Sidebar task rows use this instead of first navigating to a
+   * target-less scope entry and then replaying the remembered tab as a second
+   * navigation.
+   *
+   * Returns false when neither AppTabs nor the caller can resolve a target. A
+   * fresh, unprovisioned task must keep the target-less path so its restored
+   * TaskView snapshot / pending initial conversation can choose the target once
+   * provisioning completes.
+   */
+  openTaskScope(projectId: string, taskId: string, fallbackTarget?: TaskWindowTabTarget): boolean {
+    const scope = tabScopeKey('task', {
+      projectId,
+      taskId,
+      tab: fallbackTarget ?? { kind: 'overview' },
+    });
+    const active = this.activeTab;
+    const remembered =
+      active && tabScopeKey(active.viewId, active.params) === scope
+        ? active
+        : this._lastActiveInScope(scope);
+    const rememberedTarget =
+      remembered?.viewId === 'task'
+        ? (remembered.params.tab as TaskWindowTabTarget | undefined)
+        : undefined;
+    const target = rememberedTarget ?? fallbackTarget;
+    if (!target) return false;
+
+    // A sidebar task click is an explicit scope switch. Sticky activation
+    // normally keeps the previous strip in place, so set the destination scope
+    // before opening the remembered route.
+    this.stripScope = scope;
+    this.openTab('task', { projectId, taskId, tab: target });
+    return true;
   }
 
   /**

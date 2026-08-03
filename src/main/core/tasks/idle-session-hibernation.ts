@@ -11,7 +11,7 @@ export function shouldHibernateIdleSession(input: {
   return (
     input.timeoutMs > 0 &&
     input.detachable &&
-    (input.status === 'idle' || input.status === 'completed') &&
+    input.status === 'completed' &&
     input.now - input.statusChangedAt >= input.timeoutMs &&
     input.rendererConsumers === 0
   );

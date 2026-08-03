@@ -121,6 +121,22 @@ describe('active TUI interactions', () => {
       })
     );
     expect(await waitForTerminalInput()).toContain('`@/tmp/clipboard.png`');
+
+    // xterm owns focus on mouse down. The pane must not focus its helper
+    // textarea again during mouse down or click: immediately after an image
+    // paste, repeated focus transitions can crash Electron's renderer.
+    const focus = vi.spyOn(pty.terminal, 'focus');
+    const terminalElement = host.querySelector<HTMLElement>('.xterm');
+    if (!terminalElement) throw new Error('xterm element was not mounted');
+
+    terminalElement.dispatchEvent(
+      new MouseEvent('mousedown', { bubbles: true, button: 0, buttons: 1, cancelable: true })
+    );
+    terminalElement.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, button: 0, buttons: 0, cancelable: true })
+    );
+
+    expect(focus).toHaveBeenCalledTimes(1);
   });
 
   it('does not forward a secondary-button press to TUI mouse tracking', async () => {

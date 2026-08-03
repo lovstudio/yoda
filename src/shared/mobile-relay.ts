@@ -173,6 +173,7 @@ export function parseMobileRelayHostFrame(value: unknown): MobileRelayHostFrame 
 
 const MOBILE_RELAY_ALLOWED_PATHS = [
   /^\/v1\/snapshot$/,
+  /^\/v1\/profile$/,
   /^\/v1\/demands$/,
   /^\/v1\/attachments(?:\/[0-9a-f-]+\/(?:chunks|complete|discard))?$/i,
   /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions$/,

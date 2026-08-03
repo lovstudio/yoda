@@ -1003,6 +1003,7 @@ function parseTurnContext(value: unknown): CodexTurnContext | null {
     approvalPolicy: nullableString(ctx.approval_policy),
     sandboxPolicy: formatCodexPolicy(ctx.sandbox_policy),
     effort: nullableString(ctx.effort),
+    serviceTier: nullableString(ctx.service_tier),
   };
 }
 

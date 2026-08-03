@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import type { Conversation } from '@shared/conversations';
+import type { Conversation, SessionRuntimeOverrides } from '@shared/conversations';
 import { agentSessionExitedChannel } from '@shared/events/agentEvents';
 import type { ProjectPromptPrinciples } from '@shared/project-settings';
 import { makePtyId } from '@shared/ptyId';
@@ -112,6 +112,7 @@ export class LocalConversationProvider implements ConversationProvider {
   private readonly sessionInfos = new Map<string, Omit<ActiveConversationSession, 'detachable'>>();
   private readonly runStateWatchers = new Map<string, RunStateWatcher[]>();
   private readonly sessionArtifactCleanups = new Map<string, { pty: Pty; cleanup: () => void }>();
+  private readonly silenceReconcilerDetachers = new Map<string, () => void>();
 
   constructor({
     projectId,
@@ -150,7 +151,7 @@ export class LocalConversationProvider implements ConversationProvider {
     initialPrompt?: string,
     tmuxOverride?: boolean,
     imagePaths?: string[],
-    model?: string | null
+    runtimeOverrides?: SessionRuntimeOverrides
   ): Promise<void> {
     const sessionId = makePtySessionId(
       conversation.projectId,
@@ -368,7 +369,7 @@ export class LocalConversationProvider implements ConversationProvider {
         initialPrompt: useClipboardImagePaste ? undefined : effectiveInitialPrompt,
         workingDirectory: this.taskPath,
         appendSystemPrompt,
-        model,
+        ...runtimeOverrides,
         terminalThemeMode,
         skillPolicy: conversation.skillPolicy,
         executionMode: conversation.executionMode,
@@ -504,11 +505,23 @@ export class LocalConversationProvider implements ConversationProvider {
         });
       }
 
-      const detachSilenceReconciler = agentSilenceReconciler.attach(sessionId, {
-        projectId: conversation.projectId,
-        taskId: conversation.taskId,
-        conversationId: conversation.id,
-      });
+      const detachSilenceReconciler = agentSilenceReconciler.attach(
+        sessionId,
+        {
+          projectId: conversation.projectId,
+          taskId: conversation.taskId,
+          conversationId: conversation.id,
+        },
+        {
+          // Claude transcript / session-activity and Codex rollout tailers are
+          // authoritative. Their turns may legitimately produce no PTY output
+          // during a long-running tool call, so silence must not clear `working`.
+          // Keep the shared tracker lifecycle attached for diagnostics and
+          // deterministic cleanup, without letting silence change run state.
+          autoReconcile: !hasAuthoritativeRunState,
+        }
+      );
+      this.silenceReconcilerDetachers.set(sessionId, detachSilenceReconciler);
       detachSilenceReconcilerForRollback = detachSilenceReconciler;
       pty.onData(() => agentSilenceReconciler.noteOutput(sessionId));
       if (conversation.runtimeId === 'claude') {
@@ -523,6 +536,7 @@ export class LocalConversationProvider implements ConversationProvider {
       }
 
       pty.onExit(({ exitCode }) => {
+        this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
         if (this.sessions.get(sessionId) !== pty) return;
         void aiLogService.finish(invocationLogId, {
           status: typeof exitCode === 'number' && exitCode !== 0 ? 'failed' : 'succeeded',
@@ -530,7 +544,6 @@ export class LocalConversationProvider implements ConversationProvider {
             typeof exitCode === 'number' && exitCode !== 0 ? `Exit code ${exitCode}` : undefined,
         });
         void interactiveTurnLogger.onSessionExit(conversation.id);
-        detachSilenceReconciler();
         this.sessions.delete(sessionId);
         this.sessionInfos.delete(sessionId);
         this.stopRunStateWatcher(conversation.id);
@@ -634,7 +647,7 @@ export class LocalConversationProvider implements ConversationProvider {
         if (this.sessions.get(sessionId) === spawnedPty) {
           this.sessions.delete(sessionId);
         }
-        detachSilenceReconcilerForRollback?.();
+        this.releaseSilenceReconciler(sessionId, detachSilenceReconcilerForRollback);
         if (artifactCleanupRegistered) {
           this.cleanupSessionArtifacts(sessionId, spawnedPty);
         } else {
@@ -847,10 +860,18 @@ export class LocalConversationProvider implements ConversationProvider {
     }
   }
 
+  private releaseSilenceReconciler(sessionId: string, expected?: () => void): void {
+    const detach = this.silenceReconcilerDetachers.get(sessionId);
+    if (!detach || (expected && detach !== expected)) return;
+    this.silenceReconcilerDetachers.delete(sessionId);
+    detach();
+  }
+
   async stopSession(conversationId: string): Promise<void> {
     const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
     this.knownSessionIds.delete(sessionId);
     this.cancelPendingStart(sessionId);
+    this.releaseSilenceReconciler(sessionId);
     sessionTitleManager.stop(conversationId);
     this.stopRunStateWatcher(conversationId);
     const pty = this.sessions.get(sessionId);
@@ -894,6 +915,9 @@ export class LocalConversationProvider implements ConversationProvider {
 
   async detachAll(): Promise<void> {
     this.cancelAllPendingStarts();
+    for (const sessionId of Array.from(this.silenceReconcilerDetachers.keys())) {
+      this.releaseSilenceReconciler(sessionId);
+    }
     for (const [sessionId, pty] of this.sessions) {
       const conversationId = sessionId.split(':').pop();
       if (conversationId) {

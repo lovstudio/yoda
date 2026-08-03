@@ -3,6 +3,7 @@ import {
   type Conversation,
   type ConversationExecutionMode,
   type PendingInitialPrompt,
+  type SessionRuntimeOverrides,
 } from '@shared/conversations';
 import type { SkillSessionPolicy } from '@shared/skills/types';
 
@@ -30,8 +31,8 @@ export interface ConversationProvider {
     tmuxOverride?: boolean,
     /** Absolute local paths of image attachments to deliver with the initial prompt. */
     imagePaths?: string[],
-    /** Explicit model for a new session, or a supported resume-time model override. */
-    model?: string | null
+    /** Explicit runtime parameters for a new session or supported resume-time overrides. */
+    runtimeOverrides?: SessionRuntimeOverrides
   ): Promise<void>;
   stopSession(conversationId: string): Promise<void>;
   sendInput(conversationId: string, data: string): Promise<boolean>;

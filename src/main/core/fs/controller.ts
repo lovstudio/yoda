@@ -34,6 +34,7 @@ const watcherLabeledPaths = new Map<string, Map<string, string[]>>();
 
 type PathCompletionOptions = ListOptions & {
   pathKind?: 'relative' | 'absolute' | 'home';
+  allowOutsideProject?: boolean;
 };
 
 // Clipboard images carry no filesystem path, so the renderer ships the bytes
@@ -115,6 +116,37 @@ async function listLocalRelativePath(
   };
 }
 
+async function listLocalProjectRelativePath(
+  projectPath: string,
+  dirPath: string,
+  options: ListOptions = {}
+): Promise<FileListResult> {
+  const absoluteDirPath = path.resolve(projectPath, dirPath);
+  const result = await listLocalAbsolutePath(absoluteDirPath, options);
+  return {
+    ...result,
+    entries: result.entries.map((entry) => ({
+      ...entry,
+      path: path.join(dirPath, path.basename(entry.path)),
+    })),
+  };
+}
+
+function resolveRemoteProjectRelativePath(projectPath: string, dirPath: string): string {
+  const normalizedProjectPath = path.posix.resolve('/', projectPath.replace(/\\/g, '/'));
+  return path.posix.resolve(normalizedProjectPath, dirPath.replace(/\\/g, '/'));
+}
+
+function rebaseRemotePathCompletions(result: FileListResult, dirPath: string): FileListResult {
+  return {
+    ...result,
+    entries: result.entries.map((entry) => ({
+      ...entry,
+      path: path.posix.join(dirPath.replace(/\\/g, '/'), path.posix.basename(entry.path)),
+    })),
+  };
+}
+
 /**
  * Whitelist roots for agent home files (see readFile/writeFile): session
  * transcripts, user-level CLAUDE.md / settings, global skills — everything the
@@ -164,7 +196,7 @@ export const filesController = createRPCController({
     dirPath: string,
     options?: PathCompletionOptions
   ) => {
-    const { pathKind = 'relative', ...listOptions } = options ?? {};
+    const { allowOutsideProject = false, pathKind = 'relative', ...listOptions } = options ?? {};
 
     try {
       if (!projectId) {
@@ -241,6 +273,33 @@ export const filesController = createRPCController({
             maxEntries: 100,
             ...listOptions,
           })
+        );
+      }
+
+      if (allowOutsideProject && projectData.type === 'local') {
+        return ok(
+          await listLocalProjectRelativePath(projectData.path, dirPath, {
+            recursive: false,
+            includeHidden: true,
+            maxEntries: 100,
+            ...listOptions,
+          })
+        );
+      }
+
+      if (allowOutsideProject && projectData.type === 'ssh') {
+        const proxy = await sshConnectionManager.connect(projectData.connectionId);
+        const rootFs = new SshFileSystem(proxy, '/');
+        return ok(
+          rebaseRemotePathCompletions(
+            await rootFs.list(resolveRemoteProjectRelativePath(projectData.path, dirPath), {
+              recursive: false,
+              includeHidden: true,
+              maxEntries: 100,
+              ...listOptions,
+            }),
+            dirPath
+          )
         );
       }
 

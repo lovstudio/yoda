@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CreateTerminalParams, Terminal } from '@shared/terminals';
-import { WorkspaceTerminalStore } from './workspace-terminal-store';
+import {
+  projectTerminalScopeId,
+  type CreateTerminalParams,
+  type Terminal,
+} from '@shared/terminals';
+import { TerminalManagerStore } from '@renderer/features/tasks/terminals/terminal-manager';
+import { TerminalTabViewStore } from '@renderer/features/tasks/terminals/terminal-tab-view-store';
+import { WORKSPACE_TERMINAL_SCOPE_LIMIT, WorkspaceTerminalStore } from './workspace-terminal-store';
 
 const mocks = vi.hoisted(() => ({
   getWorkspaceTerminals: vi.fn<() => Promise<Terminal[]>>(),
@@ -11,6 +17,20 @@ const mocks = vi.hoisted(() => ({
   createTaskTerminal: vi.fn(),
   sendInput: vi.fn(),
 }));
+
+type ScopeResources = {
+  manager: TerminalManagerStore;
+  tabs: TerminalTabViewStore;
+};
+
+type WorkspaceTerminalStoreInternals = {
+  scopes: Map<string, ScopeResources>;
+  getOrCreateScope(
+    projectId: string,
+    scopeId: string,
+    sourceProjectId: string | null
+  ): ScopeResources;
+};
 
 vi.mock('@renderer/lib/ipc', () => ({
   rpc: {
@@ -73,6 +93,20 @@ describe('WorkspaceTerminalStore', () => {
     expect(mocks.createTaskTerminal).not.toHaveBeenCalled();
   });
 
+  it('reopens the quick action Terminal with its existing tab after it is closed', async () => {
+    const store = new WorkspaceTerminalStore();
+    const project = { id: 'project-1', type: 'local', path: '/repo' } as const;
+
+    await store.runCommand(project as never, 'pnpm run dev', 'Start locally');
+    const terminalId = mocks.createWorkspaceTerminal.mock.calls[0]?.[0].id;
+    store.close();
+    await store.toggleProject(project as never);
+
+    expect(store.isOpen).toBe(true);
+    expect(store.tabs?.activeTabId).toBe(terminalId);
+    expect(mocks.createWorkspaceTerminal).toHaveBeenCalledTimes(1);
+  });
+
   it('opens runtime actions as ordinary global Terminal tabs', async () => {
     const store = new WorkspaceTerminalStore();
 
@@ -109,5 +143,68 @@ describe('WorkspaceTerminalStore', () => {
     await store.syncActiveProject(null);
 
     expect(store.isOpen).toBe(false);
+  });
+
+  it('bounds scope retention while preserving active, refreshed, and newly created scopes', async () => {
+    const tabsDispose = vi.spyOn(TerminalTabViewStore.prototype, 'dispose');
+    const managerDispose = vi.spyOn(TerminalManagerStore.prototype, 'dispose');
+    const store = new WorkspaceTerminalStore();
+    const internals = store as unknown as WorkspaceTerminalStoreInternals;
+    const activeProject = { id: 'project-0', type: 'local', path: '/repo-0' } as const;
+
+    await store.openProject(activeProject as never, { ensureTerminal: false });
+    const activeScope = store.activeScope as ScopeResources;
+    const createdScopes = [activeScope];
+
+    for (let index = 1; index < WORKSPACE_TERMINAL_SCOPE_LIMIT; index += 1) {
+      const projectId = `project-${index}`;
+      createdScopes.push(
+        internals.getOrCreateScope(projectId, projectTerminalScopeId('local', projectId), projectId)
+      );
+    }
+
+    const refreshedScope = createdScopes[1];
+    expect(
+      internals.getOrCreateScope(
+        'project-1',
+        projectTerminalScopeId('local', 'project-1'),
+        'project-1'
+      )
+    ).toBe(refreshedScope);
+
+    const newProjectId = `project-${WORKSPACE_TERMINAL_SCOPE_LIMIT}`;
+    const newScope = internals.getOrCreateScope(
+      newProjectId,
+      projectTerminalScopeId('local', newProjectId),
+      newProjectId
+    );
+    createdScopes.push(newScope);
+    const evictedScope = createdScopes[2];
+
+    expect(internals.scopes.size).toBe(WORKSPACE_TERMINAL_SCOPE_LIMIT);
+    expect([...internals.scopes.values()]).toContain(activeScope);
+    expect([...internals.scopes.values()]).toContain(refreshedScope);
+    expect([...internals.scopes.values()]).toContain(newScope);
+    expect([...internals.scopes.values()]).not.toContain(evictedScope);
+    expect(store.activeScope).toBe(activeScope);
+    expect(tabsDispose.mock.contexts).toEqual([evictedScope.tabs]);
+    expect(managerDispose.mock.contexts).toEqual([evictedScope.manager]);
+    expect(tabsDispose.mock.invocationCallOrder[0]).toBeLessThan(
+      managerDispose.mock.invocationCallOrder[0]
+    );
+
+    store.dispose();
+
+    expect(internals.scopes.size).toBe(0);
+    expect(store.activeScope).toBeNull();
+    expect(store.isOpen).toBe(false);
+    for (const scope of createdScopes) {
+      expect(
+        tabsDispose.mock.contexts.filter((candidate) => candidate === scope.tabs)
+      ).toHaveLength(1);
+      expect(
+        managerDispose.mock.contexts.filter((candidate) => candidate === scope.manager)
+      ).toHaveLength(1);
+    }
   });
 });

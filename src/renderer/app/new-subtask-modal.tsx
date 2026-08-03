@@ -43,9 +43,11 @@ export const NewSubtaskModal = observer(function NewSubtaskModal({
   onClose,
   projectId,
   parentTaskId,
+  initialAction = 'create-and-run',
 }: BaseModalProps<void> & {
   projectId: string;
   parentTaskId: string;
+  initialAction?: 'create-only' | 'create-and-run';
 }) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
@@ -240,7 +242,7 @@ export const NewSubtaskModal = observer(function NewSubtaskModal({
                 disabled={isSubmitting}
                 canSubmit={canCreateAndRun}
                 showSubmitButton={false}
-                onSubmit={() => void handleSubmit(true)}
+                onSubmit={() => void handleSubmit(initialAction === 'create-and-run')}
                 autoFocus
                 textareaClassName="min-h-24 text-sm"
               />
@@ -264,21 +266,42 @@ export const NewSubtaskModal = observer(function NewSubtaskModal({
           </ConfirmButton>
         ) : (
           <>
-            <Button
-              variant="outline"
-              onClick={() => void handleSubmit(false)}
-              disabled={!canCreate || isSubmitting}
-            >
-              <ListPlus className="size-4" />
-              {t('tasks.addSubtask.createOnly')}
-            </Button>
-            <ConfirmButton
-              onClick={() => void handleSubmit(true)}
-              disabled={!canCreateAndRun || isSubmitting}
-            >
-              <Bot className="size-4" />
-              {t('tasks.addSubtask.createAndRun')}
-            </ConfirmButton>
+            {initialAction === 'create-only' ? (
+              <ConfirmButton
+                onClick={() => void handleSubmit(false)}
+                disabled={!canCreate || isSubmitting}
+              >
+                <ListPlus className="size-4" />
+                {t('tasks.addSubtask.createOnly')}
+              </ConfirmButton>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => void handleSubmit(false)}
+                disabled={!canCreate || isSubmitting}
+              >
+                <ListPlus className="size-4" />
+                {t('tasks.addSubtask.createOnly')}
+              </Button>
+            )}
+            {initialAction === 'create-and-run' ? (
+              <ConfirmButton
+                onClick={() => void handleSubmit(true)}
+                disabled={!canCreateAndRun || isSubmitting}
+              >
+                <Bot className="size-4" />
+                {t('tasks.addSubtask.createAndRun')}
+              </ConfirmButton>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => void handleSubmit(true)}
+                disabled={!canCreateAndRun || isSubmitting}
+              >
+                <Bot className="size-4" />
+                {t('tasks.addSubtask.createAndRun')}
+              </Button>
+            )}
           </>
         )}
       </DialogFooter>

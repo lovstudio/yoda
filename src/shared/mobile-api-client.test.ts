@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchSnapshot, uploadInputImage } from '../../apps/mobile/src/api-client';
+import { fetchProfile, fetchSnapshot, uploadInputImage } from '../../apps/mobile/src/api-client';
 import { MOBILE_RELAY_BASE_URL } from './mobile-relay';
 
 const relayConnection = {
@@ -51,6 +51,26 @@ describe('mobile API connectivity diagnostics', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('loads the mobile profile through the protected profile endpoint', async () => {
+    const connection = { baseUrl: 'http://127.0.0.1:3879/', token: 'dev-token' };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ generatedAt: '2026-08-02T00:00:00.000Z' }), { status: 200 })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchProfile(connection)).resolves.toMatchObject({
+      generatedAt: '2026-08-02T00:00:00.000Z',
+    });
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:3879/v1/profile', {
+      headers: {
+        Authorization: 'Bearer dev-token',
+        'Content-Type': 'application/json',
+      },
+    });
+  });
+
   it('uploads image data in ordered chunks before completing it', async () => {
     const connection = { baseUrl: 'http://127.0.0.1:3879', token: 'dev-token' };
     const fetchMock = vi
@@ -85,13 +105,18 @@ describe('mobile API connectivity diagnostics', () => {
         )
       );
     vi.stubGlobal('fetch', fetchMock);
+    const onProgress = vi.fn();
 
     await expect(
-      uploadInputImage(connection, {
-        base64: Buffer.from('1234567').toString('base64'),
-        mimeType: 'image/jpeg',
-        name: 'photo.jpg',
-      })
+      uploadInputImage(
+        connection,
+        {
+          base64: Buffer.from('1234567').toString('base64'),
+          mimeType: 'image/jpeg',
+          name: 'photo.jpg',
+        },
+        onProgress
+      )
     ).resolves.toMatchObject({ id: 'attachment-1', sizeBytes: 7 });
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
@@ -106,5 +131,9 @@ describe('mobile API connectivity diagnostics', () => {
     expect(fetchMock.mock.calls[3]?.[0]).toBe(
       'http://127.0.0.1:3879/v1/attachments/attachment-1/complete'
     );
+    expect(onProgress.mock.calls).toEqual([
+      [{ receivedBytes: 6, totalBytes: 7 }],
+      [{ receivedBytes: 7, totalBytes: 7 }],
+    ]);
   });
 });

@@ -1,4 +1,4 @@
-import type { IExecutionContext } from '@main/core/execution-context/types';
+import type { ExecOptions, IExecutionContext } from '@main/core/execution-context/types';
 import { log } from '@main/lib/logger';
 
 const TMUX_SESSION_PREFIX = 'yoda-';
@@ -8,6 +8,7 @@ const YODA_TMUX_SERVER_ARGS = ['-L', YODA_TMUX_SOCKET_NAME, '-f', '/dev/null'] a
 const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const TMUX_SEND_TIMEOUT_MS = 2_000;
 const TMUX_SEND_MAX_BUFFER = 4_096;
+export const TMUX_KILL_TIMEOUT_MS = 2_000;
 const TMUX_LIST_TIMEOUT_MS = 2_000;
 const TMUX_LIST_MAX_BUFFER = 128 * 1024;
 const TMUX_LIST_FORMAT_SEPARATOR = '\u001f';
@@ -186,9 +187,14 @@ export async function listTmuxSessionMarkers(ctx: IExecutionContext): Promise<Tm
   }
 }
 
-export async function killTmuxSession(ctx: IExecutionContext, sessionName: string): Promise<void> {
+export async function killTmuxSession(
+  ctx: IExecutionContext,
+  sessionName: string,
+  execOptions?: Pick<ExecOptions, 'signal' | 'timeout'>
+): Promise<void> {
   try {
-    await ctx.exec('tmux', [...YODA_TMUX_SERVER_ARGS, 'kill-session', '-t', sessionName]);
+    const args = [...YODA_TMUX_SERVER_ARGS, 'kill-session', '-t', sessionName];
+    await ctx.exec('tmux', args, { timeout: TMUX_KILL_TIMEOUT_MS, ...execOptions });
   } catch (err) {
     log.debug('killTmuxSession: tmux session not found or already dead', {
       sessionName,

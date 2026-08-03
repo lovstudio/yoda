@@ -1,8 +1,11 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '@main/db/client';
 import { terminals } from '@main/db/schema';
+import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
-import { resolveTask } from '../projects/utils';
+import { resolveTask, withTimeout } from '../projects/utils';
+
+export const TERMINAL_DELETE_KILL_TIMEOUT_MS = 2_000;
 
 export async function deleteTerminal({
   projectId,
@@ -24,7 +27,21 @@ export async function deleteTerminal({
     );
 
   const task = resolveTask(projectId, taskId);
-  await task?.terminals.killTerminal(terminalId);
+  if (task) {
+    try {
+      await withTimeout(task.terminals.killTerminal(terminalId), TERMINAL_DELETE_KILL_TIMEOUT_MS);
+    } catch (error) {
+      // The durable delete already succeeded. Providers invalidate their local
+      // registration before remote/tmux cleanup, so surfacing this as a failed
+      // delete would make the renderer resurrect a row that no longer exists.
+      log.warn('deleteTerminal: terminal cleanup failed after durable deletion', {
+        projectId,
+        taskId,
+        terminalId,
+        error: String(error),
+      });
+    }
+  }
   telemetryService.capture('terminal_deleted', {
     terminal_id: terminalId,
     project_id: projectId,

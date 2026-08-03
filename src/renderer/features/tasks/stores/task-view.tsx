@@ -18,6 +18,7 @@ import {
 import { appState } from '@renderer/lib/stores/app-state';
 import type { HistoryEntry } from '@renderer/lib/stores/navigation-history-store';
 import { focusTracker } from '@renderer/utils/focus-tracker';
+import { log } from '@renderer/utils/logger';
 import { TaskSidebarPreferenceStore } from './task-sidebar-preferences';
 
 /**
@@ -341,7 +342,7 @@ export class TaskViewStore {
   setTerminalDrawerOpen(open: boolean): void {
     this.setBottomPanelOpen(open);
     if (open && this.activeBottomPanelTab === 'terminals' && this.terminalTabs.tabs.length === 0) {
-      void this.terminalsMgr.createDefaultTerminal();
+      this.ensureDefaultTerminal();
     }
   }
 
@@ -356,8 +357,14 @@ export class TaskViewStore {
       this.isTerminalDrawerOpen &&
       this.terminalTabs.tabs.length === 0
     ) {
-      void this.terminalsMgr.createDefaultTerminal();
+      this.ensureDefaultTerminal();
     }
+  }
+
+  private ensureDefaultTerminal(): void {
+    void this.terminalsMgr.ensureDefaultTerminal().catch((error) => {
+      log.error('TaskViewStore: failed to ensure default terminal', error);
+    });
   }
 
   /** Removes a mode tab from the strip; the active one falls back to the next. */
@@ -374,7 +381,9 @@ export class TaskViewStore {
     this.sidebarPrefs.setBottomPanelOpen(true);
     this.sidebarPrefs.setBottomPanelTab('terminals');
     this.sidebarPrefs.openBottomPanelTab('terminals');
-    void this.terminalsMgr.createDefaultTerminal();
+    void this.terminalsMgr.createDefaultTerminal().catch((error) => {
+      log.error('TaskViewStore: failed to create terminal', error);
+    });
   }
 
   dispose(): void {

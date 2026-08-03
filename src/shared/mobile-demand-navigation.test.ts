@@ -20,7 +20,7 @@ function task(id: string, projectId = 'project-1'): MobileTaskSummary {
 }
 
 describe('mobile demand navigation', () => {
-  it('selects the created task and seeds it into the snapshot before refresh', () => {
+  it('selects the created task session and seeds the task before refresh', () => {
     const existingTask = task('existing-task');
     const staleCreatedTask = task('created-task', 'old-project');
     const createdTask = task('created-task', 'target-project');
@@ -37,14 +37,14 @@ describe('mobile demand navigation', () => {
       },
     };
 
-    const destination = prepareCreatedDemandNavigation(snapshot, createdTask);
+    const destination = prepareCreatedDemandNavigation(snapshot, createdTask, 'created-session');
 
     expect(destination).toMatchObject({
       homeTab: 'tasks',
       taskScope: 'all',
       selectedProjectId: 'target-project',
       selectedTaskId: 'created-task',
-      selectedSessionId: null,
+      selectedSessionId: 'created-session',
     });
     expect(destination.snapshot.tasks).toEqual([createdTask, existingTask]);
     expect(snapshot.tasks).toEqual([existingTask, staleCreatedTask]);

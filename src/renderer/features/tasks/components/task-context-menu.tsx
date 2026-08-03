@@ -109,6 +109,8 @@ export interface TaskMenuActions extends TaskMenuInfoFields {
   onAssignWorkspace?: (workspaceId: string | null) => void;
   /** Add an existing or new session-less task under this one. */
   onCreateSubtask?: () => void;
+  /** Create a child task and start its first Agent session. */
+  onCreateSubtaskAndRun?: () => void;
   /** Open the parent-task picker for this task. */
   onSetParent?: () => void;
   /** Create a new session-less grouping parent and nest this task under it. */
@@ -247,8 +249,17 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       key: 'create-subtask',
       group: 2,
       icon: ListPlus,
-      label: t('tasks.context.addSubtask'),
+      label: t('tasks.context.createSubtask'),
       onSelect: actions.onCreateSubtask,
+    });
+  }
+  if (!actions.isArchived && actions.onCreateSubtaskAndRun) {
+    items.push({
+      key: 'create-subtask-and-run',
+      group: 2,
+      icon: Sparkles,
+      label: t('tasks.context.createSubtaskAndRun'),
+      onSelect: actions.onCreateSubtaskAndRun,
     });
   }
   if (!actions.isArchived && actions.onSetParent) {

@@ -9,6 +9,7 @@ function request(method: string, url: string): IncomingMessage {
 describe('resolveForwardableMobileRoute', () => {
   it.each([
     ['GET', '/v1/devices/desktop-1/v1/snapshot', '/v1/snapshot', false],
+    ['GET', '/v1/devices/desktop-1/v1/profile', '/v1/profile', false],
     ['POST', '/v1/devices/desktop-1/v1/demands', '/v1/demands', false],
     ['POST', '/v1/devices/desktop-1/v1/attachments', '/v1/attachments', false],
     [

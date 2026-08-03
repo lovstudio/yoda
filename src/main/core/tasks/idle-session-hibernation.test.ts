@@ -15,8 +15,9 @@ describe('shouldHibernateIdleSession', () => {
     expect(shouldHibernateIdleSession(base)).toBe(true);
   });
 
-  it('keeps visible and awaiting-input sessions alive', () => {
+  it('keeps visible, heuristic-idle, and awaiting-input sessions alive', () => {
     expect(shouldHibernateIdleSession({ ...base, rendererConsumers: 1 })).toBe(false);
+    expect(shouldHibernateIdleSession({ ...base, status: 'idle' })).toBe(false);
     expect(shouldHibernateIdleSession({ ...base, status: 'awaiting-input' })).toBe(false);
   });
 });

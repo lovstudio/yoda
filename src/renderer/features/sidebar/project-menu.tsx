@@ -12,6 +12,7 @@ import {
   Pin,
   PinOff,
   Play,
+  Plus,
   RotateCcw,
   Settings2,
   TerminalSquare,
@@ -63,6 +64,8 @@ interface ProjectMenuActions {
   onPin: () => void;
   onUnpin: () => void;
   onOpenDetails?: () => void;
+  onCreateTask?: () => void;
+  onCreateTaskAndRun?: () => void;
   onOpenArchivedTasks?: () => void;
   onReconnect?: () => void;
   onChangeSshConnection?: () => void;
@@ -102,28 +105,47 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   const { t } = useTranslation();
   const items: MenuItemDescriptor[] = [];
 
-  // group 0 — primary navigation
+  // group 0 — task creation
+  if (actions.onCreateTask) {
+    items.push({
+      key: 'create-task',
+      group: 0,
+      icon: Plus,
+      label: t('sidebar.newTask'),
+      onSelect: actions.onCreateTask,
+    });
+  }
+  if (actions.onCreateTaskAndRun) {
+    items.push({
+      key: 'create-task-and-run',
+      group: 0,
+      icon: Bot,
+      label: t('sidebar.newTaskAndRun'),
+      onSelect: actions.onCreateTaskAndRun,
+    });
+  }
+
+  // group 1 — primary navigation
   if (actions.onOpenDetails) {
     items.push({
       key: 'open-details',
-      group: 0,
+      group: 1,
       icon: Info,
       label: t('sidebar.openProjectDetails'),
       onSelect: actions.onOpenDetails,
     });
   }
-  // Keep "Open in..." in the first group with primary project actions.
   if (actions.projectPath) {
     const path = actions.projectPath;
     items.push({
       key: 'open-in',
-      group: 0,
+      group: 1,
       kind: 'open-in',
     });
-    // group 1 — path utilities
+    // group 2 — path utilities
     items.push({
       key: 'copy-project-path',
-      group: 1,
+      group: 2,
       icon: Copy,
       label: t('sidebar.copyProjectPath'),
       onSelect: () => {
@@ -134,27 +156,27 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   if (actions.onCopyYodaLink) {
     items.push({
       key: 'copy-yoda-link',
-      group: 1,
+      group: 2,
       icon: Copy,
       label: t('sidebar.copyProjectYodaLink'),
       onSelect: actions.onCopyYodaLink,
     });
   }
 
-  // group 2 — configuration
+  // group 3 — configuration
   if (actions.canPin) {
     items.push(
       actions.isPinned
         ? {
             key: 'unpin',
-            group: 2,
+            group: 3,
             icon: PinOff,
             label: t('sidebar.unpinProject'),
             onSelect: actions.onUnpin,
           }
         : {
             key: 'pin',
-            group: 2,
+            group: 3,
             icon: Pin,
             label: t('sidebar.pinProject'),
             onSelect: actions.onPin,
@@ -164,7 +186,7 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   if (actions.onRename) {
     items.push({
       key: 'rename',
-      group: 2,
+      group: 3,
       icon: PencilLine,
       label: t('sidebar.renameProject.menuLabel'),
       onSelect: actions.onRename,
@@ -173,18 +195,18 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   if (actions.onMovePath) {
     items.push({
       key: 'move-path',
-      group: 2,
+      group: 3,
       icon: FolderPen,
       label: t('sidebar.moveProjectPath.menuLabel'),
       onSelect: actions.onMovePath,
     });
   }
-  // group 3 — ssh
+  // group 4 — ssh
   if (actions.isSsh) {
     if (actions.onReconnect) {
       items.push({
         key: 'reconnect',
-        group: 3,
+        group: 4,
         icon: RotateCcw,
         label: t('sidebar.reconnect'),
         onSelect: actions.onReconnect,
@@ -194,7 +216,7 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
     if (actions.onChangeSshConnection) {
       items.push({
         key: 'change-ssh',
-        group: 3,
+        group: 4,
         icon: CableIcon,
         label: t('sidebar.changeSshConnection'),
         onSelect: actions.onChangeSshConnection,
@@ -202,10 +224,10 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
     }
   }
 
-  // group 4 — project lifecycle
+  // group 5 — project lifecycle
   items.push({
     key: 'archive-project',
-    group: 4,
+    group: 5,
     icon: Archive,
     label: t('sidebar.archiveProject'),
     onSelect: actions.onArchiveProject,
@@ -213,7 +235,7 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   });
   items.push({
     key: 'archive-project-tasks',
-    group: 4,
+    group: 5,
     icon: ArchiveX,
     label: t('sidebar.archiveProjectTasks'),
     onSelect: actions.onArchiveProjectTasks,
@@ -222,7 +244,7 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   if (actions.onOpenArchivedTasks) {
     items.push({
       key: 'open-archived-tasks',
-      group: 4,
+      group: 5,
       icon: ArchiveRestore,
       label: t('sidebar.openArchivedTasks'),
       onSelect: actions.onOpenArchivedTasks,
@@ -230,7 +252,7 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   }
   items.push({
     key: 'remove-project',
-    group: 4,
+    group: 5,
     icon: Trash2,
     label: t('projects.removeProject'),
     onSelect: actions.onRemoveProject,
@@ -238,11 +260,11 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
     variant: 'destructive',
   });
 
-  // group 5 — repeatable project operations
+  // group 6 — repeatable project operations
   if (actions.onConfigureScripts) {
     items.push({
       key: 'configure-scripts',
-      group: 5,
+      group: 6,
       icon: Settings2,
       label: t('sidebar.runScripts.configure'),
       onSelect: actions.onConfigureScripts,
@@ -251,7 +273,7 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   if (actions.onCaptureAutomation) {
     items.push({
       key: 'quick-actions',
-      group: 5,
+      group: 6,
       kind: 'quick-actions',
       label: t('sidebar.captureAutomation.menuLabel'),
     });

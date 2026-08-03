@@ -11,7 +11,7 @@ import {
   Timer,
   type LucideIcon,
 } from 'lucide-react';
-import { useRef } from 'react';
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   AppEventLoopMetrics,
@@ -43,11 +43,15 @@ import {
   type WorkspaceResourceDetailSeries,
 } from './workspace-resource-detail-chart';
 import {
-  appendWorkspaceResourceSnapshot,
   getWorkspaceLatencyP95,
+  mergeWorkspaceResourceHistories,
+  workspaceResourceHistoryStore,
   type WorkspaceResourceHistoryPoint,
 } from './workspace-resource-history';
-import { WORKSPACE_RESOURCE_QUERY_TIMING } from './workspace-resource-monitoring';
+import {
+  WORKSPACE_RESOURCE_DETAILS_QUERY_TIMING,
+  WORKSPACE_RESOURCE_QUERY_KEY,
+} from './workspace-resource-monitoring';
 
 export type WorkspaceResourceDetailKind = 'cpu' | 'memory' | 'latency' | 'worktrees';
 
@@ -77,33 +81,27 @@ export function WorkspaceResourceDetailsModal({
 }: Props) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
-  const queryClient = useQueryClient();
   const forceWorktreeRefreshRef = useRef(false);
-  const resourceDetailsQueryKey = ['app', 'resourceDetails'] as const;
-  const { data: resourceDetails } = useQuery<{
-    snapshot: AppResourceSnapshot | undefined;
-    history: WorkspaceResourceHistoryPoint[];
-  }>({
-    queryKey: resourceDetailsQueryKey,
-    queryFn: async () => {
-      const nextSnapshot = await rpc.app.getResourceSnapshot();
-      const current = queryClient.getQueryData<{
-        snapshot: AppResourceSnapshot | undefined;
-        history: WorkspaceResourceHistoryPoint[];
-      }>(resourceDetailsQueryKey);
-      return {
-        snapshot: nextSnapshot,
-        history: appendWorkspaceResourceSnapshot(current?.history ?? initialHistory, nextSnapshot),
-      };
-    },
-    initialData: {
-      snapshot: initialSnapshot,
-      history: initialSnapshot
-        ? appendWorkspaceResourceSnapshot(initialHistory, initialSnapshot)
-        : initialHistory,
-    },
-    ...WORKSPACE_RESOURCE_QUERY_TIMING,
+  const { data: snapshot } = useQuery<AppResourceSnapshot>({
+    queryKey: WORKSPACE_RESOURCE_QUERY_KEY,
+    queryFn: () => rpc.app.getResourceSnapshot(),
+    initialData: initialSnapshot,
+    ...WORKSPACE_RESOURCE_DETAILS_QUERY_TIMING,
   });
+  const sharedHistory = useSyncExternalStore(
+    workspaceResourceHistoryStore.subscribe,
+    workspaceResourceHistoryStore.getSnapshot,
+    workspaceResourceHistoryStore.getSnapshot
+  );
+  const history = useMemo(
+    () => mergeWorkspaceResourceHistories(initialHistory, sharedHistory),
+    [initialHistory, sharedHistory]
+  );
+
+  useEffect(() => {
+    if (!snapshot) return;
+    workspaceResourceHistoryStore.append(snapshot);
+  }, [snapshot]);
   const {
     data: worktreeStorage,
     isFetching: isScanningWorktrees,
@@ -128,9 +126,6 @@ export function WorkspaceResourceDetailsModal({
 
   const copy = getDetailCopy(kind, t);
   const Icon = copy.icon;
-  const snapshot = resourceDetails.snapshot;
-  const history = resourceDetails.history;
-
   return (
     <>
       <DialogHeader className="min-w-0 flex-1 items-start gap-3">

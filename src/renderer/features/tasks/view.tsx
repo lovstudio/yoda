@@ -93,42 +93,57 @@ const TopLevelTabSync = observer(function TopLevelTabSync({
   const isRoutedTask = isActive && params.taskId === taskId;
   const target: TaskWindowTabTarget | null = isRoutedTask ? (params.tab ?? null) : null;
   const targetKey = target ? JSON.stringify(target) : null;
-  const isScopeEntry = isRoutedTask && params.tab === undefined;
-
-  // Scope entry: rewrite the route with the task's last-active internal tab
-  // (restored by TabManagerStore's snapshot) instead of forcing the overview.
-  // openTaskTopTab re-applies the route with an explicit target, which the
-  // replay effect below then aligns — and, for overview, normalizes the stored
-  // index tab's tab-less params to the explicit shape.
-  useEffect(() => {
-    if (!isScopeEntry) return;
-    openTaskTopTab(projectId, taskId, tabManager.activeTopLevelTarget ?? { kind: 'overview' });
-  }, [isScopeEntry, replayNonce, tabManager, projectId, taskId]);
 
   useEffect(() => {
     const bridge = {
-      applyingKey: null as string | null,
+      applying: null as { key: string; token: symbol } | null,
       open: (tab: TaskWindowTabTarget) => openTaskTopTab(projectId, taskId, tab),
     };
     tabManager.topLevelBridge = bridge;
-    // Surface open intents that happened before the bridge mounted (e.g. the
-    // initial conversation opened during provisioning) — a fresh task lands on
-    // its session tab, not the overview.
-    const pending = tabManager.flushPendingTopLevelTarget();
-    if (pending) openTaskTopTab(projectId, taskId, pending);
     return () => {
       if (tabManager.topLevelBridge === bridge) tabManager.topLevelBridge = null;
     };
   }, [tabManager, projectId, taskId]);
 
   useEffect(() => {
-    if (!target || !targetKey) return;
+    if (!isRoutedTask) return;
+
+    // One owner resolves the route intent. An explicit route always wins and
+    // discards pre-bridge intents. A target-less scope entry consumes the
+    // pending initial conversation exactly once, then falls back to the task's
+    // restored active tab. Keeping this in one effect prevents scope restore
+    // and bridge mount from opening the same session twice.
+    const pending = tabManager.flushPendingTopLevelTarget();
+    if (!target || !targetKey) {
+      openTaskTopTab(
+        projectId,
+        taskId,
+        pending ?? tabManager.activeTopLevelTarget ?? { kind: 'overview' }
+      );
+      return;
+    }
+
     log.debug('[tab-sync] replay: applying route target', { projectId, taskId, target });
     let cancelled = false;
     const bridge = tabManager.topLevelBridge;
-    if (bridge) bridge.applyingKey = targetKey;
-    void openProvisionedTaskTab(provisioned, target)
+    if (!bridge) return;
+    const replayToken = Symbol(targetKey);
+    const routeIsCurrent = () => {
+      if (cancelled || appState.navigation.currentViewId !== 'task') return false;
+      const current = appState.navigation.viewParamsStore.task as
+        | { projectId?: string; taskId?: string; tab?: TaskWindowTabTarget }
+        | undefined;
+      return (
+        current?.projectId === projectId &&
+        current.taskId === taskId &&
+        JSON.stringify(current.tab) === targetKey
+      );
+    };
+    if (!routeIsCurrent()) return;
+    bridge.applying = { key: targetKey, token: replayToken };
+    void openProvisionedTaskTab(provisioned, target, { shouldApply: routeIsCurrent })
       .then((found) => {
+        if (!routeIsCurrent()) return;
         log.debug('[tab-sync] replay: result', {
           target: JSON.parse(targetKey),
           found,
@@ -146,7 +161,6 @@ const TopLevelTabSync = observer(function TopLevelTabSync({
           taskId,
           target,
         });
-        if (cancelled) return;
         // The target cannot be materialized (e.g. an archived/deleted
         // conversation). Remove the dangling top-level tab — otherwise the
         // strip and the rendered content diverge: the tab stays selectable
@@ -157,11 +171,12 @@ const TopLevelTabSync = observer(function TopLevelTabSync({
         );
       })
       .catch((error: unknown) => {
+        if (!routeIsCurrent()) return;
         log.warn('TopLevelTabSync: replay failed', { projectId, taskId, target, error });
       })
       .finally(() => {
-        // Only clear our own key — a newer replay may have set its own.
-        if (bridge && bridge.applyingKey === targetKey) bridge.applyingKey = null;
+        // Only clear our own replay — a newer replay may target the same key.
+        if (bridge.applying?.token === replayToken) bridge.applying = null;
       });
     return () => {
       // A newer target superseded this replay mid-flight (rapid clicks):
@@ -170,7 +185,7 @@ const TopLevelTabSync = observer(function TopLevelTabSync({
     };
     // targetKey is the stable identity of `target`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetKey, replayNonce, provisioned, tabManager]);
+  }, [isRoutedTask, targetKey, replayNonce, provisioned, tabManager, projectId, taskId]);
 
   // Lifecycle: close top-level tabs whose conversation was archived/deleted.
   // fireImmediately also sweeps STALE persisted tabs on mount (e.g. ghosts

@@ -36,10 +36,28 @@ export function appendWorkspaceResourceSnapshot(
     rendererLatencyP95Ms: snapshot.rendererPerformance?.eventLoop.p95Ms ?? null,
     mainLatencyP95Ms: snapshot.mainEventLoop?.p95Ms ?? null,
   };
-  const sorted = [...history, nextPoint].sort(
+  return trimWorkspaceResourceHistory([...history, nextPoint]);
+}
+
+export function mergeWorkspaceResourceHistories(
+  ...histories: WorkspaceResourceHistoryPoint[][]
+): WorkspaceResourceHistoryPoint[] {
+  const pointBySampledAt = new Map<string, WorkspaceResourceHistoryPoint>();
+  for (const history of histories) {
+    for (const point of history) pointBySampledAt.set(point.sampledAt, point);
+  }
+  return trimWorkspaceResourceHistory(Array.from(pointBySampledAt.values()));
+}
+
+function trimWorkspaceResourceHistory(
+  history: WorkspaceResourceHistoryPoint[]
+): WorkspaceResourceHistoryPoint[] {
+  const sorted = [...history].sort(
     (left, right) => Date.parse(left.sampledAt) - Date.parse(right.sampledAt)
   );
-  const newestAt = Date.parse(sorted.at(-1)?.sampledAt ?? snapshot.sampledAt);
+  const newestPoint = sorted.at(-1);
+  if (!newestPoint) return sorted;
+  const newestAt = Date.parse(newestPoint.sampledAt);
   const windowStart = newestAt - WORKSPACE_RESOURCE_HISTORY_WINDOW_MS;
 
   return sorted

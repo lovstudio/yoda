@@ -46,12 +46,11 @@ export function interruptConversation(projectId: string, taskId: string, convers
     );
     return ok();
   }
-  // Only poke the CLI when it is actually running. A working CLI redraws its
-  // spinner continuously; one that has been silent past the threshold is
-  // idling at its prompt — sending Esc there doesn't interrupt anything, it
-  // clears the user's unsent input ("Press esc again to clear"). Just drop the
-  // stale status instead.
-  if (agentSilenceReconciler.isStale(ptySessionId)) {
+  // Silence can prove a heuristic session stale, but never short-circuit an
+  // authoritative Claude/Codex session: a long-running tool call may be quiet
+  // while still genuinely working and must receive Esc when the user asks to
+  // interrupt it.
+  if (agentSilenceReconciler.isAutoReconcileStale(ptySessionId)) {
     markInterrupted(conversationId);
     agentSessionRuntimeStore.dispatch(
       session,

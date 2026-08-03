@@ -76,9 +76,20 @@ describe('SessionModelEditor', () => {
       ])
     );
     mocks.getRuntimeSettings.mockResolvedValue({
-      value: { cli: 'codex', defaultModel: 'gpt-5.5', extraArgs: '--search' },
+      value: {
+        cli: 'codex',
+        defaultModel: 'gpt-5.5',
+        defaultReasoningEffort: 'medium',
+        defaultFastMode: false,
+        extraArgs: '--search',
+      },
       defaults: { cli: 'codex' },
-      overrides: { defaultModel: 'gpt-5.5', extraArgs: '--search' },
+      overrides: {
+        defaultModel: 'gpt-5.5',
+        defaultReasoningEffort: 'medium',
+        defaultFastMode: false,
+        extraArgs: '--search',
+      },
     });
     mocks.updateRuntimeSettings.mockResolvedValue(undefined);
     mocks.restartWithModel.mockResolvedValue(undefined);
@@ -102,19 +113,46 @@ describe('SessionModelEditor', () => {
     await renderEditor(root, queryClient);
 
     expect(host.textContent).toContain('gpt-5.5');
-    expect(host.textContent).toContain('workspaceRuntime.model.reasoningEffort:high');
+    expect(host.textContent).toContain('workspaceRuntime.model.reasoning.high');
+    const settings = host.querySelector('[data-testid="session-model-settings"]');
+    expect(settings).not.toBeNull();
+    expect(settings?.children).toHaveLength(3);
+    expect(host.querySelector('[data-testid="session-model-model-row"]')?.parentElement).toBe(
+      settings
+    );
+    expect(host.querySelector('[data-testid="session-model-reasoning-row"]')?.parentElement).toBe(
+      settings
+    );
+    expect(host.querySelector('[data-testid="session-model-fast-mode-row"]')?.parentElement).toBe(
+      settings
+    );
+    expect(host.querySelector('[data-testid="session-model-actions"]')).toBeNull();
+    expect(host.textContent).not.toContain('workspaceRuntime.model.defaultModel');
+    expect(host.textContent).not.toContain('workspaceRuntime.model.defaultParameters');
 
     await openModelPicker(host);
     const option = await waitForComboboxItem('claude-sonnet-4-6');
     expect(option).not.toBeUndefined();
     await clickUser(option!);
     await settle();
+    expect(host.querySelector('[data-testid="session-model-actions"]')).not.toBeNull();
+
+    await chooseReasoningEffort(host, 'workspaceRuntime.model.reasoning.xhigh');
+    const fastSwitch = host.querySelector<HTMLElement>('[data-slot="switch"]');
+    const fastLabel = host.querySelector<HTMLLabelElement>(
+      '[data-testid="session-model-fast-mode-label"]'
+    );
+    expect(fastSwitch).not.toBeNull();
+    expect(fastLabel).not.toBeNull();
+    await clickUser(fastLabel!);
+    await settle();
+    expect(fastSwitch?.getAttribute('aria-checked')).toBe('true');
 
     await clickButtonContaining(host, 'workspaceRuntime.model.restartCurrent');
     expect(mocks.showConfirm).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'workspaceRuntime.model.restartTitle',
-        description: 'workspaceRuntime.model.restartDescription:claude-sonnet-4-6',
+        description: 'workspaceRuntime.model.restartDescriptionWithParameters:claude-sonnet-4-6',
         confirmLabel: 'workspaceRuntime.model.restartConfirm',
       })
     );
@@ -124,9 +162,13 @@ describe('SessionModelEditor', () => {
     await act(async () => confirmArgs?.onSuccess());
     await settle();
 
-    expect(mocks.restartWithModel).toHaveBeenCalledWith('claude-sonnet-4-6');
+    expect(mocks.restartWithModel).toHaveBeenCalledWith({
+      model: 'claude-sonnet-4-6',
+      reasoningEffort: 'xhigh',
+      fastMode: true,
+    });
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
-      'workspaceRuntime.model.restartSuccess:claude-sonnet-4-6'
+      'workspaceRuntime.model.restartSuccessWithParameters:claude-sonnet-4-6'
     );
 
     await clickButtonContaining(host, 'workspaceRuntime.model.setDefault');
@@ -134,6 +176,8 @@ describe('SessionModelEditor', () => {
     expect(mocks.updateRuntimeSettings).toHaveBeenCalledWith('codex', {
       cli: 'codex',
       defaultModel: 'claude-sonnet-4-6',
+      defaultReasoningEffort: 'xhigh',
+      defaultFastMode: true,
       extraArgs: '--search',
     });
 
@@ -174,6 +218,7 @@ async function renderEditor(root: Root, queryClient: QueryClient) {
           currentModel: 'gpt-5.5',
           currentModelSource: 'agents.runtimeInfo.currentSession',
           reasoningEffort: 'high',
+          fastMode: false,
           onRestartWithModel: mocks.restartWithModel,
           onManageModels: mocks.manageModels,
           allowDefaultChange: true,
@@ -190,6 +235,21 @@ async function openModelPicker(host: HTMLElement) {
   );
   if (!trigger) throw new Error('Model selector is missing');
   await clickUser(trigger);
+  await settle();
+}
+
+async function chooseReasoningEffort(host: HTMLElement, text: string) {
+  const trigger = host.querySelector<HTMLButtonElement>(
+    'button[aria-label="workspaceRuntime.model.reasoningLabel"]'
+  );
+  if (!trigger) throw new Error('Reasoning selector is missing');
+  await clickUser(trigger);
+  await settle();
+  const option = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-slot="select-item"]')
+  ).find((candidate) => candidate.textContent?.includes(text));
+  if (!option) throw new Error(`Reasoning option is missing: ${text}`);
+  await clickUser(option);
   await settle();
 }
 

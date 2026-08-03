@@ -15,7 +15,14 @@ import { resolveAvailableTmuxSessionName } from '@main/core/pty/tmux-availabilit
 import { killTmuxSession } from '@main/core/pty/tmux-session-name';
 import { log } from '@main/lib/logger';
 import { wireTerminalDevServerWatcher } from '../dev-server-watcher';
-import { type LifecycleScriptSpawnRequest, type TerminalProvider } from '../terminal-provider';
+import {
+  TERMINAL_SPAWN_TIMEOUT_MS,
+  TerminalSpawnCancelledError,
+  TerminalSpawnTimeoutError,
+  type LifecycleScriptSpawnRequest,
+  type TerminalProvider,
+  type TerminalSpawnOptions,
+} from '../terminal-provider';
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
@@ -30,10 +37,13 @@ type SpawnPolicy = {
 type StartOperation = {
   readonly token: symbol;
   readonly registrationEpoch: number;
+  readonly terminalId: string;
   promise: Promise<void>;
+  rejectCancellation?: (error: Error) => void;
 };
 
 export class LocalTerminalProvider implements TerminalProvider {
+  readonly terminalHydrationConcurrencyKey = 'local';
   private sessions = new Map<string, Pty>();
   private knownSessionIds = new Set<string>();
   private respawnCounts = new Map<string, number>();
@@ -77,7 +87,8 @@ export class LocalTerminalProvider implements TerminalProvider {
   async spawnTerminal(
     terminal: Terminal,
     initialSize: { cols: number; rows: number } = { cols: DEFAULT_COLS, rows: DEFAULT_ROWS },
-    command?: { command: string; args: string[] }
+    command?: { command: string; args: string[] },
+    options: TerminalSpawnOptions = {}
   ): Promise<void> {
     return this.spawnWithPolicy(
       terminal,
@@ -87,7 +98,8 @@ export class LocalTerminalProvider implements TerminalProvider {
         respawnOnExit: true,
         preserveBufferOnExit: false,
         watchDevServer: true,
-      }
+      },
+      options
     );
   }
 
@@ -115,8 +127,12 @@ export class LocalTerminalProvider implements TerminalProvider {
     terminal: Terminal,
     initialSize: { cols: number; rows: number },
     command: PtyCommandSpec | undefined,
-    policy: SpawnPolicy
+    policy: SpawnPolicy,
+    options: TerminalSpawnOptions = {}
   ): Promise<void> {
+    if (options.signal?.aborted) {
+      return Promise.reject(this.cancellationError(terminal.id, options.signal.reason));
+    }
     const sessionId = makePtySessionId(terminal.projectId, terminal.taskId, terminal.id);
     this.knownSessionIds.add(sessionId);
     this.clearRespawnTimer(sessionId);
@@ -128,21 +144,18 @@ export class LocalTerminalProvider implements TerminalProvider {
     const operation: StartOperation = {
       token: Symbol(sessionId),
       registrationEpoch,
+      terminalId: terminal.id,
       promise: Promise.resolve(),
     };
     this.startOperations.set(sessionId, operation);
-    operation.promise = this.performSpawn(
-      sessionId,
-      terminal,
-      initialSize,
-      command,
-      policy,
-      operation
-    ).finally(() => {
-      if (this.startOperations.get(sessionId) === operation) {
-        this.startOperations.delete(sessionId);
+    const start = this.performSpawn(sessionId, terminal, initialSize, command, policy, operation);
+    operation.promise = this.guardStartOperation(sessionId, operation, start, options).finally(
+      () => {
+        if (this.startOperations.get(sessionId) === operation) {
+          this.startOperations.delete(sessionId);
+        }
       }
-    });
+    );
     return operation.promise;
   }
 
@@ -262,11 +275,65 @@ export class LocalTerminalProvider implements TerminalProvider {
     );
   }
 
-  private cancelPendingStart(sessionId: string): void {
+  private guardStartOperation(
+    sessionId: string,
+    operation: StartOperation,
+    start: Promise<void>,
+    options: TerminalSpawnOptions
+  ): Promise<void> {
+    const timeoutMs = options.timeoutMs ?? TERMINAL_SPAWN_TIMEOUT_MS;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let abortListener: (() => void) | undefined;
+    const cancellation = new Promise<never>((_, reject) => {
+      operation.rejectCancellation = reject;
+    });
+
+    if (options.signal) {
+      abortListener = () => {
+        this.abortPendingStart(
+          sessionId,
+          this.cancellationError(operation.terminalId, options.signal?.reason)
+        );
+      };
+      options.signal.addEventListener('abort', abortListener, { once: true });
+      if (options.signal.aborted) abortListener();
+    }
+
+    if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+      timer = setTimeout(() => {
+        this.abortPendingStart(
+          sessionId,
+          new TerminalSpawnTimeoutError(operation.terminalId, timeoutMs)
+        );
+      }, timeoutMs);
+      timer.unref?.();
+    }
+
+    return Promise.race([start, cancellation]).finally(() => {
+      if (timer) clearTimeout(timer);
+      if (options.signal && abortListener) {
+        options.signal.removeEventListener('abort', abortListener);
+      }
+      operation.rejectCancellation = undefined;
+    });
+  }
+
+  private cancellationError(terminalId: string, reason: unknown): Error {
+    if (reason instanceof TerminalSpawnTimeoutError) return reason;
+    return new TerminalSpawnCancelledError(terminalId);
+  }
+
+  private abortPendingStart(sessionId: string, reason: Error): void {
+    this.cancelPendingStart(sessionId, reason);
+  }
+
+  private cancelPendingStart(sessionId: string, reason?: Error): void {
     const operation = this.startOperations.get(sessionId);
     if (!operation) return;
     this.startOperations.delete(sessionId);
+    this.knownSessionIds.delete(sessionId);
     ptySessionRegistry.cancelRegistration(sessionId, operation.registrationEpoch);
+    operation.rejectCancellation?.(reason ?? new TerminalSpawnCancelledError(operation.terminalId));
   }
 
   private rollbackSpawn(sessionId: string, pty: Pty, operation: StartOperation): void {

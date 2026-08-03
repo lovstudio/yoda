@@ -5,7 +5,7 @@ describe('sidebar project new task entry', () => {
   it('gives the floating-window preference priority over one-click creation', () => {
     const source = readFileSync(new URL('./project-item.tsx', import.meta.url), 'utf8');
     const fallbackStart = source.indexOf("openMode === 'modal' ||");
-    const fallbackEnd = source.indexOf('const strategyKind', fallbackStart);
+    const fallbackEnd = source.indexOf('await createTaskAndRun();', fallbackStart);
     const fallback = source.slice(fallbackStart, fallbackEnd);
 
     expect(source).toContain(
@@ -15,5 +15,7 @@ describe('sidebar project new task entry', () => {
     expect(fallback).toContain("openMode === 'modal' ||");
     expect(fallback).toContain('openNewTask(openMode, projectId);');
     expect(fallback).not.toContain("navigate('home'");
+    expect(source).toContain('onCreateTask:');
+    expect(source).toContain('onCreateTaskAndRun:');
   });
 });

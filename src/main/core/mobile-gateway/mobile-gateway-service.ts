@@ -34,6 +34,7 @@ import {
   type MobileInputAttachmentCreateRequest,
   type MobileInputAttachmentCreateResponse,
   type MobileInputAttachmentDiscardResponse,
+  type MobileProfileSnapshot,
   type MobileProjectSummary,
   type MobileSessionContentSource,
   type MobileSessionDetail,
@@ -57,8 +58,14 @@ import {
 } from '@shared/projects';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
+import type { SettingsSyncStatus } from '@shared/settings-sync';
 import { ensureUniqueTaskSlug, taskNameFromPrompt } from '@shared/task-name';
 import type { CreateTaskError, CreateTaskWarning, Task } from '@shared/tasks';
+import {
+  yodaAccountService,
+  type SessionState,
+} from '@main/core/account/services/yoda-account-service';
+import { yodaCommerceService } from '@main/core/account/services/yoda-commerce-service';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { loadClaudeTranscript } from '@main/core/conversations/claude-transcript';
 import {
@@ -76,7 +83,9 @@ import { getProjectById, getProjects } from '@main/core/projects/operations/getP
 import { openProject } from '@main/core/projects/operations/openProject';
 import { projectManager } from '@main/core/projects/project-manager';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
+import { settingsSyncService } from '@main/core/settings-sync/service';
 import { appSettingsService } from '@main/core/settings/settings-service';
+import { getUsageOverview } from '@main/core/stats/getUsageOverview';
 import { generateTaskName } from '@main/core/tasks/name-generation/generateTaskName';
 import { createTask } from '@main/core/tasks/operations/createTask';
 import { getTasks } from '@main/core/tasks/operations/getTasks';
@@ -891,6 +900,11 @@ export class MobileGatewayService {
       return;
     }
 
+    if (req.method === 'GET' && url.pathname === '/v1/profile') {
+      writeJson(res, 200, await this.getProfileSnapshot());
+      return;
+    }
+
     const segments = pathSegments(url.pathname);
     const isAttachmentRoute = segments[0] === 'v1' && segments[1] === 'attachments';
     if (req.method === 'POST' && isAttachmentRoute && segments.length === 2) {
@@ -1026,6 +1040,80 @@ export class MobileGatewayService {
           isTaskActivityRunning(task.activityStatus)
         ).length,
         reviewTaskCount: mappedTasks.filter((task) => task.activityStatus === 'review').length,
+      },
+    };
+  }
+
+  private async getProfileSnapshot(): Promise<MobileProfileSnapshot> {
+    const [session, settings, usage] = await Promise.all([
+      yodaAccountService.getSession().catch((error: unknown): SessionState => {
+        log.warn('MobileGateway: unable to load account profile', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return { user: null, isSignedIn: false, hasAccount: false };
+      }),
+      settingsSyncService.getStatus().catch((error: unknown): SettingsSyncStatus => {
+        log.warn('MobileGateway: unable to load settings sync profile', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return {
+          signedIn: false,
+          autoSyncEnabled: false,
+          lastSyncedAt: null,
+          cloudUpdatedAt: null,
+        };
+      }),
+      getUsageOverview().catch((error: unknown) => {
+        log.warn('MobileGateway: unable to load usage profile', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      }),
+    ]);
+    const commerce = session.isSignedIn
+      ? await yodaCommerceService.getSnapshot().catch((error: unknown) => {
+          log.warn('MobileGateway: unable to load commerce profile', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return null;
+        })
+      : null;
+    const user = session.user;
+
+    return {
+      generatedAt: new Date().toISOString(),
+      account: {
+        state: session.isSignedIn
+          ? 'signed-in'
+          : session.hasAccount
+            ? 'session-expired'
+            : 'signed-out',
+        displayName: user?.name || user?.nickname || null,
+        email: user?.email || null,
+        avatarUrl: user?.avatarUrl || null,
+      },
+      usage: {
+        totalTokens: usage?.tokens?.total ?? null,
+        sessionCount:
+          usage?.byRuntime.reduce((total, runtime) => total + runtime.sessionCount, 0) ?? 0,
+        tasksTotal: usage?.tasksTotal ?? 0,
+        tasksArchived: usage?.tasksArchived ?? 0,
+        linesAdded: usage?.linesAdded ?? 0,
+        linesDeleted: usage?.linesDeleted ?? 0,
+      },
+      cloud: {
+        relay: commerce
+          ? {
+              status: commerce.relay.status,
+              configured: commerce.relay.configured,
+              accessEndsAt: commerce.relay.accessEndsAt,
+              deviceCount: commerce.relay.devices.length,
+              onlineDeviceCount: commerce.relay.devices.filter(
+                (device) => device.status === 'online'
+              ).length,
+            }
+          : null,
+        settings,
       },
     };
   }
@@ -1618,6 +1706,7 @@ export class MobileGatewayService {
 
     return {
       task: this.mapTask(result.data.task, resolveTaskActivityStatus(result.data.task, [])),
+      sessionId: conversationId,
       warning: result.data.warning ? mapCreateTaskWarning(result.data.warning) : undefined,
     };
   }

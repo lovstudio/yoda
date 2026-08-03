@@ -63,6 +63,8 @@ export type RuntimeDefinition = {
   /** Short one-liner shown in the agent info card. */
   description?: string;
   docUrl?: string;
+  /** Official release archive used by the runtime info card's version menu. */
+  versionHistoryUrl?: string;
   installCommand?: string;
   /** Reliable command that removes an installation managed by its package manager. */
   uninstallCommand?: string;
@@ -336,6 +338,7 @@ export const RUNTIMES: RuntimeDefinition[] = [
     description:
       'CLI that connects to OpenAI models for project-aware code assistance and terminal workflows.',
     docUrl: 'https://github.com/openai/codex',
+    versionHistoryUrl: 'https://github.com/openai/codex/releases',
     installCommand: 'npm install -g @openai/codex',
     uninstallCommand: 'npm uninstall -g @openai/codex',
     updateCommand: 'codex update',
@@ -1176,6 +1179,10 @@ export function getDescriptionForRuntime(id: RuntimeId): string | null {
 
 export function getDocUrlForRuntime(id: RuntimeId): string | null {
   return PROVIDER_MAP.get(id)?.docUrl ?? null;
+}
+
+export function getVersionHistoryUrlForRuntime(id: RuntimeId): string | null {
+  return PROVIDER_MAP.get(id)?.versionHistoryUrl ?? null;
 }
 
 export function listDetectableRuntimes(): RuntimeDefinition[] {

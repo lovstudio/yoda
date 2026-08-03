@@ -23,6 +23,11 @@ export interface PathCompletionItem {
   insertText: string;
 }
 
+export interface PathCompletionRequest {
+  pathKind: PathMentionQueryParts['pathKind'];
+  directoryPath: string;
+}
+
 const WINDOWS_DRIVE_ABSOLUTE_RE = /^[A-Za-z]:[\\/]/;
 
 export function findActivePathMention(value: string, caret: number): ActivePathMention | null {
@@ -110,6 +115,41 @@ export function buildPathCompletionItems(
     });
 }
 
+export function buildPathCompletionRequest(
+  parts: PathMentionQueryParts,
+  localHomeDirectory?: string
+): PathCompletionRequest {
+  if (parts.pathKind !== 'home' || !localHomeDirectory) {
+    return { pathKind: parts.pathKind, directoryPath: parts.directoryPath };
+  }
+
+  const home = trimTrailingSlash(localHomeDirectory.replace(/\\/g, '/'));
+  return {
+    pathKind: 'absolute',
+    directoryPath: parts.directoryPath === '.' ? home : `${home}/${parts.directoryPath}`,
+  };
+}
+
+export function shouldIncludeHiddenPathCompletions(parts: PathMentionQueryParts): boolean {
+  return parts.namePrefix.startsWith('.');
+}
+
+export function rebaseHomePathCompletionEntries(
+  entries: PathCompletionEntry[],
+  parts: PathMentionQueryParts,
+  localHomeDirectory?: string
+): PathCompletionEntry[] {
+  if (parts.pathKind !== 'home' || !localHomeDirectory) return entries;
+
+  const home = trimTrailingSlash(localHomeDirectory.replace(/\\/g, '/'));
+  const homePrefix = `${home}/`;
+  return entries.flatMap((entry) => {
+    const normalizedPath = entry.path.replace(/\\/g, '/');
+    if (!normalizedPath.startsWith(homePrefix)) return [];
+    return [{ ...entry, path: normalizedPath.slice(homePrefix.length) }];
+  });
+}
+
 export function applyPathCompletion(
   value: string,
   mention: ActivePathMention,
@@ -132,4 +172,8 @@ function pathBaseName(path: string): string {
 
 function ensureTrailingSlash(path: string): string {
   return path.endsWith('/') ? path : `${path}/`;
+}
+
+function trimTrailingSlash(path: string): string {
+  return path.replace(/\/+$/, '');
 }

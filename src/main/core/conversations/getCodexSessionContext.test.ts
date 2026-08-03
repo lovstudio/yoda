@@ -115,6 +115,7 @@ describe('getCodexSessionContext', () => {
         approvalPolicy: 'on-request',
         sandboxPolicy: 'workspace-write',
         effort: 'xhigh',
+        serviceTier: 'fast',
       })
     );
     expect(context?.completedTurnCount).toBe(1);
@@ -1049,6 +1050,7 @@ function writeRollout(path: string, args?: { cwd?: string; id?: string }): void 
         approval_policy: 'on-request',
         sandbox_policy: 'workspace-write',
         effort: 'xhigh',
+        service_tier: 'fast',
       },
     },
     {

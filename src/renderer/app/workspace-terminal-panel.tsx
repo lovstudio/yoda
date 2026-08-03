@@ -2,6 +2,7 @@ import { Plus, Terminal, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
+import { TerminalLogContextMenu } from '@renderer/features/tasks/terminals/terminal-log-context-menu';
 import { TerminalWorkbench } from '@renderer/features/tasks/terminals/terminal-workbench';
 import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 
@@ -20,23 +21,27 @@ export const WorkspaceTerminalPanel = observer(function WorkspaceTerminalPanel()
 
   if (!manager || !tabs) return null;
 
+  const activeTerminal = tabs.tabs.find((tab) => tab.data.id === tabs.activeTabId) ?? null;
+
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background text-foreground">
       <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border px-2">
-        <div className="flex h-5 shrink-0 items-center gap-1 rounded-sm bg-background-2 px-1.5 text-[11px] text-foreground">
-          <Terminal className="size-3" />
-          <span>{t('tasks.bottomPanel.terminals')}</span>
-          {projectStore ? (
-            <>
-              <span aria-hidden className="text-foreground-muted">
-                ·
-              </span>
-              <span className="max-w-40 truncate" title={projectStore.displayName}>
-                {projectStore.displayName}
-              </span>
-            </>
-          ) : null}
-        </div>
+        <TerminalLogContextMenu terminal={activeTerminal}>
+          <div className="flex h-5 shrink-0 items-center gap-1 rounded-sm bg-background-2 px-1.5 text-[11px] text-foreground">
+            <Terminal className="size-3" />
+            <span>{t('tasks.bottomPanel.terminals')}</span>
+            {projectStore ? (
+              <>
+                <span aria-hidden className="text-foreground-muted">
+                  ·
+                </span>
+                <span className="max-w-40 truncate" title={projectStore.displayName}>
+                  {projectStore.displayName}
+                </span>
+              </>
+            ) : null}
+          </div>
+        </TerminalLogContextMenu>
         <button
           type="button"
           className={ICON_BUTTON_CLASS}
