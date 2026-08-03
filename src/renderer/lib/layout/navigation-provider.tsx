@@ -74,26 +74,26 @@ export function useWorkspaceSlots(): SlotsContextValue {
 }
 
 /** Route components and params must commit together so provider boundaries stay aligned. */
+export function workspaceRouteSnapshot(): WorkspaceRouteSnapshot {
+  const viewId = appState.navigation.currentViewId;
+  const def = (views as unknown as Record<string, ViewDefinition<Record<string, unknown>>>)[viewId];
+  return {
+    WrapView: (def.WrapView ?? Fragment) as ComponentType<
+      { children: ReactNode } & Record<string, unknown>
+    >,
+    TitlebarSlot: def.TitlebarSlot ?? (() => null),
+    MainPanel: def.MainPanel,
+    currentView: viewId,
+    // Keep the wrapper params in the same MobX snapshot as the view
+    // components. Separate subscriptions can commit in different React
+    // renders, briefly pairing a task MainPanel with a non-task WrapView
+    // (and therefore no task-view state snapshot).
+    wrapParams: (appState.navigation.viewParamsStore[viewId] ?? {}) as Record<string, unknown>,
+  };
+}
+
 export function useWorkspaceRouteSnapshot(): WorkspaceRouteSnapshot {
-  return useMobxValue(() => {
-    const viewId = appState.navigation.currentViewId;
-    const def = (views as unknown as Record<string, ViewDefinition<Record<string, unknown>>>)[
-      viewId
-    ];
-    return {
-      WrapView: (def.WrapView ?? Fragment) as ComponentType<
-        { children: ReactNode } & Record<string, unknown>
-      >,
-      TitlebarSlot: def.TitlebarSlot ?? (() => null),
-      MainPanel: def.MainPanel,
-      currentView: viewId,
-      // Keep the wrapper params in the same MobX snapshot as the view
-      // components. Separate subscriptions can commit in different React
-      // renders, briefly pairing a task MainPanel with a non-task WrapView
-      // (and therefore no task-view state snapshot).
-      wrapParams: (appState.navigation.viewParamsStore[viewId] ?? {}) as Record<string, unknown>,
-    };
-  });
+  return useMobxValue(workspaceRouteSnapshot);
 }
 
 /**

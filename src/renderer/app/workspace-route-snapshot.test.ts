@@ -9,14 +9,17 @@ describe('workspace route snapshot', () => {
       'utf8'
     );
 
-    expect(workspaceSource.match(/useWorkspaceRouteSnapshot\(\)/g)).toHaveLength(1);
+    expect(workspaceSource.match(/workspaceRouteSnapshot\(\)/g)).toHaveLength(1);
     expect(workspaceSource).not.toContain('useWorkspaceSlots');
     expect(workspaceSource).not.toContain('useWorkspaceWrapParams');
     expect(workspaceSource).toContain(
-      'const { WrapView, TitlebarSlot, MainPanel, currentView, wrapParams } =\n    useWorkspaceRouteSnapshot();'
+      'const { WrapView, TitlebarSlot, MainPanel, currentView, wrapParams } = workspaceRouteSnapshot();'
     );
+    expect(workspaceSource).toContain('<WrapView key={routeBoundaryKey} {...wrapParams}>');
+    expect(workspaceSource).toContain('key={routeBoundaryKey}');
     expect(workspaceSource).toContain('TitlebarSlot={TitlebarSlot}');
     expect(workspaceSource).toContain('MainPanel={MainPanel}');
+    expect(navigationSource).toContain('export function workspaceRouteSnapshot()');
     expect(navigationSource).toContain(
       'wrapParams: (appState.navigation.viewParamsStore[viewId] ?? {})'
     );

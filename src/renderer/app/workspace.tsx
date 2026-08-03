@@ -17,7 +17,7 @@ import { TmuxUnavailableNotifier } from '@renderer/lib/components/tmux-unavailab
 import { useTabShortcuts } from '@renderer/lib/hooks/useTabShortcuts';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import {
-  useWorkspaceRouteSnapshot,
+  workspaceRouteSnapshot,
   type WorkspaceRouteSnapshot,
 } from '@renderer/lib/layout/navigation-provider';
 import { WorkspaceContentLayout, WorkspaceLayout } from '@renderer/lib/layout/workspace-layout';
@@ -49,8 +49,14 @@ const GlobalTabShortcuts = observer(function GlobalTabShortcuts() {
 
 export const Workspace = observer(function Workspace() {
   useTheme();
-  const { WrapView, TitlebarSlot, MainPanel, currentView, wrapParams } =
-    useWorkspaceRouteSnapshot();
+  // Read the route while this observer is rendering. The old hook subscribes
+  // after render, which lets a route change from a task to a global view
+  // briefly pair an old task panel with the new view's wrapper.
+  const { WrapView, TitlebarSlot, MainPanel, currentView, wrapParams } = workspaceRouteSnapshot();
+  const routeBoundaryKey =
+    currentView === 'task'
+      ? `${currentView}:${String(wrapParams.projectId)}:${String(wrapParams.taskId)}`
+      : currentView;
 
   return (
     <>
@@ -67,12 +73,13 @@ export const Workspace = observer(function Workspace() {
           </ErrorBoundary>
         }
         mainContent={
-          <WrapView {...wrapParams}>
+          <WrapView key={routeBoundaryKey} {...wrapParams}>
             <ErrorBoundary variant="inline" componentName="ModalRenderer">
               <ModalRenderer />
             </ErrorBoundary>
             <ErrorBoundary variant="inline" componentName="WorkspaceView">
               <WorkspaceViewContent
+                key={routeBoundaryKey}
                 TitlebarSlot={TitlebarSlot}
                 MainPanel={MainPanel}
                 currentView={currentView}
