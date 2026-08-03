@@ -81,6 +81,22 @@ describe('SidebarStore task recency ordering', () => {
     expect(taskIds(store.sidebarRows)).toEqual(['target', 'older']);
   });
 
+  it('moves pending-acceptance tasks out of both main and pinned sidebar lists', () => {
+    const standard = makeTask('standard', {
+      createdAt: '2026-06-02T10:00:00.000Z',
+    });
+    const pendingAcceptance = makeTask('pending-acceptance', {
+      createdAt: '2026-06-02T11:00:00.000Z',
+      needsReview: true,
+      isPinned: true,
+    });
+    const store = makeSidebarStore([makeProject('project-1', [standard, pendingAcceptance])]);
+    store.expandAllProjects();
+
+    expect(taskIds(store.sidebarRows)).toEqual(['standard']);
+    expect(store.pinnedSidebarEntries).toEqual([]);
+  });
+
   it('keeps a project in place when its most-recent task is archived (updated-at)', () => {
     // project-late has the newest task, so it sorts above project-early.
     const lateTask = makeTask('late-task', {
@@ -472,6 +488,7 @@ function makeTask(
     parentTaskId?: string;
     isPinned?: boolean;
     archivedAt?: string;
+    needsReview?: boolean;
   }
 ): TaskStore {
   const task: Task = {
@@ -488,7 +505,7 @@ function makeTask(
     archivedAt: timestamps.archivedAt,
     isPinned: timestamps.isPinned ?? false,
     isLongTerm: false,
-    needsReview: false,
+    needsReview: timestamps.needsReview ?? false,
     isUserNamed: false,
     setupStatus: 'ready',
     prs: [],

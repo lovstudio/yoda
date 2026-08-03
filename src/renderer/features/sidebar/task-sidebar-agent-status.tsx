@@ -17,7 +17,7 @@ import { getSortInstant } from './sidebar-store';
 /**
  * Sidebar tail: spinner while bootstrapping, otherwise the task's agent status
  * in display priority — awaiting-input → unread error/completed → working →
- * manual needs-review flag → idle (relative time). Every agent status opens the
+ * manual pending-acceptance flag → idle (relative time). Every agent status opens the
  * shared session manager, so mixed/multiple session states remain inspectable.
  */
 export const TaskSidebarAgentStatus = observer(function TaskSidebarAgentStatus({

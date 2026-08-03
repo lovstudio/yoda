@@ -4,6 +4,7 @@ import {
   Bot,
   Boxes,
   Brain,
+  ClipboardCheck,
   Cloud,
   ExternalLink,
   Gauge,
@@ -45,6 +46,7 @@ import {
   resolveSessionPrompts,
   SESSION_PROMPTS_REFRESH_MS,
 } from '@renderer/features/tasks/session-prompts';
+import { registeredTaskData } from '@renderer/features/tasks/stores/task';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { AgentInfoCard } from '@renderer/lib/components/agent-selector/agent-info-card';
@@ -83,6 +85,14 @@ type WorkspaceAgentSession = Omit<AppAgentSessionResource, 'runtimeId' | 'title'
   runtimeId?: AppAgentSessionResource['runtimeId'];
   title?: string;
   taskTitle?: string;
+};
+
+type PendingAcceptanceTask = {
+  projectId: string;
+  projectName: string;
+  taskId: string;
+  taskName: string;
+  updatedAt: string;
 };
 
 const RUNTIME_BAR_ACTION_CLASS =
@@ -397,6 +407,27 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     (session) => session.status === 'awaiting-input'
   ).length;
   const tmuxSessionCount = agentSessions.filter((session) => session.tmuxBacked).length;
+  const pendingAcceptanceTasks: PendingAcceptanceTask[] = Array.from(
+    appState.projects.projects.values()
+  ).flatMap((project) => {
+    const mountedProject = asMounted(project);
+    if (!mountedProject) return [];
+    const projectName = project.displayName;
+    return Array.from(mountedProject.taskManager.tasks.values()).flatMap((task) => {
+      const taskData = registeredTaskData(task);
+      if (!taskData || taskData.archivedAt || !taskData.needsReview) return [];
+      return [
+        {
+          projectId: taskData.projectId,
+          projectName,
+          taskId: taskData.id,
+          taskName: taskData.name,
+          updatedAt: taskData.updatedAt,
+        },
+      ];
+    });
+  });
+  pendingAcceptanceTasks.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
   const agentTriggerText =
     attentionAgentCount > 0
       ? t('workspaceRuntime.agents.triggerAttention', {
@@ -614,6 +645,15 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       },
       navigate
     );
+  };
+
+  const openPendingAcceptanceTask = (task: PendingAcceptanceTask) => {
+    setIsAgentPopoverOpen(false);
+    openTaskTarget({ projectId: task.projectId, taskId: task.taskId }, navigate);
+  };
+
+  const removeFromPendingAcceptance = (task: PendingAcceptanceTask) => {
+    void getTaskStore(task.projectId, task.taskId)?.setNeedsReview(false);
   };
 
   const openResourceDetails = (kind: WorkspaceResourceDetailKind) => {
@@ -1052,7 +1092,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               {t('workspaceRuntime.agents.description')}
             </div>
           </div>
-          <div className="grid grid-cols-4 gap-px bg-border">
+          <div className="grid grid-cols-5 gap-px bg-border">
             <WorkspaceResourceMetric
               label={t('workspaceRuntime.agents.sessions')}
               value={String(agentSessionCount)}
@@ -1068,6 +1108,10 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             <WorkspaceResourceMetric
               label={t('workspaceRuntime.agents.tmux')}
               value={String(tmuxSessionCount)}
+            />
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.agents.pendingAcceptance')}
+              value={String(pendingAcceptanceTasks.length)}
             />
           </div>
           {agentSessions.length > 0 ? (
@@ -1160,6 +1204,56 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               {t('workspaceRuntime.agents.empty')}
             </div>
           )}
+          {pendingAcceptanceTasks.length > 0 ? (
+            <div className="border-t border-border p-2">
+              <div className="px-1 py-1.5">
+                <div className="text-sm font-medium">
+                  {t('workspaceRuntime.agents.pendingAcceptanceQueue')}
+                </div>
+                <div className="mt-0.5 text-xs text-foreground-passive">
+                  {t('workspaceRuntime.agents.pendingAcceptanceDescription')}
+                </div>
+              </div>
+              <div className="max-h-52 overflow-y-auto">
+                {pendingAcceptanceTasks.map((task) => (
+                  <div
+                    key={`${task.projectId}:${task.taskId}`}
+                    className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 hover:bg-background-2"
+                  >
+                    <button
+                      type="button"
+                      aria-label={t('workspaceRuntime.agents.openPendingAcceptance', {
+                        title: task.taskName,
+                      })}
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                      onClick={() => openPendingAcceptanceTask(task)}
+                    >
+                      <ClipboardCheck
+                        aria-hidden
+                        className="size-4 shrink-0 text-status-in-review"
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm text-foreground">
+                          {task.taskName}
+                        </span>
+                        <span className="block truncate text-[11px] text-foreground-passive">
+                          {task.projectName}
+                        </span>
+                      </span>
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => removeFromPendingAcceptance(task)}
+                    >
+                      {t('workspaceRuntime.agents.removeFromPendingAcceptance')}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </PopoverContent>
       </Popover>
       <Popover open={isResourcePopoverOpen} onOpenChange={setIsResourcePopoverOpen}>

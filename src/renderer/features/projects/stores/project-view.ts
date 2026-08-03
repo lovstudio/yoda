@@ -37,7 +37,19 @@ export class ProjectViewStore implements Snapshottable<ProjectViewSnapshot> {
     // Intentionally ignore snapshot.activeView — always land on Overview on
     // session start. Users navigate to other tabs via clicks; that state is
     // intra-session only.
-    if (snapshot.taskViewTab) this.taskView.setTab(snapshot.taskViewTab);
+    // `active` was the pre-category tab name. Keep existing local snapshots
+    // usable after moving to the four mutually exclusive task categories.
+    const savedTaskTab = snapshot.taskViewTab as string | undefined;
+    if (savedTaskTab === 'active') {
+      this.taskView.setTab('standard');
+    } else if (
+      savedTaskTab === 'standard' ||
+      savedTaskTab === 'long-term' ||
+      savedTaskTab === 'pending-acceptance' ||
+      savedTaskTab === 'archived'
+    ) {
+      this.taskView.setTab(savedTaskTab);
+    }
     if (typeof snapshot.taskViewArchivedOnlyWithNote === 'boolean') {
       this.taskView.setArchivedOnlyWithNote(snapshot.taskViewArchivedOnlyWithNote);
     }
@@ -45,7 +57,7 @@ export class ProjectViewStore implements Snapshottable<ProjectViewSnapshot> {
 }
 
 class TaskViewStore {
-  tab: 'active' | 'archived' = 'active';
+  tab: 'standard' | 'long-term' | 'pending-acceptance' | 'archived' = 'standard';
   searchQuery: string = '';
   selectedIds: Set<string> = new Set();
   archivedOnlyWithNote: boolean = false;
@@ -54,7 +66,7 @@ class TaskViewStore {
     makeAutoObservable(this);
   }
 
-  setTab(tab: 'active' | 'archived') {
+  setTab(tab: 'standard' | 'long-term' | 'pending-acceptance' | 'archived') {
     this.tab = tab;
   }
 

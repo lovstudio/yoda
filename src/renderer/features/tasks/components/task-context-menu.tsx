@@ -185,7 +185,7 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
     });
   }
 
-  // group 1 — rename, pin, long-term marker, mark-read
+  // group 1 — rename, pin, task category markers
   items.push({
     key: 'rename',
     group: 1,

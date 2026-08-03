@@ -136,7 +136,9 @@ export interface SidebarSelectionRevealRequest {
 }
 
 function isActiveSidebarTask(task: TaskStore): boolean {
-  return task.state === 'unregistered' || !('archivedAt' in task.data && task.data.archivedAt);
+  if (task.state === 'unregistered') return true;
+  const data = registeredTaskData(task);
+  return Boolean(data && !data.archivedAt && !data.needsReview);
 }
 
 /** Archive in flight: requested but not yet completed (the row still shows while the saga runs). */
@@ -178,16 +180,13 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   hideProjectsWithoutActiveTasks = false;
   /** Hide tasks that have no non-archived conversation yet. */
   hideTasksWithoutActiveConversations = false;
-  /** Sort tasks marked "稍后再读" (needsReview) to the bottom of their group. */
+  /** Legacy snapshot preference. Pending-acceptance tasks are now hidden from the sidebar. */
   sortNeedsReviewLast = false;
   /** Sort tasks with an archive in flight to the bottom of their group. */
   sortArchivingLast = false;
   /**
-   * Deferred reflow: while the pointer is inside a task list, the needsReview
-   * values used for demotion are frozen at this snapshot so rows don't jump
-   * under the cursor when marked. Released (null) when the pointer leaves —
-   * the list then reflows. Archive demotion stays live on purpose: archiving
-   * means "get it out of the way", so it sinks immediately.
+   * Legacy reflow state retained only to read older snapshots. Pending-acceptance
+   * tasks now leave the sidebar instead of being demoted within it.
    */
   private frozenNeedsReviewByTaskId: ReadonlyMap<string, boolean> | null = null;
   /** Active reflow-hold sources (pointer-in-list, open row menu, …). */
@@ -943,19 +942,18 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     return this.frozenNeedsReviewByTaskId?.get(task.data.id) ?? this.taskNeedsReview(task);
   }
 
-  /** Whether the task sinks to the bottom of its group under the active demote rules. */
+  /** Whether an active task sinks to the bottom of its group while archiving. */
   private isTaskDemoted(task: TaskStore): boolean {
-    if (this.sortNeedsReviewLast && this.taskNeedsReviewForSort(task)) return true;
     if (this.sortArchivingLast && taskIsArchiving(task)) return true;
     return false;
   }
 
   /**
-   * Stable partition: demoted tasks ("稍后再读" / archiving, per settings) sink
-   * to the bottom of their group while keeping relative (manual) order intact.
+   * Stable partition: tasks archiving in flight sink to the bottom of their
+   * group while keeping relative (manual) order intact.
    */
   private demoteTasksToBottom(tasks: TaskStore[]): TaskStore[] {
-    if (!this.sortNeedsReviewLast && !this.sortArchivingLast) return tasks;
+    if (!this.sortArchivingLast) return tasks;
     return [
       ...tasks.filter((t) => !this.isTaskDemoted(t)),
       ...tasks.filter((t) => this.isTaskDemoted(t)),
@@ -963,12 +961,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   }
 
   /**
-   * Freeze the needsReview demotion order while the user is interacting with a
-   * task list (pointer inside it, or a row context menu open), so toggling
-   * "稍后再读" (or an auto-clear on open) doesn't reorder rows under the cursor.
-   * Multiple sources hold concurrently — e.g. the pointer leaves the list onto
-   * a portal context menu — so holds are keyed by reason and the list only
-   * reflows once every reason has released.
+   * Retained for snapshot compatibility with the legacy read-later preference.
    */
   holdTaskReflow(reason: string): void {
     if (!this.sortNeedsReviewLast) return;

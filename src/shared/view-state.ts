@@ -139,7 +139,7 @@ export type TaskSidebarViewSnapshot = {
 
 export type ProjectViewSnapshot = {
   activeView: string;
-  taskViewTab: 'active' | 'archived';
+  taskViewTab: 'standard' | 'long-term' | 'pending-acceptance' | 'archived';
   taskViewArchivedOnlyWithNote?: boolean;
 };
 

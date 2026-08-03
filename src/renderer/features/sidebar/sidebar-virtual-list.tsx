@@ -128,7 +128,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
     }
     if (currentView === 'task' && taskParams.projectId && taskParams.taskId) {
       const activeTask = getRegisteredTaskData(taskParams.projectId, taskParams.taskId);
-      if (activeTask?.archivedAt || activeTask?.archiveRequestedAt) {
+      if (activeTask?.archivedAt || activeTask?.archiveRequestedAt || activeTask?.needsReview) {
         return;
       }
     }

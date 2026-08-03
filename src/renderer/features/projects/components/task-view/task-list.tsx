@@ -3,6 +3,7 @@ import { Archive, FileText, RotateCcw, Trash2, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { taskKind, type TaskKind } from '@shared/task-kind';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useArchiveTask } from '@renderer/features/tasks/archive-task';
 import { useIssueSearch } from '@renderer/features/tasks/components/issue-selector/useIssueSearch';
@@ -102,7 +103,7 @@ function SelectionBar({
   onDelete,
 }: {
   count: number;
-  tab: 'active' | 'archived';
+  tab: TaskKind;
   onClear: () => void;
   onArchive: () => void;
   onRestore: () => void;
@@ -117,7 +118,7 @@ function SelectionBar({
         {t('projects.tasks.selectedCount', { count })}
       </span>
       <div className="flex items-center gap-2">
-        {tab === 'active' && (
+        {tab !== 'archived' && (
           <Button variant="outline" size="sm" onClick={onArchive}>
             <Archive className="size-3.5" />
             {t('sidebar.archiveTask')}
@@ -174,12 +175,17 @@ export const TaskList = observer(function TaskList() {
         (t): t is ReadyTask => t.state !== 'unregistered'
       )
     : [];
-  const activeTasks = allTasks.filter((t) => !t.data.archivedAt);
-  const archivedTasks = allTasks.filter((t) => Boolean(t.data.archivedAt));
+  const tasksByKind: Record<TaskKind, ReadyTask[]> = {
+    standard: [],
+    'long-term': [],
+    'pending-acceptance': [],
+    archived: [],
+  };
+  for (const task of allTasks) tasksByKind[taskKind(task.data)].push(task);
 
   if (!taskView) return null;
 
-  const displayTasks = taskView.tab === 'active' ? activeTasks : archivedTasks;
+  const displayTasks = tasksByKind[taskView.tab];
   const onlyWithNote = taskView.tab === 'archived' && taskView.archivedOnlyWithNote;
   const noteFiltered = onlyWithNote
     ? displayTasks.filter((t) => Boolean(t.data.archiveNote?.trim()))
@@ -229,14 +235,23 @@ export const TaskList = observer(function TaskList() {
             multiple={false}
             value={[taskView.tab]}
             onValueChange={([value]) => {
-              if (value) taskView.setTab(value as 'active' | 'archived');
+              if (value) taskView.setTab(value as TaskKind);
             }}
+            className="flex-wrap"
           >
-            <ToggleGroupItem value="active">
-              {t('projects.tasks.activeWithCount', { count: activeTasks.length })}
+            <ToggleGroupItem value="standard">
+              {t('projects.tasks.standardWithCount', { count: tasksByKind.standard.length })}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="long-term">
+              {t('projects.tasks.longTermWithCount', { count: tasksByKind['long-term'].length })}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="pending-acceptance">
+              {t('projects.tasks.pendingAcceptanceWithCount', {
+                count: tasksByKind['pending-acceptance'].length,
+              })}
             </ToggleGroupItem>
             <ToggleGroupItem value="archived">
-              {t('projects.tasks.archivedWithCount', { count: archivedTasks.length })}
+              {t('projects.tasks.archivedWithCount', { count: tasksByKind.archived.length })}
             </ToggleGroupItem>
           </ToggleGroup>
           <div className="flex items-center gap-2">

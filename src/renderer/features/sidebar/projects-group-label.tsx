@@ -2,7 +2,6 @@ import {
   Archive,
   ChevronsDownUp,
   ChevronsUpDown,
-  CircleDot,
   EyeOff,
   FolderTree,
   ListRestart,
@@ -100,7 +99,6 @@ export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
     sidebarStore.taskBranchDisplay !== 'compact' ||
     sidebarStore.hideProjectsWithoutActiveTasks ||
     sidebarStore.hideTasksWithoutActiveConversations ||
-    sidebarStore.sortNeedsReviewLast ||
     sidebarStore.sortArchivingLast ||
     newTaskOpenMode !== 'home' ||
     expressMode;
@@ -257,13 +255,6 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
       </PanelRow>
       <PanelSeparator />
       <SectionLabel>{t('sidebar.demoteRules')}</SectionLabel>
-      <SwitchRow
-        icon={CircleDot}
-        label={t('sidebar.demoteNeedsReview')}
-        description={t('sidebar.sortNeedsReviewLastDescription')}
-        checked={sidebarStore.sortNeedsReviewLast}
-        onCheckedChange={(checked) => sidebarStore.setSortNeedsReviewLast(checked)}
-      />
       <SwitchRow
         icon={Archive}
         label={t('sidebar.demoteArchiving')}
