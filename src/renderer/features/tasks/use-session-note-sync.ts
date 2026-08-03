@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { getTaskMenuConversation } from '@renderer/features/tasks/components/task-menu-session-info';
-import { useProvisionedTaskOrNull } from '@renderer/features/tasks/task-view-context';
+import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { rpc } from '@renderer/lib/ipc';
 import type { MarkdownNoteDraft } from '@renderer/lib/ui/markdown-annotations';
 
@@ -36,7 +36,7 @@ export function syncNoteToSessionInput(sessionId: string, note: MarkdownNoteDraf
  * "opened from a session"). Targets the task's active/most-recent conversation.
  */
 export function useSessionNoteSync(): ((note: MarkdownNoteDraft) => void) | undefined {
-  const provisioned = useProvisionedTaskOrNull();
+  const provisioned = useProvisionedTask();
   const conversationId = provisioned ? getTaskMenuConversation(provisioned)?.id : undefined;
   const sync = useCallback(
     (note: MarkdownNoteDraft) => {

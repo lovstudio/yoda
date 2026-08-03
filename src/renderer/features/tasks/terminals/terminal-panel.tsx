@@ -1,13 +1,16 @@
 import { observer } from 'mobx-react-lite';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { useIsActiveTask } from '../hooks/use-is-active-task';
 import { TerminalWorkbench } from './terminal-workbench';
 import { useCreateTerminal } from './use-create-terminal';
 
 export const TerminalsPanel = observer(function TerminalsPanel() {
   const { projectId, taskId } = useTaskViewContext();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const terminalMgr = provisionedTask.terminals;
   const terminalTabView = provisionedTask.taskView.terminalTabs;
   const isActive = useIsActiveTask(taskId);

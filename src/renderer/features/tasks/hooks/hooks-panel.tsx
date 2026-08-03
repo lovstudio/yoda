@@ -9,7 +9,10 @@ import {
   toWorkspaceRelativePath,
 } from '@renderer/features/tasks/components/file-actions';
 import { getTaskMenuConversation } from '@renderer/features/tasks/components/task-menu-session-info';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { events, rpc } from '@renderer/lib/ipc';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { MicroLabel } from '@renderer/lib/ui/label';
@@ -28,7 +31,7 @@ export const HooksPanel = observer(function HooksPanel({
 }) {
   const { t } = useTranslation();
   const { taskId } = useTaskViewContext();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const conversation = getTaskMenuConversation(provisionedTask);
   const runtimeId = conversation?.runtimeId;
 
@@ -316,7 +319,7 @@ const HookDetailsPopover = observer(function HookDetailsPopover({
   onToggle: (hook: InspectedHook, enabled: boolean) => void | Promise<void>;
 }) {
   const { t } = useTranslation();
-  const { path: workspaceRoot } = useProvisionedTask();
+  const { path: workspaceRoot } = useRequireProvisionedTask();
   const sourcePath =
     typeof hook.sourcePath === 'string' && hook.sourcePath.trim().length > 0
       ? hook.sourcePath

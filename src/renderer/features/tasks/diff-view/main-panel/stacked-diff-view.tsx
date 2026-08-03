@@ -8,7 +8,10 @@ import {
   StackedDiffPanelStore,
   type DiffSlotStore,
 } from '@renderer/features/tasks/diff-view/stores/stacked-diff-panel-store';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { FileIcon } from '@renderer/lib/editor/file-icon';
 import { modelRegistry } from '@renderer/lib/monaco/monaco-model-registry';
 import { StickyDiffEditor } from '@renderer/lib/monaco/sticky-diff-editor';
@@ -20,7 +23,7 @@ const LARGE_DIFF_LINE_THRESHOLD = 1500;
 
 export const StackedDiffView = observer(function StackedDiffView() {
   const { projectId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const { workspaceId } = provisioned;
   const diffView = provisioned.taskView.diffView;
   const git = provisioned.workspace.git;
@@ -46,7 +49,7 @@ interface StackedDiffPanelProps {
 
 const StackedDiffPanel = observer(function StackedDiffPanel({ panelStore }: StackedDiffPanelProps) {
   const { t } = useTranslation();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const diffView = provisioned.taskView.diffView;
   const { visibleSlots } = panelStore;
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -136,7 +139,7 @@ const StackedDiffPanel = observer(function StackedDiffPanel({ panelStore }: Stac
 interface StackedFileSlotProps {
   slotStore: DiffSlotStore;
   panelStore: StackedDiffPanelStore;
-  diffView: ReturnType<typeof useProvisionedTask>['taskView']['diffView'];
+  diffView: ReturnType<typeof useRequireProvisionedTask>['taskView']['diffView'];
 }
 
 const MIN_EDITOR_HEIGHT = 100;

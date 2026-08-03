@@ -7,7 +7,7 @@ import { QuickActionSuggestionControl } from '@renderer/features/tasks/quick-act
 import { getTabMeta } from '@renderer/features/tasks/tabs/tab-meta';
 import {
   useIsHostedTaskView,
-  useProvisionedTask,
+  useRequireProvisionedTask,
   useTaskViewKind,
 } from '@renderer/features/tasks/task-view-context';
 import { SidebarChip } from '@renderer/lib/components/sidebar-chip';
@@ -43,7 +43,7 @@ export const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
   taskId: string;
 }) {
   const { t } = useTranslation();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const { taskView } = provisionedTask;
   const hosted = useIsHostedTaskView();
   const projectStore = asMounted(getProjectStore(projectId));
@@ -117,7 +117,7 @@ export const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
  */
 const HostedTaskTabStrip = observer(function HostedTaskTabStrip() {
   const { t } = useTranslation();
-  const { tabManager } = useProvisionedTask().taskView;
+  const { tabManager } = useRequireProvisionedTask().taskView;
   const activeId = tabManager.resolvedActiveTabId;
 
   return (

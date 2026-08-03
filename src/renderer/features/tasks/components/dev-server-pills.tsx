@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { rpc } from '@renderer/lib/ipc';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
-import { useProvisionedTask } from '../task-view-context';
+import { useRequireProvisionedTask } from '../task-view-context';
 
 function formatUrl(url: string): string {
   try {
@@ -22,7 +22,7 @@ export const DevServerPills = observer(function DevServerPills({
   taskId: string;
 }) {
   const { t } = useTranslation();
-  const urls = useProvisionedTask().devServers.urls;
+  const urls = useRequireProvisionedTask().devServers.urls;
 
   if (urls.length === 0) return null;
 

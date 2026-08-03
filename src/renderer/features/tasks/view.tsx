@@ -12,7 +12,10 @@ import {
   getTaskStore,
   taskViewKind,
 } from '@renderer/features/tasks/stores/task-selectors';
-import { TaskViewWrapper, useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import {
+  TaskViewWrapper,
+  useRequireProvisionedTask,
+} from '@renderer/features/tasks/task-view-context';
 import { events } from '@renderer/lib/ipc';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -35,7 +38,7 @@ const TabManagerVisibilitySync = observer(function TabManagerVisibilitySync({
   projectId: string;
   taskId: string;
 }) {
-  const { taskView } = useProvisionedTask();
+  const { taskView } = useRequireProvisionedTask();
   const isActive = useIsActiveTask(taskId);
   const activeConversationId = taskView.tabManager.activeConversationId;
   const { navigate } = useNavigate();
@@ -79,7 +82,7 @@ const TopLevelTabSync = observer(function TopLevelTabSync({
   projectId: string;
   taskId: string;
 }) {
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const isActive = useIsActiveTask(taskId);
   const { params } = useParams('task');
   const tabManager = provisioned.taskView.tabManager;

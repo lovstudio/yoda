@@ -35,7 +35,10 @@ import {
   getTabMeta,
   openTaskTabInWindow,
 } from '@renderer/features/tasks/tabs/tab-meta';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { ChipContextMenu } from '@renderer/lib/components/chip-context-menu';
 import { FeatureCard } from '@renderer/lib/components/feature-card';
 import { FilePathMenuItems } from '@renderer/lib/components/file-path-actions';
@@ -111,7 +114,7 @@ function groupIcon(group: SidebarTabGroup): React.ReactNode {
 export const TaskSidebar = observer(function TaskSidebar() {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const { taskView } = provisioned;
   const { tabManager } = taskView;
   const { isSidebarCollapsed, sidebarTab: activeTab, openSidebarGroups } = taskView;
@@ -504,7 +507,7 @@ export const TaskSidebar = observer(function TaskSidebar() {
  */
 const SessionPanelSectionManager = observer(function SessionPanelSectionManager() {
   const { t } = useTranslation();
-  const { taskView } = useProvisionedTask();
+  const { taskView } = useRequireProvisionedTask();
   const order = taskView.sidebarPrefs.sessionPanelUnitOrder;
   const hidden = taskView.sidebarPrefs.sessionPanelHiddenUnits;
 

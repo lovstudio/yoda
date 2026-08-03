@@ -1,6 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
-import { useProvisionedTaskOrNull } from '@renderer/features/tasks/task-view-context';
+import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 
 /**
  * Reads/writes runtime open state for an ad-hoc disclosure (a `<details>`,
@@ -13,7 +13,7 @@ export function usePersistedDisclosure(
   id: string,
   defaultOpen = false
 ): [boolean, (open: boolean) => void] {
-  const provisioned = useProvisionedTaskOrNull();
+  const provisioned = useProvisionedTask();
   const [localOpen, setLocalOpen] = useState(defaultOpen);
   if (!provisioned) return [localOpen, setLocalOpen];
   const { taskView } = provisioned;

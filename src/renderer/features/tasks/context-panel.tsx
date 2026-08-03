@@ -50,7 +50,10 @@ import {
 } from '@renderer/features/tasks/components/persisted-disclosure';
 import { getTaskMenuConversation } from '@renderer/features/tasks/components/task-menu-session-info';
 import { HooksPanel } from '@renderer/features/tasks/hooks/hooks-panel';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { rpc } from '@renderer/lib/ipc';
 import { Input } from '@renderer/lib/ui/input';
 import { MicroLabel } from '@renderer/lib/ui/label';
@@ -118,7 +121,7 @@ export const HarnessSection = observer(function HarnessSection({
   active?: boolean;
 }) {
   const { t } = useTranslation();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const statuslineCwd =
     asMounted(getProjectStore(provisioned.projectId))?.data.path ?? provisioned.path;
   // Falls back to the task's most recent conversation when the active main-area
@@ -164,7 +167,7 @@ export const HarnessSection = observer(function HarnessSection({
 const HooksSection = observer(function HooksSection({ active }: { active: boolean }) {
   const { t } = useTranslation();
   const { taskId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const conversation = getTaskMenuConversation(provisioned);
   const runtimeId = conversation?.runtimeId;
   // Refetch on session restart (mirrors HooksPanel's reload trigger).
@@ -470,7 +473,7 @@ function PersonaSection({
   showPromptPrinciples?: boolean;
 }) {
   const { t } = useTranslation();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const { data: libraryPrompts } = usePrompts();
   const projectPrompts = getProjectSettingsStore(provisioned.projectId)?.settings?.promptPrinciples;
   const principles = showPromptPrinciples

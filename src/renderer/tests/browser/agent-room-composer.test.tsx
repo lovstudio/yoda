@@ -34,7 +34,7 @@ vi.mock('@renderer/features/features/use-features', () => ({
 }));
 
 vi.mock('@renderer/features/tasks/task-view-context', () => ({
-  useProvisionedTask: () => {
+  useRequireProvisionedTask: () => {
     throw new Error('Task view context is not used by AgentRoomComposer');
   },
 }));

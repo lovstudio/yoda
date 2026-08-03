@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { FileActionsDropdown } from '@renderer/features/tasks/components/file-actions';
 import { LeasedMonacoEditor } from '@renderer/features/tasks/editor/leased-monaco-editor';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { MarkdownEditorRenderer } from '@renderer/lib/editor/markdown-renderer';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 
@@ -15,7 +15,7 @@ import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
  * for plain text/code files.
  */
 export const MarkdownEditorPanel = observer(function MarkdownEditorPanel() {
-  const { taskView } = useProvisionedTask();
+  const { taskView } = useRequireProvisionedTask();
   const activeTab = taskView.tabManager.activeFileEntry;
 
   if (!activeTab) return null;
@@ -44,7 +44,7 @@ interface MarkdownSourceToggleOverlayProps {
 
 export function MarkdownSourceToggleOverlay({ filePath }: MarkdownSourceToggleOverlayProps) {
   const { t } = useTranslation();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const { tabManager } = provisioned.taskView;
   const sourcePath = `${provisioned.path.replace(/\/+$/, '')}/${filePath}`;
 

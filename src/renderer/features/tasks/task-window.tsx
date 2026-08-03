@@ -28,7 +28,7 @@ import { formatConversationTitleForDisplay } from './conversations/conversation-
 import { TaskActiveTabContent } from './main-panel';
 import { getTaskStore, taskErrorMessage, type TaskViewKind } from './stores/task-selectors';
 import type { ResolvedTab } from './tabs/tab-manager-store';
-import { useProvisionedTask, useTaskViewKind } from './task-view-context';
+import { useRequireProvisionedTask, useTaskViewKind } from './task-view-context';
 import { TaskViewWrapperWithProviders } from './view';
 
 export const TaskTabWindow = observer(function TaskTabWindow() {
@@ -92,7 +92,7 @@ const ReadyTaskTabWindow = observer(function ReadyTaskTabWindow({
 }: {
   target: TaskWindowTarget;
 }) {
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const { taskView } = provisioned;
   const [currentWindowId, setCurrentWindowId] = useState<number | null>(null);
   const targetTab = taskView.tabManager.resolvedTabs.find((tab) =>

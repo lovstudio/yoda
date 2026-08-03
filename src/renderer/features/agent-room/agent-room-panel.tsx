@@ -10,7 +10,7 @@ import {
 } from '@shared/team-routing-limit';
 import { openFeature } from '@renderer/features/features/feature-navigation';
 import { useFeature } from '@renderer/features/features/use-features';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { AvatarValue } from '@renderer/lib/components/avatar-value';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
@@ -37,7 +37,7 @@ type OpenTab = (id: string) => void;
  */
 export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: RoomSnapshot }) {
   const { t } = useTranslation();
-  const { taskView, conversations } = useProvisionedTask();
+  const { taskView, conversations } = useRequireProvisionedTask();
   const { tabManager } = taskView;
   const scrollRef = useRef<HTMLDivElement>(null);
   const byId = useMemo(() => new Map(snapshot.members.map((m) => [m.id, m])), [snapshot.members]);

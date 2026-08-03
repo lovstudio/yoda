@@ -18,7 +18,7 @@ import { cn } from '@renderer/utils/utils';
 import { AgentStatusIndicator } from '../components/agent-status-indicator';
 import { usePersistedDisclosure } from '../components/persisted-disclosure';
 import { SessionUsageChip } from '../components/session-usage-chip';
-import { useProvisionedTask, useTaskViewContext } from '../task-view-context';
+import { useRequireProvisionedTask, useTaskViewContext } from '../task-view-context';
 import { ConversationDragHandle } from './conversation-drag-handle';
 import type { ConversationStore } from './conversation-manager';
 import { formatConversationTitleForDisplay } from './conversation-title-utils';
@@ -136,7 +136,7 @@ const ConversationTreeItem = observer(function ConversationTreeItem({
 }) {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const showTranscript = useShowModal('archivedSessionTranscriptModal');
   const [busy, setBusy] = useState(false);
   const { conversation } = node;

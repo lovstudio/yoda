@@ -3,7 +3,10 @@ import { observer } from 'mobx-react-lite';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FileActionsDropdown } from '@renderer/features/tasks/components/file-actions';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { useSessionNoteSync } from '@renderer/features/tasks/use-session-note-sync';
 import { rpc } from '@renderer/lib/ipc';
 import { modelRegistry } from '@renderer/lib/monaco/monaco-model-registry';
@@ -24,7 +27,7 @@ export const MarkdownEditorRenderer = observer(function MarkdownEditorRenderer({
 }: MarkdownEditorRendererProps) {
   const { t } = useTranslation();
   const { projectId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const { workspaceId } = provisioned;
   const { editorView, tabManager } = provisioned.taskView;
   const syncNote = useSessionNoteSync();

@@ -28,7 +28,7 @@ vi.mock('@renderer/lib/ipc', () => ({
 }));
 
 vi.mock('@renderer/features/tasks/task-view-context', () => ({
-  useProvisionedTask: () => ({ taskView: mocks.taskView }),
+  useRequireProvisionedTask: () => ({ taskView: mocks.taskView }),
 }));
 
 vi.mock('@renderer/features/tasks/context-panel', () => ({

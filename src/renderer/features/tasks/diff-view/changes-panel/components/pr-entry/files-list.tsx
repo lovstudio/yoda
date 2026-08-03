@@ -3,12 +3,15 @@ import { commitRef, remoteRef, type GitChange } from '@shared/git';
 import { getPrNumber, type PullRequest } from '@shared/pull-requests';
 import { getRepositoryStore } from '@renderer/features/projects/stores/project-selectors';
 import { usePrefetchDiffModels } from '@renderer/features/tasks/diff-view/changes-panel/hooks/use-prefetch-diff-models';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { VirtualizedChangesList } from '../virtualized-changes-list';
 
 export const PrFilesList = observer(function PrFilesList({ pr }: { pr: PullRequest }) {
   const { projectId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const prStore = provisioned.workspace.pr;
 
   const repo = getRepositoryStore(projectId);

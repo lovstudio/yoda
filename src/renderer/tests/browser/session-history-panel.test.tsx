@@ -38,7 +38,7 @@ vi.mock('@renderer/features/tasks/session-info-panel', () => ({
 }));
 
 vi.mock('@renderer/features/tasks/task-view-context', () => ({
-  useProvisionedTask: () => ({
+  useRequireProvisionedTask: () => ({
     conversations: { conversations: new Map() },
     taskView: {
       tabManager: { openConversation: vi.fn() },

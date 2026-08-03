@@ -109,7 +109,7 @@ vi.mock('@renderer/features/tasks/components/session-usage-chip', () => ({
 }));
 
 vi.mock('@renderer/features/tasks/task-view-context', () => ({
-  useProvisionedTask: () => mocks.provisioned,
+  useRequireProvisionedTask: () => mocks.provisioned,
   useTaskViewContext: () => ({ projectId: 'project-1', taskId: 'task-1' }),
 }));
 

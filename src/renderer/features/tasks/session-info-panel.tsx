@@ -56,7 +56,10 @@ import {
   startVisibleSessionRefresh,
   type SessionConversationData,
 } from '@renderer/features/tasks/session-prompts';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { syncNoteToSessionInput } from '@renderer/features/tasks/use-session-note-sync';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { events, rpc } from '@renderer/lib/ipc';
@@ -80,7 +83,7 @@ import { cn } from '@renderer/utils/utils';
  * single-expand, so only one resolve loop is live at a time.
  */
 function useSessionInfoFields(active: boolean) {
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const conversation = getTaskMenuConversation(provisionedTask);
   // Observe the live PTY session status so the panel re-fetches session info
   // (e.g. tmux enabled/disabled) whenever the session restarts — from this
@@ -443,7 +446,7 @@ export function useSessionPrompts(active: boolean): {
   requestRestorePrompt: (prompt: ClaudeSessionPrompt, index: number) => void;
   openPromptsModal: (displayLevel?: Exclude<AgentReplyDisplayLevel, 'verbose'>) => void;
 } {
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const conversation = getTaskMenuConversation(provisionedTask);
   const sessionStatus = conversation
     ? provisionedTask.conversations.conversations.get(conversation.id)?.session.status
@@ -634,7 +637,7 @@ export function useSessionSummary(
 } {
   const autoGenerate = options?.autoGenerate ?? true;
   const { projectId, taskId } = useTaskViewContext();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const conversation = getTaskMenuConversation(provisionedTask);
   // Observing the live session status re-runs the resolve when the agent
   // transitions to idle/completed — i.e. after each reply, while open.
@@ -929,7 +932,7 @@ const OverviewTitleInline = observer(function OverviewTitleInline({
   conversation: Conversation;
 }) {
   const { t } = useTranslation();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -998,7 +1001,7 @@ const OverviewTitleInline = observer(function OverviewTitleInline({
  */
 export const SessionOverviewAIButton = observer(function SessionOverviewAIButton() {
   const { t } = useTranslation();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const conversation = getTaskMenuConversation(provisionedTask);
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<'summary' | 'title'>('summary');
@@ -1064,7 +1067,7 @@ const OverviewTitleTab = observer(function OverviewTitleTab({
   active: boolean;
 }) {
   const { t } = useTranslation();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isNamingSnapshotLoading, setIsNamingSnapshotLoading] = useState(false);
@@ -1420,7 +1423,7 @@ export const SessionOverviewPanel = observer(function SessionOverviewPanel({
   active: boolean;
 }) {
   const { t } = useTranslation();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const conversation = getTaskMenuConversation(provisionedTask);
   if (!conversation) {
     return (
@@ -1447,7 +1450,7 @@ const SessionOverviewContent = observer(function SessionOverviewContent({
 }) {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   // Re-peek when the agent goes idle so the text reflects the latest transcript.
   const sessionStatus = provisionedTask.conversations.conversations.get(conversation.id)?.session
     .status;
@@ -1685,7 +1688,7 @@ const OverviewSummaryTab = observer(function OverviewSummaryTab({
   active: boolean;
 }) {
   const { projectId, taskId } = useTaskViewContext();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const [result, setResult] = useState<SessionSummaryResult | null>(null);
   const [snapshot, setSnapshot] = useState<SessionSummarySnapshot | null>(null);
   const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);

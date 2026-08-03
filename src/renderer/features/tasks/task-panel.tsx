@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ClaudeSessionMetadata, ClaudeTodo } from '@shared/conversations';
 import { getTaskMenuConversation } from '@renderer/features/tasks/components/task-menu-session-info';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { rpc } from '@renderer/lib/ipc';
 import { MicroLabel } from '@renderer/lib/ui/label';
 import { cn } from '@renderer/utils/utils';
@@ -24,7 +24,7 @@ export function useTaskTodos(): {
   hasConversation: boolean;
   loading: boolean;
 } {
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   // Falls back to the task's most recent conversation when the active main-area
   // tab is a file/diff — the todo list must not vanish on tab switches.
   const conversation = getTaskMenuConversation(provisioned);

@@ -6,7 +6,10 @@ import { HEAD_REF, STAGED_REF } from '@shared/git';
 import type { ActiveFile } from '@shared/view-state';
 import { useDiffEditorComments } from '@renderer/features/tasks/diff-view/comments/use-diff-editor-comments';
 import { ImageDiffView } from '@renderer/features/tasks/diff-view/main-panel/image-diff-view';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { isBinaryForDiff, isImageForDiff } from '@renderer/lib/editor/fileKind';
 import { modelRegistry } from '@renderer/lib/monaco/monaco-model-registry';
 import { buildMonacoModelPath } from '@renderer/lib/monaco/monacoModelPath';
@@ -22,7 +25,7 @@ export const FileDiffView = observer(function FileDiffView({
 }) {
   const { t } = useTranslation();
   const { projectId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const { workspaceId } = provisioned;
   const diffView = provisioned.taskView.diffView;
   const draftComments = provisioned.draftComments;

@@ -34,7 +34,10 @@ import {
   getTabMeta,
   openTaskTabInWindow,
 } from '@renderer/features/tasks/tabs/tab-meta';
-import { TaskViewWrapper, useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import {
+  TaskViewWrapper,
+  useRequireProvisionedTask,
+} from '@renderer/features/tasks/task-view-context';
 import { SidebarPinnedContent } from '@renderer/features/tasks/view/sidebar-pinned-content';
 import { ChipContextMenu } from '@renderer/lib/components/chip-context-menu';
 import { FilePathMenuItems } from '@renderer/lib/components/file-path-actions';
@@ -437,7 +440,7 @@ const ShellPinnedTaskHost = observer(function ShellPinnedTaskHost({
 
 /** Resolves a task pin's internal entry and renders it through the shared pinned renderer. */
 const ShellPinnedTaskBody = observer(function ShellPinnedTaskBody({ tabId }: { tabId: string }) {
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const entry = provisioned.taskView.tabManager.entries.get(tabId);
   if (!entry) return null;
   return <SidebarPinnedContent entry={entry} />;

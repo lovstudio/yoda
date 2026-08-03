@@ -14,7 +14,10 @@ import { useTranslation } from 'react-i18next';
 import type { BottomPanelTab } from '@shared/view-state';
 import { tabDragSource, tabDropIndex, useTabDropZone } from '@renderer/app/tab-drag';
 import { SessionHistoryPanel } from '@renderer/features/tasks/conversations/session-history-panel';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { FeatureCard } from '@renderer/lib/components/feature-card';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import {
@@ -77,7 +80,7 @@ export const BottomPanel = observer(function BottomPanel({
 }) {
   const { t } = useTranslation();
   const { projectId } = useTaskViewContext();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const { taskView } = provisionedTask;
   const { navigate } = useNavigate();
   const openTabs = taskView.openBottomPanelTabs;
@@ -213,7 +216,7 @@ export const BottomPanel = observer(function BottomPanel({
  */
 const BottomPanelWidthToggle = observer(function BottomPanelWidthToggle() {
   const { t } = useTranslation();
-  const { taskView } = useProvisionedTask();
+  const { taskView } = useRequireProvisionedTask();
   const fullWidth = taskView.isBottomPanelFullWidth;
   const disabled = taskView.isSidebarCollapsed;
   const label = fullWidth

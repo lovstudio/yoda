@@ -2,7 +2,10 @@ import { Minus } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { commitRef, HEAD_REF, type GitChange } from '@shared/git';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ActionCard } from './components/action-card';
@@ -14,7 +17,7 @@ import { usePrefetchDiffModels } from './hooks/use-prefetch-diff-models';
 export const StagedSection = observer(function StagedSection() {
   const { t } = useTranslation();
   const { projectId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const git = provisioned.workspace.git;
   const changesView = provisioned.taskView.diffView.changesView;
 

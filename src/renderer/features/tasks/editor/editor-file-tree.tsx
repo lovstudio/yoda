@@ -10,7 +10,7 @@ import {
   FilePreviewInSidebarButton,
 } from '@renderer/features/tasks/components/file-actions';
 import { buildVisibleRows } from '@renderer/features/tasks/editor/stores/files-store-utils';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { FileIcon } from '@renderer/lib/editor/file-icon';
 import { getFileKind, isPreviewableKind } from '@renderer/lib/editor/fileKind';
 import { cn } from '@renderer/utils/utils';
@@ -22,7 +22,7 @@ const FileTreeRow = observer(function FileTreeRow({
   node: FileNode;
   style: React.CSSProperties;
 }) {
-  const taskState = useProvisionedTask();
+  const taskState = useRequireProvisionedTask();
   const { taskView } = taskState;
   const editorView = taskView.editorView;
 
@@ -139,7 +139,7 @@ const FileTreeRow = observer(function FileTreeRow({
 
 export const EditorFileTree = observer(function EditorFileTree() {
   const { t } = useTranslation();
-  const taskState = useProvisionedTask();
+  const taskState = useRequireProvisionedTask();
   const files = taskState.workspace.files;
   const editorView = taskState.taskView.editorView;
 

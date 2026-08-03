@@ -10,7 +10,10 @@ import {
   conversationTime,
   useArchivedConversations,
 } from '@renderer/features/tasks/conversations/use-archived-conversations';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
@@ -37,7 +40,7 @@ const ConversationRow = observer(function ConversationRow({
 }) {
   const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const { tabManager } = provisioned.taskView;
   const showConfirm = useShowModal('confirmActionModal');
 
@@ -156,7 +159,7 @@ type ConversationListRow =
 
 export const SidebarConversationsList = observer(function SidebarConversationsList() {
   const { projectId, taskId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const { tabManager } = provisioned.taskView;
   const showNewConversationModal = useShowModal('newConversationModal');
   const archived = useArchivedConversations(projectId, taskId);

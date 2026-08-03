@@ -2,7 +2,7 @@ import { autorun, reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import type * as monacoNS from 'monaco-editor';
 import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from 'react';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { registerActiveCodeEditor } from '@renderer/lib/editor/activeCodeEditor';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -48,7 +48,7 @@ export const EditorProvider = observer(function EditorProvider({
   taskId: string;
   projectId: string;
 }) {
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const { taskView } = provisionedTask;
   const { editorView, tabManager } = taskView;
   const { effectiveTheme, themeFingerprint } = useTheme();

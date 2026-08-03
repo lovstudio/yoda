@@ -1,5 +1,8 @@
 import { observer } from 'mobx-react-lite';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
 import { cn } from '@renderer/utils/utils';
 import { GitStatusSection } from './git-status-section';
@@ -10,7 +13,7 @@ import { UnstagedSection } from './unstaged-section';
 
 export const ChangesPanel = observer(function ChangesPanel() {
   const { taskId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const changesView = provisioned.taskView.diffView.changesView;
 
   const {

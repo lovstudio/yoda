@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { conversationTranscriptChangedChannel } from '@shared/events/conversationEvents';
 import { FileActionsDropdown } from '@renderer/features/tasks/components/file-actions';
 import { getTaskMenuConversation } from '@renderer/features/tasks/components/task-menu-session-info';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { events, rpc } from '@renderer/lib/ipc';
 import { TranscriptLineItem } from './components/transcript-line';
 import {
@@ -23,7 +23,7 @@ export function useConversationTranscript(active: boolean): {
   hasConversation: boolean;
   openFile: () => void;
 } {
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const { tabManager } = provisionedTask.taskView;
   const conversation = getTaskMenuConversation(provisionedTask);
   const conversationId = conversation?.id;

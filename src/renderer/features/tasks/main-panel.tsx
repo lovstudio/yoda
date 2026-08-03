@@ -16,7 +16,7 @@ import {
   taskErrorMessage,
 } from '@renderer/features/tasks/stores/task-selectors';
 import {
-  useProvisionedTask,
+  useRequireProvisionedTask,
   useTaskViewContext,
   useTaskViewKind,
 } from '@renderer/features/tasks/task-view-context';
@@ -193,7 +193,7 @@ const TaskSetupRecovery = observer(function TaskSetupRecovery({
  *   runs the full window height.
  */
 const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
-  const { taskView } = useProvisionedTask();
+  const { taskView } = useRequireProvisionedTask();
 
   if (taskView.isBottomPanelFullWidth) {
     return (
@@ -227,7 +227,7 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
   children: React.ReactNode;
 }) {
   const { taskId } = useTaskViewContext();
-  const { taskView } = useProvisionedTask();
+  const { taskView } = useRequireProvisionedTask();
   const bottomPanelRef = usePanelRef();
   const verticalGroupRef = useRef<HTMLDivElement>(null);
   const isHandleDraggingRef = useRef(false);
@@ -377,7 +377,7 @@ const TaskUpperSplit = observer(function TaskUpperSplit({
   mainContent?: React.ReactNode;
 }) {
   const { projectId, taskId } = useTaskViewContext();
-  const { taskView } = useProvisionedTask();
+  const { taskView } = useRequireProvisionedTask();
   const containerRef = useRef<HTMLDivElement>(null);
   const sidebarElRef = useRef<HTMLDivElement>(null);
   const [sidebarPx, setSidebarPx] = useState(runtimeSidebarPx);
@@ -481,7 +481,7 @@ const TaskMainAreaSplit = observer(function TaskMainAreaSplit() {
 });
 
 const UnifiedMainContent = observer(function UnifiedMainContent() {
-  const { taskView } = useProvisionedTask();
+  const { taskView } = useRequireProvisionedTask();
 
   return (
     <div
@@ -496,7 +496,7 @@ const UnifiedMainContent = observer(function UnifiedMainContent() {
 });
 
 export const TaskActiveTabContent = observer(function TaskActiveTabContent() {
-  const { taskView } = useProvisionedTask();
+  const { taskView } = useRequireProvisionedTask();
   const { setEditorHost, triggerLayout } = useEditorContext();
 
   const renderer = taskView.activeRenderer;
@@ -547,7 +547,7 @@ export const TaskActiveTabContent = observer(function TaskActiveTabContent() {
 
 /** Main-area body for the active `room-member` tab (resolved from the active descriptor). */
 const RoomMemberActiveContent = observer(function RoomMemberActiveContent() {
-  const { taskView } = useProvisionedTask();
+  const { taskView } = useRequireProvisionedTask();
   const desc = taskView.tabManager.activeDescriptor;
   if (desc?.kind !== 'room-member') return null;
   return <RoomMemberDetail memberId={desc.memberId} />;
@@ -559,7 +559,7 @@ const RoomMemberActiveContent = observer(function RoomMemberActiveContent() {
  * the markdown preview.
  */
 const MonacoFileToolbar = observer(function MonacoFileToolbar() {
-  const { taskView } = useProvisionedTask();
+  const { taskView } = useRequireProvisionedTask();
   const activeTab = taskView.tabManager.activeFileEntry;
 
   if (!activeTab) return null;
@@ -573,7 +573,7 @@ const MonacoFileToolbar = observer(function MonacoFileToolbar() {
  */
 const SvgSourceToggleOverlay = observer(function SvgSourceToggleOverlay() {
   const { t } = useTranslation();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const { tabManager } = provisioned.taskView;
   const activeTab = tabManager.activeFileEntry;
 

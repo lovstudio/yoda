@@ -2,7 +2,7 @@ import { CheckCircle, Loader2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { Input } from '@renderer/lib/ui/input';
 import { SplitButton, type SplitButtonAction } from '@renderer/lib/ui/split-button';
 import { Textarea } from '@renderer/lib/ui/textarea';
@@ -15,7 +15,7 @@ interface CommitCardProps {
 
 export const CommitCard = observer(function CommitCard({ autoStage = false }: CommitCardProps) {
   const { t } = useTranslation();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const git = provisioned.workspace.git;
   const changesView = provisioned.taskView.diffView.changesView;
   const hasPRs = changesView.expandedSections.pullRequests;

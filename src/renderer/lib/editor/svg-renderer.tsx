@@ -2,7 +2,7 @@ import { Eye, Pencil } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { modelRegistry } from '@renderer/lib/monaco/monaco-model-registry';
 import { buildMonacoModelPath } from '@renderer/lib/monaco/monacoModelPath';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
@@ -69,7 +69,7 @@ export const SvgPreview = observer(function SvgPreview({
 
 /** Renders an SVG from the active task editor's model registry. */
 export const SvgRenderer = observer(function SvgRenderer({ filePath }: SvgRendererProps) {
-  const { taskView } = useProvisionedTask();
+  const { taskView } = useRequireProvisionedTask();
   const { editorView, tabManager } = taskView;
 
   return (

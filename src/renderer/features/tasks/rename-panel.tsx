@@ -25,7 +25,10 @@ import {
   getTaskStore,
   taskDisplayName,
 } from '@renderer/features/tasks/stores/task-selectors';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { events, rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
@@ -45,7 +48,7 @@ export const RenamePanel = observer(function RenamePanel({
 }) {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const taskStore = getTaskStore(projectId, taskId);
   const taskPayload = getRegisteredTaskData(projectId, taskId);
   const taskManager = getTaskManagerStore(projectId);

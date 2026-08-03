@@ -15,7 +15,10 @@ import { useIsActiveTask } from '@renderer/features/tasks/hooks/use-is-active-ta
 import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import type { FileTabStore } from '@renderer/features/tasks/tabs/file-tab-store';
 import type { TabEntry } from '@renderer/features/tasks/tabs/tab-manager-store';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { useWorkspaceWebLinks } from '@renderer/features/tasks/terminals/use-workspace-web-links';
 import { buildFilePathDefaultOpenRequest } from '@renderer/lib/components/file-path-open';
 import { MarkdownEditorRenderer } from '@renderer/lib/editor/markdown-renderer';
@@ -35,7 +38,7 @@ export const SidebarPinnedContent = observer(function SidebarPinnedContent({
 }: {
   entry: TabEntry;
 }) {
-  const { conversations } = useProvisionedTask();
+  const { conversations } = useRequireProvisionedTask();
 
   if (entry.kind === 'overview') {
     return (
@@ -116,7 +119,7 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
   conversation: ConversationStore;
 }) {
   const { projectId, taskId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const attachImagesAsPaths = useAttachImagesAsPaths(projectId);
   const { conversations } = provisioned;
   const isActive = useIsActiveTask(taskId);

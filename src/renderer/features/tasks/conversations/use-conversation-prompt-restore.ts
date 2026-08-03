@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ClaudeSessionPrompt, Conversation } from '@shared/conversations';
 import type { ProvisionedTask } from '@renderer/features/tasks/stores/task';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 
@@ -54,7 +54,7 @@ export function useConversationPromptRestore(): {
   requestRestorePrompt: (location: ConversationPromptLocation) => void;
 } {
   const { t } = useTranslation();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const showRestoreConfirm = useShowModal('confirmActionModal');
   const pendingRef = useRef(false);
   const [restoringPrompt, setRestoringPrompt] = useState<RestoringConversationPrompt | null>(null);

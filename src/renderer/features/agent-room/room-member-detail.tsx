@@ -4,7 +4,10 @@ import { observer } from 'mobx-react-lite';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RoomMember } from '@shared/team-room';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { AvatarInput, type AvatarFileError } from '@renderer/lib/components/avatar-input';
 import { AvatarValue } from '@renderer/lib/components/avatar-value';
 import { useToast } from '@renderer/lib/hooks/use-toast';
@@ -48,7 +51,7 @@ export const RoomMemberDetail = observer(function RoomMemberDetail({
   const { t } = useTranslation();
   const { toast } = useToast();
   const { projectId, taskId } = useTaskViewContext();
-  const { taskView, conversations } = useProvisionedTask();
+  const { taskView, conversations } = useRequireProvisionedTask();
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [iconDraft, setIconDraft] = useState('');

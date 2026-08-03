@@ -6,7 +6,10 @@ import type { Conversation } from '@shared/conversations';
 import { DockedSessionHistory } from '@renderer/features/tasks/conversations/session-history-panel';
 import { useIsActiveTask } from '@renderer/features/tasks/hooks/use-is-active-task';
 import { splitViewStore } from '@renderer/features/tasks/split-view/split-view-store';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
 import { Button } from '@renderer/lib/ui/button';
@@ -22,7 +25,7 @@ export { getResumeInitialSize } from './conversation-session';
 export const ConversationsPanel = observer(function ConversationsPanel() {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const { conversations } = provisioned;
   const { tabManager: tm } = provisioned.taskView;
   const showNewConversationModal = useShowModal('newConversationModal');

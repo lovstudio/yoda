@@ -1,11 +1,14 @@
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { log } from '@renderer/utils/logger';
 import { getTerminalsPaneSize, nextTerminalName } from './terminal-tabs';
 
 /** Creates a drawer terminal (sequential name), activates it, focuses bottom. */
 export function useCreateTerminal(): () => Promise<void> {
   const { projectId, taskId } = useTaskViewContext();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const terminalMgr = provisionedTask.terminals;
   const terminalTabView = provisionedTask.taskView.terminalTabs;
 

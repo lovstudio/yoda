@@ -6,7 +6,7 @@ import {
   FileActionsDropdown,
 } from '@renderer/features/tasks/components/file-actions';
 import { PersistedDetails } from '@renderer/features/tasks/components/persisted-disclosure';
-import { useProvisionedTaskOrNull } from '@renderer/features/tasks/task-view-context';
+import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { useSessionNoteSync } from '@renderer/features/tasks/use-session-note-sync';
 import { GlobalFileActionsDropdown } from '@renderer/lib/components/file-path-actions';
 import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
@@ -36,7 +36,7 @@ export function ContextItem({
   // Outside a task view (e.g. the composer popover) the task-scoped actions
   // (open in editor, reveal in file tree) have no workspace to act on — fall
   // back to the context-free path actions.
-  const taskScoped = useProvisionedTaskOrNull() !== null;
+  const taskScoped = useProvisionedTask() !== null;
   const item = (
     <PersistedDetails
       id={`context:item:${label}`}

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ProvisionedTask } from '@renderer/features/tasks/stores/task';
 import {
   TaskViewWrapper,
-  useProvisionedTask,
+  useRequireProvisionedTask,
   useTaskViewKind,
 } from '@renderer/features/tasks/task-view-context';
 
@@ -15,7 +15,7 @@ function task(taskId: string): ProvisionedTask {
 }
 
 function StatefulReadyProbe() {
-  const currentTaskId = useProvisionedTask().taskId;
+  const currentTaskId = useRequireProvisionedTask().taskId;
   const [mountedForTaskId] = useState(currentTaskId);
   return <span>{`${mountedForTaskId}:${currentTaskId}`}</span>;
 }
@@ -124,5 +124,44 @@ describe('TaskViewWrapper snapshot transitions', () => {
     });
 
     expect(host.textContent).toBe('loading');
+  });
+
+  it('replaces ready-only consumers across teardown and reprovision of the same task', async () => {
+    await act(async () => {
+      root.render(
+        <TaskViewWrapper
+          projectId="project-1"
+          taskId="task-a"
+          kind="ready"
+          provisionedTask={task('task-a:first')}
+        >
+          <ReadyGuard />
+        </TaskViewWrapper>
+      );
+    });
+    expect(host.textContent).toBe('task-a:first:task-a:first');
+
+    await act(async () => {
+      root.render(
+        <TaskViewWrapper projectId="project-1" taskId="task-a" kind="teardown">
+          <ReadyGuard />
+        </TaskViewWrapper>
+      );
+    });
+    expect(host.textContent).toBe('not-ready');
+
+    await act(async () => {
+      root.render(
+        <TaskViewWrapper
+          projectId="project-1"
+          taskId="task-a"
+          kind="ready"
+          provisionedTask={task('task-a:second')}
+        >
+          <ReadyGuard />
+        </TaskViewWrapper>
+      );
+    });
+    expect(host.textContent).toBe('task-a:second:task-a:second');
   });
 });

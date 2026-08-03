@@ -54,7 +54,7 @@ vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
 
 vi.mock('@renderer/features/tasks/task-view-context', () => ({
   useTaskViewContext: () => ({ projectId: 'project-1', taskId: 'task-1' }),
-  useProvisionedTask: () => mocks.provisioned,
+  useRequireProvisionedTask: () => mocks.provisioned,
 }));
 
 vi.mock('@renderer/lib/hooks/use-toast', () => ({

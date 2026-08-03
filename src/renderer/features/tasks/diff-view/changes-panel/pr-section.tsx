@@ -4,7 +4,7 @@ import { getPrSyncStore } from '@renderer/features/projects/stores/project-selec
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
-import { useProvisionedTask, useTaskViewContext } from '../../task-view-context';
+import { useRequireProvisionedTask, useTaskViewContext } from '../../task-view-context';
 import { PullRequestEntry } from './components/pr-entry/pr-entry';
 import { PullRequestSectionHeader } from './components/section-header';
 
@@ -17,7 +17,7 @@ export const PullRequestsSection = observer(function PullRequestsSection({
 }) {
   const { t } = useTranslation();
   const { projectId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const { pr } = provisioned.workspace;
   const repositoryUrl = provisioned.repositoryStore.repositoryUrl;
   const taskBranch = provisioned.taskBranch;

@@ -7,7 +7,10 @@ import type { CompiledQuickAction, CompileQuickActionInput } from '@shared/quick
 import { taskNameFromPrompt } from '@shared/task-name';
 import { saveProjectQuickAction } from '@renderer/features/projects/save-project-quick-action';
 import { getRegisteredTaskData } from '@renderer/features/tasks/stores/task-selectors';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -46,7 +49,7 @@ function suggestedSkillName(label: string, taskId: string): string {
 export const QuickActionSuggestionControl = observer(function QuickActionSuggestionControl() {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const taskData = getRegisteredTaskData(projectId, taskId);
   const source = taskData?.quickActionSource;
   const conversation = source

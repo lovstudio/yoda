@@ -6,7 +6,10 @@ import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAttachImagesAsPaths } from '@renderer/features/tasks/hooks/use-attach-images-as-paths';
 import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { useWorkspaceWebLinks } from '@renderer/features/tasks/terminals/use-workspace-web-links';
 import { buildFilePathDefaultOpenRequest } from '@renderer/lib/components/file-path-open';
 import { rpc } from '@renderer/lib/ipc';
@@ -70,7 +73,7 @@ export const ConversationSession = observer(function ConversationSession({
 }) {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const attachImagesAsPaths = useAttachImagesAsPaths(projectId);
   const { conversations } = provisioned;
   const mountedProject = asMounted(getProjectStore(projectId));

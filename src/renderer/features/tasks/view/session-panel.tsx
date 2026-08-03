@@ -17,7 +17,7 @@ import {
   type AgentReplyDisplayLevel,
 } from '@shared/agent-reply-display';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,7 +58,7 @@ import {
  */
 export const SessionPanel = observer(function SessionPanel() {
   const { t } = useTranslation();
-  const { taskView } = useProvisionedTask();
+  const { taskView } = useRequireProvisionedTask();
   // Single-expand 百叶窗: only one blind is open at a time.
   const openSection = taskView.sessionPanelOpenSectionIds[0] ?? '';
   // Live sub-panels (e.g. hooks) pause their subscriptions while hidden.

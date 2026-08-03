@@ -77,11 +77,11 @@ vi.mock('@renderer/features/tasks/components/task-menu-session-info', () => ({
 
 vi.mock('@renderer/features/tasks/task-view-context', () => ({
   TaskViewWrapper: () => null,
-  useProvisionedTask: () => ({
+  useRequireProvisionedTask: () => ({
     path: '/tmp/yoda-popover-test',
     workspace: { git: { branchName: 'test-branch' } },
   }),
-  useProvisionedTaskOrNull: () => null,
+  useProvisionedTask: () => null,
   useTaskViewContext: () => ({ projectId: 'project-1', taskId: 'task-1', hosted: false }),
   useIsHostedTaskView: () => false,
   useTaskViewKind: () => 'ready',

@@ -3,7 +3,10 @@ import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { useDefaultLayout } from 'react-resizable-panels';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Button } from '@renderer/lib/ui/button';
@@ -19,7 +22,7 @@ import { useWorkspaceWebLinks } from './use-workspace-web-links';
 export const ScriptsPanel = observer(function ScriptsPanel() {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const lifecycleScriptsMgr = provisionedTask.workspace.lifecycleScripts ?? null;
   const isActive = useIsActiveTask(taskId);
   const { navigate } = useNavigate();

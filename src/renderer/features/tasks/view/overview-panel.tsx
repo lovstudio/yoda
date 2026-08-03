@@ -18,7 +18,10 @@ import {
   taskAncestors,
   taskDisplayName,
 } from '@renderer/features/tasks/stores/task-selectors';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -37,7 +40,7 @@ export const OverviewPanel = observer(function OverviewPanel() {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
   const { projectId, taskId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const { tabManager } = provisioned.taskView;
   const showNewConversationModal = useShowModal('newConversationModal');
 

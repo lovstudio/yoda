@@ -4,7 +4,7 @@ import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getPrNumber, type PullRequest } from '@shared/pull-requests';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { PrMergeLine } from '@renderer/lib/components/pr-merge-line';
 import { PrNumberBadge } from '@renderer/lib/components/pr-number-badge';
 import { StatusIcon } from '@renderer/lib/components/pr-status-icon';
@@ -123,7 +123,7 @@ function computeMergeUiState(pr: PullRequest, t: TFunction): MergeUiState {
 
 export const PullRequestEntry = observer(function PullRequestEntry({ pr }: { pr: PullRequest }) {
   const { t } = useTranslation();
-  const task = useProvisionedTask();
+  const task = useRequireProvisionedTask();
   const prStatus = pr.status;
   const prStore = task.workspace.pr;
   const diffView = task.taskView.diffView;

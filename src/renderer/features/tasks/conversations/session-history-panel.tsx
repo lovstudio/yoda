@@ -15,7 +15,7 @@ import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-
 import { displaySessionPromptText } from '@renderer/features/tasks/context-panel-prompt-display';
 import { useSessionPrompts } from '@renderer/features/tasks/session-info-panel';
 import { buildPromptPreviewItems } from '@renderer/features/tasks/session-prompts-preview';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import {
@@ -149,7 +149,7 @@ export const DockedSessionHistory = observer(function DockedSessionHistory() {
   const prompts = useSessionPrompts(enabled && !collapsed);
   const promptTree = useSessionPromptTree(enabled && treeOpen);
   const { restoringPrompt, requestRestorePrompt } = useConversationPromptRestore();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
 
   if (!enabled || !prompts.hasConversation) return null;
 

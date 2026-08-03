@@ -6,7 +6,7 @@ import {
 import { toWorkspaceRelativePath } from './file-actions';
 
 vi.mock('@renderer/features/tasks/task-view-context', () => ({
-  useProvisionedTask: vi.fn(),
+  useRequireProvisionedTask: vi.fn(),
 }));
 
 vi.mock('@renderer/lib/hooks/use-toast', () => ({

@@ -5,7 +5,10 @@ import {
   resolveSessionPrompts,
   startVisibleSessionRefresh,
 } from '@renderer/features/tasks/session-prompts';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { buildConversationTree, type ConversationTreeNode } from './conversation-tree-model';
 import {
   buildSessionPromptTree,
@@ -27,7 +30,7 @@ export function useSessionPromptTree(active: boolean): {
   activeConversationIds: ReadonlySet<string>;
 } {
   const { projectId, taskId } = useTaskViewContext();
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
   const currentConversation = getTaskMenuConversation(provisionedTask);
   const activeConversations = Array.from(
     provisionedTask.conversations.conversations.values(),

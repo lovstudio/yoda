@@ -6,7 +6,7 @@ import {
   applyPendingEditorReveal,
   type PendingEditorRevealSource,
 } from '@renderer/features/tasks/editor/editor-location';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { registerActiveCodeEditor } from '@renderer/lib/editor/activeCodeEditor';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { codeEditorPool } from '@renderer/lib/monaco/monaco-code-pool';
@@ -42,7 +42,7 @@ export const LeasedMonacoEditor = observer(function LeasedMonacoEditor({
   revealSource,
   focusReveal = true,
 }: LeasedMonacoEditorProps) {
-  const { taskView } = useProvisionedTask();
+  const { taskView } = useRequireProvisionedTask();
   const { editorView } = taskView;
   const { effectiveTheme, themeFingerprint } = useTheme();
 

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import type { TerminalWebLinkOptions } from '@renderer/lib/pty/terminal-web-links';
 
 /**
@@ -8,7 +8,7 @@ import type { TerminalWebLinkOptions } from '@renderer/lib/pty/terminal-web-link
  * visible. The right-click link menu keeps the system-browser escape hatch.
  */
 export function useWorkspaceWebLinks(): TerminalWebLinkOptions {
-  const provisionedTask = useProvisionedTask();
+  const provisionedTask = useRequireProvisionedTask();
 
   return useMemo<TerminalWebLinkOptions>(
     () => ({

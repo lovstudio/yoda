@@ -23,7 +23,10 @@ import {
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import type { ProvisionedTask } from '@renderer/features/tasks/stores/task';
 import { getRegisteredTaskData } from '@renderer/features/tasks/stores/task-selectors';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
@@ -48,7 +51,7 @@ import { cn } from '@renderer/utils/utils';
 export const TaskFinishControl = observer(function TaskFinishControl() {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const { data: stats } = useTaskStats(projectId, taskId);
   const [open, setOpen] = useState(false);
   const [merged, setMerged] = useState<MergeTaskBranchSuccess | null>(null);

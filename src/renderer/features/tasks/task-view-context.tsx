@@ -30,6 +30,11 @@ type TaskViewContext = TaskViewContextBase &
   );
 
 const TaskViewContext = createContext<TaskViewContext | null>(null);
+// Ready-only consumers subscribe to a context whose value is immutable for
+// the lifetime of their subtree. When a task leaves `ready`, React removes
+// this provider with the keyed subtree instead of broadcasting `null` to
+// every mounted ready consumer before their nearest guard can unmount them.
+const ProvisionedTaskContext = createContext<ProvisionedTask | null>(null);
 
 type TaskViewWrapperProps = {
   children: ReactNode;
@@ -58,26 +63,34 @@ export const TaskViewWrapper = observer(function TaskViewWrapper(props: TaskView
           provisionedTask: props.provisionedTask,
         }
       : { projectId, taskId, hosted, kind: props.kind, provisionedTask: null };
+  const content =
+    props.kind === 'ready' ? (
+      <ProvisionedTaskContext.Provider value={props.provisionedTask}>
+        {children}
+      </ProvisionedTaskContext.Provider>
+    ) : (
+      children
+    );
 
   return (
     <ProjectViewWrapper projectId={projectId}>
       <TaskViewContext.Provider key={snapshotBoundaryKey} value={value}>
-        {children}
+        {content}
       </TaskViewContext.Provider>
     </ProjectViewWrapper>
   );
 });
 
-/** Nullable. For components that also render outside a task view (e.g. the composer popover). */
-export function useProvisionedTaskOrNull(): ProvisionedTask | null {
+/** Nullable. Use at task-view readiness boundaries and from optional task-scoped UI. */
+export function useProvisionedTask(): ProvisionedTask | null {
   return useContext(TaskViewContext)?.provisionedTask ?? null;
 }
 
-/** Non-nullable. Only call after the shared task-view snapshot reports `ready`. */
-export function useProvisionedTask(): ProvisionedTask {
-  const task = useProvisionedTaskOrNull();
+/** Non-nullable. Only use in a subtree mounted exclusively for a ready task. */
+export function useRequireProvisionedTask(): ProvisionedTask {
+  const task = useContext(ProvisionedTaskContext);
   if (!task) {
-    throw new Error('useProvisionedTask requires a ready task view snapshot');
+    throw new Error('Ready task content rendered outside its provisioned task boundary');
   }
   return task;
 }

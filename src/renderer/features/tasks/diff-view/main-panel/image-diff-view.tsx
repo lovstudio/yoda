@@ -12,7 +12,7 @@ import {
 } from '@shared/git';
 import type { Result } from '@shared/result';
 import type { ActiveFile } from '@shared/view-state';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { rpc } from '@renderer/lib/ipc';
 import { formatBytes } from '@renderer/utils/formatBytes';
 
@@ -234,7 +234,7 @@ export const ImageDiffView = observer(function ImageDiffView({
   activeFile,
 }: ImageDiffViewProps) {
   const { t } = useTranslation();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const git = provisioned.workspace.git;
 
   const fileKey = `${activeFile.path}|${activeFile.group}|${gitRefToString(activeFile.originalRef)}|${activeFile.modifiedRef ? gitRefToString(activeFile.modifiedRef) : ''}`;

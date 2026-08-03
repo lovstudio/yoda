@@ -1,7 +1,7 @@
 import { FileText, FolderTree, PanelRight, PanelRightOpen } from 'lucide-react';
 import { useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import {
   FilePathActionsDropdown,
   FilePathMenuItems,
@@ -26,7 +26,7 @@ import { cn } from '@renderer/utils/utils';
  */
 export function useFileActions(sourcePath: string) {
   const { t } = useTranslation();
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const relativePath = toWorkspaceRelativePath(sourcePath, provisioned.path);
   // Workspace files open by relative path (stable buffer URIs under the
   // workspace model root); anything else — user CLAUDE.md, global skills,
@@ -69,7 +69,7 @@ export function useFileActions(sourcePath: string) {
  * workspace-relative or absolute (e.g. transcript JSONLs outside the worktree).
  */
 export function useTaskFilePlacementActions(path: string | null | undefined) {
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
 
   const previewInSidebar = () => {
     if (!path) return;
@@ -229,7 +229,7 @@ export function FileActionsDropdown({
  * mirroring the markdown preview's top-right toolbar chrome.
  */
 export function FileActionsOverlay({ filePath }: { filePath: string }) {
-  const provisioned = useProvisionedTask();
+  const provisioned = useRequireProvisionedTask();
   const sourcePath = `${provisioned.path.replace(/\/+$/, '')}/${filePath}`;
 
   return (

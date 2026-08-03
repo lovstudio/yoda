@@ -3,7 +3,10 @@ import { observer } from 'mobx-react-lite';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Commit } from '@shared/git';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useRequireProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { cn } from '@renderer/utils/utils';
@@ -14,7 +17,7 @@ const ITEM_HEIGHT = 43;
 export const PrCommitsList = observer(function PrCommitsList() {
   const { t } = useTranslation();
   const { projectId } = useTaskViewContext();
-  const task = useProvisionedTask();
+  const task = useRequireProvisionedTask();
   const pr = task.workspace.pr.currentPr;
   const { data, isFetchingNextPage, hasNextPage, fetchNextPage } = usePrCommits(
     projectId,

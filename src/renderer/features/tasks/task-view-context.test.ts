@@ -6,7 +6,7 @@ import type { ProvisionedTask } from './stores/task';
 import {
   TaskViewWrapper,
   useProvisionedTask,
-  useProvisionedTaskOrNull,
+  useRequireProvisionedTask,
   useTaskViewContext,
   useTaskViewKind,
 } from './task-view-context';
@@ -18,11 +18,11 @@ function TaskKindProbe() {
 }
 
 function ProvisionedTaskProbe() {
-  return createElement('span', null, useProvisionedTask().taskId);
+  return createElement('span', null, useRequireProvisionedTask().taskId);
 }
 
 function OptionalTaskProbe() {
-  return createElement('span', null, useProvisionedTaskOrNull()?.taskId ?? 'not-ready');
+  return createElement('span', null, useProvisionedTask()?.taskId ?? 'not-ready');
 }
 
 describe('task view state snapshot', () => {
@@ -79,5 +79,19 @@ describe('task view state snapshot', () => {
     );
 
     expect(markup).toContain('not-ready');
+  });
+
+  it('keeps optional task consumers safe outside a task view', () => {
+    const markup = renderToStaticMarkup(createElement(OptionalTaskProbe));
+
+    expect(markup).toContain('not-ready');
+  });
+
+  it('keeps the old transient snapshot crash out of the public task hook', () => {
+    const source = readFileSync(new URL('./task-view-context.tsx', import.meta.url), 'utf8');
+
+    expect(source).not.toContain('useProvisionedTask requires a ready task view snapshot');
+    expect(source).toContain('export function useProvisionedTask(): ProvisionedTask | null');
+    expect(source).toContain('const ProvisionedTaskContext = createContext');
   });
 });
