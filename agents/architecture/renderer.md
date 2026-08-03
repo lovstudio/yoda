@@ -6,7 +6,7 @@
 - `src/renderer/views/Workspace.tsx`: main post-onboarding shell
 - `src/renderer/components/MainContent.tsx`: switches between views (projects, tasks, settings, skills, MCP, home)
 - `src/renderer/core/ipc.ts`: typed RPC client (`rpc`) and event emitter (`events`) used throughout renderer
-- `src/renderer/app/workspace-runtime-bar.tsx`: passive active-session runtime status plus a context-aware terminal toggle; runtime actions stay on explicit Agent surfaces
+- `src/renderer/app/workspace-runtime-bar.tsx`: passive active-session runtime status plus the single project/global Terminal toggle used by quick actions; task-local drawers keep their own controls, and runtime actions stay on explicit Agent surfaces
 - `src/renderer/app/workspace-terminal-panel.tsx`: cross-route Terminal drawer using the same manager, PTY body, and terminal-list chrome as task terminals; project scopes follow project navigation while their background sessions remain alive
 
 ## View Areas (`src/renderer/views/`)

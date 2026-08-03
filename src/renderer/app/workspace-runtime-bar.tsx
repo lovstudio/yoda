@@ -14,7 +14,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AppAgentSessionResource } from '@shared/app-resource';
 import type { Conversation } from '@shared/conversations';
@@ -319,11 +319,15 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       ? appState.dependencies.getRemote(connectionId).data?.[runtimeId]
       : appState.dependencies.agentStatuses[runtimeId]
     : undefined;
-  const taskTerminalActive = Boolean(
+  const taskTerminalVisible = Boolean(
     provisionedTask?.taskView.isTerminalDrawerOpen &&
       provisionedTask.taskView.activeBottomPanelTab === 'terminals'
   );
-  const terminalActive = taskTerminalActive || workspaceTerminalStore.isOpen;
+  // The runtime-bar Terminal is the project/global Terminal used by quick
+  // actions. Task terminals keep their task-local controls and must not become
+  // a second state source for this button.
+  const workspaceTerminalOpen = workspaceTerminalStore.isOpen;
+  const terminalActive = workspaceTerminalOpen;
   const canCompactContext = Boolean(
     runtimeId === 'codex' && params?.projectId && params.taskId && activeConversationId
   );
@@ -477,26 +481,17 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     void workspaceTerminalStore.syncActiveProject(activeMountedProjectData).catch(() => {});
   }, [activeMountedProjectData]);
 
+  useLayoutEffect(() => {
+    // A task drawer can already be open behind the project Terminal. Collapse
+    // it before paint so closing a quick-action Terminal cannot reveal an
+    // unrelated task Terminal and look like the same button changed sessions.
+    if (!workspaceTerminalOpen || !taskTerminalVisible || !provisionedTask) return;
+    provisionedTask.taskView.setTerminalDrawerOpen(false);
+  }, [provisionedTask, taskTerminalVisible, workspaceTerminalOpen]);
+
   const toggleTerminal = () => {
-    if (workspaceTerminalStore.isOpen) {
+    if (workspaceTerminalOpen) {
       workspaceTerminalStore.close();
-      return;
-    }
-    if (provisionedTask) {
-      if (taskTerminalActive) {
-        provisionedTask.taskView.setTerminalDrawerOpen(false);
-        return;
-      }
-      // A project quick action opens its persisted workspace Terminal. Keep
-      // that Terminal as the next toggle target after it is closed, instead
-      // of switching to this task's unrelated Terminal drawer.
-      if (workspaceTerminalStore.activeProjectId === activeMountedProject?.data.id) {
-        void workspaceTerminalStore.toggleProject(activeMountedProject.data).catch(() => {});
-        return;
-      }
-      provisionedTask.taskView.setBottomPanelTab('terminals');
-      provisionedTask.taskView.setTerminalDrawerOpen(true);
-      provisionedTask.taskView.setFocusedRegion('bottom');
       return;
     }
     if (activeMountedProject) {
