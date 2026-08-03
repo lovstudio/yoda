@@ -216,6 +216,48 @@ describe('AppTabsStore task scope entry', () => {
     }
   );
 
+  it('switches tasks and returns to the remembered session without a target-less route', () => {
+    const taskAOverview = {
+      projectId: 'project-1',
+      taskId: 'task-a',
+      tab: { kind: 'overview' },
+    };
+    const taskASession = {
+      projectId: 'project-1',
+      taskId: 'task-a',
+      tab: { kind: 'conversation', conversationId: 'conversation-a' },
+    };
+    const taskBOverview = {
+      projectId: 'project-1',
+      taskId: 'task-b',
+      tab: { kind: 'overview' },
+    };
+    const navigation = createReactiveNavigationStub('home', { home: {} });
+    const tabs = new AppTabsStore(navigation);
+    tabs.restoreSnapshot({
+      tabs: [
+        { id: 'home-tab', viewId: 'home', params: {}, seq: 1 },
+        { id: 'task-a-overview', viewId: 'task', params: taskAOverview, seq: 2 },
+        { id: 'task-a-session', viewId: 'task', params: taskASession, seq: 4 },
+        { id: 'task-b-overview', viewId: 'task', params: taskBOverview, seq: 3 },
+      ],
+      activeTabId: 'home-tab',
+    });
+    tabs.start();
+
+    expect(tabs.openTaskScope('project-1', 'task-a')).toBe(true);
+    expect(tabs.activeTabId).toBe('task-a-session');
+    expect(navigation.viewParamsStore.task).toEqual(taskASession);
+
+    expect(tabs.openTaskScope('project-1', 'task-b')).toBe(true);
+    expect(tabs.activeTabId).toBe('task-b-overview');
+
+    expect(tabs.openTaskScope('project-1', 'task-a')).toBe(true);
+    expect(tabs.activeTabId).toBe('task-a-session');
+    expect(navigation.viewParamsStore.task).toEqual(taskASession);
+    tabs.dispose();
+  });
+
   it('restores the task scope session with the latest activation sequence', () => {
     const overviewParams = {
       projectId: 'project-1',
@@ -266,6 +308,31 @@ describe('AppTabsStore task scope entry', () => {
     expect(tabs.activeTabId).toBe('session-tab');
     expect(tabs.replayNonce).toBe(1);
     expect(navigation.viewParamsStore.task).toEqual(sessionParams);
+    tabs.dispose();
+  });
+
+  it('replaces route sync when the retained app state is started again', () => {
+    const sessionParams = {
+      projectId: 'project-1',
+      taskId: 'task-1',
+      tab: { kind: 'conversation', conversationId: 'conversation-1' },
+    };
+    const navigation = createReactiveNavigationStub('home', { home: {} });
+    const tabs = new AppTabsStore(navigation);
+    tabs.restoreSnapshot({
+      tabs: [
+        { id: 'home-tab', viewId: 'home', params: {}, seq: 1 },
+        { id: 'session-tab', viewId: 'task', params: sessionParams, seq: 2 },
+      ],
+      activeTabId: 'home-tab',
+    });
+
+    tabs.start();
+    tabs.start();
+    navigation.navigate('task', { projectId: 'project-1', taskId: 'task-1' });
+
+    expect(tabs.activeTabId).toBe('session-tab');
+    expect(tabs.replayNonce).toBe(1);
     tabs.dispose();
   });
 });

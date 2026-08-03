@@ -222,6 +222,12 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
    *   the destination scope — the strip swaps to that scope's set.
    */
   start(): void {
+    // App state is retained across renderer HMR. Re-starting route sync must
+    // replace the prior reaction; otherwise every sidebar navigation gets
+    // replayed by every retained listener and their target fallbacks race.
+    this.disposer?.();
+    this.disposer = null;
+
     if (this.tabs.length === 0) {
       const tab: AppTabEntry = {
         id: createTabId(),
