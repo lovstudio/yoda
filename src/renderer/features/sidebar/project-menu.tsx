@@ -12,6 +12,7 @@ import {
   Pin,
   PinOff,
   Play,
+  Plus,
   RotateCcw,
   Settings2,
   TerminalSquare,
@@ -63,6 +64,8 @@ interface ProjectMenuActions {
   onPin: () => void;
   onUnpin: () => void;
   onOpenDetails?: () => void;
+  onCreateTask?: () => void;
+  onCreateTaskAndRun?: () => void;
   onOpenArchivedTasks?: () => void;
   onReconnect?: () => void;
   onChangeSshConnection?: () => void;
@@ -110,6 +113,24 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
       icon: Info,
       label: t('sidebar.openProjectDetails'),
       onSelect: actions.onOpenDetails,
+    });
+  }
+  if (actions.onCreateTask) {
+    items.push({
+      key: 'create-task',
+      group: 0,
+      icon: Plus,
+      label: t('sidebar.newTask'),
+      onSelect: actions.onCreateTask,
+    });
+  }
+  if (actions.onCreateTaskAndRun) {
+    items.push({
+      key: 'create-task-and-run',
+      group: 0,
+      icon: Bot,
+      label: t('sidebar.newTaskAndRun'),
+      onSelect: actions.onCreateTaskAndRun,
     });
   }
   // Keep "Open in..." in the first group with primary project actions.

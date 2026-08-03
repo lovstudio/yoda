@@ -145,6 +145,43 @@ describe('ProjectMenu quick actions submenu', () => {
     root = createRoot(host);
   });
 
+  it.each([
+    ['context', 'context-menu-item'],
+    ['dropdown', 'dropdown-menu-item'],
+  ] as const)('shows both task creation intents in the %s menu', async (surface, itemSlot) => {
+    const { ProjectActionsMenu, ProjectContextMenu } = await import(
+      '@renderer/features/sidebar/project-menu'
+    );
+    const onCreateTask = vi.fn();
+    const onCreateTaskAndRun = vi.fn();
+    const actions = { ...requiredActions(), onCreateTask, onCreateTaskAndRun };
+
+    await act(async () => {
+      root.render(
+        surface === 'context'
+          ? createElement(ProjectContextMenu, {
+              ...actions,
+              children: createElement('div', null, 'Example project'),
+            })
+          : createElement(ProjectActionsMenu, {
+              ...actions,
+              trigger: createElement('button', null, 'More'),
+            })
+      );
+    });
+
+    const items = Array.from(
+      host.querySelectorAll<HTMLButtonElement>(`button[data-slot="${itemSlot}"]`)
+    );
+    const createTaskItem = items.find((item) => item.textContent === 'sidebar.newTask');
+    const createAndRunItem = items.find((item) => item.textContent === 'sidebar.newTaskAndRun');
+
+    await act(async () => createTaskItem?.click());
+    expect(onCreateTask).toHaveBeenCalledTimes(1);
+    await act(async () => createAndRunItem?.click());
+    expect(onCreateTaskAndRun).toHaveBeenCalledTimes(1);
+  });
+
   afterEach(async () => {
     await act(async () => root.unmount());
     host.remove();

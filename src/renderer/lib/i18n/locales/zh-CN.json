@@ -121,6 +121,7 @@
   },
   "sidebar": {
     "newTask": "新建任务",
+    "newTaskAndRun": "新建任务并启动 Session",
     "newTaskOpenMode": "新建任务打开方式",
     "newTaskOpenHome": "主页",
     "newTaskOpenModal": "悬浮窗",

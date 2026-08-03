@@ -185,21 +185,21 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     [expressProviderId, navigate, projectId, t]
   );
 
-  const handleAddTask = useCallback(async () => {
+  const openTaskComposer = useCallback(async () => {
+    const openMode = await resolveNewTaskOpenMode();
+    void getProjectManagerStore()
+      .mountProject(projectId)
+      .catch(() => {});
+    openNewTask(openMode, projectId);
+  }, [projectId]);
+
+  const createTaskAndRun = useCallback(async () => {
     const mounted = mountedProject;
     const repo = getRepositoryStore(projectId);
     const defaultBranch = repo?.defaultBranch;
     const isUnborn = repo?.isUnborn ?? false;
-    const openMode = await resolveNewTaskOpenMode();
-    // Express mode requires a runnable runtime config. Fall back to the home
-    // composer whenever any prerequisite is missing so the user can fix it
-    // there. An explicit floating-window preference takes priority over
-    // one-click creation: the `+` button must obey the chosen opening mode.
-    if (openMode === 'modal' || !expressMode || !mounted || !expressProviderId || !defaultBranch) {
-      void getProjectManagerStore()
-        .mountProject(projectId)
-        .catch(() => {});
-      openNewTask(openMode, projectId);
+    if (!mounted || !expressProviderId || !defaultBranch) {
+      await openTaskComposer();
       return;
     }
     const strategyKind = homeDraft?.strategyKind ?? 'new-branch';
@@ -228,13 +228,27 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     });
     navigate('task', { projectId: mounted.data.id, taskId });
   }, [
-    expressMode,
     expressProviderId,
     homeDraft?.strategyKind,
     mountedProject,
     navigate,
+    openTaskComposer,
     projectId,
   ]);
+
+  const handleAddTask = useCallback(async () => {
+    const openMode = await resolveNewTaskOpenMode();
+    // The row shortcut keeps honoring the persisted preference. Explicit menu
+    // actions bypass this switch because the user has already chosen an intent.
+    if (openMode === 'modal' || !expressMode) {
+      void getProjectManagerStore()
+        .mountProject(projectId)
+        .catch(() => {});
+      openNewTask(openMode, projectId);
+      return;
+    }
+    await createTaskAndRun();
+  }, [createTaskAndRun, expressMode, projectId]);
 
   if (!project) return null;
 
@@ -316,6 +330,9 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
         ? undefined
         : () => void copyTaskLink(buildProjectDeepLink({ projectId }), t),
     onOpenDetails: handleOpenDetails,
+    onCreateTask: project.state === 'unregistered' ? undefined : () => void openTaskComposer(),
+    onCreateTaskAndRun:
+      project.state === 'unregistered' ? undefined : () => void createTaskAndRun(),
     onOpenArchivedTasks:
       project.state === 'unregistered' ? undefined : () => void handleOpenArchivedTasks(),
     onPin: () => sidebarStore.setProjectPinned(projectId, true),
