@@ -7,7 +7,6 @@ import {
   Cloud,
   ExternalLink,
   Gauge,
-  MessageSquare,
   Settings2,
   Sparkles,
   Stethoscope,
@@ -41,10 +40,6 @@ import { SkillQuickSearchPopover } from '@renderer/features/skills/components/Sk
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
-import {
-  resolveSessionPrompts,
-  SESSION_PROMPTS_REFRESH_MS,
-} from '@renderer/features/tasks/session-prompts';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { AgentInfoCard } from '@renderer/lib/components/agent-selector/agent-info-card';
@@ -57,6 +52,7 @@ import { appState } from '@renderer/lib/stores/app-state';
 import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 import { Button } from '@renderer/lib/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
+import { Switch } from '@renderer/lib/ui/switch';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
@@ -127,11 +123,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     workspaceResourceHistoryStore.getSnapshot,
     workspaceResourceHistoryStore.getSnapshot
   );
-  const [sessionPromptCount, setSessionPromptCount] = useState<{
-    conversationId: string;
-    count: number;
-  } | null>(null);
-
   useEffect(() => startRendererPerformanceReporter(), []);
   const route = appState.navigation.currentViewId;
   const params = appState.navigation.viewParamsStore[route] as
@@ -327,13 +318,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       : (sessionContext?.rateLimits ?? []);
   const shortAccountWindow = accountRateLimits[0] ?? null;
   const sessionHistoryDocked = interfaceSettings?.dockSessionHistory ?? true;
-  const displayedPromptCount =
-    sessionPromptCount && sessionPromptCount.conversationId === activeConversation?.id
-      ? sessionPromptCount.count
-      : null;
-  const sessionHistoryLabel = t('workspaceRuntime.sessionHistory', {
-    count: displayedPromptCount ?? 0,
-  });
   const globalMaasBinding = useMaasGlobalBinding();
   const { data: maasConnections } = useMaasConnections();
   const selectedMaasPlatformId = globalMaasBinding.data?.enabled
@@ -437,24 +421,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   useEffect(() => {
     void workspaceTerminalStore.syncActiveProject(activeMountedProjectData).catch(() => {});
   }, [activeMountedProjectData]);
-
-  useEffect(() => {
-    if (!activeConversation || !provisionedTask) return;
-    let cancelled = false;
-    const load = () =>
-      resolveSessionPrompts(activeConversation, provisionedTask.path).then((prompts) => {
-        if (!cancelled) {
-          setSessionPromptCount({ conversationId: activeConversation.id, count: prompts.length });
-        }
-      });
-
-    void load();
-    const interval = window.setInterval(() => void load(), SESSION_PROMPTS_REFRESH_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [activeConversation, provisionedTask]);
 
   const toggleTerminal = () => {
     if (workspaceTerminalStore.isOpen) {
@@ -696,30 +662,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               />
             </PopoverContent>
           </Popover>
-          {activeConversationId ? (
-            <>
-              <span aria-hidden className="@max-[1120px]:hidden">
-                ·
-              </span>
-              <button
-                type="button"
-                aria-label={sessionHistoryLabel}
-                aria-pressed={sessionHistoryDocked}
-                title={sessionHistoryLabel}
-                onClick={toggleSessionHistoryDock}
-                className={cn(
-                  'flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border',
-                  sessionHistoryDocked && 'bg-background-2 text-foreground'
-                )}
-              >
-                <MessageSquare className="size-3.5" />
-                <span className="tabular-nums @max-[1120px]:hidden">{sessionHistoryLabel}</span>
-                <span className="hidden tabular-nums @max-[1120px]:inline">
-                  {displayedPromptCount ?? 0}
-                </span>
-              </button>
-            </>
-          ) : null}
           {sessionContext && contextPercent != null ? (
             <>
               <span aria-hidden className="@max-[1120px]:hidden">
@@ -798,6 +740,26 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                       />
                     ) : null}
                   </div>
+                  {activeConversationId ? (
+                    <div className="border-t border-border p-3">
+                      <div className="flex items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium">
+                            {t('workspaceRuntime.sessionHistoryVisibility')}
+                          </div>
+                          <div className="mt-0.5 text-xs text-foreground-passive">
+                            {t('workspaceRuntime.sessionHistoryVisibilityDescription')}
+                          </div>
+                        </div>
+                        <Switch
+                          size="sm"
+                          checked={sessionHistoryDocked}
+                          onCheckedChange={toggleSessionHistoryDock}
+                          aria-label={t('workspaceRuntime.sessionHistoryVisibility')}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
                   {canCompactContext ? (
                     <div className="border-t border-border p-3">
                       <Button
