@@ -31,6 +31,12 @@ export type AgentStatus = AgentSessionRuntimeStatus;
 export class ConversationManagerStore {
   private _loaded = false;
   private _loadPromise: Promise<void> | null = null;
+  /**
+   * Whether `conversations` represents a completed backend snapshot. It stays
+   * false while an observed, non-preloaded manager is fetching so consumers do
+   * not mistake its temporary empty map for a deleted conversation list.
+   */
+  hasAuthoritativeSnapshot = false;
   private offAgentEvents: (() => void) | null = null;
   private offAuthoritativeStatus: (() => void) | null = null;
   private offSessionExited: (() => void) | null = null;
@@ -50,10 +56,12 @@ export class ConversationManagerStore {
   ) {
     makeObservable(this, {
       conversations: observable,
+      hasAuthoritativeSnapshot: observable,
       taskStatus: computed,
     });
     if (preloaded !== undefined) {
       this._loaded = true;
+      this.hasAuthoritativeSnapshot = true;
       const owned = preloaded.filter((conversation) => this._belongsHere(conversation));
       for (const conversation of owned) {
         const store = new ConversationStore(conversation);
@@ -226,6 +234,7 @@ export class ConversationManagerStore {
           for (const [id, store] of this.conversations) {
             if (!this._belongsHere(store.data)) this.conversations.delete(id);
           }
+          this.hasAuthoritativeSnapshot = true;
         });
         await this.hydrateRuntimeStatuses(conversations.map((conversation) => conversation.id));
       })
@@ -276,6 +285,7 @@ export class ConversationManagerStore {
     runInAction(() => {
       this._loaded = true;
       this.mergeConversations(conversations);
+      this.hasAuthoritativeSnapshot = true;
     });
     await this.hydrateRuntimeStatuses(conversations.map((conversation) => conversation.id));
     return this.conversations.has(conversationId);

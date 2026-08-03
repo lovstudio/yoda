@@ -133,7 +133,28 @@ describe('ConversationManagerStore', () => {
     await flushPromises();
 
     expect(mocks.getConversationsForTaskMock).not.toHaveBeenCalled();
+    expect(store.hasAuthoritativeSnapshot).toBe(true);
     stopObserving();
+    store.dispose();
+  });
+
+  it('does not expose an empty manager as an authoritative snapshot while loading', async () => {
+    let resolveConversations: ((conversations: Conversation[]) => void) | undefined;
+    mocks.getConversationsForTaskMock.mockImplementation(
+      () =>
+        new Promise<Conversation[]>((resolve) => {
+          resolveConversations = resolve;
+        })
+    );
+    const store = new ConversationManagerStore('project-1', 'task-1');
+    const load = store.load();
+
+    expect(store.hasAuthoritativeSnapshot).toBe(false);
+    resolveConversations?.([conversation]);
+    await load;
+
+    expect(store.hasAuthoritativeSnapshot).toBe(true);
+    expect(store.conversations.has(conversation.id)).toBe(true);
     store.dispose();
   });
 

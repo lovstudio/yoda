@@ -483,7 +483,11 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
       remembered?.viewId === 'task'
         ? (remembered.params.tab as TaskWindowTabTarget | undefined)
         : undefined;
-    const target = rememberedTarget ?? fallbackTarget;
+    // The mounted task's tab manager is the freshest authority for a sidebar
+    // re-entry. App-tab history can legitimately lag behind it while the task
+    // was in the background, so only use that history when the caller has no
+    // resolved target yet.
+    const target = fallbackTarget ?? rememberedTarget;
     if (!target) return false;
 
     // A sidebar task click is an explicit scope switch. Sticky activation

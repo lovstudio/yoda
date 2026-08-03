@@ -144,7 +144,7 @@ describe('AppTabsStore task scope entry', () => {
     const sessionParams = {
       projectId: 'project-1',
       taskId: 'task-1',
-      tab: { kind: 'conversation', conversationId: 'conversation-1' },
+      tab: { kind: 'conversation' as const, conversationId: 'conversation-1' },
     };
     const navigation = createNavigationStub();
     const tabs = new AppTabsStore(navigation);
@@ -180,6 +180,33 @@ describe('AppTabsStore task scope entry', () => {
       taskId: 'task-1',
       tab: { kind: 'overview' },
     });
+    tabs.dispose();
+  });
+
+  it('uses the mounted task target over stale app-tab history', () => {
+    const overviewParams = {
+      projectId: 'project-1',
+      taskId: 'task-1',
+      tab: { kind: 'overview' },
+    };
+    const sessionParams = {
+      projectId: 'project-1',
+      taskId: 'task-1',
+      tab: { kind: 'conversation' as const, conversationId: 'conversation-1' },
+    };
+    const navigation = createNavigationStub();
+    const tabs = new AppTabsStore(navigation);
+    tabs.restoreSnapshot({
+      tabs: [
+        { id: 'overview-tab', viewId: 'task', params: overviewParams, seq: 2 },
+        { id: 'session-tab', viewId: 'task', params: sessionParams, seq: 1 },
+      ],
+      activeTabId: 'overview-tab',
+    });
+
+    expect(tabs.openTaskScope('project-1', 'task-1', sessionParams.tab)).toBe(true);
+    expect(tabs.activeTabId).toBe('session-tab');
+    expect(navigation.navigate).toHaveBeenCalledWith('task', sessionParams);
     tabs.dispose();
   });
 
