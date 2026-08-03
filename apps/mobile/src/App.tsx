@@ -524,26 +524,42 @@ function formatTimestamp(value?: string): string {
   });
 }
 
-function formatCompactNumber(value: number): string {
-  return new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(
-    value
-  );
+function formatReadableNumber(value: number, maximumFractionDigits = 1): string {
+  const absolute = Math.abs(value);
+  const units = [
+    { divisor: 100_000_000, suffix: '亿' },
+    { divisor: 10_000, suffix: '万' },
+  ];
+  const unit = units.find(({ divisor }) => absolute >= divisor);
+  if (!unit) return new Intl.NumberFormat('zh-CN').format(value);
+
+  const scaled = value / unit.divisor;
+  const formatted = new Intl.NumberFormat('zh-CN', {
+    maximumFractionDigits,
+    minimumFractionDigits: 0,
+  }).format(scaled);
+  return `${formatted}${unit.suffix}`;
 }
 
-function formatTokenCount(value: number | null): string {
-  return value === null ? '尚无数据' : `${formatCompactNumber(value)} tokens`;
+function formatTokenUsage(value: number | null): { amount: string; unit: string } {
+  if (value === null) return { amount: '—', unit: '暂无数据' };
+  const compact = formatReadableNumber(value);
+  const match = compact.match(/^(.+?)([万亿])$/);
+  return match
+    ? { amount: match[1]!, unit: `${match[2]} Token` }
+    : { amount: compact, unit: 'Token' };
 }
 
 function formatProfileTime(value: string | null): string {
   if (!value) return '尚未同步';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '尚未同步';
-  return date.toLocaleString('zh-CN', {
-    month: 'numeric',
-    day: 'numeric',
+  const time = date.toLocaleTimeString('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
   });
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
 }
 
 function accountStateLabel(state: MobileProfileSnapshot['account']['state']): string {
@@ -1551,6 +1567,7 @@ function MyProfileScreen({
 }) {
   const account = profile?.account;
   const relay = profile?.cloud.relay;
+  const tokenUsage = formatTokenUsage(profile?.usage.totalTokens ?? null);
   const recentProjects = sortMobileProjects(projects, 'recent').slice(0, 3);
   const displayName = account?.displayName || 'Yoda 用户';
   const avatarInitial = displayName.slice(0, 1).toLocaleUpperCase();
@@ -1659,27 +1676,26 @@ function MyProfileScreen({
         <View style={styles.profileUsageCard}>
           <View style={styles.profileUsagePrimary}>
             <Text style={styles.profileUsageLabel}>累计处理</Text>
-            <Text style={styles.profileUsageValue}>
-              {formatTokenCount(profile?.usage.totalTokens ?? null)}
-            </Text>
+            <View style={styles.profileUsageReading}>
+              <Text style={styles.profileUsageValue}>{tokenUsage.amount}</Text>
+              <Text style={styles.profileUsageUnit}>{tokenUsage.unit}</Text>
+            </View>
           </View>
           <View style={styles.profileUsageDivider} />
           <View style={styles.profileUsageStats}>
             <ProfileDataCell
               label="会话"
-              value={profile ? String(profile.usage.sessionCount) : '—'}
+              value={profile ? formatReadableNumber(profile.usage.sessionCount) : '—'}
             />
             <ProfileDataCell
               label="已完成任务"
-              value={profile ? String(profile.usage.tasksArchived) : '—'}
+              value={profile ? formatReadableNumber(profile.usage.tasksArchived) : '—'}
             />
             <ProfileDataCell
               label="代码变更"
-              value={
-                profile
-                  ? `+${formatCompactNumber(profile.usage.linesAdded)} / -${formatCompactNumber(profile.usage.linesDeleted)}`
-                  : '—'
-              }
+              value={profile ? `+${formatReadableNumber(profile.usage.linesAdded)}` : '—'}
+              detail={profile ? `−${formatReadableNumber(profile.usage.linesDeleted)}` : undefined}
+              tone="positive"
             />
           </View>
         </View>
@@ -1697,7 +1713,7 @@ function MyProfileScreen({
             value={relay ? relayStateLabel(relay.status) : '登录后可用'}
             detail={
               relay
-                ? `${relay.onlineDeviceCount}/${relay.deviceCount} 台设备在线${relay.accessEndsAt ? ` · 有效至 ${formatProfileTime(relay.accessEndsAt)}` : ''}`
+                ? `${relay.onlineDeviceCount} / ${relay.deviceCount} 台设备在线${relay.accessEndsAt ? ` · 有效至 ${formatProfileTime(relay.accessEndsAt)}` : ''}`
                 : '让手机在外网也能连接这台桌面设备'
             }
             active={relay?.status === 'active' || relay?.status === 'trial'}
@@ -1742,12 +1758,29 @@ function ProfileMetric({
   );
 }
 
-function ProfileDataCell({ label, value }: { label: string; value: string }) {
+function ProfileDataCell({
+  detail,
+  label,
+  tone = 'default',
+  value,
+}: {
+  detail?: string;
+  label: string;
+  tone?: 'default' | 'positive';
+  value: string;
+}) {
   return (
     <View style={styles.profileDataCell}>
-      <Text style={styles.profileDataValue} numberOfLines={1}>
+      <Text
+        style={[
+          styles.profileDataValue,
+          tone === 'positive' ? styles.profileDataValuePositive : null,
+        ]}
+        numberOfLines={1}
+      >
         {value}
       </Text>
+      {detail ? <Text style={styles.profileDataDetail}>{detail}</Text> : null}
       <Text style={styles.profileDataLabel}>{label}</Text>
     </View>
   );
@@ -4510,8 +4543,10 @@ const styles = StyleSheet.create({
   },
   profileMetricValue: {
     color: COLORS.ink,
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.4,
   },
   profileMetricLabel: {
     color: COLORS.muted,
@@ -4561,7 +4596,13 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   profileUsagePrimary: {
-    gap: 3,
+    gap: 5,
+  },
+  profileUsageReading: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
   },
   profileUsageLabel: {
     color: COLORS.muted,
@@ -4570,8 +4611,17 @@ const styles = StyleSheet.create({
   },
   profileUsageValue: {
     color: COLORS.ink,
-    fontSize: 27,
+    fontSize: 38,
     fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -1.2,
+    lineHeight: 44,
+  },
+  profileUsageUnit: {
+    color: COLORS.muted,
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 22,
   },
   profileUsageDivider: {
     height: 1,
@@ -4585,12 +4635,25 @@ const styles = StyleSheet.create({
   profileDataCell: {
     minWidth: 0,
     flex: 1,
-    gap: 3,
+    gap: 2,
   },
   profileDataValue: {
     color: COLORS.ink,
-    fontSize: 13,
+    fontSize: 19,
     fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.35,
+    lineHeight: 23,
+  },
+  profileDataValuePositive: {
+    color: COLORS.green,
+  },
+  profileDataDetail: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '700',
+    lineHeight: 15,
   },
   profileDataLabel: {
     color: COLORS.muted,

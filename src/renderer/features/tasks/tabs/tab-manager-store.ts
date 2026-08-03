@@ -436,8 +436,15 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
    * last-active tab instead of forcing the overview.
    */
   get activeTopLevelTarget(): TaskWindowTabTarget | null {
-    const desc = this.activeDescriptor;
-    if (!desc || desc.kind === 'overview') return null;
+    const tabId = this.resolvedActiveTabId;
+    const target = tabId ? this.topLevelTargetForTabId(tabId) : undefined;
+    return target?.kind === 'overview' ? null : (target ?? null);
+  }
+
+  /** Converts a persisted task-history tab id into its routable page target. */
+  topLevelTargetForTabId(tabId: string): TaskWindowTabTarget | undefined {
+    const desc = this.entries.get(tabId);
+    if (!desc || desc.kind === 'overview') return desc ? { kind: 'overview' } : undefined;
     if (desc.kind === 'conversation') {
       return { kind: 'conversation', conversationId: desc.conversationId };
     }

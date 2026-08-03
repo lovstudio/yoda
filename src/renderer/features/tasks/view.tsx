@@ -188,13 +188,19 @@ const TopLevelTabSync = observer(function TopLevelTabSync({
   }, [isRoutedTask, targetKey, replayNonce, provisioned, tabManager, projectId, taskId]);
 
   // Lifecycle: close top-level tabs whose conversation was archived/deleted.
-  // fireImmediately also sweeps STALE persisted tabs on mount (e.g. ghosts
-  // created before ownership guards existed).
+  // An unhydrated manager starts with an empty map, so wait for a completed
+  // backend snapshot before treating an absent id as deletion. Otherwise a
+  // task switch can briefly erase its persisted session tab before loading
+  // restores the conversation list.
   useEffect(
     () =>
       reaction(
-        () => [...provisioned.conversations.conversations.keys()].sort().join('\n'),
-        () => {
+        () => ({
+          hasAuthoritativeSnapshot: provisioned.conversations.hasAuthoritativeSnapshot,
+          conversationIds: [...provisioned.conversations.conversations.keys()].sort().join('\n'),
+        }),
+        ({ hasAuthoritativeSnapshot }) => {
+          if (!hasAuthoritativeSnapshot) return;
           const ids = new Set(provisioned.conversations.conversations.keys());
           appState.appTabs.closeTabsWhere((tab) => {
             if (tab.viewId !== 'task') return false;
