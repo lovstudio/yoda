@@ -25,6 +25,10 @@ function ReadyGuard() {
   return kind === 'ready' ? <StatefulReadyProbe /> : <span>not-ready</span>;
 }
 
+function UnguardedReadyProbe() {
+  return <StatefulReadyProbe />;
+}
+
 describe('TaskViewWrapper snapshot transitions', () => {
   let host: HTMLDivElement;
   let root: Root;
@@ -94,5 +98,31 @@ describe('TaskViewWrapper snapshot transitions', () => {
     });
 
     expect(host.textContent).toBe('not-ready');
+  });
+
+  it('does not render a direct ready consumer after the snapshot becomes non-ready', async () => {
+    await act(async () => {
+      root.render(
+        <TaskViewWrapper
+          projectId="project-1"
+          taskId="task-a"
+          kind="ready"
+          provisionedTask={task('task-a')}
+        >
+          <UnguardedReadyProbe />
+        </TaskViewWrapper>
+      );
+    });
+    expect(host.textContent).toBe('task-a:task-a');
+
+    await act(async () => {
+      root.render(
+        <TaskViewWrapper projectId="project-1" taskId="task-b" kind="creating">
+          <span>loading</span>
+        </TaskViewWrapper>
+      );
+    });
+
+    expect(host.textContent).toBe('loading');
   });
 });

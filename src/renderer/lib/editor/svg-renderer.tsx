@@ -11,14 +11,23 @@ interface SvgRendererProps {
   filePath: string;
 }
 
+interface SvgPreviewProps {
+  filePath: string;
+  modelRootPath: string;
+  onShowSource: () => void;
+}
+
 /**
- * Renders an SVG file as an image.
+ * Context-free SVG preview, shared by task editors and standalone project-file
+ * tabs. Its caller owns the model root and source-view transition.
  */
-export const SvgRenderer = observer(function SvgRenderer({ filePath }: SvgRendererProps) {
+export const SvgPreview = observer(function SvgPreview({
+  filePath,
+  modelRootPath,
+  onShowSource,
+}: SvgPreviewProps) {
   const { t } = useTranslation();
-  const { taskView } = useProvisionedTask();
-  const { editorView, tabManager } = taskView;
-  const bufferUri = buildMonacoModelPath(editorView.modelRootPath, filePath);
+  const bufferUri = buildMonacoModelPath(modelRootPath, filePath);
 
   // Touch bufferVersions so this observer re-renders when the buffer is first
   // populated — otherwise the preview can stick on an empty src.
@@ -41,7 +50,7 @@ export const SvgRenderer = observer(function SvgRenderer({ filePath }: SvgRender
         value={['svg']}
         onValueChange={(value) => {
           if (value.includes('svg-source')) {
-            tabManager.updateRenderer(filePath, () => ({ kind: 'svg-source' }));
+            onShowSource();
           }
         }}
         size="sm"
@@ -55,5 +64,19 @@ export const SvgRenderer = observer(function SvgRenderer({ filePath }: SvgRender
         </ToggleGroupItem>
       </ToggleGroup>
     </div>
+  );
+});
+
+/** Renders an SVG from the active task editor's model registry. */
+export const SvgRenderer = observer(function SvgRenderer({ filePath }: SvgRendererProps) {
+  const { taskView } = useProvisionedTask();
+  const { editorView, tabManager } = taskView;
+
+  return (
+    <SvgPreview
+      filePath={filePath}
+      modelRootPath={editorView.modelRootPath}
+      onShowSource={() => tabManager.updateRenderer(filePath, () => ({ kind: 'svg-source' }))}
+    />
   );
 });
