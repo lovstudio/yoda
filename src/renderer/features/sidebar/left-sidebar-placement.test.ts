@@ -17,4 +17,17 @@ describe('LeftSidebar app placement', () => {
     expect(pinnedAppsIndex).toBeGreaterThan(marketplaceIndex);
     expect(source.slice(pinnedAppsIndex)).toContain('viewId="marketplace"');
   });
+
+  it('keeps the primary creation entry as a new task in every view', () => {
+    const source = readFileSync(new URL('./left-sidebar.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain(
+      "import { openNewTaskFromPreference } from '@renderer/app/open-new-task';"
+    );
+    expect(source).toContain('void openNewTaskFromPreference(currentProjectId);');
+    expect(source).toContain("aria-label={t('sidebar.newTask')}");
+    expect(source).toContain("{t('sidebar.newTask')}</span>");
+    expect(source).not.toContain('openNewTaskFromCurrentContext');
+    expect(source).not.toContain('createSubtaskAndRun');
+  });
 });

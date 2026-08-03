@@ -2,9 +2,8 @@ import { AppWindow, FolderInput, Library, Search, SquarePen, Store } from 'lucid
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { skillIssueAgentLabel } from '@shared/skills/validation';
-import { openNewTaskFromCurrentContext } from '@renderer/app/open-new-task';
+import { openNewTaskFromPreference } from '@renderer/app/open-new-task';
 import { useAiLabApps, useUpdateAiLabApp } from '@renderer/features/ai-lab/use-ai-lab';
 import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import {
@@ -76,9 +75,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
         ? projectParams.projectId
         : undefined;
   const currentTaskId = currentView === 'task' ? taskParams.taskId : undefined;
-  const canCreateSubtask = Boolean(
-    currentTaskId && currentProjectId && currentProjectId !== INTERNAL_PROJECT_ID
-  );
   const selectionRevealRequest = sidebarStore.selectionRevealRequest;
   const routeSelection = currentProjectId
     ? {
@@ -188,14 +184,8 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
       ? `${skillIssueLabel}\n${formatSkillIssueTitle(firstSkillIssue)}`
       : (skillIssueLabel ?? undefined);
   const handleNewTask = React.useCallback(() => {
-    void openNewTaskFromCurrentContext(
-      currentProjectId,
-      canCreateSubtask ? currentTaskId : undefined
-    );
-  }, [canCreateSubtask, currentProjectId, currentTaskId]);
-  const newTaskLabel = canCreateSubtask
-    ? t('tasks.context.createSubtaskAndRun')
-    : t('sidebar.newTask');
+    void openNewTaskFromPreference(currentProjectId);
+  }, [currentProjectId]);
 
   return (
     <div
@@ -237,12 +227,12 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
             <SidebarMenuButton
               isActive={isCurrentView(currentView, 'home')}
               onClick={handleNewTask}
-              aria-label={newTaskLabel}
+              aria-label={t('sidebar.newTask')}
               className="w-full justify-between"
             >
               <span className="flex items-center gap-2 min-w-0 w-full">
                 <SquarePen className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
-                <span className="truncate min-w-0">{newTaskLabel}</span>
+                <span className="truncate min-w-0">{t('sidebar.newTask')}</span>
               </span>
               <ShortcutHint settingsKey="newTask" />
             </SidebarMenuButton>
