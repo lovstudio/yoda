@@ -1858,8 +1858,7 @@ function FloatingNewTaskButton({ onPress }: { onPress: () => void }) {
       ]}
       onPress={onPress}
     >
-      <Ionicons color={COLORS.surface} name="add-outline" size={20} />
-      <Text style={styles.floatingNewTaskButtonText}>新建任务</Text>
+      <Ionicons color={COLORS.surface} name="add-outline" size={26} />
     </Pressable>
   );
 }
@@ -5582,16 +5581,15 @@ const styles = StyleSheet.create({
   },
   floatingNewTaskButton: {
     position: 'absolute',
-    right: 18,
+    right: 20,
     bottom: Platform.OS === 'ios' ? 76 : 70,
     zIndex: 4,
-    minHeight: 48,
-    flexDirection: 'row',
+    width: 56,
+    height: 56,
     alignItems: 'center',
-    gap: 7,
-    borderRadius: 24,
+    justifyContent: 'center',
+    borderRadius: 28,
     backgroundColor: COLORS.charcoal,
-    paddingHorizontal: 17,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.2,
@@ -5600,12 +5598,7 @@ const styles = StyleSheet.create({
   },
   floatingNewTaskButtonPressed: {
     backgroundColor: '#4B5258',
-    transform: [{ scale: 0.98 }],
-  },
-  floatingNewTaskButtonText: {
-    color: COLORS.surface,
-    fontSize: 14,
-    fontWeight: '800',
+    transform: [{ scale: 0.94 }],
   },
   bottomTabBar: {
     flexDirection: 'row',
