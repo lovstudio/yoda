@@ -35,4 +35,11 @@ describe('Workspace runtime bar responsive layout', () => {
     expect(source).toContain('truncate font-medium text-foreground @max-[720px]:hidden');
     expect(source).toContain("compact ? 'h-1 w-9 @max-[720px]:hidden'");
   });
+
+  it('keeps session-history visibility in the context popover, not the runtime bar', () => {
+    expect(source).not.toContain('<MessageSquare');
+    expect(source).not.toContain('resolveSessionPrompts');
+    expect(source).toContain("t('workspaceRuntime.sessionHistoryVisibility')");
+    expect(source).toContain('onCheckedChange={toggleSessionHistoryDock}');
+  });
 });
