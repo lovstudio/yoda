@@ -73,6 +73,20 @@ describe('WorkspaceTerminalStore', () => {
     expect(mocks.createTaskTerminal).not.toHaveBeenCalled();
   });
 
+  it('reopens the quick action Terminal with its existing tab after it is closed', async () => {
+    const store = new WorkspaceTerminalStore();
+    const project = { id: 'project-1', type: 'local', path: '/repo' } as const;
+
+    await store.runCommand(project as never, 'pnpm run dev', 'Start locally');
+    const terminalId = mocks.createWorkspaceTerminal.mock.calls[0]?.[0].id;
+    store.close();
+    await store.toggleProject(project as never);
+
+    expect(store.isOpen).toBe(true);
+    expect(store.tabs?.activeTabId).toBe(terminalId);
+    expect(mocks.createWorkspaceTerminal).toHaveBeenCalledTimes(1);
+  });
+
   it('opens runtime actions as ordinary global Terminal tabs', async () => {
     const store = new WorkspaceTerminalStore();
 
