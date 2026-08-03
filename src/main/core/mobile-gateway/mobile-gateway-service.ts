@@ -561,6 +561,8 @@ function normalizeCreateDemandRequest(body: unknown): MobileCreateDemandRequest 
   return {
     prompt,
     projectId: typeof value.projectId === 'string' ? value.projectId.trim() || null : null,
+    parentTaskId:
+      typeof value.parentTaskId === 'string' ? value.parentTaskId.trim() || undefined : undefined,
     title: typeof value.title === 'string' ? value.title.trim() || undefined : undefined,
     provider: typeof value.provider === 'string' ? value.provider.trim() || undefined : undefined,
     attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
@@ -1687,6 +1689,7 @@ export class MobileGatewayService {
       name: taskName,
       sourceBranch,
       strategy: { kind: 'no-worktree' },
+      parentTaskId: params.parentTaskId,
       initialConversation: {
         id: conversationId,
         projectId,

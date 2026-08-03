@@ -391,6 +391,8 @@ export type MobileProfileSnapshot = {
 
 export type MobileCreateDemandRequest = {
   projectId?: string | null;
+  /** Parent task for context-aware creation from a task detail on mobile. */
+  parentTaskId?: string;
   prompt: string;
   title?: string;
   provider?: string;

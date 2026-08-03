@@ -705,6 +705,7 @@ export function App() {
   const [profile, setProfile] = useState<MobileProfileSnapshot | null>(null);
   const [homeTab, setHomeTab] = useState<HomeTab>('home');
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [newTaskParent, setNewTaskParent] = useState<MobileTaskSummary | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState('all');
   const [taskScope, setTaskScope] = useState<TaskScope>('all');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -777,6 +778,7 @@ export function App() {
     setProfile(null);
     setHomeTab('home');
     setNewTaskOpen(false);
+    setNewTaskParent(null);
     setSelectedProjectId('all');
     setTaskScope('all');
     setSelectedTaskId(null);
@@ -962,6 +964,17 @@ export function App() {
     setRefreshing(false);
   }, [homeTab, loadDashboard, loadProfile]);
 
+  const openNewTask = useCallback((parentTask: MobileTaskSummary | null = null) => {
+    setNewTaskParent(parentTask);
+    if (parentTask) setDemandProjectId(parentTask.projectId);
+    setNewTaskOpen(true);
+  }, []);
+
+  const closeNewTask = useCallback(() => {
+    setNewTaskOpen(false);
+    setNewTaskParent(null);
+  }, []);
+
   const handleSubmitDemand = useCallback(async () => {
     if (!connection || !snapshot || (!prompt.trim() && demandImages.length === 0) || submitting)
       return;
@@ -977,6 +990,7 @@ export function App() {
       setDemandUploadProgress(null);
       const result = await createDemand(connection, {
         projectId: demandProjectId,
+        parentTaskId: newTaskParent?.id,
         prompt: prompt.trim(),
         attachmentIds,
       });
@@ -997,7 +1011,7 @@ export function App() {
       const destination = prepareCreatedDemandNavigation(snapshot, result.task, createdSessionId);
       setSnapshot(destination.snapshot);
       setHomeTab(destination.homeTab);
-      setNewTaskOpen(false);
+      closeNewTask();
       setTaskScope(destination.taskScope);
       setSelectedProjectId(destination.selectedProjectId);
       setSelectedTaskId(destination.selectedTaskId);
@@ -1015,7 +1029,36 @@ export function App() {
       setDemandUploadProgress(null);
       setSubmitting(false);
     }
-  }, [connection, demandImages, demandProjectId, loadDashboard, prompt, snapshot, submitting]);
+  }, [
+    closeNewTask,
+    connection,
+    demandImages,
+    demandProjectId,
+    loadDashboard,
+    newTaskParent?.id,
+    prompt,
+    snapshot,
+    submitting,
+  ]);
+
+  const newTaskModal = (
+    <NewTaskModal
+      images={demandImages}
+      open={newTaskOpen}
+      parentTask={newTaskParent}
+      projects={visibleProjects}
+      prompt={prompt}
+      selectedProjectId={demandProjectId}
+      submitting={submitting}
+      uploadProgress={demandUploadProgress}
+      onClose={closeNewTask}
+      onImagesChange={setDemandImages}
+      onMediaError={setError}
+      onProjectChange={setDemandProjectId}
+      onPromptChange={setPrompt}
+      onSubmit={handleSubmitDemand}
+    />
+  );
 
   if (booting) {
     return (
@@ -1055,16 +1098,20 @@ export function App() {
 
   if (selectedTask) {
     return (
-      <TaskSessionsScreen
-        connection={connection}
-        projects={snapshot?.projects ?? []}
-        task={selectedTask}
-        onBack={() => {
-          setSelectedTaskId(null);
-          setSelectedSessionId(null);
-        }}
-        onOpenSession={(sessionId) => setSelectedSessionId(sessionId)}
-      />
+      <>
+        <TaskSessionsScreen
+          connection={connection}
+          projects={snapshot?.projects ?? []}
+          task={selectedTask}
+          onBack={() => {
+            setSelectedTaskId(null);
+            setSelectedSessionId(null);
+          }}
+          onOpenSession={(sessionId) => setSelectedSessionId(sessionId)}
+          onCreateSubtask={() => openNewTask(selectedTask)}
+        />
+        {newTaskModal}
+      </>
     );
   }
 
@@ -1106,7 +1153,7 @@ export function App() {
                     projects={visibleProjects}
                     recentTasks={recentTasks}
                     snapshot={snapshot}
-                    onNewRequest={() => setNewTaskOpen(true)}
+                    onNewRequest={() => openNewTask()}
                     onOpenTask={setSelectedTaskId}
                     onOpenTasks={() => setHomeTab('tasks')}
                     onSelectScope={handleMetricSelect}
@@ -1163,25 +1210,11 @@ export function App() {
               </>
             ) : null}
           </ScrollView>
-          <FloatingNewTaskButton onPress={() => setNewTaskOpen(true)} />
+          <FloatingNewTaskButton onPress={() => openNewTask()} />
           <HomeTabBar activeTab={homeTab} onSelect={setHomeTab} />
         </View>
       </KeyboardAvoidingView>
-      <NewTaskModal
-        images={demandImages}
-        open={newTaskOpen}
-        projects={visibleProjects}
-        prompt={prompt}
-        selectedProjectId={demandProjectId}
-        submitting={submitting}
-        uploadProgress={demandUploadProgress}
-        onClose={() => setNewTaskOpen(false)}
-        onImagesChange={setDemandImages}
-        onMediaError={setError}
-        onProjectChange={setDemandProjectId}
-        onPromptChange={setPrompt}
-        onSubmit={handleSubmitDemand}
-      />
+      {newTaskModal}
     </SafeAreaView>
   );
 }
@@ -2043,6 +2076,7 @@ function DemandComposer({
   onImagesChange,
   onMediaError,
   onSubmit,
+  projectLocked = false,
 }: {
   images: MobileImageDraft[];
   projects: MobileProjectSummary[];
@@ -2055,6 +2089,7 @@ function DemandComposer({
   onImagesChange: (images: MobileImageDraft[]) => void;
   onMediaError: (message: string) => void;
   onSubmit: () => void;
+  projectLocked?: boolean;
 }) {
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const selectedProject = projects.find((project) => project.id === selectedProjectId);
@@ -2073,10 +2108,14 @@ function DemandComposer({
         disabled={submitting}
         images={images}
         imagesEnabled={imagesEnabled}
-        projectSelector={{
-          label: selectedProjectLabel,
-          onPress: () => setProjectPickerOpen(true),
-        }}
+        projectSelector={
+          projectLocked
+            ? undefined
+            : {
+                label: selectedProjectLabel,
+                onPress: () => setProjectPickerOpen(true),
+              }
+        }
         speechContext={[selectedProject?.displayName, selectedProject?.name]}
         value={prompt}
         onChange={onPromptChange}
@@ -2095,23 +2134,25 @@ function DemandComposer({
           />
         }
       />
-      <ProjectPickerSheet
-        eyebrow="新建任务"
-        open={projectPickerOpen}
-        projects={projects}
-        selectedProjectId={selectedProjectId}
-        title="选择项目"
-        unscopedOption={{
-          icon: 'documents-outline',
-          label: '草稿箱',
-          meta: '不归属具体项目',
-        }}
-        onClose={() => setProjectPickerOpen(false)}
-        onProjectChange={(projectId) => {
-          onProjectChange(projectId);
-          setProjectPickerOpen(false);
-        }}
-      />
+      {!projectLocked ? (
+        <ProjectPickerSheet
+          eyebrow="新建任务"
+          open={projectPickerOpen}
+          projects={projects}
+          selectedProjectId={selectedProjectId}
+          title="选择项目"
+          unscopedOption={{
+            icon: 'documents-outline',
+            label: '草稿箱',
+            meta: '不归属具体项目',
+          }}
+          onClose={() => setProjectPickerOpen(false)}
+          onProjectChange={(projectId) => {
+            onProjectChange(projectId);
+            setProjectPickerOpen(false);
+          }}
+        />
+      ) : null}
       <Pressable
         accessibilityLabel="Submit new mobile request"
         disabled={!canSubmit}
@@ -2143,11 +2184,13 @@ function DemandComposer({
 function NewTaskModal({
   open,
   onClose,
+  parentTask = null,
   ...composerProps
 }: Omit<Parameters<typeof DemandComposer>[0], 'onSubmit'> & {
   open: boolean;
   onClose: () => void;
   onSubmit: () => void;
+  parentTask?: MobileTaskSummary | null;
 }) {
   return (
     <Modal
@@ -2167,8 +2210,12 @@ function NewTaskModal({
         <SafeAreaView style={styles.newTaskWindow}>
           <View style={styles.newTaskWindowHeader}>
             <View>
-              <Text style={styles.newTaskWindowEyebrow}>新建任务</Text>
-              <Text style={styles.newTaskWindowTitle}>开始一项工作</Text>
+              <Text style={styles.newTaskWindowEyebrow}>
+                {parentTask ? '新建子任务' : '新建任务'}
+              </Text>
+              <Text style={styles.newTaskWindowTitle} numberOfLines={2}>
+                {parentTask ? `在「${parentTask.name}」下开始一项工作` : '开始一项工作'}
+              </Text>
             </View>
             <Pressable
               accessibilityLabel="关闭新建任务窗口"
@@ -2187,7 +2234,7 @@ function NewTaskModal({
             contentContainerStyle={styles.newTaskWindowContent}
             keyboardShouldPersistTaps="handled"
           >
-            <DemandComposer {...composerProps} />
+            <DemandComposer {...composerProps} projectLocked={Boolean(parentTask)} />
           </ScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
@@ -2422,12 +2469,14 @@ function TaskSessionsScreen({
   projects,
   task,
   onBack,
+  onCreateSubtask,
   onOpenSession,
 }: {
   connection: MobileConnection;
   projects: MobileProjectSummary[];
   task: MobileTaskSummary;
   onBack: () => void;
+  onCreateSubtask: () => void;
   onOpenSession: (sessionId: string) => void;
 }) {
   const [sessions, setSessions] = useState<MobileSessionSummary[]>([]);
@@ -2502,6 +2551,16 @@ function TaskSessionsScreen({
           />
           <DetailItem label="Updated" value={formatTimestamp(task.updatedAt)} />
         </View>
+
+        <Pressable
+          accessibilityLabel="在当前任务下新建子任务并启动 Session"
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.primaryButton, pressed ? styles.buttonPressed : null]}
+          onPress={onCreateSubtask}
+        >
+          <Ionicons color={COLORS.surface} name="add-circle-outline" size={18} />
+          <Text style={styles.primaryButtonText}>新建子任务并启动 Session</Text>
+        </Pressable>
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>

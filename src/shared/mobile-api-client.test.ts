@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchProfile, fetchSnapshot, uploadInputImage } from '../../apps/mobile/src/api-client';
+import {
+  createDemand,
+  fetchProfile,
+  fetchSnapshot,
+  uploadInputImage,
+} from '../../apps/mobile/src/api-client';
 import { MOBILE_RELAY_BASE_URL } from './mobile-relay';
 
 const relayConnection = {
@@ -68,6 +73,39 @@ describe('mobile API connectivity diagnostics', () => {
         Authorization: 'Bearer dev-token',
         'Content-Type': 'application/json',
       },
+    });
+  });
+
+  it('keeps the current task as the parent when creating a mobile subtask', async () => {
+    const connection = { baseUrl: 'http://127.0.0.1:3879', token: 'dev-token' };
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          task: { id: 'child-task', projectId: 'project-1' },
+          sessionId: 'child-session',
+        }),
+        { status: 201 }
+      )
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await createDemand(connection, {
+      projectId: 'project-1',
+      parentTaskId: 'parent-task',
+      prompt: '实现移动端子任务入口',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:3879/v1/demands', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer dev-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        projectId: 'project-1',
+        parentTaskId: 'parent-task',
+        prompt: '实现移动端子任务入口',
+      }),
     });
   });
 
