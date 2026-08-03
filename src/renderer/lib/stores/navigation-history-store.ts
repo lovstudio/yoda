@@ -100,6 +100,21 @@ export class NavigationHistoryStore {
     return this.entries[this.index];
   }
 
+  /**
+   * Finds the most recently visited internal page for a task on the current
+   * history branch. Entries after the cursor are forward-history and must not
+   * affect a new sidebar navigation.
+   */
+  lastTaskTab(projectId: string, taskId: string): string | undefined {
+    for (let i = this.index; i >= 0; i--) {
+      const entry = this.entries[i];
+      if (entry?.kind === 'tab' && entry.projectId === projectId && entry.taskId === taskId) {
+        return entry.tabId;
+      }
+    }
+    return undefined;
+  }
+
   pushNavigation(currentEntry: HistoryEntry | undefined, nextEntry: HistoryEntry): void {
     if (this.navigating) return;
     if (currentEntry && entriesEqual(currentEntry, nextEntry)) return;

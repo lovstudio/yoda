@@ -44,6 +44,17 @@ describe('NavigationHistoryStore', () => {
     expect(history.canGoBack).toBe(true);
   });
 
+  it('returns the latest task page from the current history branch', () => {
+    const history = new NavigationHistoryStore();
+    history.push(tab('project-1', 'task-1', 'session-a'));
+    history.push(tab('project-1', 'task-2', 'session-b'));
+    history.push(tab('project-1', 'task-1', 'file-a'));
+    history.back(() => {});
+
+    expect(history.lastTaskTab('project-1', 'task-1')).toBe('session-a');
+    expect(history.lastTaskTab('project-1', 'task-2')).toBe('session-b');
+  });
+
   it('does not append when the visible current page already matches the target', () => {
     const history = new NavigationHistoryStore();
 

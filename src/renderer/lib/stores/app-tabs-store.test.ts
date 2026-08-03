@@ -140,7 +140,7 @@ describe('AppTabsStore persisted route migration', () => {
 });
 
 describe('AppTabsStore task scope entry', () => {
-  it('opens a remembered task target through one explicit navigation', () => {
+  it('requires a concrete task target through one explicit navigation', () => {
     const sessionParams = {
       projectId: 'project-1',
       taskId: 'task-1',
@@ -155,7 +155,7 @@ describe('AppTabsStore task scope entry', () => {
       ],
       activeTabId: 'home-tab',
     });
-    const opened = tabs.openTaskScope('project-1', 'task-1');
+    const opened = tabs.openTaskScope('project-1', 'task-1', sessionParams.tab);
 
     expect(opened).toBe(true);
     expect(tabs.activeTabId).toBe('session-tab');
@@ -183,7 +183,7 @@ describe('AppTabsStore task scope entry', () => {
     tabs.dispose();
   });
 
-  it('uses the mounted task target over stale app-tab history', () => {
+  it('does not infer a task target from app-tab history', () => {
     const overviewParams = {
       projectId: 'project-1',
       taskId: 'task-1',
@@ -204,9 +204,9 @@ describe('AppTabsStore task scope entry', () => {
       activeTabId: 'overview-tab',
     });
 
-    expect(tabs.openTaskScope('project-1', 'task-1', sessionParams.tab)).toBe(true);
-    expect(tabs.activeTabId).toBe('session-tab');
-    expect(navigation.navigate).toHaveBeenCalledWith('task', sessionParams);
+    expect(tabs.openTaskScope('project-1', 'task-1')).toBe(false);
+    expect(tabs.activeTabId).toBe('overview-tab');
+    expect(navigation.navigate).not.toHaveBeenCalled();
     tabs.dispose();
   });
 
@@ -214,12 +214,12 @@ describe('AppTabsStore task scope entry', () => {
     ['inactive', 'home-tab'],
     ['active', 'session-tab'],
   ])(
-    'moves the strip into a task scope when its remembered tab is sticky and %s',
+    'moves the strip into a task scope when its history target is sticky and %s',
     (_, activeTabId) => {
       const sessionParams = {
         projectId: 'project-1',
         taskId: 'task-1',
-        tab: { kind: 'conversation', conversationId: 'conversation-1' },
+        tab: { kind: 'conversation' as const, conversationId: 'conversation-1' },
       };
       const navigation = createNavigationStub();
       const tabs = new AppTabsStore(navigation);
@@ -233,7 +233,7 @@ describe('AppTabsStore task scope entry', () => {
         stripScope: 'view:home',
       });
 
-      expect(tabs.openTaskScope('project-1', 'task-1')).toBe(true);
+      expect(tabs.openTaskScope('project-1', 'task-1', sessionParams.tab)).toBe(true);
 
       expect(tabs.activeTabId).toBe('session-tab');
       expect(tabs.stripScope).toBe(tabScopeKey('task', sessionParams));
@@ -243,21 +243,21 @@ describe('AppTabsStore task scope entry', () => {
     }
   );
 
-  it('switches tasks and returns to the remembered session without a target-less route', () => {
+  it('switches tasks through the supplied history targets without a target-less route', () => {
     const taskAOverview = {
       projectId: 'project-1',
       taskId: 'task-a',
-      tab: { kind: 'overview' },
+      tab: { kind: 'overview' as const },
     };
     const taskASession = {
       projectId: 'project-1',
       taskId: 'task-a',
-      tab: { kind: 'conversation', conversationId: 'conversation-a' },
+      tab: { kind: 'conversation' as const, conversationId: 'conversation-a' },
     };
     const taskBOverview = {
       projectId: 'project-1',
       taskId: 'task-b',
-      tab: { kind: 'overview' },
+      tab: { kind: 'overview' as const },
     };
     const navigation = createReactiveNavigationStub('home', { home: {} });
     const tabs = new AppTabsStore(navigation);
@@ -272,14 +272,14 @@ describe('AppTabsStore task scope entry', () => {
     });
     tabs.start();
 
-    expect(tabs.openTaskScope('project-1', 'task-a')).toBe(true);
+    expect(tabs.openTaskScope('project-1', 'task-a', taskASession.tab)).toBe(true);
     expect(tabs.activeTabId).toBe('task-a-session');
     expect(navigation.viewParamsStore.task).toEqual(taskASession);
 
-    expect(tabs.openTaskScope('project-1', 'task-b')).toBe(true);
+    expect(tabs.openTaskScope('project-1', 'task-b', taskBOverview.tab)).toBe(true);
     expect(tabs.activeTabId).toBe('task-b-overview');
 
-    expect(tabs.openTaskScope('project-1', 'task-a')).toBe(true);
+    expect(tabs.openTaskScope('project-1', 'task-a', taskASession.tab)).toBe(true);
     expect(tabs.activeTabId).toBe('task-a-session');
     expect(navigation.viewParamsStore.task).toEqual(taskASession);
     tabs.dispose();

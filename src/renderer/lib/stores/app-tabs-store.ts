@@ -459,14 +459,11 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
 
   /**
    * Enters a task through one explicit route when its destination is already
-   * known. Sidebar task rows use this instead of first navigating to a
-   * target-less scope entry and then replaying the remembered tab as a second
-   * navigation.
+   * known. Sidebar task rows resolve this from NavigationHistoryStore, then
+   * use this one route instead of a target-less scope entry.
    *
-   * Returns false when neither AppTabs nor the caller can resolve a target. A
-   * fresh, unprovisioned task must keep the target-less path so its restored
-   * TaskView snapshot / pending initial conversation can choose the target once
-   * provisioning completes.
+   * Returns false without an explicit target. A fresh task keeps the
+   * target-less path so provisioning can establish its initial page.
    */
   openTaskScope(projectId: string, taskId: string, fallbackTarget?: TaskWindowTabTarget): boolean {
     const scope = tabScopeKey('task', {
@@ -474,27 +471,13 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
       taskId,
       tab: fallbackTarget ?? { kind: 'overview' },
     });
-    const active = this.activeTab;
-    const remembered =
-      active && tabScopeKey(active.viewId, active.params) === scope
-        ? active
-        : this._lastActiveInScope(scope);
-    const rememberedTarget =
-      remembered?.viewId === 'task'
-        ? (remembered.params.tab as TaskWindowTabTarget | undefined)
-        : undefined;
-    // The mounted task's tab manager is the freshest authority for a sidebar
-    // re-entry. App-tab history can legitimately lag behind it while the task
-    // was in the background, so only use that history when the caller has no
-    // resolved target yet.
-    const target = fallbackTarget ?? rememberedTarget;
-    if (!target) return false;
+    if (!fallbackTarget) return false;
 
     // A sidebar task click is an explicit scope switch. Sticky activation
     // normally keeps the previous strip in place, so set the destination scope
     // before opening the remembered route.
     this.stripScope = scope;
-    this.openTab('task', { projectId, taskId, tab: target });
+    this.openTab('task', { projectId, taskId, tab: fallbackTarget });
     return true;
   }
 
