@@ -480,6 +480,13 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         provisionedTask.taskView.setTerminalDrawerOpen(false);
         return;
       }
+      // A project quick action opens its persisted workspace Terminal. Keep
+      // that Terminal as the next toggle target after it is closed, instead
+      // of switching to this task's unrelated Terminal drawer.
+      if (workspaceTerminalStore.activeProjectId === activeMountedProject?.data.id) {
+        void workspaceTerminalStore.toggleProject(activeMountedProject.data).catch(() => {});
+        return;
+      }
       provisionedTask.taskView.setBottomPanelTab('terminals');
       provisionedTask.taskView.setTerminalDrawerOpen(true);
       provisionedTask.taskView.setFocusedRegion('bottom');
