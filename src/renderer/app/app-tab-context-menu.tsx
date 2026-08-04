@@ -6,6 +6,7 @@ import {
   GitFork,
   Link,
   ListX,
+  LocateFixed,
   PanelRight,
   PanelRightOpen,
   Pencil,
@@ -54,9 +55,10 @@ import { FilePathMenuItems, type FilePathTarget } from '@renderer/lib/components
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { APP_SHORTCUTS } from '@renderer/lib/hooks/useKeyboardShortcuts';
 import { rpc } from '@renderer/lib/ipc';
+import { useWorkspaceLayoutContext } from '@renderer/lib/layout/layout-provider';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { showModal } from '@renderer/lib/modal/modal-provider';
-import { appState } from '@renderer/lib/stores/app-state';
+import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
 import { isIndexTab, type AppTabEntry } from '@renderer/lib/stores/app-tabs-store';
 import {
   ContextMenu,
@@ -80,6 +82,8 @@ export const AppTabContextMenu = observer(function AppTabContextMenu({
   children: ReactNode;
 }) {
   const { t } = useTranslation();
+  const { setCollapsed } = useWorkspaceLayoutContext();
+  const revealInSidebar = () => revealTabInSidebar(tab, () => setCollapsed('left', false));
 
   // A task's overview tab is the task entity itself on the strip — it gets the
   // shared task menu (identical to the sidebar row and the kanban row).
@@ -88,14 +92,21 @@ export const AppTabContextMenu = observer(function AppTabContextMenu({
     const target = (tab.params.tab as TaskWindowTabTarget | undefined) ?? { kind: 'overview' };
     if (projectId && taskId && target.kind === 'overview') {
       return (
-        <TaskOverviewTabMenu tab={tab} projectId={projectId} taskId={taskId}>
+        <TaskOverviewTabMenu
+          tab={tab}
+          projectId={projectId}
+          taskId={taskId}
+          onRevealInSidebar={revealInSidebar}
+        >
           {children}
         </TaskOverviewTabMenu>
       );
     }
   }
 
-  const sections = buildTabSections(tab, t).filter((section) => section.length > 0);
+  const sections = buildTabSections(tab, t, revealInSidebar).filter(
+    (section) => section.length > 0
+  );
 
   if (sections.length === 0) return <>{children}</>;
 
@@ -117,14 +128,61 @@ export const AppTabContextMenu = observer(function AppTabContextMenu({
 
 export type Translate = Parameters<typeof copyTaskLink>[1];
 
-function buildTabSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
-  if (tab.viewId === 'task') return buildTaskSections(tab, t);
+function buildTabSections(
+  tab: AppTabEntry,
+  t: Translate,
+  onRevealInSidebar: () => void
+): ReactNode[][] {
+  const reveal = buildRevealInSidebarSection(tab, t, onRevealInSidebar);
+  if (tab.viewId === 'task') return buildTaskSections(tab, t, reveal);
   if (tab.viewId === 'file') {
-    return [[buildGlobalPinItem(tab, t)], buildProjectFileSection(tab), buildCloseSection(tab, t)];
+    return [
+      [...reveal, buildGlobalPinItem(tab, t)],
+      buildProjectFileSection(tab),
+      buildCloseSection(tab, t),
+    ];
   }
   // Every other tab (project pages, global views, home) can at least be
   // pinned into the shell side pane.
-  return [[buildGlobalPinItem(tab, t)], buildCloseSection(tab, t)];
+  return [[...reveal, buildGlobalPinItem(tab, t)], buildCloseSection(tab, t)];
+}
+
+export function tabSidebarTarget(
+  tab: AppTabEntry
+): { projectId: string; taskId?: string } | undefined {
+  const { projectId, taskId } = tab.params as { projectId?: unknown; taskId?: unknown };
+  if (typeof projectId !== 'string' || projectId.length === 0) return undefined;
+  if (tab.viewId === 'task') {
+    if (typeof taskId !== 'string' || taskId.length === 0) return undefined;
+    return { projectId, taskId };
+  }
+  if (tab.viewId === 'project' || tab.viewId === 'file') return { projectId };
+  return undefined;
+}
+
+export function revealTabInSidebar(tab: AppTabEntry, revealSidebar: () => void): void {
+  const target = tabSidebarTarget(tab);
+  if (!target) return;
+  revealSidebar();
+  sidebarStore.requestSelectionReveal(target.projectId, target.taskId);
+}
+
+function buildRevealInSidebarSection(
+  tab: AppTabEntry,
+  t: Translate,
+  onRevealInSidebar: () => void
+): ReactNode[] {
+  if (!tabSidebarTarget(tab)) return [];
+  return [
+    <ContextMenuItem
+      key="reveal-in-sidebar"
+      className="whitespace-nowrap"
+      onClick={onRevealInSidebar}
+    >
+      <LocateFixed className="size-4" />
+      {t('appTabs.revealInSidebar')}
+    </ContextMenuItem>,
+  ];
 }
 
 /** "Open in global sidebar" — pane gets an independent view instance; tab stays. */
@@ -150,11 +208,13 @@ const TaskOverviewTabMenu = observer(function TaskOverviewTabMenu({
   tab,
   projectId,
   taskId,
+  onRevealInSidebar,
   children,
 }: {
   tab: AppTabEntry;
   projectId: string;
   taskId: string;
+  onRevealInSidebar: () => void;
   children: ReactNode;
 }) {
   const { t } = useTranslation();
@@ -162,6 +222,14 @@ const TaskOverviewTabMenu = observer(function TaskOverviewTabMenu({
   const tabSections: ReactNode[][] = [
     buildProvisionRetrySection(projectId, taskId, t),
     [
+      <ContextMenuItem
+        key="reveal-in-sidebar"
+        className="whitespace-nowrap"
+        onClick={onRevealInSidebar}
+      >
+        <LocateFixed className="size-4" />
+        {t('appTabs.revealInSidebar')}
+      </ContextMenuItem>,
       <ContextMenuItem
         key="global-pin"
         className="whitespace-nowrap"
@@ -196,7 +264,7 @@ const TaskOverviewTabMenu = observer(function TaskOverviewTabMenu({
   );
 });
 
-function buildTaskSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
+function buildTaskSections(tab: AppTabEntry, t: Translate, reveal: ReactNode[]): ReactNode[][] {
   const { projectId, taskId } = tab.params as { projectId?: string; taskId?: string };
   const target = (tab.params.tab as TaskWindowTabTarget | undefined) ?? { kind: 'overview' };
   // Overview tabs are intercepted by TaskOverviewTabMenu before reaching here.
@@ -249,12 +317,18 @@ function buildTaskSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
       target.conversationId,
       t
     );
-    return [retry, management ?? [], copy ?? [], placement, buildCloseSection(tab, t)];
+    return [
+      retry,
+      management ?? [],
+      copy ?? [],
+      [...reveal, ...placement],
+      buildCloseSection(tab, t),
+    ];
   }
 
   // room-member target — identity tab; placement + close only (no path actions).
   if (target.kind === 'room-member') {
-    return [retry, placement, buildCloseSection(tab, t)];
+    return [retry, [...reveal, ...placement], buildCloseSection(tab, t)];
   }
 
   // file / diff target — path actions based on the task worktree.
@@ -273,7 +347,7 @@ function buildTaskSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
       ]
     : [];
 
-  return [retry, placement, file, buildCloseSection(tab, t)];
+  return [retry, [...reveal, ...placement], file, buildCloseSection(tab, t)];
 }
 
 /**

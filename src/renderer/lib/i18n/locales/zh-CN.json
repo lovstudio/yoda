@@ -14,6 +14,7 @@
   },
   "appTabs": {
     "closeTab": "关闭标签页",
+    "revealInSidebar": "在侧边栏中定位",
     "openInGlobalSidePane": "在全局侧边栏打开",
     "unpinFromGlobalSidePane": "从全局侧边栏取消固定",
     "closeGlobalSidePane": "关闭全局侧边栏",
