@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { getDistinctAgentTaskTitle, getQuotaWindowLabel } from './workspace-runtime-bar-format';
+import {
+  getAccountUsageThresholdAlert,
+  getDistinctAgentTaskTitle,
+  getQuotaWindowLabel,
+} from './workspace-runtime-bar-format';
 
 describe('getDistinctAgentTaskTitle', () => {
   it('removes a repeated task title from the compact session row', () => {
@@ -27,4 +31,38 @@ describe('getQuotaWindowLabel', () => {
       expect(getQuotaWindowLabel(windowMinutes)).toEqual({ translationKey, value });
     }
   );
+});
+
+describe('getAccountUsageThresholdAlert', () => {
+  const windows = [
+    { windowMinutes: 300, usedPercent: 95.2, resetsAt: '2026-08-04T12:00:00.000Z' },
+    { windowMinutes: 10_080, usedPercent: 97.6, resetsAt: '2026-08-10T00:00:00.000Z' },
+  ];
+
+  it('returns the most depleted window and represents all windows at the threshold', () => {
+    expect(getAccountUsageThresholdAlert(windows, 95, new Set())).toEqual({
+      window: windows[1],
+      notificationKeys: ['300:2026-08-04T12:00:00.000Z', '10080:2026-08-10T00:00:00.000Z'],
+    });
+  });
+
+  it('uses the same rounded percentage shown in the runtime bar', () => {
+    expect(
+      getAccountUsageThresholdAlert(
+        [{ windowMinutes: 300, usedPercent: 94.6, resetsAt: null }],
+        95,
+        new Set()
+      )
+    ).not.toBeNull();
+  });
+
+  it('does not repeat a notification for the same quota window', () => {
+    expect(
+      getAccountUsageThresholdAlert(
+        windows,
+        95,
+        new Set(['300:2026-08-04T12:00:00.000Z', '10080:2026-08-10T00:00:00.000Z'])
+      )
+    ).toBeNull();
+  });
 });

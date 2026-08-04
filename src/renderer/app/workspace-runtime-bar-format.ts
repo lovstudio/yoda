@@ -9,6 +9,19 @@ export interface QuotaWindowLabel {
   value: number;
 }
 
+export interface AccountUsageThresholdWindow {
+  windowMinutes: number;
+  usedPercent: number;
+  resetsAt: string | null;
+}
+
+export interface AccountUsageThresholdAlert {
+  /** The most depleted newly-qualified window, used for the notification copy. */
+  window: AccountUsageThresholdWindow;
+  /** Every newly-qualified window represented by this notification. */
+  notificationKeys: string[];
+}
+
 function normalizeSessionLabel(value: string): string {
   return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
 }
@@ -45,5 +58,30 @@ export function getQuotaWindowLabel(windowMinutes: number): QuotaWindowLabel {
   return {
     translationKey: 'workspaceRuntime.quotaWindowMinutes',
     value: windowMinutes,
+  };
+}
+
+export function getAccountUsageThresholdAlert(
+  windows: readonly AccountUsageThresholdWindow[],
+  threshold: number,
+  notifiedKeys: ReadonlySet<string>
+): AccountUsageThresholdAlert | null {
+  const newlyQualified = windows
+    .map((window) => ({
+      window,
+      percent: Math.round(window.usedPercent),
+      key: `${window.windowMinutes}:${window.resetsAt ?? 'current'}`,
+    }))
+    .filter(({ percent, key }) => percent >= threshold && !notifiedKeys.has(key));
+
+  if (newlyQualified.length === 0) return null;
+
+  const mostDepleted = newlyQualified.reduce((highest, candidate) =>
+    candidate.percent > highest.percent ? candidate : highest
+  );
+
+  return {
+    window: mostDepleted.window,
+    notificationKeys: newlyQualified.map(({ key }) => key),
   };
 }

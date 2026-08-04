@@ -110,6 +110,8 @@ export const SETTINGS_DEFAULTS = {
     sound: true,
     osNotifications: true,
     soundFocusMode: 'always' as const,
+    accountUsageWarningEnabled: true,
+    accountUsageWarningThreshold: 95,
   },
   terminal: {
     autoCopyOnSelection: true,
