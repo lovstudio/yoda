@@ -71,6 +71,9 @@ export const notificationSettingsSchema = z.object({
   sound: z.boolean(),
   osNotifications: z.boolean(),
   soundFocusMode: z.enum(['always', 'unfocused']),
+  /** Show an in-app action when a Codex account quota reaches the configured threshold. */
+  accountUsageWarningEnabled: z.boolean().catch(true),
+  accountUsageWarningThreshold: z.number().int().min(1).max(100).catch(95),
 });
 
 const summaryContextSchema = z.object(
