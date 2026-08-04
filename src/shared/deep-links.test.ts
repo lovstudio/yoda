@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildAiLabAppDeepLink,
   buildProjectDeepLink,
   buildSessionDeepLink,
   buildTaskDeepLink,
@@ -57,6 +58,15 @@ describe('deep links', () => {
   it('builds project links that round-trip through the parser', () => {
     expect(buildProjectDeepLink({ projectId: 'project-1' })).toBe('yoda://project/project-1');
     expect(parseYodaDeepLink('yoda://project/project-1')).toEqual({ projectId: 'project-1' });
+  });
+
+  it('builds AI Lab app links that round-trip through the parser', () => {
+    expect(buildAiLabAppDeepLink({ appId: 'app / 测试' })).toBe(
+      'yoda://app/app%20%2F%20%E6%B5%8B%E8%AF%95'
+    );
+    expect(parseYodaDeepLink('yoda://app/app%20%2F%20%E6%B5%8B%E8%AF%95')).toEqual({
+      appId: 'app / 测试',
+    });
   });
 
   it('builds session links', () => {

@@ -104,7 +104,9 @@ class DeepLinkService {
       return null;
     }
 
-    const resolved = await resolveTaskTarget(parsed);
+    const resolved = parsed.appId
+      ? await resolveAiLabAppTarget(parsed.appId)
+      : await resolveTaskTarget(parsed);
     if (!resolved) {
       log.warn('deep-link: target not found', { rawUrl, parsed });
       return null;
@@ -131,6 +133,16 @@ class DeepLinkService {
 
     events.emit(deepLinkOpenChannel, target);
   }
+}
+
+async function resolveAiLabAppTarget(
+  appId: string
+): Promise<{ appId: string; projectId?: string } | null> {
+  const { aiLabService } = await import('@main/core/ai-lab/ai-lab-service');
+  const appTarget = (await aiLabService.listApps()).find((item) => item.id === appId);
+  return appTarget
+    ? { appId: appTarget.id, ...(appTarget.projectId ? { projectId: appTarget.projectId } : {}) }
+    : null;
 }
 
 async function resolveTaskTarget(

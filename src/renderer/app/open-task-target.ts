@@ -143,10 +143,13 @@ export function findInternalTabId(
   return undefined;
 }
 
-export type OpenTaskTarget = Pick<
-  DeepLinkTarget,
-  'projectId' | 'taskId' | 'conversationId' | 'promptId' | 'promptIndex'
->;
+export type OpenTaskTarget = {
+  projectId: string;
+  taskId?: DeepLinkTarget['taskId'];
+  conversationId?: DeepLinkTarget['conversationId'];
+  promptId?: DeepLinkTarget['promptId'];
+  promptIndex?: DeepLinkTarget['promptIndex'];
+};
 
 export function openTaskTarget(
   target: OpenTaskTarget,
