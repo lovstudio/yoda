@@ -1,6 +1,7 @@
 {
   "appTabs": {
     "closeTab": "Close tab",
+    "revealInSidebar": "Locate in sidebar",
     "openInGlobalSidePane": "Open in global sidebar",
     "unpinFromGlobalSidePane": "Unpin from global sidebar",
     "closeGlobalSidePane": "Close global sidebar",
