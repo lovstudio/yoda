@@ -80,6 +80,7 @@ import {
   type MobileImageDraft,
   type MobileInputUploadProgress,
 } from './input-upload';
+import { parseMarkdownBlocks, tokenizeInlineMarkdown } from './markdown';
 import { subscribeSessionEvents } from './session-event-stream';
 import { startMobileVoiceInput, type MobileVoiceInputSession } from './voice-input';
 
@@ -131,19 +132,6 @@ type ReadableOutput = {
   blocks: ReadableOutputBlock[];
   omittedCount: number;
 };
-
-type MarkdownBlock =
-  | { kind: 'heading'; level: number; text: string }
-  | { kind: 'paragraph'; text: string }
-  | { kind: 'quote'; text: string }
-  | { kind: 'list'; ordered: boolean; items: string[] }
-  | { kind: 'code'; language?: string; text: string };
-
-type InlineMarkdownToken =
-  | { kind: 'text'; text: string }
-  | { kind: 'bold'; text: string }
-  | { kind: 'code'; text: string }
-  | { kind: 'link'; text: string; url: string };
 
 function taskScopeLabel(scope: TaskScope): string {
   switch (scope) {
@@ -390,118 +378,6 @@ function mergeAdjacentAssistantBlocks(
     merged.push({ ...block });
   }
   return merged;
-}
-
-function parseMarkdownBlocks(value: string): MarkdownBlock[] {
-  const lines = value.replace(/\r/g, '').split('\n');
-  const blocks: MarkdownBlock[] = [];
-  let paragraph: string[] = [];
-  let index = 0;
-
-  const flushParagraph = () => {
-    const text = paragraph.join('\n').trim();
-    if (text) blocks.push({ kind: 'paragraph', text });
-    paragraph = [];
-  };
-
-  while (index < lines.length) {
-    const line = lines[index] ?? '';
-    const trimmed = line.trim();
-
-    if (!trimmed) {
-      flushParagraph();
-      index += 1;
-      continue;
-    }
-
-    const fence = trimmed.match(/^```([A-Za-z0-9_-]+)?\s*$/);
-    if (fence) {
-      flushParagraph();
-      const codeLines: string[] = [];
-      index += 1;
-      while (index < lines.length && !(lines[index] ?? '').trim().startsWith('```')) {
-        codeLines.push(lines[index] ?? '');
-        index += 1;
-      }
-      if (index < lines.length) index += 1;
-      blocks.push({ kind: 'code', language: fence[1], text: codeLines.join('\n').trimEnd() });
-      continue;
-    }
-
-    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
-    if (heading) {
-      flushParagraph();
-      blocks.push({ kind: 'heading', level: heading[1].length, text: heading[2].trim() });
-      index += 1;
-      continue;
-    }
-
-    if (/^>\s?/.test(trimmed)) {
-      flushParagraph();
-      const quoteLines: string[] = [];
-      while (index < lines.length && /^>\s?/.test((lines[index] ?? '').trim())) {
-        quoteLines.push((lines[index] ?? '').trim().replace(/^>\s?/, ''));
-        index += 1;
-      }
-      blocks.push({ kind: 'quote', text: quoteLines.join('\n').trim() });
-      continue;
-    }
-
-    const listMatch = trimmed.match(/^((?:[-*+])|\d+[.)])\s+(.+)$/);
-    if (listMatch) {
-      flushParagraph();
-      const ordered = /\d+[.)]/.test(listMatch[1]);
-      const items: string[] = [];
-      while (index < lines.length) {
-        const current = (lines[index] ?? '').trim();
-        const item = current.match(/^((?:[-*+])|\d+[.)])\s+(.+)$/);
-        if (!item || /\d+[.)]/.test(item[1]) !== ordered) break;
-        items.push(item[2].trim());
-        index += 1;
-      }
-      blocks.push({ kind: 'list', ordered, items });
-      continue;
-    }
-
-    paragraph.push(line);
-    index += 1;
-  }
-
-  flushParagraph();
-  return blocks;
-}
-
-function tokenizeInlineMarkdown(value: string): InlineMarkdownToken[] {
-  const tokens: InlineMarkdownToken[] = [];
-  const pattern = /(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(value)) !== null) {
-    if (match.index > cursor) {
-      tokens.push({ kind: 'text', text: value.slice(cursor, match.index) });
-    }
-
-    const raw = match[0];
-    if (raw.startsWith('**') || raw.startsWith('__')) {
-      tokens.push({ kind: 'bold', text: raw.slice(2, -2) });
-    } else if (raw.startsWith('`')) {
-      tokens.push({ kind: 'code', text: raw.slice(1, -1) });
-    } else {
-      const link = raw.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-      tokens.push(
-        link ? { kind: 'link', text: link[1], url: link[2] } : { kind: 'text', text: raw }
-      );
-    }
-
-    cursor = match.index + raw.length;
-  }
-
-  if (cursor < value.length) {
-    tokens.push({ kind: 'text', text: value.slice(cursor) });
-  }
-
-  return tokens.length > 0 ? tokens : [{ kind: 'text', text: value }];
 }
 
 function formatTimestamp(value?: string): string {
@@ -2936,7 +2812,6 @@ function SessionDetailScreen({
               onPress={handleScrollToBottomPress}
             >
               <Ionicons color={COLORS.surface} name="arrow-down-outline" size={17} />
-              <Text style={styles.scrollToBottomText}>Bottom</Text>
             </Pressable>
           ) : null}
           <SessionInputComposer
@@ -3409,16 +3284,16 @@ function SessionRuntimeStatus({
   const detail = uploadProgress
     ? mobileInputUploadProgressText(uploadProgress)
     : sending
-      ? 'Resuming the session and sending your message…'
+      ? 'Resuming and sending…'
       : acceptsInput
         ? runtimeStatus === 'completed'
-          ? 'This turn is complete. You can send a follow-up.'
+          ? 'Ready for a follow-up.'
           : 'Live input is available.'
         : resumable
-          ? 'Ready for a follow-up. The session will resume when you send.'
+          ? 'Send a follow-up to resume.'
           : live
-            ? 'The session is connected but not accepting input.'
-            : 'The session is offline.';
+            ? 'Connected, input unavailable.'
+            : 'Session offline.';
 
   return (
     <View
@@ -3444,9 +3319,11 @@ function SessionRuntimeStatus({
           {detail}
         </Text>
       </View>
-      <Text style={styles.sessionInputCount}>
-        {valueLength}/{MOBILE_SESSION_INPUT_MAX_CHARS}
-      </Text>
+      {valueLength > 0 ? (
+        <Text style={styles.sessionInputCount}>
+          {valueLength}/{MOBILE_SESSION_INPUT_MAX_CHARS}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -3713,6 +3590,17 @@ function RenderedMarkdown({ value, inverted = false }: { value: string; inverted
           );
         }
 
+        if (block.kind === 'table') {
+          return (
+            <MarkdownTable
+              key={index}
+              headers={block.headers}
+              inverted={inverted}
+              rows={block.rows}
+            />
+          );
+        }
+
         if (block.kind === 'list') {
           return (
             <View key={index} style={styles.markdownList}>
@@ -3747,6 +3635,64 @@ function RenderedMarkdown({ value, inverted = false }: { value: string; inverted
           />
         );
       })}
+    </View>
+  );
+}
+
+function MarkdownTable({
+  headers,
+  rows,
+  inverted = false,
+}: {
+  headers: string[];
+  rows: string[][];
+  inverted?: boolean;
+}) {
+  return (
+    <View accessibilityLabel={`Table with ${rows.length} rows`} style={styles.markdownTable}>
+      {rows.map((row, rowIndex) => (
+        <View
+          key={`${rowIndex}-${row.join('|')}`}
+          style={[styles.markdownTableCard, inverted ? styles.markdownTableCardInverted : null]}
+        >
+          <Text
+            style={[styles.markdownTablePrimaryLabel, inverted ? styles.transcriptUserMeta : null]}
+          >
+            {headers[0] || 'Item'}
+          </Text>
+          <MarkdownInline
+            inverted={inverted}
+            style={[styles.markdownTablePrimaryValue, inverted ? styles.transcriptUserText : null]}
+            text={row[0] || '—'}
+          />
+          {headers.slice(1).map((header, columnIndex) => (
+            <View
+              key={`${columnIndex}-${header}`}
+              style={[
+                styles.markdownTableField,
+                inverted ? styles.markdownTableFieldInverted : null,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.markdownTableFieldLabel,
+                  inverted ? styles.transcriptUserMeta : null,
+                ]}
+              >
+                {header || `Column ${columnIndex + 2}`}
+              </Text>
+              <MarkdownInline
+                inverted={inverted}
+                style={[
+                  styles.markdownTableFieldValue,
+                  inverted ? styles.transcriptUserText : null,
+                ]}
+                text={row[columnIndex + 1] || '—'}
+              />
+            </View>
+          ))}
+        </View>
+      ))}
     </View>
   );
 }
@@ -4056,52 +4002,48 @@ const styles = StyleSheet.create({
   },
   scrollToBottomButton: {
     position: 'absolute',
-    right: 18,
-    bottom: Platform.OS === 'ios' ? 150 : 142,
-    minHeight: 42,
-    flexDirection: 'row',
+    right: 14,
+    bottom: Platform.OS === 'ios' ? 132 : 124,
+    width: 42,
+    height: 42,
     alignItems: 'center',
-    gap: 7,
-    borderRadius: 8,
+    justifyContent: 'center',
+    borderRadius: 21,
     backgroundColor: COLORS.charcoal,
-    paddingHorizontal: 13,
-  },
-  scrollToBottomText: {
-    color: COLORS.surface,
-    fontSize: 13,
-    fontWeight: '800',
   },
   sessionInputBar: {
     borderTopWidth: 1,
     borderTopColor: COLORS.line,
     backgroundColor: COLORS.surface,
     paddingHorizontal: 12,
-    paddingTop: 9,
+    paddingTop: 7,
     paddingBottom: Platform.OS === 'ios' ? 10 : 12,
-    gap: 8,
+    gap: 6,
   },
   sessionRunStatus: {
-    minHeight: 52,
+    minHeight: 36,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
+    gap: 7,
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
+    borderRadius: 7,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
   },
   sessionRunStatusIcon: {
-    width: 24,
+    width: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sessionRunStatusBody: {
     minWidth: 0,
     flex: 1,
-    gap: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   sessionRunStatusLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
   },
   sessionRunStatusDetail: {
@@ -5477,6 +5419,60 @@ const styles = StyleSheet.create({
   markdownListText: {
     minWidth: 0,
     flex: 1,
+  },
+  markdownTable: {
+    gap: 8,
+  },
+  markdownTableCard: {
+    gap: 7,
+    borderWidth: 1,
+    borderColor: COLORS.faint,
+    borderRadius: 8,
+    backgroundColor: '#FAFAF7',
+    padding: 11,
+  },
+  markdownTableCardInverted: {
+    borderColor: '#555A60',
+    backgroundColor: '#373B3F',
+  },
+  markdownTablePrimaryLabel: {
+    color: COLORS.muted,
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  markdownTablePrimaryValue: {
+    color: COLORS.ink,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  markdownTableField: {
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.faint,
+    paddingTop: 7,
+  },
+  markdownTableFieldInverted: {
+    borderTopColor: '#555A60',
+  },
+  markdownTableFieldLabel: {
+    width: 58,
+    color: COLORS.muted,
+    fontSize: 11,
+    lineHeight: 19,
+    fontWeight: '700',
+  },
+  markdownTableFieldValue: {
+    minWidth: 0,
+    flex: 1,
+    color: COLORS.ink,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '500',
   },
   inlineBold: {
     fontWeight: '800',
