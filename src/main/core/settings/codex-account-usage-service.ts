@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type {
   AgentAccountRateLimitWindow,
+  AgentAccountResetCredit,
   AgentAccountResetOutcome,
   AgentAccountResetResult,
   AgentAccountUsage,
@@ -25,16 +26,18 @@ export async function getCodexAccountUsage(): Promise<AgentAccountUsage> {
       supported: true,
       rateLimits: [],
       resetCreditsAvailable: null,
+      resetCredits: null,
       fetchedAt,
       error: error instanceof Error ? error.message : 'Failed to read Codex account usage.',
     };
   }
 }
 
-export async function resetCodexAccountUsage(): Promise<AgentAccountResetResult> {
+export async function resetCodexAccountUsage(creditId?: string): Promise<AgentAccountResetResult> {
   try {
     const result = await requestCodexAppServer('account/rateLimitResetCredit/consume', {
       idempotencyKey: randomUUID(),
+      ...(creditId?.trim() ? { creditId: creditId.trim() } : {}),
     });
     return {
       runtimeId: 'codex',
@@ -59,13 +62,17 @@ export function getAccountUsage(id: RuntimeId): Promise<AgentAccountUsage> {
     supported: false,
     rateLimits: [],
     resetCreditsAvailable: null,
+    resetCredits: null,
     fetchedAt: new Date().toISOString(),
     error: null,
   });
 }
 
-export function resetAccountUsage(id: RuntimeId): Promise<AgentAccountResetResult> {
-  if (id === 'codex') return resetCodexAccountUsage();
+export function resetAccountUsage(
+  id: RuntimeId,
+  args?: { creditId?: string }
+): Promise<AgentAccountResetResult> {
+  if (id === 'codex') return resetCodexAccountUsage(args?.creditId);
   return Promise.resolve({
     runtimeId: id,
     supported: false,
@@ -90,6 +97,7 @@ export function parseCodexResetOutcome(value: unknown): AgentAccountResetOutcome
 export function parseCodexRateLimits(value: unknown): {
   rateLimits: AgentAccountRateLimitWindow[];
   resetCreditsAvailable: number | null;
+  resetCredits: AgentAccountResetCredit[] | null;
 } {
   const response = objectValue(value) as CodexRateLimitResponse | null;
   const snapshot = objectValue(response?.rateLimits);
@@ -111,12 +119,40 @@ export function parseCodexRateLimits(value: unknown): {
   });
   const resetCredits = objectValue(response?.rateLimitResetCredits);
   const availableCount = numberValue(resetCredits?.availableCount);
+  const creditRows = resetCredits?.credits;
   return {
     rateLimits,
     resetCreditsAvailable:
       availableCount != null && Number.isInteger(availableCount) && availableCount >= 0
         ? availableCount
         : null,
+    resetCredits: Array.isArray(creditRows)
+      ? creditRows.flatMap((item) => {
+          const credit = objectValue(item);
+          const id = stringValue(credit?.id)?.trim();
+          const status = credit?.status;
+          if (
+            !id ||
+            (status !== 'available' &&
+              status !== 'redeeming' &&
+              status !== 'redeemed' &&
+              status !== 'unknown')
+          ) {
+            return [];
+          }
+          const expiresAt = numberValue(credit?.expiresAt);
+          return [
+            {
+              id,
+              status,
+              expiresAt:
+                expiresAt != null && expiresAt > 0
+                  ? new Date(expiresAt * 1000).toISOString()
+                  : null,
+            },
+          ];
+        })
+      : null,
   };
 }
 
@@ -126,4 +162,8 @@ function objectValue(value: unknown): Record<string, unknown> | null {
 
 function numberValue(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
 }

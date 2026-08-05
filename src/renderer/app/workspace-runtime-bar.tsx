@@ -91,6 +91,7 @@ import { WorkspaceResourceTrend } from './workspace-resource-trend';
 import {
   getAccountUsageThresholdAlert,
   getDistinctAgentTaskTitle,
+  getNextAccountResetCredit,
   getQuotaWindowLabel,
 } from './workspace-runtime-bar-format';
 
@@ -371,6 +372,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     [accountUsage, sessionContext?.rateLimits]
   );
   const shortAccountWindow = accountRateLimits[0] ?? null;
+  const nextAccountResetCredit = getNextAccountResetCredit(accountUsage?.resetCredits);
   const accountUsageWarningEnabled = notificationSettings?.accountUsageWarningEnabled ?? true;
   const accountUsageWarningThreshold = notificationSettings?.accountUsageWarningThreshold ?? 95;
   useEffect(() => {
@@ -585,7 +587,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     if (!runtimeId || runtimeId !== 'codex' || connectionId) return;
     setIsResettingAccountUsage(true);
     try {
-      const result = await rpc.runtimeSettings.resetAccountUsage(runtimeId);
+      const result = await rpc.runtimeSettings.resetAccountUsage(runtimeId, {
+        creditId: nextAccountResetCredit?.id,
+      });
       if (result.error || !result.outcome) {
         toast.error(t('workspaceRuntime.accountUsageResetFailed'));
         return;
@@ -606,17 +610,21 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     } finally {
       setIsResettingAccountUsage(false);
     }
-  }, [connectionId, refreshAccountUsageQuery, runtimeId, t, toast]);
+  }, [connectionId, nextAccountResetCredit?.id, refreshAccountUsageQuery, runtimeId, t, toast]);
 
   const confirmAccountUsageReset = useCallback(() => {
     showConfirmActionModal({
       title: t('workspaceRuntime.confirmAccountUsageResetTitle'),
-      description: t('workspaceRuntime.confirmAccountUsageResetDescription'),
+      description: nextAccountResetCredit?.expiresAt
+        ? t('workspaceRuntime.confirmAccountUsageResetDescriptionWithExpiry', {
+            time: formatAccountResetCreditExpiry(nextAccountResetCredit.expiresAt),
+          })
+        : t('workspaceRuntime.confirmAccountUsageResetDescription'),
       confirmLabel: t('workspaceRuntime.resetAccountUsage'),
       variant: 'default',
       onSuccess: () => void resetAccountUsage(),
     });
-  }, [resetAccountUsage, showConfirmActionModal, t]);
+  }, [nextAccountResetCredit?.expiresAt, resetAccountUsage, showConfirmActionModal, t]);
 
   const commitAccountUsageWarningThreshold = () => {
     const threshold = Number(accountUsageWarningThresholdDraft);
@@ -1088,18 +1096,46 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   ) : null}
                   {runtimeId === 'codex' && !connectionId ? (
                     <div className="border-t border-border px-3 py-2.5 text-xs">
-                      <span className="text-foreground-passive">
-                        {t('workspaceRuntime.accountResetCredits')}
-                      </span>
-                      <span className="float-right font-mono tabular-nums text-foreground">
-                        {accountUsage?.resetCreditsAvailable != null
-                          ? t('workspaceRuntime.accountResetCreditsCount', {
-                              count: accountUsage.resetCreditsAvailable,
-                            })
-                          : accountUsage?.error
-                            ? t('workspaceRuntime.accountResetCreditsFailed')
-                            : t('workspaceRuntime.accountResetCreditsLoading')}
-                      </span>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-foreground-passive">
+                          {t('workspaceRuntime.accountResetCredits')}
+                        </span>
+                        <span className="font-mono tabular-nums text-foreground">
+                          {accountUsage?.resetCreditsAvailable != null
+                            ? t('workspaceRuntime.accountResetCreditsCount', {
+                                count: accountUsage.resetCreditsAvailable,
+                              })
+                            : accountUsage?.error
+                              ? t('workspaceRuntime.accountResetCreditsFailed')
+                              : t('workspaceRuntime.accountResetCreditsLoading')}
+                        </span>
+                      </div>
+                      {accountUsage?.resetCreditsAvailable != null &&
+                      accountUsage.resetCreditsAvailable > 0 ? (
+                        <div className="mt-1.5 flex items-center justify-between gap-3">
+                          <span className="text-foreground-passive">
+                            {t('workspaceRuntime.accountResetCreditExpiry')}
+                          </span>
+                          <span
+                            className="text-right font-mono tabular-nums text-foreground"
+                            title={
+                              nextAccountResetCredit?.expiresAt
+                                ? new Date(nextAccountResetCredit.expiresAt).toLocaleString()
+                                : undefined
+                            }
+                          >
+                            {nextAccountResetCredit?.expiresAt
+                              ? t('workspaceRuntime.accountResetCreditExpiresAt', {
+                                  time: formatAccountResetCreditExpiry(
+                                    nextAccountResetCredit.expiresAt
+                                  ),
+                                })
+                              : nextAccountResetCredit
+                                ? t('workspaceRuntime.accountResetCreditNoExpiry')
+                                : t('workspaceRuntime.accountResetCreditExpiryUnknown')}
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                   <div className="border-t border-border p-3">
@@ -1778,6 +1814,15 @@ function formatResetCountdown(value: string): string {
   if (remainingHours < 48) return formatter.format(remainingHours, 'hour');
 
   return formatter.format(Math.ceil(remainingHours / 24), 'day');
+}
+
+function formatAccountResetCreditExpiry(value: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
 }
 
 function getUsageTone(percent: number): string {
