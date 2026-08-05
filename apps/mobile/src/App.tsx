@@ -4003,24 +4003,18 @@ function TaskRow({
   task: MobileTaskSummary;
   onPress: () => void;
 }) {
-  const bootstrap =
-    task.bootstrapStatus.status === 'bootstrapping'
-      ? 'Booting'
-      : task.bootstrapStatus.status === 'error'
-        ? 'Error'
-        : task.bootstrapStatus.status === 'ready'
-          ? 'Ready'
-          : 'Idle';
+  const sessionCountLabel = `${task.conversationCount} ${task.conversationCount === 1 ? 'session' : 'sessions'}`;
 
   return (
     <Pressable
       accessibilityLabel={`Open task ${task.name}`}
       accessibilityRole="button"
+      testID={`mobile-task-card-two-line-v1-${task.id}`}
       style={({ pressed }) => [styles.taskRow, pressed ? styles.buttonPressed : null]}
       onPress={onPress}
     >
       <View style={styles.taskTopLine}>
-        <Text style={styles.taskName} numberOfLines={2}>
+        <Text style={styles.taskName} numberOfLines={1}>
           {task.name}
         </Text>
         <View style={[styles.statusPill, { borderColor: statusColor(task.activityStatus) }]}>
@@ -4029,20 +4023,16 @@ function TaskRow({
           </Text>
         </View>
       </View>
-      <Text style={styles.taskProject} numberOfLines={1}>
-        {projectLabel}
-      </Text>
-      <View style={styles.taskMetaLine}>
-        <MetaItem icon="pulse-outline" label={bootstrap} />
-        <MetaItem icon="chatbubbles-outline" label={`${task.conversationCount} sessions`} />
-        <MetaItem
-          icon="time-outline"
-          label={formatTimestamp(task.lastInteractedAt ?? task.updatedAt)}
-        />
-      </View>
-      <View style={styles.rowDisclosure}>
-        <Text style={styles.rowDisclosureText}>Sessions</Text>
-        <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={16} />
+      <View style={styles.taskSummaryLine}>
+        <Text style={styles.taskProject} numberOfLines={1}>
+          {projectLabel}
+        </Text>
+        <View style={styles.taskSummaryMeta}>
+          <Text style={styles.taskSummaryText} numberOfLines={1}>
+            {sessionCountLabel} · {formatTimestamp(task.lastInteractedAt ?? task.updatedAt)}
+          </Text>
+          <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={16} />
+        </View>
       </View>
     </Pressable>
   );
@@ -5102,8 +5092,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.line,
     borderRadius: 8,
     backgroundColor: COLORS.surface,
-    padding: 14,
-    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 7,
   },
   projectDirectoryRow: {
     minHeight: 72,
@@ -5182,9 +5173,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 21,
   },
+  taskSummaryLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   taskProject: {
+    minWidth: 0,
+    flex: 1,
     color: COLORS.muted,
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  taskSummaryMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  taskSummaryText: {
+    color: COLORS.muted,
+    fontSize: 12,
     fontWeight: '600',
   },
   taskMetaLine: {
