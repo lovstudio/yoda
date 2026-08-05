@@ -20,6 +20,7 @@ function prompt(id: string, content: string, enabled: boolean, order: number): P
     extraInfo: '',
     injectionEnabled: enabled,
     injectionOrder: order,
+    version: '1.0.0',
     createdAt: '2026-07-27T00:00:00.000Z',
     updatedAt: '2026-07-27T00:00:00.000Z',
   };

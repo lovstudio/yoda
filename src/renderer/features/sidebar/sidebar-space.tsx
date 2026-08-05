@@ -4,6 +4,7 @@ import { NavButtons, NavIconButton } from '@renderer/lib/components/nav-buttons'
 import { useWorkspaceLayoutContext } from '@renderer/lib/layout/layout-provider';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
+import { ProjectsSettingsMenu } from './projects-group-label';
 
 export function SidebarSpace() {
   const { t } = useTranslation();
@@ -11,6 +12,7 @@ export function SidebarSpace() {
   return (
     <div className="[-webkit-app-region:drag] flex h-10 w-full items-center justify-end px-2">
       <NavButtons>
+        <ProjectsSettingsMenu renderTrigger={(props) => <NavIconButton {...props} />} />
         <Tooltip>
           <TooltipTrigger
             render={<NavIconButton onClick={() => setCollapsed('left', isLeftOpen)} />}

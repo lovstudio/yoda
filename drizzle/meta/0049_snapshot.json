@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c89eaff6-2021-4055-8338-b299e328c015",
-  "prevId": "428dc949-829b-42c6-a101-4d9388c64555",
+  "id": "c3389ee0-7231-4fe2-a59a-ded9fb543546",
+  "prevId": "c89eaff6-2021-4055-8338-b299e328c015",
   "tables": {
     "agent_teams": {
       "name": "agent_teams",
@@ -1876,6 +1876,13 @@
           "type": "text",
           "primaryKey": true,
           "notNull": true,
+          "autoincrement": false
+        },
+        "parent_name": {
+          "name": "parent_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "sort_order": {

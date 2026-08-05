@@ -276,6 +276,36 @@ describe('terminal file links', () => {
     });
   });
 
+  it('treats a local file URI as a file path', () => {
+    const text =
+      'file:///Users/mark/.codex/generated_images/019fcba6-bfdb-7063-bde0-3b7def1f9245/exec-de539056-b836-40a4-afeb-fc4e247d8e87.png';
+    const line = `生成结果：${text}`;
+    const terminal = makeTerminal([line]);
+
+    expect(extractTerminalFileLinkCandidates(line)).toEqual([{ text, index: line.indexOf(text) }]);
+    expect(
+      getTerminalFileLinkMatches(terminal, 1, {
+        workspaceRoot: '/Users/mark/lovstudio/coding/yoda',
+        onOpen: (): void => undefined,
+      })
+    ).toEqual([
+      {
+        range: {
+          start: { x: line.indexOf(text) + 1, y: 1 },
+          end: { x: line.indexOf(text) + text.length, y: 1 },
+        },
+        text,
+        target: {
+          originalText: text,
+          absolutePath:
+            '/Users/mark/.codex/generated_images/019fcba6-bfdb-7063-bde0-3b7def1f9245/exec-de539056-b836-40a4-afeb-fc4e247d8e87.png',
+          line: undefined,
+          column: undefined,
+        },
+      },
+    ]);
+  });
+
   it('drops a trailing sentence period after the extension', () => {
     const line = 'output/手工川-会话实时摘要机制-2026-06-09-v0.1.md.';
     const expected = 'output/手工川-会话实时摘要机制-2026-06-09-v0.1.md';

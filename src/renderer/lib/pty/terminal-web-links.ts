@@ -12,7 +12,7 @@ import { isTerminalLinkCellInRange, type TerminalLinkCellPosition } from './term
 // candidate so balanced URL content can be distinguished from surrounding
 // prose below.
 const URL_REGEX =
-  /(?:https?|HTTPS?|ftp|FTP|file|FILE):\/\/[^\s"'<>`、，。；：！？（）「」『』【】〈〉《》“”‘’]+/g;
+  /(?:https?|HTTPS?|ftp|FTP):\/\/[^\s"'<>`、，。；：！？（）「」『』【】〈〉《》“”‘’]+/g;
 const TRAILING_URL_PUNCTUATION_RE = /[.,;:!?]+$/u;
 type AsciiOpeningDelimiter = '(' | '[' | '{';
 const ASCII_CLOSING_DELIMITERS: Readonly<Record<string, AsciiOpeningDelimiter>> = {
@@ -39,7 +39,7 @@ const TABLE_CONTEXT_MAX_DISTANCE = 24;
 // these literally, where only the bare URL inside the parens was clickable.
 // Match the whole span so the label is clickable too; the captured group is the
 // URL to open. Titles (`[label](url "title")`) fall back to the bare-URL match.
-const MARKDOWN_LINK_REGEX = /(!?)\[[^\]\n]*\]\(((?:https?|ftp|file):\/\/[^\s)]+)\)/gi;
+const MARKDOWN_LINK_REGEX = /(!?)\[[^\]\n]*\]\(((?:https?|ftp):\/\/[^\s)]+)\)/gi;
 
 interface TerminalWebLinkCandidate {
   url: string;

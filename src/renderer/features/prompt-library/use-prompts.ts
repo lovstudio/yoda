@@ -6,11 +6,13 @@ import type {
   PromptCreateInput,
   PromptGroup,
   PromptUpdateInput,
+  PromptVersionBump,
 } from '@shared/prompt-library';
 import { events, rpc } from '@renderer/lib/ipc';
 
 export const promptsQueryKey = ['prompts'] as const;
 export const promptGroupsQueryKey = ['promptGroups'] as const;
+export const promptVersionsQueryKey = (id: string) => ['promptVersions', id] as const;
 
 export function usePrompts() {
   const queryClient = useQueryClient();
@@ -39,6 +41,13 @@ export function usePromptGroups() {
   return useQuery({
     queryKey: promptGroupsQueryKey,
     queryFn: () => rpc.promptLibrary.listGroups(),
+  });
+}
+
+export function usePromptVersions(id: string) {
+  return useQuery({
+    queryKey: promptVersionsQueryKey(id),
+    queryFn: () => rpc.promptLibrary.listVersions(id),
   });
 }
 
@@ -105,6 +114,18 @@ export function useUpdatePrompt() {
       rpc.promptLibrary.update(id, patch),
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: promptsQueryKey });
+    },
+  });
+}
+
+export function useRestorePromptVersion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, version, bump }: { id: string; version: string; bump: PromptVersionBump }) =>
+      rpc.promptLibrary.restoreVersion(id, version, bump),
+    onSettled: (_data, _error, input) => {
+      void queryClient.invalidateQueries({ queryKey: promptsQueryKey });
+      void queryClient.invalidateQueries({ queryKey: promptVersionsQueryKey(input.id) });
     },
   });
 }

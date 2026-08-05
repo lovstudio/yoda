@@ -10,6 +10,7 @@ import { SettingsPanel } from '@renderer/features/projects/components/settings-v
 import { TaskList } from '@renderer/features/projects/components/task-view/task-list';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import type { ProjectView } from '@renderer/features/projects/stores/project-view';
+import { PromptLibraryPanel } from '@renderer/features/prompt-library/prompt-library-panel';
 import { useParams } from '@renderer/lib/layout/navigation-provider';
 
 /**
@@ -36,6 +37,7 @@ export const ActiveProject = observer(function ActiveProject() {
         {activeView === 'pullRequests' && <PullRequestView />}
         {activeView === 'sessions' && <ProjectSessionsPanel />}
         {activeView === 'harness' && <HarnessPanel />}
+        {activeView === 'prompts' && <PromptLibraryPanel projectId={projectId} />}
         {activeView === 'docs' && <DocsPanel projectId={projectId} />}
         {activeView === 'settings' && <SettingsPanel />}
       </div>

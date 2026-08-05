@@ -14,6 +14,7 @@ import { log } from '@main/lib/logger';
 import { iterateLines } from '@main/utils/text-lines';
 import { resolveTask } from '../projects/utils';
 import { findClaudeTranscriptPathBySessionId } from './claude-transcript-locator';
+import { getReservedCodexThreadIds } from './codex-thread-reservations';
 import { getConversationRuntimeStateRoot } from './conversation-session-source';
 import { getCodexSessionContext } from './getCodexSessionContext';
 import { mapConversationRowToConversation } from './utils';
@@ -284,12 +285,16 @@ async function resolveTranscriptPath(
   if (conversation.runtimeId === 'codex' && cwd) {
     const providerConfig = await runtimeOverrideSettings.getItem('codex');
     const stateRoot = getConversationRuntimeStateRoot(conversation, providerConfig);
+    const reservedThreadIds = await getReservedCodexThreadIds(conversation.id);
     const context = await getCodexSessionContext(
       cwd,
       conversation.sessionSource?.sessionId ?? conversation.id,
       conversation.title,
       conversation.createdAt ?? null,
-      stateRoot ? { codexHome: stateRoot } : undefined
+      {
+        ...(stateRoot ? { codexHome: stateRoot } : {}),
+        reservedThreadIds,
+      }
     ).catch(() => null);
     return context?.rolloutPath ?? null;
   }

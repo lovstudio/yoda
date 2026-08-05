@@ -1,10 +1,15 @@
 import { createRPCController } from '@shared/ipc/rpc';
-import type { PromptCreateInput, PromptUpdateInput } from '@shared/prompt-library';
+import type {
+  PromptCreateInput,
+  PromptUpdateInput,
+  PromptVersionBump,
+} from '@shared/prompt-library';
 import { promptLibraryService } from './prompt-library-service';
 import { promptSourceService } from './prompt-source-service';
 
 export const promptLibraryController = createRPCController({
   list: () => promptLibraryService.list(),
+  listVersions: (id: string) => promptLibraryService.listVersions(id),
   listGroups: () => promptLibraryService.listGroups(),
   createGroup: (name: string, parentName?: string | null) =>
     promptLibraryService.createGroup(name, parentName),
@@ -26,6 +31,11 @@ export const promptLibraryController = createRPCController({
   },
   update: async (id: string, patch: PromptUpdateInput) => {
     const prompt = await promptLibraryService.update(id, patch);
+    await promptSourceService.reconcile();
+    return prompt;
+  },
+  restoreVersion: async (id: string, version: string, bump: PromptVersionBump) => {
+    const prompt = await promptLibraryService.restoreVersion(id, version, bump);
     await promptSourceService.reconcile();
     return prompt;
   },

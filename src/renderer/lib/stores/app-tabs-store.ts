@@ -102,6 +102,7 @@ export const PROJECT_PAGE_VIEWS = [
   'pullRequests',
   'sessions',
   'harness',
+  'prompts',
   'docs',
   'settings',
 ] as const;

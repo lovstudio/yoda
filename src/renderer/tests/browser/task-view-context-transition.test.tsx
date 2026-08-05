@@ -1,3 +1,5 @@
+import { observable, runInAction } from 'mobx';
+import { observer } from 'mobx-react-lite';
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -161,6 +163,54 @@ describe('TaskViewWrapper snapshot transitions', () => {
           <ReadyGuard />
         </TaskViewWrapper>
       );
+    });
+    expect(host.textContent).toBe('task-a:second:task-a:second');
+  });
+
+  it('keeps MobX-driven ready consumers isolated throughout teardown and reprovision', async () => {
+    const state = observable<{
+      kind: 'ready' | 'teardown';
+      provisionedTask: ProvisionedTask | null;
+    }>({
+      kind: 'ready',
+      provisionedTask: task('task-a:first'),
+    });
+    const Owner = observer(function Owner() {
+      if (state.kind !== 'ready' || !state.provisionedTask) {
+        return (
+          <TaskViewWrapper projectId="project-1" taskId="task-a" kind="teardown">
+            <ReadyGuard />
+          </TaskViewWrapper>
+        );
+      }
+      return (
+        <TaskViewWrapper
+          projectId="project-1"
+          taskId="task-a"
+          kind="ready"
+          provisionedTask={state.provisionedTask}
+        >
+          <ReadyGuard />
+        </TaskViewWrapper>
+      );
+    });
+
+    await act(async () => root.render(<Owner />));
+    expect(host.textContent).toBe('task-a:first:task-a:first');
+
+    await act(async () => {
+      runInAction(() => {
+        state.kind = 'teardown';
+        state.provisionedTask = null;
+      });
+    });
+    expect(host.textContent).toBe('not-ready');
+
+    await act(async () => {
+      runInAction(() => {
+        state.provisionedTask = task('task-a:second');
+        state.kind = 'ready';
+      });
     });
     expect(host.textContent).toBe('task-a:second:task-a:second');
   });
