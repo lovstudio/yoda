@@ -303,7 +303,11 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               label={markerLabel}
               className={cn(
                 'absolute left-1 top-1/2 -translate-y-1/2',
-                hasRootToggle && 'transition-opacity group-hover/row:opacity-0'
+                // The appearance marker and the root disclosure share the
+                // reserved icon slot. Opacity alone does not remove the marker
+                // from hit testing while it fades, so let pointer input reach
+                // the disclosure button underneath.
+                hasRootToggle && 'pointer-events-none transition-opacity group-hover/row:opacity-0'
               )}
             />
           )}
