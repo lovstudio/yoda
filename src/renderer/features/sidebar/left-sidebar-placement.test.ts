@@ -18,6 +18,12 @@ describe('LeftSidebar app placement', () => {
     expect(source.slice(pinnedAppsIndex)).toContain('viewId="marketplace"');
   });
 
+  it('does not mix view options into the fixed navigation list', () => {
+    const source = readFileSync(new URL('./left-sidebar.tsx', import.meta.url), 'utf8');
+
+    expect(source).not.toContain('ProjectsSettingsMenu');
+  });
+
   it('keeps the primary creation entry as a new task in every view', () => {
     const source = readFileSync(new URL('./left-sidebar.tsx', import.meta.url), 'utf8');
 

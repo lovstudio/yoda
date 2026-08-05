@@ -291,9 +291,9 @@ function stripDragPayload(tab: AppTabEntry): TabDragPayload {
 
 /**
  * Per-tab dismiss behavior for the × slot. Session tabs dismiss by archiving
- * (mirroring the task's archive button — the pre-archive command runs, and the
- * session leaves the strip for good); every other tab plainly closes. The
- * plain-close path for session tabs stays available via the context menu.
+ * directly; running the pre-archive skill remains an explicit choice in the
+ * context menu. Every other tab plainly closes. The plain-close path for
+ * session tabs also stays available via the context menu.
  */
 function describeDismiss(
   tab: AppTabEntry,
@@ -316,7 +316,9 @@ function describeDismiss(
       ),
       pending: isArchiving,
       onDismiss: () => {
-        void archiveConversationFlow(projectId, taskId, conversationId).catch((error: unknown) => {
+        void archiveConversationFlow(projectId, taskId, conversationId, {
+          skipPreCommand: true,
+        }).catch((error: unknown) => {
           log.warn('AppTabStrip: archive conversation failed', {
             projectId,
             taskId,
@@ -379,9 +381,8 @@ const AppTab = observer(function AppTab({
       }}
     >
       {/* One leading slot: the icon morphs into the close action on hover —
-          or persistently while dismissal is pending (e.g. a session archiving
-          through its pre-archive command) — so tabs never spend an extra slot
-          on a trailing ×. */}
+          or persistently while dismissal is pending (e.g. a session being
+          archived) — so tabs never spend an extra slot on a trailing ×. */}
       <span className="relative flex size-4 shrink-0 items-center justify-center">
         <span
           className={cn(
