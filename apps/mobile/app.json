@@ -25,6 +25,7 @@
       "expo-localization"
     ],
     "ios": {
+      "appleTeamId": "SR95DUC5MJ",
       "bundleIdentifier": "ai.lovstudio.yoda.mobile",
       "requireFullScreen": true,
       "supportsTablet": true,
