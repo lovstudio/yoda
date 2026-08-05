@@ -35,7 +35,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import React, { useId, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES,
@@ -63,6 +63,7 @@ import {
 } from '@renderer/lib/ui/dropdown-menu';
 import { Input } from '@renderer/lib/ui/input';
 import { Switch } from '@renderer/lib/ui/switch';
+import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab } from '@renderer/lib/ui/tabs';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
 import { ProjectPromptSection } from './project-prompt-section';
@@ -96,6 +97,8 @@ type PromptDraft = {
   injectionEnabled: boolean;
   source?: PromptSource;
 };
+
+type PromptLibraryScope = 'global' | 'project' | 'dynamic';
 
 type SourceForm =
   | { type: 'url'; url: string; refreshMinutes: string; timeoutSeconds: string }
@@ -283,7 +286,14 @@ function SortablePromptRow({
   );
 }
 
-export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean }) {
+export function PromptLibraryPanel({
+  embedded = false,
+  projectId,
+}: {
+  embedded?: boolean;
+  /** Preselects the project-scoped instruction and opens the project tab. */
+  projectId?: string;
+}) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const showConfirm = useShowModal('confirmActionModal');
@@ -315,7 +325,16 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
   const [activeRuntimeId, setActiveRuntimeId] = useState<RuntimeId | null>(null);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projectId ?? null);
+  const [activeScope, setActiveScope] = useState<PromptLibraryScope>(
+    projectId ? 'project' : 'dynamic'
+  );
+
+  useEffect(() => {
+    if (!projectId) return;
+    setSelectedProjectId(projectId);
+    setActiveScope('project');
+  }, [projectId]);
 
   const items = useMemo(() => data ?? [], [data]);
   const groups = useMemo(
@@ -647,799 +666,841 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
           <h1 className="text-4xl font-normal tracking-normal">{t('promptLibrary.title')}</h1>
         )}
 
-        <PromptLibraryChapter
-          dataSlot="prompt-collection-section"
-          className={cn(embedded ? 'mt-6' : 'mt-8')}
-          icon={LibraryBig}
-          title={t('promptLibrary.collection.title')}
-          description={t('promptLibrary.collection.description')}
-          actions={
-            <div className="flex flex-wrap items-center gap-2 @3xl:justify-end">
-              <Button type="button" variant="outline" size="sm" onClick={openCreate}>
-                <Plus className="size-4" />
-                {t('promptLibrary.source.manual')}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void handleFileImport()}
-                disabled={sourceLoading}
-              >
-                <FileText className="size-4" />
-                {t('promptLibrary.source.file')}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setSourceForm({
-                    type: 'url',
-                    url: '',
-                    refreshMinutes: DEFAULT_REFRESH,
-                    timeoutSeconds: DEFAULT_TIMEOUT,
-                  })
-                }
-              >
-                <Link className="size-4" />
-                {t('promptLibrary.source.url')}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setSourceForm({
-                    type: 'git',
-                    repositoryUrl: '',
-                    filePath: '',
-                    ref: '',
-                    refreshMinutes: DEFAULT_REFRESH,
-                    timeoutSeconds: DEFAULT_TIMEOUT,
-                  })
-                }
-              >
-                <GitBranch className="size-4" />
-                {t('promptLibrary.source.git')}
-              </Button>
-            </div>
-          }
+        <Tabs
+          value={activeScope}
+          onValueChange={(value) => setActiveScope(value as PromptLibraryScope)}
+          className={cn(embedded ? 'mt-4' : 'mt-6')}
         >
-          {sourceForm || editorOpen ? (
-            <div className="grid gap-3">
-              {sourceForm && (
-                <form
-                  onSubmit={handleSourceImport}
-                  className="grid gap-3 rounded-lg border border-border bg-background-secondary p-3"
-                >
-                  {sourceForm.type === 'url' ? (
-                    <label className="grid gap-1.5">
-                      <span className="text-xs text-foreground-muted">
-                        {t('promptLibrary.source.urlLabel')}
-                      </span>
-                      <Input
-                        value={sourceForm.url}
-                        onChange={(event) =>
-                          setSourceForm((current) =>
-                            current?.type === 'url'
-                              ? { ...current, url: event.target.value }
-                              : current
-                          )
-                        }
-                        placeholder={t('promptLibrary.source.urlPlaceholder')}
-                        autoFocus
-                      />
-                    </label>
-                  ) : (
-                    <>
-                      <label className="grid gap-1.5">
-                        <span className="text-xs text-foreground-muted">
-                          {t('promptLibrary.source.repository')}
-                        </span>
-                        <Input
-                          value={sourceForm.repositoryUrl}
-                          onChange={(event) =>
-                            setSourceForm((current) =>
-                              current?.type === 'git'
-                                ? { ...current, repositoryUrl: event.target.value }
-                                : current
-                            )
-                          }
-                          placeholder="https://github.com/owner/repository.git"
-                          autoFocus
-                        />
-                      </label>
-                      <div className="grid gap-3 @2xl:grid-cols-[1fr_180px]">
+          <TabsList aria-label={t('promptLibrary.tabs.ariaLabel')} className="w-full max-w-md">
+            <TabsIndicator />
+            <TabsTab value="global">{t('promptLibrary.tabs.global')}</TabsTab>
+            <TabsTab value="project">{t('promptLibrary.tabs.project')}</TabsTab>
+            <TabsTab value="dynamic">{t('promptLibrary.tabs.dynamic')}</TabsTab>
+          </TabsList>
+
+          <TabsPanel value="global">
+            <PromptRuntimeSelector
+              runtimeId={activeRuntimeId}
+              onRuntimeIdChange={setActiveRuntimeId}
+            />
+            <UserInstructionSection runtimeId={activeRuntimeId} />
+          </TabsPanel>
+
+          <TabsPanel value="project">
+            <PromptRuntimeSelector
+              runtimeId={activeRuntimeId}
+              onRuntimeIdChange={setActiveRuntimeId}
+            />
+            <ProjectPromptSection
+              projectId={selectedProjectId}
+              runtimeId={activeRuntimeId}
+              onProjectIdChange={setSelectedProjectId}
+            />
+          </TabsPanel>
+
+          <TabsPanel value="dynamic">
+            <PromptLibraryChapter
+              dataSlot="prompt-collection-section"
+              className="mt-4"
+              icon={LibraryBig}
+              title={t('promptLibrary.collection.title')}
+              description={t('promptLibrary.collection.description')}
+              actions={
+                <div className="flex flex-wrap items-center gap-2 @3xl:justify-end">
+                  <Button type="button" variant="outline" size="sm" onClick={openCreate}>
+                    <Plus className="size-4" />
+                    {t('promptLibrary.source.manual')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleFileImport()}
+                    disabled={sourceLoading}
+                  >
+                    <FileText className="size-4" />
+                    {t('promptLibrary.source.file')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setSourceForm({
+                        type: 'url',
+                        url: '',
+                        refreshMinutes: DEFAULT_REFRESH,
+                        timeoutSeconds: DEFAULT_TIMEOUT,
+                      })
+                    }
+                  >
+                    <Link className="size-4" />
+                    {t('promptLibrary.source.url')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setSourceForm({
+                        type: 'git',
+                        repositoryUrl: '',
+                        filePath: '',
+                        ref: '',
+                        refreshMinutes: DEFAULT_REFRESH,
+                        timeoutSeconds: DEFAULT_TIMEOUT,
+                      })
+                    }
+                  >
+                    <GitBranch className="size-4" />
+                    {t('promptLibrary.source.git')}
+                  </Button>
+                </div>
+              }
+            >
+              {sourceForm || editorOpen ? (
+                <div className="grid gap-3">
+                  {sourceForm && (
+                    <form
+                      onSubmit={handleSourceImport}
+                      className="grid gap-3 rounded-lg border border-border bg-background-secondary p-3"
+                    >
+                      {sourceForm.type === 'url' ? (
                         <label className="grid gap-1.5">
                           <span className="text-xs text-foreground-muted">
-                            {t('promptLibrary.source.filePath')}
+                            {t('promptLibrary.source.urlLabel')}
                           </span>
                           <Input
-                            value={sourceForm.filePath}
+                            value={sourceForm.url}
                             onChange={(event) =>
                               setSourceForm((current) =>
-                                current?.type === 'git'
-                                  ? { ...current, filePath: event.target.value }
+                                current?.type === 'url'
+                                  ? { ...current, url: event.target.value }
                                   : current
                               )
                             }
-                            placeholder="prompts/review.md"
+                            placeholder={t('promptLibrary.source.urlPlaceholder')}
+                            autoFocus
+                          />
+                        </label>
+                      ) : (
+                        <>
+                          <label className="grid gap-1.5">
+                            <span className="text-xs text-foreground-muted">
+                              {t('promptLibrary.source.repository')}
+                            </span>
+                            <Input
+                              value={sourceForm.repositoryUrl}
+                              onChange={(event) =>
+                                setSourceForm((current) =>
+                                  current?.type === 'git'
+                                    ? { ...current, repositoryUrl: event.target.value }
+                                    : current
+                                )
+                              }
+                              placeholder="https://github.com/owner/repository.git"
+                              autoFocus
+                            />
+                          </label>
+                          <div className="grid gap-3 @2xl:grid-cols-[1fr_180px]">
+                            <label className="grid gap-1.5">
+                              <span className="text-xs text-foreground-muted">
+                                {t('promptLibrary.source.filePath')}
+                              </span>
+                              <Input
+                                value={sourceForm.filePath}
+                                onChange={(event) =>
+                                  setSourceForm((current) =>
+                                    current?.type === 'git'
+                                      ? { ...current, filePath: event.target.value }
+                                      : current
+                                  )
+                                }
+                                placeholder="prompts/review.md"
+                              />
+                            </label>
+                            <label className="grid gap-1.5">
+                              <span className="text-xs text-foreground-muted">
+                                {t('promptLibrary.source.ref')}
+                              </span>
+                              <Input
+                                value={sourceForm.ref}
+                                onChange={(event) =>
+                                  setSourceForm((current) =>
+                                    current?.type === 'git'
+                                      ? { ...current, ref: event.target.value }
+                                      : current
+                                  )
+                                }
+                                placeholder="main"
+                              />
+                            </label>
+                          </div>
+                        </>
+                      )}
+                      <div className="grid gap-3 @2xl:grid-cols-2">
+                        <label className="grid gap-1.5">
+                          <span className="text-xs text-foreground-muted">
+                            {t('promptLibrary.source.refreshInterval')}
+                          </span>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={sourceForm.refreshMinutes}
+                            onChange={(event) =>
+                              setSourceForm((current) =>
+                                current
+                                  ? { ...current, refreshMinutes: event.target.value }
+                                  : current
+                              )
+                            }
                           />
                         </label>
                         <label className="grid gap-1.5">
                           <span className="text-xs text-foreground-muted">
-                            {t('promptLibrary.source.ref')}
+                            {t('promptLibrary.source.timeout')}
                           </span>
                           <Input
-                            value={sourceForm.ref}
+                            type="number"
+                            min={1}
+                            value={sourceForm.timeoutSeconds}
                             onChange={(event) =>
                               setSourceForm((current) =>
-                                current?.type === 'git'
-                                  ? { ...current, ref: event.target.value }
+                                current
+                                  ? { ...current, timeoutSeconds: event.target.value }
                                   : current
                               )
                             }
-                            placeholder="main"
                           />
                         </label>
                       </div>
-                    </>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSourceForm(null)}
+                        >
+                          {t('common.cancel')}
+                        </Button>
+                        <Button
+                          type="submit"
+                          size="sm"
+                          disabled={
+                            sourceLoading ||
+                            (sourceForm.type === 'url'
+                              ? !sourceForm.url.trim()
+                              : !sourceForm.repositoryUrl.trim() || !sourceForm.filePath.trim())
+                          }
+                        >
+                          {sourceLoading ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : sourceForm.type === 'url' ? (
+                            <Link className="size-4" />
+                          ) : (
+                            <GitBranch className="size-4" />
+                          )}
+                          {t('promptLibrary.source.load')}
+                        </Button>
+                      </div>
+                    </form>
                   )}
-                  <div className="grid gap-3 @2xl:grid-cols-2">
-                    <label className="grid gap-1.5">
-                      <span className="text-xs text-foreground-muted">
-                        {t('promptLibrary.source.refreshInterval')}
-                      </span>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={sourceForm.refreshMinutes}
-                        onChange={(event) =>
-                          setSourceForm((current) =>
-                            current ? { ...current, refreshMinutes: event.target.value } : current
-                          )
-                        }
-                      />
-                    </label>
-                    <label className="grid gap-1.5">
-                      <span className="text-xs text-foreground-muted">
-                        {t('promptLibrary.source.timeout')}
-                      </span>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={sourceForm.timeoutSeconds}
-                        onChange={(event) =>
-                          setSourceForm((current) =>
-                            current ? { ...current, timeoutSeconds: event.target.value } : current
-                          )
-                        }
-                      />
-                    </label>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSourceForm(null)}
-                    >
-                      {t('common.cancel')}
-                    </Button>
-                    <Button
-                      type="submit"
-                      size="sm"
-                      disabled={
-                        sourceLoading ||
-                        (sourceForm.type === 'url'
-                          ? !sourceForm.url.trim()
-                          : !sourceForm.repositoryUrl.trim() || !sourceForm.filePath.trim())
-                      }
-                    >
-                      {sourceLoading ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : sourceForm.type === 'url' ? (
-                        <Link className="size-4" />
-                      ) : (
-                        <GitBranch className="size-4" />
-                      )}
-                      {t('promptLibrary.source.load')}
-                    </Button>
-                  </div>
-                </form>
-              )}
 
-              {editorOpen && (
-                <form
-                  ref={editorRef}
-                  data-slot="prompt-library-editor"
-                  onSubmit={handleSave}
-                  className="grid gap-3 rounded-lg border border-border bg-background-secondary p-3"
-                >
-                  {draft.source && (
-                    <div className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
-                      {draft.source.type === 'file' ? (
-                        <FileText className="size-4 shrink-0 text-foreground-muted" />
-                      ) : draft.source.type === 'url' ? (
-                        <Link className="size-4 shrink-0 text-foreground-muted" />
-                      ) : (
-                        <GitBranch className="size-4 shrink-0 text-foreground-muted" />
+                  {editorOpen && (
+                    <form
+                      ref={editorRef}
+                      data-slot="prompt-library-editor"
+                      onSubmit={handleSave}
+                      className="grid gap-3 rounded-lg border border-border bg-background-secondary p-3"
+                    >
+                      {draft.source && (
+                        <div className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
+                          {draft.source.type === 'file' ? (
+                            <FileText className="size-4 shrink-0 text-foreground-muted" />
+                          ) : draft.source.type === 'url' ? (
+                            <Link className="size-4 shrink-0 text-foreground-muted" />
+                          ) : (
+                            <GitBranch className="size-4 shrink-0 text-foreground-muted" />
+                          )}
+                          <span className="min-w-0 flex-1 truncate text-xs text-foreground-muted">
+                            {sourceTarget(draft.source)}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            onClick={() =>
+                              setDraft((current) => ({ ...current, source: undefined }))
+                            }
+                          >
+                            {t('promptLibrary.source.detach')}
+                          </Button>
+                        </div>
                       )}
-                      <span className="min-w-0 flex-1 truncate text-xs text-foreground-muted">
-                        {sourceTarget(draft.source)}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        onClick={() => setDraft((current) => ({ ...current, source: undefined }))}
-                      >
-                        {t('promptLibrary.source.detach')}
-                      </Button>
-                    </div>
+                      <div className="grid gap-3 @2xl:grid-cols-2">
+                        <label className="grid gap-1.5">
+                          <span className="text-xs text-foreground-muted">
+                            {t('promptLibrary.form.title')}
+                          </span>
+                          <Input
+                            value={draft.title}
+                            onChange={(event) =>
+                              setDraft((current) => ({ ...current, title: event.target.value }))
+                            }
+                            placeholder={t('promptLibrary.form.titlePlaceholder')}
+                            autoFocus
+                          />
+                        </label>
+                        <label className="grid gap-1.5">
+                          <span className="text-xs text-foreground-muted">
+                            {t('promptLibrary.form.group')}
+                          </span>
+                          <Input
+                            list={groupOptionsId}
+                            value={draft.groupName}
+                            onChange={(event) =>
+                              setDraft((current) => ({ ...current, groupName: event.target.value }))
+                            }
+                            placeholder={t('promptLibrary.form.groupPlaceholder')}
+                          />
+                          <datalist id={groupOptionsId}>
+                            {namedGroups.map((groupName) => (
+                              <option key={groupName} value={groupName} />
+                            ))}
+                          </datalist>
+                        </label>
+                      </div>
+                      <label className="grid gap-1.5">
+                        <span className="text-xs text-foreground-muted">
+                          {t('promptLibrary.form.description')}
+                        </span>
+                        <Input
+                          value={draft.description}
+                          onChange={(event) =>
+                            setDraft((current) => ({ ...current, description: event.target.value }))
+                          }
+                          placeholder={t('promptLibrary.form.descriptionPlaceholder')}
+                        />
+                      </label>
+                      <label className="grid gap-1.5">
+                        <span className="text-xs text-foreground-muted">
+                          {t('promptLibrary.form.content')}
+                        </span>
+                        <Textarea
+                          value={draft.content}
+                          onChange={(event) =>
+                            setDraft((current) => ({ ...current, content: event.target.value }))
+                          }
+                          readOnly={Boolean(draft.source)}
+                          placeholder={t('promptLibrary.form.contentPlaceholder')}
+                          className="min-h-40 resize-y font-mono"
+                        />
+                        {draft.source && (
+                          <span className="text-xs text-foreground-passive">
+                            {t('promptLibrary.source.readOnlyHint')}
+                          </span>
+                        )}
+                      </label>
+                      <label className="grid gap-1.5">
+                        <span className="text-xs text-foreground-muted">
+                          {t('promptLibrary.form.extraInfo')}
+                        </span>
+                        <Textarea
+                          value={draft.extraInfo}
+                          onChange={(event) =>
+                            setDraft((current) => ({ ...current, extraInfo: event.target.value }))
+                          }
+                          placeholder={t('promptLibrary.form.extraInfoPlaceholder')}
+                          className="min-h-20 resize-y"
+                        />
+                      </label>
+                      <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-background px-3 py-2.5">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">
+                            {t('promptLibrary.injection.enable')}
+                          </p>
+                          <p className="mt-0.5 text-xs text-foreground-muted">
+                            {t('promptLibrary.injection.enableHint')}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={draft.injectionEnabled}
+                          onCheckedChange={(checked) =>
+                            setDraft((current) => ({ ...current, injectionEnabled: checked }))
+                          }
+                        />
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button type="button" variant="ghost" size="sm" onClick={closeEditor}>
+                          <X className="size-4" />
+                          {t('common.cancel')}
+                        </Button>
+                        <Button
+                          type="submit"
+                          size="sm"
+                          disabled={!canSave || createPrompt.isPending || updatePrompt.isPending}
+                        >
+                          <Save className="size-4" />
+                          {editingId !== 'new' ? t('common.save') : t('common.create')}
+                        </Button>
+                      </div>
+                    </form>
                   )}
-                  <div className="grid gap-3 @2xl:grid-cols-2">
-                    <label className="grid gap-1.5">
-                      <span className="text-xs text-foreground-muted">
-                        {t('promptLibrary.form.title')}
-                      </span>
-                      <Input
-                        value={draft.title}
-                        onChange={(event) =>
-                          setDraft((current) => ({ ...current, title: event.target.value }))
-                        }
-                        placeholder={t('promptLibrary.form.titlePlaceholder')}
-                        autoFocus
-                      />
-                    </label>
-                    <label className="grid gap-1.5">
-                      <span className="text-xs text-foreground-muted">
-                        {t('promptLibrary.form.group')}
-                      </span>
-                      <Input
-                        list={groupOptionsId}
-                        value={draft.groupName}
-                        onChange={(event) =>
-                          setDraft((current) => ({ ...current, groupName: event.target.value }))
-                        }
-                        placeholder={t('promptLibrary.form.groupPlaceholder')}
-                      />
-                      <datalist id={groupOptionsId}>
-                        {namedGroups.map((groupName) => (
-                          <option key={groupName} value={groupName} />
-                        ))}
-                      </datalist>
-                    </label>
-                  </div>
-                  <label className="grid gap-1.5">
-                    <span className="text-xs text-foreground-muted">
-                      {t('promptLibrary.form.description')}
+                </div>
+              ) : null}
+            </PromptLibraryChapter>
+
+            <PromptLibraryChapter
+              dataSlot="prompt-list-section"
+              className="mt-6"
+              icon={ListTree}
+              title={t('promptLibrary.collection.all')}
+              description={t('promptLibrary.collection.allDescription')}
+              actions={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openGroupCreator()}
+                >
+                  <FolderPlus className="size-4" />
+                  {t('promptLibrary.groups.create')}
+                </Button>
+              }
+            >
+              {groupFormOpen && (
+                <form
+                  data-slot="prompt-group-form"
+                  onSubmit={handleCreateGroup}
+                  className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-background-secondary p-3"
+                >
+                  <label className="grid min-w-48 flex-1 gap-1.5">
+                    <span className="text-xs font-medium text-foreground">
+                      {moveAfterCreateId
+                        ? t('promptLibrary.groups.createAndMove')
+                        : t('promptLibrary.groups.create')}
                     </span>
                     <Input
-                      value={draft.description}
-                      onChange={(event) =>
-                        setDraft((current) => ({ ...current, description: event.target.value }))
-                      }
-                      placeholder={t('promptLibrary.form.descriptionPlaceholder')}
+                      value={newGroupName}
+                      onChange={(event) => setNewGroupName(event.target.value)}
+                      placeholder={t('promptLibrary.groups.namePlaceholder')}
+                      autoFocus
                     />
                   </label>
-                  <label className="grid gap-1.5">
-                    <span className="text-xs text-foreground-muted">
-                      {t('promptLibrary.form.content')}
-                    </span>
-                    <Textarea
-                      value={draft.content}
-                      onChange={(event) =>
-                        setDraft((current) => ({ ...current, content: event.target.value }))
-                      }
-                      readOnly={Boolean(draft.source)}
-                      placeholder={t('promptLibrary.form.contentPlaceholder')}
-                      className="min-h-40 resize-y font-mono"
-                    />
-                    {draft.source && (
-                      <span className="text-xs text-foreground-passive">
-                        {t('promptLibrary.source.readOnlyHint')}
-                      </span>
-                    )}
-                  </label>
-                  <label className="grid gap-1.5">
-                    <span className="text-xs text-foreground-muted">
-                      {t('promptLibrary.form.extraInfo')}
-                    </span>
-                    <Textarea
-                      value={draft.extraInfo}
-                      onChange={(event) =>
-                        setDraft((current) => ({ ...current, extraInfo: event.target.value }))
-                      }
-                      placeholder={t('promptLibrary.form.extraInfoPlaceholder')}
-                      className="min-h-20 resize-y"
-                    />
-                  </label>
-                  <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-background px-3 py-2.5">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">
-                        {t('promptLibrary.injection.enable')}
-                      </p>
-                      <p className="mt-0.5 text-xs text-foreground-muted">
-                        {t('promptLibrary.injection.enableHint')}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={draft.injectionEnabled}
-                      onCheckedChange={(checked) =>
-                        setDraft((current) => ({ ...current, injectionEnabled: checked }))
-                      }
-                    />
-                  </div>
-                  <div className="flex items-center justify-end gap-2">
-                    <Button type="button" variant="ghost" size="sm" onClick={closeEditor}>
-                      <X className="size-4" />
-                      {t('common.cancel')}
-                    </Button>
-                    <Button
-                      type="submit"
-                      size="sm"
-                      disabled={!canSave || createPrompt.isPending || updatePrompt.isPending}
-                    >
-                      <Save className="size-4" />
-                      {editingId !== 'new' ? t('common.save') : t('common.create')}
-                    </Button>
-                  </div>
+                  <Button type="button" variant="ghost" size="sm" onClick={closeGroupCreator}>
+                    {t('common.cancel')}
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={!canCreateGroup || createGroup.isPending}
+                  >
+                    <FolderPlus className="size-4" />
+                    {moveAfterCreateId
+                      ? t('promptLibrary.groups.createAndMoveAction')
+                      : t('common.create')}
+                  </Button>
                 </form>
               )}
-            </div>
-          ) : null}
-        </PromptLibraryChapter>
 
-        <PromptRuntimeSelector runtimeId={activeRuntimeId} onRuntimeIdChange={setActiveRuntimeId} />
-        <UserInstructionSection runtimeId={activeRuntimeId} />
-        <ProjectPromptSection
-          projectId={selectedProjectId}
-          runtimeId={activeRuntimeId}
-          onProjectIdChange={setSelectedProjectId}
-        />
-
-        <PromptLibraryChapter
-          dataSlot="prompt-list-section"
-          className="mt-6"
-          icon={ListTree}
-          title={t('promptLibrary.collection.all')}
-          description={t('promptLibrary.collection.allDescription')}
-          actions={
-            <Button type="button" variant="outline" size="sm" onClick={() => openGroupCreator()}>
-              <FolderPlus className="size-4" />
-              {t('promptLibrary.groups.create')}
-            </Button>
-          }
-        >
-          {groupFormOpen && (
-            <form
-              data-slot="prompt-group-form"
-              onSubmit={handleCreateGroup}
-              className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-background-secondary p-3"
-            >
-              <label className="grid min-w-48 flex-1 gap-1.5">
-                <span className="text-xs font-medium text-foreground">
-                  {moveAfterCreateId
-                    ? t('promptLibrary.groups.createAndMove')
-                    : t('promptLibrary.groups.create')}
-                </span>
-                <Input
-                  value={newGroupName}
-                  onChange={(event) => setNewGroupName(event.target.value)}
-                  placeholder={t('promptLibrary.groups.namePlaceholder')}
-                  autoFocus
-                />
-              </label>
-              <Button type="button" variant="ghost" size="sm" onClick={closeGroupCreator}>
-                {t('common.cancel')}
-              </Button>
-              <Button type="submit" size="sm" disabled={!canCreateGroup || createGroup.isPending}>
-                <FolderPlus className="size-4" />
-                {moveAfterCreateId
-                  ? t('promptLibrary.groups.createAndMoveAction')
-                  : t('common.create')}
-              </Button>
-            </form>
-          )}
-
-          <div className="mt-3">
-            {groups.length === 0 ? (
-              <p className="text-sm text-foreground-muted">{t('promptLibrary.empty')}</p>
-            ) : (
-              <DndContext
-                sensors={sortingSensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleGroupDragEnd}
-              >
-                <SortableContext
-                  items={groups.map((group) => promptGroupSortableId(group.name))}
-                  strategy={verticalListSortingStrategy}
-                >
-                  <ul className="grid gap-2">
-                    {groups.map((group) => {
-                      const groupIsOpen = !collapsedGroups.has(group.name);
-                      const groupLabel =
-                        group.name === UNGROUPED_PROMPT_GROUP
-                          ? t('promptLibrary.groups.ungrouped')
-                          : group.name;
-                      return (
-                        <SortablePromptGroup
-                          key={group.name || 'ungrouped'}
-                          groupName={group.name}
-                          disabled={reorderGroups.isPending}
-                        >
-                          {(groupDragHandle) => (
-                            <>
-                              <div className="flex min-w-0 items-center">
-                                {groupDragHandle}
-                                <button
-                                  type="button"
-                                  onClick={() => toggleGroup(group.name)}
-                                  aria-expanded={groupIsOpen}
-                                  className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left outline-none transition-colors hover:bg-background-1 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
-                                >
-                                  <ChevronRight
-                                    className={cn(
-                                      'size-4 shrink-0 text-foreground-muted transition-transform',
-                                      groupIsOpen && 'rotate-90'
-                                    )}
-                                  />
-                                  <Folder className="size-4 shrink-0 text-foreground-muted" />
-                                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                                    {groupLabel}
-                                  </span>
-                                </button>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  aria-label={t('promptLibrary.groups.createPrompt', {
-                                    name: groupLabel,
-                                  })}
-                                  title={t('promptLibrary.groups.createPrompt', {
-                                    name: groupLabel,
-                                  })}
-                                  onClick={() => openCreateInGroup(group.name)}
-                                >
-                                  <Plus className="size-4" />
-                                </Button>
-                                {group.name !== UNGROUPED_PROMPT_GROUP && (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    aria-label={t('promptLibrary.groups.rename', {
-                                      name: groupLabel,
-                                    })}
-                                    title={t('promptLibrary.groups.rename', {
-                                      name: groupLabel,
-                                    })}
-                                    onClick={() => openGroupRenamer(group.name)}
-                                  >
-                                    <Pencil className="size-4" />
-                                  </Button>
-                                )}
-                              </div>
-
-                              {renamingGroupName === group.name && (
-                                <form
-                                  data-slot="prompt-group-rename-form"
-                                  onSubmit={handleRenameGroup}
-                                  className="flex flex-wrap items-end gap-2 border-t border-border bg-background px-3 py-3"
-                                >
-                                  <label className="grid min-w-48 flex-1 gap-1.5">
-                                    <span className="text-xs font-medium text-foreground">
-                                      {t('promptLibrary.groups.renameTitle', {
+              <div className="mt-3">
+                {groups.length === 0 ? (
+                  <p className="text-sm text-foreground-muted">{t('promptLibrary.empty')}</p>
+                ) : (
+                  <DndContext
+                    sensors={sortingSensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleGroupDragEnd}
+                  >
+                    <SortableContext
+                      items={groups.map((group) => promptGroupSortableId(group.name))}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <ul className="grid gap-2">
+                        {groups.map((group) => {
+                          const groupIsOpen = !collapsedGroups.has(group.name);
+                          const groupLabel =
+                            group.name === UNGROUPED_PROMPT_GROUP
+                              ? t('promptLibrary.groups.ungrouped')
+                              : group.name;
+                          return (
+                            <SortablePromptGroup
+                              key={group.name || 'ungrouped'}
+                              groupName={group.name}
+                              disabled={reorderGroups.isPending}
+                            >
+                              {(groupDragHandle) => (
+                                <>
+                                  <div className="flex min-w-0 items-center">
+                                    {groupDragHandle}
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleGroup(group.name)}
+                                      aria-expanded={groupIsOpen}
+                                      className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left outline-none transition-colors hover:bg-background-1 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
+                                    >
+                                      <ChevronRight
+                                        className={cn(
+                                          'size-4 shrink-0 text-foreground-muted transition-transform',
+                                          groupIsOpen && 'rotate-90'
+                                        )}
+                                      />
+                                      <Folder className="size-4 shrink-0 text-foreground-muted" />
+                                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                                        {groupLabel}
+                                      </span>
+                                    </button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      aria-label={t('promptLibrary.groups.createPrompt', {
                                         name: groupLabel,
                                       })}
-                                    </span>
-                                    <Input
-                                      value={nextGroupName}
-                                      onChange={(event) => setNextGroupName(event.target.value)}
-                                      placeholder={t('promptLibrary.groups.namePlaceholder')}
-                                      autoFocus
-                                    />
-                                  </label>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={closeGroupRenamer}
-                                  >
-                                    {t('common.cancel')}
-                                  </Button>
-                                  <Button
-                                    type="submit"
-                                    size="sm"
-                                    disabled={!canRenameGroup || renameGroup.isPending}
-                                  >
-                                    <Save className="size-4" />
-                                    {t('common.save')}
-                                  </Button>
-                                </form>
-                              )}
-
-                              {groupIsOpen &&
-                                (group.prompts.length === 0 ? (
-                                  <p className="border-t border-border px-8 py-4 text-xs text-foreground-muted">
-                                    {t('promptLibrary.groups.empty')}
-                                  </p>
-                                ) : (
-                                  <DndContext
-                                    sensors={sortingSensors}
-                                    collisionDetection={closestCenter}
-                                    onDragEnd={(event) =>
-                                      handlePromptDragEnd(
-                                        group.name,
-                                        group.prompts.map((entry) => entry.id),
-                                        event
-                                      )
-                                    }
-                                  >
-                                    <SortableContext
-                                      items={group.prompts.map((entry) => entry.id)}
-                                      strategy={verticalListSortingStrategy}
+                                      title={t('promptLibrary.groups.createPrompt', {
+                                        name: groupLabel,
+                                      })}
+                                      onClick={() => openCreateInGroup(group.name)}
                                     >
-                                      <ul className="border-t border-border">
-                                        {group.prompts.map((entry) => {
-                                          const isOpen = expandedIds.has(entry.id);
-                                          return (
-                                            <SortablePromptRow
-                                              key={entry.id}
-                                              entry={entry}
-                                              groupName={group.name}
-                                              disabled={reorderPrompts.isPending}
-                                            >
-                                              {(promptDragHandle) => (
-                                                <>
-                                                  <div className="flex items-center gap-2 px-3 py-2.5 pl-7">
-                                                    {promptDragHandle}
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => toggleExpanded(entry.id)}
-                                                      aria-expanded={isOpen}
-                                                      className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none focus-visible:rounded-sm focus-visible:ring-1 focus-visible:ring-border"
-                                                    >
-                                                      <ChevronRight
-                                                        className={cn(
-                                                          'size-4 shrink-0 text-foreground-muted transition-transform',
-                                                          isOpen && 'rotate-90'
-                                                        )}
-                                                      />
-                                                      <span className="min-w-0 flex-1">
-                                                        <span className="flex items-center gap-2">
-                                                          <span className="truncate text-sm font-medium text-foreground">
-                                                            {entry.title}
-                                                          </span>
-                                                          {entry.source && (
-                                                            <span className="shrink-0 rounded bg-background-1 px-1.5 py-0.5 text-[10px] text-foreground-muted">
-                                                              {t(
-                                                                `promptLibrary.source.type.${entry.source.type}`
+                                      <Plus className="size-4" />
+                                    </Button>
+                                    {group.name !== UNGROUPED_PROMPT_GROUP && (
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        aria-label={t('promptLibrary.groups.rename', {
+                                          name: groupLabel,
+                                        })}
+                                        title={t('promptLibrary.groups.rename', {
+                                          name: groupLabel,
+                                        })}
+                                        onClick={() => openGroupRenamer(group.name)}
+                                      >
+                                        <Pencil className="size-4" />
+                                      </Button>
+                                    )}
+                                  </div>
+
+                                  {renamingGroupName === group.name && (
+                                    <form
+                                      data-slot="prompt-group-rename-form"
+                                      onSubmit={handleRenameGroup}
+                                      className="flex flex-wrap items-end gap-2 border-t border-border bg-background px-3 py-3"
+                                    >
+                                      <label className="grid min-w-48 flex-1 gap-1.5">
+                                        <span className="text-xs font-medium text-foreground">
+                                          {t('promptLibrary.groups.renameTitle', {
+                                            name: groupLabel,
+                                          })}
+                                        </span>
+                                        <Input
+                                          value={nextGroupName}
+                                          onChange={(event) => setNextGroupName(event.target.value)}
+                                          placeholder={t('promptLibrary.groups.namePlaceholder')}
+                                          autoFocus
+                                        />
+                                      </label>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={closeGroupRenamer}
+                                      >
+                                        {t('common.cancel')}
+                                      </Button>
+                                      <Button
+                                        type="submit"
+                                        size="sm"
+                                        disabled={!canRenameGroup || renameGroup.isPending}
+                                      >
+                                        <Save className="size-4" />
+                                        {t('common.save')}
+                                      </Button>
+                                    </form>
+                                  )}
+
+                                  {groupIsOpen &&
+                                    (group.prompts.length === 0 ? (
+                                      <p className="border-t border-border px-8 py-4 text-xs text-foreground-muted">
+                                        {t('promptLibrary.groups.empty')}
+                                      </p>
+                                    ) : (
+                                      <DndContext
+                                        sensors={sortingSensors}
+                                        collisionDetection={closestCenter}
+                                        onDragEnd={(event) =>
+                                          handlePromptDragEnd(
+                                            group.name,
+                                            group.prompts.map((entry) => entry.id),
+                                            event
+                                          )
+                                        }
+                                      >
+                                        <SortableContext
+                                          items={group.prompts.map((entry) => entry.id)}
+                                          strategy={verticalListSortingStrategy}
+                                        >
+                                          <ul className="border-t border-border">
+                                            {group.prompts.map((entry) => {
+                                              const isOpen = expandedIds.has(entry.id);
+                                              return (
+                                                <SortablePromptRow
+                                                  key={entry.id}
+                                                  entry={entry}
+                                                  groupName={group.name}
+                                                  disabled={reorderPrompts.isPending}
+                                                >
+                                                  {(promptDragHandle) => (
+                                                    <>
+                                                      <div className="flex items-center gap-2 px-3 py-2.5 pl-7">
+                                                        {promptDragHandle}
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => toggleExpanded(entry.id)}
+                                                          aria-expanded={isOpen}
+                                                          className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none focus-visible:rounded-sm focus-visible:ring-1 focus-visible:ring-border"
+                                                        >
+                                                          <ChevronRight
+                                                            className={cn(
+                                                              'size-4 shrink-0 text-foreground-muted transition-transform',
+                                                              isOpen && 'rotate-90'
+                                                            )}
+                                                          />
+                                                          <span className="min-w-0 flex-1">
+                                                            <span className="flex items-center gap-2">
+                                                              <span className="truncate text-sm font-medium text-foreground">
+                                                                {entry.title}
+                                                              </span>
+                                                              {entry.source && (
+                                                                <span className="shrink-0 rounded bg-background-1 px-1.5 py-0.5 text-[10px] text-foreground-muted">
+                                                                  {t(
+                                                                    `promptLibrary.source.type.${entry.source.type}`
+                                                                  )}
+                                                                </span>
                                                               )}
                                                             </span>
-                                                          )}
-                                                        </span>
-                                                        {entry.description && (
-                                                          <span className="mt-0.5 block truncate text-xs text-foreground-muted">
-                                                            {entry.description}
+                                                            {entry.description && (
+                                                              <span className="mt-0.5 block truncate text-xs text-foreground-muted">
+                                                                {entry.description}
+                                                              </span>
+                                                            )}
                                                           </span>
-                                                        )}
-                                                      </span>
-                                                    </button>
-                                                    <Switch
-                                                      size="sm"
-                                                      checked={entry.injectionEnabled}
-                                                      disabled={updatePrompt.isPending}
-                                                      aria-label={t(
-                                                        'promptLibrary.injection.toggle',
-                                                        {
-                                                          name: entry.title,
-                                                        }
-                                                      )}
-                                                      onCheckedChange={(checked) =>
-                                                        setInjectionEnabled(entry, checked)
-                                                      }
-                                                    />
-                                                    <div className="flex shrink-0 items-center gap-1 opacity-70 transition-opacity group-hover/prompt:opacity-100 group-focus-within/prompt:opacity-100">
-                                                      <DropdownMenu>
-                                                        <DropdownMenuTrigger
-                                                          render={
+                                                        </button>
+                                                        <Switch
+                                                          size="sm"
+                                                          checked={entry.injectionEnabled}
+                                                          disabled={updatePrompt.isPending}
+                                                          aria-label={t(
+                                                            'promptLibrary.injection.toggle',
+                                                            {
+                                                              name: entry.title,
+                                                            }
+                                                          )}
+                                                          onCheckedChange={(checked) =>
+                                                            setInjectionEnabled(entry, checked)
+                                                          }
+                                                        />
+                                                        <div className="flex shrink-0 items-center gap-1 opacity-70 transition-opacity group-hover/prompt:opacity-100 group-focus-within/prompt:opacity-100">
+                                                          <DropdownMenu>
+                                                            <DropdownMenuTrigger
+                                                              render={
+                                                                <Button
+                                                                  type="button"
+                                                                  variant="ghost"
+                                                                  size="icon-sm"
+                                                                  aria-label={t(
+                                                                    'promptLibrary.groups.move',
+                                                                    {
+                                                                      name: entry.title,
+                                                                    }
+                                                                  )}
+                                                                  title={t(
+                                                                    'promptLibrary.groups.move',
+                                                                    {
+                                                                      name: entry.title,
+                                                                    }
+                                                                  )}
+                                                                  disabled={updatePrompt.isPending}
+                                                                >
+                                                                  <FolderInput className="size-4" />
+                                                                </Button>
+                                                              }
+                                                            />
+                                                            <DropdownMenuContent
+                                                              align="end"
+                                                              className="w-56"
+                                                            >
+                                                              <DropdownMenuGroup>
+                                                                <DropdownMenuLabel>
+                                                                  {t('promptLibrary.groups.moveTo')}
+                                                                </DropdownMenuLabel>
+                                                                <DropdownMenuRadioGroup
+                                                                  value={
+                                                                    entry.groupName.trim() ||
+                                                                    UNGROUPED_MENU_VALUE
+                                                                  }
+                                                                >
+                                                                  <DropdownMenuRadioItem
+                                                                    value={UNGROUPED_MENU_VALUE}
+                                                                    closeOnClick
+                                                                    onClick={() =>
+                                                                      movePromptToGroup(
+                                                                        entry,
+                                                                        UNGROUPED_PROMPT_GROUP
+                                                                      )
+                                                                    }
+                                                                  >
+                                                                    {t(
+                                                                      'promptLibrary.groups.ungrouped'
+                                                                    )}
+                                                                  </DropdownMenuRadioItem>
+                                                                  {namedGroups.map((groupName) => (
+                                                                    <DropdownMenuRadioItem
+                                                                      key={groupName}
+                                                                      value={groupName}
+                                                                      closeOnClick
+                                                                      onClick={() =>
+                                                                        movePromptToGroup(
+                                                                          entry,
+                                                                          groupName
+                                                                        )
+                                                                      }
+                                                                    >
+                                                                      {groupName}
+                                                                    </DropdownMenuRadioItem>
+                                                                  ))}
+                                                                </DropdownMenuRadioGroup>
+                                                              </DropdownMenuGroup>
+                                                              <DropdownMenuSeparator />
+                                                              <DropdownMenuItem
+                                                                onClick={() =>
+                                                                  openGroupCreator(entry.id)
+                                                                }
+                                                              >
+                                                                <FolderPlus className="size-4" />
+                                                                {t(
+                                                                  'promptLibrary.groups.createAndMove'
+                                                                )}
+                                                              </DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                          </DropdownMenu>
+                                                          {entry.source && (
                                                             <Button
                                                               type="button"
                                                               variant="ghost"
                                                               size="icon-sm"
                                                               aria-label={t(
-                                                                'promptLibrary.groups.move',
-                                                                {
-                                                                  name: entry.title,
-                                                                }
+                                                                'promptLibrary.source.refresh'
                                                               )}
-                                                              title={t(
-                                                                'promptLibrary.groups.move',
-                                                                {
-                                                                  name: entry.title,
-                                                                }
-                                                              )}
-                                                              disabled={updatePrompt.isPending}
-                                                            >
-                                                              <FolderInput className="size-4" />
-                                                            </Button>
-                                                          }
-                                                        />
-                                                        <DropdownMenuContent
-                                                          align="end"
-                                                          className="w-56"
-                                                        >
-                                                          <DropdownMenuGroup>
-                                                            <DropdownMenuLabel>
-                                                              {t('promptLibrary.groups.moveTo')}
-                                                            </DropdownMenuLabel>
-                                                            <DropdownMenuRadioGroup
-                                                              value={
-                                                                entry.groupName.trim() ||
-                                                                UNGROUPED_MENU_VALUE
+                                                              disabled={refreshSource.isPending}
+                                                              onClick={() =>
+                                                                refreshSource.mutate(entry.id, {
+                                                                  onSuccess: (result) => {
+                                                                    if (result.status === 'error') {
+                                                                      showSourceError(result.error);
+                                                                    }
+                                                                  },
+                                                                })
                                                               }
                                                             >
-                                                              <DropdownMenuRadioItem
-                                                                value={UNGROUPED_MENU_VALUE}
-                                                                closeOnClick
-                                                                onClick={() =>
-                                                                  movePromptToGroup(
-                                                                    entry,
-                                                                    UNGROUPED_PROMPT_GROUP
-                                                                  )
-                                                                }
-                                                              >
-                                                                {t(
-                                                                  'promptLibrary.groups.ungrouped'
+                                                              <RefreshCw
+                                                                className={cn(
+                                                                  'size-4',
+                                                                  refreshSource.isPending &&
+                                                                    'animate-spin'
                                                                 )}
-                                                              </DropdownMenuRadioItem>
-                                                              {namedGroups.map((groupName) => (
-                                                                <DropdownMenuRadioItem
-                                                                  key={groupName}
-                                                                  value={groupName}
-                                                                  closeOnClick
+                                                              />
+                                                            </Button>
+                                                          )}
+                                                          <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon-sm"
+                                                            aria-label={t('promptLibrary.copy')}
+                                                            onClick={() => handleCopy(entry)}
+                                                          >
+                                                            <Copy className="size-4" />
+                                                          </Button>
+                                                          <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon-sm"
+                                                            aria-label={t('common.edit')}
+                                                            onClick={() => openEdit(entry)}
+                                                          >
+                                                            <Pencil className="size-4" />
+                                                          </Button>
+                                                          <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon-sm"
+                                                            aria-label={t('common.delete')}
+                                                            onClick={() => handleDelete(entry)}
+                                                          >
+                                                            <Trash2 className="size-4" />
+                                                          </Button>
+                                                        </div>
+                                                      </div>
+                                                      {isOpen && (
+                                                        <div className="grid gap-3 border-t border-border px-3 py-3 pl-14">
+                                                          {entry.source && (
+                                                            <p className="truncate text-xs text-foreground-passive">
+                                                              {sourceTarget(entry.source)}
+                                                            </p>
+                                                          )}
+                                                          <pre className="min-w-0 whitespace-pre-wrap break-words font-mono text-xs text-foreground-passive">
+                                                            {entry.content}
+                                                          </pre>
+                                                          {entry.extraInfo && (
+                                                            <div className="rounded-md border border-border bg-background px-3 py-2 text-xs leading-5 text-foreground-muted">
+                                                              <span className="mr-2 font-medium text-foreground">
+                                                                {t('promptLibrary.form.extraInfo')}
+                                                              </span>
+                                                              {isExternalUrl(entry.extraInfo) ? (
+                                                                <button
+                                                                  type="button"
+                                                                  className="inline-flex items-center gap-1 text-foreground underline underline-offset-2"
                                                                   onClick={() =>
-                                                                    movePromptToGroup(
-                                                                      entry,
-                                                                      groupName
+                                                                    void rpc.app.openExternal(
+                                                                      entry.extraInfo.trim()
                                                                     )
                                                                   }
                                                                 >
-                                                                  {groupName}
-                                                                </DropdownMenuRadioItem>
-                                                              ))}
-                                                            </DropdownMenuRadioGroup>
-                                                          </DropdownMenuGroup>
-                                                          <DropdownMenuSeparator />
-                                                          <DropdownMenuItem
-                                                            onClick={() =>
-                                                              openGroupCreator(entry.id)
-                                                            }
-                                                          >
-                                                            <FolderPlus className="size-4" />
-                                                            {t(
-                                                              'promptLibrary.groups.createAndMove'
-                                                            )}
-                                                          </DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                      </DropdownMenu>
-                                                      {entry.source && (
-                                                        <Button
-                                                          type="button"
-                                                          variant="ghost"
-                                                          size="icon-sm"
-                                                          aria-label={t(
-                                                            'promptLibrary.source.refresh'
-                                                          )}
-                                                          disabled={refreshSource.isPending}
-                                                          onClick={() =>
-                                                            refreshSource.mutate(entry.id, {
-                                                              onSuccess: (result) => {
-                                                                if (result.status === 'error') {
-                                                                  showSourceError(result.error);
-                                                                }
-                                                              },
-                                                            })
-                                                          }
-                                                        >
-                                                          <RefreshCw
-                                                            className={cn(
-                                                              'size-4',
-                                                              refreshSource.isPending &&
-                                                                'animate-spin'
-                                                            )}
-                                                          />
-                                                        </Button>
-                                                      )}
-                                                      <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon-sm"
-                                                        aria-label={t('promptLibrary.copy')}
-                                                        onClick={() => handleCopy(entry)}
-                                                      >
-                                                        <Copy className="size-4" />
-                                                      </Button>
-                                                      <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon-sm"
-                                                        aria-label={t('common.edit')}
-                                                        onClick={() => openEdit(entry)}
-                                                      >
-                                                        <Pencil className="size-4" />
-                                                      </Button>
-                                                      <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon-sm"
-                                                        aria-label={t('common.delete')}
-                                                        onClick={() => handleDelete(entry)}
-                                                      >
-                                                        <Trash2 className="size-4" />
-                                                      </Button>
-                                                    </div>
-                                                  </div>
-                                                  {isOpen && (
-                                                    <div className="grid gap-3 border-t border-border px-3 py-3 pl-14">
-                                                      {entry.source && (
-                                                        <p className="truncate text-xs text-foreground-passive">
-                                                          {sourceTarget(entry.source)}
-                                                        </p>
-                                                      )}
-                                                      <pre className="min-w-0 whitespace-pre-wrap break-words font-mono text-xs text-foreground-passive">
-                                                        {entry.content}
-                                                      </pre>
-                                                      {entry.extraInfo && (
-                                                        <div className="rounded-md border border-border bg-background px-3 py-2 text-xs leading-5 text-foreground-muted">
-                                                          <span className="mr-2 font-medium text-foreground">
-                                                            {t('promptLibrary.form.extraInfo')}
-                                                          </span>
-                                                          {isExternalUrl(entry.extraInfo) ? (
-                                                            <button
-                                                              type="button"
-                                                              className="inline-flex items-center gap-1 text-foreground underline underline-offset-2"
-                                                              onClick={() =>
-                                                                void rpc.app.openExternal(
-                                                                  entry.extraInfo.trim()
-                                                                )
-                                                              }
-                                                            >
-                                                              {entry.extraInfo.trim()}
-                                                              <ExternalLink className="size-3" />
-                                                            </button>
-                                                          ) : (
-                                                            <span className="whitespace-pre-wrap">
-                                                              {entry.extraInfo}
-                                                            </span>
+                                                                  {entry.extraInfo.trim()}
+                                                                  <ExternalLink className="size-3" />
+                                                                </button>
+                                                              ) : (
+                                                                <span className="whitespace-pre-wrap">
+                                                                  {entry.extraInfo}
+                                                                </span>
+                                                              )}
+                                                            </div>
                                                           )}
                                                         </div>
                                                       )}
-                                                    </div>
+                                                    </>
                                                   )}
-                                                </>
-                                              )}
-                                            </SortablePromptRow>
-                                          );
-                                        })}
-                                      </ul>
-                                    </SortableContext>
-                                  </DndContext>
-                                ))}
-                            </>
-                          )}
-                        </SortablePromptGroup>
-                      );
-                    })}
-                  </ul>
-                </SortableContext>
-              </DndContext>
-            )}
-          </div>
-        </PromptLibraryChapter>
+                                                </SortablePromptRow>
+                                              );
+                                            })}
+                                          </ul>
+                                        </SortableContext>
+                                      </DndContext>
+                                    ))}
+                                </>
+                              )}
+                            </SortablePromptGroup>
+                          );
+                        })}
+                      </ul>
+                    </SortableContext>
+                  </DndContext>
+                )}
+              </div>
+            </PromptLibraryChapter>
+          </TabsPanel>
+        </Tabs>
         <div
           data-slot="prompt-library-bottom-space"
           aria-hidden

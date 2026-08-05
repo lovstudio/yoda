@@ -25,6 +25,13 @@ describe('terminal web links', () => {
     ]);
   });
 
+  it('leaves local file URIs to the file link provider', () => {
+    const line =
+      'file:///Users/mark/.codex/generated_images/019fcba6-bfdb-7063-bde0-3b7def1f9245/exec-de539056-b836-40a4-afeb-fc4e247d8e87.png';
+
+    expect(extractTerminalWebLinkCandidates(line)).toEqual([]);
+  });
+
   it('stops a parenthesized URL before adjacent Chinese prose', () => {
     const url = 'https://lovstudio.ai/yoda/session/yss_jwNYhuQC7vOzOuHim41RoMtQgkVwnMxkxOu8T0p5Z6Y';
     const line = `这条会话 (${url})现在会：`;

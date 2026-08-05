@@ -2,13 +2,27 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   formatCodexRolloutTerminalHistory,
   loadCodexRolloutTerminalHistoryForConversation,
+  loadCodexRolloutTranscriptTailForConversation,
   parseCodexRolloutShareImages,
   parseCodexRolloutTranscript,
 } from './codex-rollout-terminal-history';
+
+const mocks = vi.hoisted(() => ({
+  getReservedCodexThreadIds: vi.fn(async () => new Set<string>()),
+}));
+
+vi.mock('./codex-thread-reservations', () => ({
+  getReservedCodexThreadIds: mocks.getReservedCodexThreadIds,
+}));
+
+beforeEach(() => {
+  mocks.getReservedCodexThreadIds.mockReset();
+  mocks.getReservedCodexThreadIds.mockResolvedValue(new Set());
+});
 
 describe('formatCodexRolloutTerminalHistory', () => {
   it('formats Codex event messages and command output for terminal replay', () => {
@@ -221,6 +235,94 @@ describe('formatCodexRolloutTerminalHistory', () => {
       expect(history).toContain('Thread: forked-thread');
       expect(history).toContain('Latest continuation content');
       expect(history).not.toContain('Stale root ending');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps mobile transcript reads on the selected session when a fork is another session', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'yoda-codex-mobile-session-scope-'));
+    const statePath = join(directory, 'state_5.sqlite');
+    const rootRolloutPath = join(directory, 'root.jsonl');
+    const siblingRolloutPath = join(directory, 'sibling.jsonl');
+
+    try {
+      createStateDb(statePath);
+      writeFileSync(
+        rootRolloutPath,
+        [
+          {
+            timestamp: '2026-08-05T04:44:34.000Z',
+            type: 'session_meta',
+            payload: { id: 'root-thread', cwd: '/repo' },
+          },
+          {
+            timestamp: '2026-08-05T05:00:00.000Z',
+            type: 'event_msg',
+            payload: { type: 'agent_message', message: 'Selected session content' },
+          },
+        ]
+          .map((row) => JSON.stringify(row))
+          .join('\n')
+      );
+      writeFileSync(
+        siblingRolloutPath,
+        [
+          {
+            timestamp: '2026-08-05T06:21:33.000Z',
+            type: 'session_meta',
+            payload: {
+              id: 'sibling-thread',
+              forked_from_id: 'root-thread',
+              cwd: '/repo',
+            },
+          },
+          {
+            timestamp: '2026-08-05T06:23:14.000Z',
+            type: 'event_msg',
+            payload: { type: 'agent_message', message: 'Other session content' },
+          },
+        ]
+          .map((row) => JSON.stringify(row))
+          .join('\n')
+      );
+      insertThread(statePath, {
+        id: 'root-thread',
+        rolloutPath: rootRolloutPath,
+        createdAtMs: Date.parse('2026-08-05T04:44:34.000Z'),
+        updatedAtMs: Date.parse('2026-08-05T05:00:00.000Z'),
+      });
+      insertThread(statePath, {
+        id: 'sibling-thread',
+        rolloutPath: siblingRolloutPath,
+        createdAtMs: Date.parse('2026-08-05T06:21:33.000Z'),
+        updatedAtMs: Date.parse('2026-08-05T06:23:14.000Z'),
+      });
+      mocks.getReservedCodexThreadIds.mockResolvedValue(new Set(['sibling-thread']));
+
+      const transcript = await loadCodexRolloutTranscriptTailForConversation({
+        cwd: '/repo',
+        conversation: {
+          id: 'selected-conversation',
+          projectId: 'project-1',
+          taskId: 'task-1',
+          runtimeId: 'codex',
+          title: 'Discovered session',
+          createdAt: '2026-08-05 04:44:34',
+          lastInteractedAt: '2026-08-05T05:00:00.000Z',
+          isInitialConversation: true,
+          sessionSource: {
+            catalogId: 'catalog-1',
+            runtimeId: 'codex',
+            sessionId: 'root-thread',
+            stateRoot: directory,
+          },
+        },
+      });
+
+      expect(transcript?.map((entry) => entry.content)).toContain('Selected session content');
+      expect(transcript?.map((entry) => entry.content)).not.toContain('Other session content');
+      expect(mocks.getReservedCodexThreadIds).toHaveBeenCalledWith('selected-conversation');
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

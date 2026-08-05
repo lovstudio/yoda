@@ -122,4 +122,29 @@ describe('SettingsStore', () => {
       },
     });
   });
+
+  it('adds account usage warning defaults to legacy notification settings', async () => {
+    mocks.selectExecute.mockResolvedValue([
+      {
+        key: 'notifications',
+        value: JSON.stringify({
+          enabled: true,
+          sound: false,
+          osNotifications: true,
+          soundFocusMode: 'unfocused',
+        }),
+      },
+    ]);
+
+    const result = await new SettingsStore().get('notifications');
+
+    expect(result).toEqual({
+      enabled: true,
+      sound: false,
+      osNotifications: true,
+      soundFocusMode: 'unfocused',
+      accountUsageWarningEnabled: true,
+      accountUsageWarningThreshold: 95,
+    });
+  });
 });

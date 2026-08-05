@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Task } from '@shared/tasks';
-import { createUnprovisionedTask } from './task';
+import { createUnprovisionedTask, isProvisioned, TaskStore, type ProvisionedTask } from './task';
 import { summarizeTaskSessionStatuses, taskSessionStatusSummary } from './task-selectors';
 
 const mocks = vi.hoisted(() => ({
@@ -95,6 +95,31 @@ describe('summarizeTaskSessionStatuses', () => {
       'newer',
       'older',
     ]);
+  });
+});
+
+describe('task readiness invariant', () => {
+  it('does not classify a provisioned state without its payload as ready', () => {
+    const store = new TaskStore(makeTask(), 'provisioned');
+
+    expect(store.provisionedTask).toBeNull();
+    expect(isProvisioned(store)).toBe(false);
+  });
+
+  it('leaves a disposed provisioned store in a valid non-ready state', () => {
+    const disposeProvisionedTask = vi.fn();
+    const store = new TaskStore(makeTask(), 'provisioned');
+    store.provisionedTask = {
+      dispose: disposeProvisionedTask,
+    } as unknown as ProvisionedTask;
+
+    store.dispose();
+
+    expect(disposeProvisionedTask).toHaveBeenCalledOnce();
+    expect(store.state).toBe('unprovisioned');
+    expect(store.phase).toBe('idle');
+    expect(store.provisionedTask).toBeNull();
+    expect(isProvisioned(store)).toBe(false);
   });
 });
 

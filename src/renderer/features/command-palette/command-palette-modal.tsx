@@ -3,10 +3,12 @@ import { Command } from 'cmdk';
 import {
   FolderOpen,
   GitBranch,
+  History,
   Loader2,
   MessageSquare,
   MessagesSquare,
   Search,
+  Trash2,
   Zap,
 } from 'lucide-react';
 import React, { useDeferredValue, useEffect, useState } from 'react';
@@ -28,7 +30,10 @@ import { InfiniteGroup } from './infinite-group';
 import { LovcodeInstallBanner } from './lovcode-install-banner';
 import { parseQuery, setScope, type SearchScope } from './qualifiers';
 import {
+  loadRecentCommandPaletteQueries,
   rememberCommandPaletteQuery,
+  rememberRecentCommandPaletteQuery,
+  removeRecentCommandPaletteQuery,
   resolveInitialCommandPaletteQuery,
   type CommandPaletteQueryMemory,
 } from './query-memory';
@@ -134,6 +139,48 @@ function PaletteItem({
   );
 }
 
+function RecentSearchesGroup({
+  queries,
+  onUse,
+  onDelete,
+}: {
+  queries: string[];
+  onUse: (query: string) => void;
+  onDelete: (query: string) => void;
+}) {
+  const { t } = useTranslation();
+  if (queries.length === 0) return null;
+
+  return (
+    <Command.Group heading={t('commandPalette.recentSearches')} className={GROUP_CLASS}>
+      {queries.map((recentQuery) => {
+        const deleteLabel = t('commandPalette.deleteRecentSearch', { query: recentQuery });
+        return (
+          <div key={recentQuery} className="group flex items-center gap-1 rounded-md">
+            <Command.Item
+              value={`recent-search:${recentQuery}`}
+              onSelect={() => onUse(recentQuery)}
+              className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 text-sm text-foreground-muted aria-selected:bg-background-2 aria-selected:text-foreground"
+            >
+              <History size={14} className="shrink-0 text-foreground/40" />
+              <span className="truncate">{recentQuery}</span>
+            </Command.Item>
+            <button
+              type="button"
+              onClick={() => onDelete(recentQuery)}
+              aria-label={deleteLabel}
+              title={deleteLabel}
+              className="flex size-8 shrink-0 items-center justify-center rounded-md text-foreground/40 opacity-0 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/30 group-hover:opacity-100 group-focus-within:opacity-100"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          </div>
+        );
+      })}
+    </Command.Group>
+  );
+}
+
 export function CommandPaletteModal({
   projectId,
   taskId,
@@ -145,6 +192,7 @@ export function CommandPaletteModal({
   const [query, setQuery] = useState(() =>
     resolveInitialCommandPaletteQuery(initialQuery, queryMemory)
   );
+  const [recentQueries, setRecentQueries] = useState(loadRecentCommandPaletteQueries);
   const deferred = useDeferredValue(query);
   const { navigate } = useNavigate();
 
@@ -249,8 +297,23 @@ export function CommandPaletteModal({
     setQuery((prev) => setScope(prev, next));
   };
 
+  const rememberCurrentSearch = () => {
+    if (!parseQuery(query).text.trim()) return;
+    setRecentQueries(rememberRecentCommandPaletteQuery(query));
+  };
+
+  const handleDeleteRecentSearch = (recentQuery: string) => {
+    setRecentQueries(removeRecentCommandPaletteQuery(recentQuery));
+  };
+
+  const handleExecuteAction = (item: PaletteAction) => {
+    rememberCurrentSearch();
+    item.execute();
+  };
+
   const handleNavigateToTask = (item: SearchItem) => {
     if (!item.projectId) return;
+    rememberCurrentSearch();
     // Archived tasks are surfaced in search but must be restored before the
     // task view can mount them.
     if (item.archived) {
@@ -261,12 +324,14 @@ export function CommandPaletteModal({
   };
 
   const handleNavigateToProject = (item: SearchItem) => {
+    rememberCurrentSearch();
     onClose();
     navigate('project', { projectId: item.id });
   };
 
   const handleNavigateToConversation = (item: SearchItem) => {
     if (!item.projectId || !item.taskId) return;
+    rememberCurrentSearch();
     // The conversation may belong to an archived task; restore it first so the
     // task view can mount (mirrors handleNavigateToTask).
     if (item.taskArchived) {
@@ -359,6 +424,13 @@ export function CommandPaletteModal({
         })}
       </div>
       <Command.List className="h-96 overflow-y-auto p-1">
+        {searchText.length === 0 && (
+          <RecentSearchesGroup
+            queries={recentQueries}
+            onUse={setQuery}
+            onDelete={handleDeleteRecentSearch}
+          />
+        )}
         {inSessionsScope ? (
           searchText.length === 0 ? (
             // No text yet: show recent conversations (SQLite index, paginated).
@@ -471,7 +543,12 @@ export function CommandPaletteModal({
             {actionResults.length > 0 && (
               <Command.Group heading="Actions" className={GROUP_CLASS}>
                 {actionResults.map((item) => (
-                  <PaletteItem key={item.id} value={item.id} item={item} onSelect={item.execute} />
+                  <PaletteItem
+                    key={item.id}
+                    value={item.id}
+                    item={item}
+                    onSelect={() => handleExecuteAction(item)}
+                  />
                 ))}
               </Command.Group>
             )}
@@ -486,7 +563,12 @@ export function CommandPaletteModal({
             {actionResults.length > 0 && (
               <Command.Group heading="Actions" className={GROUP_CLASS}>
                 {actionResults.map((item) => (
-                  <PaletteItem key={item.id} value={item.id} item={item} onSelect={item.execute} />
+                  <PaletteItem
+                    key={item.id}
+                    value={item.id}
+                    item={item}
+                    onSelect={() => handleExecuteAction(item)}
+                  />
                 ))}
               </Command.Group>
             )}
@@ -544,7 +626,12 @@ export function CommandPaletteModal({
             {actionResults.length > 0 && (
               <Command.Group heading="Actions" className={GROUP_CLASS}>
                 {actionResults.map((item) => (
-                  <PaletteItem key={item.id} value={item.id} item={item} onSelect={item.execute} />
+                  <PaletteItem
+                    key={item.id}
+                    value={item.id}
+                    item={item}
+                    onSelect={() => handleExecuteAction(item)}
+                  />
                 ))}
               </Command.Group>
             )}

@@ -6,6 +6,7 @@ import {
   Bot,
   CableIcon,
   Copy,
+  FileText,
   FolderPen,
   Info,
   PencilLine,
@@ -64,6 +65,7 @@ interface ProjectMenuActions {
   onPin: () => void;
   onUnpin: () => void;
   onOpenDetails?: () => void;
+  onConfigureSystemPrompt?: () => void;
   onCreateTask?: () => void;
   onCreateTaskAndRun?: () => void;
   onOpenArchivedTasks?: () => void;
@@ -166,6 +168,15 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   }
 
   // group 3 — configuration
+  if (actions.onConfigureSystemPrompt) {
+    items.push({
+      key: 'configure-system-prompt',
+      group: 3,
+      icon: FileText,
+      label: t('sidebar.configureSystemPrompt'),
+      onSelect: actions.onConfigureSystemPrompt,
+    });
+  }
   if (actions.canPin) {
     items.push(
       actions.isPinned

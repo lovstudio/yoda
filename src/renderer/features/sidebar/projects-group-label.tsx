@@ -11,7 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import type { ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactElement, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT,
@@ -23,7 +23,7 @@ import {
 } from '@shared/view-state';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
-import { sidebarStore, workspaceStore } from '@renderer/lib/stores/app-state';
+import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
 import {
   ContextMenu,
@@ -58,7 +58,6 @@ export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
           label={t('sidebar.projects')}
           collapsed={sidebarStore.projectsCollapsed}
           onToggle={() => sidebarStore.toggleProjectsCollapsed()}
-          rightSlot={!workspaceStore.enabled ? <ProjectsSettingsMenu /> : undefined}
         />
       </ContextMenuTrigger>
       <ContextMenuContent>
@@ -81,11 +80,19 @@ export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
 });
 
 /**
- * View-options icon button next to the workspace switcher: opens the sidebar
+ * View-options icon in the sidebar's top navigation buttons: opens the
  * task-list display panel. Highlighted while any setting deviates from the
  * defaults.
  */
-export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
+interface ProjectsSettingsMenuProps {
+  renderTrigger: (
+    props: ButtonHTMLAttributes<HTMLButtonElement> & { 'data-customized'?: boolean }
+  ) => ReactElement;
+}
+
+export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu({
+  renderTrigger,
+}: ProjectsSettingsMenuProps) {
   const { t } = useTranslation();
   const { value: homeDraft } = useAppSettingsKey('homeDraft');
   const { value: interfaceSettings } = useAppSettingsKey('interface');
@@ -109,21 +116,19 @@ export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
         <TooltipTrigger
           render={
             <PopoverTrigger
-              render={
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  aria-label={t('workspaces.viewOptions')}
-                  data-active={customized || undefined}
-                  className="shrink-0 hover:bg-background-tertiary-2 text-foreground-muted hover:text-foreground data-[active=true]:text-foreground"
-                />
-              }
+              render={renderTrigger({
+                'aria-label': t('workspaces.viewOptions'),
+                'data-customized': customized || undefined,
+                className: 'data-[customized=true]:text-foreground',
+              })}
             />
           }
         >
-          <Settings2 />
+          <Settings2 className="h-4 w-4" />
         </TooltipTrigger>
-        <TooltipContent>{t('workspaces.viewOptions')}</TooltipContent>
+        <TooltipContent side="bottom" sideOffset={8}>
+          {t('workspaces.viewOptions')}
+        </TooltipContent>
       </Tooltip>
       <PopoverContent align="end" className="w-72 gap-0 p-1.5">
         <ProjectsSettingsPanel />
