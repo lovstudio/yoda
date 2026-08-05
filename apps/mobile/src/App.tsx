@@ -77,6 +77,7 @@ import {
 } from './connection-bootstrap';
 import { clearConnection, loadConnection, saveConnection } from './connection-storage';
 import { prepareCreatedDemandNavigation } from './demand-navigation';
+import { DEFAULT_HOME_TAB, HOME_TABS, homeTabTitle, type HomeTab } from './home-navigation';
 import { pickMobileInputImages } from './input-media';
 import {
   uploadMobileInputImages,
@@ -122,7 +123,6 @@ type ConnectDraft = {
 };
 
 type TaskScope = 'all' | 'open' | 'inProgress' | 'review';
-type HomeTab = 'home' | 'tasks' | 'profile';
 type SessionOutputMode = 'rendered' | 'raw';
 
 type ReadableOutputBlock = {
@@ -146,26 +146,6 @@ function taskScopeLabel(scope: TaskScope): string {
       return '待审阅';
     case 'all':
       return '全部任务';
-  }
-}
-
-function homeTabTitle(tab: HomeTab): { title: string; subtitle: string } {
-  switch (tab) {
-    case 'tasks':
-      return {
-        title: '任务队列',
-        subtitle: '集中查看进行中的会话与任务状态。',
-      };
-    case 'profile':
-      return {
-        title: '我的工作台',
-        subtitle: '查看账号、用量、工作进度与云端服务。',
-      };
-    case 'home':
-      return {
-        title: 'Command center',
-        subtitle: 'Monitor desktop work and keep requests moving.',
-      };
   }
 }
 
@@ -579,7 +559,7 @@ export function App() {
   });
   const [snapshot, setSnapshot] = useState<MobileDashboardSnapshot | null>(null);
   const [profile, setProfile] = useState<MobileProfileSnapshot | null>(null);
-  const [homeTab, setHomeTab] = useState<HomeTab>('home');
+  const [homeTab, setHomeTab] = useState<HomeTab>(DEFAULT_HOME_TAB);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskParent, setNewTaskParent] = useState<MobileTaskSummary | null>(null);
   const [newTaskAttributionLocked, setNewTaskAttributionLocked] = useState(false);
@@ -653,7 +633,7 @@ export function App() {
     setConnection(next);
     setSnapshot(null);
     setProfile(null);
-    setHomeTab('home');
+    setHomeTab(DEFAULT_HOME_TAB);
     setNewTaskOpen(false);
     setNewTaskParent(null);
     setNewTaskAttributionLocked(false);
@@ -784,31 +764,11 @@ export function App() {
     [selectedTaskId, snapshot]
   );
 
-  const recentTasks = useMemo(
-    () =>
-      [...(snapshot?.tasks ?? [])]
-        .sort((a, b) => {
-          const aTime = Date.parse(a.lastInteractedAt ?? a.updatedAt ?? '');
-          const bTime = Date.parse(b.lastInteractedAt ?? b.updatedAt ?? '');
-          return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
-        })
-        .slice(0, 4),
-    [snapshot]
-  );
-
   useEffect(() => {
     if (!selectedTaskId || selectedTask) return;
     setSelectedTaskId(null);
     setSelectedSessionId(null);
   }, [selectedTask, selectedTaskId]);
-
-  const handleMetricSelect = useCallback((scope: TaskScope) => {
-    setTaskScope(scope);
-    setSelectedProjectId('all');
-    setSelectedTaskId(null);
-    setSelectedSessionId(null);
-    setHomeTab('tasks');
-  }, []);
 
   const handleConnect = useCallback(async () => {
     const next = {
@@ -1033,18 +993,6 @@ export function App() {
 
             {snapshot ? (
               <>
-                {homeTab === 'home' ? (
-                  <HomeDashboard
-                    projects={visibleProjects}
-                    recentTasks={recentTasks}
-                    snapshot={snapshot}
-                    onNewRequest={() => openNewTask()}
-                    onOpenTask={setSelectedTaskId}
-                    onOpenTasks={() => setHomeTab('tasks')}
-                    onSelectScope={handleMetricSelect}
-                  />
-                ) : null}
-
                 {homeTab === 'tasks' ? (
                   <TasksWorkspace
                     projects={snapshot.projects}
@@ -1280,103 +1228,6 @@ function YodaBrandMark({ size }: { size: number }) {
       source={yodaMarkSource}
       style={{ width: size, height: size }}
     />
-  );
-}
-
-function HomeDashboard({
-  projects,
-  recentTasks,
-  snapshot,
-  onNewRequest,
-  onOpenTask,
-  onOpenTasks,
-  onSelectScope,
-}: {
-  projects: MobileProjectSummary[];
-  recentTasks: MobileTaskSummary[];
-  snapshot: MobileDashboardSnapshot;
-  onNewRequest: () => void;
-  onOpenTask: (taskId: string) => void;
-  onOpenTasks: () => void;
-  onSelectScope: (scope: TaskScope) => void;
-}) {
-  const primaryTask = recentTasks[0];
-  return (
-    <>
-      <View style={styles.commandPanel}>
-        <View style={styles.commandPanelTop}>
-          <View>
-            <Text style={styles.commandPanelLabel}>Live workspace</Text>
-            <Text style={styles.commandPanelValue}>{snapshot.metrics.activeTaskCount}</Text>
-          </View>
-          <View style={styles.commandPanelBadge}>
-            <Ionicons color={COLORS.green} name="radio-outline" size={15} />
-            <Text style={styles.commandPanelBadgeText}>Online</Text>
-          </View>
-        </View>
-        <Text style={styles.commandPanelText}>
-          {snapshot.metrics.inProgressTaskCount} running · {snapshot.metrics.reviewTaskCount} ready
-          for review · {snapshot.metrics.openProjectCount} open projects
-        </Text>
-        <View style={styles.quickActions}>
-          <Pressable
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.quickActionPrimary,
-              pressed ? styles.buttonPressed : null,
-            ]}
-            onPress={onNewRequest}
-          >
-            <Ionicons color={COLORS.surface} name="add-outline" size={18} />
-            <Text style={styles.quickActionPrimaryText}>新建任务</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.quickActionSecondary,
-              pressed ? styles.buttonPressed : null,
-            ]}
-            onPress={onOpenTasks}
-          >
-            <Ionicons color={COLORS.charcoal} name="list-outline" size={18} />
-            <Text style={styles.quickActionSecondaryText}>查看任务</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <Metrics selectedScope="all" snapshot={snapshot} onSelectScope={onSelectScope} />
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>最近工作</Text>
-          <Pressable accessibilityRole="button" onPress={onOpenTasks}>
-            <Text style={styles.sectionAction}>查看全部</Text>
-          </Pressable>
-        </View>
-        {primaryTask ? (
-          <>
-            <TaskRow
-              projectLabel={projectName(projects, primaryTask.projectId)}
-              task={primaryTask}
-              onPress={() => onOpenTask(primaryTask.id)}
-            />
-            {recentTasks.slice(1, 3).map((task) => (
-              <CompactTaskRow
-                key={task.id}
-                projectLabel={projectName(projects, task.projectId)}
-                task={task}
-                onPress={() => onOpenTask(task.id)}
-              />
-            ))}
-          </>
-        ) : (
-          <View style={styles.emptyState}>
-            <Ionicons color={COLORS.muted} name="sparkles-outline" size={22} />
-            <Text style={styles.emptyText}>还没有任务。</Text>
-          </View>
-        )}
-      </View>
-    </>
   );
 }
 
@@ -1787,19 +1638,9 @@ function HomeTabBar({
   activeTab: HomeTab;
   onSelect: (tab: HomeTab) => void;
 }) {
-  const tabs: Array<{
-    icon: keyof typeof Ionicons.glyphMap;
-    label: string;
-    value: HomeTab;
-  }> = [
-    { icon: 'grid-outline', label: '首页', value: 'home' },
-    { icon: 'checkmark-circle-outline', label: '任务', value: 'tasks' },
-    { icon: 'person-circle-outline', label: '我的', value: 'profile' },
-  ];
-
   return (
     <View style={styles.bottomTabBar}>
-      {tabs.map((tab) => {
+      {HOME_TABS.map((tab) => {
         const active = activeTab === tab.value;
         return (
           <Pressable
@@ -1820,65 +1661,6 @@ function HomeTabBar({
           </Pressable>
         );
       })}
-    </View>
-  );
-}
-
-function Metrics({
-  selectedScope,
-  snapshot,
-  onSelectScope,
-}: {
-  selectedScope: TaskScope;
-  snapshot: MobileDashboardSnapshot;
-  onSelectScope: (scope: TaskScope) => void;
-}) {
-  const metrics = [
-    {
-      label: '项目',
-      value: snapshot.metrics.projectCount,
-      icon: 'folder-outline',
-      scope: 'all',
-    },
-    {
-      label: '已打开',
-      value: snapshot.metrics.openProjectCount,
-      icon: 'desktop-outline',
-      scope: 'open',
-    },
-    {
-      label: '进行中',
-      value: snapshot.metrics.inProgressTaskCount,
-      icon: 'flash-outline',
-      scope: 'inProgress',
-    },
-    {
-      label: '待审阅',
-      value: snapshot.metrics.reviewTaskCount,
-      icon: 'checkmark-done-outline',
-      scope: 'review',
-    },
-  ] as const;
-
-  return (
-    <View style={styles.metricsGrid}>
-      {metrics.map((metric) => (
-        <Pressable
-          key={metric.label}
-          accessibilityLabel={`Filter ${metric.label}`}
-          accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.metricCard,
-            selectedScope === metric.scope ? styles.metricCardActive : null,
-            pressed ? styles.buttonPressed : null,
-          ]}
-          onPress={() => onSelectScope(metric.scope)}
-        >
-          <Ionicons color={COLORS.charcoal} name={metric.icon} size={18} />
-          <Text style={styles.metricValue}>{metric.value}</Text>
-          <Text style={styles.metricLabel}>{metric.label}</Text>
-        </Pressable>
-      ))}
     </View>
   );
 }
@@ -4142,36 +3924,6 @@ function TaskRow({
   );
 }
 
-function CompactTaskRow({
-  projectLabel,
-  task,
-  onPress,
-}: {
-  projectLabel: string;
-  task: MobileTaskSummary;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityLabel={`Open task ${task.name}`}
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.compactTaskRow, pressed ? styles.buttonPressed : null]}
-      onPress={onPress}
-    >
-      <View style={styles.compactTaskDot} />
-      <View style={styles.compactTaskBody}>
-        <Text style={styles.compactTaskName} numberOfLines={1}>
-          {task.name}
-        </Text>
-        <Text style={styles.compactTaskProject} numberOfLines={1}>
-          {projectLabel} · {formatTimestamp(task.lastInteractedAt ?? task.updatedAt)}
-        </Text>
-      </View>
-      <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={16} />
-    </Pressable>
-  );
-}
-
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.detailItem}>
@@ -4502,89 +4254,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: '600',
   },
-  commandPanel: {
-    borderWidth: 1,
-    borderColor: COLORS.charcoal,
-    borderRadius: 8,
-    backgroundColor: COLORS.charcoal,
-    padding: 16,
-    gap: 14,
-  },
-  commandPanelTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 14,
-  },
-  commandPanelLabel: {
-    color: '#D8D4CB',
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  commandPanelValue: {
-    color: COLORS.surface,
-    fontSize: 42,
-    fontWeight: '800',
-    lineHeight: 46,
-  },
-  commandPanelBadge: {
-    minHeight: 31,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderWidth: 1,
-    borderColor: '#555A60',
-    borderRadius: 8,
-    paddingHorizontal: 9,
-  },
-  commandPanelBadgeText: {
-    color: '#D8D4CB',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  commandPanelText: {
-    color: '#E7E4DC',
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '600',
-  },
-  quickActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  quickActionPrimary: {
-    minHeight: 44,
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: 8,
-    backgroundColor: COLORS.blue,
-  },
-  quickActionPrimaryText: {
-    color: COLORS.surface,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  quickActionSecondary: {
-    minHeight: 44,
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#555A60',
-    borderRadius: 8,
-    backgroundColor: '#F7F7F2',
-  },
-  quickActionSecondaryText: {
-    color: COLORS.charcoal,
-    fontSize: 14,
-    fontWeight: '800',
-  },
   screenHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -4724,35 +4393,6 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.45,
-  },
-  metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  metricCard: {
-    width: '48.5%',
-    minHeight: 92,
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 8,
-    backgroundColor: COLORS.surface,
-    padding: 13,
-    gap: 5,
-  },
-  metricCardActive: {
-    borderColor: COLORS.charcoal,
-    backgroundColor: '#EFEEE7',
-  },
-  metricValue: {
-    color: COLORS.ink,
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  metricLabel: {
-    color: COLORS.muted,
-    fontSize: 13,
-    fontWeight: '600',
   },
   profileScreen: {
     gap: 18,
@@ -5340,39 +4980,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     padding: 14,
     gap: 10,
-  },
-  compactTaskRow: {
-    minHeight: 64,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 11,
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 8,
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: 13,
-    paddingVertical: 10,
-  },
-  compactTaskDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.blue,
-  },
-  compactTaskBody: {
-    minWidth: 0,
-    flex: 1,
-    gap: 3,
-  },
-  compactTaskName: {
-    color: COLORS.ink,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  compactTaskProject: {
-    color: COLORS.muted,
-    fontSize: 12,
-    fontWeight: '600',
   },
   projectDirectoryRow: {
     minHeight: 72,
