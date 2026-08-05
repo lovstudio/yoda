@@ -97,6 +97,10 @@ describe('MaaS platform menu', () => {
     expect(menu?.textContent).toContain('ZenMux');
     expect(menu?.textContent).toContain('LiteLLM');
     expect(menu?.textContent).toContain('New API');
+    expect(menu?.textContent).toContain('CLIProxyAPI');
+    expect(menu?.textContent).toContain('maas.categories.hosted-platform.title');
+    expect(menu?.textContent).toContain('maas.categories.self-hosted-gateway.title');
+    expect(menu?.textContent).toContain('maas.categories.custom.title');
   });
 
   it('adds LiteLLM with a local Gateway preset and routing guidance', async () => {
@@ -178,6 +182,36 @@ describe('MaaS platform menu', () => {
     );
 
     expect(host.querySelector('[data-maas-platform-id="newapi"]')).not.toBeNull();
+  });
+
+  it('adds CLIProxyAPI as a self-hosted gateway with its local preset', async () => {
+    const { MaasView } = await import('@renderer/features/maas/components/MaasView');
+    await act(async () => root.render(createElement(MaasView, { embedded: true })));
+
+    const addButton = Array.from(host.querySelectorAll('button')).find(
+      (button) => button.textContent === 'maas.addPlatform'
+    );
+    await act(async () => addButton?.click());
+    const cliProxyApiItem = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+    ).find((item) => item.textContent?.includes('CLIProxyAPI'));
+    await act(async () => cliProxyApiItem?.click());
+
+    const category = host.querySelector<HTMLElement>(
+      '[data-maas-platform-category="self-hosted-gateway"]'
+    );
+    const panel = host.querySelector<HTMLElement>('[data-maas-platform-id="cliproxyapi"]');
+    expect(category).not.toBeNull();
+    expect(panel).not.toBeNull();
+    expect(panel?.textContent).toContain('maas.connection.cliProxyApiSetupHelper');
+    expect(
+      Array.from(panel?.querySelectorAll<HTMLInputElement>('input') ?? []).map(
+        (input) => input.value
+      )
+    ).toEqual(expect.arrayContaining(['CLIProxyAPI', 'http://127.0.0.1:8317/v1']));
+    expect(panel?.querySelector('input[type="password"]')?.getAttribute('placeholder')).toBe(
+      'maas.connection.cliProxyApiKeyPlaceholder'
+    );
   });
 
   it('can add more than one independent Custom platform draft', async () => {

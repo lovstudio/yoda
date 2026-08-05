@@ -21,9 +21,11 @@ import {
   getMaasPlatformTemplateId,
   hasMaasInferenceCredential,
   isMaasPlatformId,
+  MAAS_PLATFORM_CATEGORIES,
   MAAS_PLATFORMS,
   type MaasApiKeyKind,
   type MaasConnection,
+  type MaasPlatformCategory,
   type MaasPlatformId,
   type MaasPlatformOfficialDescription,
   type MaasPlatformTemplateId,
@@ -39,6 +41,7 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { Input } from '@renderer/lib/ui/input';
@@ -152,6 +155,14 @@ export const MaasView: React.FC<{
       new Map(platformDescriptions?.map((description) => [description.platformId, description])),
     [platformDescriptions]
   );
+  const visiblePlatformGroups = useMemo(
+    () => groupMaasPlatformIds(visiblePlatformIds),
+    [visiblePlatformIds]
+  );
+  const availablePlatformGroups = useMemo(
+    () => groupMaasPlatformIds(availablePlatformIds),
+    [availablePlatformIds]
+  );
 
   const handlePlatformValueChange = useCallback((value: string) => {
     if (value === '') {
@@ -203,49 +214,67 @@ export const MaasView: React.FC<{
     [setGlobalBinding, t, toast]
   );
 
-  const platformAccordion =
+  const renderPlatformAccordion = (platformIds: MaasPlatformId[]) => (
+    <AccordionPrimitive.Root
+      type="single"
+      collapsible
+      value={expandedPlatformId}
+      onValueChange={handlePlatformValueChange}
+      className="overflow-hidden rounded-xl border border-border/60 bg-muted/10"
+    >
+      {platformIds.map((platformId) => {
+        const connection = findConnection(connections, platformId);
+        const isDraft = !connection.configured && draftPlatformIds.includes(platformId);
+        const templateId = getMaasPlatformTemplateId(platformId);
+        const enabled = Boolean(
+          globalBinding.data?.enabled && globalBinding.data.platformId === platformId
+        );
+        const platformConfigured = Boolean(
+          connection.connected && hasMaasInferenceCredential(connection)
+        );
+        const enableAvailable = gateway.ready && platformConfigured;
+        const enablePending = Boolean(
+          setGlobalBinding.isPending &&
+            setGlobalBinding.variables?.platformId === connection.platformId
+        );
+        return (
+          <PlatformAccordionItem
+            key={platformId}
+            connection={connection}
+            officialDescription={platformDescriptionById.get(templateId)}
+            onOpenUsage={platformId === 'zenmux' ? () => showZenmuxUsage({}) : undefined}
+            onCancelDraft={isDraft ? () => handleCancelDraft(platformId) : undefined}
+            onConnected={() => handlePlatformConnected(platformId)}
+            enabled={enabled}
+            enableAvailable={enableAvailable}
+            gatewayReady={gateway.ready}
+            enablePending={enablePending}
+            enableUpdating={setGlobalBinding.isPending}
+            onEnabledChange={(next) => handlePlatformEnabledChange(connection, next)}
+            loading={isLoading}
+          />
+        );
+      })}
+    </AccordionPrimitive.Root>
+  );
+
+  const platformSections =
     visiblePlatformIds.length > 0 ? (
-      <AccordionPrimitive.Root
-        type="single"
-        collapsible
-        value={expandedPlatformId}
-        onValueChange={handlePlatformValueChange}
-        className="overflow-hidden rounded-xl border border-border/60 bg-muted/10"
-      >
-        {visiblePlatformIds.map((platformId) => {
-          const connection = findConnection(connections, platformId);
-          const isDraft = !connection.configured && draftPlatformIds.includes(platformId);
-          const templateId = getMaasPlatformTemplateId(platformId);
-          const enabled = Boolean(
-            globalBinding.data?.enabled && globalBinding.data.platformId === platformId
-          );
-          const platformConfigured = Boolean(
-            connection.connected && hasMaasInferenceCredential(connection)
-          );
-          const enableAvailable = gateway.ready && platformConfigured;
-          const enablePending = Boolean(
-            setGlobalBinding.isPending &&
-              setGlobalBinding.variables?.platformId === connection.platformId
-          );
-          return (
-            <PlatformAccordionItem
-              key={platformId}
-              connection={connection}
-              officialDescription={platformDescriptionById.get(templateId)}
-              onOpenUsage={platformId === 'zenmux' ? () => showZenmuxUsage({}) : undefined}
-              onCancelDraft={isDraft ? () => handleCancelDraft(platformId) : undefined}
-              onConnected={() => handlePlatformConnected(platformId)}
-              enabled={enabled}
-              enableAvailable={enableAvailable}
-              gatewayReady={gateway.ready}
-              enablePending={enablePending}
-              enableUpdating={setGlobalBinding.isPending}
-              onEnabledChange={(next) => handlePlatformEnabledChange(connection, next)}
-              loading={isLoading}
-            />
-          );
-        })}
-      </AccordionPrimitive.Root>
+      <div className="grid gap-5">
+        {visiblePlatformGroups.map(({ category, platformIds }) => (
+          <section key={category} data-maas-platform-category={category} className="grid gap-2.5">
+            <div className="px-0.5">
+              <h4 className="text-xs font-medium text-foreground">
+                {t(`maas.categories.${category}.title`)}
+              </h4>
+              <p className="mt-0.5 text-xs leading-relaxed text-foreground-muted">
+                {t(`maas.categories.${category}.description`)}
+              </p>
+            </div>
+            {renderPlatformAccordion(platformIds)}
+          </section>
+        ))}
+      </div>
     ) : (
       <div className="flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/10 px-6 py-8 text-center">
         <Layers className="h-5 w-5 text-foreground-muted" />
@@ -294,35 +323,47 @@ export const MaasView: React.FC<{
                   <DropdownMenuContent align="end" className="w-72">
                     <DropdownMenuGroup>
                       <DropdownMenuLabel>{t('maas.selectPlatform')}</DropdownMenuLabel>
-                      {availablePlatformIds.map((platformId) => {
-                        const platform = MAAS_PLATFORMS[platformId];
-                        return (
-                          <DropdownMenuItem
-                            key={platformId}
-                            className="items-start py-2"
-                            onClick={() => handleAddPlatform(platformId)}
-                          >
-                            <Layers className="mt-0.5 h-4 w-4" />
-                            <span className="min-w-0">
-                              <span className="block text-sm text-foreground">{platform.name}</span>
-                              <span className="mt-0.5 block line-clamp-2 text-xs leading-relaxed text-foreground-muted">
-                                {t(`maas.platforms.${platformId}.description`)}
-                              </span>
-                            </span>
-                          </DropdownMenuItem>
-                        );
-                      })}
                     </DropdownMenuGroup>
+                    {availablePlatformGroups.map(({ category, platformIds }) => (
+                      <React.Fragment key={category}>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuGroup>
+                          <DropdownMenuLabel>
+                            {t(`maas.categories.${category}.title`)}
+                          </DropdownMenuLabel>
+                          {platformIds.map((platformId) => {
+                            const platform = MAAS_PLATFORMS[platformId];
+                            return (
+                              <DropdownMenuItem
+                                key={platformId}
+                                className="items-start py-2"
+                                onClick={() => handleAddPlatform(platformId)}
+                              >
+                                <Layers className="mt-0.5 h-4 w-4" />
+                                <span className="min-w-0">
+                                  <span className="block text-sm text-foreground">
+                                    {platform.name}
+                                  </span>
+                                  <span className="mt-0.5 block line-clamp-2 text-xs leading-relaxed text-foreground-muted">
+                                    {t(`maas.platforms.${platformId}.description`)}
+                                  </span>
+                                </span>
+                              </DropdownMenuItem>
+                            );
+                          })}
+                        </DropdownMenuGroup>
+                      </React.Fragment>
+                    ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
             }
           >
-            {platformAccordion}
+            {platformSections}
           </MaasChapter>
         </>
       ) : (
-        platformAccordion
+        platformSections
       )}
     </div>
   );
@@ -349,6 +390,17 @@ export const MaasView: React.FC<{
     </div>
   );
 };
+
+function groupMaasPlatformIds<TPlatformId extends MaasPlatformId>(
+  platformIds: readonly TPlatformId[]
+): Array<{ category: MaasPlatformCategory; platformIds: TPlatformId[] }> {
+  return MAAS_PLATFORM_CATEGORIES.map((category) => ({
+    category,
+    platformIds: platformIds.filter(
+      (platformId) => getMaasPlatformDefinition(platformId).category === category
+    ),
+  })).filter((group) => group.platformIds.length > 0);
+}
 
 const MaasDescriptionSourceBadge: React.FC<{
   description: MaasPlatformOfficialDescription;
@@ -804,7 +856,9 @@ const ConnectionPanel: React.FC<{
         ? t('maas.connection.litellmKeyPlaceholder')
         : connection.platformId === 'newapi'
           ? t('maas.connection.newApiKeyPlaceholder')
-          : t('maas.connection.apiKeyPlaceholder');
+          : connection.platformId === 'cliproxyapi'
+            ? t('maas.connection.cliProxyApiKeyPlaceholder')
+            : t('maas.connection.apiKeyPlaceholder');
   const platformDescription =
     officialDescription?.source === 'fallback' || !officialDescription
       ? t(`maas.platforms.${getMaasPlatformTemplateId(connection.platformId)}.description`)
@@ -916,6 +970,11 @@ const ConnectionPanel: React.FC<{
         {connection.platformId === 'newapi' && (
           <div className="max-w-2xl rounded-lg border border-border/60 bg-background-secondary px-3 py-2 text-xs leading-relaxed text-foreground-muted">
             {t('maas.connection.newApiSetupHelper')}
+          </div>
+        )}
+        {connection.platformId === 'cliproxyapi' && (
+          <div className="max-w-2xl rounded-lg border border-border/60 bg-background-secondary px-3 py-2 text-xs leading-relaxed text-foreground-muted">
+            {t('maas.connection.cliProxyApiSetupHelper')}
           </div>
         )}
 

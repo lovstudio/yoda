@@ -470,7 +470,7 @@
       "agentManager": "Agents",
       "models": "Models",
       "llm": "LLM",
-      "maas": "MaaS",
+      "maas": "Model access",
       "usage": "Usage",
       "aiLogs": "AI Logs",
       "automation": "Automation",
@@ -560,7 +560,7 @@
       "revokeDevice": "Revoke",
       "settingsSync": {
         "title": "Settings sync",
-        "description": "Restore interface, shortcuts, Agent, and MaaS settings across Yoda installations, like IDE settings sync.",
+        "description": "Restore interface, shortcuts, Agent, and model access settings across Yoda installations, like IDE settings sync.",
         "autoSync": "Sync automatically with your LovStudio account",
         "lastSynced": "Last synced: {{date}}",
         "notSynced": "Not synced yet",
@@ -601,7 +601,7 @@
       "providerDescription": "Choose the model provider whose catalog you want to manage.",
       "providerUnknown": "Unknown provider",
       "customProviderTitle": "Custom providers",
-      "customProviderDescription": "Add a model vendor that is not in the catalog. This manages vendor and model ownership; configure Agent Client or MaaS access in its corresponding settings.",
+      "customProviderDescription": "Add a model vendor that is not in the catalog. This manages vendor and model ownership; configure Agent Client or model access in its corresponding settings.",
       "addProvider": "Add provider",
       "providerName": "Provider name",
       "providerNamePlaceholder": "For example, SiliconFlow",
@@ -672,14 +672,14 @@
       "agentClient": "Agent Client",
       "agentClientDescription": "The client this AI call is attached to, such as Claude Code, Codex, or Code Ace.",
       "accessMethod": "Access method",
-      "accessMethodDescription": "Choose official subscription, official API key, or Yoda MaaS within the current Client.",
+      "accessMethodDescription": "Choose official subscription, official API key, or Yoda model access within the current Client.",
       "access": {
         "officialSubscription": "Official subscription",
         "officialApi": "API key",
-        "maas": "Third-party MaaS"
+        "maas": "Model access"
       },
-      "maasPlatform": "MaaS platform",
-      "maasPlatformDescription": "Only used when the access method is MaaS. {{count}} platform(s) connected; selected platform is {{status}}.",
+      "maasPlatform": "Model access service",
+      "maasPlatformDescription": "Only used when the access method is model access. {{count}} service(s) connected; selected service is {{status}}.",
       "maasConnected": "connected",
       "maasNotConnected": "not connected",
       "model": "Model",
@@ -1401,14 +1401,14 @@
     "signInDescription": "Your LovStudio account provides identity, credits, Relay, and GitHub OAuth. You can still use local features without signing in.",
     "connectedAs": "Connected as {{name}}",
     "maasGateway": {
-      "stepTitle": "MaaS Gateway",
-      "title": "Install Yoda MaaS Gateway?",
-      "description": "This optional Marketplace background service lets Codex use and hot-switch third-party MaaS providers through localhost without writing upstream API keys into Codex configuration.",
+      "stepTitle": "Model Gateway",
+      "title": "Install Yoda Model Gateway?",
+      "description": "This optional Marketplace background service lets Codex use and hot-switch hosted platforms or self-hosted gateways through localhost without writing upstream API keys into Codex configuration.",
       "security": "The Gateway listens only on 127.0.0.1. Provider secrets remain in Yoda encrypted storage and enter the helper memory only through process IPC.",
       "install": "Install Gateway",
       "skip": "Not now",
-      "unavailable": "MaaS Gateway is not currently available in the Marketplace.",
-      "installFailed": "MaaS Gateway installation failed."
+      "unavailable": "The Model Gateway is not currently available in the Marketplace.",
+      "installFailed": "Model Gateway installation failed."
     },
     "import": {
       "importing": "Importing…",
@@ -1706,7 +1706,7 @@
         "authProvider": {
           "official-subscription": "Subscription",
           "official-api": "API Key",
-          "yoda-maas": "MaaS"
+          "yoda-maas": "Model access"
         }
       },
       "subtasks": "Subtasks ({{count}})"
@@ -3383,7 +3383,7 @@
       "authProviders": {
         "official-subscription": "Official subscription",
         "official-api": "Official API",
-        "yoda-maas": "Yoda MaaS"
+        "yoda-maas": "Yoda model access"
       },
       "clientDefault": "Client default",
       "agentOverride": "Agent override",
@@ -3444,9 +3444,9 @@
       "officialSubscriptionDescription": "{{name}} keeps official login and subscription credentials in its own CLI or local config.",
       "officialApi": "Official API",
       "officialApiDescription": "API keys and base URLs forwarded to {{name}} when Yoda launches client sessions.",
-      "maasSource": "Yoda MaaS",
+      "maasSource": "Yoda model access",
       "maasDescription": "Use configured model platforms for shared routing, observability, and billing when available.",
-      "manageMaas": "Manage MaaS",
+      "manageMaas": "Manage model access",
       "selectAria": "Use {{name}} as the auth source",
       "expandAria": "Toggle {{name}} details",
       "selectedUnavailable": "This source is not ready yet — finish configuring it first",
@@ -3497,10 +3497,10 @@
       "localUsageCacheWrite": "Cache write",
       "localUsageLoading": "Crunching local usage...",
       "localUsageError": "Could not read local usage",
-      "noMaasConnections": "No MaaS platform is connected yet.",
+      "noMaasConnections": "No model access service is connected yet.",
       "usageTitle": "Usage",
       "usageRefresh": "Refresh",
-      "usageNoMaas": "Connect ZenMux in the MaaS view to open official billing and usage pages.",
+      "usageNoMaas": "Connect ZenMux in Model access to open official billing and usage pages.",
       "usageLoading": "Loading usage...",
       "usageError": "Could not load usage",
       "usageEmpty": "No matching usage statistics.",
@@ -3508,7 +3508,7 @@
       "usageTokens": "Tokens",
       "usageCost": "Cost",
       "usagePeriod": "Period",
-      "usageAllRoutes": "All MaaS routes",
+      "usageAllRoutes": "All model access routes",
       "usageFilteredBy": "Filtered",
       "usageExternalTitle": "Use ZenMux Console as source of truth",
       "usageExternalDescription": "Yoda does not display ZenMux platform-wide statistics here, so public trends are not mistaken for this account or agent's cost.",
@@ -4085,7 +4085,7 @@
       "commit-message": "Commit message",
       "logo-generation": "Logo generation",
       "app-image-edit": "AI Lab image edit",
-      "maas-chat": "MaaS chat",
+      "maas-chat": "Model access chat",
       "llm-debug": "LLM debug",
       "interactive-session": "Interactive session",
       "interactive-turn": "Chat turn",
@@ -4093,46 +4093,60 @@
     }
   },
   "maas": {
-    "title": "MaaS",
-    "subtitle": "Connect model platforms and inspect real usage statistics.",
-    "platformsTitle": "Platforms",
+    "title": "Model access",
+    "subtitle": "Connect a hosted model platform or self-hosted gateway and apply it to Agent Clients.",
+    "platformsTitle": "Access services",
+    "categories": {
+      "hosted-platform": {
+        "title": "Hosted platforms",
+        "description": "Use a platform endpoint and API key without operating a gateway service yourself."
+      },
+      "self-hosted-gateway": {
+        "title": "Self-hosted gateways",
+        "description": "Connect a model gateway operated by you, your team, or Yoda to manage upstream accounts and channels."
+      },
+      "custom": {
+        "title": "Custom access",
+        "description": "Connect another model service with an OpenAI-compatible API."
+      }
+    },
     "connected": "Connected",
     "notConnected": "Not connected",
     "connectedCount": "{{count}} connected",
     "addedCount": "{{count}} added",
     "activeCount": "{{count}} active",
-    "addPlatform": "Add platform",
-    "selectPlatform": "Choose a platform to add",
+    "addPlatform": "Add access",
+    "selectPlatform": "Choose an access service",
     "cancelAddPlatform": "Cancel adding {{platform}}",
-    "emptyTitle": "No platforms added",
-    "emptyDescription": "Add a platform and save its endpoint and API key. You can save multiple platforms, but at most one can be active at a time.",
+    "emptyTitle": "No access services added",
+    "emptyDescription": "Add a hosted platform, self-hosted gateway, or custom access service and save its endpoint and API key. At most one service can be active at a time.",
     "global": {
-      "title": "Active platform",
-      "description": "Globally, zero or one platform can be active. Enabling one backs up every compatible Agent CLI access configuration; choosing another switches automatically, and disabling restores the originals.",
-      "loading": "Loading MaaS status…",
+      "title": "Active access",
+      "description": "Globally, zero or one access service can be active. Enabling one backs up every compatible Agent CLI configuration; choosing another switches automatically, and disabling restores the originals.",
+      "loading": "Loading model access status…",
       "effective": "Active for {{count}} Agent CLI(s)",
       "needsAttention": "Enabled, but credentials or configuration need attention",
       "enabled": "Enabled",
       "disabled": "Disabled",
       "notEnabled": "Available",
       "needsConfiguration": "Configure an API key first",
-      "needsGateway": "Install and enable Yoda MaaS Gateway first",
+      "needsGateway": "Install and enable Yoda Model Gateway first",
       "toggleAria": "Enable {{platform}} globally",
       "enableAria": "Enable {{platform}}",
       "disableAria": "Disable {{platform}}",
       "manage": "Configure {{platform}}",
       "enabledToast": "{{platform}} is active for every compatible Agent CLI",
-      "restoredToast": "MaaS disabled and Agent CLI configurations restored",
-      "codexRestartNotice": "If Codex App is open, quit it completely and reopen it to reload the local MaaS Gateway provider. The upstream API key is not placed in the app environment.",
-      "updateFailed": "Could not update global MaaS configuration"
+      "restoredToast": "Model access disabled and Agent CLI configurations restored",
+      "codexRestartNotice": "If Codex App is open, quit it completely and reopen it to reload the local model access provider. The upstream API key is not placed in the app environment.",
+      "updateFailed": "Could not update global model access configuration"
     },
     "gatewayRequirement": {
-      "title": "Yoda MaaS Gateway required",
+      "title": "Yoda Model Gateway required",
       "states": {
         "loading": "Checking the Marketplace extension status…",
         "unavailable": "The Gateway listing is currently unavailable. Open Marketplace to inspect it.",
         "unsupported": "The Gateway does not support this platform.",
-        "not-installed": "Install the Gateway from Marketplace before enabling a MaaS platform.",
+        "not-installed": "Install the Gateway from Marketplace before enabling model access.",
         "disabled": "The Gateway is installed but disabled. Enable it from Marketplace first.",
         "unhealthy": "The Gateway is not running normally. Open Marketplace to inspect its status."
       },
@@ -4141,7 +4155,7 @@
     },
     "clients": {
       "title": "Agent Clients",
-      "description": "Selecting a Client saves its current access mode and switches its API key and endpoint to this MaaS. Restore returns to the previous configuration. Changes apply when a session is next started or resumed.",
+      "description": "Selecting a Client saves its current access mode and switches its API key and endpoint to this model access service. Restore returns to the previous configuration. Changes apply when a session is next started or resumed.",
       "loading": "Loading Client configuration…",
       "effective": "Configuration active",
       "needsAttention": "Linked, but credentials or configuration need attention",
@@ -4165,13 +4179,16 @@
         "description": "Use SiliconFlow API to call GenAI capabilities; call via OpenAI interface."
       },
       "litellm": {
-        "description": "Unify multiple MaaS providers behind an OpenAI-compatible Gateway, with routing, load balancing, and failover handled by LiteLLM."
+        "description": "Unify multiple upstream model providers behind an OpenAI-compatible Gateway, with routing, load balancing, and failover handled by LiteLLM."
       },
       "newapi": {
         "description": "Manage OpenAI-compatible upstream channels through a lightweight gateway with routing, retries, and failover."
       },
+      "cliproxyapi": {
+        "description": "Expose CLI and OAuth accounts through compatible APIs with multi-account routing and load balancing."
+      },
       "custom": {
-        "description": "Creates a model response for the given chat conversation."
+        "description": "Connect another model service with an OpenAI-compatible API."
       }
     },
     "platformDescription": {
@@ -4198,9 +4215,11 @@
       "managementApiKey": "Management API key",
       "zenmuxManagementKeyPlaceholder": "Paste ZenMux Management API Key",
       "litellmKeyPlaceholder": "Paste a LiteLLM Virtual Key or Master Key",
-      "litellmSetupHelper": "Configure upstream MaaS providers, model names, and routing rules in LiteLLM first. Yoda connects only to the Gateway and forwards Codex requests through /v1/responses.",
+      "litellmSetupHelper": "Configure upstream model providers, model names, and routing rules in LiteLLM first. Yoda connects only to the Gateway and forwards Codex requests through /v1/responses.",
       "newApiKeyPlaceholder": "Paste a New API token",
       "newApiSetupHelper": "Add upstream channels in New API first. Yoda connects to its OpenAI-compatible endpoint and uses the same model list.",
+      "cliProxyApiKeyPlaceholder": "Paste an API key configured in CLIProxyAPI",
+      "cliProxyApiSetupHelper": "Start CLIProxyAPI, sign in to the CLI or OAuth accounts, and enable an API key in its configuration first. Yoda connects to the compatible endpoint and forwards Agent Client requests.",
       "inferenceApiKey": "Agent Client API key",
       "inferenceApiKeyPlaceholder": "Paste a ZenMux API key for model inference",
       "inferenceApiKeyHelper": "This key is used only for Agent Client model calls. The Management key above remains dedicated to usage and log statistics.",
@@ -4233,7 +4252,7 @@
       "subtitle": "Account-level cost details should be checked in ZenMux Cost Analytics.",
       "loading": "Loading ZenMux statistics...",
       "emptyNoConnectionTitle": "No platform connected",
-      "emptyNoConnection": "Connect a MaaS platform to load ZenMux Management API aggregates.",
+      "emptyNoConnection": "Connect a model access service to load ZenMux Management API aggregates.",
       "emptyNoRecords": "No usage statistics.",
       "errorTitle": "Could not load usage statistics",
       "reload": "Reload",
@@ -4466,7 +4485,7 @@
     },
     "gateway": {
       "title": "Gateway",
-      "description": "Choose MaaS, a subscription account, or an API key for each Agent Client",
+      "description": "Choose model access, a subscription account, or an API key for each Agent Client",
       "global": "Global",
       "globalHint": "These settings apply to all new local sessions",
       "currentSource": "{{client}} currently uses {{source}}",
@@ -4479,21 +4498,22 @@
       "ready": "Ready",
       "needsConfiguration": "Needs configuration",
       "directSources": "Agent CLI",
-      "maasSources": "MaaS platforms",
+      "maasSources": "Model access",
       "subscription": "Subscription account",
       "apiKey": "API Key",
-      "maas": "MaaS",
+      "maas": "Model access",
       "unconfigured": "Not configured",
-      "noMaas": "No MaaS platform connected",
+      "noMaas": "No model access service connected",
       "updated": "Updated the Gateway for {{client}}",
       "updateFailed": "Failed to update Gateway",
       "manageClient": "Manage {{client}} account",
-      "manageMaas": "Manage MaaS platforms",
+      "manageMaas": "Manage model access",
       "openLogs": "Open AI logs"
     },
     "maas": {
-      "title": "MaaS",
-      "description": "Choose one MaaS platform for every compatible Agent CLI",
+      "title": "Model access",
+      "labelWithPlatform": "Model access ({{platform}})",
+      "description": "Choose a hosted platform or self-hosted gateway for every compatible Agent CLI",
       "effective": "Active",
       "needsAttention": "Check setup",
       "disabled": "Disabled",

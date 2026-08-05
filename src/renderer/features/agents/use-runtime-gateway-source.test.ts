@@ -48,7 +48,8 @@ describe('workspace MaaS placement', () => {
     expect(triggerIndex).toBeGreaterThan(spacerIndex);
     expect(terminalIndex).toBeGreaterThan(triggerIndex);
     expect(source).toContain('<MaasGlobalSelector');
-    expect(source).toContain("    : 'MaaS';");
+    expect(source).toContain("t('workspaceRuntime.maas.labelWithPlatform'");
+    expect(source).toContain(": t('workspaceRuntime.maas.title');");
     expect(source).not.toContain('<GatewayRuntimeSources');
     expect(triggerSource).toContain(
       "globalMaasBinding.data?.enabled ? 'text-foreground' : 'text-foreground-passive'"

@@ -173,6 +173,19 @@ describe('Codex MaaS native authentication switch', () => {
     expect(activeConfig).toContain('wire_api = "responses"');
   });
 
+  it('writes CLIProxyAPI as a distinct Codex model provider', async () => {
+    await enableGateway(authSwitch, codexHome, {
+      platformId: 'cliproxyapi',
+      displayName: 'CLIProxyAPI',
+    });
+
+    const activeConfig = await readFile(configPath, 'utf8');
+    expect(activeConfig).toContain('model_provider = "cliproxyapi"');
+    expect(activeConfig).toContain('[model_providers.cliproxyapi]');
+    expect(activeConfig).toContain('name = "CLIProxyAPI"');
+    expect(activeConfig).toContain('wire_api = "responses"');
+  });
+
   it('rolls an enable operation back without leaving a stale snapshot', async () => {
     const rollback = await enableGateway(authSwitch, codexHome);
 
@@ -310,7 +323,7 @@ function enableGateway(
   authSwitch: CodexMaasAuthSwitch,
   codexHome: string,
   overrides: {
-    platformId?: 'zenmux' | 'openrouter' | 'litellm' | 'newapi';
+    platformId?: 'zenmux' | 'openrouter' | 'litellm' | 'newapi' | 'cliproxyapi';
     displayName?: string;
     gatewayToken?: string;
   } = {}

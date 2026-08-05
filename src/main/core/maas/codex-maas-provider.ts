@@ -25,6 +25,9 @@ const CODEX_MAAS_PROVIDER_METADATA: Record<MaasPlatformTemplateId, CodexMaasProv
   newapi: {
     providerId: 'newapi',
   },
+  cliproxyapi: {
+    providerId: 'cliproxyapi',
+  },
   custom: {
     providerId: 'custom',
   },

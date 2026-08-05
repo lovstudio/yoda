@@ -360,8 +360,12 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     (connection) => connection.platformId === selectedMaasPlatformId
   );
   const selectedMaasLabel = selectedMaasPlatformId
-    ? `MaaS (${selectedMaasConnection?.displayName ?? getMaasPlatformDefinition(selectedMaasPlatformId).name})`
-    : 'MaaS';
+    ? t('workspaceRuntime.maas.labelWithPlatform', {
+        platform:
+          selectedMaasConnection?.displayName ??
+          getMaasPlatformDefinition(selectedMaasPlatformId).name,
+      })
+    : t('workspaceRuntime.maas.title');
   const { data: resourceSnapshot } = useQuery({
     queryKey: WORKSPACE_RESOURCE_QUERY_KEY,
     queryFn: () => rpc.app.getResourceSnapshot(),

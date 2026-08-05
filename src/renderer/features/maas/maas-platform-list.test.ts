@@ -37,6 +37,7 @@ describe('MaaS platform list', () => {
       'siliconflow',
       'litellm',
       'newapi',
+      'cliproxyapi',
       'custom',
     ]);
   });
