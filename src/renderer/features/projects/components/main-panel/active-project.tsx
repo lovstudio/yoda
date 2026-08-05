@@ -7,10 +7,10 @@ import { OverviewPanel } from '@renderer/features/projects/components/overview-v
 import { PullRequestView } from '@renderer/features/projects/components/pr-view/pr-view';
 import { ProjectSessionsPanel } from '@renderer/features/projects/components/sessions-view/project-sessions-panel';
 import { SettingsPanel } from '@renderer/features/projects/components/settings-view/settings-panel';
-import { ProjectSystemPromptPanel } from '@renderer/features/projects/components/system-prompt-view/project-system-prompt-panel';
 import { TaskList } from '@renderer/features/projects/components/task-view/task-list';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import type { ProjectView } from '@renderer/features/projects/stores/project-view';
+import { PromptLibraryPanel } from '@renderer/features/prompt-library/prompt-library-panel';
 import { useParams } from '@renderer/lib/layout/navigation-provider';
 
 /**
@@ -37,7 +37,7 @@ export const ActiveProject = observer(function ActiveProject() {
         {activeView === 'pullRequests' && <PullRequestView />}
         {activeView === 'sessions' && <ProjectSessionsPanel />}
         {activeView === 'harness' && <HarnessPanel />}
-        {activeView === 'prompts' && <ProjectSystemPromptPanel projectId={projectId} />}
+        {activeView === 'prompts' && <PromptLibraryPanel projectId={projectId} />}
         {activeView === 'docs' && <DocsPanel projectId={projectId} />}
         {activeView === 'settings' && <SettingsPanel />}
       </div>

@@ -35,7 +35,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import React, { useId, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES,
@@ -283,7 +283,14 @@ function SortablePromptRow({
   );
 }
 
-export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean }) {
+export function PromptLibraryPanel({
+  embedded = false,
+  projectId,
+}: {
+  embedded?: boolean;
+  /** Preselects the project-scoped instruction and prompt section. */
+  projectId?: string;
+}) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const showConfirm = useShowModal('confirmActionModal');
@@ -315,7 +322,11 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
   const [activeRuntimeId, setActiveRuntimeId] = useState<RuntimeId | null>(null);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projectId ?? null);
+
+  useEffect(() => {
+    if (projectId) setSelectedProjectId(projectId);
+  }, [projectId]);
 
   const items = useMemo(() => data ?? [], [data]);
   const groups = useMemo(
