@@ -22,6 +22,12 @@ export interface AccountUsageThresholdAlert {
   notificationKeys: string[];
 }
 
+export interface AccountResetCreditCandidate {
+  id: string;
+  status: 'available' | 'redeeming' | 'redeemed' | 'unknown';
+  expiresAt: string | null;
+}
+
 function normalizeSessionLabel(value: string): string {
   return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
 }
@@ -84,4 +90,26 @@ export function getAccountUsageThresholdAlert(
     window: mostDepleted.window,
     notificationKeys: newlyQualified.map(({ key }) => key),
   };
+}
+
+/** Prefer the available credit that expires first so later credits stay banked. */
+export function getNextAccountResetCredit<T extends AccountResetCreditCandidate>(
+  credits: readonly T[] | null | undefined
+): T | null {
+  const available = credits?.filter((credit) => credit.status === 'available') ?? [];
+  if (available.length === 0) return null;
+
+  return available.reduce((next, candidate) => {
+    const nextExpiry = next.expiresAt ? Date.parse(next.expiresAt) : Number.POSITIVE_INFINITY;
+    const candidateExpiry = candidate.expiresAt
+      ? Date.parse(candidate.expiresAt)
+      : Number.POSITIVE_INFINITY;
+    const normalizedNextExpiry = Number.isFinite(nextExpiry)
+      ? nextExpiry
+      : Number.POSITIVE_INFINITY;
+    const normalizedCandidateExpiry = Number.isFinite(candidateExpiry)
+      ? candidateExpiry
+      : Number.POSITIVE_INFINITY;
+    return normalizedCandidateExpiry < normalizedNextExpiry ? candidate : next;
+  });
 }

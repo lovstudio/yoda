@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getAccountUsageThresholdAlert,
   getDistinctAgentTaskTitle,
+  getNextAccountResetCredit,
   getQuotaWindowLabel,
 } from './workspace-runtime-bar-format';
 
@@ -15,6 +16,29 @@ describe('getDistinctAgentTaskTitle', () => {
 
   it('preserves distinct task context', () => {
     expect(getDistinctAgentTaskTitle('修复登录状态', '桌面端授权')).toBe('桌面端授权');
+  });
+});
+
+describe('getNextAccountResetCredit', () => {
+  it('chooses the available credit that expires first', () => {
+    expect(
+      getNextAccountResetCredit([
+        { id: 'permanent', status: 'available', expiresAt: null },
+        { id: 'later', status: 'available', expiresAt: '2026-08-20T00:00:00.000Z' },
+        { id: 'earlier', status: 'available', expiresAt: '2026-08-13T00:00:00.000Z' },
+        { id: 'redeemed', status: 'redeemed', expiresAt: '2026-08-06T00:00:00.000Z' },
+      ])
+    ).toMatchObject({ id: 'earlier' });
+  });
+
+  it('keeps a non-expiring credit selectable when it is the only available detail', () => {
+    expect(
+      getNextAccountResetCredit([
+        { id: 'permanent', status: 'available', expiresAt: null },
+        { id: 'redeeming', status: 'redeeming', expiresAt: null },
+      ])
+    ).toMatchObject({ id: 'permanent' });
+    expect(getNextAccountResetCredit(null)).toBeNull();
   });
 });
 
