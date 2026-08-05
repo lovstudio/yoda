@@ -77,6 +77,23 @@ vi.mock('@renderer/features/prompt-library/prompt-system-section', async () => {
   };
 });
 
+vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
+  usePrompts: () => ({
+    data: [
+      {
+        id: 'global-prompt',
+        title: 'Global prompt',
+        content: 'Global content',
+        description: '',
+        extraInfo: '',
+        groupName: '',
+        injectionEnabled: true,
+        injectionOrder: 0,
+      },
+    ],
+  }),
+}));
+
 vi.mock('@renderer/lib/hooks/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
@@ -156,5 +173,32 @@ describe('ProjectPromptSection', () => {
       );
     });
     expect(mocks.saveSettings).toHaveBeenCalled();
+  });
+
+  it('supports a fixed project with per-project global prompt overrides', async () => {
+    const { ProjectPromptSection } = await import(
+      '@renderer/features/prompt-library/project-prompt-section'
+    );
+    await act(async () => {
+      root.render(
+        createElement(ProjectPromptSection, {
+          projectId: 'project-1',
+          runtimeId: 'codex',
+          onProjectIdChange: vi.fn(),
+          showProjectSelector: false,
+          showGlobalPrompts: true,
+        })
+      );
+    });
+
+    expect(host.querySelector('[data-slot="project-selector"]')).toBeNull();
+    const globalToggle = host.querySelector<HTMLButtonElement>(
+      '[data-slot="prompt-injection-row"] [data-slot="switch"]'
+    );
+    expect(globalToggle).not.toBeNull();
+    await act(async () => globalToggle?.click());
+    await act(async () => {
+      await vi.waitFor(() => expect(mocks.saveSettings).toHaveBeenCalled());
+    });
   });
 });

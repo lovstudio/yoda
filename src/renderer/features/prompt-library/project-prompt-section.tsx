@@ -5,7 +5,11 @@ import { useTranslation } from 'react-i18next';
 import type { ProjectPromptPrinciples, PromptPrinciple } from '@shared/project-settings';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { RUNTIMES, type RuntimeId } from '@shared/runtime-registry';
-import { setProjectItems } from '@renderer/features/projects/project-prompt-principles';
+import {
+  effectiveGlobalEnabled,
+  setGlobalOverride,
+  setProjectItems,
+} from '@renderer/features/projects/project-prompt-principles';
 import {
   asMounted,
   getProjectManagerStore,
@@ -20,8 +24,10 @@ import { Input } from '@renderer/lib/ui/input';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
+import { PromptInjectionControls } from './prompt-injection-controls';
 import { PromptLibraryChapter } from './prompt-library-chapter';
 import { PromptInstructionFilesEditor } from './prompt-system-section';
+import { usePrompts } from './use-prompts';
 
 function navigationProjectId(): string | undefined {
   const navigation = appState.navigation;
@@ -38,10 +44,14 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
   projectId,
   runtimeId,
   onProjectIdChange,
+  showProjectSelector = true,
+  showGlobalPrompts = false,
 }: {
   projectId: string | null;
   runtimeId: RuntimeId | null;
-  onProjectIdChange: (projectId: string | null) => void;
+  onProjectIdChange?: (projectId: string | null) => void;
+  showProjectSelector?: boolean;
+  showGlobalPrompts?: boolean;
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -72,7 +82,7 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
   })();
 
   useEffect(() => {
-    if (!projectId && defaultProjectId) onProjectIdChange(defaultProjectId);
+    if (!projectId && defaultProjectId) onProjectIdChange?.(defaultProjectId);
   }, [defaultProjectId, onProjectIdChange, projectId]);
 
   useEffect(() => {
@@ -156,12 +166,14 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
       title={t('promptLibrary.project.title')}
       description={t('promptLibrary.project.description')}
       actions={
-        <div className="w-full @3xl:w-72">
-          <ProjectSelector
-            value={projectId ?? undefined}
-            onChange={(next) => onProjectIdChange(next ?? null)}
-          />
-        </div>
+        showProjectSelector ? (
+          <div className="w-full @3xl:w-72">
+            <ProjectSelector
+              value={projectId ?? undefined}
+              onChange={(next) => onProjectIdChange?.(next ?? null)}
+            />
+          </div>
+        ) : undefined
       }
     >
       {!projectId ? (
@@ -174,6 +186,10 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
         </div>
       ) : (
         <div className="grid gap-4">
+          {showGlobalPrompts ? (
+            <ProjectGlobalPromptOverrides draft={draft} savePrinciples={savePrinciples} />
+          ) : null}
+
           {runtimeId ? (
             <div>
               <h3 className="text-xs font-medium text-foreground">
@@ -299,5 +315,43 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
         </div>
       )}
     </PromptLibraryChapter>
+  );
+});
+
+const ProjectGlobalPromptOverrides = observer(function ProjectGlobalPromptOverrides({
+  draft,
+  savePrinciples,
+}: {
+  draft: ProjectPromptPrinciples | undefined;
+  savePrinciples: (next: ProjectPromptPrinciples | undefined) => void;
+}) {
+  const { t } = useTranslation();
+  const { data: prompts = [] } = usePrompts();
+  const orderedPrompts = prompts
+    .slice()
+    .sort((left, right) => left.injectionOrder - right.injectionOrder);
+
+  return (
+    <div>
+      <h3 className="text-xs font-medium text-foreground">
+        {t('promptLibrary.project.globalPrompts')}
+      </h3>
+      <p className="mt-1 text-xs leading-5 text-foreground-muted">
+        {t('promptLibrary.project.globalPromptsDescription')}
+      </p>
+      <PromptInjectionControls
+        className="mt-2"
+        prompts={orderedPrompts}
+        isPromptEnabled={(prompt) => effectiveGlobalEnabled(draft, prompt)}
+        onPromptEnabledChange={(prompt, enabled) =>
+          savePrinciples(setGlobalOverride(draft, prompt, enabled))
+        }
+        empty={
+          <p className="mt-2 rounded-lg border border-dashed border-border px-3 py-3 text-xs text-foreground-muted">
+            {t('promptLibrary.project.globalPromptsEmpty')}
+          </p>
+        }
+      />
+    </div>
   );
 });

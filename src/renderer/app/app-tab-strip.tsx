@@ -486,6 +486,8 @@ function describeProjectTab(
       return { label: t('tasks.conversations.sessions'), icon: lucideIcon(MessageSquare) };
     case 'harness':
       return { label: t('projects.harness.label'), icon: lucideIcon(Cpu) };
+    case 'prompts':
+      return { label: t('projects.systemPrompt.title'), icon: lucideIcon(FileText) };
     case 'docs':
       return { label: t('projects.docs.label'), icon: lucideIcon(BookText) };
     case 'settings':
