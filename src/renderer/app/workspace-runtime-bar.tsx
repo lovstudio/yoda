@@ -372,6 +372,8 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     [accountUsage, sessionContext?.rateLimits]
   );
   const shortAccountWindow = accountRateLimits[0] ?? null;
+  const accountUsageSupportsResetCreditDetails =
+    accountUsage == null || Object.prototype.hasOwnProperty.call(accountUsage, 'resetCredits');
   const nextAccountResetCredit = getNextAccountResetCredit(accountUsage?.resetCredits);
   const accountUsageWarningEnabled = notificationSettings?.accountUsageWarningEnabled ?? true;
   const accountUsageWarningThreshold = notificationSettings?.accountUsageWarningThreshold ?? 95;
@@ -1121,7 +1123,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                             title={
                               nextAccountResetCredit?.expiresAt
                                 ? new Date(nextAccountResetCredit.expiresAt).toLocaleString()
-                                : undefined
+                                : t(
+                                    accountUsageSupportsResetCreditDetails
+                                      ? 'workspaceRuntime.accountResetCreditExpiryUnknownDescription'
+                                      : 'workspaceRuntime.accountResetCreditRestartRequiredDescription'
+                                  )
                             }
                           >
                             {nextAccountResetCredit?.expiresAt
@@ -1132,7 +1138,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                                 })
                               : nextAccountResetCredit
                                 ? t('workspaceRuntime.accountResetCreditNoExpiry')
-                                : t('workspaceRuntime.accountResetCreditExpiryUnknown')}
+                                : t(
+                                    accountUsageSupportsResetCreditDetails
+                                      ? 'workspaceRuntime.accountResetCreditExpiryUnknown'
+                                      : 'workspaceRuntime.accountResetCreditRestartRequired'
+                                  )}
                           </span>
                         </div>
                       ) : null}
