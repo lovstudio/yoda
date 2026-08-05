@@ -27,7 +27,7 @@ import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { cn } from '@renderer/utils/utils';
 import { GlobalSidePaneTarget } from './global-side-pane-target';
 import { SidebarPinnedTaskList } from './pinned-task-list';
-import { ProjectsGroupLabel, ProjectsSettingsMenu } from './projects-group-label';
+import { ProjectsGroupLabel } from './projects-group-label';
 import { SidebarAccountAnchor } from './sidebar-account-anchor';
 import {
   SidebarContainer,
@@ -273,7 +273,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 </span>
               </SidebarMenuButton>
             </GlobalSidePaneTarget>
-            <ProjectsSettingsMenu />
             <GlobalSidePaneTarget viewId="marketplace" params={marketplaceParams}>
               <SidebarMenuButton
                 isActive={isCurrentView(currentView, 'marketplace')}
