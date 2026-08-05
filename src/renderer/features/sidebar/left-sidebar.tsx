@@ -219,7 +219,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 <div className="group/ws flex h-8 items-center gap-1 rounded-lg pr-1 text-foreground-tertiary-muted transition-colors hover:bg-background-tertiary-1 hover:text-foreground-tertiary has-data-popup-open:bg-background-tertiary-1 has-data-popup-open:text-foreground-tertiary">
                   <WorkspaceSwitcher />
                   <WorkspaceReviewBadge className="shrink-0" />
-                  <ProjectsSettingsMenu />
                 </div>
                 <div className="my-1 border-t border-border" />
               </>
@@ -274,6 +273,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 </span>
               </SidebarMenuButton>
             </GlobalSidePaneTarget>
+            <ProjectsSettingsMenu />
             <GlobalSidePaneTarget viewId="marketplace" params={marketplaceParams}>
               <SidebarMenuButton
                 isActive={isCurrentView(currentView, 'marketplace')}
