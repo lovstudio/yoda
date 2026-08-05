@@ -128,6 +128,22 @@ export function appendMobileVoiceTranscript(baseValue: string, transcript: strin
   return `${baseValue}${joinsWithoutSpace ? '' : ' '}${normalized}`;
 }
 
+export function mergeMobileVoiceRecognitionResult(
+  committedTranscript: string,
+  transcript: string,
+  isFinal: boolean
+): { committedTranscript: string; visibleTranscript: string } {
+  const nextCommittedTranscript = isFinal
+    ? appendMobileVoiceTranscript(committedTranscript, transcript)
+    : committedTranscript;
+  return {
+    committedTranscript: nextCommittedTranscript,
+    visibleTranscript: isFinal
+      ? nextCommittedTranscript
+      : appendMobileVoiceTranscript(nextCommittedTranscript, transcript),
+  };
+}
+
 function normalizeMobileSpeechContext(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
 }

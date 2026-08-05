@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   AppState,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -39,6 +40,7 @@ import {
   appendMobileVoiceTranscript,
   canContinueMobileSession,
   getMobileProjectActivityById,
+  mergeMobileVoiceRecognitionResult,
   MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
   MOBILE_SESSION_INPUT_MAX_CHARS,
   parseMobilePairingUrl,
@@ -2912,11 +2914,10 @@ function InputMediaControls({
 }) {
   const [pickingImages, setPickingImages] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
-  const [voiceMode, setVoiceMode] = useState(false);
   const [voiceStarting, setVoiceStarting] = useState(false);
   const [voiceActive, setVoiceActive] = useState(false);
   const voiceBaseValueRef = useRef('');
-  const voicePressActiveRef = useRef(false);
+  const voiceFinalTranscriptRef = useRef('');
   const voiceSessionRef = useRef<MobileVoiceInputSession | null>(null);
 
   const disposeVoiceSession = useCallback(() => {
@@ -2961,6 +2962,8 @@ function InputMediaControls({
     }
 
     voiceBaseValueRef.current = value;
+    voiceFinalTranscriptRef.current = '';
+    Keyboard.dismiss();
     setVoiceStarting(true);
     try {
       const session = await startMobileVoiceInput({
@@ -2970,19 +2973,24 @@ function InputMediaControls({
           onError(message);
           disposeVoiceSession();
         },
-        onResult: (transcript) => {
+        onResult: (transcript, isFinal) => {
+          const nextTranscript = mergeMobileVoiceRecognitionResult(
+            voiceFinalTranscriptRef.current,
+            transcript,
+            isFinal
+          );
+          voiceFinalTranscriptRef.current = nextTranscript.committedTranscript;
           onChange(
-            appendMobileVoiceTranscript(voiceBaseValueRef.current, transcript).slice(
-              0,
-              MOBILE_SESSION_INPUT_MAX_CHARS
-            )
+            appendMobileVoiceTranscript(
+              voiceBaseValueRef.current,
+              nextTranscript.visibleTranscript
+            ).slice(0, MOBILE_SESSION_INPUT_MAX_CHARS)
           );
         },
       });
       voiceSessionRef.current = session;
       setVoiceStarting(false);
       setVoiceActive(true);
-      if (!voicePressActiveRef.current) session.stop();
     } catch (error) {
       disposeVoiceSession();
       onError(errorMessage(error));
@@ -2999,20 +3007,17 @@ function InputMediaControls({
   ]);
 
   const stopVoiceInput = useCallback(() => {
-    voicePressActiveRef.current = false;
     voiceSessionRef.current?.stop();
   }, []);
 
-  const handleVoicePressIn = useCallback(() => {
-    voicePressActiveRef.current = true;
-    void startVoiceInput();
-  }, [startVoiceInput]);
-
-  const toggleVoiceMode = useCallback(() => {
+  const handleVoiceButtonPress = useCallback(() => {
     if (disabled) return;
-    if (voiceMode) stopVoiceInput();
-    setVoiceMode((current) => !current);
-  }, [disabled, stopVoiceInput, voiceMode]);
+    if (voiceActive) {
+      stopVoiceInput();
+      return;
+    }
+    void startVoiceInput();
+  }, [disabled, startVoiceInput, stopVoiceInput, voiceActive]);
 
   return (
     <View style={[styles.inputMediaShell, compact ? styles.inputMediaShellCompact : null]}>
@@ -3070,58 +3075,43 @@ function InputMediaControls({
       ) : null}
       <View style={styles.wechatComposerRow}>
         <Pressable
-          accessibilityLabel={voiceMode ? 'Switch to keyboard input' : 'Switch to voice input'}
+          accessibilityHint={
+            voiceActive
+              ? 'Stops listening and keeps the transcribed text in the input.'
+              : 'Starts listening and shows speech as editable text in the input.'
+          }
+          accessibilityLabel={voiceActive ? 'Stop voice input' : 'Start voice input'}
           accessibilityRole="button"
-          accessibilityState={{ disabled }}
-          disabled={disabled}
+          accessibilityState={{
+            busy: voiceStarting,
+            disabled: disabled || voiceStarting,
+            selected: voiceActive,
+          }}
+          disabled={disabled || voiceStarting}
           hitSlop={5}
           style={({ pressed }) => [
-            styles.composerModeButton,
-            voiceMode ? styles.composerModeButtonActive : null,
+            styles.composerVoiceButton,
+            voiceActive ? styles.composerVoiceButtonActive : null,
             disabled ? styles.buttonDisabled : null,
             pressed ? styles.buttonPressed : null,
           ]}
-          onPress={toggleVoiceMode}
+          onPress={handleVoiceButtonPress}
         >
-          <Ionicons
-            color={voiceMode ? COLORS.green : COLORS.charcoal}
-            name={voiceMode ? 'keypad-outline' : 'mic-outline'}
-            size={25}
-          />
+          {voiceStarting ? (
+            <ActivityIndicator color={COLORS.green} size="small" />
+          ) : (
+            <Ionicons
+              color={voiceActive ? COLORS.green : COLORS.charcoal}
+              name={voiceActive ? 'stop-circle-outline' : 'mic-outline'}
+              size={25}
+            />
+          )}
         </Pressable>
-        {voiceMode ? (
-          <Pressable
-            accessibilityHint="Hold while speaking. Release to turn speech into editable text."
-            accessibilityLabel={
-              voiceActive ? 'Listening. Release to finish voice input' : 'Hold to speak'
-            }
-            accessibilityRole="button"
-            accessibilityState={{ busy: voiceStarting, disabled }}
-            disabled={disabled || voiceStarting}
-            style={({ pressed }) => [
-              styles.voiceHoldButton,
-              voiceActive || pressed ? styles.voiceHoldButtonActive : null,
-              disabled ? styles.buttonDisabled : null,
-            ]}
-            onPressIn={handleVoicePressIn}
-            onPressOut={stopVoiceInput}
-          >
-            {voiceStarting ? (
-              <ActivityIndicator color={COLORS.green} size="small" />
-            ) : (
-              <Ionicons
-                color={voiceActive ? COLORS.green : COLORS.charcoal}
-                name="mic-outline"
-                size={18}
-              />
-            )}
-            <Text style={styles.voiceHoldButtonText}>
-              {voiceActive ? '松开发送语音' : '按住说话'}
-            </Text>
-          </Pressable>
-        ) : (
-          <View style={styles.composerTextShell}>{input}</View>
-        )}
+        <View
+          style={[styles.composerTextShell, voiceActive ? styles.composerTextShellActive : null]}
+        >
+          {input}
+        </View>
         <Pressable
           accessibilityLabel={canSubmit && onSubmit ? 'Send message' : 'More input tools'}
           accessibilityRole="button"
@@ -4134,19 +4124,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  composerModeButton: {
+  composerVoiceButton: {
     width: 34,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  composerModeButtonActive: {
+  composerVoiceButtonActive: {
     borderRadius: 17,
     backgroundColor: '#EAF7F2',
   },
   composerTextShell: {
     minWidth: 0,
     flex: 1,
+  },
+  composerTextShellActive: {
+    borderRadius: 9,
+    shadowColor: COLORS.green,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.14,
+    shadowRadius: 5,
   },
   composerTextInput: {
     minHeight: 44,
@@ -4161,28 +4158,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 10,
     paddingBottom: 10,
-  },
-  voiceHoldButton: {
-    minHeight: 44,
-    minWidth: 0,
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    borderWidth: 1,
-    borderColor: '#CFCDC6',
-    borderRadius: 7,
-    backgroundColor: '#F2F1EC',
-  },
-  voiceHoldButtonActive: {
-    borderColor: '#93C6B8',
-    backgroundColor: '#EAF7F2',
-  },
-  voiceHoldButtonText: {
-    color: COLORS.charcoal,
-    fontSize: 15,
-    fontWeight: '700',
   },
   composerTrailingButton: {
     width: 38,

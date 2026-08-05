@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   appendMobileVoiceTranscript,
   buildMobileSpeechContextualStrings,
+  mergeMobileVoiceRecognitionResult,
   MOBILE_SPEECH_CONTEXT_MAX_STRINGS,
   resolveMobileSpeechLocale,
 } from './mobile-api';
@@ -22,6 +23,43 @@ describe('mobile voice input text', () => {
 
   it('does not change the draft for an empty recognition result', () => {
     expect(appendMobileVoiceTranscript('keep this', '   ')).toBe('keep this');
+  });
+
+  it('replaces interim text while preserving finalized continuous dictation segments', () => {
+    const firstInterim = mergeMobileVoiceRecognitionResult('', '开始一项', false);
+    expect(firstInterim).toEqual({
+      committedTranscript: '',
+      visibleTranscript: '开始一项',
+    });
+
+    const revisedInterim = mergeMobileVoiceRecognitionResult(
+      firstInterim.committedTranscript,
+      '开始一项工作',
+      false
+    );
+    expect(revisedInterim.visibleTranscript).toBe('开始一项工作');
+
+    const firstFinal = mergeMobileVoiceRecognitionResult(
+      revisedInterim.committedTranscript,
+      '开始一项工作',
+      true
+    );
+    const nextInterim = mergeMobileVoiceRecognitionResult(
+      firstFinal.committedTranscript,
+      '并实时显示',
+      false
+    );
+    expect(nextInterim.visibleTranscript).toBe('开始一项工作并实时显示');
+
+    const nextFinal = mergeMobileVoiceRecognitionResult(
+      firstFinal.committedTranscript,
+      '并实时显示',
+      true
+    );
+    expect(nextFinal).toEqual({
+      committedTranscript: '开始一项工作并实时显示',
+      visibleTranscript: '开始一项工作并实时显示',
+    });
   });
 
   it('matches preferred locales against the recognizer locale list', () => {
