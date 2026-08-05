@@ -133,6 +133,7 @@
     "skillIssues": "{{count}} 个 skill 校验问题",
     "automation": "自动化",
     "mobile": "移动端",
+    "maas": "模型接入",
     "settings": "设置",
     "lovStudioAccount": "LovStudio 账户",
     "manageLovStudioAccount": "管理 LovStudio 账户",

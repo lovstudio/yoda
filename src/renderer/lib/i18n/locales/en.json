@@ -133,6 +133,7 @@
     "skillIssues": "{{count}} skill issue(s)",
     "automation": "Automation",
     "mobile": "Mobile",
+    "maas": "Model access",
     "settings": "Settings",
     "lovStudioAccount": "LovStudio account",
     "manageLovStudioAccount": "Manage LovStudio account",
