@@ -39,6 +39,23 @@ describe('MaaS platform instances', () => {
       id: 'newapi',
       name: 'New API',
       defaultEndpoint: 'http://127.0.0.1:4001/v1',
+      category: 'self-hosted-gateway',
     });
+  });
+
+  it('provides a local CLIProxyAPI preset for CLI and OAuth account routing', () => {
+    expect(isMaasPlatformId('cliproxyapi')).toBe(true);
+    expect(getMaasPlatformDefinition('cliproxyapi')).toMatchObject({
+      id: 'cliproxyapi',
+      name: 'CLIProxyAPI',
+      category: 'self-hosted-gateway',
+      defaultEndpoint: 'http://127.0.0.1:8317/v1',
+    });
+  });
+
+  it('classifies vendor-operated model services as hosted platforms', () => {
+    expect(getMaasPlatformDefinition('zenmux').category).toBe('hosted-platform');
+    expect(getMaasPlatformDefinition('openrouter').category).toBe('hosted-platform');
+    expect(getMaasPlatformDefinition('siliconflow').category).toBe('hosted-platform');
   });
 });

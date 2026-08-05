@@ -492,12 +492,15 @@ export type MobileSessionContentSource = 'live' | 'history' | 'empty';
 export type MobileSessionTranscriptRole = 'user' | 'assistant' | 'tool' | 'status';
 export type MobileSessionTranscriptFormat = 'markdown' | 'code' | 'plain';
 export type MobileSessionTranscriptAgentPhase = 'commentary' | 'final';
+export type MobileSessionTranscriptToolStatus = 'running' | 'completed';
 
 export type MobileSessionTranscriptBlock = {
   id: string;
   role: MobileSessionTranscriptRole;
   /** Present for Agent text when the runtime exposes reply-phase metadata. */
   agentPhase?: MobileSessionTranscriptAgentPhase;
+  /** Present for tool blocks when the transcript exposes call/result boundaries. */
+  toolStatus?: MobileSessionTranscriptToolStatus;
   title?: string;
   timestamp: string | null;
   format: MobileSessionTranscriptFormat;

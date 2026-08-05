@@ -62,6 +62,10 @@ import {
   parseMobileRelayPairingUrl,
 } from '../../../src/shared/mobile-relay';
 import {
+  formatMobileToolTranscriptContent,
+  summarizeMobileToolTranscriptContent,
+} from '../../../src/shared/mobile-tool-transcript';
+import {
   createDemand,
   discardInputAttachment,
   fetchProfile,
@@ -77,6 +81,7 @@ import {
 } from './connection-bootstrap';
 import { clearConnection, loadConnection, saveConnection } from './connection-storage';
 import { prepareCreatedDemandNavigation } from './demand-navigation';
+import { DEFAULT_HOME_TAB, HOME_TABS, homeTabTitle, type HomeTab } from './home-navigation';
 import { pickMobileInputImages } from './input-media';
 import {
   uploadMobileInputImages,
@@ -122,7 +127,6 @@ type ConnectDraft = {
 };
 
 type TaskScope = 'all' | 'open' | 'inProgress' | 'review';
-type HomeTab = 'home' | 'tasks' | 'profile';
 type SessionOutputMode = 'rendered' | 'raw';
 
 type ReadableOutputBlock = {
@@ -146,26 +150,6 @@ function taskScopeLabel(scope: TaskScope): string {
       return '待审阅';
     case 'all':
       return '全部任务';
-  }
-}
-
-function homeTabTitle(tab: HomeTab): { title: string; subtitle: string } {
-  switch (tab) {
-    case 'tasks':
-      return {
-        title: '任务队列',
-        subtitle: '集中查看进行中的会话与任务状态。',
-      };
-    case 'profile':
-      return {
-        title: '我的工作台',
-        subtitle: '查看账号、用量、工作进度与云端服务。',
-      };
-    case 'home':
-      return {
-        title: 'Command center',
-        subtitle: 'Monitor desktop work and keep requests moving.',
-      };
   }
 }
 
@@ -354,12 +338,6 @@ function parseReadableOutput(value: string): ReadableOutput {
       text,
     })),
   };
-}
-
-function summarizeToolContent(value: string): string {
-  const compacted = value.replace(/\s+/g, ' ').trim();
-  if (!compacted) return 'No tool output.';
-  return compacted.length > 132 ? `${compacted.slice(0, 132)}...` : compacted;
 }
 
 function isAssistantTextBlock(block: MobileSessionTranscriptBlock): boolean {
@@ -579,7 +557,7 @@ export function App() {
   });
   const [snapshot, setSnapshot] = useState<MobileDashboardSnapshot | null>(null);
   const [profile, setProfile] = useState<MobileProfileSnapshot | null>(null);
-  const [homeTab, setHomeTab] = useState<HomeTab>('home');
+  const [homeTab, setHomeTab] = useState<HomeTab>(DEFAULT_HOME_TAB);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskParent, setNewTaskParent] = useState<MobileTaskSummary | null>(null);
   const [newTaskAttributionLocked, setNewTaskAttributionLocked] = useState(false);
@@ -653,7 +631,7 @@ export function App() {
     setConnection(next);
     setSnapshot(null);
     setProfile(null);
-    setHomeTab('home');
+    setHomeTab(DEFAULT_HOME_TAB);
     setNewTaskOpen(false);
     setNewTaskParent(null);
     setNewTaskAttributionLocked(false);
@@ -784,31 +762,11 @@ export function App() {
     [selectedTaskId, snapshot]
   );
 
-  const recentTasks = useMemo(
-    () =>
-      [...(snapshot?.tasks ?? [])]
-        .sort((a, b) => {
-          const aTime = Date.parse(a.lastInteractedAt ?? a.updatedAt ?? '');
-          const bTime = Date.parse(b.lastInteractedAt ?? b.updatedAt ?? '');
-          return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
-        })
-        .slice(0, 4),
-    [snapshot]
-  );
-
   useEffect(() => {
     if (!selectedTaskId || selectedTask) return;
     setSelectedTaskId(null);
     setSelectedSessionId(null);
   }, [selectedTask, selectedTaskId]);
-
-  const handleMetricSelect = useCallback((scope: TaskScope) => {
-    setTaskScope(scope);
-    setSelectedProjectId('all');
-    setSelectedTaskId(null);
-    setSelectedSessionId(null);
-    setHomeTab('tasks');
-  }, []);
 
   const handleConnect = useCallback(async () => {
     const next = {
@@ -1033,18 +991,6 @@ export function App() {
 
             {snapshot ? (
               <>
-                {homeTab === 'home' ? (
-                  <HomeDashboard
-                    projects={visibleProjects}
-                    recentTasks={recentTasks}
-                    snapshot={snapshot}
-                    onNewRequest={() => openNewTask()}
-                    onOpenTask={setSelectedTaskId}
-                    onOpenTasks={() => setHomeTab('tasks')}
-                    onSelectScope={handleMetricSelect}
-                  />
-                ) : null}
-
                 {homeTab === 'tasks' ? (
                   <TasksWorkspace
                     projects={snapshot.projects}
@@ -1280,103 +1226,6 @@ function YodaBrandMark({ size }: { size: number }) {
       source={yodaMarkSource}
       style={{ width: size, height: size }}
     />
-  );
-}
-
-function HomeDashboard({
-  projects,
-  recentTasks,
-  snapshot,
-  onNewRequest,
-  onOpenTask,
-  onOpenTasks,
-  onSelectScope,
-}: {
-  projects: MobileProjectSummary[];
-  recentTasks: MobileTaskSummary[];
-  snapshot: MobileDashboardSnapshot;
-  onNewRequest: () => void;
-  onOpenTask: (taskId: string) => void;
-  onOpenTasks: () => void;
-  onSelectScope: (scope: TaskScope) => void;
-}) {
-  const primaryTask = recentTasks[0];
-  return (
-    <>
-      <View style={styles.commandPanel}>
-        <View style={styles.commandPanelTop}>
-          <View>
-            <Text style={styles.commandPanelLabel}>Live workspace</Text>
-            <Text style={styles.commandPanelValue}>{snapshot.metrics.activeTaskCount}</Text>
-          </View>
-          <View style={styles.commandPanelBadge}>
-            <Ionicons color={COLORS.green} name="radio-outline" size={15} />
-            <Text style={styles.commandPanelBadgeText}>Online</Text>
-          </View>
-        </View>
-        <Text style={styles.commandPanelText}>
-          {snapshot.metrics.inProgressTaskCount} running · {snapshot.metrics.reviewTaskCount} ready
-          for review · {snapshot.metrics.openProjectCount} open projects
-        </Text>
-        <View style={styles.quickActions}>
-          <Pressable
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.quickActionPrimary,
-              pressed ? styles.buttonPressed : null,
-            ]}
-            onPress={onNewRequest}
-          >
-            <Ionicons color={COLORS.surface} name="add-outline" size={18} />
-            <Text style={styles.quickActionPrimaryText}>新建任务</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.quickActionSecondary,
-              pressed ? styles.buttonPressed : null,
-            ]}
-            onPress={onOpenTasks}
-          >
-            <Ionicons color={COLORS.charcoal} name="list-outline" size={18} />
-            <Text style={styles.quickActionSecondaryText}>查看任务</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <Metrics selectedScope="all" snapshot={snapshot} onSelectScope={onSelectScope} />
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>最近工作</Text>
-          <Pressable accessibilityRole="button" onPress={onOpenTasks}>
-            <Text style={styles.sectionAction}>查看全部</Text>
-          </Pressable>
-        </View>
-        {primaryTask ? (
-          <>
-            <TaskRow
-              projectLabel={projectName(projects, primaryTask.projectId)}
-              task={primaryTask}
-              onPress={() => onOpenTask(primaryTask.id)}
-            />
-            {recentTasks.slice(1, 3).map((task) => (
-              <CompactTaskRow
-                key={task.id}
-                projectLabel={projectName(projects, task.projectId)}
-                task={task}
-                onPress={() => onOpenTask(task.id)}
-              />
-            ))}
-          </>
-        ) : (
-          <View style={styles.emptyState}>
-            <Ionicons color={COLORS.muted} name="sparkles-outline" size={22} />
-            <Text style={styles.emptyText}>还没有任务。</Text>
-          </View>
-        )}
-      </View>
-    </>
   );
 }
 
@@ -1787,19 +1636,9 @@ function HomeTabBar({
   activeTab: HomeTab;
   onSelect: (tab: HomeTab) => void;
 }) {
-  const tabs: Array<{
-    icon: keyof typeof Ionicons.glyphMap;
-    label: string;
-    value: HomeTab;
-  }> = [
-    { icon: 'grid-outline', label: '首页', value: 'home' },
-    { icon: 'checkmark-circle-outline', label: '任务', value: 'tasks' },
-    { icon: 'person-circle-outline', label: '我的', value: 'profile' },
-  ];
-
   return (
     <View style={styles.bottomTabBar}>
-      {tabs.map((tab) => {
+      {HOME_TABS.map((tab) => {
         const active = activeTab === tab.value;
         return (
           <Pressable
@@ -1820,65 +1659,6 @@ function HomeTabBar({
           </Pressable>
         );
       })}
-    </View>
-  );
-}
-
-function Metrics({
-  selectedScope,
-  snapshot,
-  onSelectScope,
-}: {
-  selectedScope: TaskScope;
-  snapshot: MobileDashboardSnapshot;
-  onSelectScope: (scope: TaskScope) => void;
-}) {
-  const metrics = [
-    {
-      label: '项目',
-      value: snapshot.metrics.projectCount,
-      icon: 'folder-outline',
-      scope: 'all',
-    },
-    {
-      label: '已打开',
-      value: snapshot.metrics.openProjectCount,
-      icon: 'desktop-outline',
-      scope: 'open',
-    },
-    {
-      label: '进行中',
-      value: snapshot.metrics.inProgressTaskCount,
-      icon: 'flash-outline',
-      scope: 'inProgress',
-    },
-    {
-      label: '待审阅',
-      value: snapshot.metrics.reviewTaskCount,
-      icon: 'checkmark-done-outline',
-      scope: 'review',
-    },
-  ] as const;
-
-  return (
-    <View style={styles.metricsGrid}>
-      {metrics.map((metric) => (
-        <Pressable
-          key={metric.label}
-          accessibilityLabel={`Filter ${metric.label}`}
-          accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.metricCard,
-            selectedScope === metric.scope ? styles.metricCardActive : null,
-            pressed ? styles.buttonPressed : null,
-          ]}
-          onPress={() => onSelectScope(metric.scope)}
-        >
-          <Ionicons color={COLORS.charcoal} name={metric.icon} size={18} />
-          <Text style={styles.metricValue}>{metric.value}</Text>
-          <Text style={styles.metricLabel}>{metric.label}</Text>
-        </Pressable>
-      ))}
     </View>
   );
 }
@@ -3005,8 +2785,14 @@ function SessionDetailScreen({
       >
         <View style={styles.sessionDetailShell}>
           <SessionNavigationBar
+            acceptsInput={detail?.session.acceptsInput ?? false}
+            live={detail?.session.running ?? false}
             projectLabel={projectName(projects, task.projectId)}
+            resumable={detail?.session.resumable ?? false}
+            runtimeStatus={detail?.session.runtimeStatus ?? null}
+            sending={sendingInput}
             title={session?.title ?? task.name}
+            uploadProgress={sessionUploadProgress}
             onBack={onBack}
           />
           <ScrollView
@@ -3071,16 +2857,13 @@ function SessionDetailScreen({
             </Pressable>
           ) : null}
           <SessionInputComposer
-            live={detail?.session.running ?? false}
             acceptsInput={detail?.session.acceptsInput ?? false}
             resumable={detail?.session.resumable ?? false}
             images={sessionImages}
             imagesEnabled={
               projects.find((project) => project.id === task.projectId)?.type === 'local'
             }
-            runtimeStatus={detail?.session.runtimeStatus ?? null}
             sending={sendingInput}
-            uploadProgress={sessionUploadProgress}
             speechContext={[
               taskProject?.displayName,
               taskProject?.name,
@@ -3101,12 +2884,24 @@ function SessionDetailScreen({
 }
 
 function SessionNavigationBar({
+  acceptsInput,
+  live,
   projectLabel,
+  resumable,
+  runtimeStatus,
+  sending,
   title,
+  uploadProgress,
   onBack,
 }: {
+  acceptsInput: boolean;
+  live: boolean;
   projectLabel: string;
+  resumable: boolean;
+  runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
+  sending: boolean;
   title: string;
+  uploadProgress: MobileInputUploadProgress | null;
   onBack: () => void;
 }) {
   return (
@@ -3130,6 +2925,14 @@ function SessionNavigationBar({
           {title}
         </Text>
       </View>
+      <SessionRuntimeStatus
+        acceptsInput={acceptsInput}
+        live={live}
+        resumable={resumable}
+        runtimeStatus={runtimeStatus}
+        sending={sending}
+        uploadProgress={uploadProgress}
+      />
     </View>
   );
 }
@@ -3429,14 +3232,11 @@ function InputMediaControls({
 }
 
 function SessionInputComposer({
-  live,
   acceptsInput,
   resumable,
   images,
   imagesEnabled,
-  runtimeStatus,
   sending,
-  uploadProgress,
   speechContext,
   value,
   onChange,
@@ -3444,14 +3244,11 @@ function SessionInputComposer({
   onImagesChange,
   onSend,
 }: {
-  live: boolean;
   acceptsInput: boolean;
   resumable: boolean;
   images: MobileImageDraft[];
   imagesEnabled: boolean;
-  runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
   sending: boolean;
-  uploadProgress: MobileInputUploadProgress | null;
   speechContext: readonly (string | null | undefined)[];
   value: string;
   onChange: (value: string) => void;
@@ -3467,15 +3264,6 @@ function SessionInputComposer({
     !sending;
   return (
     <View style={styles.sessionInputBar}>
-      <SessionRuntimeStatus
-        acceptsInput={acceptsInput}
-        live={live}
-        resumable={resumable}
-        runtimeStatus={runtimeStatus}
-        sending={sending}
-        uploadProgress={uploadProgress}
-        valueLength={value.length}
-      />
       <InputMediaControls
         compact
         canSubmit={canSend}
@@ -3503,6 +3291,11 @@ function SessionInputComposer({
         onError={onError}
         onImagesChange={onImagesChange}
       />
+      {value.length > 0 ? (
+        <Text style={styles.sessionInputCount}>
+          {value.length}/{MOBILE_SESSION_INPUT_MAX_CHARS}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -3514,7 +3307,6 @@ function SessionRuntimeStatus({
   runtimeStatus,
   sending,
   uploadProgress,
-  valueLength,
 }: {
   acceptsInput: boolean;
   live: boolean;
@@ -3522,7 +3314,6 @@ function SessionRuntimeStatus({
   runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
   sending: boolean;
   uploadProgress: MobileInputUploadProgress | null;
-  valueLength: number;
 }) {
   const presentation = sending
     ? {
@@ -3563,19 +3354,9 @@ function SessionRuntimeStatus({
           <Ionicons color={presentation.color} name={presentation.icon} size={20} />
         )}
       </View>
-      <View style={styles.sessionRunStatusBody}>
-        <Text style={[styles.sessionRunStatusLabel, { color: presentation.color }]}>
-          {presentation.label}
-        </Text>
-        <Text style={styles.sessionRunStatusDetail} numberOfLines={1}>
-          {detail}
-        </Text>
-      </View>
-      {valueLength > 0 ? (
-        <Text style={styles.sessionInputCount}>
-          {valueLength}/{MOBILE_SESSION_INPUT_MAX_CHARS}
-        </Text>
-      ) : null}
+      <Text style={[styles.sessionRunStatusLabel, { color: presentation.color }]} numberOfLines={1}>
+        {presentation.label}
+      </Text>
     </View>
   );
 }
@@ -3687,6 +3468,10 @@ function RenderedSessionTranscript({
     () => mergeAdjacentAssistantBlocks(detail.transcript),
     [detail.transcript]
   );
+  const latestToolId = useMemo(
+    () => transcript.findLast((block) => block.role === 'tool')?.id,
+    [transcript]
+  );
 
   if (detail.transcript.length === 0) {
     return <ReadableSessionOutput output={fallbackOutput} />;
@@ -3695,13 +3480,26 @@ function RenderedSessionTranscript({
   return (
     <View style={styles.transcriptList}>
       {transcript.map((block) => (
-        <TranscriptBlock key={block.id} block={block} />
+        <TranscriptBlock
+          key={block.id}
+          block={block}
+          isLatestTool={block.id === latestToolId}
+          sessionRunning={detail.session.running && detail.session.runtimeStatus === 'working'}
+        />
       ))}
     </View>
   );
 }
 
-function TranscriptBlock({ block }: { block: MobileSessionTranscriptBlock }) {
+function TranscriptBlock({
+  block,
+  isLatestTool,
+  sessionRunning,
+}: {
+  block: MobileSessionTranscriptBlock;
+  isLatestTool: boolean;
+  sessionRunning: boolean;
+}) {
   const [toolExpanded, setToolExpanded] = useState(false);
   const isUser = block.role === 'user';
   const isAssistant = block.role === 'assistant';
@@ -3713,6 +3511,11 @@ function TranscriptBlock({ block }: { block: MobileSessionTranscriptBlock }) {
   const toggleToolExpanded = useCallback(() => {
     setToolExpanded((current) => !current);
   }, []);
+  const toolRunning =
+    isTool &&
+    sessionRunning &&
+    (block.toolStatus === 'running' || (block.toolStatus === undefined && isLatestTool));
+  const formattedToolContent = isTool ? formatMobileToolTranscriptContent(block.content) : '';
   const showBody = !isTool || toolExpanded;
   const headerContent = (
     <>
@@ -3749,6 +3552,58 @@ function TranscriptBlock({ block }: { block: MobileSessionTranscriptBlock }) {
     </>
   );
 
+  if (isTool) {
+    const toolPreview = summarizeMobileToolTranscriptContent(formattedToolContent);
+    return (
+      <View
+        style={[
+          styles.transcriptBlock,
+          styles.transcriptToolBlock,
+          toolRunning ? styles.transcriptToolBlockRunning : null,
+        ]}
+      >
+        <Pressable
+          accessibilityHint={toolPreview}
+          accessibilityLabel={`${toolExpanded ? 'Collapse' : 'Expand'} ${title}. ${
+            toolRunning ? 'Running' : 'Completed'
+          }`}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.toolCompactRow, pressed ? styles.buttonPressed : null]}
+          onPress={toggleToolExpanded}
+        >
+          <View style={styles.transcriptTitleRow}>
+            {toolRunning ? (
+              <ActivityIndicator color={COLORS.blue} size="small" />
+            ) : (
+              <Ionicons color={COLORS.green} name="checkmark-circle" size={17} />
+            )}
+            <Text style={styles.transcriptTitle} numberOfLines={1}>
+              {title}
+            </Text>
+          </View>
+          <View style={styles.toolCompactMeta}>
+            <Text style={[styles.toolStateText, toolRunning ? styles.toolStateTextRunning : null]}>
+              {toolRunning ? 'Running' : 'Done'}
+            </Text>
+            <Ionicons
+              color={COLORS.muted}
+              name={toolExpanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+              size={16}
+            />
+          </View>
+        </Pressable>
+        {toolExpanded ? (
+          <View style={styles.toolExpandedBody}>
+            <CodeText value={formattedToolContent} />
+            {block.timestamp ? (
+              <Text style={styles.toolExpandedTime}>{formatTimestamp(block.timestamp)}</Text>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+
   return (
     <View
       style={[
@@ -3758,31 +3613,7 @@ function TranscriptBlock({ block }: { block: MobileSessionTranscriptBlock }) {
         isStatus ? styles.transcriptStatusBlock : null,
       ]}
     >
-      {isTool ? (
-        <Pressable
-          accessibilityLabel={`${toolExpanded ? 'Collapse' : 'Expand'} ${title}`}
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.transcriptHeader, pressed ? styles.buttonPressed : null]}
-          onPress={toggleToolExpanded}
-        >
-          {headerContent}
-        </Pressable>
-      ) : (
-        <View style={styles.transcriptHeader}>{headerContent}</View>
-      )}
-      {isTool && !toolExpanded ? (
-        <Pressable
-          accessibilityLabel={`Expand ${title} details`}
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.toolCollapsedBody, pressed ? styles.buttonPressed : null]}
-          onPress={toggleToolExpanded}
-        >
-          <Text style={styles.toolCollapsedText} numberOfLines={2}>
-            {summarizeToolContent(block.content)}
-          </Text>
-          <Text style={styles.toolCollapsedAction}>Show details</Text>
-        </Pressable>
-      ) : null}
+      <View style={styles.transcriptHeader}>{headerContent}</View>
       {showBody && block.format === 'code' ? (
         <CodeText value={block.content} />
       ) : showBody && block.format === 'plain' ? (
@@ -4141,36 +3972,6 @@ function TaskRow({
   );
 }
 
-function CompactTaskRow({
-  projectLabel,
-  task,
-  onPress,
-}: {
-  projectLabel: string;
-  task: MobileTaskSummary;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityLabel={`Open task ${task.name}`}
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.compactTaskRow, pressed ? styles.buttonPressed : null]}
-      onPress={onPress}
-    >
-      <View style={styles.compactTaskDot} />
-      <View style={styles.compactTaskBody}>
-        <Text style={styles.compactTaskName} numberOfLines={1}>
-          {task.name}
-        </Text>
-        <Text style={styles.compactTaskProject} numberOfLines={1}>
-          {projectLabel} · {formatTimestamp(task.lastInteractedAt ?? task.updatedAt)}
-        </Text>
-      </View>
-      <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={16} />
-    </Pressable>
-  );
-}
-
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.detailItem}>
@@ -4270,40 +4071,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 7,
     paddingBottom: Platform.OS === 'ios' ? 10 : 12,
-    gap: 6,
+    gap: 4,
   },
   sessionRunStatus: {
-    minHeight: 36,
+    maxWidth: 142,
+    minHeight: 30,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    flexShrink: 0,
+    gap: 5,
     borderWidth: 1,
-    borderRadius: 7,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    borderRadius: 15,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   sessionRunStatusIcon: {
     width: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sessionRunStatusBody: {
-    minWidth: 0,
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
   sessionRunStatusLabel: {
+    minWidth: 0,
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: '800',
   },
-  sessionRunStatusDetail: {
-    color: COLORS.muted,
-    fontSize: 11,
-    fontWeight: '600',
-  },
   sessionInputCount: {
+    alignSelf: 'flex-end',
+    marginRight: 54,
     color: COLORS.muted,
     fontSize: 11,
     fontWeight: '700',
@@ -4507,89 +4302,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: '600',
   },
-  commandPanel: {
-    borderWidth: 1,
-    borderColor: COLORS.charcoal,
-    borderRadius: 8,
-    backgroundColor: COLORS.charcoal,
-    padding: 16,
-    gap: 14,
-  },
-  commandPanelTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 14,
-  },
-  commandPanelLabel: {
-    color: '#D8D4CB',
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  commandPanelValue: {
-    color: COLORS.surface,
-    fontSize: 42,
-    fontWeight: '800',
-    lineHeight: 46,
-  },
-  commandPanelBadge: {
-    minHeight: 31,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderWidth: 1,
-    borderColor: '#555A60',
-    borderRadius: 8,
-    paddingHorizontal: 9,
-  },
-  commandPanelBadgeText: {
-    color: '#D8D4CB',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  commandPanelText: {
-    color: '#E7E4DC',
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '600',
-  },
-  quickActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  quickActionPrimary: {
-    minHeight: 44,
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: 8,
-    backgroundColor: COLORS.blue,
-  },
-  quickActionPrimaryText: {
-    color: COLORS.surface,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  quickActionSecondary: {
-    minHeight: 44,
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#555A60',
-    borderRadius: 8,
-    backgroundColor: '#F7F7F2',
-  },
-  quickActionSecondaryText: {
-    color: COLORS.charcoal,
-    fontSize: 14,
-    fontWeight: '800',
-  },
   screenHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -4729,35 +4441,6 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.45,
-  },
-  metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  metricCard: {
-    width: '48.5%',
-    minHeight: 92,
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 8,
-    backgroundColor: COLORS.surface,
-    padding: 13,
-    gap: 5,
-  },
-  metricCardActive: {
-    borderColor: COLORS.charcoal,
-    backgroundColor: '#EFEEE7',
-  },
-  metricValue: {
-    color: COLORS.ink,
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  metricLabel: {
-    color: COLORS.muted,
-    fontSize: 13,
-    fontWeight: '600',
   },
   profileScreen: {
     gap: 18,
@@ -5346,39 +5029,6 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 10,
   },
-  compactTaskRow: {
-    minHeight: 64,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 11,
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 8,
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: 13,
-    paddingVertical: 10,
-  },
-  compactTaskDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.blue,
-  },
-  compactTaskBody: {
-    minWidth: 0,
-    flex: 1,
-    gap: 3,
-  },
-  compactTaskName: {
-    color: COLORS.ink,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  compactTaskProject: {
-    color: COLORS.muted,
-    fontSize: 12,
-    fontWeight: '600',
-  },
   projectDirectoryRow: {
     minHeight: 72,
     flexDirection: 'row',
@@ -5552,7 +5202,14 @@ const styles = StyleSheet.create({
   },
   transcriptToolBlock: {
     borderColor: '#D0CCC2',
-    backgroundColor: '#F1F0EA',
+    backgroundColor: '#F7F6F1',
+    padding: 0,
+    gap: 0,
+    overflow: 'hidden',
+  },
+  transcriptToolBlockRunning: {
+    borderColor: '#A9C2F8',
+    backgroundColor: '#F7FAFF',
   },
   transcriptStatusBlock: {
     borderColor: COLORS.faint,
@@ -5610,22 +5267,39 @@ const styles = StyleSheet.create({
   transcriptUserMeta: {
     color: '#D8D4CB',
   },
-  toolCollapsedBody: {
+  toolCompactRow: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  toolCompactMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  toolStateText: {
+    color: COLORS.green,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  toolStateTextRunning: {
+    color: COLORS.blue,
+  },
+  toolExpandedBody: {
     gap: 7,
     borderTopWidth: 1,
     borderTopColor: '#D8D4CB',
-    paddingTop: 10,
+    padding: 10,
   },
-  toolCollapsedText: {
+  toolExpandedTime: {
     color: COLORS.muted,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  toolCollapsedAction: {
-    color: COLORS.charcoal,
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'right',
   },
   markdownStack: {
     gap: 10,

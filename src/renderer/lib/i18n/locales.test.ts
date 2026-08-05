@@ -35,9 +35,19 @@ describe('i18n locales', () => {
     await i18n.changeLanguage('en');
   });
 
-  it('uses 中转渠道 consistently as the Chinese MaaS term', () => {
-    expect(zhCN.settings.tabs.maas).toBe('中转渠道');
-    expect(zhCN.maas.title).toBe('中转渠道');
+  it('uses 模型接入 consistently as the Chinese product term', () => {
+    expect(zhCN.sidebar.maas).toBe('模型接入');
+    expect(zhCN.settings.tabs.maas).toBe('模型接入');
+    expect(zhCN.maas.title).toBe('模型接入');
+    expect(zhCN.workspaceRuntime.maas.title).toBe('模型接入');
     expect(JSON.stringify(zhCN)).not.toContain('MaaS');
+  });
+
+  it('resolves the model access global tab label in both locales', async () => {
+    await i18n.changeLanguage('zh-CN');
+    expect(i18n.t('sidebar.maas')).toBe('模型接入');
+
+    await i18n.changeLanguage('en');
+    expect(i18n.t('sidebar.maas')).toBe('Model access');
   });
 });

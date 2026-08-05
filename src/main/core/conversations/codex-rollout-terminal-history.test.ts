@@ -438,6 +438,7 @@ describe('parseCodexRolloutTranscript', () => {
         id: '2026-06-04T01:00:03.000Z-tool-2',
         timestamp: '2026-06-04T01:00:03.000Z',
         role: 'tool',
+        toolStatus: 'completed',
         title: 'Command',
         format: 'code',
         content: '$ pnpm test\nTests passed\n[completed, exit 0]',
@@ -547,6 +548,7 @@ describe('parseCodexRolloutTranscript', () => {
       ['2026-06-04T01:00:08.000Z-assistant-8', 'assistant', 'Codex'],
     ]);
     expect(blocks[2]?.content).toContain('tools.exec_command');
+    expect(blocks[2]?.toolStatus).toBe('completed');
     expect(blocks[2]?.content).toContain('Output:\nScript completed');
     expect(blocks[2]?.content).toContain('[Image output omitted]');
     expect(blocks[3]?.content).toContain('Output:\nSub-agent started');
@@ -565,9 +567,42 @@ describe('parseCodexRolloutTranscript', () => {
     expect(tool).toMatchObject({
       id: '2026-06-04T01:00:03.000Z-tool-3',
       role: 'tool',
+      toolStatus: 'running',
       title: 'Run command',
     });
     expect(tool?.content).not.toContain('Output:');
+  });
+
+  it('completes a tool call even when the tool returns an empty payload', () => {
+    const raw = [
+      {
+        timestamp: '2026-06-04T01:00:03.000Z',
+        type: 'response_item',
+        payload: {
+          type: 'function_call',
+          name: 'exec_command',
+          call_id: 'call-empty',
+          arguments: '{"cmd":"true"}',
+        },
+      },
+      {
+        timestamp: '2026-06-04T01:00:04.000Z',
+        type: 'response_item',
+        payload: {
+          type: 'function_call_output',
+          call_id: 'call-empty',
+          output: '',
+        },
+      },
+    ]
+      .map((row) => JSON.stringify(row))
+      .join('\n');
+
+    expect(parseCodexRolloutTranscript(raw)[0]).toMatchObject({
+      role: 'tool',
+      toolStatus: 'completed',
+      content: '{"cmd":"true"}\n\nOutput:\nCompleted with no output.',
+    });
   });
 });
 
