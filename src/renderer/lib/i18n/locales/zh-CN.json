@@ -2657,6 +2657,12 @@
   },
   "promptLibrary": {
     "title": "提示词库",
+    "tabs": {
+      "ariaLabel": "提示词配置范围",
+      "global": "全局",
+      "project": "项目",
+      "dynamic": "动态"
+    },
     "collection": {
       "title": "提示词",
       "description": "创建可复用提示词并按分组排序；可从文件、网址或 Git 同步，也可选择在会话启动时自动注入。",

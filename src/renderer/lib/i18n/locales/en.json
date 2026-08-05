@@ -2657,6 +2657,12 @@
   },
   "promptLibrary": {
     "title": "Prompts",
+    "tabs": {
+      "ariaLabel": "Prompt configuration scope",
+      "global": "Global",
+      "project": "Project",
+      "dynamic": "Dynamic"
+    },
     "collection": {
       "title": "Prompts",
       "description": "Create reusable prompts, sort them into groups, sync from files, URLs, or Git, and optionally inject them when a session starts.",
