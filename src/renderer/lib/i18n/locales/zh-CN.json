@@ -206,6 +206,7 @@
     "reconnect": "重新连接",
     "changeSshConnection": "更换 SSH 连接",
     "openProjectDetails": "打开项目详情",
+    "configureSystemPrompt": "配置 System Prompt",
     "openArchivedTasks": "查看已归档任务",
     "openSessionDetails": "打开会话详情",
     "openTaskDetails": "打开任务详情",
@@ -2735,6 +2736,9 @@
       "selectProject": "选择一个项目后即可查看和编辑项目提示词。",
       "instructionFiles": "{{runtime}} 项目级指令",
       "instructionFilesDescription": "以下是 {{runtime}} 在当前项目中读取的标准指令路径；文件不存在时可直接创建。",
+      "globalPrompts": "提示词库注入",
+      "globalPromptsDescription": "覆盖提示词库在当前项目中的启用状态；未覆盖的条目继续继承全局设置。",
+      "globalPromptsEmpty": "提示词库还是空的。先在资源库中添加可复用提示词。",
       "localPrompts": "项目专属提示词",
       "localPromptsDescription": "只属于当前项目，并在全局动态提示词之后注入。",
       "add": "添加项目提示词",
@@ -5327,6 +5331,10 @@
       "thisProject": "{{name}}（本项目）"
     },
     "projectNotReady": "项目尚未就绪",
+    "systemPrompt": {
+      "title": "System Prompt",
+      "description": "集中管理这个项目的 Agent 指令：选择提示词库的动态注入项、维护项目专属提示词，并编辑 Claude Code 或 Codex 实际读取的项目级指令文件。Agent CLI 的内置 system prompt 保持不变。"
+    },
     "promptHistory": {
       "title": "项目对话",
       "scanning": "正在扫描 {{scanned}} / {{total}} 个会话，已发现 {{count}} 条 Prompt",

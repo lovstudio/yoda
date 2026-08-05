@@ -10,6 +10,7 @@ export type ProjectView =
   | 'pullRequests'
   | 'sessions'
   | 'harness'
+  | 'prompts'
   | 'docs'
   | 'settings';
 
