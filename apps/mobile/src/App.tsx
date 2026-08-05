@@ -3005,8 +3005,14 @@ function SessionDetailScreen({
       >
         <View style={styles.sessionDetailShell}>
           <SessionNavigationBar
+            acceptsInput={detail?.session.acceptsInput ?? false}
+            live={detail?.session.running ?? false}
             projectLabel={projectName(projects, task.projectId)}
+            resumable={detail?.session.resumable ?? false}
+            runtimeStatus={detail?.session.runtimeStatus ?? null}
+            sending={sendingInput}
             title={session?.title ?? task.name}
+            uploadProgress={sessionUploadProgress}
             onBack={onBack}
           />
           <ScrollView
@@ -3071,16 +3077,13 @@ function SessionDetailScreen({
             </Pressable>
           ) : null}
           <SessionInputComposer
-            live={detail?.session.running ?? false}
             acceptsInput={detail?.session.acceptsInput ?? false}
             resumable={detail?.session.resumable ?? false}
             images={sessionImages}
             imagesEnabled={
               projects.find((project) => project.id === task.projectId)?.type === 'local'
             }
-            runtimeStatus={detail?.session.runtimeStatus ?? null}
             sending={sendingInput}
-            uploadProgress={sessionUploadProgress}
             speechContext={[
               taskProject?.displayName,
               taskProject?.name,
@@ -3101,12 +3104,24 @@ function SessionDetailScreen({
 }
 
 function SessionNavigationBar({
+  acceptsInput,
+  live,
   projectLabel,
+  resumable,
+  runtimeStatus,
+  sending,
   title,
+  uploadProgress,
   onBack,
 }: {
+  acceptsInput: boolean;
+  live: boolean;
   projectLabel: string;
+  resumable: boolean;
+  runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
+  sending: boolean;
   title: string;
+  uploadProgress: MobileInputUploadProgress | null;
   onBack: () => void;
 }) {
   return (
@@ -3130,6 +3145,14 @@ function SessionNavigationBar({
           {title}
         </Text>
       </View>
+      <SessionRuntimeStatus
+        acceptsInput={acceptsInput}
+        live={live}
+        resumable={resumable}
+        runtimeStatus={runtimeStatus}
+        sending={sending}
+        uploadProgress={uploadProgress}
+      />
     </View>
   );
 }
@@ -3429,14 +3452,11 @@ function InputMediaControls({
 }
 
 function SessionInputComposer({
-  live,
   acceptsInput,
   resumable,
   images,
   imagesEnabled,
-  runtimeStatus,
   sending,
-  uploadProgress,
   speechContext,
   value,
   onChange,
@@ -3444,14 +3464,11 @@ function SessionInputComposer({
   onImagesChange,
   onSend,
 }: {
-  live: boolean;
   acceptsInput: boolean;
   resumable: boolean;
   images: MobileImageDraft[];
   imagesEnabled: boolean;
-  runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
   sending: boolean;
-  uploadProgress: MobileInputUploadProgress | null;
   speechContext: readonly (string | null | undefined)[];
   value: string;
   onChange: (value: string) => void;
@@ -3467,15 +3484,6 @@ function SessionInputComposer({
     !sending;
   return (
     <View style={styles.sessionInputBar}>
-      <SessionRuntimeStatus
-        acceptsInput={acceptsInput}
-        live={live}
-        resumable={resumable}
-        runtimeStatus={runtimeStatus}
-        sending={sending}
-        uploadProgress={uploadProgress}
-        valueLength={value.length}
-      />
       <InputMediaControls
         compact
         canSubmit={canSend}
@@ -3503,6 +3511,11 @@ function SessionInputComposer({
         onError={onError}
         onImagesChange={onImagesChange}
       />
+      {value.length > 0 ? (
+        <Text style={styles.sessionInputCount}>
+          {value.length}/{MOBILE_SESSION_INPUT_MAX_CHARS}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -3514,7 +3527,6 @@ function SessionRuntimeStatus({
   runtimeStatus,
   sending,
   uploadProgress,
-  valueLength,
 }: {
   acceptsInput: boolean;
   live: boolean;
@@ -3522,7 +3534,6 @@ function SessionRuntimeStatus({
   runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
   sending: boolean;
   uploadProgress: MobileInputUploadProgress | null;
-  valueLength: number;
 }) {
   const presentation = sending
     ? {
@@ -3563,19 +3574,9 @@ function SessionRuntimeStatus({
           <Ionicons color={presentation.color} name={presentation.icon} size={20} />
         )}
       </View>
-      <View style={styles.sessionRunStatusBody}>
-        <Text style={[styles.sessionRunStatusLabel, { color: presentation.color }]}>
-          {presentation.label}
-        </Text>
-        <Text style={styles.sessionRunStatusDetail} numberOfLines={1}>
-          {detail}
-        </Text>
-      </View>
-      {valueLength > 0 ? (
-        <Text style={styles.sessionInputCount}>
-          {valueLength}/{MOBILE_SESSION_INPUT_MAX_CHARS}
-        </Text>
-      ) : null}
+      <Text style={[styles.sessionRunStatusLabel, { color: presentation.color }]} numberOfLines={1}>
+        {presentation.label}
+      </Text>
     </View>
   );
 }
@@ -4270,40 +4271,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 7,
     paddingBottom: Platform.OS === 'ios' ? 10 : 12,
-    gap: 6,
+    gap: 4,
   },
   sessionRunStatus: {
-    minHeight: 36,
+    maxWidth: 142,
+    minHeight: 30,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    flexShrink: 0,
+    gap: 5,
     borderWidth: 1,
-    borderRadius: 7,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    borderRadius: 15,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   sessionRunStatusIcon: {
     width: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sessionRunStatusBody: {
-    minWidth: 0,
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
   sessionRunStatusLabel: {
+    minWidth: 0,
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: '800',
   },
-  sessionRunStatusDetail: {
-    color: COLORS.muted,
-    fontSize: 11,
-    fontWeight: '600',
-  },
   sessionInputCount: {
+    alignSelf: 'flex-end',
+    marginRight: 54,
     color: COLORS.muted,
     fontSize: 11,
     fontWeight: '700',
