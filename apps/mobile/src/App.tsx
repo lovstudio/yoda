@@ -63,6 +63,8 @@ import {
 } from '../../../src/shared/mobile-relay';
 import {
   formatMobileToolTranscriptContent,
+  groupAdjacentMobileToolBlocks,
+  mobileToolGroupTitle,
   summarizeMobileToolTranscriptContent,
 } from '../../../src/shared/mobile-tool-transcript';
 import {
@@ -3468,6 +3470,7 @@ function RenderedSessionTranscript({
     () => mergeAdjacentAssistantBlocks(detail.transcript),
     [detail.transcript]
   );
+  const renderItems = useMemo(() => groupAdjacentMobileToolBlocks(transcript), [transcript]);
   const latestToolId = useMemo(
     () => transcript.findLast((block) => block.role === 'tool')?.id,
     [transcript]
@@ -3479,44 +3482,178 @@ function RenderedSessionTranscript({
 
   return (
     <View style={styles.transcriptList}>
-      {transcript.map((block) => (
-        <TranscriptBlock
-          key={block.id}
-          block={block}
-          isLatestTool={block.id === latestToolId}
-          sessionRunning={detail.session.running && detail.session.runtimeStatus === 'working'}
-        />
-      ))}
+      {renderItems.map((item) =>
+        item.kind === 'tool-group' ? (
+          <TranscriptToolGroup
+            key={item.id}
+            blocks={item.blocks}
+            latestToolId={latestToolId}
+            sessionRunning={detail.session.running && detail.session.runtimeStatus === 'working'}
+          />
+        ) : (
+          <TranscriptBlock key={item.id} block={item.block} />
+        )
+      )}
     </View>
   );
 }
 
-function TranscriptBlock({
+function isTranscriptToolRunning({
   block,
-  isLatestTool,
+  latestToolId,
   sessionRunning,
 }: {
   block: MobileSessionTranscriptBlock;
-  isLatestTool: boolean;
+  latestToolId: string | undefined;
+  sessionRunning: boolean;
+}): boolean {
+  return (
+    sessionRunning &&
+    (block.toolStatus === 'running' ||
+      (block.toolStatus === undefined && block.id === latestToolId))
+  );
+}
+
+function ToolStateIcon({ running }: { running: boolean }) {
+  return running ? (
+    <ActivityIndicator color={COLORS.blue} size="small" />
+  ) : (
+    <Ionicons color={COLORS.green} name="checkmark-circle" size={17} />
+  );
+}
+
+function ToolExpandedContent({ block }: { block: MobileSessionTranscriptBlock }) {
+  return (
+    <View style={styles.toolExpandedBody}>
+      <CodeText value={formatMobileToolTranscriptContent(block.content)} />
+      {block.timestamp ? (
+        <Text style={styles.toolExpandedTime}>{formatTimestamp(block.timestamp)}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+function TranscriptToolGroup({
+  blocks,
+  latestToolId,
+  sessionRunning,
+}: {
+  blocks: MobileSessionTranscriptBlock[];
+  latestToolId: string | undefined;
   sessionRunning: boolean;
 }) {
-  const [toolExpanded, setToolExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const title = mobileToolGroupTitle(blocks);
+  const running = blocks.some((block) =>
+    isTranscriptToolRunning({ block, latestToolId, sessionRunning })
+  );
+  const latestBlock = blocks.at(-1);
+  const preview = latestBlock
+    ? summarizeMobileToolTranscriptContent(latestBlock.content)
+    : 'No details';
+
+  return (
+    <View
+      style={[
+        styles.transcriptBlock,
+        styles.transcriptToolBlock,
+        running ? styles.transcriptToolBlockRunning : null,
+      ]}
+    >
+      <Pressable
+        accessibilityHint={preview}
+        accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${title}. ${
+          running ? 'Running' : 'Completed'
+        }`}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.toolCompactRow, pressed ? styles.buttonPressed : null]}
+        onPress={() => setExpanded((current) => !current)}
+      >
+        <View style={styles.transcriptTitleRow}>
+          <ToolStateIcon running={running} />
+          <Text style={styles.transcriptTitle} numberOfLines={1}>
+            {title}
+          </Text>
+        </View>
+        <View style={styles.toolCompactMeta}>
+          <Text style={[styles.toolStateText, running ? styles.toolStateTextRunning : null]}>
+            {running ? 'Running' : 'Done'}
+          </Text>
+          <Ionicons
+            color={COLORS.muted}
+            name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+            size={16}
+          />
+        </View>
+      </Pressable>
+      {expanded ? (
+        blocks.length === 1 ? (
+          <ToolExpandedContent block={blocks[0]} />
+        ) : (
+          <View style={styles.toolGroupList}>
+            {blocks.map((block) => (
+              <TranscriptToolGroupItem
+                key={block.id}
+                block={block}
+                latestToolId={latestToolId}
+                sessionRunning={sessionRunning}
+              />
+            ))}
+          </View>
+        )
+      ) : null}
+    </View>
+  );
+}
+
+function TranscriptToolGroupItem({
+  block,
+  latestToolId,
+  sessionRunning,
+}: {
+  block: MobileSessionTranscriptBlock;
+  latestToolId: string | undefined;
+  sessionRunning: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const title = block.title ?? 'Command';
+  const running = isTranscriptToolRunning({ block, latestToolId, sessionRunning });
+  const preview = summarizeMobileToolTranscriptContent(block.content);
+
+  return (
+    <View style={[styles.toolGroupItem, running ? styles.toolGroupItemRunning : null]}>
+      <Pressable
+        accessibilityHint={preview}
+        accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${title}. ${
+          running ? 'Running' : 'Completed'
+        }`}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.toolGroupItemRow, pressed ? styles.buttonPressed : null]}
+        onPress={() => setExpanded((current) => !current)}
+      >
+        <View style={styles.transcriptTitleRow}>
+          <ToolStateIcon running={running} />
+          <Text style={styles.toolGroupItemTitle} numberOfLines={1}>
+            {title}
+          </Text>
+        </View>
+        <Ionicons
+          color={COLORS.muted}
+          name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+          size={15}
+        />
+      </Pressable>
+      {expanded ? <ToolExpandedContent block={block} /> : null}
+    </View>
+  );
+}
+
+function TranscriptBlock({ block }: { block: MobileSessionTranscriptBlock }) {
   const isUser = block.role === 'user';
   const isAssistant = block.role === 'assistant';
-  const isTool = block.role === 'tool';
   const isStatus = block.role === 'status';
   const title =
-    block.title ??
-    (isUser ? 'You' : isAssistant ? 'Codex' : isTool ? 'Command' : isStatus ? 'Status' : 'Message');
-  const toggleToolExpanded = useCallback(() => {
-    setToolExpanded((current) => !current);
-  }, []);
-  const toolRunning =
-    isTool &&
-    sessionRunning &&
-    (block.toolStatus === 'running' || (block.toolStatus === undefined && isLatestTool));
-  const formattedToolContent = isTool ? formatMobileToolTranscriptContent(block.content) : '';
-  const showBody = !isTool || toolExpanded;
+    block.title ?? (isUser ? 'You' : isAssistant ? 'Codex' : isStatus ? 'Status' : 'Message');
   const headerContent = (
     <>
       <View style={styles.transcriptTitleRow}>
@@ -3524,7 +3661,6 @@ function TranscriptBlock({
           style={[
             styles.transcriptRoleDot,
             isUser ? styles.transcriptUserDot : null,
-            isTool ? styles.transcriptToolDot : null,
             isStatus ? styles.transcriptStatusDot : null,
           ]}
         />
@@ -3541,91 +3677,31 @@ function TranscriptBlock({
             {formatTimestamp(block.timestamp)}
           </Text>
         ) : null}
-        {isTool ? (
-          <Ionicons
-            color={COLORS.muted}
-            name={toolExpanded ? 'chevron-up-outline' : 'chevron-down-outline'}
-            size={17}
-          />
-        ) : null}
       </View>
     </>
   );
-
-  if (isTool) {
-    const toolPreview = summarizeMobileToolTranscriptContent(formattedToolContent);
-    return (
-      <View
-        style={[
-          styles.transcriptBlock,
-          styles.transcriptToolBlock,
-          toolRunning ? styles.transcriptToolBlockRunning : null,
-        ]}
-      >
-        <Pressable
-          accessibilityHint={toolPreview}
-          accessibilityLabel={`${toolExpanded ? 'Collapse' : 'Expand'} ${title}. ${
-            toolRunning ? 'Running' : 'Completed'
-          }`}
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.toolCompactRow, pressed ? styles.buttonPressed : null]}
-          onPress={toggleToolExpanded}
-        >
-          <View style={styles.transcriptTitleRow}>
-            {toolRunning ? (
-              <ActivityIndicator color={COLORS.blue} size="small" />
-            ) : (
-              <Ionicons color={COLORS.green} name="checkmark-circle" size={17} />
-            )}
-            <Text style={styles.transcriptTitle} numberOfLines={1}>
-              {title}
-            </Text>
-          </View>
-          <View style={styles.toolCompactMeta}>
-            <Text style={[styles.toolStateText, toolRunning ? styles.toolStateTextRunning : null]}>
-              {toolRunning ? 'Running' : 'Done'}
-            </Text>
-            <Ionicons
-              color={COLORS.muted}
-              name={toolExpanded ? 'chevron-up-outline' : 'chevron-down-outline'}
-              size={16}
-            />
-          </View>
-        </Pressable>
-        {toolExpanded ? (
-          <View style={styles.toolExpandedBody}>
-            <CodeText value={formattedToolContent} />
-            {block.timestamp ? (
-              <Text style={styles.toolExpandedTime}>{formatTimestamp(block.timestamp)}</Text>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
-    );
-  }
 
   return (
     <View
       style={[
         styles.transcriptBlock,
         isUser ? styles.transcriptUserBlock : null,
-        isTool ? styles.transcriptToolBlock : null,
         isStatus ? styles.transcriptStatusBlock : null,
       ]}
     >
       <View style={styles.transcriptHeader}>{headerContent}</View>
-      {showBody && block.format === 'code' ? (
+      {block.format === 'code' ? (
         <CodeText value={block.content} />
-      ) : showBody && block.format === 'plain' ? (
+      ) : block.format === 'plain' ? (
         <Text
           selectable
           style={[styles.markdownParagraph, isUser ? styles.transcriptUserText : null]}
         >
           {block.content}
         </Text>
-      ) : showBody ? (
+      ) : (
         <RenderedMarkdown value={block.content} inverted={isUser} />
-      ) : null}
+      )}
     </View>
   );
 }
@@ -5288,6 +5364,39 @@ const styles = StyleSheet.create({
   },
   toolStateTextRunning: {
     color: COLORS.blue,
+  },
+  toolGroupList: {
+    gap: 7,
+    borderTopWidth: 1,
+    borderTopColor: '#D8D4CB',
+    padding: 8,
+  },
+  toolGroupItem: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#DDD9D0',
+    borderRadius: 7,
+    backgroundColor: COLORS.surface,
+  },
+  toolGroupItemRunning: {
+    borderColor: '#B9CDF7',
+    backgroundColor: '#F7FAFF',
+  },
+  toolGroupItemRow: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  toolGroupItemTitle: {
+    minWidth: 0,
+    flex: 1,
+    color: COLORS.ink,
+    fontSize: 12,
+    fontWeight: '700',
   },
   toolExpandedBody: {
     gap: 7,

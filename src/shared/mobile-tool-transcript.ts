@@ -1,4 +1,51 @@
+import type { MobileSessionTranscriptBlock } from './mobile-api';
+
 const TOOL_PREVIEW_MAX_CHARS = 88;
+
+export type MobileTranscriptRenderItem =
+  | {
+      kind: 'block';
+      id: string;
+      block: MobileSessionTranscriptBlock;
+    }
+  | {
+      kind: 'tool-group';
+      id: string;
+      blocks: MobileSessionTranscriptBlock[];
+    };
+
+/**
+ * Keep one stable render item for a contiguous run of tool calls. The first
+ * tool id remains the group id while new calls arrive, so the count can grow
+ * without remounting an expanded inspector.
+ */
+export function groupAdjacentMobileToolBlocks(
+  blocks: MobileSessionTranscriptBlock[]
+): MobileTranscriptRenderItem[] {
+  const items: MobileTranscriptRenderItem[] = [];
+
+  for (const block of blocks) {
+    const previous = items.at(-1);
+    if (block.role === 'tool') {
+      if (previous?.kind === 'tool-group') {
+        previous.blocks.push(block);
+      } else {
+        items.push({ kind: 'tool-group', id: block.id, blocks: [block] });
+      }
+      continue;
+    }
+
+    items.push({ kind: 'block', id: block.id, block });
+  }
+
+  return items;
+}
+
+export function mobileToolGroupTitle(blocks: MobileSessionTranscriptBlock[]): string {
+  const titles = [...new Set(blocks.map((block) => block.title ?? 'Command'))];
+  if (blocks.length === 1) return titles[0];
+  return titles.length === 1 ? `${titles[0]}（${blocks.length}）` : `Tools（${blocks.length}）`;
+}
 
 /**
  * Tool inputs are frequently serialized inside JSON or JavaScript wrappers.
