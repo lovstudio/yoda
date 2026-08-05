@@ -84,6 +84,14 @@ function indexExists(db: Database.Database, indexName: string): boolean {
   return row !== undefined;
 }
 
+function tableExists(db: Database.Database, tableName: string): boolean {
+  return (
+    db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
+      .get(tableName) !== undefined
+  );
+}
+
 function countAppliedMigrations(db: Database.Database): number {
   const row = db.prepare('SELECT COUNT(*) AS count FROM __drizzle_migrations').get() as {
     count: number;
@@ -118,6 +126,8 @@ describe('runBundledMigrations', () => {
           .get('existing-conversation')
       ).toEqual({ forked_from_conversation_id: null, forked_from_prompt_index: null });
       expect(columnExists(db, 'prompts', 'group_name')).toBe(true);
+      expect(columnExists(db, 'prompts', 'version')).toBe(true);
+      expect(tableExists(db, 'prompt_versions')).toBe(true);
       expect(
         db.prepare('SELECT group_name FROM prompts WHERE id = ?').get('existing-prompt')
       ).toEqual({ group_name: '' });
@@ -167,7 +177,7 @@ describe('runBundledMigrations', () => {
     // Simulates an upgrade from a release whose migration journal was longer
     // (squashed/renumbered since): the DB records more applied migrations than
     // the bundled journal contains, and the shared prefix hashes match while
-    // the tail (0045-0047) was never applied.
+    // the tail (0045 onward) was never applied.
     const db = new Database(':memory:');
     try {
       createMigrationTable(db);
@@ -190,6 +200,7 @@ describe('runBundledMigrations', () => {
           name text PRIMARY KEY NOT NULL,
           created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
         );
+        CREATE TABLE prompts (id text PRIMARY KEY NOT NULL);
         CREATE TABLE tasks (id text PRIMARY KEY NOT NULL);
         CREATE TABLE projects (id text PRIMARY KEY NOT NULL);
       `);
@@ -197,6 +208,8 @@ describe('runBundledMigrations', () => {
       expect(() => runBundledMigrations(db)).not.toThrow();
 
       expect(columnExists(db, 'prompt_groups', 'sort_order')).toBe(true);
+      expect(columnExists(db, 'prompts', 'version')).toBe(true);
+      expect(tableExists(db, 'prompt_versions')).toBe(true);
       expect(columnExists(db, 'tasks', 'is_long_term')).toBe(true);
       expect(columnExists(db, 'workspace_terminals', 'id')).toBe(true);
       expect(indexExists(db, 'idx_workspace_terminals_project_scope')).toBe(true);

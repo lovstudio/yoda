@@ -38,12 +38,14 @@ import {
 import React, { useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  incrementPromptVersion,
   PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES,
   PROMPT_SOURCE_DEFAULT_TIMEOUT_SECONDS,
   type Prompt,
   type PromptCreateInput,
   type PromptSource,
   type PromptSourceError,
+  type PromptVersionBump,
 } from '@shared/prompt-library';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { useToast } from '@renderer/lib/hooks/use-toast';
@@ -62,6 +64,13 @@ import {
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { Input } from '@renderer/lib/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/lib/ui/select';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
@@ -74,6 +83,7 @@ import {
 } from './prompt-groups';
 import { PromptLibraryChapter } from './prompt-library-chapter';
 import { PromptRuntimeSelector, UserInstructionSection } from './prompt-system-section';
+import { PromptVersionHistory } from './prompt-version-history';
 import {
   useCreatePrompt,
   useCreatePromptGroup,
@@ -148,6 +158,16 @@ function draftToCreateInput(draft: PromptDraft): PromptCreateInput {
     injectionEnabled: draft.injectionEnabled,
     source: draft.source,
   };
+}
+
+function hasAuthoredChanges(draft: PromptDraft, entry: Prompt | undefined): boolean {
+  if (!entry) return false;
+  return (
+    draft.title.trim() !== entry.title ||
+    draft.description.trim() !== entry.description ||
+    draft.content.trim() !== entry.content ||
+    draft.extraInfo.trim() !== entry.extraInfo
+  );
 }
 
 function parseNumber(value: string): number | undefined {
@@ -305,6 +325,7 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   const editorRef = useRef<HTMLFormElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<PromptDraft>(EMPTY_DRAFT);
+  const [versionBump, setVersionBump] = useState<PromptVersionBump>('patch');
   const [sourceForm, setSourceForm] = useState<SourceForm | null>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
   const [groupFormOpen, setGroupFormOpen] = useState(false);
@@ -327,6 +348,11 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
     [items, persistedGroupNames]
   );
   const editorOpen = editingId !== null;
+  const editingEntry = items.find((entry) => entry.id === editingId);
+  const authoredChanges = hasAuthoredChanges(draft, editingEntry);
+  const nextVersion = editingEntry
+    ? incrementPromptVersion(editingEntry.version, versionBump)
+    : '1.0.0';
   const canSave = draft.title.trim().length > 0 && draft.content.trim().length > 0;
   const normalizedNewGroupName = newGroupName.trim();
   const canCreateGroup =
@@ -341,18 +367,21 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   const closeEditor = () => {
     setEditingId(null);
     setDraft(EMPTY_DRAFT);
+    setVersionBump('patch');
   };
 
   const openCreate = () => {
     setSourceForm(null);
     setEditingId('new');
     setDraft(EMPTY_DRAFT);
+    setVersionBump('patch');
   };
 
   const openCreateInGroup = (groupName: string) => {
     setSourceForm(null);
     setEditingId('new');
     setDraft({ ...EMPTY_DRAFT, groupName });
+    setVersionBump('patch');
     setCollapsedGroups((current) => {
       const next = new Set(current);
       next.delete(groupName);
@@ -367,12 +396,14 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
     setSourceForm(null);
     setEditingId('new');
     setDraft({ ...EMPTY_DRAFT, title: name, content: text, source });
+    setVersionBump('patch');
   };
 
   const openEdit = (entry: Prompt) => {
     setSourceForm(null);
     setEditingId(entry.id);
     setDraft(draftFromEntry(entry));
+    setVersionBump('patch');
   };
 
   const openGroupCreator = (promptId: string | null = null) => {
@@ -546,7 +577,14 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
       });
     if (editingId && editingId !== 'new') {
       updatePrompt.mutate(
-        { id: editingId, patch: { ...input, source: input.source ?? null } },
+        {
+          id: editingId,
+          patch: {
+            ...input,
+            source: input.source ?? null,
+            ...(authoredChanges ? { versionBump } : {}),
+          },
+        },
         { onSuccess: closeEditor, onError }
       );
     } else {
@@ -972,6 +1010,42 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                       }
                     />
                   </div>
+                  {editingEntry && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2.5">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          {t('promptLibrary.versions.saveTitle')}
+                        </p>
+                        <p className="mt-0.5 text-xs text-foreground-muted">
+                          {authoredChanges
+                            ? t('promptLibrary.versions.nextVersion', { version: nextVersion })
+                            : t('promptLibrary.versions.noAuthoredChanges', {
+                                version: editingEntry.version,
+                              })}
+                        </p>
+                      </div>
+                      <Select
+                        value={versionBump}
+                        disabled={!authoredChanges}
+                        onValueChange={(value) => setVersionBump(value as PromptVersionBump)}
+                      >
+                        <SelectTrigger size="sm" aria-label={t('promptLibrary.versions.bumpLabel')}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent align="end">
+                          <SelectItem value="patch">
+                            {t('promptLibrary.versions.bump.patch')}
+                          </SelectItem>
+                          <SelectItem value="minor">
+                            {t('promptLibrary.versions.bump.minor')}
+                          </SelectItem>
+                          <SelectItem value="major">
+                            {t('promptLibrary.versions.bump.major')}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="flex items-center justify-end gap-2">
                     <Button type="button" variant="ghost" size="sm" onClick={closeEditor}>
                       <X className="size-4" />
@@ -983,7 +1057,11 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                       disabled={!canSave || createPrompt.isPending || updatePrompt.isPending}
                     >
                       <Save className="size-4" />
-                      {editingId !== 'new' ? t('common.save') : t('common.create')}
+                      {editingId === 'new'
+                        ? t('common.create')
+                        : authoredChanges
+                          ? t('promptLibrary.versions.saveAs', { version: nextVersion })
+                          : t('common.save')}
                     </Button>
                   </div>
                 </form>
@@ -1213,6 +1291,9 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                                                           <span className="truncate text-sm font-medium text-foreground">
                                                             {entry.title}
                                                           </span>
+                                                          <span className="shrink-0 rounded bg-background-1 px-1.5 py-0.5 text-[10px] text-foreground-muted">
+                                                            v{entry.version}
+                                                          </span>
                                                           {entry.source && (
                                                             <span className="shrink-0 rounded bg-background-1 px-1.5 py-0.5 text-[10px] text-foreground-muted">
                                                               {t(
@@ -1418,6 +1499,7 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                                                           )}
                                                         </div>
                                                       )}
+                                                      <PromptVersionHistory prompt={entry} />
                                                     </div>
                                                   )}
                                                 </>

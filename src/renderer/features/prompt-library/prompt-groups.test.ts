@@ -18,6 +18,7 @@ function prompt(id: string, groupName: string): Prompt {
     extraInfo: '',
     injectionEnabled: false,
     injectionOrder: 0,
+    version: '1.0.0',
     createdAt: '2026-07-27T00:00:00.000Z',
     updatedAt: '2026-07-27T00:00:00.000Z',
   };

@@ -2,7 +2,7 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Prompt } from '@shared/prompt-library';
+import type { Prompt, PromptVersionSnapshot } from '@shared/prompt-library';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -14,7 +14,9 @@ const mocks = vi.hoisted(() => ({
   deletePrompt: vi.fn(),
   promptGroups: [] as string[],
   prompts: [] as Prompt[],
+  promptVersions: [] as PromptVersionSnapshot[],
   refreshPrompt: vi.fn(),
+  restorePromptVersion: vi.fn(),
   reorderGroups: vi.fn(),
   reorderPrompts: vi.fn(),
 }));
@@ -24,6 +26,7 @@ vi.mock('react-i18next', async (importOriginal) => ({
   useTranslation: () => ({
     t: (key: string, values?: { count?: number }) =>
       key === 'promptLibrary.groups.count' ? String(values?.count ?? 0) : key,
+    i18n: { language: 'en' },
   }),
 }));
 
@@ -38,6 +41,8 @@ vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
   useReorderPromptGroups: () => ({ mutate: mocks.reorderGroups, isPending: false }),
   useReorderPrompts: () => ({ mutate: mocks.reorderPrompts, isPending: false }),
   useRefreshPromptSource: () => ({ mutate: mocks.refreshPrompt, isPending: false }),
+  usePromptVersions: () => ({ data: mocks.promptVersions, isLoading: false }),
+  useRestorePromptVersion: () => ({ mutate: mocks.restorePromptVersion, isPending: false }),
 }));
 
 vi.mock('@renderer/features/prompt-library/prompt-system-section', async () => {
@@ -105,6 +110,7 @@ function prompt(id: string, groupName: string): Prompt {
     extraInfo: '',
     injectionEnabled: false,
     injectionOrder: 0,
+    version: '1.0.0',
     createdAt: '2026-07-27T00:00:00.000Z',
     updatedAt: '2026-07-27T00:00:00.000Z',
   };
@@ -133,6 +139,7 @@ describe('PromptLibraryPanel groups', () => {
       prompt('review-second', 'Review'),
     ];
     mocks.promptGroups = ['Build', 'Review'];
+    mocks.promptVersions = [];
     host = document.createElement('div');
     host.style.width = '440px';
     document.body.appendChild(host);
@@ -510,5 +517,69 @@ describe('PromptLibraryPanel groups', () => {
       );
     });
     expect(mocks.reorderGroups).toHaveBeenCalledWith(['Review', 'Build']);
+  });
+
+  it('shows semantic versions and saves authored edits as a new patch version', async () => {
+    mocks.prompts = [{ ...prompt('review', 'Review'), version: '1.2.0' }];
+    mocks.promptGroups = ['Review'];
+    mocks.promptVersions = [
+      {
+        id: 'version-1.2.0',
+        promptId: 'review',
+        version: '1.2.0',
+        title: 'review',
+        description: 'review description',
+        content: 'review content',
+        extraInfo: '',
+        createdAt: '2026-07-27T00:00:00.000Z',
+      },
+      {
+        id: 'version-1.1.0',
+        promptId: 'review',
+        version: '1.1.0',
+        title: 'review',
+        description: 'review description',
+        content: 'older content',
+        extraInfo: '',
+        createdAt: '2026-07-26T00:00:00.000Z',
+      },
+    ];
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    expect(host.textContent).toContain('v1.2.0');
+    const rowToggle = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) =>
+        button.getAttribute('aria-expanded') === 'false' && button.textContent?.includes('review')
+    );
+    await act(async () => rowToggle?.click());
+    expect(host.querySelector('[data-slot="prompt-version-history"]')?.textContent).toContain(
+      'v1.1.0'
+    );
+
+    const editButton = host.querySelector<HTMLButtonElement>('button[aria-label="common.edit"]');
+    await act(async () => editButton?.click());
+    const editor = host.querySelector<HTMLFormElement>('form[data-slot="prompt-library-editor"]');
+    const content = editor?.querySelector<HTMLTextAreaElement>(
+      'textarea[placeholder="promptLibrary.form.contentPlaceholder"]'
+    );
+    await act(async () => {
+      if (content) setFormValue(content, 'updated review content');
+    });
+    expect(editor?.textContent).toContain('promptLibrary.versions.saveAs');
+    await act(async () => editor?.requestSubmit());
+
+    expect(mocks.updatePrompt).toHaveBeenCalledWith(
+      {
+        id: 'review',
+        patch: expect.objectContaining({
+          content: 'updated review content',
+          versionBump: 'patch',
+        }),
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
+    );
   });
 });

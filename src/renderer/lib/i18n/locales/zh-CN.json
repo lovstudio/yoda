@@ -2701,6 +2701,26 @@
       "extraInfo": "额外信息",
       "extraInfoPlaceholder": "可选：补充说明、参考网址或扩展入口"
     },
+    "versions": {
+      "title": "版本历史",
+      "current": "当前 v{{version}}",
+      "saveTitle": "语义化版本",
+      "nextVersion": "本次内容修改将保存为 v{{version}}。",
+      "noAuthoredChanges": "内容没有变化，继续使用 v{{version}}。",
+      "bumpLabel": "版本升级类型",
+      "bump": {
+        "patch": "补丁版 · 小幅修订",
+        "minor": "次版本 · 向后兼容的新内容",
+        "major": "主版本 · 重大或不兼容调整"
+      },
+      "saveAs": "保存为 v{{version}}",
+      "restore": "恢复此版本",
+      "restoreTitle": "恢复 v{{version}}？",
+      "restoreDescription": "该版本的提示词内容会重新成为当前内容，并保存为一个新的补丁版本；已有历史保持不变。",
+      "restoreAction": "恢复为新版本",
+      "restored": "已恢复为 v{{version}}",
+      "restoreFailed": "恢复提示词版本失败"
+    },
     "runtime": {
       "title": "当前 CLI",
       "description": "下方用户级与项目级指令均随此选项切换。",

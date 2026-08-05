@@ -43,11 +43,25 @@ function createSchema(sqlite: Database.Database): void {
       extra_info TEXT DEFAULT '' NOT NULL,
       injection_enabled INTEGER DEFAULT false NOT NULL,
       injection_order INTEGER DEFAULT 0 NOT NULL,
+      version TEXT DEFAULT '1.0.0' NOT NULL,
       source_json TEXT,
       sort_order INTEGER DEFAULT 0 NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
+    CREATE TABLE prompt_versions (
+      id TEXT PRIMARY KEY NOT NULL,
+      prompt_id TEXT NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+      version TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '' NOT NULL,
+      content TEXT NOT NULL,
+      extra_info TEXT DEFAULT '' NOT NULL,
+      source_json TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    CREATE UNIQUE INDEX idx_prompt_versions_prompt_id_version
+      ON prompt_versions(prompt_id, version);
   `);
 }
 
@@ -75,6 +89,63 @@ describe('PromptLibraryService groups', () => {
 
     expect(await service.createGroup(' Research ')).toBe('Research');
     expect(await service.listGroups()).toEqual(['Research']);
+  });
+
+  it('starts at v1.0.0 and creates immutable semantic versions for authored changes', async () => {
+    const { PromptLibraryService } = await import('./prompt-library-service');
+    const service = new PromptLibraryService();
+    const created = await service.create({
+      title: 'Review',
+      content: 'Review this change.',
+      description: '',
+      groupName: '',
+      extraInfo: '',
+      injectionEnabled: false,
+    });
+
+    expect(created.version).toBe('1.0.0');
+    expect(await service.listVersions(created.id)).toEqual([
+      expect.objectContaining({ version: '1.0.0', content: 'Review this change.' }),
+    ]);
+
+    await service.update(created.id, { content: 'Review behavior and tests.' });
+    await service.update(created.id, {
+      description: 'Use before merging.',
+      versionBump: 'minor',
+    });
+    await service.update(created.id, { injectionEnabled: true, groupName: 'Review' });
+
+    expect((await service.list()).find((prompt) => prompt.id === created.id)?.version).toBe(
+      '1.1.0'
+    );
+    expect((await service.listVersions(created.id)).map((version) => version.version)).toEqual([
+      '1.1.0',
+      '1.0.1',
+      '1.0.0',
+    ]);
+  });
+
+  it('restores an old snapshot as a new version without rewriting history', async () => {
+    const { PromptLibraryService } = await import('./prompt-library-service');
+    const service = new PromptLibraryService();
+    const created = await service.create({
+      title: 'Review',
+      content: 'Original',
+      description: '',
+      groupName: '',
+      extraInfo: '',
+      injectionEnabled: false,
+    });
+    await service.update(created.id, { content: 'Changed' });
+
+    const restored = await service.restoreVersion(created.id, '1.0.0');
+
+    expect(restored).toMatchObject({ content: 'Original', version: '1.0.2' });
+    expect((await service.listVersions(created.id)).map((version) => version.version)).toEqual([
+      '1.0.2',
+      '1.0.1',
+      '1.0.0',
+    ]);
   });
 
   it('renames a group while preserving its order and moving every prompt', async () => {

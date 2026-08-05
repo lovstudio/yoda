@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { asc, eq, ne, sql } from 'drizzle-orm';
 import { promptsUpdatedChannel } from '@shared/events/appEvents';
 import {
+  incrementPromptVersion,
   promptCreateInputSchema,
   promptGroupNameSchema,
   promptSourceSchema,
@@ -10,13 +11,16 @@ import {
   type PromptCreateInput,
   type PromptSource,
   type PromptUpdateInput,
+  type PromptVersionBump,
+  type PromptVersionSnapshot,
 } from '@shared/prompt-library';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { db } from '@main/db/client';
-import { promptGroups, prompts } from '@main/db/schema';
+import { promptGroups, prompts, promptVersions } from '@main/db/schema';
 import { events } from '@main/lib/events';
 
 type PromptRow = typeof prompts.$inferSelect;
+type PromptVersionRow = typeof promptVersions.$inferSelect;
 
 function parseSource(value: string | null): PromptSource | undefined {
   if (!value) return undefined;
@@ -38,10 +42,49 @@ function toPrompt(row: PromptRow): Prompt {
     extraInfo: row.extraInfo,
     injectionEnabled: row.injectionEnabled,
     injectionOrder: row.injectionOrder,
+    version: row.version,
     source: parseSource(row.sourceJson),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+function toPromptVersion(row: PromptVersionRow): PromptVersionSnapshot {
+  return {
+    id: row.id,
+    promptId: row.promptId,
+    version: row.version,
+    title: row.title,
+    description: row.description,
+    content: row.content,
+    extraInfo: row.extraInfo,
+    source: parseSource(row.sourceJson),
+    createdAt: row.createdAt,
+  };
+}
+
+function versionSnapshotValues(row: PromptRow): typeof promptVersions.$inferInsert {
+  return {
+    id: randomUUID(),
+    promptId: row.id,
+    version: row.version,
+    title: row.title,
+    description: row.description,
+    content: row.content,
+    extraInfo: row.extraInfo,
+    sourceJson: row.sourceJson,
+    createdAt: row.updatedAt,
+  };
+}
+
+function compareSemanticVersions(left: string, right: string): number {
+  const leftParts = left.split('.').map(Number);
+  const rightParts = right.split('.').map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    const difference = (rightParts[index] ?? 0) - (leftParts[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
 }
 
 /**
@@ -140,6 +183,22 @@ export class PromptLibraryService {
         )
         .onConflictDoNothing({ target: promptGroups.name });
     }
+
+    const [promptRows, versionRows] = await Promise.all([
+      db.select().from(prompts),
+      db
+        .select({ promptId: promptVersions.promptId, version: promptVersions.version })
+        .from(promptVersions),
+    ]);
+    const existingVersions = new Set(
+      versionRows.map((row) => `${row.promptId}\u0000${row.version}`)
+    );
+    const missingSnapshots = promptRows
+      .filter((row) => !existingVersions.has(`${row.id}\u0000${row.version}`))
+      .map(versionSnapshotValues);
+    if (missingSnapshots.length > 0) {
+      await db.insert(promptVersions).values(missingSnapshots).onConflictDoNothing();
+    }
     await this.syncInjectionOrder();
   }
 
@@ -157,6 +216,13 @@ export class PromptLibraryService {
       .from(promptGroups)
       .orderBy(asc(promptGroups.sortOrder), asc(promptGroups.name));
     return rows.map((row) => row.name);
+  }
+
+  async listVersions(id: string): Promise<PromptVersionSnapshot[]> {
+    const rows = await db.select().from(promptVersions).where(eq(promptVersions.promptId, id));
+    return rows
+      .sort((left, right) => compareSemanticVersions(left.version, right.version))
+      .map(toPromptVersion);
   }
 
   async createGroup(name: string): Promise<string> {
@@ -234,12 +300,16 @@ export class PromptLibraryService {
       extraInfo: parsed.extraInfo,
       injectionEnabled: parsed.injectionEnabled,
       injectionOrder: 0,
+      version: '1.0.0',
       sourceJson: parsed.source ? JSON.stringify(parsed.source) : null,
       sortOrder: next ?? 0,
       createdAt: now,
       updatedAt: now,
     };
-    await db.insert(prompts).values(row);
+    db.transaction((tx) => {
+      tx.insert(prompts).values(row).run();
+      tx.insert(promptVersions).values(versionSnapshotValues(row)).run();
+    });
     await this.syncInjectionOrder();
     events.emit(promptsUpdatedChannel, undefined);
     const [created] = await db.select().from(prompts).where(eq(prompts.id, row.id)).limit(1);
@@ -251,16 +321,13 @@ export class PromptLibraryService {
     const normalizedGroupName = parsed.groupName?.trim();
     if (normalizedGroupName !== undefined) await this.ensureGroup(normalizedGroupName);
     if (Object.keys(parsed).length > 0) {
-      const { source, groupName: _groupName, ...fields } = parsed;
+      const [current] = await db.select().from(prompts).where(eq(prompts.id, id)).limit(1);
+      if (!current) return null;
+      const { source, groupName: _groupName, versionBump, ...fields } = parsed;
       let sortOrder: number | undefined;
       let groupChanged = false;
       if (normalizedGroupName !== undefined) {
-        const [current] = await db
-          .select({ groupName: prompts.groupName })
-          .from(prompts)
-          .where(eq(prompts.id, id))
-          .limit(1);
-        groupChanged = Boolean(current && current.groupName.trim() !== normalizedGroupName);
+        groupChanged = current.groupName.trim() !== normalizedGroupName;
         if (groupChanged) {
           const [{ next }] = await db
             .select({
@@ -271,18 +338,58 @@ export class PromptLibraryService {
           sortOrder = next ?? 0;
         }
       }
+      const authoredContentChanged =
+        (parsed.title !== undefined && parsed.title !== current.title) ||
+        (parsed.description !== undefined && parsed.description !== current.description) ||
+        (parsed.content !== undefined && parsed.content !== current.content) ||
+        (parsed.extraInfo !== undefined && parsed.extraInfo !== current.extraInfo);
+      const nextVersion = authoredContentChanged
+        ? incrementPromptVersion(current.version, versionBump ?? 'patch')
+        : current.version;
       const update = {
         ...fields,
         ...(normalizedGroupName !== undefined ? { groupName: normalizedGroupName } : {}),
         ...(sortOrder !== undefined ? { sortOrder } : {}),
         ...(source !== undefined ? { sourceJson: source ? JSON.stringify(source) : null } : {}),
+        ...(authoredContentChanged ? { version: nextVersion } : {}),
       };
-      await db.update(prompts).set(update).where(eq(prompts.id, id));
+      db.transaction((tx) => {
+        const [updated] = tx
+          .update(prompts)
+          .set(update)
+          .where(eq(prompts.id, id))
+          .returning()
+          .all();
+        if (authoredContentChanged && updated) {
+          tx.insert(promptVersions).values(versionSnapshotValues(updated)).run();
+        }
+      });
       if (groupChanged) await this.syncInjectionOrder();
     }
     events.emit(promptsUpdatedChannel, undefined);
     const [row] = await db.select().from(prompts).where(eq(prompts.id, id)).limit(1);
     return row ? toPrompt(row) : null;
+  }
+
+  async restoreVersion(
+    id: string,
+    version: string,
+    bump: PromptVersionBump = 'patch'
+  ): Promise<Prompt | null> {
+    const [snapshot] = await db
+      .select()
+      .from(promptVersions)
+      .where(sql`${promptVersions.promptId} = ${id} AND ${promptVersions.version} = ${version}`)
+      .limit(1);
+    if (!snapshot) throw new Error('Prompt version not found');
+    return this.update(id, {
+      title: snapshot.title,
+      description: snapshot.description,
+      content: snapshot.content,
+      extraInfo: snapshot.extraInfo,
+      source: parseSource(snapshot.sourceJson) ?? null,
+      versionBump: bump,
+    });
   }
 
   async remove(id: string): Promise<void> {

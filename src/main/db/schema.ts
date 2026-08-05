@@ -199,6 +199,7 @@ export const prompts = sqliteTable('prompts', {
   extraInfo: text('extra_info').notNull().default(''),
   injectionEnabled: integer('injection_enabled', { mode: 'boolean' }).notNull().default(false),
   injectionOrder: integer('injection_order').notNull().default(0),
+  version: text('version').notNull().default('1.0.0'),
   sourceJson: text('source_json'),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: text('created_at')
@@ -209,6 +210,33 @@ export const prompts = sqliteTable('prompts', {
     .default(sql`CURRENT_TIMESTAMP`)
     .$onUpdate(() => new Date().toISOString()),
 });
+
+/** Immutable authored-content snapshots for each semantic prompt version. */
+export const promptVersions = sqliteTable(
+  'prompt_versions',
+  {
+    id: text('id').primaryKey(),
+    promptId: text('prompt_id')
+      .notNull()
+      .references(() => prompts.id, { onDelete: 'cascade' }),
+    version: text('version').notNull(),
+    title: text('title').notNull(),
+    description: text('description').notNull().default(''),
+    content: text('content').notNull(),
+    extraInfo: text('extra_info').notNull().default(''),
+    sourceJson: text('source_json'),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    promptIdIdx: index('idx_prompt_versions_prompt_id').on(table.promptId),
+    promptVersionIdx: uniqueIndex('idx_prompt_versions_prompt_id_version').on(
+      table.promptId,
+      table.version
+    ),
+  })
+);
 
 /**
  * One review-mode orchestration run (implement → review → loop). Persisted so

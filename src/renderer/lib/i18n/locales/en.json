@@ -2701,6 +2701,26 @@
       "extraInfo": "Extra information",
       "extraInfoPlaceholder": "Optional notes, reference URL, or extension entry point"
     },
+    "versions": {
+      "title": "Version history",
+      "current": "Current v{{version}}",
+      "saveTitle": "Semantic version",
+      "nextVersion": "This content change will be saved as v{{version}}.",
+      "noAuthoredChanges": "No content change; v{{version}} stays current.",
+      "bumpLabel": "Version increment",
+      "bump": {
+        "patch": "Patch · small revision",
+        "minor": "Minor · compatible addition",
+        "major": "Major · breaking change"
+      },
+      "saveAs": "Save as v{{version}}",
+      "restore": "Restore this version",
+      "restoreTitle": "Restore v{{version}}?",
+      "restoreDescription": "Its authored content will become the current prompt and be saved as a new patch version. Existing history stays unchanged.",
+      "restoreAction": "Restore as new version",
+      "restored": "Restored as v{{version}}",
+      "restoreFailed": "Failed to restore prompt version"
+    },
     "runtime": {
       "title": "Current CLI",
       "description": "The user-level and project-level instructions below follow this selection.",

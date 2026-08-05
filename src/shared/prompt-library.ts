@@ -101,6 +101,23 @@ export type PromptSourceRefreshResult =
 export const promptGroupNameSchema = z.string().trim().min(1).max(80);
 export type PromptGroupName = z.infer<typeof promptGroupNameSchema>;
 
+export const promptVersionSchema = z.string().regex(/^\d+\.\d+\.\d+$/);
+export type PromptVersionNumber = z.infer<typeof promptVersionSchema>;
+
+export const promptVersionBumpSchema = z.enum(['patch', 'minor', 'major']);
+export type PromptVersionBump = z.infer<typeof promptVersionBumpSchema>;
+
+export function incrementPromptVersion(
+  version: PromptVersionNumber,
+  bump: PromptVersionBump
+): PromptVersionNumber {
+  const parsed = promptVersionSchema.parse(version);
+  const [major, minor, patch] = parsed.split('.').map(Number) as [number, number, number];
+  if (bump === 'major') return `${major + 1}.0.0`;
+  if (bump === 'minor') return `${major}.${minor + 1}.0`;
+  return `${major}.${minor}.${patch + 1}`;
+}
+
 export const promptSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -110,11 +127,25 @@ export const promptSchema = z.object({
   extraInfo: z.string(),
   injectionEnabled: z.boolean(),
   injectionOrder: z.number().int(),
+  version: promptVersionSchema,
   source: promptSourceSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 export type Prompt = z.infer<typeof promptSchema>;
+
+export const promptVersionSnapshotSchema = z.object({
+  id: z.string(),
+  promptId: z.string(),
+  version: promptVersionSchema,
+  title: z.string(),
+  description: z.string(),
+  content: z.string(),
+  extraInfo: z.string(),
+  source: promptSourceSchema.optional(),
+  createdAt: z.string(),
+});
+export type PromptVersionSnapshot = z.infer<typeof promptVersionSnapshotSchema>;
 
 export const promptCreateInputSchema = z.object({
   title: z.string(),
@@ -136,6 +167,7 @@ export const promptUpdateInputSchema = z
     extraInfo: z.string(),
     injectionEnabled: z.boolean(),
     source: promptSourceSchema.nullable(),
+    versionBump: promptVersionBumpSchema,
   })
   .partial();
 export type PromptUpdateInput = z.infer<typeof promptUpdateInputSchema>;
