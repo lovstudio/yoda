@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import type { DeepLinkTarget } from '@shared/deep-links';
 import {
   deepLinkOpenChannel,
   menuExportSettingsChannel,
@@ -135,9 +136,18 @@ export function AppMenuEvents({ onOpenSettings }: { onOpenSettings?: () => boole
     const unlistenNotifications = events.on(notificationFocusTaskChannel, (target) =>
       openTaskTarget(target, navigate, disposers)
     );
-    const unlistenDeepLinks = events.on(deepLinkOpenChannel, (target) =>
-      openTaskTarget(target, navigate, disposers)
-    );
+    const openDeepLinkTarget = (target: DeepLinkTarget) => {
+      if (target.appId) {
+        navigate('marketplace', { section: 'apps', appId: target.appId });
+        return;
+      }
+      if (!target.projectId) {
+        log.warn('AppMenuEvents: deep link has no routable target', { target });
+        return;
+      }
+      openTaskTarget({ ...target, projectId: target.projectId }, navigate, disposers);
+    };
+    const unlistenDeepLinks = events.on(deepLinkOpenChannel, openDeepLinkTarget);
     // A warm window navigates to its tab when the main process assigns a target.
     const unlistenAssign = events.on(taskWindowAssignTargetChannel, (target) =>
       openTaskWindowTarget(target, navigate, disposers)
@@ -147,7 +157,7 @@ export function AppMenuEvents({ onOpenSettings }: { onOpenSettings?: () => boole
       void rpc.app
         .consumePendingDeepLinks()
         .then((targets) => {
-          for (const target of targets) openTaskTarget(target, navigate, disposers);
+          for (const target of targets) openDeepLinkTarget(target);
         })
         .catch((error: unknown) => {
           log.warn('AppMenuEvents: failed to consume pending deep links', { error });

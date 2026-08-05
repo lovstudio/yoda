@@ -1,6 +1,7 @@
 import { APP_NAME_LOWER } from './app-identity';
 
 export type ParsedDeepLink = {
+  appId?: string;
   projectId?: string;
   taskId?: string;
   conversationId?: string;
@@ -11,7 +12,8 @@ export type ParsedDeepLink = {
 export type DeepLinkTarget = {
   id: string;
   rawUrl: string;
-  projectId: string;
+  appId?: string;
+  projectId?: string;
   taskId?: string;
   conversationId?: string;
   promptId?: string;
@@ -38,6 +40,10 @@ export function buildSessionDeepLink(
 
 export function buildProjectDeepLink(args: { projectId: string }, scheme = APP_NAME_LOWER): string {
   return `${scheme}://project/${encodeURIComponent(args.projectId)}`;
+}
+
+export function buildAiLabAppDeepLink(args: { appId: string }, scheme = APP_NAME_LOWER): string {
+  return `${scheme}://app/${encodeURIComponent(args.appId)}`;
 }
 
 export function buildTaskDeepLink(
@@ -85,6 +91,11 @@ export function parseYodaDeepLink(rawUrl: string, scheme = APP_NAME_LOWER): Pars
         ...queryTarget,
         projectId: parts[0] ?? queryTarget.projectId,
       });
+    case 'app':
+      return compactTarget({
+        ...queryTarget,
+        appId: parts[0] ?? queryTarget.appId,
+      });
     case 'task':
       return compactTarget({
         ...queryTarget,
@@ -103,6 +114,7 @@ export function parseYodaDeepLink(rawUrl: string, scheme = APP_NAME_LOWER): Pars
 
 function queryParams(searchParams: URLSearchParams): ParsedDeepLink {
   return compactTarget({
+    appId: firstParam(searchParams, 'appId', 'app'),
     projectId: firstParam(searchParams, 'projectId', 'project'),
     taskId: firstParam(searchParams, 'taskId', 'task'),
     conversationId: firstParam(

@@ -244,6 +244,14 @@ export class TaskStore {
   dispose(): void {
     this.provisionedTask?.dispose();
     this.provisionedTask = null;
+    // A disposed store may remain observable until its manager removes or
+    // replaces it. Never leave the state machine claiming `provisioned`
+    // without the corresponding payload: taskViewKind would otherwise expose
+    // a false ready state to renderer boundaries during project/task teardown.
+    if (this.state === 'provisioned') {
+      this.state = 'unprovisioned';
+      this.phase = 'idle';
+    }
   }
 
   recordUserPromptAt(lastInteractedAt: string): void {
@@ -496,7 +504,7 @@ export function isUnprovisioned(t: TaskStore): t is UnprovisionedTask {
 export function isProvisioned(
   t: TaskStore
 ): t is TaskStore & { state: 'provisioned'; data: Task; provisionedTask: ProvisionedTask } {
-  return t.state === 'provisioned';
+  return t.state === 'provisioned' && t.provisionedTask !== null;
 }
 
 /** Full `Task` payload when registered (unprovisioned or provisioned); `undefined` when unregistered. */

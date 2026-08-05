@@ -14,7 +14,15 @@ import {
   Terminal,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useCallback, useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AppAgentSessionResource } from '@shared/app-resource';
 import type { Conversation } from '@shared/conversations';
@@ -54,6 +62,7 @@ import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 import { Button } from '@renderer/lib/ui/button';
+import { Input } from '@renderer/lib/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { Switch } from '@renderer/lib/ui/switch';
 import { agentConfig } from '@renderer/utils/agentConfig';
@@ -79,7 +88,11 @@ import {
   WORKSPACE_RESOURCE_QUERY_TIMING,
 } from './workspace-resource-monitoring';
 import { WorkspaceResourceTrend } from './workspace-resource-trend';
-import { getDistinctAgentTaskTitle, getQuotaWindowLabel } from './workspace-runtime-bar-format';
+import {
+  getAccountUsageThresholdAlert,
+  getDistinctAgentTaskTitle,
+  getQuotaWindowLabel,
+} from './workspace-runtime-bar-format';
 
 type WorkspaceAgentSession = Omit<AppAgentSessionResource, 'runtimeId' | 'title' | 'taskTitle'> & {
   runtimeId?: AppAgentSessionResource['runtimeId'];
@@ -123,6 +136,8 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     useAppSettingsKey('interface');
   const { value: homeDraft, update: updateHomeDraft } = useAppSettingsKey('homeDraft');
   const { value: taskSettings, update: updateTaskSettings } = useAppSettingsKey('tasks');
+  const { value: notificationSettings, update: updateNotificationSettings } =
+    useAppSettingsKey('notifications');
   const { value: defaultRuntime } = useAppSettingsKey('defaultRuntime');
   const [isCompacting, setIsCompacting] = useState(false);
   const [isResettingAccountUsage, setIsResettingAccountUsage] = useState(false);
@@ -138,6 +153,8 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
   const [isConfigPopoverOpen, setIsConfigPopoverOpen] = useState(false);
   const [isSkillPopoverOpen, setIsSkillPopoverOpen] = useState(false);
+  const [accountUsageWarningThresholdDraft, setAccountUsageWarningThresholdDraft] = useState('95');
+  const notifiedAccountUsageWindowsRef = useRef(new Set<string>());
   const resourceHistory = useSyncExternalStore(
     workspaceResourceHistoryStore.subscribe,
     workspaceResourceHistoryStore.getSnapshot,
@@ -343,13 +360,22 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     },
     enabled: runtimeId === 'codex' && !connectionId,
     staleTime: 60_000,
+    refetchInterval: (notificationSettings?.accountUsageWarningEnabled ?? true) ? 60_000 : false,
     refetchOnWindowFocus: true,
   });
-  const accountRateLimits =
-    accountUsage && !accountUsage.error && accountUsage.rateLimits.length > 0
-      ? accountUsage.rateLimits
-      : (sessionContext?.rateLimits ?? []);
+  const accountRateLimits = useMemo(
+    () =>
+      accountUsage && !accountUsage.error && accountUsage.rateLimits.length > 0
+        ? accountUsage.rateLimits
+        : (sessionContext?.rateLimits ?? []),
+    [accountUsage, sessionContext?.rateLimits]
+  );
   const shortAccountWindow = accountRateLimits[0] ?? null;
+  const accountUsageWarningEnabled = notificationSettings?.accountUsageWarningEnabled ?? true;
+  const accountUsageWarningThreshold = notificationSettings?.accountUsageWarningThreshold ?? 95;
+  useEffect(() => {
+    setAccountUsageWarningThresholdDraft(String(accountUsageWarningThreshold));
+  }, [accountUsageWarningThreshold]);
   const sessionHistoryDocked = interfaceSettings?.dockSessionHistory ?? true;
   const globalMaasBinding = useMaasGlobalBinding();
   const { data: maasConnections } = useMaasConnections();
@@ -555,7 +581,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     }
   };
 
-  const resetAccountUsage = async () => {
+  const resetAccountUsage = useCallback(async () => {
     if (!runtimeId || runtimeId !== 'codex' || connectionId) return;
     setIsResettingAccountUsage(true);
     try {
@@ -580,9 +606,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     } finally {
       setIsResettingAccountUsage(false);
     }
-  };
+  }, [connectionId, refreshAccountUsageQuery, runtimeId, t, toast]);
 
-  const confirmAccountUsageReset = () => {
+  const confirmAccountUsageReset = useCallback(() => {
     showConfirmActionModal({
       title: t('workspaceRuntime.confirmAccountUsageResetTitle'),
       description: t('workspaceRuntime.confirmAccountUsageResetDescription'),
@@ -590,7 +616,67 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       variant: 'default',
       onSuccess: () => void resetAccountUsage(),
     });
+  }, [resetAccountUsage, showConfirmActionModal, t]);
+
+  const commitAccountUsageWarningThreshold = () => {
+    const threshold = Number(accountUsageWarningThresholdDraft);
+    if (Number.isInteger(threshold) && threshold >= 1 && threshold <= 100) {
+      updateNotificationSettings({ accountUsageWarningThreshold: threshold });
+      return;
+    }
+    setAccountUsageWarningThresholdDraft(String(accountUsageWarningThreshold));
   };
+
+  useEffect(() => {
+    if (
+      !accountUsageWarningEnabled ||
+      runtimeId !== 'codex' ||
+      connectionId ||
+      !accountUsage ||
+      accountUsage.error
+    ) {
+      return;
+    }
+
+    const alert = getAccountUsageThresholdAlert(
+      accountUsage.rateLimits,
+      accountUsageWarningThreshold,
+      notifiedAccountUsageWindowsRef.current
+    );
+    if (!alert) return;
+
+    for (const key of alert.notificationKeys) {
+      notifiedAccountUsageWindowsRef.current.add(key);
+    }
+
+    const percent = Math.round(alert.window.usedPercent);
+    const windowLabel = getQuotaWindowLabel(alert.window.windowMinutes);
+    const windowName = t(windowLabel.translationKey, { value: windowLabel.value });
+    toast({
+      title: t('workspaceRuntime.accountUsageThresholdTitle', { percent }),
+      description: t('workspaceRuntime.accountUsageThresholdDescription', {
+        window: windowName,
+        threshold: accountUsageWarningThreshold,
+      }),
+      ...(accountUsage?.resetCreditsAvailable != null && accountUsage.resetCreditsAvailable > 0
+        ? {
+            action: {
+              label: t('workspaceRuntime.resetAccountUsage'),
+              onClick: confirmAccountUsageReset,
+            },
+          }
+        : {}),
+    });
+  }, [
+    accountUsage,
+    accountUsageWarningEnabled,
+    accountUsageWarningThreshold,
+    confirmAccountUsageReset,
+    connectionId,
+    runtimeId,
+    t,
+    toast,
+  ]);
 
   const toggleSessionHistoryDock = () => {
     updateInterfaceSettings({ dockSessionHistory: !sessionHistoryDocked });
@@ -940,6 +1026,66 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                       );
                     })}
                   </div>
+                  {runtimeId === 'codex' && !connectionId ? (
+                    <div className="border-t border-border p-3 text-xs">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-foreground">
+                            {t('workspaceRuntime.accountUsageWarning')}
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-foreground-passive">
+                            {t('workspaceRuntime.accountUsageWarningDescription')}
+                          </div>
+                        </div>
+                        <Switch
+                          size="sm"
+                          checked={accountUsageWarningEnabled}
+                          onCheckedChange={(enabled) =>
+                            updateNotificationSettings({ accountUsageWarningEnabled: enabled })
+                          }
+                          aria-label={t('workspaceRuntime.accountUsageWarning')}
+                        />
+                      </div>
+                      {accountUsageWarningEnabled ? (
+                        <div className="mt-2.5 flex items-center justify-between gap-3">
+                          <label
+                            htmlFor="account-usage-warning-threshold"
+                            className="text-foreground-muted"
+                          >
+                            {t('workspaceRuntime.accountUsageWarningThreshold')}
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              id="account-usage-warning-threshold"
+                              type="number"
+                              min={1}
+                              max={100}
+                              step={1}
+                              value={accountUsageWarningThresholdDraft}
+                              className="h-7 w-16 text-right font-mono tabular-nums"
+                              onChange={(event) =>
+                                setAccountUsageWarningThresholdDraft(event.target.value)
+                              }
+                              onBlur={commitAccountUsageWarningThreshold}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                  event.currentTarget.blur();
+                                  return;
+                                }
+                                if (event.key === 'Escape') {
+                                  setAccountUsageWarningThresholdDraft(
+                                    String(accountUsageWarningThreshold)
+                                  );
+                                  event.currentTarget.blur();
+                                }
+                              }}
+                            />
+                            <span className="text-foreground-passive">%</span>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {runtimeId === 'codex' && !connectionId ? (
                     <div className="border-t border-border px-3 py-2.5 text-xs">
                       <span className="text-foreground-passive">

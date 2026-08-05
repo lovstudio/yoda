@@ -1,9 +1,11 @@
 import {
   AppWindow,
   ArrowLeft,
+  ClipboardList,
   Code2,
   ExternalLink,
   FolderOpen,
+  Link2,
   Loader2,
   Pin,
   PinOff,
@@ -14,6 +16,7 @@ import {
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AiLabUserApp } from '@shared/ai-lab';
+import { buildAiLabAppDeepLink } from '@shared/deep-links';
 import { getRuntime } from '@shared/runtime-registry';
 import { ensureUniqueTaskDisplayName } from '@shared/task-name';
 import type { MountedProject } from '@renderer/features/projects/stores/project';
@@ -28,6 +31,7 @@ import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
+import { buildAiLabAppBasicInfo } from '../ai-lab-app-basic-info';
 import { AI_LAB_APPS, type AiLabAppDefinition } from '../app-registry';
 import { createAiLabProject } from '../create-ai-lab-project';
 import { startAiLabBuildTask } from '../start-ai-lab-build-task';
@@ -300,6 +304,60 @@ function UserAppHost({ app, onBack }: { app: AiLabUserApp; onBack: () => void })
     }
   };
 
+  const copyAppText = async (value: string, successMessage: string) => {
+    try {
+      const result = await rpc.app.clipboardWriteText(value);
+      if (!result.success) throw new Error(result.error);
+      toast({ title: successMessage });
+    } catch (error) {
+      toast({
+        title: t('aiLab.copyFailed'),
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const copyYodaLink = () => {
+    void copyAppText(buildAiLabAppDeepLink({ appId: app.id }), t('aiLab.yodaLinkCopied'));
+  };
+
+  const copyBasicInfo = async () => {
+    const project = app.projectId
+      ? await rpc.projects.getProject(app.projectId).catch(() => undefined)
+      : undefined;
+    const value = buildAiLabAppBasicInfo(
+      {
+        appName: app.name,
+        description: app.description,
+        appId: app.id,
+        yodaLink: buildAiLabAppDeepLink({ appId: app.id }),
+        projectId: app.projectId,
+        projectPath: project?.path,
+        startCommand:
+          app.runtimeKind === 'react-vite' && project?.path ? 'pnpm run dev' : undefined,
+        runtimeKind: app.runtimeKind,
+        runtimeName: app.runtimeId ? (getRuntime(app.runtimeId)?.name ?? app.runtimeId) : undefined,
+        model: app.model,
+        capabilities: app.capabilities,
+      },
+      {
+        app: t('aiLab.basicInfo.app'),
+        description: t('aiLab.basicInfo.description'),
+        appId: t('aiLab.basicInfo.appId'),
+        yodaLink: t('aiLab.basicInfo.yodaLink'),
+        projectId: t('aiLab.basicInfo.projectId'),
+        projectPath: t('aiLab.basicInfo.projectPath'),
+        startCommand: t('aiLab.basicInfo.startCommand'),
+        runtimeKind: t('aiLab.basicInfo.runtimeKind'),
+        runtime: t('aiLab.basicInfo.runtime'),
+        model: t('aiLab.basicInfo.model'),
+        capabilities: t('aiLab.basicInfo.capabilities'),
+      }
+    );
+    if (value) await copyAppText(value, t('aiLab.basicInfoCopied'));
+  };
+
   const handleRefine = async (event: React.FormEvent) => {
     event.preventDefault();
     const prompt = refinement.trim();
@@ -385,6 +443,12 @@ function UserAppHost({ app, onBack }: { app: AiLabUserApp; onBack: () => void })
             onClick={() => void openInWindow()}
           >
             {isOpeningWindow ? <Loader2 className="animate-spin" /> : <ExternalLink />}
+          </HeaderActionButton>
+          <HeaderActionButton label={t('aiLab.copyYodaLink')} onClick={copyYodaLink}>
+            <Link2 />
+          </HeaderActionButton>
+          <HeaderActionButton label={t('aiLab.copyBasicInfo')} onClick={() => void copyBasicInfo()}>
+            <ClipboardList />
           </HeaderActionButton>
           {app.projectKind === 'app' && app.projectId && (
             <HeaderActionButton label={t('aiLab.openAppProject')} onClick={openAppProject}>
