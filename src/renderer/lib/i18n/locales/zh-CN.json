@@ -2398,6 +2398,8 @@
     "placeholder": "搜索任务、项目、动作…",
     "noResults": "未找到结果",
     "noResultsFor": "“{{query}}”没有结果",
+    "recentSearches": "最近搜索",
+    "deleteRecentSearch": "删除最近搜索“{{query}}”",
     "sessionsToggleTitle": "搜索所有项目的会话内容",
     "inSessions": "在会话中",
     "scopeAll": "全部",
