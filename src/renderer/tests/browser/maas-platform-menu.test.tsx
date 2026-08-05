@@ -2,7 +2,10 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CliProxyApiManagedStatus } from '@shared/cliproxyapi-managed';
+import type { LiteLlmManagedStatus } from '@shared/litellm-managed';
 import type { MaasConnection, MaasGlobalBindingStatus } from '@shared/maas';
+import type { NewApiManagedStatus } from '@shared/new-api-managed';
 import type { MaasGatewayAvailability } from '@renderer/features/maas/maas-gateway-availability';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -11,8 +14,53 @@ const mocks = vi.hoisted(() => ({
   showZenmuxUsage: vi.fn(),
   setGlobalBinding: vi.fn(),
   openMarketplace: vi.fn(),
+  installLiteLlm: vi.fn(async () => undefined),
+  installNewApi: vi.fn(async () => undefined),
+  installCliProxyApi: vi.fn(async () => undefined),
   gatewayAvailability: 'ready' as MaasGatewayAvailability,
   connections: [] as MaasConnection[],
+  liteLlmStatus: {
+    state: 'not-installed',
+    operation: null,
+    managed: false,
+    installed: false,
+    dockerInstalled: true,
+    dockerRunning: true,
+    canStartDocker: true,
+    dockerVersion: '28.0.0',
+    endpoint: 'http://127.0.0.1:4000/v1',
+    adminUrl: 'http://127.0.0.1:4000/ui',
+    imageVersion: 'main-v1.77.7-stable',
+    modelCount: null,
+  } as LiteLlmManagedStatus,
+  newApiStatus: {
+    state: 'not-installed',
+    operation: null,
+    managed: false,
+    installed: false,
+    initialized: false,
+    credentialsAvailable: false,
+    dockerInstalled: true,
+    dockerRunning: true,
+    canStartDocker: true,
+    dockerVersion: '28.0.0',
+    endpoint: 'http://127.0.0.1:4001/v1',
+    adminUrl: 'http://127.0.0.1:4001',
+    imageVersion: 'v0.8.9-alpha.6',
+    modelCount: null,
+  } as NewApiManagedStatus,
+  cliProxyApiStatus: {
+    state: 'not-installed',
+    operation: null,
+    supported: true,
+    managed: false,
+    installed: false,
+    endpoint: 'http://127.0.0.1:8317/v1',
+    adminUrl: 'http://127.0.0.1:8317/management.html',
+    bundledVersion: '7.2.120',
+    installedVersion: null,
+    modelCount: null,
+  } as CliProxyApiManagedStatus,
   globalBinding: {
     platformId: null,
     enabled: false,
@@ -36,6 +84,60 @@ vi.mock('@renderer/features/maas/useMaas', () => ({
     isPending: false,
     variables: undefined,
     mutate: mocks.setGlobalBinding,
+  }),
+  useLiteLlmManagedStatus: () => ({
+    data: mocks.liteLlmStatus,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(async () => undefined),
+  }),
+  useInstallLiteLlm: () => ({ isPending: false, mutateAsync: mocks.installLiteLlm }),
+  useStartLiteLlm: () => ({ isPending: false, mutateAsync: vi.fn(async () => undefined) }),
+  useStopLiteLlm: () => ({ isPending: false, mutateAsync: vi.fn(async () => undefined) }),
+  useStartDockerForLiteLlm: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(async () => undefined),
+  }),
+  useOpenLiteLlmAdmin: () => ({ isPending: false, mutateAsync: vi.fn(async () => undefined) }),
+  useCopyLiteLlmAdminPassword: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(async () => undefined),
+  }),
+  useNewApiManagedStatus: () => ({
+    data: mocks.newApiStatus,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(async () => undefined),
+  }),
+  useInstallNewApi: () => ({ isPending: false, mutateAsync: mocks.installNewApi }),
+  useInitializeNewApi: () => ({ isPending: false, mutateAsync: vi.fn(async () => undefined) }),
+  useStartNewApi: () => ({ isPending: false, mutateAsync: vi.fn(async () => undefined) }),
+  useStopNewApi: () => ({ isPending: false, mutateAsync: vi.fn(async () => undefined) }),
+  useStartDockerForNewApi: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(async () => undefined),
+  }),
+  useOpenNewApiAdmin: () => ({ isPending: false, mutateAsync: vi.fn(async () => undefined) }),
+  useCopyNewApiAdminPassword: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(async () => undefined),
+  }),
+  useCliProxyApiManagedStatus: () => ({
+    data: mocks.cliProxyApiStatus,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(async () => undefined),
+  }),
+  useInstallCliProxyApi: () => ({ isPending: false, mutateAsync: mocks.installCliProxyApi }),
+  useStartCliProxyApi: () => ({ isPending: false, mutateAsync: vi.fn(async () => undefined) }),
+  useStopCliProxyApi: () => ({ isPending: false, mutateAsync: vi.fn(async () => undefined) }),
+  useOpenCliProxyApiAdmin: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(async () => undefined),
+  }),
+  useCopyCliProxyApiManagementKey: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(async () => undefined),
   }),
 }));
 
@@ -62,6 +164,9 @@ describe('MaaS platform menu', () => {
     vi.clearAllMocks();
     mocks.connections = [];
     mocks.gatewayAvailability = 'ready';
+    mocks.liteLlmStatus.state = 'not-installed';
+    mocks.newApiStatus.state = 'not-installed';
+    mocks.cliProxyApiStatus.state = 'not-installed';
     mocks.globalBinding = {
       platformId: null,
       enabled: false,
@@ -81,7 +186,7 @@ describe('MaaS platform menu', () => {
     host.remove();
   });
 
-  it('opens the add-platform menu with its label inside a Base UI menu group', async () => {
+  it('separates managed gateways from the direct-provider add menu', async () => {
     const { MaasView } = await import('@renderer/features/maas/components/MaasView');
     await act(async () => root.render(createElement(MaasView, { embedded: true })));
 
@@ -89,48 +194,36 @@ describe('MaaS platform menu', () => {
       (button) => button.textContent === 'maas.addPlatform'
     );
     expect(addButton).toBeDefined();
+    expect(host.textContent).toContain('maas.managedGateways.title');
+    expect(host.querySelector('[data-testid="litellm-integration-card"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="new-api-integration-card"]')).not.toBeNull();
+    expect(host.textContent).toContain('CLIProxyAPI');
 
     await act(async () => addButton?.click());
 
     const menu = document.querySelector('[data-slot="dropdown-menu-content"]');
     expect(menu?.textContent).toContain('maas.selectPlatform');
     expect(menu?.textContent).toContain('ZenMux');
-    expect(menu?.textContent).toContain('LiteLLM');
-    expect(menu?.textContent).toContain('New API');
-    expect(menu?.textContent).toContain('CLIProxyAPI');
+    expect(menu?.textContent).not.toContain('LiteLLM');
+    expect(menu?.textContent).not.toContain('New API');
+    expect(menu?.textContent).not.toContain('CLIProxyAPI');
     expect(menu?.textContent).toContain('maas.categories.hosted-platform.title');
-    expect(menu?.textContent).toContain('maas.categories.self-hosted-gateway.title');
     expect(menu?.textContent).toContain('maas.categories.custom.title');
   });
 
-  it('adds LiteLLM with a local Gateway preset and routing guidance', async () => {
+  it('installs LiteLLM from its managed gateway card', async () => {
     const { MaasView } = await import('@renderer/features/maas/components/MaasView');
     await act(async () => root.render(createElement(MaasView, { embedded: true })));
 
-    const addButton = Array.from(host.querySelectorAll('button')).find(
-      (button) => button.textContent === 'maas.addPlatform'
+    const installButton = host.querySelector<HTMLButtonElement>(
+      '[aria-label="settings.integrationsTab.litellmOneClickInstall"]'
     );
-    await act(async () => addButton?.click());
-    const litellmItem = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
-    ).find((item) => item.textContent?.includes('LiteLLM'));
-    expect(litellmItem).toBeDefined();
-    await act(async () => litellmItem?.click());
-
-    const panel = host.querySelector<HTMLElement>('[data-maas-platform-id="litellm"]');
-    expect(panel).not.toBeNull();
-    expect(panel?.textContent).toContain('maas.connection.litellmSetupHelper');
-    expect(
-      Array.from(panel?.querySelectorAll<HTMLInputElement>('input') ?? []).map(
-        (input) => input.value
-      )
-    ).toEqual(expect.arrayContaining(['LiteLLM', 'http://127.0.0.1:4000/v1']));
-    expect(panel?.querySelector('input[type="password"]')?.getAttribute('placeholder')).toBe(
-      'maas.connection.litellmKeyPlaceholder'
-    );
+    expect(installButton).not.toBeNull();
+    await act(async () => installButton?.click());
+    expect(mocks.installLiteLlm).toHaveBeenCalledOnce();
   });
 
-  it('opens a requested LiteLLM draft directly from the Settings integrations page', async () => {
+  it('opens requested LiteLLM connection details in the model access page', async () => {
     const { MaasView } = await import('@renderer/features/maas/components/MaasView');
     await act(async () =>
       root.render(
@@ -144,33 +237,19 @@ describe('MaaS platform menu', () => {
     expect(host.querySelector('[data-maas-platform-id="litellm"]')).not.toBeNull();
   });
 
-  it('adds New API with its isolated local endpoint and channel guidance', async () => {
+  it('installs New API from its managed gateway card', async () => {
     const { MaasView } = await import('@renderer/features/maas/components/MaasView');
     await act(async () => root.render(createElement(MaasView, { embedded: true })));
 
-    const addButton = Array.from(host.querySelectorAll('button')).find(
-      (button) => button.textContent === 'maas.addPlatform'
+    const installButton = host.querySelector<HTMLButtonElement>(
+      '[aria-label="settings.integrationsTab.newApiOneClickInstall"]'
     );
-    await act(async () => addButton?.click());
-    const newApiItem = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
-    ).find((item) => item.textContent?.includes('New API'));
-    await act(async () => newApiItem?.click());
-
-    const panel = host.querySelector<HTMLElement>('[data-maas-platform-id="newapi"]');
-    expect(panel).not.toBeNull();
-    expect(panel?.textContent).toContain('maas.connection.newApiSetupHelper');
-    expect(
-      Array.from(panel?.querySelectorAll<HTMLInputElement>('input') ?? []).map(
-        (input) => input.value
-      )
-    ).toEqual(expect.arrayContaining(['New API', 'http://127.0.0.1:4001/v1']));
-    expect(panel?.querySelector('input[type="password"]')?.getAttribute('placeholder')).toBe(
-      'maas.connection.newApiKeyPlaceholder'
-    );
+    expect(installButton).not.toBeNull();
+    await act(async () => installButton?.click());
+    expect(mocks.installNewApi).toHaveBeenCalledOnce();
   });
 
-  it('opens a requested New API draft directly from the Settings integrations page', async () => {
+  it('opens requested New API connection details in the model access page', async () => {
     const { MaasView } = await import('@renderer/features/maas/components/MaasView');
     await act(async () =>
       root.render(
@@ -184,34 +263,37 @@ describe('MaaS platform menu', () => {
     expect(host.querySelector('[data-maas-platform-id="newapi"]')).not.toBeNull();
   });
 
-  it('adds CLIProxyAPI as a self-hosted gateway with its local preset', async () => {
+  it('installs CLIProxyAPI from its managed gateway card', async () => {
     const { MaasView } = await import('@renderer/features/maas/components/MaasView');
     await act(async () => root.render(createElement(MaasView, { embedded: true })));
 
-    const addButton = Array.from(host.querySelectorAll('button')).find(
-      (button) => button.textContent === 'maas.addPlatform'
+    const installButton = host.querySelector<HTMLButtonElement>(
+      '[aria-label="maas.managedGateways.oneClickInstall"]'
     );
-    await act(async () => addButton?.click());
-    const cliProxyApiItem = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
-    ).find((item) => item.textContent?.includes('CLIProxyAPI'));
-    await act(async () => cliProxyApiItem?.click());
+    expect(installButton).not.toBeNull();
+    await act(async () => installButton?.click());
+    expect(mocks.installCliProxyApi).toHaveBeenCalledOnce();
+  });
 
-    const category = host.querySelector<HTMLElement>(
-      '[data-maas-platform-category="self-hosted-gateway"]'
+  it('opens connection settings for an existing CLIProxyAPI service', async () => {
+    mocks.cliProxyApiStatus.state = 'external-running';
+    const { MaasView } = await import('@renderer/features/maas/components/MaasView');
+    await act(async () => root.render(createElement(MaasView, { embedded: true })));
+
+    const connectButton = host.querySelector<HTMLButtonElement>(
+      '[aria-label="maas.managedGateways.connectExisting"]'
     );
+    expect(connectButton).not.toBeNull();
+    await act(async () => connectButton?.click());
+
+    expect(host.querySelector('[data-testid="maas-managed-connection-settings"]')).not.toBeNull();
     const panel = host.querySelector<HTMLElement>('[data-maas-platform-id="cliproxyapi"]');
-    expect(category).not.toBeNull();
     expect(panel).not.toBeNull();
-    expect(panel?.textContent).toContain('maas.connection.cliProxyApiSetupHelper');
     expect(
       Array.from(panel?.querySelectorAll<HTMLInputElement>('input') ?? []).map(
         (input) => input.value
       )
     ).toEqual(expect.arrayContaining(['CLIProxyAPI', 'http://127.0.0.1:8317/v1']));
-    expect(panel?.querySelector('input[type="password"]')?.getAttribute('placeholder')).toBe(
-      'maas.connection.cliProxyApiKeyPlaceholder'
-    );
   });
 
   it('can add more than one independent Custom platform draft', async () => {

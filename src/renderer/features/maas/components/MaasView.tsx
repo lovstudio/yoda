@@ -64,7 +64,17 @@ import {
   useSetMaasGlobalBinding,
 } from '../useMaas';
 import { useMaasGatewayExtension } from '../useMaasGatewayExtension';
+import { CliProxyApiManagedCard } from './CliProxyApiManagedCard';
+import { LiteLlmManagedCard } from './LiteLlmManagedCard';
 import { MaasGatewayRequirement } from './MaasGatewayRequirement';
+import { NewApiManagedCard } from './NewApiManagedCard';
+
+const MANAGED_GATEWAY_IDS = ['litellm', 'newapi', 'cliproxyapi'] as const;
+type ManagedGatewayId = (typeof MANAGED_GATEWAY_IDS)[number];
+
+function isManagedGatewayId(platformId: MaasPlatformId): platformId is ManagedGatewayId {
+  return (MANAGED_GATEWAY_IDS as readonly MaasPlatformId[]).includes(platformId);
+}
 
 function findConnection(
   connections: MaasConnection[] | undefined,
@@ -140,15 +150,38 @@ export const MaasView: React.FC<{
   const [draftPlatformIds, setDraftPlatformIds] = useState<MaasPlatformId[]>(
     initialRequestedPlatformId ? [initialRequestedPlatformId] : []
   );
-  const configuredCount = connections?.filter((connection) => connection.configured).length ?? 0;
-  const activeCount = globalBinding.data?.enabled ? 1 : 0;
-  const visiblePlatformIds = useMemo(
+  const [managedConnectionPlatformId, setManagedConnectionPlatformId] =
+    useState<ManagedGatewayId | null>(() =>
+      initialRequestedPlatformId && isManagedGatewayId(initialRequestedPlatformId)
+        ? initialRequestedPlatformId
+        : null
+    );
+  const configuredCount =
+    connections?.filter(
+      (connection) =>
+        connection.configured &&
+        !isManagedGatewayId(getMaasPlatformTemplateId(connection.platformId))
+    ).length ?? 0;
+  const activeCount =
+    globalBinding.data?.enabled &&
+    globalBinding.data.platformId &&
+    !isManagedGatewayId(getMaasPlatformTemplateId(globalBinding.data.platformId))
+      ? 1
+      : 0;
+  const allVisiblePlatformIds = useMemo(
     () => getVisibleMaasPlatformIds(connections, draftPlatformIds),
     [connections, draftPlatformIds]
   );
+  const visiblePlatformIds = useMemo(
+    () => allVisiblePlatformIds.filter((platformId) => !isManagedGatewayId(platformId)),
+    [allVisiblePlatformIds]
+  );
   const availablePlatformIds = useMemo(
-    () => getAvailableMaasPlatformIds(visiblePlatformIds),
-    [visiblePlatformIds]
+    () =>
+      getAvailableMaasPlatformIds(allVisiblePlatformIds).filter(
+        (platformId) => !isManagedGatewayId(platformId)
+      ),
+    [allVisiblePlatformIds]
   );
   const platformDescriptionById = useMemo(
     () =>
@@ -182,10 +215,19 @@ export const MaasView: React.FC<{
   const handleCancelDraft = useCallback((platformId: MaasPlatformId) => {
     setDraftPlatformIds((current) => current.filter((id) => id !== platformId));
     setExpandedPlatformId((current) => (current === platformId ? '' : current));
+    setManagedConnectionPlatformId((current) => (current === platformId ? null : current));
   }, []);
 
   const handlePlatformConnected = useCallback((platformId: MaasPlatformId) => {
     setDraftPlatformIds((current) => current.filter((id) => id !== platformId));
+  }, []);
+
+  const handleOpenManagedConnection = useCallback((platformId: ManagedGatewayId) => {
+    setDraftPlatformIds((current) =>
+      current.includes(platformId) ? current : [...current, platformId]
+    );
+    setManagedConnectionPlatformId(platformId);
+    setExpandedPlatformId(platformId);
   }, []);
 
   const handlePlatformEnabledChange = useCallback(
@@ -296,6 +338,49 @@ export const MaasView: React.FC<{
         availability={gateway.availability}
         onOpenMarketplace={onOpenMarketplace}
       />
+      <MaasChapter
+        title={t('maas.managedGateways.title')}
+        description={t('maas.managedGateways.description')}
+      >
+        <div className="grid gap-3 @4xl:grid-cols-2" data-testid="maas-managed-gateway-cards">
+          <LiteLlmManagedCard onOpenManualSettings={() => handleOpenManagedConnection('litellm')} />
+          <NewApiManagedCard onOpenManualSettings={() => handleOpenManagedConnection('newapi')} />
+          <CliProxyApiManagedCard
+            onOpenManualSettings={() => handleOpenManagedConnection('cliproxyapi')}
+          />
+        </div>
+        {managedConnectionPlatformId && (
+          <div className="grid gap-2.5" data-testid="maas-managed-connection-settings">
+            <div className="flex items-center justify-between gap-3 px-0.5">
+              <div>
+                <h4 className="text-xs font-medium text-foreground">
+                  {t('maas.managedGateways.connectionSettings')}
+                </h4>
+                <p className="mt-0.5 text-xs leading-relaxed text-foreground-muted">
+                  {t('maas.managedGateways.connectionSettingsDescription')}
+                </p>
+              </div>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={t('common.close')}
+                      onClick={() => setManagedConnectionPlatformId(null)}
+                    >
+                      <X className="size-3.5" />
+                    </Button>
+                  }
+                />
+                <TooltipContent>{t('common.close')}</TooltipContent>
+              </Tooltip>
+            </div>
+            {renderPlatformAccordion([managedConnectionPlatformId])}
+          </div>
+        )}
+      </MaasChapter>
       {showSectionChrome ? (
         <>
           <MaasChapter

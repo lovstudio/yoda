@@ -1,7 +1,6 @@
 import { Check, Menu } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { MaasPlatformTemplateId } from '@shared/maas';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { AgentManagerView } from '@renderer/features/agents-config/agent-manager-view';
 import { RuntimeAccordion } from '@renderer/features/agents/components/RuntimeAccordion';
@@ -216,15 +215,6 @@ export function SettingsPage({
   const { navigate } = useNavigate();
   // In the side pane the chip-strip row hosts the tab picker — don't double it.
   const isPinHosted = useIsPinHosted();
-  const [requestedMaasPlatformId, setRequestedMaasPlatformId] =
-    React.useState<MaasPlatformTemplateId>();
-  const handleOpenMaasPlatform = React.useCallback(
-    (platformId: MaasPlatformTemplateId) => {
-      setRequestedMaasPlatformId(platformId);
-      onTabChange('maas');
-    },
-    [onTabChange]
-  );
 
   const tabContent: Record<string, TabContentConfig> = {
     general: {
@@ -411,7 +401,6 @@ export function SettingsPage({
         <MaasView
           embedded
           onOpenMarketplace={() => navigate('marketplace', { section: 'extensions' })}
-          requestedPlatformId={requestedMaasPlatformId}
         />
       ),
     },
@@ -444,7 +433,7 @@ export function SettingsPage({
         {
           id: 'integrations',
           title: t('settings.integrationsTab.title'),
-          component: <IntegrationsCard onOpenMaasPlatform={handleOpenMaasPlatform} />,
+          component: <IntegrationsCard />,
         },
       ],
     },

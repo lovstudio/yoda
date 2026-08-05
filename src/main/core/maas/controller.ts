@@ -8,6 +8,7 @@ import type {
   MaasSetRuntimeBindingInput,
   MaasUsageSummaryInput,
 } from '@shared/maas';
+import { cliProxyApiManagedService } from './cliproxyapi-managed-service';
 import { liteLlmManagedService } from './litellm-managed-service';
 import { maasService } from './maas-service';
 import { newApiManagedService } from './new-api-managed-service';
@@ -102,4 +103,10 @@ export const maasController = createRPCController({
   startDockerForNewApi: () => newApiManagedService.startDockerDesktop(),
   copyNewApiAdminPassword: () => newApiManagedService.copyAdminPassword(),
   openNewApiAdmin: () => newApiManagedService.openAdmin(),
+  getCliProxyApiManagedStatus: () => cliProxyApiManagedService.getStatus(),
+  installCliProxyApi: () => cliProxyApiManagedService.install(),
+  startCliProxyApi: () => cliProxyApiManagedService.start(),
+  stopCliProxyApi: () => cliProxyApiManagedService.stop(),
+  copyCliProxyApiManagementKey: () => cliProxyApiManagedService.copyManagementKey(),
+  openCliProxyApiAdmin: () => cliProxyApiManagedService.openAdmin(),
 });
