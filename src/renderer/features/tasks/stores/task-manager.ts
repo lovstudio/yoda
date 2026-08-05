@@ -4,6 +4,7 @@ import { conversationMovedChannel } from '@shared/events/conversationEvents';
 import { prSyncProgressChannel, prUpdatedChannel } from '@shared/events/prEvents';
 import {
   taskArchivedChannel,
+  taskCreatedChannel,
   taskProvisionProgressChannel,
   taskRenamedChannel,
   taskStatusUpdatedChannel,
@@ -195,6 +196,7 @@ export class TaskManagerStore {
   private _unsubProvisionProgress: (() => void) | null = null;
   private _unsubConversationMoved: (() => void) | null = null;
   private _unsubTaskStatusUpdated: (() => void) | null = null;
+  private _unsubTaskCreated: (() => void) | null = null;
   private _unsubTaskArchived: (() => void) | null = null;
   private _unsubTaskRenamed: (() => void) | null = null;
   private _disposeRepositoryReaction: (() => void) | null = null;
@@ -234,6 +236,20 @@ export class TaskManagerStore {
             store.data.status = status as TaskLifecycleStatus;
           });
         }
+      }
+    );
+
+    this._unsubTaskCreated = events.on(
+      taskCreatedChannel,
+      ({ taskId, projectId: evtProjectId }) => {
+        if (evtProjectId !== this.projectId) return;
+        void this.ensureTaskLoaded(taskId).catch((error: unknown) => {
+          log.warn('TaskManagerStore: failed to reconcile externally created task', {
+            taskId,
+            projectId: evtProjectId,
+            error,
+          });
+        });
       }
     );
 
@@ -990,6 +1006,8 @@ export class TaskManagerStore {
     this._disposed = true;
     this._unsubTaskStatusUpdated?.();
     this._unsubTaskStatusUpdated = null;
+    this._unsubTaskCreated?.();
+    this._unsubTaskCreated = null;
     this._unsubTaskArchived?.();
     this._unsubTaskArchived = null;
     this._unsubTaskRenamed?.();

@@ -2,6 +2,14 @@ import { defineEvent } from '@shared/ipc/events';
 import type { PullRequest } from '@shared/pull-requests';
 import type { TaskNamingSnapshot } from '@shared/task-naming';
 
+/** Emitted after a task created outside the current renderer has reached a
+ * stable persisted state. Renderers use this as an invalidation and refetch
+ * the canonical task snapshot so mobile-created tasks appear immediately. */
+export const taskCreatedChannel = defineEvent<{
+  taskId: string;
+  projectId: string;
+}>('task:created');
+
 export const taskStatusUpdatedChannel = defineEvent<{
   taskId: string;
   projectId: string;
