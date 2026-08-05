@@ -1,6 +1,9 @@
 import { open, readFile, stat } from 'node:fs/promises';
 import type { Conversation } from '@shared/conversations';
-import type { MobileSessionTranscriptAgentPhase } from '@shared/mobile-api';
+import type {
+  MobileSessionTranscriptAgentPhase,
+  MobileSessionTranscriptToolStatus,
+} from '@shared/mobile-api';
 import {
   readCodexThreadRolloutPath,
   resolveCodexStatePath,
@@ -47,6 +50,7 @@ export type CodexRolloutTranscriptEntry = {
   timestamp: string | null;
   role: CodexRolloutTranscriptEntryRole;
   agentPhase?: MobileSessionTranscriptAgentPhase;
+  toolStatus?: MobileSessionTranscriptToolStatus;
   title?: string;
   format: 'markdown' | 'code' | 'plain';
   content: string;
@@ -371,6 +375,7 @@ export function parseCodexRolloutTranscript(raw: string): CodexRolloutTranscript
         const toolCall = responseToolCalls.get(parsedEntry.outputForCallId);
         if (toolCall) {
           toolCall.content = `${toolCall.content}\n\nOutput:\n${parsedEntry.entry.content}`;
+          toolCall.toolStatus = 'completed';
           continue;
         }
       }
@@ -571,6 +576,7 @@ function parseEventTranscriptEntry(
       index,
       timestamp,
       role: 'tool',
+      toolStatus: 'completed',
       title: 'Command',
       format: 'code',
       content: parts.join('\n'),
@@ -583,6 +589,7 @@ function parseEventTranscriptEntry(
       index,
       timestamp,
       role: 'tool',
+      toolStatus: 'completed',
       title: 'Edit files',
       format: 'code',
       content: output ? truncate(output, MAX_COMMAND_OUTPUT_CHARS) : 'File edit completed',
@@ -702,6 +709,7 @@ function parseResponseTranscriptEntry(
         index,
         timestamp,
         role: 'tool',
+        toolStatus: 'running',
         title: toolDisplayName(name, input),
         format: 'code',
         content: input ? truncate(input, MAX_COMMAND_OUTPUT_CHARS) : name,
@@ -712,20 +720,19 @@ function parseResponseTranscriptEntry(
   if (payload.type === 'function_call_output' || payload.type === 'custom_tool_call_output') {
     const output = extractToolOutputText(payload.output);
     const callId = nullableString(payload.call_id) ?? undefined;
-    return output
-      ? {
-          order: index,
-          outputForCallId: callId,
-          entry: transcriptEntry({
-            index,
-            timestamp,
-            role: 'tool',
-            title: 'Tool output',
-            format: 'code',
-            content: truncate(output, MAX_COMMAND_OUTPUT_CHARS),
-          }),
-        }
-      : null;
+    return {
+      order: index,
+      outputForCallId: callId,
+      entry: transcriptEntry({
+        index,
+        timestamp,
+        role: 'tool',
+        toolStatus: 'completed',
+        title: 'Tool output',
+        format: 'code',
+        content: output ? truncate(output, MAX_COMMAND_OUTPUT_CHARS) : 'Completed with no output.',
+      }),
+    };
   }
 
   return null;
@@ -736,6 +743,7 @@ function transcriptEntry({
   timestamp,
   role,
   agentPhase,
+  toolStatus,
   title,
   format = 'markdown',
   content,
@@ -744,6 +752,7 @@ function transcriptEntry({
   timestamp: string | null;
   role: CodexRolloutTranscriptEntryRole;
   agentPhase?: MobileSessionTranscriptAgentPhase;
+  toolStatus?: MobileSessionTranscriptToolStatus;
   title?: string;
   format?: CodexRolloutTranscriptEntry['format'];
   content: string;
@@ -753,6 +762,7 @@ function transcriptEntry({
     timestamp,
     role,
     ...(agentPhase ? { agentPhase } : {}),
+    ...(toolStatus ? { toolStatus } : {}),
     title,
     format,
     content: content.trimEnd(),
