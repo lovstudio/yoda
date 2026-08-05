@@ -46,6 +46,7 @@ import {
   parseMobilePairingUrl,
   parseMobileTimestamp,
   sortMobileProjects,
+  sortMobileTaskAttributionCandidates,
   type MobileDashboardSnapshot,
   type MobileProfileSnapshot,
   type MobileProjectSortMode,
@@ -581,6 +582,7 @@ export function App() {
   const [homeTab, setHomeTab] = useState<HomeTab>('home');
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskParent, setNewTaskParent] = useState<MobileTaskSummary | null>(null);
+  const [newTaskAttributionLocked, setNewTaskAttributionLocked] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState('all');
   const [taskScope, setTaskScope] = useState<TaskScope>('all');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -654,6 +656,7 @@ export function App() {
     setHomeTab('home');
     setNewTaskOpen(false);
     setNewTaskParent(null);
+    setNewTaskAttributionLocked(false);
     setSelectedProjectId('all');
     setTaskScope('all');
     setSelectedTaskId(null);
@@ -841,6 +844,7 @@ export function App() {
 
   const openNewTask = useCallback((parentTask: MobileTaskSummary | null = null) => {
     setNewTaskParent(parentTask);
+    setNewTaskAttributionLocked(Boolean(parentTask));
     if (parentTask) setDemandProjectId(parentTask.projectId);
     setNewTaskOpen(true);
   }, []);
@@ -848,6 +852,7 @@ export function App() {
   const closeNewTask = useCallback(() => {
     setNewTaskOpen(false);
     setNewTaskParent(null);
+    setNewTaskAttributionLocked(false);
   }, []);
 
   const handleSubmitDemand = useCallback(async () => {
@@ -922,14 +927,19 @@ export function App() {
       open={newTaskOpen}
       parentTask={newTaskParent}
       projects={visibleProjects}
+      tasks={snapshot?.tasks ?? []}
       prompt={prompt}
       selectedProjectId={demandProjectId}
       submitting={submitting}
       uploadProgress={demandUploadProgress}
+      attributionLocked={newTaskAttributionLocked}
       onClose={closeNewTask}
+      onAttributionChange={(projectId, parentTask) => {
+        setDemandProjectId(projectId);
+        setNewTaskParent(parentTask);
+      }}
       onImagesChange={setDemandImages}
       onMediaError={setError}
-      onProjectChange={setDemandProjectId}
       onPromptChange={setPrompt}
       onSubmit={handleSubmitDemand}
     />
@@ -1931,35 +1941,39 @@ function TaskProjectScopeControl({
 }
 
 function DemandComposer({
+  attributionLocked = false,
   images,
+  parentTask,
   projects,
   prompt,
   selectedProjectId,
   submitting,
+  tasks,
   uploadProgress,
+  onAttributionChange,
   onPromptChange,
-  onProjectChange,
   onImagesChange,
   onMediaError,
   onSubmit,
-  projectLocked = false,
 }: {
+  attributionLocked?: boolean;
   images: MobileImageDraft[];
+  parentTask: MobileTaskSummary | null;
   projects: MobileProjectSummary[];
   prompt: string;
   selectedProjectId: string | null;
   submitting: boolean;
+  tasks: MobileTaskSummary[];
   uploadProgress: MobileInputUploadProgress | null;
+  onAttributionChange: (projectId: string | null, parentTask: MobileTaskSummary | null) => void;
   onPromptChange: (prompt: string) => void;
-  onProjectChange: (projectId: string | null) => void;
   onImagesChange: (images: MobileImageDraft[]) => void;
   onMediaError: (message: string) => void;
   onSubmit: () => void;
-  projectLocked?: boolean;
 }) {
-  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
+  const [attributionPickerOpen, setAttributionPickerOpen] = useState(false);
   const selectedProject = projects.find((project) => project.id === selectedProjectId);
-  const selectedProjectLabel = selectedProject?.displayName ?? 'Drafts';
+  const selectedAttributionLabel = parentTask?.name ?? selectedProject?.displayName ?? '草稿箱';
   const imagesEnabled = selectedProjectId === null || selectedProject?.type === 'local';
   const canSubmit =
     (prompt.trim().length > 0 || images.length > 0) &&
@@ -1975,14 +1989,16 @@ function DemandComposer({
         images={images}
         imagesEnabled={imagesEnabled}
         projectSelector={
-          projectLocked
+          attributionLocked
             ? undefined
             : {
-                label: selectedProjectLabel,
-                onPress: () => setProjectPickerOpen(true),
+                contextHint: parentTask ? '将创建为子任务' : '选择任务归属',
+                icon: parentTask ? 'git-branch-outline' : 'folder-outline',
+                label: selectedAttributionLabel,
+                onPress: () => setAttributionPickerOpen(true),
               }
         }
-        speechContext={[selectedProject?.displayName, selectedProject?.name]}
+        speechContext={[selectedProject?.displayName, selectedProject?.name, parentTask?.name]}
         value={prompt}
         onChange={onPromptChange}
         onError={onMediaError}
@@ -2000,22 +2016,16 @@ function DemandComposer({
           />
         }
       />
-      {!projectLocked ? (
-        <ProjectPickerSheet
-          eyebrow="新建任务"
-          open={projectPickerOpen}
+      {!attributionLocked && attributionPickerOpen ? (
+        <TaskAttributionPickerSheet
+          parentTask={parentTask}
           projects={projects}
           selectedProjectId={selectedProjectId}
-          title="选择项目"
-          unscopedOption={{
-            icon: 'documents-outline',
-            label: '草稿箱',
-            meta: '不归属具体项目',
-          }}
-          onClose={() => setProjectPickerOpen(false)}
-          onProjectChange={(projectId) => {
-            onProjectChange(projectId);
-            setProjectPickerOpen(false);
+          tasks={tasks}
+          onClose={() => setAttributionPickerOpen(false)}
+          onChange={(projectId, nextParentTask) => {
+            onAttributionChange(projectId, nextParentTask);
+            setAttributionPickerOpen(false);
           }}
         />
       ) : null}
@@ -2048,6 +2058,7 @@ function DemandComposer({
 }
 
 function NewTaskModal({
+  attributionLocked = false,
   open,
   onClose,
   parentTask = null,
@@ -2057,6 +2068,7 @@ function NewTaskModal({
   onClose: () => void;
   onSubmit: () => void;
   parentTask?: MobileTaskSummary | null;
+  attributionLocked?: boolean;
 }) {
   return (
     <Modal
@@ -2100,11 +2112,253 @@ function NewTaskModal({
             contentContainerStyle={styles.newTaskWindowContent}
             keyboardShouldPersistTaps="handled"
           >
-            <DemandComposer {...composerProps} projectLocked={Boolean(parentTask)} />
+            <DemandComposer
+              {...composerProps}
+              attributionLocked={attributionLocked}
+              parentTask={parentTask}
+            />
           </ScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
     </Modal>
+  );
+}
+
+function TaskAttributionPickerSheet({
+  parentTask,
+  projects,
+  selectedProjectId,
+  tasks,
+  onChange,
+  onClose,
+}: {
+  parentTask: MobileTaskSummary | null;
+  projects: MobileProjectSummary[];
+  selectedProjectId: string | null;
+  tasks: MobileTaskSummary[];
+  onChange: (projectId: string | null, parentTask: MobileTaskSummary | null) => void;
+  onClose: () => void;
+}) {
+  const [sortMode, setSortMode] = useState<MobileProjectSortMode>('recent');
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const sortedProjects = useMemo(
+    () => sortMobileProjects(projects, sortMode),
+    [projects, sortMode]
+  );
+  const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
+  const taskStatsByProjectId = useMemo(() => {
+    const stats = new Map<string, { count: number; longTermCount: number }>();
+    for (const task of tasks) {
+      const current = stats.get(task.projectId) ?? { count: 0, longTermCount: 0 };
+      current.count += 1;
+      if (task.isLongTerm) current.longTermCount += 1;
+      stats.set(task.projectId, current);
+    }
+    return stats;
+  }, [tasks]);
+  const activeTasks = useMemo(
+    () =>
+      sortMobileTaskAttributionCandidates(
+        tasks.filter((task) => task.projectId === activeProjectId)
+      ),
+    [activeProjectId, tasks]
+  );
+
+  return (
+    <Modal
+      animationType="slide"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      transparent
+      visible
+      onRequestClose={onClose}
+    >
+      <View accessibilityViewIsModal style={styles.projectPickerOverlay}>
+        <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
+        <SafeAreaView style={styles.projectPickerSheet}>
+          <View style={styles.projectPickerHandle} />
+          <View style={styles.projectPickerHeader}>
+            <View style={styles.attributionPickerHeaderLead}>
+              {activeProject ? (
+                <Pressable
+                  accessibilityLabel="返回选择项目"
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.projectPickerClose,
+                    pressed ? styles.buttonPressed : null,
+                  ]}
+                  onPress={() => setActiveProjectId(null)}
+                >
+                  <Ionicons color={COLORS.charcoal} name="chevron-back-outline" size={22} />
+                </Pressable>
+              ) : null}
+              <View style={styles.projectPickerTitleBlock}>
+                <Text style={styles.projectPickerEyebrow}>任务归属</Text>
+                <Text style={styles.projectPickerTitle} numberOfLines={1}>
+                  {activeProject ? activeProject.displayName : '先选择项目'}
+                </Text>
+              </View>
+            </View>
+            <Pressable
+              accessibilityLabel="关闭任务归属选择"
+              accessibilityRole="button"
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.projectPickerClose,
+                pressed ? styles.buttonPressed : null,
+              ]}
+              onPress={onClose}
+            >
+              <Ionicons color={COLORS.charcoal} name="close-outline" size={22} />
+            </Pressable>
+          </View>
+
+          {activeProject ? (
+            <View style={styles.attributionPickerStepHint}>
+              <Text style={styles.attributionPickerStepHintText}>
+                直接归属项目，或选择一个已有任务作为上级任务
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.projectPickerSort}>
+              <Text style={styles.projectPickerSortLabel}>项目排序</Text>
+              <View accessibilityRole="radiogroup" style={styles.projectPickerSortOptions}>
+                <DemandProjectSortOption
+                  active={sortMode === 'recent'}
+                  label="最近"
+                  onPress={() => setSortMode('recent')}
+                />
+                <DemandProjectSortOption
+                  active={sortMode === 'name'}
+                  label="名称"
+                  onPress={() => setSortMode('name')}
+                />
+                <DemandProjectSortOption
+                  active={sortMode === 'open'}
+                  label="已打开"
+                  onPress={() => setSortMode('open')}
+                />
+              </View>
+            </View>
+          )}
+
+          <ScrollView
+            contentContainerStyle={styles.projectPickerList}
+            keyboardShouldPersistTaps="handled"
+            style={styles.projectPickerListViewport}
+          >
+            {activeProject ? (
+              <>
+                <AttributionPickerOption
+                  icon="folder-outline"
+                  label={`仅归属「${activeProject.displayName}」`}
+                  meta="创建为项目下的独立任务"
+                  selected={selectedProjectId === activeProject.id && !parentTask}
+                  onPress={() => onChange(activeProject.id, null)}
+                />
+                {activeTasks.map((task) => (
+                  <AttributionPickerOption
+                    key={task.id}
+                    icon={task.isLongTerm ? 'infinite-outline' : 'git-branch-outline'}
+                    label={task.name}
+                    meta={`${task.isLongTerm ? '长期任务 · ' : ''}创建为它的子任务 · ${formatTimestamp(task.lastInteractedAt ?? task.updatedAt)}`}
+                    selected={parentTask?.id === task.id}
+                    onPress={() => onChange(activeProject.id, task)}
+                  />
+                ))}
+                {activeTasks.length === 0 ? (
+                  <View style={styles.attributionPickerEmpty}>
+                    <Ionicons color={COLORS.muted} name="git-branch-outline" size={22} />
+                    <Text style={styles.emptyText}>这个项目还没有可选择的任务。</Text>
+                  </View>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <AttributionPickerOption
+                  icon="documents-outline"
+                  label="草稿箱"
+                  meta="不归属具体项目"
+                  selected={selectedProjectId === null && !parentTask}
+                  onPress={() => onChange(null, null)}
+                />
+                {sortedProjects.map((project) => {
+                  const taskStats = taskStatsByProjectId.get(project.id) ?? {
+                    count: 0,
+                    longTermCount: 0,
+                  };
+                  return (
+                    <AttributionPickerOption
+                      key={project.id}
+                      disclosure
+                      icon={project.isOpen ? 'desktop-outline' : 'folder-outline'}
+                      label={project.displayName}
+                      meta={`${taskStats.count} 个任务${taskStats.longTermCount > 0 ? ` · ${taskStats.longTermCount} 个长期任务` : ''}`}
+                      selected={selectedProjectId === project.id}
+                      onPress={() => setActiveProjectId(project.id)}
+                    />
+                  );
+                })}
+              </>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </View>
+    </Modal>
+  );
+}
+
+function AttributionPickerOption({
+  disclosure = false,
+  icon,
+  label,
+  meta,
+  selected,
+  onPress,
+}: {
+  disclosure?: boolean;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  meta: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={`${label}，${meta}`}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      style={({ pressed }) => [
+        styles.projectPickerOption,
+        selected ? styles.projectPickerOptionSelected : null,
+        pressed ? styles.buttonPressed : null,
+      ]}
+      onPress={onPress}
+    >
+      <View
+        style={[
+          styles.projectPickerOptionIcon,
+          selected ? styles.projectPickerOptionIconSelected : null,
+        ]}
+      >
+        <Ionicons color={selected ? COLORS.surface : COLORS.muted} name={icon} size={17} />
+      </View>
+      <View style={styles.projectPickerOptionBody}>
+        <Text style={styles.projectPickerOptionLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        <Text style={styles.projectPickerOptionMeta} numberOfLines={1}>
+          {meta}
+        </Text>
+      </View>
+      {selected && !disclosure ? (
+        <Ionicons color={COLORS.charcoal} name="checkmark-circle" size={20} />
+      ) : null}
+      {disclosure ? (
+        <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={19} />
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -2903,6 +3157,8 @@ function InputMediaControls({
   canSubmit?: boolean;
   onSubmit?: () => void;
   projectSelector?: {
+    contextHint?: string;
+    icon?: keyof typeof Ionicons.glyphMap;
     label: string;
     onPress: () => void;
   };
@@ -3052,8 +3308,8 @@ function InputMediaControls({
       {projectSelector ? (
         <View style={styles.inputMediaContextRow}>
           <Pressable
-            accessibilityHint="Opens a scrollable project list"
-            accessibilityLabel={`Choose project, current project ${projectSelector.label}`}
+            accessibilityHint="先选择项目，再选择项目下的任务"
+            accessibilityLabel={`选择任务归属，当前${projectSelector.label}`}
             accessibilityRole="button"
             accessibilityState={{ disabled }}
             disabled={disabled}
@@ -3064,13 +3320,19 @@ function InputMediaControls({
             ]}
             onPress={projectSelector.onPress}
           >
-            <Ionicons color={COLORS.charcoal} name="folder-outline" size={16} />
+            <Ionicons
+              color={COLORS.charcoal}
+              name={projectSelector.icon ?? 'folder-outline'}
+              size={16}
+            />
             <Text numberOfLines={1} style={styles.inputMediaProjectText}>
               {projectSelector.label}
             </Text>
             <Ionicons color={COLORS.muted} name="chevron-down-outline" size={13} />
           </Pressable>
-          <Text style={styles.inputMediaContextHint}>选择任务归属</Text>
+          <Text style={styles.inputMediaContextHint}>
+            {projectSelector.contextHint ?? '选择任务归属'}
+          </Text>
         </View>
       ) : null}
       <View style={styles.wechatComposerRow}>
@@ -4938,6 +5200,14 @@ const styles = StyleSheet.create({
     paddingTop: 15,
     paddingBottom: 12,
   },
+  attributionPickerHeaderLead: {
+    minWidth: 0,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingRight: 12,
+  },
   projectPickerTitleBlock: {
     gap: 2,
   },
@@ -5009,6 +5279,24 @@ const styles = StyleSheet.create({
   },
   projectPickerListViewport: {
     flex: 1,
+  },
+  attributionPickerStepHint: {
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: COLORS.faint,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+  },
+  attributionPickerStepHintText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  attributionPickerEmpty: {
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 28,
   },
   projectPickerOption: {
     minHeight: 64,

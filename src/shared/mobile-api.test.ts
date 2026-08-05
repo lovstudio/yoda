@@ -6,7 +6,9 @@ import {
   getMobileProjectActivityById,
   parseMobilePairingUrl,
   sortMobileProjects,
+  sortMobileTaskAttributionCandidates,
   type MobileProjectSummary,
+  type MobileTaskSummary,
 } from './mobile-api';
 
 describe('mobile session continuation', () => {
@@ -192,5 +194,62 @@ describe('mobile project ordering', () => {
 
     expect(activityByProjectId.get('active')).toBe('2026-07-31T16:43:51.748Z');
     expect(activityByProjectId.get('empty')).toBe('2026-07-30T08:00:00.000Z');
+  });
+});
+
+describe('mobile task attribution ordering', () => {
+  function task(
+    id: string,
+    updatedAt: string,
+    options: { isLongTerm?: boolean; isPinned?: boolean; lastInteractedAt?: string } = {}
+  ): MobileTaskSummary {
+    return {
+      id,
+      projectId: 'project-1',
+      name: id,
+      status: 'todo',
+      activityStatus: 'todo',
+      bootstrapStatus: { status: 'not-started' },
+      updatedAt,
+      lastInteractedAt: options.lastInteractedAt,
+      needsReview: false,
+      isPinned: options.isPinned ?? false,
+      isLongTerm: options.isLongTerm ?? false,
+      conversationCount: 0,
+      runtimeCounts: {},
+    };
+  }
+
+  it('keeps long-term parents visible before ordinary recent tasks', () => {
+    const tasks = [
+      task('ordinary-new', '2026-08-05T12:00:00.000Z'),
+      task('long-term-old', '2026-07-01T12:00:00.000Z', { isLongTerm: true }),
+      task('long-term-new', '2026-08-04T12:00:00.000Z', { isLongTerm: true }),
+    ];
+
+    expect(sortMobileTaskAttributionCandidates(tasks).map(({ id }) => id)).toEqual([
+      'long-term-new',
+      'long-term-old',
+      'ordinary-new',
+    ]);
+    expect(tasks.map(({ id }) => id)).toEqual(['ordinary-new', 'long-term-old', 'long-term-new']);
+  });
+
+  it('uses pinned state, interaction time, and natural name order as stable fallbacks', () => {
+    const tasks = [
+      task('Task 10', 'unknown'),
+      task('Task 2', 'unknown'),
+      task('recent', '2026-08-01T00:00:00.000Z', {
+        lastInteractedAt: '2026-08-03T00:00:00.000Z',
+      }),
+      task('pinned', '2026-07-01T00:00:00.000Z', { isPinned: true }),
+    ];
+
+    expect(sortMobileTaskAttributionCandidates(tasks).map(({ id }) => id)).toEqual([
+      'pinned',
+      'recent',
+      'Task 2',
+      'Task 10',
+    ]);
   });
 });

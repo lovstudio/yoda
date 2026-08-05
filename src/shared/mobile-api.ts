@@ -352,6 +352,31 @@ export type MobileTaskSummary = {
   runtimeCounts: Record<string, number>;
 };
 
+/**
+ * Orders tasks for the mobile attribution picker. Long-term work is the most
+ * useful parent for follow-up tasks, then pinned and recently active work.
+ */
+export function sortMobileTaskAttributionCandidates(
+  tasks: readonly MobileTaskSummary[]
+): MobileTaskSummary[] {
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+  return tasks
+    .map((task, index) => ({
+      task,
+      index,
+      activityAt: parseMobileTimestamp(task.lastInteractedAt ?? task.updatedAt),
+    }))
+    .sort(
+      (a, b) =>
+        Number(b.task.isLongTerm) - Number(a.task.isLongTerm) ||
+        Number(b.task.isPinned) - Number(a.task.isPinned) ||
+        b.activityAt - a.activityAt ||
+        collator.compare(a.task.name, b.task.name) ||
+        a.index - b.index
+    )
+    .map(({ task }) => task);
+}
+
 export type MobileDashboardMetrics = {
   projectCount: number;
   openProjectCount: number;
