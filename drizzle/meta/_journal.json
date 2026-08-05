@@ -337,6 +337,13 @@
       "when": 1785518147025,
       "tag": "0047_puzzling_carlie_cooper",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1785926518286,
+      "tag": "0048_soft_katie_power",
+      "breakpoints": true
     }
   ]
 }

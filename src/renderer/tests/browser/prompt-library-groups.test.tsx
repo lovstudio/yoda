@@ -2,21 +2,24 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Prompt } from '@shared/prompt-library';
+import type { Prompt, PromptGroup } from '@shared/prompt-library';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
   createGroup: vi.fn(),
   createPrompt: vi.fn(),
+  deleteGroup: vi.fn(),
   renameGroup: vi.fn(),
+  moveGroup: vi.fn(),
   updatePrompt: vi.fn(),
   deletePrompt: vi.fn(),
-  promptGroups: [] as string[],
+  promptGroups: [] as PromptGroup[],
   prompts: [] as Prompt[],
   refreshPrompt: vi.fn(),
   reorderGroups: vi.fn(),
   reorderPrompts: vi.fn(),
+  showConfirm: vi.fn(),
 }));
 
 vi.mock('react-i18next', async (importOriginal) => ({
@@ -31,6 +34,8 @@ vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
   usePrompts: () => ({ data: mocks.prompts, isLoading: false }),
   usePromptGroups: () => ({ data: mocks.promptGroups, isLoading: false }),
   useCreatePromptGroup: () => ({ mutate: mocks.createGroup, isPending: false }),
+  useDeletePromptGroup: () => ({ mutate: mocks.deleteGroup, isPending: false }),
+  useMovePromptGroup: () => ({ mutate: mocks.moveGroup, isPending: false }),
   useRenamePromptGroup: () => ({ mutate: mocks.renameGroup, isPending: false }),
   useCreatePrompt: () => ({ mutate: mocks.createPrompt, isPending: false }),
   useUpdatePrompt: () => ({ mutate: mocks.updatePrompt, isPending: false }),
@@ -92,7 +97,7 @@ vi.mock('@renderer/lib/ipc', () => ({
 }));
 
 vi.mock('@renderer/lib/modal/modal-provider', () => ({
-  useShowModal: () => vi.fn(),
+  useShowModal: () => mocks.showConfirm,
 }));
 
 function prompt(id: string, groupName: string): Prompt {
@@ -132,7 +137,10 @@ describe('PromptLibraryPanel groups', () => {
       prompt('ungrouped-first', ''),
       prompt('review-second', 'Review'),
     ];
-    mocks.promptGroups = ['Build', 'Review'];
+    mocks.promptGroups = [
+      { name: 'Build', parentName: null },
+      { name: 'Review', parentName: null },
+    ];
     host = document.createElement('div');
     host.style.width = '440px';
     document.body.appendChild(host);
@@ -296,7 +304,7 @@ describe('PromptLibraryPanel groups', () => {
     await act(async () => groupForm?.requestSubmit());
 
     expect(mocks.createGroup).toHaveBeenCalledWith(
-      'Writing',
+      { name: 'Writing', parentName: null },
       expect.objectContaining({
         onSuccess: expect.any(Function),
         onError: expect.any(Function),
@@ -310,11 +318,16 @@ describe('PromptLibraryPanel groups', () => {
     );
     await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
 
-    const renameBuildButton = host.querySelector<HTMLButtonElement>(
-      'button[aria-label="promptLibrary.groups.rename"]'
+    const buildMenuButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="promptLibrary.groups.moreActions"]'
     );
-    expect(renameBuildButton).not.toBeNull();
-    await act(async () => renameBuildButton?.click());
+    expect(buildMenuButton).not.toBeNull();
+    await act(async () => buildMenuButton?.click());
+    const renameBuildItem = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+    ).find((item) => item.textContent?.includes('promptLibrary.groups.renameAction'));
+    expect(renameBuildItem).toBeDefined();
+    await act(async () => renameBuildItem?.click());
 
     const renameForm = host.querySelector<HTMLFormElement>(
       'form[data-slot="prompt-group-rename-form"]'
@@ -330,6 +343,85 @@ describe('PromptLibraryPanel groups', () => {
 
     expect(mocks.renameGroup).toHaveBeenCalledWith(
       { currentName: 'Build', nextName: 'Delivery' },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      })
+    );
+  });
+
+  it('renders nested groups and creates a subgroup from the parent menu', async () => {
+    mocks.prompts = [prompt('react-first', 'React')];
+    mocks.promptGroups = [
+      { name: 'Engineering', parentName: null },
+      { name: 'Frontend', parentName: 'Engineering' },
+      { name: 'React', parentName: 'Frontend' },
+    ];
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    const groupCards = Array.from(host.querySelectorAll<HTMLElement>('[data-slot="prompt-group"]'));
+    expect(groupCards).toHaveLength(3);
+    expect(groupCards.map((card) => card.style.marginLeft)).toEqual(['0px', '20px', '40px']);
+
+    const engineeringMenuButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="promptLibrary.groups.moreActions"]'
+    );
+    await act(async () => engineeringMenuButton?.click());
+    const createChildItem = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+    ).find((item) => item.textContent?.includes('promptLibrary.groups.newChild'));
+    await act(async () => createChildItem?.click());
+
+    const groupNameInput = host.querySelector<HTMLInputElement>(
+      'input[placeholder="promptLibrary.groups.namePlaceholder"]'
+    );
+    await act(async () => {
+      if (groupNameInput) setFormValue(groupNameInput, 'Backend');
+    });
+    const groupForm = host.querySelector<HTMLFormElement>('form[data-slot="prompt-group-form"]');
+    await act(async () => groupForm?.requestSubmit());
+
+    expect(mocks.createGroup).toHaveBeenCalledWith(
+      { name: 'Backend', parentName: 'Engineering' },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      })
+    );
+  });
+
+  it('confirms group deletion from the overflow menu', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    const buildMenuButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="promptLibrary.groups.moreActions"]'
+    );
+    await act(async () => buildMenuButton?.click());
+    const deleteBuildItem = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+    ).find((item) => item.textContent?.includes('promptLibrary.groups.deleteAction'));
+    expect(deleteBuildItem).toBeDefined();
+    await act(async () => deleteBuildItem?.click());
+
+    expect(mocks.showConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'promptLibrary.groups.deleteTitle',
+        confirmLabel: 'promptLibrary.groups.deleteConfirm',
+        onSuccess: expect.any(Function),
+      })
+    );
+    const confirmation = mocks.showConfirm.mock.calls.at(-1)?.[0] as
+      | { onSuccess?: () => void }
+      | undefined;
+    await act(async () => confirmation?.onSuccess?.());
+    expect(mocks.deleteGroup).toHaveBeenCalledWith(
+      'Build',
       expect.objectContaining({
         onSuccess: expect.any(Function),
         onError: expect.any(Function),
@@ -440,7 +532,7 @@ describe('PromptLibraryPanel groups', () => {
       { ...prompt('second', 'Review'), injectionEnabled: true, injectionOrder: 20 },
       { ...prompt('first', 'Review'), injectionEnabled: true, injectionOrder: 10 },
     ];
-    mocks.promptGroups = ['Review'];
+    mocks.promptGroups = [{ name: 'Review', parentName: null }];
     const { PromptLibraryPanel } = await import(
       '@renderer/features/prompt-library/prompt-library-panel'
     );
@@ -509,6 +601,9 @@ describe('PromptLibraryPanel groups', () => {
         new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true })
       );
     });
-    expect(mocks.reorderGroups).toHaveBeenCalledWith(['Review', 'Build']);
+    expect(mocks.reorderGroups).toHaveBeenCalledWith({
+      parentName: null,
+      names: ['Review', 'Build'],
+    });
   });
 });

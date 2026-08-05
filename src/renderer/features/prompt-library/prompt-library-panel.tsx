@@ -28,6 +28,7 @@ import {
   Link,
   ListTree,
   Loader2,
+  MoreHorizontal,
   Pencil,
   Plus,
   RefreshCw,
@@ -59,6 +60,9 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { Input } from '@renderer/lib/ui/input';
@@ -67,7 +71,10 @@ import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
 import { ProjectPromptSection } from './project-prompt-section';
 import {
+  getGroupDescendants,
+  getGroupPath,
   getNamedPromptGroups,
+  getVisiblePromptGroups,
   groupPrompts,
   reorderPromptIds,
   UNGROUPED_PROMPT_GROUP,
@@ -78,6 +85,8 @@ import {
   useCreatePrompt,
   useCreatePromptGroup,
   useDeletePrompt,
+  useDeletePromptGroup,
+  useMovePromptGroup,
   usePromptGroups,
   usePrompts,
   useRefreshPromptSource,
@@ -120,6 +129,7 @@ const EMPTY_DRAFT: PromptDraft = {
 const DEFAULT_REFRESH = String(PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES);
 const DEFAULT_TIMEOUT = String(PROMPT_SOURCE_DEFAULT_TIMEOUT_SECONDS);
 const UNGROUPED_MENU_VALUE = 'prompt-library:ungrouped';
+const ROOT_GROUP_MENU_VALUE = 'prompt-library:root-group';
 const GROUP_SORTABLE_ID_PREFIX = 'prompt-library:group:';
 
 function promptGroupSortableId(groupName: string): string {
@@ -172,10 +182,12 @@ function isExternalUrl(value: string): boolean {
 
 function SortablePromptGroup({
   groupName,
+  depth,
   disabled,
   children,
 }: {
   groupName: string;
+  depth: number;
   disabled: boolean;
   children: (dragHandle: React.ReactNode) => React.ReactNode;
 }) {
@@ -218,6 +230,7 @@ function SortablePromptGroup({
         transition,
         opacity: isDragging ? 0.45 : 1,
         zIndex: isDragging ? 1 : 'auto',
+        marginLeft: `${depth * 20}px`,
       }}
       className="relative overflow-hidden rounded-lg border border-border bg-background-secondary"
     >
@@ -288,9 +301,11 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   const { toast } = useToast();
   const showConfirm = useShowModal('confirmActionModal');
   const { data, isLoading } = usePrompts();
-  const { data: persistedGroupNames, isLoading: groupsLoading } = usePromptGroups();
+  const { data: persistedGroups, isLoading: groupsLoading } = usePromptGroups();
   const createGroup = useCreatePromptGroup();
   const renameGroup = useRenamePromptGroup();
+  const moveGroup = useMovePromptGroup();
+  const deleteGroup = useDeletePromptGroup();
   const createPrompt = useCreatePrompt();
   const updatePrompt = useUpdatePrompt();
   const deletePrompt = useDeletePrompt();
@@ -303,12 +318,14 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   );
   const groupOptionsId = useId();
   const editorRef = useRef<HTMLFormElement>(null);
+  const groupFormRef = useRef<HTMLFormElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<PromptDraft>(EMPTY_DRAFT);
   const [sourceForm, setSourceForm] = useState<SourceForm | null>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
   const [groupFormOpen, setGroupFormOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupParentName, setNewGroupParentName] = useState<string | null>(null);
   const [moveAfterCreateId, setMoveAfterCreateId] = useState<string | null>(null);
   const [renamingGroupName, setRenamingGroupName] = useState<string | null>(null);
   const [nextGroupName, setNextGroupName] = useState('');
@@ -319,12 +336,16 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
 
   const items = useMemo(() => data ?? [], [data]);
   const groups = useMemo(
-    () => groupPrompts(items, persistedGroupNames ?? []),
-    [items, persistedGroupNames]
+    () => groupPrompts(items, persistedGroups ?? []),
+    [items, persistedGroups]
   );
   const namedGroups = useMemo(
-    () => getNamedPromptGroups(items, persistedGroupNames ?? []),
-    [items, persistedGroupNames]
+    () => getNamedPromptGroups(items, persistedGroups ?? []),
+    [items, persistedGroups]
+  );
+  const visibleGroups = useMemo(
+    () => getVisiblePromptGroups(groups, collapsedGroups),
+    [collapsedGroups, groups]
   );
   const editorOpen = editingId !== null;
   const canSave = draft.title.trim().length > 0 && draft.content.trim().length > 0;
@@ -375,15 +396,20 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
     setDraft(draftFromEntry(entry));
   };
 
-  const openGroupCreator = (promptId: string | null = null) => {
+  const openGroupCreator = (promptId: string | null = null, parentName: string | null = null) => {
     setMoveAfterCreateId(promptId);
+    setNewGroupParentName(parentName);
     setNewGroupName('');
     setGroupFormOpen(true);
+    requestAnimationFrame(() => {
+      groupFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
   };
 
   const closeGroupCreator = () => {
     setGroupFormOpen(false);
     setNewGroupName('');
+    setNewGroupParentName(null);
     setMoveAfterCreateId(null);
   };
 
@@ -428,23 +454,27 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
     const promptToMove = moveAfterCreateId
       ? items.find((entry) => entry.id === moveAfterCreateId)
       : undefined;
-    createGroup.mutate(groupName, {
-      onSuccess: () => {
-        setCollapsedGroups((current) => {
-          const next = new Set(current);
-          next.delete(groupName);
-          return next;
-        });
-        if (promptToMove) movePromptToGroup(promptToMove, groupName);
-        closeGroupCreator();
-      },
-      onError: (error) =>
-        toast({
-          title: t('promptLibrary.groups.createFailed'),
-          description: error instanceof Error ? error.message : String(error),
-          variant: 'destructive',
-        }),
-    });
+    createGroup.mutate(
+      { name: groupName, parentName: newGroupParentName },
+      {
+        onSuccess: () => {
+          setCollapsedGroups((current) => {
+            const next = new Set(current);
+            next.delete(groupName);
+            if (newGroupParentName) next.delete(newGroupParentName);
+            return next;
+          });
+          if (promptToMove) movePromptToGroup(promptToMove, groupName);
+          closeGroupCreator();
+        },
+        onError: (error) =>
+          toast({
+            title: t('promptLibrary.groups.createFailed'),
+            description: error instanceof Error ? error.message : String(error),
+            variant: 'destructive',
+          }),
+      }
+    );
   };
 
   const handleRenameGroup = (event: React.FormEvent) => {
@@ -478,6 +508,62 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
           }),
       }
     );
+  };
+
+  const movePromptGroup = (name: string, parentName: string | null) => {
+    moveGroup.mutate(
+      { name, parentName },
+      {
+        onSuccess: () => {
+          setCollapsedGroups((current) => {
+            const next = new Set(current);
+            if (parentName) next.delete(parentName);
+            return next;
+          });
+        },
+        onError: (error) =>
+          toast({
+            title: t('promptLibrary.groups.moveFailed'),
+            description: error instanceof Error ? error.message : String(error),
+            variant: 'destructive',
+          }),
+      }
+    );
+  };
+
+  const handleDeleteGroup = (groupName: string) => {
+    const group = groups.find((candidate) => candidate.name === groupName);
+    if (!group) return;
+    const childCount = groups.filter((candidate) => candidate.parentName === groupName).length;
+    showConfirm({
+      title: t('promptLibrary.groups.deleteTitle', { name: groupName }),
+      description: t('promptLibrary.groups.deleteDescription', {
+        childCount,
+        promptCount: group.prompts.length,
+      }),
+      confirmLabel: t('promptLibrary.groups.deleteConfirm'),
+      onSuccess: () => {
+        deleteGroup.mutate(groupName, {
+          onSuccess: () => {
+            setCollapsedGroups((current) => {
+              const next = new Set(current);
+              next.delete(groupName);
+              return next;
+            });
+            if (renamingGroupName === groupName) closeGroupRenamer();
+            setDraft((current) =>
+              current.groupName.trim() === groupName ? { ...current, groupName: '' } : current
+            );
+          },
+          onError: (error) =>
+            toast({
+              title: t('promptLibrary.groups.deleteFailed'),
+              description: error instanceof Error ? error.message : String(error),
+              variant: 'destructive',
+            }),
+        });
+      },
+    });
   };
 
   const showSourceError = (error: PromptSourceError) => {
@@ -610,8 +696,16 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
     ) {
       return;
     }
-    const next = reorderPromptIds(namedGroups, activeGroupName, overGroupName);
-    if (next !== namedGroups) reorderGroups.mutate(next);
+    const activeGroup = groups.find((group) => group.name === activeGroupName);
+    const overGroup = groups.find((group) => group.name === overGroupName);
+    if (!activeGroup || !overGroup || activeGroup.parentName !== overGroup.parentName) return;
+    const siblingNames = groups
+      .filter((group) => group.parentName === activeGroup.parentName && group.name)
+      .map((group) => group.name);
+    const next = reorderPromptIds(siblingNames, activeGroupName, overGroupName);
+    if (next !== siblingNames) {
+      reorderGroups.mutate({ parentName: activeGroup.parentName, names: next });
+    }
   };
 
   const handlePromptDragEnd = (groupName: string, ids: string[], event: DragEndEvent) => {
@@ -1015,6 +1109,7 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
         >
           {groupFormOpen && (
             <form
+              ref={groupFormRef}
               data-slot="prompt-group-form"
               onSubmit={handleCreateGroup}
               className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-background-secondary p-3"
@@ -1023,7 +1118,9 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                 <span className="text-xs font-medium text-foreground">
                   {moveAfterCreateId
                     ? t('promptLibrary.groups.createAndMove')
-                    : t('promptLibrary.groups.create')}
+                    : newGroupParentName
+                      ? t('promptLibrary.groups.createChild', { name: newGroupParentName })
+                      : t('promptLibrary.groups.create')}
                 </span>
                 <Input
                   value={newGroupName}
@@ -1054,21 +1151,29 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                 onDragEnd={handleGroupDragEnd}
               >
                 <SortableContext
-                  items={groups.map((group) => promptGroupSortableId(group.name))}
+                  items={visibleGroups.map((group) => promptGroupSortableId(group.name))}
                   strategy={verticalListSortingStrategy}
                 >
                   <ul className="grid gap-2">
-                    {groups.map((group) => {
+                    {visibleGroups.map((group) => {
                       const groupIsOpen = !collapsedGroups.has(group.name);
                       const groupLabel =
                         group.name === UNGROUPED_PROMPT_GROUP
                           ? t('promptLibrary.groups.ungrouped')
                           : group.name;
+                      const groupDescendants = group.name
+                        ? getGroupDescendants(persistedGroups ?? [], group.name)
+                        : new Set<string>();
+                      const parentCandidates = (persistedGroups ?? []).filter(
+                        (candidate) =>
+                          candidate.name !== group.name && !groupDescendants.has(candidate.name)
+                      );
                       return (
                         <SortablePromptGroup
                           key={group.name || 'ungrouped'}
                           groupName={group.name}
-                          disabled={reorderGroups.isPending}
+                          depth={group.depth}
+                          disabled={reorderGroups.isPending || moveGroup.isPending}
                         >
                           {(groupDragHandle) => (
                             <>
@@ -1106,20 +1211,83 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                                   <Plus className="size-4" />
                                 </Button>
                                 {group.name !== UNGROUPED_PROMPT_GROUP && (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    aria-label={t('promptLibrary.groups.rename', {
-                                      name: groupLabel,
-                                    })}
-                                    title={t('promptLibrary.groups.rename', {
-                                      name: groupLabel,
-                                    })}
-                                    onClick={() => openGroupRenamer(group.name)}
-                                  >
-                                    <Pencil className="size-4" />
-                                  </Button>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger
+                                      render={
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon-sm"
+                                          aria-label={t('promptLibrary.groups.moreActions', {
+                                            name: groupLabel,
+                                          })}
+                                          title={t('promptLibrary.groups.moreActions', {
+                                            name: groupLabel,
+                                          })}
+                                        >
+                                          <MoreHorizontal className="size-4" />
+                                        </Button>
+                                      }
+                                    />
+                                    <DropdownMenuContent align="end" className="w-56">
+                                      <DropdownMenuItem
+                                        onClick={() => openGroupCreator(null, group.name)}
+                                      >
+                                        <FolderPlus />
+                                        {t('promptLibrary.groups.newChild')}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSub>
+                                        <DropdownMenuSubTrigger>
+                                          <FolderInput />
+                                          {t('promptLibrary.groups.moveGroup')}
+                                        </DropdownMenuSubTrigger>
+                                        <DropdownMenuSubContent className="w-64">
+                                          <DropdownMenuRadioGroup
+                                            value={group.parentName ?? ROOT_GROUP_MENU_VALUE}
+                                          >
+                                            <DropdownMenuRadioItem
+                                              value={ROOT_GROUP_MENU_VALUE}
+                                              closeOnClick
+                                              onClick={() => movePromptGroup(group.name, null)}
+                                            >
+                                              {t('promptLibrary.groups.topLevel')}
+                                            </DropdownMenuRadioItem>
+                                            {parentCandidates.map((candidate) => (
+                                              <DropdownMenuRadioItem
+                                                key={candidate.name}
+                                                value={candidate.name}
+                                                closeOnClick
+                                                onClick={() =>
+                                                  movePromptGroup(group.name, candidate.name)
+                                                }
+                                              >
+                                                <span className="truncate">
+                                                  {getGroupPath(
+                                                    persistedGroups ?? [],
+                                                    candidate.name
+                                                  )}
+                                                </span>
+                                              </DropdownMenuRadioItem>
+                                            ))}
+                                          </DropdownMenuRadioGroup>
+                                        </DropdownMenuSubContent>
+                                      </DropdownMenuSub>
+                                      <DropdownMenuItem
+                                        onClick={() => openGroupRenamer(group.name)}
+                                      >
+                                        <Pencil />
+                                        {t('promptLibrary.groups.renameAction')}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        variant="destructive"
+                                        onClick={() => handleDeleteGroup(group.name)}
+                                      >
+                                        <Trash2 />
+                                        {t('promptLibrary.groups.deleteAction')}
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 )}
                               </div>
 
@@ -1308,7 +1476,10 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                                                                     )
                                                                   }
                                                                 >
-                                                                  {groupName}
+                                                                  {getGroupPath(
+                                                                    persistedGroups ?? [],
+                                                                    groupName
+                                                                  )}
                                                                 </DropdownMenuRadioItem>
                                                               ))}
                                                             </DropdownMenuRadioGroup>

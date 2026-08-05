@@ -101,6 +101,12 @@ export type PromptSourceRefreshResult =
 export const promptGroupNameSchema = z.string().trim().min(1).max(80);
 export type PromptGroupName = z.infer<typeof promptGroupNameSchema>;
 
+export const promptGroupSchema = z.object({
+  name: promptGroupNameSchema,
+  parentName: promptGroupNameSchema.nullable(),
+});
+export type PromptGroup = z.infer<typeof promptGroupSchema>;
+
 export const promptSchema = z.object({
   id: z.string(),
   title: z.string(),

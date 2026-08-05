@@ -183,6 +183,7 @@ export const automationRuns = sqliteTable(
 /** Persisted prompt groups, including groups that do not contain prompts yet. */
 export const promptGroups = sqliteTable('prompt_groups', {
   name: text('name').primaryKey(),
+  parentName: text('parent_name'),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: text('created_at')
     .notNull()

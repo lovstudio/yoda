@@ -6,10 +6,15 @@ import { promptSourceService } from './prompt-source-service';
 export const promptLibraryController = createRPCController({
   list: () => promptLibraryService.list(),
   listGroups: () => promptLibraryService.listGroups(),
-  createGroup: (name: string) => promptLibraryService.createGroup(name),
+  createGroup: (name: string, parentName?: string | null) =>
+    promptLibraryService.createGroup(name, parentName),
   renameGroup: (currentName: string, nextName: string) =>
     promptLibraryService.renameGroup(currentName, nextName),
-  reorderGroups: (names: string[]) => promptLibraryService.reorderGroups(names),
+  moveGroup: (name: string, parentName: string | null) =>
+    promptLibraryService.moveGroup(name, parentName),
+  deleteGroup: (name: string) => promptLibraryService.removeGroup(name),
+  reorderGroups: (parentName: string | null, names: string[]) =>
+    promptLibraryService.reorderGroups(parentName, names),
   reorderPrompts: (groupName: string, ids: string[]) =>
     promptLibraryService.reorderPrompts(groupName, ids),
   setGroupInjectionEnabled: (groupName: string, enabled: boolean) =>

@@ -197,6 +197,7 @@ describe('runBundledMigrations', () => {
       expect(() => runBundledMigrations(db)).not.toThrow();
 
       expect(columnExists(db, 'prompt_groups', 'sort_order')).toBe(true);
+      expect(columnExists(db, 'prompt_groups', 'parent_name')).toBe(true);
       expect(columnExists(db, 'tasks', 'is_long_term')).toBe(true);
       expect(columnExists(db, 'workspace_terminals', 'id')).toBe(true);
       expect(indexExists(db, 'idx_workspace_terminals_project_scope')).toBe(true);
