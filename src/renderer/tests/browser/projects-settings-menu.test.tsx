@@ -1,4 +1,4 @@
-import { act, createElement } from 'react';
+import { act, createElement, type ButtonHTMLAttributes } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -66,6 +66,9 @@ vi.mock('@renderer/lib/stores/app-state', () => ({
   workspaceStore: { enabled: false },
 }));
 
+const renderTrigger = (props: ButtonHTMLAttributes<HTMLButtonElement>) =>
+  createElement('button', props);
+
 async function settle(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -96,7 +99,7 @@ describe('ProjectsSettingsMenu', () => {
     const { ProjectsSettingsMenu } = await import(
       '@renderer/features/sidebar/projects-group-label'
     );
-    await act(async () => root.render(createElement(ProjectsSettingsMenu)));
+    await act(async () => root.render(createElement(ProjectsSettingsMenu, { renderTrigger })));
 
     const viewOptions = host.querySelector<HTMLButtonElement>(
       'button[aria-label="workspaces.viewOptions"]'
@@ -133,7 +136,7 @@ describe('ProjectsSettingsMenu', () => {
     const { ProjectsSettingsMenu } = await import(
       '@renderer/features/sidebar/projects-group-label'
     );
-    await act(async () => root.render(createElement(ProjectsSettingsMenu)));
+    await act(async () => root.render(createElement(ProjectsSettingsMenu, { renderTrigger })));
 
     const viewOptions = host.querySelector<HTMLButtonElement>(
       'button[aria-label="workspaces.viewOptions"]'

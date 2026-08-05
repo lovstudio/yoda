@@ -233,9 +233,6 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         data-sidebar-project-id={projectId}
         data-sidebar-task-id={taskId}
         isActive={isActive}
-        role={hasChildren ? 'button' : undefined}
-        tabIndex={hasChildren ? 0 : undefined}
-        aria-expanded={hasChildren ? !isCollapsed : undefined}
         onPointerEnter={taskPreloadIntent.schedule}
         onPointerLeave={taskPreloadIntent.cancel}
         onMouseDown={(e) => {
@@ -249,20 +246,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
             pinTaskToSidePane();
             return;
           }
-          // Parent tasks act as task groups in the sidebar, like project rows:
-          // clicking their row toggles the child subtree instead of navigating
-          // away from the list. The context menu still exposes "打开任务".
-          if (hasChildren) {
-            handleToggleSubtasks();
-            return;
-          }
           handleOpenDetails();
-        }}
-        onKeyDown={(e) => {
-          if (!hasChildren || (e.key !== 'Enter' && e.key !== ' ')) return;
-          e.preventDefault();
-          e.stopPropagation();
-          handleToggleSubtasks();
         }}
         onDoubleClick={(e) => {
           e.stopPropagation();

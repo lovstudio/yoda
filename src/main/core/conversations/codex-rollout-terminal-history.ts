@@ -6,6 +6,7 @@ import {
   resolveCodexStatePath,
 } from '@main/core/session-title/codex-title-source';
 import { resolveAgentResumeSession } from './codex-session-id';
+import { getReservedCodexThreadIds } from './codex-thread-reservations';
 import { getConversationAgentSessionId } from './conversation-session-source';
 import { getCodexSessionContext } from './getCodexSessionContext';
 
@@ -118,16 +119,7 @@ export async function loadCodexRolloutTranscriptForConversation({
 }): Promise<CodexRolloutTranscriptEntry[] | null> {
   if (conversation.runtimeId !== 'codex') return null;
 
-  const context = await getCodexSessionContext(
-    cwd,
-    getConversationAgentSessionId(conversation),
-    conversation.title,
-    conversation.createdAt,
-    {
-      ...(conversation.sessionSource ? { codexHome: conversation.sessionSource.stateRoot } : {}),
-      conversationLastInteractedAt: conversation.lastInteractedAt,
-    }
-  );
+  const context = await resolveCodexRolloutContext(conversation, cwd);
   if (!context?.rolloutPath) return null;
 
   let snapshot: RolloutFileSnapshot;
@@ -260,7 +252,8 @@ async function resolveCodexRolloutContext(conversation: Conversation, cwd: strin
   if (conversation.runtimeId !== 'codex') return null;
   const source = conversation.sessionSource;
   const statePath = resolveCodexStatePath(source?.stateRoot);
-  const session = resolveAgentResumeSession(conversation, cwd);
+  const reservedThreadIds = await getReservedCodexThreadIds(conversation.id);
+  const session = resolveAgentResumeSession(conversation, cwd, { reservedThreadIds });
   if (session) {
     const rolloutPath = readCodexThreadRolloutPath(statePath, session.sessionId);
     if (rolloutPath) {
@@ -284,6 +277,7 @@ async function resolveCodexRolloutContext(conversation: Conversation, cwd: strin
       ...(source ? { codexHome: source.stateRoot } : {}),
       conversationLastInteractedAt: conversation.lastInteractedAt,
       transcriptMode: 'harness',
+      reservedThreadIds,
     }
   ).catch(() => null);
   if (!fallback?.rolloutPath) return null;

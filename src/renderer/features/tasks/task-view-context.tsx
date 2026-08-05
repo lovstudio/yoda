@@ -88,7 +88,14 @@ export function useProvisionedTask(): ProvisionedTask | null {
 
 /** Non-nullable. Only use in a subtree mounted exclusively for a ready task. */
 export function useRequireProvisionedTask(): ProvisionedTask {
-  const task = useContext(ProvisionedTaskContext);
+  const lifetimeTask = useContext(ProvisionedTaskContext);
+  const snapshotTask = useContext(TaskViewContext)?.provisionedTask ?? null;
+  // The discriminated owner snapshot is authoritative. The lifetime context
+  // keeps an already-mounted ready subtree stable while React removes it.
+  // Reading both closes the inverse transition as well: when the owner has
+  // published `ready`, a child must not fail merely because React has not yet
+  // installed the nested lifetime provider in the same concurrent pass.
+  const task = snapshotTask ?? lifetimeTask;
   if (!task) {
     throw new Error('Ready task content rendered outside its provisioned task boundary');
   }

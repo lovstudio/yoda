@@ -73,10 +73,17 @@ vi.mock('@renderer/features/prompt-library/prompt-system-section', async () => {
 vi.mock('@renderer/features/prompt-library/project-prompt-section', async () => {
   const React = await import('react');
   return {
-    ProjectPromptSection: ({ runtimeId }: { runtimeId: string | null }) =>
+    ProjectPromptSection: ({
+      runtimeId,
+      projectId,
+    }: {
+      runtimeId: string | null;
+      projectId: string | null;
+    }) =>
       React.createElement('section', {
         'data-slot': 'project-prompt-section',
         'data-runtime-id': runtimeId ?? '',
+        'data-project-id': projectId ?? '',
       }),
   };
 });
@@ -398,15 +405,34 @@ describe('PromptLibraryPanel groups', () => {
     expect(host.querySelector('[data-slot="prompt-library-bottom-space"].h-24')).not.toBeNull();
   });
 
-  it('puts reusable prompts first and keeps CLI and project instruction chapters together', async () => {
+  it('preselects the routed project and follows project changes', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () =>
+      root.render(createElement(PromptLibraryPanel, { projectId: 'project-1' }))
+    );
+
+    const projectSection = host.querySelector('[data-slot="project-prompt-section"]');
+    expect(projectSection?.getAttribute('data-project-id')).toBe('project-1');
+    expect(host.querySelector('[data-slot="prompt-collection-section"]')).toBeNull();
+
+    await act(async () =>
+      root.render(createElement(PromptLibraryPanel, { projectId: 'project-2' }))
+    );
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(projectSection?.getAttribute('data-project-id')).toBe('project-2')
+      );
+    });
+  });
+
+  it('separates global, project, and dynamic prompt settings into tabs', async () => {
     const { PromptLibraryPanel } = await import(
       '@renderer/features/prompt-library/prompt-library-panel'
     );
     await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
 
-    const runtime = host.querySelector('[data-slot="prompt-runtime-selector"]');
-    const user = host.querySelector('[data-slot="user-instruction-section"]');
-    const project = host.querySelector('[data-slot="project-prompt-section"]');
     const collection = host.querySelector('[data-slot="prompt-collection-section"]');
     const promptList = host.querySelector('[data-slot="prompt-list-section"]');
     const promptListHeading = Array.from(host.querySelectorAll('h2')).find((heading) =>
@@ -414,32 +440,42 @@ describe('PromptLibraryPanel groups', () => {
     );
 
     expect(collection).not.toBeNull();
-    expect(runtime).not.toBeNull();
-    expect(user).not.toBeNull();
-    expect(project).not.toBeNull();
     expect(promptList).not.toBeNull();
     expect(promptListHeading).not.toBeNull();
     expect(promptListHeading?.closest('section')).toBe(promptList);
-    if (!collection || !runtime || !user || !project || !promptList) {
-      throw new Error('Prompt layer sections are missing');
-    }
-    expect(collection.compareDocumentPosition(runtime) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
-    expect(runtime.compareDocumentPosition(user) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
-    expect(user.compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
-    expect(project.compareDocumentPosition(promptList) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
+    expect(host.querySelector('[data-slot="prompt-runtime-selector"]')).toBeNull();
 
-    const claudeButton = runtime.querySelector<HTMLButtonElement>('button');
+    const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'promptLibrary.tabs.global',
+      'promptLibrary.tabs.project',
+      'promptLibrary.tabs.dynamic',
+    ]);
+
+    await act(async () => {
+      tabs[0]?.click();
+      await vi.waitFor(() =>
+        expect(host.querySelector('[data-slot="prompt-collection-section"]')).toBeNull()
+      );
+    });
+    const globalRuntime = host.querySelector('[data-slot="prompt-runtime-selector"]');
+    const user = host.querySelector('[data-slot="user-instruction-section"]');
+    expect(globalRuntime).not.toBeNull();
+    expect(user).not.toBeNull();
+
+    const claudeButton = globalRuntime?.querySelector<HTMLButtonElement>('button');
     await act(async () => claudeButton?.click());
-    expect(user.getAttribute('data-runtime-id')).toBe('claude');
-    expect(project.getAttribute('data-runtime-id')).toBe('claude');
+    expect(user?.getAttribute('data-runtime-id')).toBe('claude');
+
+    await act(async () => {
+      tabs[1]?.click();
+      await vi.waitFor(() =>
+        expect(host.querySelector('[data-slot="user-instruction-section"]')).toBeNull()
+      );
+    });
+    const project = host.querySelector('[data-slot="project-prompt-section"]');
+    expect(project).not.toBeNull();
+    expect(project?.getAttribute('data-runtime-id')).toBe('claude');
   });
 
   it('removes the separate injection order card and keyboard-sorts prompt rows within a group', async () => {

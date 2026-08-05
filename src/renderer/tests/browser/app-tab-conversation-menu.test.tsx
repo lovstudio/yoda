@@ -13,6 +13,7 @@ vi.mock('@renderer/lib/stores/app-state', () => ({
     appTabs: { visibleTabs: [], activeTabId: null },
     sidePane: {},
   },
+  sidebarStore: { requestSelectionReveal: vi.fn() },
 }));
 
 vi.mock('@renderer/features/tasks/components/task-context-menu', () => ({

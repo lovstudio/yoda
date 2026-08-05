@@ -12,6 +12,7 @@ import type { QuickAction } from '@shared/project-settings';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const translations: Record<string, string> = {
+  'sidebar.configureSystemPrompt': 'Configure System Prompt',
   'sidebar.captureAutomation.menuLabel': 'Quick actions',
   'sidebar.captureAutomation.createLabel': 'New quick action…',
   'sidebar.captureAutomation.noCommands': 'No previously run quick actions.',
@@ -192,6 +193,45 @@ describe('ProjectMenu quick actions submenu', () => {
     await act(async () => createAndRunItem?.click());
     expect(onCreateTaskAndRun).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ['context', 'context-menu-item'],
+    ['dropdown', 'dropdown-menu-item'],
+  ] as const)(
+    'opens project System Prompt configuration from the %s menu',
+    async (surface, itemSlot) => {
+      const { ProjectActionsMenu, ProjectContextMenu } = await import(
+        '@renderer/features/sidebar/project-menu'
+      );
+      const onConfigureSystemPrompt = vi.fn();
+      const actions = {
+        ...requiredActions(),
+        onConfigureSystemPrompt,
+      };
+
+      await act(async () => {
+        root.render(
+          surface === 'context'
+            ? createElement(ProjectContextMenu, {
+                ...actions,
+                children: createElement('div', null, 'Example project'),
+              })
+            : createElement(ProjectActionsMenu, {
+                ...actions,
+                trigger: createElement('button', null, 'More'),
+              })
+        );
+      });
+
+      const item = Array.from(
+        host.querySelectorAll<HTMLButtonElement>(`button[data-slot="${itemSlot}"]`)
+      ).find((candidate) => candidate.textContent === 'Configure System Prompt');
+
+      expect(item).toBeDefined();
+      await act(async () => item?.click());
+      expect(onConfigureSystemPrompt).toHaveBeenCalledTimes(1);
+    }
+  );
 
   afterEach(async () => {
     await act(async () => root.unmount());
