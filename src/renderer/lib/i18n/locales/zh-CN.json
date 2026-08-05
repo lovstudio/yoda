@@ -1827,6 +1827,7 @@
       "truncatedMessages_plural": "中间还有 {{count}} 条对话",
       "promptsModalTitle": "用户 prompts",
       "conversationModalTitle": "对话",
+      "showAgentReplies": "显示 AI 回复",
       "userMessage": "用户",
       "userMessageIndex": "用户 #{{index}}",
       "agent": "Agent",

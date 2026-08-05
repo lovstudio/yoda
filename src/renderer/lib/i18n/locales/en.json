@@ -1827,6 +1827,7 @@
       "truncatedMessages_plural": "{{count}} conversation items in the middle",
       "promptsModalTitle": "User prompts",
       "conversationModalTitle": "Conversation",
+      "showAgentReplies": "Show AI replies",
       "userMessage": "User",
       "userMessageIndex": "User #{{index}}",
       "agent": "Agent",
