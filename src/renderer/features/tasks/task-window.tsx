@@ -172,7 +172,7 @@ const ReadyTaskTabWindow = observer(function ReadyTaskTabWindow({
         <span className="h-3.5 w-px shrink-0 bg-border" aria-hidden />
         <span className="min-w-0 truncate text-xs font-medium text-foreground-muted">{title}</span>
       </div>
-      <TaskActiveTabContent />
+      <TaskActiveTabContent forceSessionVisible />
     </div>
   );
 });
