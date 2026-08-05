@@ -7,6 +7,7 @@ import type { DiffViewStore } from '@renderer/features/tasks/diff-view/stores/di
 import type { FileModelLifecycleStore } from '@renderer/features/tasks/editor/stores/file-model-lifecycle-store';
 import { appState } from '@renderer/lib/stores/app-state';
 import {
+  isProvisioned,
   isUnprovisioned,
   isUnregistered,
   registeredTaskData,
@@ -232,7 +233,12 @@ export function taskViewKind(store: TaskStore | undefined, projectId: string): T
     if (store.phase === 'teardown-error') return 'teardown-error';
     return 'idle';
   }
-  return 'ready';
+  if (isProvisioned(store)) return 'ready';
+
+  // Defensive containment for a disposed/legacy store whose state says
+  // provisioned while its payload is absent. Treat it as leaving readiness;
+  // rendering ready-only descendants would violate the provider contract.
+  return 'teardown';
 }
 
 /** Returns the provisioned task payload if ready, otherwise undefined. */
