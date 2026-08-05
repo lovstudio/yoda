@@ -206,7 +206,7 @@ const PLUS_BUTTON_CLASS =
 
 /**
  * The strip's "+" in a project scope: a menu that opens the project's
- * non-overview pages (tasks/issues/PRs/sessions/harness/docs/settings) as tabs, plus a
+ * non-overview pages (tasks/issues/PRs/sessions/harness/prompts/docs/settings) as tabs, plus a
  * shortcut to start a new task. Overview is the fixed tab and pages already
  * open are omitted. Docs is always offered — opening it unconfigured lands on
  * the Docs page's empty state, which guides the user to configure a source.
@@ -487,7 +487,7 @@ function describeProjectTab(
     case 'harness':
       return { label: t('projects.harness.label'), icon: lucideIcon(Cpu) };
     case 'prompts':
-      return { label: t('projects.systemPrompt.title'), icon: lucideIcon(FileText) };
+      return { label: t('library.sections.prompts'), icon: lucideIcon(FileText) };
     case 'docs':
       return { label: t('projects.docs.label'), icon: lucideIcon(BookText) };
     case 'settings':

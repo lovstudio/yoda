@@ -68,10 +68,17 @@ vi.mock('@renderer/features/prompt-library/prompt-system-section', async () => {
 vi.mock('@renderer/features/prompt-library/project-prompt-section', async () => {
   const React = await import('react');
   return {
-    ProjectPromptSection: ({ runtimeId }: { runtimeId: string | null }) =>
+    ProjectPromptSection: ({
+      runtimeId,
+      projectId,
+    }: {
+      runtimeId: string | null;
+      projectId: string | null;
+    }) =>
       React.createElement('section', {
         'data-slot': 'project-prompt-section',
         'data-runtime-id': runtimeId ?? '',
+        'data-project-id': projectId ?? '',
       }),
   };
 });
@@ -389,6 +396,27 @@ describe('PromptLibraryPanel groups', () => {
     await act(async () => root.render(createElement(PromptLibraryPanel)));
 
     expect(host.querySelector('[data-slot="prompt-library-bottom-space"].h-24')).not.toBeNull();
+  });
+
+  it('preselects the routed project and follows project changes', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () =>
+      root.render(createElement(PromptLibraryPanel, { projectId: 'project-1' }))
+    );
+
+    const projectSection = host.querySelector('[data-slot="project-prompt-section"]');
+    expect(projectSection?.getAttribute('data-project-id')).toBe('project-1');
+
+    await act(async () =>
+      root.render(createElement(PromptLibraryPanel, { projectId: 'project-2' }))
+    );
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(projectSection?.getAttribute('data-project-id')).toBe('project-2')
+      );
+    });
   });
 
   it('puts reusable prompts first and keeps CLI and project instruction chapters together', async () => {
