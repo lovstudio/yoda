@@ -1,0 +1,35 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- iOS and legacy Android icon canvas. The background is intentionally full bleed:
+       the operating system applies its own outer mask and must never flatten transparent corners. -->
+  <defs>
+    <radialGradient id="field" cx="0.5" cy="0.42" r="0.75">
+      <stop offset="0" stop-color="#142819"/>
+      <stop offset="0.6" stop-color="#0d1810"/>
+      <stop offset="1" stop-color="#0b130e"/>
+    </radialGradient>
+    <radialGradient id="dotGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#5dc98f" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#5dc98f" stop-opacity="0"/>
+    </radialGradient>
+    <mask id="cowl">
+      <rect x="-60" y="-60" width="360" height="380" fill="#fff"/>
+      <path fill="#000" d="M 167.2 120.4 A 50 50 0 1 0 72.8 120.4 L 120 256 Z"/>
+    </mask>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#field)"/>
+
+  <g transform="translate(252 272) scale(2.1667)">
+    <path mask="url(#cowl)" fill="#dbebde" d="
+      M 156.4 21.3
+      L 228.2 162.9
+      A 34 34 0 0 1 200 216
+      L 40 216
+      A 34 34 0 0 1 11.8 162.9
+      L 83.6 21.3
+      A 44 44 0 0 1 156.4 21.3
+      Z"/>
+    <circle cx="120" cy="104" r="36" fill="url(#dotGlow)"/>
+    <circle cx="120" cy="104" r="13" fill="#5dc98f"/>
+  </g>
+</svg>

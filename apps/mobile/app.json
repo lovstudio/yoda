@@ -3,7 +3,7 @@
     "name": "Yoda Mobile",
     "slug": "yoda-mobile",
     "scheme": "yodamobile",
-    "icon": "../../src/assets/images/yoda/yoda_logo.png",
+    "icon": "../../src/assets/images/yoda/yoda-mobile-icon.png",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
