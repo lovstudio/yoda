@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm';
-import { taskRenamedChannel } from '@shared/events/taskEvents';
+import { taskCreatedChannel, taskRenamedChannel } from '@shared/events/taskEvents';
 import type { CreateBranchError } from '@shared/git';
 import { err, ok, type Result } from '@shared/result';
 import { deriveTaskSlug } from '@shared/task-name';
@@ -491,6 +491,7 @@ export async function createTask(
       branchSetup.message,
       taskRow
     );
+    events.emit(taskCreatedChannel, { taskId: params.id, projectId: params.projectId });
     return ok({
       task: mapTaskRowToTask(failedRow, prs, {}, linkedIssues),
       warning: {
@@ -528,6 +529,7 @@ export async function createTask(
 
   const provisionResult = await taskManager.provisionTask(project, task, [], []);
   if (!provisionResult.success) {
+    events.emit(taskCreatedChannel, { taskId: params.id, projectId: params.projectId });
     return err(mapProvisionError(provisionResult.error));
   }
   telemetryService.capture('task_provisioned', {
@@ -574,6 +576,7 @@ export async function createTask(
     });
   }
 
+  events.emit(taskCreatedChannel, { taskId: params.id, projectId: params.projectId });
   return ok({ task, warning });
 }
 

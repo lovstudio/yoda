@@ -1,22 +1,62 @@
 import { randomUUID } from 'node:crypto';
-import { asc, eq, ne, sql } from 'drizzle-orm';
+import { asc, eq, isNull, ne, sql } from 'drizzle-orm';
 import { promptsUpdatedChannel } from '@shared/events/appEvents';
 import {
+  incrementPromptVersion,
   promptCreateInputSchema,
   promptGroupNameSchema,
   promptSourceSchema,
   promptUpdateInputSchema,
   type Prompt,
   type PromptCreateInput,
+  type PromptGroup,
   type PromptSource,
   type PromptUpdateInput,
+  type PromptVersionBump,
+  type PromptVersionSnapshot,
 } from '@shared/prompt-library';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { db } from '@main/db/client';
-import { promptGroups, prompts } from '@main/db/schema';
+import { promptGroups, prompts, promptVersions } from '@main/db/schema';
 import { events } from '@main/lib/events';
 
 type PromptRow = typeof prompts.$inferSelect;
+type PromptGroupRow = typeof promptGroups.$inferSelect;
+
+function orderPromptGroups(rows: PromptGroupRow[]): PromptGroupRow[] {
+  const children = new Map<string | null, PromptGroupRow[]>();
+  for (const row of rows) {
+    const siblings = children.get(row.parentName) ?? [];
+    siblings.push(row);
+    children.set(row.parentName, siblings);
+  }
+  for (const siblings of children.values()) {
+    siblings.sort(
+      (left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name)
+    );
+  }
+
+  const ordered: PromptGroupRow[] = [];
+  const visited = new Set<string>();
+  const visit = (parentName: string | null): void => {
+    for (const row of children.get(parentName) ?? []) {
+      if (visited.has(row.name)) continue;
+      visited.add(row.name);
+      ordered.push(row);
+      visit(row.name);
+    }
+  };
+  visit(null);
+  for (const row of rows) {
+    if (!visited.has(row.name)) {
+      visited.add(row.name);
+      ordered.push(row);
+      visit(row.name);
+    }
+  }
+  return ordered;
+}
+type PromptVersionRow = typeof promptVersions.$inferSelect;
 
 function parseSource(value: string | null): PromptSource | undefined {
   if (!value) return undefined;
@@ -38,10 +78,49 @@ function toPrompt(row: PromptRow): Prompt {
     extraInfo: row.extraInfo,
     injectionEnabled: row.injectionEnabled,
     injectionOrder: row.injectionOrder,
+    version: row.version,
     source: parseSource(row.sourceJson),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+function toPromptVersion(row: PromptVersionRow): PromptVersionSnapshot {
+  return {
+    id: row.id,
+    promptId: row.promptId,
+    version: row.version,
+    title: row.title,
+    description: row.description,
+    content: row.content,
+    extraInfo: row.extraInfo,
+    source: parseSource(row.sourceJson),
+    createdAt: row.createdAt,
+  };
+}
+
+function versionSnapshotValues(row: PromptRow): typeof promptVersions.$inferInsert {
+  return {
+    id: randomUUID(),
+    promptId: row.id,
+    version: row.version,
+    title: row.title,
+    description: row.description,
+    content: row.content,
+    extraInfo: row.extraInfo,
+    sourceJson: row.sourceJson,
+    createdAt: row.updatedAt,
+  };
+}
+
+function compareSemanticVersions(left: string, right: string): number {
+  const leftParts = left.split('.').map(Number);
+  const rightParts = right.split('.').map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    const difference = (rightParts[index] ?? 0) - (leftParts[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
 }
 
 /**
@@ -50,11 +129,8 @@ function toPrompt(row: PromptRow): Prompt {
  */
 export class PromptLibraryService {
   private async syncInjectionOrder(): Promise<void> {
-    const [groupRows, promptRows] = await Promise.all([
-      db
-        .select({ name: promptGroups.name })
-        .from(promptGroups)
-        .orderBy(asc(promptGroups.sortOrder), asc(promptGroups.name)),
+    const [unorderedGroupRows, promptRows] = await Promise.all([
+      db.select().from(promptGroups),
       db
         .select({
           id: prompts.id,
@@ -63,6 +139,7 @@ export class PromptLibraryService {
         .from(prompts)
         .orderBy(asc(prompts.sortOrder), asc(prompts.createdAt)),
     ]);
+    const groupRows = orderPromptGroups(unorderedGroupRows);
     const groupOrder = new Map(groupRows.map((row, index) => [row.name, index]));
     const orderedPrompts = promptRows.slice().sort((left, right) => {
       const leftGroup = left.groupName.trim();
@@ -140,6 +217,22 @@ export class PromptLibraryService {
         )
         .onConflictDoNothing({ target: promptGroups.name });
     }
+
+    const [promptRows, versionRows] = await Promise.all([
+      db.select().from(prompts),
+      db
+        .select({ promptId: promptVersions.promptId, version: promptVersions.version })
+        .from(promptVersions),
+    ]);
+    const existingVersions = new Set(
+      versionRows.map((row) => `${row.promptId}\u0000${row.version}`)
+    );
+    const missingSnapshots = promptRows
+      .filter((row) => !existingVersions.has(`${row.id}\u0000${row.version}`))
+      .map(versionSnapshotValues);
+    if (missingSnapshots.length > 0) {
+      await db.insert(promptVersions).values(missingSnapshots).onConflictDoNothing();
+    }
     await this.syncInjectionOrder();
   }
 
@@ -151,17 +244,24 @@ export class PromptLibraryService {
     return rows.map(toPrompt);
   }
 
-  async listGroups(): Promise<string[]> {
-    const rows = await db
-      .select()
-      .from(promptGroups)
-      .orderBy(asc(promptGroups.sortOrder), asc(promptGroups.name));
-    return rows.map((row) => row.name);
+  async listGroups(): Promise<PromptGroup[]> {
+    const rows = orderPromptGroups(await db.select().from(promptGroups));
+    return rows.map(({ name, parentName }) => ({ name, parentName }));
   }
 
-  async createGroup(name: string): Promise<string> {
+  async listVersions(id: string): Promise<PromptVersionSnapshot[]> {
+    const rows = await db.select().from(promptVersions).where(eq(promptVersions.promptId, id));
+    return rows
+      .sort((left, right) => compareSemanticVersions(left.version, right.version))
+      .map(toPromptVersion);
+  }
+
+  async createGroup(name: string, parentName?: string | null): Promise<string> {
     const parsed = promptGroupNameSchema.parse(name);
-    await this.ensureGroup(parsed);
+    const normalizedParentName = parentName ? promptGroupNameSchema.parse(parentName) : null;
+    if (normalizedParentName === parsed) throw new Error('Prompt group cannot contain itself');
+    if (normalizedParentName) await this.requireGroup(normalizedParentName);
+    await this.ensureGroup(parsed, normalizedParentName);
     events.emit(promptsUpdatedChannel, undefined);
     return parsed;
   }
@@ -188,6 +288,10 @@ export class PromptLibraryService {
 
     db.transaction((tx) => {
       tx.update(promptGroups).set({ name: next }).where(eq(promptGroups.name, current)).run();
+      tx.update(promptGroups)
+        .set({ parentName: next })
+        .where(eq(promptGroups.parentName, current))
+        .run();
       tx.update(prompts)
         .set({ groupName: next })
         .where(sql`trim(${prompts.groupName}) = ${current}`)
@@ -198,21 +302,107 @@ export class PromptLibraryService {
     return next;
   }
 
-  private async ensureGroup(name: string): Promise<void> {
-    const normalized = name.trim();
-    if (!normalized) return;
+  private async requireGroup(name: string): Promise<PromptGroupRow> {
+    const [row] = await db.select().from(promptGroups).where(eq(promptGroups.name, name)).limit(1);
+    if (!row) throw new Error('Prompt group not found');
+    return row;
+  }
+
+  private async nextGroupSortOrder(parentName: string | null): Promise<number> {
     const [{ nextSortOrder }] = await db
       .select({
         nextSortOrder: sql<number>`coalesce(max(${promptGroups.sortOrder}), -1) + 1`,
       })
-      .from(promptGroups);
+      .from(promptGroups)
+      .where(
+        parentName === null
+          ? isNull(promptGroups.parentName)
+          : eq(promptGroups.parentName, parentName)
+      );
+    return nextSortOrder ?? 0;
+  }
+
+  private async ensureGroup(name: string, parentName: string | null = null): Promise<void> {
+    const normalized = name.trim();
+    if (!normalized) return;
+    const nextSortOrder = await this.nextGroupSortOrder(parentName);
     await db
       .insert(promptGroups)
       .values({
         name: promptGroupNameSchema.parse(normalized),
-        sortOrder: nextSortOrder ?? 0,
+        parentName,
+        sortOrder: nextSortOrder,
       })
       .onConflictDoNothing({ target: promptGroups.name });
+  }
+
+  async moveGroup(name: string, parentName: string | null): Promise<void> {
+    const normalizedName = promptGroupNameSchema.parse(name);
+    const normalizedParentName = parentName ? promptGroupNameSchema.parse(parentName) : null;
+    const group = await this.requireGroup(normalizedName);
+    if (group.parentName === normalizedParentName) return;
+    if (normalizedName === normalizedParentName)
+      throw new Error('Prompt group cannot contain itself');
+
+    let cursor = normalizedParentName;
+    const visited = new Set<string>();
+    while (cursor) {
+      if (cursor === normalizedName) throw new Error('Prompt group nesting would create a cycle');
+      if (visited.has(cursor)) throw new Error('Prompt group nesting contains a cycle');
+      visited.add(cursor);
+      const parent = await this.requireGroup(cursor);
+      cursor = parent.parentName;
+    }
+
+    await db
+      .update(promptGroups)
+      .set({
+        parentName: normalizedParentName,
+        sortOrder: await this.nextGroupSortOrder(normalizedParentName),
+      })
+      .where(eq(promptGroups.name, normalizedName));
+    await this.syncInjectionOrder();
+    events.emit(promptsUpdatedChannel, undefined);
+  }
+
+  async removeGroup(name: string): Promise<void> {
+    const normalizedName = promptGroupNameSchema.parse(name);
+    const group = await this.requireGroup(normalizedName);
+    const children = await db
+      .select()
+      .from(promptGroups)
+      .where(eq(promptGroups.parentName, normalizedName))
+      .orderBy(asc(promptGroups.sortOrder), asc(promptGroups.name));
+    const nextSortOrder = await this.nextGroupSortOrder(group.parentName);
+    const groupPrompts = await db
+      .select({ id: prompts.id })
+      .from(prompts)
+      .where(sql`trim(${prompts.groupName}) = ${normalizedName}`)
+      .orderBy(asc(prompts.sortOrder), asc(prompts.createdAt));
+    const [{ nextPromptSortOrder }] = await db
+      .select({
+        nextPromptSortOrder: sql<number>`coalesce(max(${prompts.sortOrder}), -1) + 1`,
+      })
+      .from(prompts)
+      .where(sql`trim(${prompts.groupName}) = ''`);
+
+    db.transaction((tx) => {
+      children.forEach((child, index) => {
+        tx.update(promptGroups)
+          .set({ parentName: group.parentName, sortOrder: nextSortOrder + index })
+          .where(eq(promptGroups.name, child.name))
+          .run();
+      });
+      groupPrompts.forEach((prompt, index) => {
+        tx.update(prompts)
+          .set({ groupName: '', sortOrder: (nextPromptSortOrder ?? 0) + index })
+          .where(eq(prompts.id, prompt.id))
+          .run();
+      });
+      tx.delete(promptGroups).where(eq(promptGroups.name, normalizedName)).run();
+    });
+    await this.syncInjectionOrder();
+    events.emit(promptsUpdatedChannel, undefined);
   }
 
   async create(input: PromptCreateInput): Promise<Prompt> {
@@ -234,12 +424,16 @@ export class PromptLibraryService {
       extraInfo: parsed.extraInfo,
       injectionEnabled: parsed.injectionEnabled,
       injectionOrder: 0,
+      version: '1.0.0',
       sourceJson: parsed.source ? JSON.stringify(parsed.source) : null,
       sortOrder: next ?? 0,
       createdAt: now,
       updatedAt: now,
     };
-    await db.insert(prompts).values(row);
+    db.transaction((tx) => {
+      tx.insert(prompts).values(row).run();
+      tx.insert(promptVersions).values(versionSnapshotValues(row)).run();
+    });
     await this.syncInjectionOrder();
     events.emit(promptsUpdatedChannel, undefined);
     const [created] = await db.select().from(prompts).where(eq(prompts.id, row.id)).limit(1);
@@ -251,16 +445,13 @@ export class PromptLibraryService {
     const normalizedGroupName = parsed.groupName?.trim();
     if (normalizedGroupName !== undefined) await this.ensureGroup(normalizedGroupName);
     if (Object.keys(parsed).length > 0) {
-      const { source, groupName: _groupName, ...fields } = parsed;
+      const [current] = await db.select().from(prompts).where(eq(prompts.id, id)).limit(1);
+      if (!current) return null;
+      const { source, groupName: _groupName, versionBump, ...fields } = parsed;
       let sortOrder: number | undefined;
       let groupChanged = false;
       if (normalizedGroupName !== undefined) {
-        const [current] = await db
-          .select({ groupName: prompts.groupName })
-          .from(prompts)
-          .where(eq(prompts.id, id))
-          .limit(1);
-        groupChanged = Boolean(current && current.groupName.trim() !== normalizedGroupName);
+        groupChanged = current.groupName.trim() !== normalizedGroupName;
         if (groupChanged) {
           const [{ next }] = await db
             .select({
@@ -271,18 +462,58 @@ export class PromptLibraryService {
           sortOrder = next ?? 0;
         }
       }
+      const authoredContentChanged =
+        (parsed.title !== undefined && parsed.title !== current.title) ||
+        (parsed.description !== undefined && parsed.description !== current.description) ||
+        (parsed.content !== undefined && parsed.content !== current.content) ||
+        (parsed.extraInfo !== undefined && parsed.extraInfo !== current.extraInfo);
+      const nextVersion = authoredContentChanged
+        ? incrementPromptVersion(current.version, versionBump ?? 'patch')
+        : current.version;
       const update = {
         ...fields,
         ...(normalizedGroupName !== undefined ? { groupName: normalizedGroupName } : {}),
         ...(sortOrder !== undefined ? { sortOrder } : {}),
         ...(source !== undefined ? { sourceJson: source ? JSON.stringify(source) : null } : {}),
+        ...(authoredContentChanged ? { version: nextVersion } : {}),
       };
-      await db.update(prompts).set(update).where(eq(prompts.id, id));
+      db.transaction((tx) => {
+        const [updated] = tx
+          .update(prompts)
+          .set(update)
+          .where(eq(prompts.id, id))
+          .returning()
+          .all();
+        if (authoredContentChanged && updated) {
+          tx.insert(promptVersions).values(versionSnapshotValues(updated)).run();
+        }
+      });
       if (groupChanged) await this.syncInjectionOrder();
     }
     events.emit(promptsUpdatedChannel, undefined);
     const [row] = await db.select().from(prompts).where(eq(prompts.id, id)).limit(1);
     return row ? toPrompt(row) : null;
+  }
+
+  async restoreVersion(
+    id: string,
+    version: string,
+    bump: PromptVersionBump = 'patch'
+  ): Promise<Prompt | null> {
+    const [snapshot] = await db
+      .select()
+      .from(promptVersions)
+      .where(sql`${promptVersions.promptId} = ${id} AND ${promptVersions.version} = ${version}`)
+      .limit(1);
+    if (!snapshot) throw new Error('Prompt version not found');
+    return this.update(id, {
+      title: snapshot.title,
+      description: snapshot.description,
+      content: snapshot.content,
+      extraInfo: snapshot.extraInfo,
+      source: parseSource(snapshot.sourceJson) ?? null,
+      versionBump: bump,
+    });
   }
 
   async remove(id: string): Promise<void> {
@@ -300,20 +531,29 @@ export class PromptLibraryService {
     events.emit(promptsUpdatedChannel, undefined);
   }
 
-  async reorderGroups(names: string[]): Promise<void> {
+  async reorderGroups(parentName: string | null, names: string[]): Promise<void> {
+    const normalizedParentName = parentName ? promptGroupNameSchema.parse(parentName) : null;
+    if (normalizedParentName) await this.requireGroup(normalizedParentName);
     const normalizedNames = names.map((name) => promptGroupNameSchema.parse(name));
     const uniqueNames = [...new Set(normalizedNames)];
     if (uniqueNames.length !== normalizedNames.length) {
       throw new Error('Prompt group order contains duplicates');
     }
 
-    const existing = await db.select({ name: promptGroups.name }).from(promptGroups);
+    const existing = await db
+      .select({ name: promptGroups.name })
+      .from(promptGroups)
+      .where(
+        normalizedParentName === null
+          ? isNull(promptGroups.parentName)
+          : eq(promptGroups.parentName, normalizedParentName)
+      );
     const existingNames = new Set(existing.map((row) => row.name));
     if (
       uniqueNames.length !== existingNames.size ||
       uniqueNames.some((name) => !existingNames.has(name))
     ) {
-      throw new Error('Prompt group order must contain every named group');
+      throw new Error('Prompt group order must contain every sibling group');
     }
     db.transaction((tx) => {
       uniqueNames.forEach((name, index) => {

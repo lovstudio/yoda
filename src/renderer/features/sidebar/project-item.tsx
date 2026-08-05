@@ -100,6 +100,12 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     navigate('project', { projectId });
   }, [navigate, prefetchRepository, projectId]);
 
+  const handleConfigureSystemPrompt = useCallback(() => {
+    prefetchRepository();
+    void settingsStore?.pageData.load();
+    navigate('project', { projectId, view: 'prompts' });
+  }, [navigate, prefetchRepository, projectId, settingsStore]);
+
   const handleOpenArchivedTasks = useCallback(async () => {
     prefetchRepository();
     await getProjectManagerStore().mountProject(projectId);
@@ -378,6 +384,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
         ? undefined
         : () => void copyTaskLink(buildProjectDeepLink({ projectId }), t),
     onOpenDetails: handleOpenDetails,
+    onConfigureSystemPrompt:
+      project.state === 'unregistered' ? undefined : handleConfigureSystemPrompt,
     onCreateTask: project.state === 'unregistered' ? undefined : () => void openTaskComposer(),
     onCreateTaskAndRun:
       project.state === 'unregistered' ? undefined : () => void createTaskAndRun(),

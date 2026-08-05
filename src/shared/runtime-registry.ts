@@ -266,12 +266,22 @@ export type AgentAccountRateLimitWindow = {
   resetsAt: string | null;
 };
 
+export type AgentAccountResetCredit = {
+  /** Opaque provider identifier used to redeem this specific credit. */
+  id: string;
+  status: 'available' | 'redeeming' | 'redeemed' | 'unknown';
+  /** Provider-defined expiry; null means this credit does not expire. */
+  expiresAt: string | null;
+};
+
 /** Live subscription quota read from the provider CLI account API. */
 export type AgentAccountUsage = {
   runtimeId: RuntimeId;
   supported: boolean;
   rateLimits: AgentAccountRateLimitWindow[];
   resetCreditsAvailable: number | null;
+  /** null means the provider returned only the authoritative aggregate count. */
+  resetCredits: AgentAccountResetCredit[] | null;
   fetchedAt: string;
   error: string | null;
 };

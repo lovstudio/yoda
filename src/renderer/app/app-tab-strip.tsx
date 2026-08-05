@@ -206,7 +206,7 @@ const PLUS_BUTTON_CLASS =
 
 /**
  * The strip's "+" in a project scope: a menu that opens the project's
- * non-overview pages (tasks/issues/PRs/sessions/harness/docs/settings) as tabs, plus a
+ * non-overview pages (tasks/issues/PRs/sessions/harness/prompts/docs/settings) as tabs, plus a
  * shortcut to start a new task. Overview is the fixed tab and pages already
  * open are omitted. Docs is always offered — opening it unconfigured lands on
  * the Docs page's empty state, which guides the user to configure a source.
@@ -291,9 +291,9 @@ function stripDragPayload(tab: AppTabEntry): TabDragPayload {
 
 /**
  * Per-tab dismiss behavior for the × slot. Session tabs dismiss by archiving
- * (mirroring the task's archive button — the pre-archive command runs, and the
- * session leaves the strip for good); every other tab plainly closes. The
- * plain-close path for session tabs stays available via the context menu.
+ * directly; running the pre-archive skill remains an explicit choice in the
+ * context menu. Every other tab plainly closes. The plain-close path for
+ * session tabs also stays available via the context menu.
  */
 function describeDismiss(
   tab: AppTabEntry,
@@ -316,7 +316,9 @@ function describeDismiss(
       ),
       pending: isArchiving,
       onDismiss: () => {
-        void archiveConversationFlow(projectId, taskId, conversationId).catch((error: unknown) => {
+        void archiveConversationFlow(projectId, taskId, conversationId, {
+          skipPreCommand: true,
+        }).catch((error: unknown) => {
           log.warn('AppTabStrip: archive conversation failed', {
             projectId,
             taskId,
@@ -379,9 +381,8 @@ const AppTab = observer(function AppTab({
       }}
     >
       {/* One leading slot: the icon morphs into the close action on hover —
-          or persistently while dismissal is pending (e.g. a session archiving
-          through its pre-archive command) — so tabs never spend an extra slot
-          on a trailing ×. */}
+          or persistently while dismissal is pending (e.g. a session being
+          archived) — so tabs never spend an extra slot on a trailing ×. */}
       <span className="relative flex size-4 shrink-0 items-center justify-center">
         <span
           className={cn(
@@ -486,6 +487,8 @@ function describeProjectTab(
       return { label: t('tasks.conversations.sessions'), icon: lucideIcon(MessageSquare) };
     case 'harness':
       return { label: t('projects.harness.label'), icon: lucideIcon(Cpu) };
+    case 'prompts':
+      return { label: t('library.sections.prompts'), icon: lucideIcon(FileText) };
     case 'docs':
       return { label: t('projects.docs.label'), icon: lucideIcon(BookText) };
     case 'settings':

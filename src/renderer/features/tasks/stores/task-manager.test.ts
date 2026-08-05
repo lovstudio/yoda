@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
-import { taskArchivedChannel, taskRenamedChannel } from '@shared/events/taskEvents';
+import {
+  taskArchivedChannel,
+  taskCreatedChannel,
+  taskRenamedChannel,
+} from '@shared/events/taskEvents';
 import type { CreateTaskParams, Task } from '@shared/tasks';
 import type { ProjectSettingsStore } from '@renderer/features/projects/stores/project-settings-store';
 import type { RepositoryStore } from '@renderer/features/projects/stores/repository-store';
@@ -257,6 +261,43 @@ describe('TaskManagerStore external task reconciliation', () => {
     expect(manager.tasks.get('task-1')?.data.name).toBe('Imported session');
     manager.dispose();
   });
+
+  it('loads a task when main reports that mobile creation completed', async () => {
+    const manager = createManager();
+    mocks.getTasks.mockResolvedValue([makeTask('Created on mobile')]);
+    mocks.getPullRequestsForTask.mockResolvedValue({ success: false });
+
+    emitTaskCreated();
+
+    await vi.waitFor(() => {
+      expect(manager.tasks.get('task-1')?.data.name).toBe('Created on mobile');
+    });
+    expect(mocks.getTasks).toHaveBeenCalledWith('project-1');
+    manager.dispose();
+  });
+
+  it('keeps the local optimistic task when its own creation event arrives', async () => {
+    const manager = createManager();
+    const optimisticTask = createUnregisteredTask({
+      id: 'task-1',
+      name: 'Creating locally',
+      status: 'in_progress',
+      lastInteractedAt: '2026-06-05T10:00:00.000Z',
+      createdAt: '2026-06-05T10:00:00.000Z',
+      statusChangedAt: '2026-06-05T10:00:00.000Z',
+      isPinned: false,
+      isLongTerm: false,
+      needsReview: false,
+    });
+    manager.tasks.set('task-1', optimisticTask);
+
+    emitTaskCreated();
+    await Promise.resolve();
+
+    expect(manager.tasks.get('task-1')).toBe(optimisticTask);
+    expect(mocks.getTasks).not.toHaveBeenCalled();
+    manager.dispose();
+  });
 });
 
 describe('TaskManagerStore task view preload', () => {
@@ -335,7 +376,7 @@ describe('TaskManagerStore disposal', () => {
     } as unknown as TaskStore);
     const unsubscribers = [...mocks.unsubscribers];
 
-    expect(unsubscribers).toHaveLength(7);
+    expect(unsubscribers).toHaveLength(8);
     manager.dispose();
     manager.dispose();
 
@@ -383,6 +424,12 @@ function emitTaskRenamed(name: string): void {
     name,
     isUserNamed: true,
   });
+}
+
+function emitTaskCreated(): void {
+  const listener = mocks.listeners.get(taskCreatedChannel.name);
+  expect(listener).toBeDefined();
+  listener?.({ taskId: 'task-1', projectId: 'project-1' });
 }
 
 function makeCreateTaskParams(name: string): CreateTaskParams {

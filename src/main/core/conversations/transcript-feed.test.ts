@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   stat: vi.fn(async (_filePath: string) => ({})),
   watch: vi.fn(),
   watchCallback: null as ((eventType: string) => void) | null,
+  getReservedCodexThreadIds: vi.fn(async () => new Set(['reserved-thread'])),
 }));
 
 vi.mock('node:fs', () => ({
@@ -53,6 +54,9 @@ vi.mock('./claude-transcript-locator', () => ({
 vi.mock('./getCodexSessionContext', () => ({
   getCodexSessionContext: (...args: unknown[]) => mocks.getCodexSessionContext(...args),
 }));
+vi.mock('./codex-thread-reservations', () => ({
+  getReservedCodexThreadIds: mocks.getReservedCodexThreadIds,
+}));
 vi.mock('./utils', () => ({ mapConversationRowToConversation: (row: unknown) => row }));
 vi.mock('@main/core/session-title/claude-title-source', () => ({
   resolveClaudeTranscriptPath: vi.fn(),
@@ -88,6 +92,14 @@ describe('transcript feed local subscription', () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await vi.advanceTimersByTimeAsync(250);
     expect(mocks.watch).toHaveBeenCalledWith('/tmp/codex-rollout.jsonl', expect.any(Function));
+    expect(mocks.getReservedCodexThreadIds).toHaveBeenCalledWith('conversation');
+    expect(mocks.getCodexSessionContext).toHaveBeenLastCalledWith(
+      '/workspace',
+      'conversation',
+      'Conversation',
+      '2026-07-11T00:00:00.000Z',
+      { codexHome: '/Users/mark/.codex', reservedThreadIds: new Set(['reserved-thread']) }
+    );
 
     listener.mockClear();
     mocks.watchCallback?.('change');

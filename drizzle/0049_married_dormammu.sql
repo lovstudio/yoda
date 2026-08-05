@@ -1,0 +1,1 @@
+ALTER TABLE `prompt_groups` ADD `parent_name` text;

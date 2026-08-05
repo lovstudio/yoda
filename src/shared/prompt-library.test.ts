@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  incrementPromptVersion,
   promptCreateInputSchema,
   promptSourceSchema,
   promptUpdateInputSchema,
@@ -24,6 +25,12 @@ describe('prompt library schemas', () => {
     expect(promptUpdateInputSchema.parse({ groupName: 'Review' })).toEqual({
       groupName: 'Review',
     });
+  });
+
+  it('increments semantic prompt versions by patch, minor, or major', () => {
+    expect(incrementPromptVersion('1.2.3', 'patch')).toBe('1.2.4');
+    expect(incrementPromptVersion('1.2.3', 'minor')).toBe('1.3.0');
+    expect(incrementPromptVersion('1.2.3', 'major')).toBe('2.0.0');
   });
 
   it('accepts a Git repository file as a prompt content source', () => {

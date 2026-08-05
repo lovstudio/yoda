@@ -495,7 +495,12 @@ const UnifiedMainContent = observer(function UnifiedMainContent() {
   );
 });
 
-export const TaskActiveTabContent = observer(function TaskActiveTabContent() {
+export const TaskActiveTabContent = observer(function TaskActiveTabContent({
+  forceSessionVisible = false,
+}: {
+  /** A detached task window is visible even though it is not the main workspace route. */
+  forceSessionVisible?: boolean;
+}) {
   const { taskView } = useRequireProvisionedTask();
   const { setEditorHost, triggerLayout } = useEditorContext();
 
@@ -533,7 +538,7 @@ export const TaskActiveTabContent = observer(function TaskActiveTabContent() {
         <DiffView />
       </Activity>
       <Activity mode={renderer === 'agents' ? 'visible' : 'hidden'}>
-        <ConversationsPanel />
+        <ConversationsPanel forceVisible={forceSessionVisible} />
       </Activity>
       <Activity mode={renderer === 'room-member' ? 'visible' : 'hidden'}>
         <RoomMemberActiveContent />

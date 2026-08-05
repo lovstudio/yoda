@@ -17,12 +17,18 @@ import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import type { ConversationStore } from './conversation-manager';
 import { ConversationSession } from './conversation-session';
+import { isConversationSurfaceVisible } from './conversation-surface-visibility';
 import { ConversationTree } from './conversation-tree';
 import { useArchivedConversations } from './use-archived-conversations';
 
 export { getResumeInitialSize } from './conversation-session';
 
-export const ConversationsPanel = observer(function ConversationsPanel() {
+export const ConversationsPanel = observer(function ConversationsPanel({
+  forceVisible = false,
+}: {
+  /** Detached task windows are outside the main workspace route but still own a visible session. */
+  forceVisible?: boolean;
+}) {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
   const provisioned = useRequireProvisionedTask();
@@ -34,7 +40,11 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
   // still need their PTY session resumed so input can be sent — gating resume on
   // isActive alone leaves comparison panes dead (can't send). Focus, however,
   // stays tied to isActive so extra panes don't steal the keyboard.
-  const isVisible = isActive || splitViewStore.has(taskId);
+  const isVisible = isConversationSurfaceVisible({
+    isActiveTask: isActive,
+    isSplitView: splitViewStore.has(taskId),
+    forceVisible,
+  });
   const autoFocus = isActive && provisioned.taskView.focusedRegion === 'main';
 
   const handleCreate = () =>

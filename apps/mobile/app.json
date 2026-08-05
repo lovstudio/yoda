@@ -4,7 +4,7 @@
     "slug": "yoda-mobile",
     "scheme": "yodamobile",
     "icon": "../../src/assets/images/yoda/yoda_logo.png",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -25,7 +25,9 @@
       "expo-localization"
     ],
     "ios": {
+      "appleTeamId": "SR95DUC5MJ",
       "bundleIdentifier": "ai.lovstudio.yoda.mobile",
+      "buildNumber": "2",
       "requireFullScreen": true,
       "supportsTablet": true,
       "infoPlist": {

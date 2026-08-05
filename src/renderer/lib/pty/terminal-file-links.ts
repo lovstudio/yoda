@@ -92,11 +92,19 @@ const LABELED_SPACED_FILE_CANDIDATE_REGEX = new RegExp(
   `([:：][ \\t]*)(@?${SPACED_BARE_FILENAME}(?::\\d+(?::\\d+)?)?)(?=$|[${PATH_TRAILING}])`,
   'giu'
 );
+// `file:///...` is a local filesystem reference, not a browser URL. Keep the
+// URI prefix in the clickable text, then normalize it to an absolute path in
+// resolveTerminalFileLinkTarget().
+const FILE_URI_CANDIDATE_REGEX = new RegExp(
+  `(^|[${PATH_LEADING}])(file:\\/\\/\\/(?:${ABSOLUTE_PATH_SEGMENT}\\/)+?(?:${SPACED_ABSOLUTE_FILENAME}|${FILE_PATH_FILENAME})(?::\\d+(?::\\d+)?)?)(?=$|[${PATH_TRAILING}])`,
+  'giu'
+);
 const FILE_PATH_CANDIDATE_REGEXES: readonly {
   regex: RegExp;
   requiresSpace: boolean;
   isDirectory?: true;
 }[] = [
+  { regex: FILE_URI_CANDIDATE_REGEX, requiresSpace: false },
   { regex: ROOTED_SPACED_FILENAME_CANDIDATE_REGEX, requiresSpace: true },
   { regex: ROOTED_FILE_PATH_CANDIDATE_REGEX, requiresSpace: true },
   { regex: TILDE_DIRECTORY_CANDIDATE_REGEX, requiresSpace: false, isDirectory: true },
@@ -165,7 +173,7 @@ export function extractTerminalFileLinkCandidates(line: string): TerminalFileLin
       const text = match[2];
       if (!text) continue;
       if (requiresSpace && !text.includes(' ')) continue;
-      if (text.includes('://') || text.startsWith('//')) continue;
+      if ((text.includes('://') && !/^file:\/\/\//i.test(text)) || text.startsWith('//')) continue;
 
       const leading = match[1] ?? '';
       const index = match.index + leading.length;
@@ -632,7 +640,10 @@ export function resolveTerminalFileLinkTarget(
   const parsed = parsePathLocation(text);
   if (!parsed) return null;
 
-  let rawPath = parsed.path.replace(/\\/g, '/');
+  const fileUriPath = parseLocalFileUriPath(parsed.path);
+  if (parsed.path.toLowerCase().startsWith('file://') && !fileUriPath) return null;
+
+  let rawPath = (fileUriPath ?? parsed.path).replace(/\\/g, '/');
   if (rawPath.startsWith('@')) rawPath = rawPath.slice(1);
   const isDirectory = directoryHint || rawPath.endsWith('/');
   const normalizedRoot = workspaceRoot?.replace(/\\/g, '/').replace(/\/+$/g, '');
@@ -672,6 +683,18 @@ export function resolveTerminalFileLinkTarget(
     isDirectory: true,
     absolutePath: base.absolutePath?.replace(/\/+$/g, ''),
   };
+}
+
+function parseLocalFileUriPath(value: string): string | null {
+  if (!value.toLowerCase().startsWith('file://')) return null;
+
+  try {
+    const uri = new URL(value);
+    if (uri.protocol !== 'file:' || (uri.hostname && uri.hostname !== 'localhost')) return null;
+    return decodeURIComponent(uri.pathname);
+  } catch {
+    return null;
+  }
 }
 
 function resolveFileTarget(

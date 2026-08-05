@@ -1,6 +1,6 @@
 {
   "name": "@yoda/mobile",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "packageManager": "pnpm@10.28.2",
   "main": "index.ts",
@@ -18,7 +18,7 @@
     "@expo/metro-runtime": "~6.1.2",
     "@expo/vector-icons": "^15.1.1",
     "@react-native-async-storage/async-storage": "^2.2.0",
-    "expo": "~54.0.35",
+    "expo": "~54.0.36",
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.13",
     "expo-font": "~14.0.12",

@@ -94,4 +94,27 @@ describe('terminal link resolver', () => {
       },
     });
   });
+
+  it('resolves file URIs through the local file path flow', () => {
+    const uri =
+      'file:///Users/mark/.codex/generated_images/019fcba6-bfdb-7063-bde0-3b7def1f9245/exec-de539056-b836-40a4-afeb-fc4e247d8e87.png';
+    const terminal = makeTerminal([uri]);
+    const fileOptions = {
+      workspaceRoot: '/Users/mark/lovstudio/coding/yoda',
+      onOpen: (): void => undefined,
+    };
+
+    expect(
+      getTerminalLinkTargetAtCell(terminal, 1, { x: uri.indexOf('exec-') + 1, y: 1 }, fileOptions)
+    ).toEqual({
+      kind: 'file',
+      target: {
+        originalText: uri,
+        absolutePath:
+          '/Users/mark/.codex/generated_images/019fcba6-bfdb-7063-bde0-3b7def1f9245/exec-de539056-b836-40a4-afeb-fc4e247d8e87.png',
+        line: undefined,
+        column: undefined,
+      },
+    });
+  });
 });

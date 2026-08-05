@@ -64,7 +64,7 @@ export async function startMobileVoiceInput(options: {
   try {
     ExpoSpeechRecognitionModule.start({
       addsPunctuation: true,
-      continuous: false,
+      continuous: true,
       contextualStrings: speechContextualStrings,
       interimResults: true,
       iosTaskHint: 'dictation',

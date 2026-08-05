@@ -1,11 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { promptsUpdatedChannel } from '@shared/events/appEvents';
-import type { Prompt, PromptCreateInput, PromptUpdateInput } from '@shared/prompt-library';
+import type {
+  Prompt,
+  PromptCreateInput,
+  PromptGroup,
+  PromptUpdateInput,
+  PromptVersionBump,
+} from '@shared/prompt-library';
 import { events, rpc } from '@renderer/lib/ipc';
 
 export const promptsQueryKey = ['prompts'] as const;
 export const promptGroupsQueryKey = ['promptGroups'] as const;
+export const promptVersionsQueryKey = (id: string) => ['promptVersions', id] as const;
 
 export function usePrompts() {
   const queryClient = useQueryClient();
@@ -37,12 +44,43 @@ export function usePromptGroups() {
   });
 }
 
+export function usePromptVersions(id: string) {
+  return useQuery({
+    queryKey: promptVersionsQueryKey(id),
+    queryFn: () => rpc.promptLibrary.listVersions(id),
+  });
+}
+
 export function useCreatePromptGroup() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) => rpc.promptLibrary.createGroup(name),
+    mutationFn: ({ name, parentName }: { name: string; parentName: string | null }) =>
+      rpc.promptLibrary.createGroup(name, parentName),
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: promptGroupsQueryKey });
+    },
+  });
+}
+
+export function useMovePromptGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, parentName }: { name: string; parentName: string | null }) =>
+      rpc.promptLibrary.moveGroup(name, parentName),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: promptGroupsQueryKey });
+      void queryClient.invalidateQueries({ queryKey: promptsQueryKey });
+    },
+  });
+}
+
+export function useDeletePromptGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => rpc.promptLibrary.deleteGroup(name),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: promptGroupsQueryKey });
+      void queryClient.invalidateQueries({ queryKey: promptsQueryKey });
     },
   });
 }
@@ -80,6 +118,18 @@ export function useUpdatePrompt() {
   });
 }
 
+export function useRestorePromptVersion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, version, bump }: { id: string; version: string; bump: PromptVersionBump }) =>
+      rpc.promptLibrary.restoreVersion(id, version, bump),
+    onSettled: (_data, _error, input) => {
+      void queryClient.invalidateQueries({ queryKey: promptsQueryKey });
+      void queryClient.invalidateQueries({ queryKey: promptVersionsQueryKey(input.id) });
+    },
+  });
+}
+
 export function useDeletePrompt() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -93,11 +143,31 @@ export function useDeletePrompt() {
 export function useReorderPromptGroups() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (names: string[]) => rpc.promptLibrary.reorderGroups(names),
-    onMutate: async (names) => {
+    mutationFn: ({ parentName, names }: { parentName: string | null; names: string[] }) =>
+      rpc.promptLibrary.reorderGroups(parentName, names),
+    onMutate: async ({ parentName, names }) => {
       await queryClient.cancelQueries({ queryKey: promptGroupsQueryKey });
-      const previous = queryClient.getQueryData<string[]>(promptGroupsQueryKey);
-      queryClient.setQueryData(promptGroupsQueryKey, names);
+      const previous = queryClient.getQueryData<PromptGroup[]>(promptGroupsQueryKey);
+      queryClient.setQueryData<PromptGroup[]>(promptGroupsQueryKey, (current) => {
+        if (!current) return current;
+        const order = new Map(names.map((name, index) => [name, index]));
+        const siblingIndexes = current.flatMap((group, index) =>
+          group.parentName === parentName ? [index] : []
+        );
+        const siblings = current
+          .filter((group) => group.parentName === parentName)
+          .sort(
+            (left, right) =>
+              (order.get(left.name) ?? Number.MAX_SAFE_INTEGER) -
+              (order.get(right.name) ?? Number.MAX_SAFE_INTEGER)
+          );
+        const next = current.slice();
+        siblingIndexes.forEach((index, siblingIndex) => {
+          const group = siblings[siblingIndex];
+          if (group) next[index] = group;
+        });
+        return next;
+      });
       return { previous };
     },
     onError: (_error, _names, context) => {

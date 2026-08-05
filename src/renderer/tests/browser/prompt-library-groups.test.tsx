@@ -2,21 +2,26 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Prompt } from '@shared/prompt-library';
+import type { Prompt, PromptGroup, PromptVersionSnapshot } from '@shared/prompt-library';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
   createGroup: vi.fn(),
   createPrompt: vi.fn(),
+  deleteGroup: vi.fn(),
   renameGroup: vi.fn(),
+  moveGroup: vi.fn(),
   updatePrompt: vi.fn(),
   deletePrompt: vi.fn(),
-  promptGroups: [] as string[],
+  promptGroups: [] as PromptGroup[],
   prompts: [] as Prompt[],
+  promptVersions: [] as PromptVersionSnapshot[],
   refreshPrompt: vi.fn(),
+  restorePromptVersion: vi.fn(),
   reorderGroups: vi.fn(),
   reorderPrompts: vi.fn(),
+  showConfirm: vi.fn(),
 }));
 
 vi.mock('react-i18next', async (importOriginal) => ({
@@ -24,6 +29,7 @@ vi.mock('react-i18next', async (importOriginal) => ({
   useTranslation: () => ({
     t: (key: string, values?: { count?: number }) =>
       key === 'promptLibrary.groups.count' ? String(values?.count ?? 0) : key,
+    i18n: { language: 'en' },
   }),
 }));
 
@@ -31,6 +37,8 @@ vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
   usePrompts: () => ({ data: mocks.prompts, isLoading: false }),
   usePromptGroups: () => ({ data: mocks.promptGroups, isLoading: false }),
   useCreatePromptGroup: () => ({ mutate: mocks.createGroup, isPending: false }),
+  useDeletePromptGroup: () => ({ mutate: mocks.deleteGroup, isPending: false }),
+  useMovePromptGroup: () => ({ mutate: mocks.moveGroup, isPending: false }),
   useRenamePromptGroup: () => ({ mutate: mocks.renameGroup, isPending: false }),
   useCreatePrompt: () => ({ mutate: mocks.createPrompt, isPending: false }),
   useUpdatePrompt: () => ({ mutate: mocks.updatePrompt, isPending: false }),
@@ -38,6 +46,8 @@ vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
   useReorderPromptGroups: () => ({ mutate: mocks.reorderGroups, isPending: false }),
   useReorderPrompts: () => ({ mutate: mocks.reorderPrompts, isPending: false }),
   useRefreshPromptSource: () => ({ mutate: mocks.refreshPrompt, isPending: false }),
+  usePromptVersions: () => ({ data: mocks.promptVersions, isLoading: false }),
+  useRestorePromptVersion: () => ({ mutate: mocks.restorePromptVersion, isPending: false }),
 }));
 
 vi.mock('@renderer/features/prompt-library/prompt-system-section', async () => {
@@ -68,10 +78,17 @@ vi.mock('@renderer/features/prompt-library/prompt-system-section', async () => {
 vi.mock('@renderer/features/prompt-library/project-prompt-section', async () => {
   const React = await import('react');
   return {
-    ProjectPromptSection: ({ runtimeId }: { runtimeId: string | null }) =>
+    ProjectPromptSection: ({
+      runtimeId,
+      projectId,
+    }: {
+      runtimeId: string | null;
+      projectId: string | null;
+    }) =>
       React.createElement('section', {
         'data-slot': 'project-prompt-section',
         'data-runtime-id': runtimeId ?? '',
+        'data-project-id': projectId ?? '',
       }),
   };
 });
@@ -92,7 +109,7 @@ vi.mock('@renderer/lib/ipc', () => ({
 }));
 
 vi.mock('@renderer/lib/modal/modal-provider', () => ({
-  useShowModal: () => vi.fn(),
+  useShowModal: () => mocks.showConfirm,
 }));
 
 function prompt(id: string, groupName: string): Prompt {
@@ -105,6 +122,7 @@ function prompt(id: string, groupName: string): Prompt {
     extraInfo: '',
     injectionEnabled: false,
     injectionOrder: 0,
+    version: '1.0.0',
     createdAt: '2026-07-27T00:00:00.000Z',
     updatedAt: '2026-07-27T00:00:00.000Z',
   };
@@ -132,7 +150,11 @@ describe('PromptLibraryPanel groups', () => {
       prompt('ungrouped-first', ''),
       prompt('review-second', 'Review'),
     ];
-    mocks.promptGroups = ['Build', 'Review'];
+    mocks.promptGroups = [
+      { name: 'Build', parentName: null },
+      { name: 'Review', parentName: null },
+    ];
+    mocks.promptVersions = [];
     host = document.createElement('div');
     host.style.width = '440px';
     document.body.appendChild(host);
@@ -296,7 +318,7 @@ describe('PromptLibraryPanel groups', () => {
     await act(async () => groupForm?.requestSubmit());
 
     expect(mocks.createGroup).toHaveBeenCalledWith(
-      'Writing',
+      { name: 'Writing', parentName: null },
       expect.objectContaining({
         onSuccess: expect.any(Function),
         onError: expect.any(Function),
@@ -310,11 +332,16 @@ describe('PromptLibraryPanel groups', () => {
     );
     await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
 
-    const renameBuildButton = host.querySelector<HTMLButtonElement>(
-      'button[aria-label="promptLibrary.groups.rename"]'
+    const buildMenuButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="promptLibrary.groups.moreActions"]'
     );
-    expect(renameBuildButton).not.toBeNull();
-    await act(async () => renameBuildButton?.click());
+    expect(buildMenuButton).not.toBeNull();
+    await act(async () => buildMenuButton?.click());
+    const renameBuildItem = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+    ).find((item) => item.textContent?.includes('promptLibrary.groups.renameAction'));
+    expect(renameBuildItem).toBeDefined();
+    await act(async () => renameBuildItem?.click());
 
     const renameForm = host.querySelector<HTMLFormElement>(
       'form[data-slot="prompt-group-rename-form"]'
@@ -330,6 +357,85 @@ describe('PromptLibraryPanel groups', () => {
 
     expect(mocks.renameGroup).toHaveBeenCalledWith(
       { currentName: 'Build', nextName: 'Delivery' },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      })
+    );
+  });
+
+  it('renders nested groups and creates a subgroup from the parent menu', async () => {
+    mocks.prompts = [prompt('react-first', 'React')];
+    mocks.promptGroups = [
+      { name: 'Engineering', parentName: null },
+      { name: 'Frontend', parentName: 'Engineering' },
+      { name: 'React', parentName: 'Frontend' },
+    ];
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    const groupCards = Array.from(host.querySelectorAll<HTMLElement>('[data-slot="prompt-group"]'));
+    expect(groupCards).toHaveLength(3);
+    expect(groupCards.map((card) => card.style.marginLeft)).toEqual(['0px', '20px', '40px']);
+
+    const engineeringMenuButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="promptLibrary.groups.moreActions"]'
+    );
+    await act(async () => engineeringMenuButton?.click());
+    const createChildItem = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+    ).find((item) => item.textContent?.includes('promptLibrary.groups.newChild'));
+    await act(async () => createChildItem?.click());
+
+    const groupNameInput = host.querySelector<HTMLInputElement>(
+      'input[placeholder="promptLibrary.groups.namePlaceholder"]'
+    );
+    await act(async () => {
+      if (groupNameInput) setFormValue(groupNameInput, 'Backend');
+    });
+    const groupForm = host.querySelector<HTMLFormElement>('form[data-slot="prompt-group-form"]');
+    await act(async () => groupForm?.requestSubmit());
+
+    expect(mocks.createGroup).toHaveBeenCalledWith(
+      { name: 'Backend', parentName: 'Engineering' },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      })
+    );
+  });
+
+  it('confirms group deletion from the overflow menu', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    const buildMenuButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="promptLibrary.groups.moreActions"]'
+    );
+    await act(async () => buildMenuButton?.click());
+    const deleteBuildItem = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+    ).find((item) => item.textContent?.includes('promptLibrary.groups.deleteAction'));
+    expect(deleteBuildItem).toBeDefined();
+    await act(async () => deleteBuildItem?.click());
+
+    expect(mocks.showConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'promptLibrary.groups.deleteTitle',
+        confirmLabel: 'promptLibrary.groups.deleteConfirm',
+        onSuccess: expect.any(Function),
+      })
+    );
+    const confirmation = mocks.showConfirm.mock.calls.at(-1)?.[0] as
+      | { onSuccess?: () => void }
+      | undefined;
+    await act(async () => confirmation?.onSuccess?.());
+    expect(mocks.deleteGroup).toHaveBeenCalledWith(
+      'Build',
       expect.objectContaining({
         onSuccess: expect.any(Function),
         onError: expect.any(Function),
@@ -391,15 +497,34 @@ describe('PromptLibraryPanel groups', () => {
     expect(host.querySelector('[data-slot="prompt-library-bottom-space"].h-24')).not.toBeNull();
   });
 
-  it('puts reusable prompts first and keeps CLI and project instruction chapters together', async () => {
+  it('preselects the routed project and follows project changes', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () =>
+      root.render(createElement(PromptLibraryPanel, { projectId: 'project-1' }))
+    );
+
+    const projectSection = host.querySelector('[data-slot="project-prompt-section"]');
+    expect(projectSection?.getAttribute('data-project-id')).toBe('project-1');
+    expect(host.querySelector('[data-slot="prompt-collection-section"]')).toBeNull();
+
+    await act(async () =>
+      root.render(createElement(PromptLibraryPanel, { projectId: 'project-2' }))
+    );
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(projectSection?.getAttribute('data-project-id')).toBe('project-2')
+      );
+    });
+  });
+
+  it('separates global, project, and dynamic prompt settings into tabs', async () => {
     const { PromptLibraryPanel } = await import(
       '@renderer/features/prompt-library/prompt-library-panel'
     );
     await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
 
-    const runtime = host.querySelector('[data-slot="prompt-runtime-selector"]');
-    const user = host.querySelector('[data-slot="user-instruction-section"]');
-    const project = host.querySelector('[data-slot="project-prompt-section"]');
     const collection = host.querySelector('[data-slot="prompt-collection-section"]');
     const promptList = host.querySelector('[data-slot="prompt-list-section"]');
     const promptListHeading = Array.from(host.querySelectorAll('h2')).find((heading) =>
@@ -407,32 +532,42 @@ describe('PromptLibraryPanel groups', () => {
     );
 
     expect(collection).not.toBeNull();
-    expect(runtime).not.toBeNull();
-    expect(user).not.toBeNull();
-    expect(project).not.toBeNull();
     expect(promptList).not.toBeNull();
     expect(promptListHeading).not.toBeNull();
     expect(promptListHeading?.closest('section')).toBe(promptList);
-    if (!collection || !runtime || !user || !project || !promptList) {
-      throw new Error('Prompt layer sections are missing');
-    }
-    expect(collection.compareDocumentPosition(runtime) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
-    expect(runtime.compareDocumentPosition(user) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
-    expect(user.compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
-    expect(project.compareDocumentPosition(promptList) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
+    expect(host.querySelector('[data-slot="prompt-runtime-selector"]')).toBeNull();
 
-    const claudeButton = runtime.querySelector<HTMLButtonElement>('button');
+    const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'promptLibrary.tabs.global',
+      'promptLibrary.tabs.project',
+      'promptLibrary.tabs.dynamic',
+    ]);
+
+    await act(async () => {
+      tabs[0]?.click();
+      await vi.waitFor(() =>
+        expect(host.querySelector('[data-slot="prompt-collection-section"]')).toBeNull()
+      );
+    });
+    const globalRuntime = host.querySelector('[data-slot="prompt-runtime-selector"]');
+    const user = host.querySelector('[data-slot="user-instruction-section"]');
+    expect(globalRuntime).not.toBeNull();
+    expect(user).not.toBeNull();
+
+    const claudeButton = globalRuntime?.querySelector<HTMLButtonElement>('button');
     await act(async () => claudeButton?.click());
-    expect(user.getAttribute('data-runtime-id')).toBe('claude');
-    expect(project.getAttribute('data-runtime-id')).toBe('claude');
+    expect(user?.getAttribute('data-runtime-id')).toBe('claude');
+
+    await act(async () => {
+      tabs[1]?.click();
+      await vi.waitFor(() =>
+        expect(host.querySelector('[data-slot="user-instruction-section"]')).toBeNull()
+      );
+    });
+    const project = host.querySelector('[data-slot="project-prompt-section"]');
+    expect(project).not.toBeNull();
+    expect(project?.getAttribute('data-runtime-id')).toBe('claude');
   });
 
   it('removes the separate injection order card and keyboard-sorts prompt rows within a group', async () => {
@@ -440,7 +575,7 @@ describe('PromptLibraryPanel groups', () => {
       { ...prompt('second', 'Review'), injectionEnabled: true, injectionOrder: 20 },
       { ...prompt('first', 'Review'), injectionEnabled: true, injectionOrder: 10 },
     ];
-    mocks.promptGroups = ['Review'];
+    mocks.promptGroups = [{ name: 'Review', parentName: null }];
     const { PromptLibraryPanel } = await import(
       '@renderer/features/prompt-library/prompt-library-panel'
     );
@@ -509,6 +644,73 @@ describe('PromptLibraryPanel groups', () => {
         new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true })
       );
     });
-    expect(mocks.reorderGroups).toHaveBeenCalledWith(['Review', 'Build']);
+    expect(mocks.reorderGroups).toHaveBeenCalledWith({
+      parentName: null,
+      names: ['Review', 'Build'],
+    });
+  });
+
+  it('shows semantic versions and saves authored edits as a new patch version', async () => {
+    mocks.prompts = [{ ...prompt('review', 'Review'), version: '1.2.0' }];
+    mocks.promptGroups = [{ name: 'Review', parentName: null }];
+    mocks.promptVersions = [
+      {
+        id: 'version-1.2.0',
+        promptId: 'review',
+        version: '1.2.0',
+        title: 'review',
+        description: 'review description',
+        content: 'review content',
+        extraInfo: '',
+        createdAt: '2026-07-27T00:00:00.000Z',
+      },
+      {
+        id: 'version-1.1.0',
+        promptId: 'review',
+        version: '1.1.0',
+        title: 'review',
+        description: 'review description',
+        content: 'older content',
+        extraInfo: '',
+        createdAt: '2026-07-26T00:00:00.000Z',
+      },
+    ];
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    expect(host.textContent).toContain('v1.2.0');
+    const rowToggle = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) =>
+        button.getAttribute('aria-expanded') === 'false' && button.textContent?.includes('review')
+    );
+    await act(async () => rowToggle?.click());
+    expect(host.querySelector('[data-slot="prompt-version-history"]')?.textContent).toContain(
+      'v1.1.0'
+    );
+
+    const editButton = host.querySelector<HTMLButtonElement>('button[aria-label="common.edit"]');
+    await act(async () => editButton?.click());
+    const editor = host.querySelector<HTMLFormElement>('form[data-slot="prompt-library-editor"]');
+    const content = editor?.querySelector<HTMLTextAreaElement>(
+      'textarea[placeholder="promptLibrary.form.contentPlaceholder"]'
+    );
+    await act(async () => {
+      if (content) setFormValue(content, 'updated review content');
+    });
+    expect(editor?.textContent).toContain('promptLibrary.versions.saveAs');
+    await act(async () => editor?.requestSubmit());
+
+    expect(mocks.updatePrompt).toHaveBeenCalledWith(
+      {
+        id: 'review',
+        patch: expect.objectContaining({
+          content: 'updated review content',
+          versionBump: 'patch',
+        }),
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
+    );
   });
 });
