@@ -11,7 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import type { ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactElement, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT,
@@ -44,7 +44,7 @@ import { Separator } from '@renderer/lib/ui/separator';
 import { Switch } from '@renderer/lib/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
-import { SidebarMenuButton, SidebarSectionHeader } from './sidebar-primitives';
+import { SidebarSectionHeader } from './sidebar-primitives';
 import type { ProjectTypeFilter } from './sidebar-store';
 
 export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
@@ -80,10 +80,19 @@ export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
 });
 
 /**
- * View-options entry in the sidebar's fixed navigation: opens the task-list
- * display panel. Highlighted while any setting deviates from the defaults.
+ * View-options icon in the sidebar's top navigation buttons: opens the
+ * task-list display panel. Highlighted while any setting deviates from the
+ * defaults.
  */
-export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
+interface ProjectsSettingsMenuProps {
+  renderTrigger: (
+    props: ButtonHTMLAttributes<HTMLButtonElement> & { 'data-customized'?: boolean }
+  ) => ReactElement;
+}
+
+export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu({
+  renderTrigger,
+}: ProjectsSettingsMenuProps) {
   const { t } = useTranslation();
   const { value: homeDraft } = useAppSettingsKey('homeDraft');
   const { value: interfaceSettings } = useAppSettingsKey('interface');
@@ -103,18 +112,24 @@ export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
 
   return (
     <Popover>
-      <PopoverTrigger
-        render={
-          <SidebarMenuButton
-            aria-label={t('workspaces.viewOptions')}
-            data-customized={customized || undefined}
-            className="data-popup-open:bg-background-tertiary-1 data-popup-open:text-foreground-tertiary data-[customized=true]:text-foreground-tertiary"
-          />
-        }
-      >
-        <Settings2 className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
-        <span className="min-w-0 truncate">{t('workspaces.viewOptions')}</span>
-      </PopoverTrigger>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <PopoverTrigger
+              render={renderTrigger({
+                'aria-label': t('workspaces.viewOptions'),
+                'data-customized': customized || undefined,
+                className: 'data-[customized=true]:text-foreground',
+              })}
+            />
+          }
+        >
+          <Settings2 className="h-4 w-4" />
+        </TooltipTrigger>
+        <TooltipContent side="bottom" sideOffset={8}>
+          {t('workspaces.viewOptions')}
+        </TooltipContent>
+      </Tooltip>
       <PopoverContent align="end" className="w-72 gap-0 p-1.5">
         <ProjectsSettingsPanel />
       </PopoverContent>
