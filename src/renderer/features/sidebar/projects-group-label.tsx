@@ -23,7 +23,7 @@ import {
 } from '@shared/view-state';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
-import { sidebarStore, workspaceStore } from '@renderer/lib/stores/app-state';
+import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
 import {
   ContextMenu,
@@ -44,7 +44,7 @@ import { Separator } from '@renderer/lib/ui/separator';
 import { Switch } from '@renderer/lib/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
-import { SidebarSectionHeader } from './sidebar-primitives';
+import { SidebarMenuButton, SidebarSectionHeader } from './sidebar-primitives';
 import type { ProjectTypeFilter } from './sidebar-store';
 
 export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
@@ -58,7 +58,6 @@ export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
           label={t('sidebar.projects')}
           collapsed={sidebarStore.projectsCollapsed}
           onToggle={() => sidebarStore.toggleProjectsCollapsed()}
-          rightSlot={!workspaceStore.enabled ? <ProjectsSettingsMenu /> : undefined}
         />
       </ContextMenuTrigger>
       <ContextMenuContent>
@@ -81,9 +80,8 @@ export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
 });
 
 /**
- * View-options icon button next to the workspace switcher: opens the sidebar
- * task-list display panel. Highlighted while any setting deviates from the
- * defaults.
+ * View-options entry in the sidebar's fixed navigation: opens the task-list
+ * display panel. Highlighted while any setting deviates from the defaults.
  */
 export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
   const { t } = useTranslation();
@@ -105,26 +103,18 @@ export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
 
   return (
     <Popover>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <PopoverTrigger
-              render={
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  aria-label={t('workspaces.viewOptions')}
-                  data-active={customized || undefined}
-                  className="shrink-0 hover:bg-background-tertiary-2 text-foreground-muted hover:text-foreground data-[active=true]:text-foreground"
-                />
-              }
-            />
-          }
-        >
-          <Settings2 />
-        </TooltipTrigger>
-        <TooltipContent>{t('workspaces.viewOptions')}</TooltipContent>
-      </Tooltip>
+      <PopoverTrigger
+        render={
+          <SidebarMenuButton
+            aria-label={t('workspaces.viewOptions')}
+            data-customized={customized || undefined}
+            className="data-popup-open:bg-background-tertiary-1 data-popup-open:text-foreground-tertiary data-[customized=true]:text-foreground-tertiary"
+          />
+        }
+      >
+        <Settings2 className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
+        <span className="min-w-0 truncate">{t('workspaces.viewOptions')}</span>
+      </PopoverTrigger>
       <PopoverContent align="end" className="w-72 gap-0 p-1.5">
         <ProjectsSettingsPanel />
       </PopoverContent>

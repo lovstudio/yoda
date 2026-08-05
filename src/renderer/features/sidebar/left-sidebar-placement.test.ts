@@ -18,6 +18,23 @@ describe('LeftSidebar app placement', () => {
     expect(source.slice(pinnedAppsIndex)).toContain('viewId="marketplace"');
   });
 
+  it('keeps view options as the penultimate fixed item above Marketplace', () => {
+    const source = readFileSync(new URL('./left-sidebar.tsx', import.meta.url), 'utf8');
+    const libraryIndex = source.indexOf(
+      '<GlobalSidePaneTarget viewId="library" params={libraryParams}'
+    );
+    const viewOptionsIndex = source.indexOf('<ProjectsSettingsMenu />');
+    const marketplaceIndex = source.indexOf(
+      '<GlobalSidePaneTarget viewId="marketplace" params={marketplaceParams}'
+    );
+    const pinnedAppsIndex = source.indexOf('{pinnedApps.map((app) => (');
+
+    expect(viewOptionsIndex).toBeGreaterThan(libraryIndex);
+    expect(marketplaceIndex).toBeGreaterThan(viewOptionsIndex);
+    expect(pinnedAppsIndex).toBeGreaterThan(marketplaceIndex);
+    expect(source.indexOf('<ProjectsSettingsMenu />', viewOptionsIndex + 1)).toBe(-1);
+  });
+
   it('keeps the primary creation entry as a new task in every view', () => {
     const source = readFileSync(new URL('./left-sidebar.tsx', import.meta.url), 'utf8');
 
