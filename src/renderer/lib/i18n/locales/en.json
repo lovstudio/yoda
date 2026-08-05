@@ -2397,6 +2397,8 @@
     "placeholder": "Search tasks, projects, actions…",
     "noResults": "No results",
     "noResultsFor": "No results for \"{{query}}\"",
+    "recentSearches": "Recent searches",
+    "deleteRecentSearch": "Delete recent search \"{{query}}\"",
     "sessionsToggleTitle": "Search session content across every project",
     "inSessions": "in sessions",
     "scopeAll": "All",
