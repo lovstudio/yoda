@@ -30,6 +30,17 @@ export const appController = createRPCController({
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   },
+  clipboardWritePng: async (dataUrl: string) => {
+    try {
+      appService.clipboardWritePng(dataUrl);
+      return { success: true as const };
+    } catch (error) {
+      return {
+        success: false as const,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  },
   triggerVoiceInput: async (args?: TriggerVoiceInputArgs) => {
     try {
       const result = await appService.triggerVoiceInput(args);

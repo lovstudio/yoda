@@ -158,6 +158,7 @@
     "mobx-react-lite": "^4.1.1",
     "monaco-editor": "^0.55.1",
     "motion": "^12.23.12",
+    "modern-screenshot": "^4.7.0",
     "nbranch": "^0.1.1",
     "pinyin-pro": "^3.28.1",
     "postcss": "^8.4.32",

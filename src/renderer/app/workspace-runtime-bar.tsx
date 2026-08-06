@@ -48,6 +48,7 @@ import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-
 import { SkillQuickSearchPopover } from '@renderer/features/skills/components/SkillQuickSearchPopover';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
+import { LatestReplyScreenshotButton } from '@renderer/features/tasks/conversations/latest-reply-screenshot';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import { registeredTaskData } from '@renderer/features/tasks/stores/task';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
@@ -855,7 +856,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   align="start"
                   side="top"
                   sideOffset={8}
-                  className="w-80 gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+                  className="max-h-[min(80vh,40rem)] w-[min(20rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] gap-0 overflow-y-auto overscroll-contain border border-border bg-background p-0 text-foreground shadow-lg"
                 >
                   <div className="flex flex-col gap-3 p-3">
                     <div className="flex items-start justify-between gap-3">
@@ -909,7 +910,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                     ) : null}
                   </div>
                   {activeConversationId ? (
-                    <div className="border-t border-border p-3">
+                    <div className="flex flex-col gap-3 border-t border-border p-3">
                       <div className="flex items-center gap-3">
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-medium">
@@ -926,6 +927,18 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                           aria-label={t('workspaceRuntime.sessionHistoryVisibility')}
                         />
                       </div>
+                      {params?.projectId && params.taskId ? (
+                        <div>
+                          <LatestReplyScreenshotButton
+                            projectId={params.projectId}
+                            taskId={params.taskId}
+                            conversationId={activeConversationId}
+                          />
+                          <p className="mt-1.5 text-[11px] leading-4 text-foreground-passive">
+                            {t('workspaceRuntime.replyScreenshotDescription')}
+                          </p>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                   {canCompactContext ? (

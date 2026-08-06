@@ -3,7 +3,7 @@ import { stat, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { eq } from 'drizzle-orm';
-import { app, clipboard, dialog, shell } from 'electron';
+import { app, clipboard, dialog, nativeImage, shell } from 'electron';
 import { isAiLabWindowTarget, type AiLabWindowTarget } from '@shared/ai-lab-window';
 import type {
   AppEventLoopMetrics,
@@ -359,6 +359,19 @@ class AppService implements IInitializable, IDisposable {
   clipboardWriteText(text: string): void {
     if (typeof text !== 'string') throw new Error('Invalid clipboard text');
     clipboard.writeText(text);
+  }
+
+  clipboardWritePng(dataUrl: string): void {
+    if (
+      typeof dataUrl !== 'string' ||
+      !dataUrl.startsWith('data:image/png;base64,') ||
+      dataUrl.length > 64 * 1024 * 1024
+    ) {
+      throw new Error('Invalid PNG clipboard payload');
+    }
+    const image = nativeImage.createFromDataURL(dataUrl);
+    if (image.isEmpty()) throw new Error('PNG clipboard payload is empty');
+    clipboard.writeImage(image);
   }
 
   triggerVoiceInput(args?: TriggerVoiceInputArgs): Promise<TriggerVoiceInputResult> {
