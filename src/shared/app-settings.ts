@@ -6,6 +6,7 @@ import {
   type globalLlmSettingsSchema,
   type homeDraftSchema,
   type interfaceSettingsSchema,
+  type issueWorkerSettingsSchema,
   type kanbanColumnHookSchema,
   type kanbanHookActionSchema,
   type kanbanSettingsSchema,
@@ -36,6 +37,7 @@ export type RuntimeAutoApproveDefaults = z.infer<typeof runtimeAutoApproveDefaul
 export type RuntimePermissionModes = z.infer<typeof runtimePermissionModesSchema>;
 export type AutomationEntry = z.infer<typeof automationEntrySchema>;
 export type AutomationsSettings = z.infer<typeof automationsSettingsSchema>;
+export type IssueWorkerSettings = z.infer<typeof issueWorkerSettingsSchema>;
 export type KanbanHookAction = z.infer<typeof kanbanHookActionSchema>;
 export type KanbanColumnHook = z.infer<typeof kanbanColumnHookSchema>;
 export type KanbanSettings = z.infer<typeof kanbanSettingsSchema>;

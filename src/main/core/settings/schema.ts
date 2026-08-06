@@ -10,6 +10,11 @@ import {
   LLM_REASONING_EFFORT_IDS,
   normalizeLlmSettings,
 } from '@shared/global-llm';
+import {
+  MAX_ISSUE_WORKER_CONCURRENCY,
+  MAX_ISSUE_WORKER_POLL_INTERVAL_SECONDS,
+  MIN_ISSUE_WORKER_POLL_INTERVAL_SECONDS,
+} from '@shared/issue-worker';
 import { KANBAN_STATUSES } from '@shared/kanban';
 import { isMaasPlatformId, type MaasPlatformId } from '@shared/maas';
 import {
@@ -164,6 +169,22 @@ export const automationsSettingsSchema = z.object({
       automationEntrySchema
     )
   ),
+});
+
+export const issueWorkerProjectConfigSchema = z.object({
+  enabled: z.boolean(),
+  runtime: runtimeIdSchema,
+  concurrency: z.number().int().min(1).max(MAX_ISSUE_WORKER_CONCURRENCY),
+  pollIntervalSeconds: z
+    .number()
+    .int()
+    .min(MIN_ISSUE_WORKER_POLL_INTERVAL_SECONDS)
+    .max(MAX_ISSUE_WORKER_POLL_INTERVAL_SECONDS),
+  managedTaskIds: z.array(z.string()).max(1_000).catch([]),
+});
+
+export const issueWorkerSettingsSchema = z.object({
+  projects: z.record(z.string(), issueWorkerProjectConfigSchema),
 });
 
 export const kanbanHookActionSchema = z.discriminatedUnion('type', [
@@ -650,6 +671,7 @@ export const APP_SETTINGS_SCHEMA_MAP = {
   runtimeAutoApproveDefaults: runtimeAutoApproveDefaultsSchema,
   runtimePermissionModes: runtimePermissionModesSchema,
   automations: automationsSettingsSchema,
+  issueWorker: issueWorkerSettingsSchema,
   kanban: kanbanSettingsSchema,
   maas: maasSettingsSchema,
   llm: globalLlmSettingsSchema,
@@ -678,6 +700,7 @@ export const appSettingsSchema = z.object({
   runtimeAutoApproveDefaults: runtimeAutoApproveDefaultsSchema,
   runtimePermissionModes: runtimePermissionModesSchema,
   automations: automationsSettingsSchema,
+  issueWorker: issueWorkerSettingsSchema,
   kanban: kanbanSettingsSchema,
   maas: maasSettingsSchema,
   llm: globalLlmSettingsSchema,

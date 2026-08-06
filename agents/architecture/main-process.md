@@ -17,6 +17,10 @@ The main process is organized into domain modules under `src/main/core/`. Each d
 - **fs** — Filesystem operations with provider pattern (`local-fs.ts`, `ssh-fs.ts`)
 - **git** — Git operations (`git-service.ts`, `git-repo-utils.ts`, `detectGitInfo.ts`)
 - **github** — GitHub auth, PRs, issues, repos (via `gh` CLI)
+- **issues** — Issue provider RPC plus the opt-in Issue worker. The worker uses
+  persisted per-project settings, single-flight polling, local capacity checks,
+  issue-link deduplication, and isolated worktree tasks to feed unattended
+  Agents; completed runs move to review and immediately free a queue slot.
 - **jira** — Jira integration
 - **linear** — Linear integration
 - **maas** — MaaS connections, encrypted credentials, Client bindings, and the

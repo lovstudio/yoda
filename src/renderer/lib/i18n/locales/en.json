@@ -5072,7 +5072,28 @@
     "connectIntegrationDescription": "Connect an integration to search issues.",
     "configureIntegrations": "Configure integrations",
     "noProviderIssues": "No provider issues available.",
-    "selectIssue": "Select issue"
+    "selectIssue": "Select issue",
+    "worker": {
+      "label": "Auto run",
+      "menu": "Issue queue",
+      "enabled": "Process new issues automatically",
+      "runNow": "Check now",
+      "concurrency": "Concurrent agents",
+      "agents": "{{count}} agents",
+      "pollInterval": "Check interval",
+      "seconds": "{{count}} seconds",
+      "capacity": "{{active}} / {{concurrency}} running",
+      "description": "Open, unlinked issues become isolated Agent tasks and move to review when execution ends.",
+      "copyError": "Copy error details",
+      "actionFailed": "Issue queue action failed",
+      "states": {
+        "disabled": "Off",
+        "idle": "Waiting",
+        "syncing": "Checking",
+        "at-capacity": "At capacity",
+        "error": "Needs attention"
+      }
+    }
   },
   "pullRequests": {
     "draft": "Draft",

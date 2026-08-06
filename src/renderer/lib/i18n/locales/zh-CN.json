@@ -5072,7 +5072,28 @@
     "connectIntegrationDescription": "连接集成后即可搜索 Issue。",
     "configureIntegrations": "配置集成",
     "noProviderIssues": "暂无 provider issue。",
-    "selectIssue": "选择 Issue"
+    "selectIssue": "选择 Issue",
+    "worker": {
+      "label": "自动处理",
+      "menu": "Issue 队列",
+      "enabled": "自动处理新 Issue",
+      "runNow": "立即检查",
+      "concurrency": "并行 Agent",
+      "agents": "{{count}} 个 Agent",
+      "pollInterval": "检查间隔",
+      "seconds": "{{count}} 秒",
+      "capacity": "{{active}} / {{concurrency}} 运行中",
+      "description": "打开且未关联的 Issue 会进入隔离任务；Agent 结束后，任务自动转入审查。",
+      "copyError": "复制错误详情",
+      "actionFailed": "Issue 队列操作失败",
+      "states": {
+        "disabled": "已关闭",
+        "idle": "等待中",
+        "syncing": "检查中",
+        "at-capacity": "并发已满",
+        "error": "需要处理"
+      }
+    }
   },
   "pullRequests": {
     "draft": "草稿",

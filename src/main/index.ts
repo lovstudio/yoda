@@ -26,6 +26,7 @@ import { knownBinDirs } from './core/dependencies/probe';
 import { editorBufferService } from './core/editor/editor-buffer-service';
 import { extensionMarketplaceService } from './core/extensions/extension-marketplace-service';
 import { gitWatcherRegistry } from './core/git/git-watcher-registry';
+import { issueWorkerService } from './core/issues/issue-worker-service';
 import { maasService } from './core/maas/maas-service';
 import { mobileGatewayService } from './core/mobile-gateway/mobile-gateway-service';
 import { mobileRelayService } from './core/mobile-gateway/mobile-relay-service';
@@ -275,6 +276,7 @@ void app.whenReady().then(async () => {
   automationScheduler.initialize().catch((e) => {
     log.error('Failed to start automation scheduler:', e);
   });
+  issueWorkerService.initialize();
 
   yodaAccountService
     .loadSessionToken()
@@ -338,6 +340,7 @@ function prepareShutdown(mode: TeardownMode): Promise<void> {
       prSyncScheduler.dispose();
       promptSourceService.dispose();
       automationScheduler.dispose();
+      issueWorkerService.dispose();
       await workspaceTerminalService.dispose(mode);
       const [extensionResult, gitWatcherResult, projectManagerResult] = await Promise.allSettled([
         extensionMarketplaceService.dispose(),
