@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => {
   const compile = vi.fn();
   const saveProjectQuickAction = vi.fn();
   const showCreateSkillModal = vi.fn();
+  const toast = vi.fn();
   const toastSuccess = vi.fn();
   const toastError = vi.fn();
   const conversation = {
@@ -30,6 +31,7 @@ const mocks = vi.hoisted(() => {
     compile,
     saveProjectQuickAction,
     showCreateSkillModal,
+    toast,
     toastSuccess,
     toastError,
     conversation,
@@ -58,7 +60,10 @@ vi.mock('@renderer/features/tasks/task-view-context', () => ({
 }));
 
 vi.mock('@renderer/lib/hooks/use-toast', () => ({
-  toast: { success: mocks.toastSuccess, error: mocks.toastError },
+  toast: Object.assign(mocks.toast, {
+    success: mocks.toastSuccess,
+    error: mocks.toastError,
+  }),
 }));
 
 vi.mock('@renderer/lib/ipc', () => ({
@@ -105,6 +110,7 @@ describe('QuickActionSuggestionControl', () => {
     });
     mocks.saveProjectQuickAction.mockReset().mockResolvedValue(true);
     mocks.showCreateSkillModal.mockReset();
+    mocks.toast.mockReset();
     mocks.toastSuccess.mockReset();
     mocks.toastError.mockReset();
     mocks.taskData.quickActionSource.invokedSkill = false;
@@ -136,8 +142,8 @@ describe('QuickActionSuggestionControl', () => {
   it('analyzes only after completion and offers the supported command', async () => {
     await renderControl();
     await waitFor(
-      () => host.textContent?.includes('tasks.quickActionSuggestion.commandCta') === true,
-      'command suggestion did not appear'
+      () => mocks.toast.mock.calls.length === 1,
+      'command confirmation toast did not appear'
     );
 
     expect(mocks.compile).toHaveBeenCalledWith({
@@ -146,7 +152,19 @@ describe('QuickActionSuggestionControl', () => {
       runtimeId: 'codex',
       taskContext: { taskId: 'task-1', conversationId: 'conversation-1' },
     });
-    await act(async () => buttonWithText('tasks.quickActionSuggestion.saveCommand')?.click());
+    const confirmation = mocks.toast.mock.calls[0]?.[0] as
+      | { action?: { onClick?: () => void } }
+      | undefined;
+    expect(mocks.toast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'tasks.quickActionSuggestion.commandToastTitle',
+        action: expect.objectContaining({
+          label: 'tasks.quickActionSuggestion.confirmCommand',
+        }),
+      }),
+      { duration: 12_000 }
+    );
+    await act(async () => confirmation?.action?.onClick?.());
     await waitFor(
       () => mocks.saveProjectQuickAction.mock.calls.length === 1,
       'suggested command was not saved'

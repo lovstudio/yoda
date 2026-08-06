@@ -11,6 +11,7 @@ import {
   serializePromptWithTokens,
   type PromptToken,
 } from '@renderer/app/prompt-attachment-tokens';
+import { promptInvokesSkill } from '@renderer/features/projects/quick-action-source';
 import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import { saveProjectQuickAction } from '@renderer/features/projects/save-project-quick-action';
 import {
@@ -50,10 +51,6 @@ type CommandSource = 'package' | 'manual';
 
 function genId(): string {
   return crypto.randomUUID();
-}
-
-export function promptInvokesSkill(prompt: string): boolean {
-  return /(^|[\s([{,])[/$][A-Za-z0-9_:-]+(?=\s|$)/.test(prompt);
 }
 
 export const CaptureProjectAutomationModal = observer(function CaptureProjectAutomationModal({
