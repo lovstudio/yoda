@@ -8,6 +8,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
@@ -93,14 +94,16 @@ export function IssueWorkerMenu({
         }
       />
       <DropdownMenuContent align="end" className="w-72">
-        <DropdownMenuLabel className="flex items-center justify-between gap-3">
-          <span>{t('issues.worker.menu')}</span>
-          {isEnabled ? (
-            <span className="font-normal text-foreground-passive">
-              {t(`issues.worker.states.${snapshot?.state ?? 'idle'}`)}
-            </span>
-          ) : null}
-        </DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="flex items-center justify-between gap-3">
+            <span>{t('issues.worker.menu')}</span>
+            {isEnabled ? (
+              <span className="font-normal text-foreground-passive">
+                {t(`issues.worker.states.${snapshot?.state ?? 'idle'}`)}
+              </span>
+            ) : null}
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuCheckboxItem
           checked={isEnabled}
           disabled={configure.isPending}
