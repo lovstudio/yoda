@@ -13,8 +13,10 @@ import {
   IssueLinkedTasks,
   IssueTaskLinkPopover,
 } from '@renderer/features/projects/components/issues-view/issue-task-links';
+import { IssueWorkerMenu } from '@renderer/features/projects/components/issues-view/issue-worker-menu';
 import { useIssueTaskCreation } from '@renderer/features/projects/components/issues-view/use-issue-task-creation';
 import { getRepositoryStore } from '@renderer/features/projects/stores/project-selectors';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import {
   IssueIdentifier,
   ProviderLogo,
@@ -168,6 +170,7 @@ export const IssuesPanel = observer(function IssuesPanel() {
   const { data: features = [] } = useFeatures(projectId);
   const { authenticated, isInitialized, needsGhAuth } = useGithubContext();
   const { navigate } = useNavigate();
+  const { value: defaultRuntime } = useAppSettingsKey('defaultRuntime');
 
   const {
     issues,
@@ -265,21 +268,15 @@ export const IssuesPanel = observer(function IssuesPanel() {
             {t('issues.openCount', { count: issues.length })}
           </div>
           <div className="flex min-w-0 items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={confirmCreateIssueTasks}
-              disabled={taskableIssues.length === 0 || isCreatingIssueTasks}
-            >
-              {isCreatingIssueTasks ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <ScanSearch className="size-3.5" />
-              )}
-              {taskableIssues.length > 0
-                ? t('issues.createTasksCount', { count: taskableIssues.length })
-                : t('issues.allIssuesInTasks')}
-            </Button>
+            {defaultRuntime ? (
+              <IssueWorkerMenu
+                projectId={projectId}
+                defaultRuntime={defaultRuntime}
+                taskableCount={taskableIssues.length}
+                isCreatingTasks={isCreatingIssueTasks}
+                onCreateTasks={confirmCreateIssueTasks}
+              />
+            ) : null}
             <CreateIssueButton
               repositoryUrl={repositoryUrl}
               projectId={projectId}

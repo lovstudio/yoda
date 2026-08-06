@@ -1,5 +1,9 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
+import type {
+  CliProxyApiManagedActionResult,
+  CliProxyApiManagedStatus,
+} from '@shared/cliproxyapi-managed';
 import type { LiteLlmManagedActionResult, LiteLlmManagedStatus } from '@shared/litellm-managed';
 import type {
   MaasConnectInput,
@@ -32,6 +36,7 @@ export const maasQueryKeys = {
   globalBinding: ['maas', 'global-binding'] as const,
   liteLlmManaged: ['maas', 'litellm-managed'] as const,
   newApiManaged: ['maas', 'new-api-managed'] as const,
+  cliProxyApiManaged: ['maas', 'cliproxyapi-managed'] as const,
   records: (platformId: MaasPlatformId, kind: MaasInvocationFilterKind, refreshSequence = 0) =>
     ['maas', 'records', REAL_USAGE_QUERY_VERSION, platformId, kind, refreshSequence] as const,
   summary: (
@@ -191,6 +196,71 @@ export function useCopyNewApiAdminPassword() {
   });
 }
 
+function assertCliProxyApiActionSucceeded(
+  result: CliProxyApiManagedActionResult
+): CliProxyApiManagedStatus {
+  if (!result.success) {
+    throw new Error(result.error ?? 'CLIProxyAPI operation failed.');
+  }
+  return result.status;
+}
+
+export function useCliProxyApiManagedStatus(enabled = true) {
+  return useQuery<CliProxyApiManagedStatus>({
+    queryKey: maasQueryKeys.cliProxyApiManaged,
+    queryFn: () => rpc.maas.getCliProxyApiManagedStatus(),
+    enabled,
+    staleTime: 5_000,
+    refetchInterval: (query) => (query.state.data?.operation ? 1_000 : 15_000),
+    refetchOnWindowFocus: true,
+  });
+}
+
+function useCliProxyApiManagedAction(action: () => Promise<CliProxyApiManagedActionResult>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => assertCliProxyApiActionSucceeded(await action()),
+    onSuccess: (status) => {
+      queryClient.setQueryData(maasQueryKeys.cliProxyApiManaged, status);
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections });
+    },
+  });
+}
+
+export function useInstallCliProxyApi() {
+  return useCliProxyApiManagedAction(() => rpc.maas.installCliProxyApi());
+}
+
+export function useStartCliProxyApi() {
+  return useCliProxyApiManagedAction(() => rpc.maas.startCliProxyApi());
+}
+
+export function useStopCliProxyApi() {
+  return useCliProxyApiManagedAction(() => rpc.maas.stopCliProxyApi());
+}
+
+export function useOpenCliProxyApiAdmin() {
+  return useMutation({
+    mutationFn: async () => {
+      const result = await rpc.maas.openCliProxyApiAdmin();
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to open CLIProxyAPI management center.');
+      }
+    },
+  });
+}
+
+export function useCopyCliProxyApiManagementKey() {
+  return useMutation({
+    mutationFn: async () => {
+      const result = await rpc.maas.copyCliProxyApiManagementKey();
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to copy CLIProxyAPI management key.');
+      }
+    },
+  });
+}
+
 export function useMaasRuntimeBindings(platformId?: MaasPlatformId, enabled = true) {
   return useQuery<MaasRuntimeBindingStatus[]>({
     queryKey: maasQueryKeys.runtimeBindings(platformId),
@@ -312,6 +382,7 @@ export function useDisconnectMaasPlatform() {
                 inferenceKeyFingerprint: null,
                 connectedAt: null,
                 lastCheckedAt: null,
+                lastTest: null,
                 configured: false,
                 connected: false,
                 error: null,
@@ -330,8 +401,10 @@ export function useDisconnectMaasPlatform() {
 }
 
 export function useCheckMaasConnection() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (platformId: MaasPlatformId) => rpc.maas.checkConnection(platformId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections }),
   });
 }
 

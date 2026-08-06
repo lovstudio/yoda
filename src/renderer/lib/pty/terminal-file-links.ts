@@ -13,8 +13,8 @@ const MAX_WRAPPED_LINE_LENGTH = 2048;
 // Balanced parens that occur before the final extension are handled separately
 // below so generated filenames such as `report(1).md` remain one link.
 const PATH_SEG_EXCLUDED = `\\s"'\`$<>|\\\\:：()（）「」『』【】〈〉《》，、。；！？`;
-const PATH_LEADING = `\\s"'([{<:：（「『【〈《、`;
-const PATH_TRAILING = `\\s"')\\]}>,:：，、。；;!?！？.(（）「」『』【】〈〉《》`;
+const PATH_LEADING = `\\s"'\`([{<:：（「『【〈《、`;
+const PATH_TRAILING = `\\s"'\`)\\]}>,:：，、。；;!?！？.(（）「」『』【】〈〉《》`;
 // File extension: 1–32 path chars after a dot, but the final char may not be a
 // dot so a trailing sentence period (`foo.md.`) is left out of the link.
 const PATH_EXT = `[^${PATH_SEG_EXCLUDED}\\/]{0,31}[^${PATH_SEG_EXCLUDED}\\/.]`;
@@ -460,11 +460,13 @@ function hasIndentedPathContinuation(
   if (!joinedCandidate || joinedCandidate.text.endsWith('/')) return false;
   if (tail.endsWith('/')) return true;
 
-  // A trailing hyphen is a word-wrap opportunity used by Ink renderers inside
-  // long basenames (`terminal-file-` + `links.ts`). Keep this filename case
-  // distinct from directory continuation: the next row may only contribute
-  // the rest of that basename, never another path with its own `/`.
-  if (!tail.endsWith('-')) return false;
+  // Ink can wrap an absolute path anywhere inside a long basename
+  // (`cliproxya` + `pi-managed-service.ts`), not only at punctuation. Requiring
+  // an absolute prefix and an incomplete extension keeps this distinct from
+  // two independent relative paths on adjacent indented rows.
+  const isAbsoluteBasenameContinuation =
+    (tail.startsWith('/') || tail.startsWith('@/')) && !COMPLETE_EXT_RE.test(tail);
+  if (!tail.endsWith('-') && !isAbsoluteBasenameContinuation) return false;
   const continuation = joinedCandidate.text.slice(tail.length);
   if (!/^[\p{L}\p{N}]/u.test(continuation) || continuation.includes('/')) return false;
 

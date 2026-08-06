@@ -1,6 +1,6 @@
-import { Sparkles, TerminalSquare, X } from 'lucide-react';
+import { Sparkles, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { QuickAction } from '@shared/project-settings';
 import type { CompiledQuickAction, CompileQuickActionInput } from '@shared/quick-actions';
@@ -61,6 +61,7 @@ export const QuickActionSuggestionControl = observer(function QuickActionSuggest
   const [dismissed, setDismissed] = useState(
     () => globalThis.localStorage?.getItem(dismissalKey(taskId)) === '1'
   );
+  const notifiedCommandKeyRef = useRef<string | null>(null);
   const showCreateSkillModal = useShowModal('createSkillModal');
 
   const analysisKey = source
@@ -98,7 +99,7 @@ export const QuickActionSuggestionControl = observer(function QuickActionSuggest
           return;
         }
         setSuggestion(result);
-        setOpen(true);
+        setOpen(result.kind === 'skill');
       })
       .catch(() => {
         if (!cancelled) setSuggestion(null);
@@ -113,52 +114,80 @@ export const QuickActionSuggestionControl = observer(function QuickActionSuggest
     return suggestion.kind === 'skill' ? suggestion.instruction : source.prompt;
   }, [source, suggestion]);
 
-  if (dismissed || !source || !suggestion || suggestion.kind === 'none') return null;
-
-  const dismiss = () => {
+  const dismiss = useCallback(() => {
     globalThis.localStorage?.setItem(dismissalKey(taskId), '1');
     setDismissed(true);
     setOpen(false);
-  };
+  }, [taskId]);
 
-  const save = async (kind: 'command' | 'skill') => {
-    if (saving) return;
-    const command =
-      kind === 'command' && suggestion.kind === 'command'
-        ? suggestion.command
-        : reusableInstruction;
-    if (!command.trim()) return;
+  const save = useCallback(
+    async (kind: 'command' | 'skill') => {
+      if (saving || !source || !suggestion || suggestion.kind === 'none') return;
+      const command =
+        kind === 'command' && suggestion.kind === 'command'
+          ? suggestion.command
+          : reusableInstruction;
+      if (!command.trim()) return;
 
-    setSaving(true);
-    const action: QuickAction = {
-      id: crypto.randomUUID(),
-      label:
-        'label' in suggestion && suggestion.label.trim()
-          ? suggestion.label
-          : taskNameFromPrompt(command),
-      command,
-      kind,
-      sourceIntent: source.prompt,
-    };
-    try {
-      if (!(await saveProjectQuickAction(projectId, action))) {
+      setSaving(true);
+      const action: QuickAction = {
+        id: crypto.randomUUID(),
+        label: suggestion.label.trim() ? suggestion.label : taskNameFromPrompt(command),
+        command,
+        kind,
+        sourceIntent: source.prompt,
+      };
+      try {
+        if (!(await saveProjectQuickAction(projectId, action))) {
+          toast.error(t('tasks.quickActionSuggestion.saveFailed'));
+          return;
+        }
+        toast.success(
+          t(
+            kind === 'command'
+              ? 'tasks.quickActionSuggestion.commandSaved'
+              : 'tasks.quickActionSuggestion.instructionSaved'
+          )
+        );
+        dismiss();
+      } catch {
         toast.error(t('tasks.quickActionSuggestion.saveFailed'));
-        return;
+      } finally {
+        setSaving(false);
       }
-      toast.success(
-        t(
-          kind === 'command'
-            ? 'tasks.quickActionSuggestion.commandSaved'
-            : 'tasks.quickActionSuggestion.instructionSaved'
-        )
-      );
-      dismiss();
-    } catch {
-      toast.error(t('tasks.quickActionSuggestion.saveFailed'));
-    } finally {
-      setSaving(false);
-    }
-  };
+    },
+    [dismiss, projectId, reusableInstruction, saving, source, suggestion, t]
+  );
+
+  useEffect(() => {
+    if (!analysisKey || !suggestion || suggestion.kind !== 'command' || dismissed) return;
+    const notificationKey = `${analysisKey}:${suggestion.command}`;
+    if (notifiedCommandKeyRef.current === notificationKey) return;
+    notifiedCommandKeyRef.current = notificationKey;
+    toast(
+      {
+        title: t('tasks.quickActionSuggestion.commandToastTitle'),
+        description: t('tasks.quickActionSuggestion.commandToastDescription', {
+          command: suggestion.command,
+        }),
+        action: {
+          label: t('tasks.quickActionSuggestion.confirmCommand'),
+          onClick: () => void save('command'),
+        },
+      },
+      { duration: 12_000 }
+    );
+  }, [analysisKey, dismissed, save, suggestion, t]);
+
+  if (
+    dismissed ||
+    !source ||
+    !suggestion ||
+    suggestion.kind === 'none' ||
+    suggestion.kind === 'command'
+  ) {
+    return null;
+  }
 
   const createSkill = () => {
     showCreateSkillModal({
@@ -169,8 +198,6 @@ export const QuickActionSuggestionControl = observer(function QuickActionSuggest
     });
   };
 
-  const SuggestionIcon = suggestion.kind === 'command' ? TerminalSquare : Sparkles;
-
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
@@ -179,12 +206,8 @@ export const QuickActionSuggestionControl = observer(function QuickActionSuggest
             type="button"
             className="flex h-7 items-center gap-1.5 rounded-md border border-primary/25 bg-primary/5 px-2 text-xs text-foreground transition-colors hover:bg-primary/10"
           >
-            <SuggestionIcon className="size-3.5 text-primary" />
-            {t(
-              suggestion.kind === 'command'
-                ? 'tasks.quickActionSuggestion.commandCta'
-                : 'tasks.quickActionSuggestion.instructionCta'
-            )}
+            <Sparkles className="size-3.5 text-primary" />
+            {t('tasks.quickActionSuggestion.instructionCta')}
           </button>
         }
       />
@@ -206,12 +229,6 @@ export const QuickActionSuggestionControl = observer(function QuickActionSuggest
           </Button>
         </div>
 
-        {suggestion.kind === 'command' ? (
-          <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-md bg-background-2 px-2.5 py-2 font-mono text-[11px] leading-5 text-foreground">
-            {suggestion.command}
-          </pre>
-        ) : null}
-
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={dismiss} disabled={saving}>
             {t('tasks.quickActionSuggestion.notNow')}
@@ -224,11 +241,6 @@ export const QuickActionSuggestionControl = observer(function QuickActionSuggest
           <Button variant="outline" size="sm" onClick={() => void save('skill')} disabled={saving}>
             {t('tasks.quickActionSuggestion.saveInstruction')}
           </Button>
-          {suggestion.kind === 'command' ? (
-            <Button size="sm" onClick={() => void save('command')} disabled={saving}>
-              {t('tasks.quickActionSuggestion.saveCommand')}
-            </Button>
-          ) : null}
         </div>
       </PopoverContent>
     </Popover>

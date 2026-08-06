@@ -133,6 +133,7 @@
     "skillIssues": "{{count}} 个 skill 校验问题",
     "automation": "自动化",
     "mobile": "移动端",
+    "maas": "模型接入",
     "settings": "设置",
     "lovStudioAccount": "LovStudio 账户",
     "manageLovStudioAccount": "管理 LovStudio 账户",
@@ -472,7 +473,7 @@
       "agentManager": "Agent",
       "models": "模型",
       "llm": "LLM",
-      "maas": "中转渠道",
+      "maas": "模型接入",
       "usage": "用量",
       "aiLogs": "AI 日志",
       "automation": "自动化",
@@ -562,7 +563,7 @@
       "revokeDevice": "撤销",
       "settingsSync": {
         "title": "设置同步",
-        "description": "像 IDE 设置同步一样，在不同 Yoda 安装之间恢复界面、快捷键、Agent 与中转渠道配置。",
+        "description": "像 IDE 设置同步一样，在不同 Yoda 安装之间恢复界面、快捷键、Agent 与模型接入配置。",
         "autoSync": "自动同步到 LovStudio 账户",
         "lastSynced": "上次同步：{{date}}",
         "notSynced": "尚未同步",
@@ -603,7 +604,7 @@
       "providerDescription": "选择要查看和维护模型的厂商。",
       "providerUnknown": "未知厂商",
       "customProviderTitle": "自定义厂商",
-      "customProviderDescription": "新增目录尚未收录的模型厂商。这里管理厂商与模型归属；Agent 客户端或中转渠道的接入方式仍在对应设置中配置。",
+      "customProviderDescription": "新增目录尚未收录的模型厂商。这里管理厂商与模型归属；Agent Client 或模型接入方式仍在对应设置中配置。",
       "addProvider": "新增厂商",
       "providerName": "厂商名称",
       "providerNamePlaceholder": "例如 SiliconFlow",
@@ -674,14 +675,14 @@
       "agentClient": "Agent Client",
       "agentClientDescription": "这次 AI 调用实际依附的客户端，例如 Claude Code、Codex 或 Code Ace。",
       "accessMethod": "接入方式",
-      "accessMethodDescription": "在当前 Client 内选择官网订阅、官方 API Key 或 Yoda 中转渠道。",
+      "accessMethodDescription": "在当前 Client 内选择官网订阅、官方 API Key 或 Yoda 模型接入。",
       "access": {
         "officialSubscription": "官网订阅",
         "officialApi": "API Key",
-        "maas": "第三方中转渠道"
+        "maas": "模型接入"
       },
-      "maasPlatform": "中转渠道",
-      "maasPlatformDescription": "仅在接入方式为中转渠道时生效。当前已连接 {{count}} 个渠道，所选渠道{{status}}。",
+      "maasPlatform": "模型接入服务",
+      "maasPlatformDescription": "仅在接入方式为模型接入时生效。当前已连接 {{count}} 个服务，所选服务{{status}}。",
       "maasConnected": "已连接",
       "maasNotConnected": "未连接",
       "model": "模型",
@@ -1403,14 +1404,14 @@
     "signInDescription": "LovStudio 账户统一承载身份、积分、Relay 和 GitHub OAuth；不登录也可继续使用本地功能。",
     "connectedAs": "已登录为 {{name}}",
     "maasGateway": {
-      "stepTitle": "中转渠道网关",
-      "title": "安装 Yoda 中转渠道网关？",
-      "description": "这是扩展市场中的可选后台服务。安装后，Codex 可通过本机代理使用和热切换第三方中转渠道，真实 API Key 不会写入 Codex 配置。",
+      "stepTitle": "模型网关",
+      "title": "安装 Yoda 模型网关？",
+      "description": "这是扩展市场中的可选后台服务。安装后，Codex 可通过本机代理使用和热切换云端平台或自托管网关，真实 API Key 不会写入 Codex 配置。",
       "security": "Gateway 只监听 127.0.0.1；Provider 密钥保存在 Yoda 加密密钥库，并仅通过进程 IPC 注入运行时内存。",
       "install": "安装 Gateway",
       "skip": "暂不需要",
-      "unavailable": "中转渠道网关当前不在扩展市场中。",
-      "installFailed": "中转渠道网关安装失败。"
+      "unavailable": "模型网关当前不在扩展市场中。",
+      "installFailed": "模型网关安装失败。"
     },
     "import": {
       "importing": "导入中…",
@@ -1525,6 +1526,10 @@
     "voiceTooltip": "触发 Typeless 免持语音快捷键",
     "voiceTriggeredToast": "已触发 Typeless 语音输入（{{shortcut}}）。",
     "voiceTriggerFailedToast": "无法触发 Typeless 语音输入",
+    "quickActionModeEnable": "开启快捷操作模式",
+    "quickActionModeDisable": "关闭快捷操作模式",
+    "quickActionModeTooltip": "任务完成后，分析是否可转为直接执行的命令",
+    "quickActionModeUnavailable": "快捷操作模式仅适用于本地项目的 Vibe 单任务与 Codex / Claude",
     "submitAria": "发送",
     "skillShortcutAria": "插入 skill",
     "skillShortcutLabel": "Skills",
@@ -1708,7 +1713,7 @@
         "authProvider": {
           "official-subscription": "订阅",
           "official-api": "API Key",
-          "yoda-maas": "中转渠道"
+          "yoda-maas": "模型接入"
         }
       },
       "subtasks": "子任务（{{count}}）"
@@ -2033,6 +2038,9 @@
       "createSkill": "创建 Skill",
       "saveInstruction": "保存为运行指令",
       "saveCommand": "保存为命令",
+      "commandToastTitle": "这次操作可以直接复用",
+      "commandToastDescription": "确认后会加入快捷操作：{{command}}",
+      "confirmCommand": "确认保存",
       "commandSaved": "已加入快捷操作，下次会直接在终端执行。",
       "instructionSaved": "已加入快捷操作，下次会创建新的任务会话。",
       "saveFailed": "快捷操作保存失败。"
@@ -3426,7 +3434,7 @@
       "authProviders": {
         "official-subscription": "官方订阅",
         "official-api": "官方 API",
-        "yoda-maas": "Yoda 中转渠道"
+        "yoda-maas": "Yoda 模型接入"
       },
       "clientDefault": "客户端默认",
       "agentOverride": "Agent 覆盖",
@@ -3487,9 +3495,9 @@
       "officialSubscriptionDescription": "{{name}} 的官方登录与订阅凭据由它自己的 CLI 或本地配置管理。",
       "officialApi": "官方 API",
       "officialApiDescription": "Yoda 启动 {{name}} 会话时会转发这些 API Key 和 Base URL 环境变量。",
-      "maasSource": "Yoda 中转渠道",
+      "maasSource": "Yoda 模型接入",
       "maasDescription": "如已配置模型平台，可作为共享路由、观测与计费来源。",
-      "manageMaas": "管理中转渠道",
+      "manageMaas": "管理模型接入",
       "selectAria": "使用{{name}}作为认证来源",
       "expandAria": "展开{{name}}详情",
       "selectedUnavailable": "该来源尚未就绪，请先完成配置",
@@ -3540,10 +3548,10 @@
       "localUsageCacheWrite": "缓存写",
       "localUsageLoading": "正在统计本地用量…",
       "localUsageError": "统计本地用量失败",
-      "noMaasConnections": "尚未连接中转渠道。",
+      "noMaasConnections": "尚未连接模型接入服务。",
       "usageTitle": "用量",
       "usageRefresh": "刷新",
-      "usageNoMaas": "在中转渠道页面连接 ZenMux 后即可打开官方账单与用量页面。",
+      "usageNoMaas": "在模型接入页面连接 ZenMux 后即可打开官方账单与用量页面。",
       "usageLoading": "正在加载用量…",
       "usageError": "无法加载用量",
       "usageEmpty": "暂无匹配的用量统计。",
@@ -4146,7 +4154,7 @@
       "commit-message": "提交信息",
       "logo-generation": "Logo 生成",
       "app-image-edit": "AI Lab 图片编辑",
-      "maas-chat": "中转渠道对话",
+      "maas-chat": "模型接入对话",
       "llm-debug": "LLM 调试",
       "interactive-session": "交互式会话",
       "interactive-turn": "对话轮次",
@@ -4154,46 +4162,115 @@
     }
   },
   "maas": {
-    "title": "中转渠道",
-    "subtitle": "连接模型中转渠道并查看真实用量统计。",
-    "platformsTitle": "平台",
+    "title": "模型接入",
+    "subtitle": "统一管理直连渠道与中转渠道，并应用到 Agent Client。",
+    "platformsTitle": "云端集成",
+    "cloudProfiles": {
+      "title": "云端集成",
+      "description": "每个 Router 配置都是一条独立 Profile；可不限量新增，同一目标平台也可保存多个 Key。",
+      "docs": "服务商与测试"
+    },
+    "managedGateways": {
+      "title": "本地集成（开源）",
+      "description": "按 GitHub Star 排序。Yoda 可快捷安装、启停并管理本地 Router，也支持连接已有服务。",
+      "integrationDocs": "集成文档",
+      "oneClickInstall": "一键安装",
+      "start": "启动",
+      "stopService": "停止服务",
+      "openConsole": "打开控制台",
+      "connectExisting": "连接已有服务",
+      "manageConnection": "管理连接",
+      "connectionSettings": "连接设置",
+      "connectionSettingsDescription": "自定义远程端点与 API Key；本机托管服务会自动生成并保存连接凭据。",
+      "recheck": "重新检测",
+      "cliProxyApi": {
+        "managedDescription": "Yoda 将下载已校验的本地服务、生成独立密钥并自动完成连接",
+        "detecting": "正在检测 CLIProxyAPI…",
+        "detectionFailed": "服务检测遇到问题，重新检测后即可继续",
+        "unsupportedDescription": "当前系统暂无对应的托管版本，仍可连接已有服务",
+        "installingDescription": "正在下载并校验 CLIProxyAPI；完成后会自动启动并连接 Yoda",
+        "startingDescription": "CLIProxyAPI 正在启动并连接 Yoda",
+        "stoppingDescription": "CLIProxyAPI 正在停止",
+        "stoppedDescription": "CLIProxyAPI 已安装，当前处于停止状态",
+        "externalDescription": "检测到 8317 端口上已有 CLIProxyAPI，可直接连接并复用现有配置",
+        "needsAccountDescription": "服务已连接；打开控制台登录第一个 CLI 或 OAuth 账号即可使用",
+        "runningDescription": "本地中转正在运行；打开控制台可管理账号与路由",
+        "readyDescription": "CLIProxyAPI 与 Yoda 已连接 · 可用模型 {{count}} 个",
+        "remoteConnectedDescription": "已连接现有 CLIProxyAPI：{{endpoint}}",
+        "installing": "正在安装 CLIProxyAPI…",
+        "starting": "正在启动 CLIProxyAPI…",
+        "stopping": "正在停止 CLIProxyAPI…",
+        "installed": "CLIProxyAPI 已安装并连接",
+        "installFailed": "CLIProxyAPI 安装失败",
+        "started": "CLIProxyAPI 已启动",
+        "startFailed": "CLIProxyAPI 启动失败",
+        "stopped": "CLIProxyAPI 已停止",
+        "stopFailed": "CLIProxyAPI 停止失败",
+        "addFirstAccount": "登录第一个账号",
+        "actions": "CLIProxyAPI 操作",
+        "manageActions": "管理 CLIProxyAPI",
+        "management": "CLIProxyAPI 管理",
+        "copyManagementKey": "复制管理密钥",
+        "managementKeyCopied": "管理密钥已复制",
+        "copyManagementKeyFailed": "管理密钥复制失败",
+        "adminOpened": "管理密钥已复制，CLIProxyAPI 控制台已打开",
+        "adminOpenedHint": "在控制台中粘贴密钥，即可登录并添加 CLI 或 OAuth 账号",
+        "openAdminFailed": "CLIProxyAPI 控制台打开失败"
+      }
+    },
+    "categories": {
+      "hosted-platform": {
+        "title": "云端平台",
+        "description": "使用平台提供的端点和 API Key，无需自行运行网关服务。"
+      },
+      "self-hosted-gateway": {
+        "title": "自托管网关",
+        "description": "连接由你、团队或 Yoda 运行的模型网关，统一管理上游账号与渠道。"
+      },
+      "custom": {
+        "title": "自定义接入",
+        "description": "连接其他兼容 OpenAI 接口的模型服务。"
+      }
+    },
     "connected": "已连接",
     "notConnected": "未连接",
     "connectedCount": "已连接 {{count}} 个",
     "addedCount": "已添加 {{count}} 个",
     "activeCount": "生效中 {{count}} 个",
-    "addPlatform": "新增平台",
-    "selectPlatform": "选择要添加的平台",
+    "addPlatform": "新增接入",
+    "addProfile": "新增 Profile",
+    "selectPlatform": "选择接入服务",
+    "selectTargetPlatform": "选择目标平台（可重复添加）",
     "cancelAddPlatform": "取消添加 {{platform}}",
-    "emptyTitle": "还没有添加平台",
-    "emptyDescription": "新增一个平台并保存端点与 API Key；可以保存多个平台，但同时最多只有一个平台生效。",
+    "emptyTitle": "还没有云端 Profile",
+    "emptyDescription": "新增一条 Profile 并保存目标端点与 API Key；同一平台可配置多条，同时最多只有一条生效。",
     "global": {
-      "title": "当前生效平台",
-      "description": "全局允许 0 或 1 个平台生效。启用后会备份所有兼容 Agent CLI 的当前接入配置；启用另一平台会自动切换，停用时自动复原。",
-      "loading": "正在读取中转渠道状态…",
+      "title": "当前生效接入",
+      "description": "全局允许 0 或 1 个接入服务生效。启用后会备份所有兼容 Agent CLI 的当前配置；启用另一服务会自动切换，停用时自动复原。",
+      "loading": "正在读取模型接入状态…",
       "effective": "已对 {{count}} 个 Agent CLI 生效",
       "needsAttention": "已启用，但凭据或配置异常",
       "enabled": "已启用",
       "disabled": "未启用",
       "notEnabled": "可启用",
       "needsConfiguration": "需要先配置 API Key",
-      "needsGateway": "需要先安装并启用 Yoda 中转渠道网关",
+      "needsGateway": "需要先安装并启用 Yoda 模型网关",
       "toggleAria": "全局启用 {{platform}}",
       "enableAria": "启用 {{platform}}",
       "disableAria": "停用 {{platform}}",
       "manage": "配置 {{platform}}",
       "enabledToast": "{{platform}} 已对所有兼容 Agent CLI 生效",
-      "restoredToast": "已停用中转渠道，并复原 Agent CLI 配置",
-      "codexRestartNotice": "如 Codex App 已打开，请完全退出后重新打开，以重新加载本地中转渠道 Provider；上游 API Key 不会进入 App 环境变量。",
-      "updateFailed": "无法更新全局中转渠道配置"
+      "restoredToast": "已停用模型接入，并复原 Agent CLI 配置",
+      "codexRestartNotice": "如 Codex App 已打开，请完全退出后重新打开，以重新加载本地模型接入 Provider；上游 API Key 不会进入 App 环境变量。",
+      "updateFailed": "无法更新全局模型接入配置"
     },
     "gatewayRequirement": {
-      "title": "需要 Yoda 中转渠道网关",
+      "title": "需要 Yoda 模型网关",
       "states": {
         "loading": "正在检查扩展市场中的 Gateway 状态…",
         "unavailable": "当前未读取到 Gateway 扩展，请前往扩展市场查看。",
         "unsupported": "Gateway 暂不支持当前平台。",
-        "not-installed": "启用中转渠道前，需要先从扩展市场安装 Gateway。",
+        "not-installed": "启用模型接入前，需要先从扩展市场安装 Gateway。",
         "disabled": "Gateway 已安装但未启用，请先在扩展市场启用。",
         "unhealthy": "Gateway 当前未正常运行，请前往扩展市场检查状态。"
       },
@@ -4202,7 +4279,7 @@
     },
     "clients": {
       "title": "Agent Client",
-      "description": "勾选后会保存当前接入方式，并把该 Client 的 API Key 与端点切换到此中转渠道；复原会恢复切换前配置。新配置从下一次启动或恢复会话开始生效。",
+      "description": "勾选后会保存当前接入方式，并把该 Client 的 API Key 与端点切换到此模型接入服务；复原会恢复切换前配置。新配置从下一次启动或恢复会话开始生效。",
       "loading": "正在读取 Client 配置…",
       "effective": "配置已生效",
       "needsAttention": "已关联，但凭据或配置异常",
@@ -4226,13 +4303,16 @@
         "description": "使用 SiliconFlow API 调用 GenAI 能力，支持 OpenAI 接口调用。"
       },
       "litellm": {
-        "description": "通过一个 OpenAI 兼容 Gateway 汇聚多个中转渠道，并由 LiteLLM 执行路由、负载均衡与故障切换。"
+        "description": "通过一个 OpenAI 兼容 Gateway 汇聚多个上游模型渠道，并由 LiteLLM 执行路由、负载均衡与故障切换。"
       },
       "newapi": {
         "description": "通过轻量网关管理 OpenAI 兼容上游渠道，并提供路由、重试与故障切换。"
       },
+      "cliproxyapi": {
+        "description": "将 CLI 与 OAuth 账号转换为兼容 API，并提供多账号路由与负载均衡。"
+      },
       "custom": {
-        "description": "为给定聊天对话创建模型响应。"
+        "description": "连接其他兼容 OpenAI 接口的模型服务。"
       }
     },
     "platformDescription": {
@@ -4259,9 +4339,11 @@
       "managementApiKey": "Management API Key",
       "zenmuxManagementKeyPlaceholder": "粘贴 ZenMux Management API Key",
       "litellmKeyPlaceholder": "粘贴 LiteLLM Virtual Key 或 Master Key",
-      "litellmSetupHelper": "请先在 LiteLLM 中配置上游中转渠道、模型名称与路由规则；Yoda 只连接 Gateway，并通过 /v1/responses 转发 Codex 请求。",
+      "litellmSetupHelper": "请先在 LiteLLM 中配置上游模型渠道、模型名称与路由规则；Yoda 只连接 Gateway，并通过 /v1/responses 转发 Codex 请求。",
       "newApiKeyPlaceholder": "粘贴 New API 令牌",
       "newApiSetupHelper": "请先在 New API 中添加上游渠道；Yoda 连接其 OpenAI 兼容端点，并使用同一模型列表。",
+      "cliProxyApiKeyPlaceholder": "粘贴 CLIProxyAPI 配置中的 API Key",
+      "cliProxyApiSetupHelper": "请先启动 CLIProxyAPI、完成 CLI 或 OAuth 账号登录，并在配置中启用 API Key；Yoda 连接其兼容端点并转发 Agent Client 请求。",
       "inferenceApiKey": "Agent Client API Key",
       "inferenceApiKeyPlaceholder": "粘贴用于模型调用的 ZenMux API Key",
       "inferenceApiKeyHelper": "此 Key 仅用于 Agent Client 的模型调用；上方 Management Key 仅用于用量与日志统计。",
@@ -4287,14 +4369,19 @@
       "keyFingerprint": "Key {{fingerprint}}",
       "noKey": "未保存 Key",
       "lastChecked": "检查于 {{time}}",
-      "neverChecked": "尚未检查"
+      "neverChecked": "尚未检查",
+      "test": "测试连接",
+      "testing": "正在测试 3 次…",
+      "testFailed": "连接测试未通过",
+      "averageLatency": "平均 {{latency}} ms",
+      "testSamples": "3 次：{{samples}}"
     },
     "records": {
       "title": "ZenMux 账单与用量",
       "subtitle": "账号级成本明细以 ZenMux 官方 Cost Analytics 为准。",
       "loading": "正在加载 ZenMux 统计数据…",
       "emptyNoConnectionTitle": "未连接平台",
-      "emptyNoConnection": "连接中转渠道后即可加载 ZenMux Management API 聚合统计。",
+      "emptyNoConnection": "连接模型接入服务后即可加载 ZenMux Management API 聚合统计。",
       "emptyNoRecords": "暂无用量统计。",
       "errorTitle": "无法加载用量统计",
       "reload": "刷新",
@@ -4527,7 +4614,7 @@
     },
     "gateway": {
       "title": "Gateway",
-      "description": "为每个 Agent Client 选择中转渠道、订阅账号或 API Key",
+      "description": "为每个 Agent Client 选择模型接入、订阅账号或 API Key",
       "global": "全局",
       "globalHint": "这里的配置对所有本地新会话生效",
       "currentSource": "{{client}} 当前使用 {{source}}",
@@ -4540,21 +4627,22 @@
       "ready": "可用",
       "needsConfiguration": "需要配置",
       "directSources": "Agent CLI",
-      "maasSources": "中转渠道",
+      "maasSources": "模型接入",
       "subscription": "订阅账号",
       "apiKey": "API Key",
-      "maas": "中转渠道",
+      "maas": "模型接入",
       "unconfigured": "未配置",
-      "noMaas": "尚未连接中转渠道",
+      "noMaas": "尚未连接模型接入服务",
       "updated": "已更新 {{client}} 的 Gateway",
       "updateFailed": "Gateway 更新失败",
       "manageClient": "管理 {{client}} 账号",
-      "manageMaas": "管理中转渠道",
+      "manageMaas": "管理模型接入",
       "openLogs": "查看 AI 日志"
     },
     "maas": {
-      "title": "中转渠道",
-      "description": "选择一个中转渠道，对所有兼容 Agent CLI 全局生效",
+      "title": "模型接入",
+      "labelWithPlatform": "模型接入（{{platform}}）",
+      "description": "选择一个云端平台或自托管网关，对所有兼容 Agent CLI 全局生效",
       "effective": "已生效",
       "needsAttention": "需检查",
       "disabled": "未启用",
@@ -5079,7 +5167,28 @@
     "connectIntegrationDescription": "连接集成后即可搜索 Issue。",
     "configureIntegrations": "配置集成",
     "noProviderIssues": "暂无 provider issue。",
-    "selectIssue": "选择 Issue"
+    "selectIssue": "选择 Issue",
+    "worker": {
+      "label": "自动处理",
+      "menu": "Issue 队列",
+      "enabled": "自动处理新 Issue",
+      "runNow": "立即检查",
+      "concurrency": "并行 Agent",
+      "agents": "{{count}} 个 Agent",
+      "pollInterval": "检查间隔",
+      "seconds": "{{count}} 秒",
+      "capacity": "{{active}} / {{concurrency}} 运行中",
+      "description": "打开且未关联的 Issue 会进入隔离任务；Agent 结束后，任务自动转入审查。",
+      "copyError": "复制错误详情",
+      "actionFailed": "Issue 队列操作失败",
+      "states": {
+        "disabled": "已关闭",
+        "idle": "等待中",
+        "syncing": "检查中",
+        "at-capacity": "并发已满",
+        "error": "需要处理"
+      }
+    }
   },
   "pullRequests": {
     "draft": "草稿",

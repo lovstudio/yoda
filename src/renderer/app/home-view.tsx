@@ -56,12 +56,14 @@ import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registr
 import { normalizeSkillSelection } from '@shared/skills/selection';
 import type { SkillSelectionInput } from '@shared/skills/types';
 import { ensureUniqueTaskDisplayName, taskNameFromPrompt } from '@shared/task-name';
+import type { QuickActionTaskSource } from '@shared/tasks';
 import { resolveHomeProjectId } from '@renderer/app/home-project-selection';
 import { FeatureWorkflowPreview } from '@renderer/features/agent-room/feature-workflow-rail';
 import { invalidateTeamRoomQueries } from '@renderer/features/agent-room/team-room-queries';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
 import { createAiLabProject } from '@renderer/features/ai-lab/create-ai-lab-project';
 import { startAiLabBuildTask } from '@renderer/features/ai-lab/start-ai-lab-build-task';
+import { promptInvokesSkill } from '@renderer/features/projects/quick-action-source';
 import {
   asMounted,
   getProjectManagerStore,
@@ -820,6 +822,7 @@ export const HomeComposer = observer(function HomeComposer({
   const persistedPrompt = draft?.prompt ?? '';
   const [prompt, setPrompt] = useState(persistedPrompt);
   const [promptTokens, setPromptTokens] = useState<PromptToken[]>([]);
+  const [quickActionMode, setQuickActionMode] = useState(false);
   const clearPromptTokens = useCallback(() => {
     setPromptTokens((prev) => {
       for (const token of prev) {
@@ -1023,6 +1026,15 @@ export const HomeComposer = observer(function HomeComposer({
   const compareVariantsReady =
     !compareActive ||
     (Boolean(selectedProjectId) && compareVariants.every((variant) => Boolean(variant.projectId)));
+  const quickActionModeAvailable =
+    runMode === 'normal' &&
+    !taskScopedTarget &&
+    compareVariants.length === 0 &&
+    projectData?.type === 'local' &&
+    (runtimeId === 'codex' || runtimeId === 'claude');
+  useEffect(() => {
+    if (!quickActionModeAvailable) setQuickActionMode(false);
+  }, [quickActionModeAvailable]);
   const featureWorkflowNeedsBrief =
     runMode === 'team' &&
     Boolean(activeTeam && hasFeatureWorkflowContract(activeTeam)) &&
@@ -1533,6 +1545,7 @@ export const HomeComposer = observer(function HomeComposer({
         parentTaskId?: string;
         model?: string | null;
         skillSelection?: SkillSelectionInput;
+        quickActionSource?: Omit<QuickActionTaskSource, 'conversationId'>;
       }) => {
         const taskId = crypto.randomUUID();
         const conversationId = crypto.randomUUID();
@@ -1557,6 +1570,9 @@ export const HomeComposer = observer(function HomeComposer({
                   : (selectedBranch ?? baseDefaultBranch),
           strategy,
           parentTaskId: args.parentTaskId ?? parentTarget?.taskId,
+          quickActionSource: args.quickActionSource
+            ? { ...args.quickActionSource, conversationId }
+            : undefined,
           initialConversation: {
             id: conversationId,
             projectId: mounted.data.id,
@@ -1876,6 +1892,13 @@ export const HomeComposer = observer(function HomeComposer({
         strategyKind: standardSubmitKind,
         model: normalSlot.agent?.model,
         skillSelection: agentSkillSelection(normalSlot.agent),
+        quickActionSource:
+          quickActionMode && requirement
+            ? {
+                prompt: requirement,
+                invokedSkill: promptInvokesSkill(requirement),
+              }
+            : undefined,
       });
       goToTask(mounted.data.id, task.taskId);
       scheduleDeferredPrompt({
@@ -1924,6 +1947,7 @@ export const HomeComposer = observer(function HomeComposer({
     submitting,
     runMode,
     compareVariants,
+    quickActionMode,
     reviewerRuntime,
     activeTeam,
     queryClient,
@@ -2162,6 +2186,9 @@ export const HomeComposer = observer(function HomeComposer({
           runHostKind={runHostKind}
           containerClassName={promptInputChrome.containerClassName}
           canSubmit={canSubmit}
+          quickActionMode={quickActionMode}
+          quickActionModeDisabled={!quickActionModeAvailable}
+          onQuickActionModeChange={setQuickActionMode}
           onSubmit={submit}
           autoFocus
         />

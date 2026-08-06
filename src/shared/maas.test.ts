@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createCustomMaasPlatformId,
+  createMaasProfileId,
   getMaasPlatformDefinition,
   getMaasPlatformTemplateId,
   isMaasPlatformId,
@@ -24,6 +25,17 @@ describe('MaaS platform instances', () => {
     expect(getMaasPlatformTemplateId('custom')).toBe('custom');
   });
 
+  it('creates independent profiles for the same cloud target platform', () => {
+    const first = createMaasProfileId('zenmux', 'first-key');
+    const second = createMaasProfileId('zenmux', 'second-key');
+
+    expect(first).toBe('zenmux:first-key');
+    expect(second).toBe('zenmux:second-key');
+    expect(first).not.toBe(second);
+    expect(isMaasPlatformId(first)).toBe(true);
+    expect(getMaasPlatformTemplateId(first)).toBe('zenmux');
+  });
+
   it('provides a local LiteLLM Gateway preset that supports Responses API routing', () => {
     expect(isMaasPlatformId('litellm')).toBe(true);
     expect(getMaasPlatformDefinition('litellm')).toMatchObject({
@@ -39,6 +51,23 @@ describe('MaaS platform instances', () => {
       id: 'newapi',
       name: 'New API',
       defaultEndpoint: 'http://127.0.0.1:4001/v1',
+      category: 'self-hosted-gateway',
     });
+  });
+
+  it('provides a local CLIProxyAPI preset for CLI and OAuth account routing', () => {
+    expect(isMaasPlatformId('cliproxyapi')).toBe(true);
+    expect(getMaasPlatformDefinition('cliproxyapi')).toMatchObject({
+      id: 'cliproxyapi',
+      name: 'CLIProxyAPI',
+      category: 'self-hosted-gateway',
+      defaultEndpoint: 'http://127.0.0.1:8317/v1',
+    });
+  });
+
+  it('classifies vendor-operated model services as hosted platforms', () => {
+    expect(getMaasPlatformDefinition('zenmux').category).toBe('hosted-platform');
+    expect(getMaasPlatformDefinition('openrouter').category).toBe('hosted-platform');
+    expect(getMaasPlatformDefinition('siliconflow').category).toBe('hosted-platform');
   });
 });

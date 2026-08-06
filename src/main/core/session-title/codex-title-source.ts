@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -19,6 +19,8 @@ export type CodexThreadTitle = {
   firstUserMessage: string;
   createdAtMs: number;
   updatedAtMs: number;
+  rolloutPath?: string;
+  tokensUsed?: number;
 };
 
 export type CodexThreadRef = {
@@ -43,6 +45,8 @@ const READY_POLL_MAX_MS = 5 * 60_000;
 const RESUME_START_GRACE_MS = 10_000;
 const NEW_SESSION_THREAD_CREATE_GRACE_MS = 1_000;
 const NEW_SESSION_THREAD_CREATE_MAX_DRIFT_MS = 60_000;
+const ROUTED_SESSION_SETTLE_MS = 10_000;
+const MAX_INTERRUPTED_STUB_BYTES = 256 * 1024;
 const TITLE_PREFIX_MATCH_MIN_LENGTH = 16;
 
 const activeCodexThreadTitlePollers = new Set<CodexThreadTitlePoller>();
@@ -90,6 +94,8 @@ export function findNewCodexThreadTitle(params: {
             cwd,
             title,
             first_user_message AS firstUserMessage,
+            NULLIF(rollout_path, '') AS rolloutPath,
+            tokens_used AS tokensUsed,
             COALESCE(created_at_ms, created_at * 1000) AS createdAtMs,
             COALESCE(updated_at_ms, updated_at * 1000) AS updatedAtMs
           FROM threads
@@ -520,6 +526,8 @@ export function readCodexThreadTitle(
             cwd,
             title,
             first_user_message AS firstUserMessage,
+            NULLIF(rollout_path, '') AS rolloutPath,
+            tokens_used AS tokensUsed,
             COALESCE(created_at_ms, created_at * 1000) AS createdAtMs,
             COALESCE(updated_at_ms, updated_at * 1000) AS updatedAtMs
           FROM threads
@@ -648,7 +656,7 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
   private poll(): void {
     if (this.stopped) return;
     try {
-      const row = this.threadId
+      let row = this.threadId
         ? readCodexThreadTitle(this.options.statePath, this.threadId)
         : this.options.isResuming
           ? findRecentCodexThreadTitle({
@@ -663,6 +671,9 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
               maxCreatedAtMs: this.maxCreatedAtMs,
             });
 
+      if (row && this.threadId === row.id) {
+        row = this.findSupersedingThread(row) ?? row;
+      }
       if (row && this.tryBindThread(row)) {
         this.handleRow(row);
       }
@@ -681,6 +692,12 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
   private handleRow(row: CodexThreadTitle): void {
     const isUnrenamed = row.firstUserMessage.length > 0 && row.title === row.firstUserMessage;
     if (isUnrenamed) {
+      if (
+        isRoutedPrompt(row.firstUserMessage) &&
+        Date.now() < row.createdAtMs + ROUTED_SESSION_SETTLE_MS
+      ) {
+        return;
+      }
       this.maybeSummarize(row);
       return;
     }
@@ -770,6 +787,35 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
     return true;
   }
 
+  private findSupersedingThread(current: CodexThreadTitle): CodexThreadTitle | undefined {
+    if (this.options.isResuming || !isInterruptedCodexThreadStub(current)) return undefined;
+    const candidate = findNewCodexThreadTitle({
+      statePath: this.options.statePath,
+      cwd: this.options.cwd,
+      minCreatedAtMs: current.createdAtMs + 1,
+      maxCreatedAtMs: this.maxCreatedAtMs,
+    });
+    if (
+      !candidate ||
+      !isLikelyRelaunchedPrompt(current.firstUserMessage, candidate.firstUserMessage)
+    ) {
+      return undefined;
+    }
+
+    const claimedBy = claimedCodexThreadOwners.get(candidate.id);
+    if (claimedBy && claimedBy !== this.options.conversationId) return undefined;
+    if (bestFreshOwnerFor(candidate)) return undefined;
+
+    if (claimedCodexThreadOwners.get(current.id) === this.options.conversationId) {
+      claimedCodexThreadOwners.delete(current.id);
+    }
+    claimedCodexThreadOwners.set(candidate.id, this.options.conversationId);
+    claimedCodexThreadsByOwner.set(this.options.conversationId, candidate.id);
+    this.threadId = candidate.id;
+    this.notifySessionBound(candidate.id);
+    return candidate;
+  }
+
   private notifySessionBound(sessionId: string): void {
     if (this.notifiedSessionId === sessionId) return;
     this.notifiedSessionId = sessionId;
@@ -820,7 +866,15 @@ function isExpectedUnavailableCodexStateError(error: unknown): boolean {
 function parseCodexThreadTitle(row: unknown): CodexThreadTitle | undefined {
   const ref = parseCodexThreadRef(row);
   if (!ref?.title) return undefined;
-  return { ...ref, title: ref.title };
+  const rec = row as Record<string, unknown>;
+  return {
+    ...ref,
+    title: ref.title,
+    ...(typeof rec.rolloutPath === 'string' && rec.rolloutPath.length > 0
+      ? { rolloutPath: rec.rolloutPath }
+      : {}),
+    ...(typeof rec.tokensUsed === 'number' ? { tokensUsed: rec.tokensUsed } : {}),
+  };
 }
 
 function parseCodexThreadRef(row: unknown): CodexThreadRef | undefined {
@@ -858,4 +912,63 @@ function parseCodexThreadRollout(row: unknown): CodexThreadRollout | undefined {
     createdAtMs: rec.createdAtMs,
     updatedAtMs: rec.updatedAtMs,
   };
+}
+
+function isInterruptedCodexThreadStub(thread: CodexThreadTitle): boolean {
+  if (thread.tokensUsed !== 0 || !thread.rolloutPath || !existsSync(thread.rolloutPath))
+    return false;
+  try {
+    if (statSync(thread.rolloutPath).size > MAX_INTERRUPTED_STUB_BYTES) return false;
+    let interrupted = false;
+    let substantiveResponse = false;
+    for (const line of readFileSync(thread.rolloutPath, 'utf8').split('\n')) {
+      if (!line.trim()) continue;
+      const record = JSON.parse(line) as {
+        type?: string;
+        payload?: { type?: string; role?: string; reason?: string };
+      };
+      if (
+        record.type === 'event_msg' &&
+        record.payload?.type === 'turn_aborted' &&
+        record.payload.reason === 'interrupted'
+      ) {
+        interrupted = true;
+      }
+      if (record.type !== 'response_item') continue;
+      if (record.payload?.type === 'message') {
+        if (record.payload.role === 'assistant') substantiveResponse = true;
+      } else {
+        substantiveResponse = true;
+      }
+    }
+    return interrupted && !substantiveResponse;
+  } catch {
+    return false;
+  }
+}
+
+function isRoutedPrompt(prompt: string): boolean {
+  return prompt.trimStart().startsWith('$');
+}
+
+function isLikelyRelaunchedPrompt(current: string, candidate: string): boolean {
+  const currentPrompt = normalizePrompt(current);
+  const candidatePrompt = normalizePrompt(candidate);
+  if (!currentPrompt || !candidatePrompt) return false;
+  if (currentPrompt === candidatePrompt) return true;
+  if (!isRoutedPrompt(currentPrompt) || !isRoutedPrompt(candidatePrompt)) return false;
+
+  const [currentCommand, ...currentBodyParts] = currentPrompt.split(' ');
+  const [candidateCommand, ...candidateBodyParts] = candidatePrompt.split(' ');
+  const currentBody = currentBodyParts.join(' ');
+  const candidateBody = candidateBodyParts.join(' ');
+  return (
+    currentBody.length > 0 &&
+    currentBody === candidateBody &&
+    (candidateCommand.startsWith(currentCommand) || currentCommand.startsWith(candidateCommand))
+  );
+}
+
+function normalizePrompt(prompt: string): string {
+  return prompt.trim().replace(/\s+/g, ' ');
 }

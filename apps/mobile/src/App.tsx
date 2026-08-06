@@ -39,6 +39,8 @@ import yodaMarkSource from '../../../src/assets/images/yoda/yoda_logo.png';
 import {
   appendMobileVoiceTranscript,
   canContinueMobileSession,
+  filterMobileProjects,
+  filterMobileTasks,
   getMobileProjectActivityById,
   mergeMobileVoiceRecognitionResult,
   MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
@@ -62,6 +64,12 @@ import {
   parseMobileRelayPairingUrl,
 } from '../../../src/shared/mobile-relay';
 import {
+  formatMobileToolTranscriptContent,
+  groupAdjacentMobileToolBlocks,
+  mobileToolGroupTitle,
+  summarizeMobileToolTranscriptContent,
+} from '../../../src/shared/mobile-tool-transcript';
+import {
   createDemand,
   discardInputAttachment,
   fetchProfile,
@@ -77,6 +85,7 @@ import {
 } from './connection-bootstrap';
 import { clearConnection, loadConnection, saveConnection } from './connection-storage';
 import { prepareCreatedDemandNavigation } from './demand-navigation';
+import { DEFAULT_HOME_TAB, HOME_TABS, homeTabTitle, type HomeTab } from './home-navigation';
 import { pickMobileInputImages } from './input-media';
 import {
   uploadMobileInputImages,
@@ -122,7 +131,6 @@ type ConnectDraft = {
 };
 
 type TaskScope = 'all' | 'open' | 'inProgress' | 'review';
-type HomeTab = 'home' | 'tasks' | 'profile';
 type SessionOutputMode = 'rendered' | 'raw';
 
 type ReadableOutputBlock = {
@@ -146,26 +154,6 @@ function taskScopeLabel(scope: TaskScope): string {
       return '待审阅';
     case 'all':
       return '全部任务';
-  }
-}
-
-function homeTabTitle(tab: HomeTab): { title: string; subtitle: string } {
-  switch (tab) {
-    case 'tasks':
-      return {
-        title: '任务队列',
-        subtitle: '集中查看进行中的会话与任务状态。',
-      };
-    case 'profile':
-      return {
-        title: '我的工作台',
-        subtitle: '查看账号、用量、工作进度与云端服务。',
-      };
-    case 'home':
-      return {
-        title: 'Command center',
-        subtitle: 'Monitor desktop work and keep requests moving.',
-      };
   }
 }
 
@@ -354,12 +342,6 @@ function parseReadableOutput(value: string): ReadableOutput {
       text,
     })),
   };
-}
-
-function summarizeToolContent(value: string): string {
-  const compacted = value.replace(/\s+/g, ' ').trim();
-  if (!compacted) return 'No tool output.';
-  return compacted.length > 132 ? `${compacted.slice(0, 132)}...` : compacted;
 }
 
 function isAssistantTextBlock(block: MobileSessionTranscriptBlock): boolean {
@@ -579,7 +561,7 @@ export function App() {
   });
   const [snapshot, setSnapshot] = useState<MobileDashboardSnapshot | null>(null);
   const [profile, setProfile] = useState<MobileProfileSnapshot | null>(null);
-  const [homeTab, setHomeTab] = useState<HomeTab>('home');
+  const [homeTab, setHomeTab] = useState<HomeTab>(DEFAULT_HOME_TAB);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskParent, setNewTaskParent] = useState<MobileTaskSummary | null>(null);
   const [newTaskAttributionLocked, setNewTaskAttributionLocked] = useState(false);
@@ -653,7 +635,7 @@ export function App() {
     setConnection(next);
     setSnapshot(null);
     setProfile(null);
-    setHomeTab('home');
+    setHomeTab(DEFAULT_HOME_TAB);
     setNewTaskOpen(false);
     setNewTaskParent(null);
     setNewTaskAttributionLocked(false);
@@ -784,31 +766,11 @@ export function App() {
     [selectedTaskId, snapshot]
   );
 
-  const recentTasks = useMemo(
-    () =>
-      [...(snapshot?.tasks ?? [])]
-        .sort((a, b) => {
-          const aTime = Date.parse(a.lastInteractedAt ?? a.updatedAt ?? '');
-          const bTime = Date.parse(b.lastInteractedAt ?? b.updatedAt ?? '');
-          return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
-        })
-        .slice(0, 4),
-    [snapshot]
-  );
-
   useEffect(() => {
     if (!selectedTaskId || selectedTask) return;
     setSelectedTaskId(null);
     setSelectedSessionId(null);
   }, [selectedTask, selectedTaskId]);
-
-  const handleMetricSelect = useCallback((scope: TaskScope) => {
-    setTaskScope(scope);
-    setSelectedProjectId('all');
-    setSelectedTaskId(null);
-    setSelectedSessionId(null);
-    setHomeTab('tasks');
-  }, []);
 
   const handleConnect = useCallback(async () => {
     const next = {
@@ -1033,18 +995,6 @@ export function App() {
 
             {snapshot ? (
               <>
-                {homeTab === 'home' ? (
-                  <HomeDashboard
-                    projects={visibleProjects}
-                    recentTasks={recentTasks}
-                    snapshot={snapshot}
-                    onNewRequest={() => openNewTask()}
-                    onOpenTask={setSelectedTaskId}
-                    onOpenTasks={() => setHomeTab('tasks')}
-                    onSelectScope={handleMetricSelect}
-                  />
-                ) : null}
-
                 {homeTab === 'tasks' ? (
                   <TasksWorkspace
                     projects={snapshot.projects}
@@ -1280,103 +1230,6 @@ function YodaBrandMark({ size }: { size: number }) {
       source={yodaMarkSource}
       style={{ width: size, height: size }}
     />
-  );
-}
-
-function HomeDashboard({
-  projects,
-  recentTasks,
-  snapshot,
-  onNewRequest,
-  onOpenTask,
-  onOpenTasks,
-  onSelectScope,
-}: {
-  projects: MobileProjectSummary[];
-  recentTasks: MobileTaskSummary[];
-  snapshot: MobileDashboardSnapshot;
-  onNewRequest: () => void;
-  onOpenTask: (taskId: string) => void;
-  onOpenTasks: () => void;
-  onSelectScope: (scope: TaskScope) => void;
-}) {
-  const primaryTask = recentTasks[0];
-  return (
-    <>
-      <View style={styles.commandPanel}>
-        <View style={styles.commandPanelTop}>
-          <View>
-            <Text style={styles.commandPanelLabel}>Live workspace</Text>
-            <Text style={styles.commandPanelValue}>{snapshot.metrics.activeTaskCount}</Text>
-          </View>
-          <View style={styles.commandPanelBadge}>
-            <Ionicons color={COLORS.green} name="radio-outline" size={15} />
-            <Text style={styles.commandPanelBadgeText}>Online</Text>
-          </View>
-        </View>
-        <Text style={styles.commandPanelText}>
-          {snapshot.metrics.inProgressTaskCount} running · {snapshot.metrics.reviewTaskCount} ready
-          for review · {snapshot.metrics.openProjectCount} open projects
-        </Text>
-        <View style={styles.quickActions}>
-          <Pressable
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.quickActionPrimary,
-              pressed ? styles.buttonPressed : null,
-            ]}
-            onPress={onNewRequest}
-          >
-            <Ionicons color={COLORS.surface} name="add-outline" size={18} />
-            <Text style={styles.quickActionPrimaryText}>新建任务</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.quickActionSecondary,
-              pressed ? styles.buttonPressed : null,
-            ]}
-            onPress={onOpenTasks}
-          >
-            <Ionicons color={COLORS.charcoal} name="list-outline" size={18} />
-            <Text style={styles.quickActionSecondaryText}>查看任务</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <Metrics selectedScope="all" snapshot={snapshot} onSelectScope={onSelectScope} />
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>最近工作</Text>
-          <Pressable accessibilityRole="button" onPress={onOpenTasks}>
-            <Text style={styles.sectionAction}>查看全部</Text>
-          </Pressable>
-        </View>
-        {primaryTask ? (
-          <>
-            <TaskRow
-              projectLabel={projectName(projects, primaryTask.projectId)}
-              task={primaryTask}
-              onPress={() => onOpenTask(primaryTask.id)}
-            />
-            {recentTasks.slice(1, 3).map((task) => (
-              <CompactTaskRow
-                key={task.id}
-                projectLabel={projectName(projects, task.projectId)}
-                task={task}
-                onPress={() => onOpenTask(task.id)}
-              />
-            ))}
-          </>
-        ) : (
-          <View style={styles.emptyState}>
-            <Ionicons color={COLORS.muted} name="sparkles-outline" size={22} />
-            <Text style={styles.emptyText}>还没有任务。</Text>
-          </View>
-        )}
-      </View>
-    </>
   );
 }
 
@@ -1787,19 +1640,9 @@ function HomeTabBar({
   activeTab: HomeTab;
   onSelect: (tab: HomeTab) => void;
 }) {
-  const tabs: Array<{
-    icon: keyof typeof Ionicons.glyphMap;
-    label: string;
-    value: HomeTab;
-  }> = [
-    { icon: 'grid-outline', label: '首页', value: 'home' },
-    { icon: 'checkmark-circle-outline', label: '任务', value: 'tasks' },
-    { icon: 'person-circle-outline', label: '我的', value: 'profile' },
-  ];
-
   return (
     <View style={styles.bottomTabBar}>
-      {tabs.map((tab) => {
+      {HOME_TABS.map((tab) => {
         const active = activeTab === tab.value;
         return (
           <Pressable
@@ -1820,65 +1663,6 @@ function HomeTabBar({
           </Pressable>
         );
       })}
-    </View>
-  );
-}
-
-function Metrics({
-  selectedScope,
-  snapshot,
-  onSelectScope,
-}: {
-  selectedScope: TaskScope;
-  snapshot: MobileDashboardSnapshot;
-  onSelectScope: (scope: TaskScope) => void;
-}) {
-  const metrics = [
-    {
-      label: '项目',
-      value: snapshot.metrics.projectCount,
-      icon: 'folder-outline',
-      scope: 'all',
-    },
-    {
-      label: '已打开',
-      value: snapshot.metrics.openProjectCount,
-      icon: 'desktop-outline',
-      scope: 'open',
-    },
-    {
-      label: '进行中',
-      value: snapshot.metrics.inProgressTaskCount,
-      icon: 'flash-outline',
-      scope: 'inProgress',
-    },
-    {
-      label: '待审阅',
-      value: snapshot.metrics.reviewTaskCount,
-      icon: 'checkmark-done-outline',
-      scope: 'review',
-    },
-  ] as const;
-
-  return (
-    <View style={styles.metricsGrid}>
-      {metrics.map((metric) => (
-        <Pressable
-          key={metric.label}
-          accessibilityLabel={`Filter ${metric.label}`}
-          accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.metricCard,
-            selectedScope === metric.scope ? styles.metricCardActive : null,
-            pressed ? styles.buttonPressed : null,
-          ]}
-          onPress={() => onSelectScope(metric.scope)}
-        >
-          <Ionicons color={COLORS.charcoal} name={metric.icon} size={18} />
-          <Text style={styles.metricValue}>{metric.value}</Text>
-          <Text style={styles.metricLabel}>{metric.label}</Text>
-        </Pressable>
-      ))}
     </View>
   );
 }
@@ -2141,9 +1925,15 @@ function TaskAttributionPickerSheet({
 }) {
   const [sortMode, setSortMode] = useState<MobileProjectSortMode>('recent');
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [projectSearchQuery, setProjectSearchQuery] = useState('');
+  const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const sortedProjects = useMemo(
     () => sortMobileProjects(projects, sortMode),
     [projects, sortMode]
+  );
+  const visibleProjects = useMemo(
+    () => filterMobileProjects(sortedProjects, projectSearchQuery),
+    [projectSearchQuery, sortedProjects]
   );
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
   const taskStatsByProjectId = useMemo(() => {
@@ -2156,13 +1946,13 @@ function TaskAttributionPickerSheet({
     }
     return stats;
   }, [tasks]);
-  const activeTasks = useMemo(
-    () =>
-      sortMobileTaskAttributionCandidates(
-        tasks.filter((task) => task.projectId === activeProjectId)
-      ),
-    [activeProjectId, tasks]
-  );
+  const activeTasks = useMemo(() => {
+    const sortedTasks = sortMobileTaskAttributionCandidates(
+      tasks.filter((task) => task.projectId === activeProjectId)
+    );
+    return filterMobileTasks(sortedTasks, taskSearchQuery);
+  }, [activeProjectId, taskSearchQuery, tasks]);
+  const activeProjectTaskCount = tasks.filter((task) => task.projectId === activeProjectId).length;
 
   return (
     <Modal
@@ -2214,6 +2004,12 @@ function TaskAttributionPickerSheet({
             </Pressable>
           </View>
 
+          <ProjectPickerSearchInput
+            placeholder={activeProject ? '搜索任务' : '搜索项目'}
+            value={activeProject ? taskSearchQuery : projectSearchQuery}
+            onChangeText={activeProject ? setTaskSearchQuery : setProjectSearchQuery}
+          />
+
           {activeProject ? (
             <View style={styles.attributionPickerStepHint}>
               <Text style={styles.attributionPickerStepHintText}>
@@ -2250,13 +2046,15 @@ function TaskAttributionPickerSheet({
           >
             {activeProject ? (
               <>
-                <AttributionPickerOption
-                  icon="folder-outline"
-                  label={`仅归属「${activeProject.displayName}」`}
-                  meta="创建为项目下的独立任务"
-                  selected={selectedProjectId === activeProject.id && !parentTask}
-                  onPress={() => onChange(activeProject.id, null)}
-                />
+                {!taskSearchQuery.trim() ? (
+                  <AttributionPickerOption
+                    icon="folder-outline"
+                    label={`仅归属「${activeProject.displayName}」`}
+                    meta="创建为项目下的独立任务"
+                    selected={selectedProjectId === activeProject.id && !parentTask}
+                    onPress={() => onChange(activeProject.id, null)}
+                  />
+                ) : null}
                 {activeTasks.map((task) => (
                   <AttributionPickerOption
                     key={task.id}
@@ -2269,21 +2067,31 @@ function TaskAttributionPickerSheet({
                 ))}
                 {activeTasks.length === 0 ? (
                   <View style={styles.attributionPickerEmpty}>
-                    <Ionicons color={COLORS.muted} name="git-branch-outline" size={22} />
-                    <Text style={styles.emptyText}>这个项目还没有可选择的任务。</Text>
+                    <Ionicons
+                      color={COLORS.muted}
+                      name={taskSearchQuery.trim() ? 'search-outline' : 'git-branch-outline'}
+                      size={22}
+                    />
+                    <Text style={styles.emptyText}>
+                      {taskSearchQuery.trim() && activeProjectTaskCount > 0
+                        ? `没有匹配“${taskSearchQuery.trim()}”的任务`
+                        : '这个项目还没有可选择的任务。'}
+                    </Text>
                   </View>
                 ) : null}
               </>
             ) : (
               <>
-                <AttributionPickerOption
-                  icon="documents-outline"
-                  label="草稿箱"
-                  meta="不归属具体项目"
-                  selected={selectedProjectId === null && !parentTask}
-                  onPress={() => onChange(null, null)}
-                />
-                {sortedProjects.map((project) => {
+                {!projectSearchQuery.trim() ? (
+                  <AttributionPickerOption
+                    icon="documents-outline"
+                    label="草稿箱"
+                    meta="不归属具体项目"
+                    selected={selectedProjectId === null && !parentTask}
+                    onPress={() => onChange(null, null)}
+                  />
+                ) : null}
+                {visibleProjects.map((project) => {
                   const taskStats = taskStatsByProjectId.get(project.id) ?? {
                     count: 0,
                     longTermCount: 0,
@@ -2300,6 +2108,9 @@ function TaskAttributionPickerSheet({
                     />
                   );
                 })}
+                {visibleProjects.length === 0 ? (
+                  <ProjectPickerEmptyResult query={projectSearchQuery} type="项目" />
+                ) : null}
               </>
             )}
           </ScrollView>
@@ -2386,10 +2197,23 @@ function ProjectPickerSheet({
   onProjectChange: (projectId: string | null) => void;
 }) {
   const [sortMode, setSortMode] = useState<MobileProjectSortMode>('recent');
+  const [searchQuery, setSearchQuery] = useState('');
   const sortedProjects = useMemo(
     () => sortMobileProjects(projects, sortMode),
     [projects, sortMode]
   );
+  const visibleProjects = useMemo(
+    () => filterMobileProjects(sortedProjects, searchQuery),
+    [searchQuery, sortedProjects]
+  );
+  const closePicker = () => {
+    setSearchQuery('');
+    onClose();
+  };
+  const selectProject = (projectId: string | null) => {
+    setSearchQuery('');
+    onProjectChange(projectId);
+  };
   return (
     <Modal
       animationType="slide"
@@ -2397,10 +2221,10 @@ function ProjectPickerSheet({
       statusBarTranslucent
       transparent
       visible={open}
-      onRequestClose={onClose}
+      onRequestClose={closePicker}
     >
       <View accessibilityViewIsModal style={styles.projectPickerOverlay}>
-        <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={closePicker} />
         <SafeAreaView style={styles.projectPickerSheet}>
           <View style={styles.projectPickerHandle} />
           <View style={styles.projectPickerHeader}>
@@ -2416,11 +2240,16 @@ function ProjectPickerSheet({
                 styles.projectPickerClose,
                 pressed ? styles.buttonPressed : null,
               ]}
-              onPress={onClose}
+              onPress={closePicker}
             >
               <Ionicons color={COLORS.charcoal} name="close-outline" size={22} />
             </Pressable>
           </View>
+          <ProjectPickerSearchInput
+            placeholder="搜索项目"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
           <View style={styles.projectPickerSort}>
             <Text style={styles.projectPickerSortLabel}>项目排序</Text>
             <View accessibilityRole="radiogroup" style={styles.projectPickerSortOptions}>
@@ -2447,27 +2276,87 @@ function ProjectPickerSheet({
             keyboardShouldPersistTaps="handled"
             style={styles.projectPickerListViewport}
           >
-            <ProjectPickerOption
-              icon={unscopedOption.icon}
-              label={unscopedOption.label}
-              meta={unscopedOption.meta}
-              selected={selectedProjectId === null}
-              onPress={() => onProjectChange(null)}
-            />
-            {sortedProjects.map((project) => (
+            {!searchQuery.trim() ? (
+              <ProjectPickerOption
+                icon={unscopedOption.icon}
+                label={unscopedOption.label}
+                meta={unscopedOption.meta}
+                selected={selectedProjectId === null}
+                onPress={() => selectProject(null)}
+              />
+            ) : null}
+            {visibleProjects.map((project) => (
               <ProjectPickerOption
                 key={project.id}
                 icon={project.isOpen ? 'desktop-outline' : 'folder-outline'}
                 label={project.displayName}
                 meta={`Active ${formatTimestamp(project.lastActivityAt ?? project.updatedAt)}`}
                 selected={selectedProjectId === project.id}
-                onPress={() => onProjectChange(project.id)}
+                onPress={() => selectProject(project.id)}
               />
             ))}
+            {visibleProjects.length === 0 ? (
+              <ProjectPickerEmptyResult query={searchQuery} type="项目" />
+            ) : null}
           </ScrollView>
         </SafeAreaView>
       </View>
     </Modal>
+  );
+}
+
+function ProjectPickerSearchInput({
+  placeholder,
+  value,
+  onChangeText,
+}: {
+  placeholder: string;
+  value: string;
+  onChangeText: (value: string) => void;
+}) {
+  return (
+    <View style={styles.projectPickerSearchArea}>
+      <View style={styles.projectPickerSearchField}>
+        <Ionicons color={COLORS.muted} name="search-outline" size={18} />
+        <TextInput
+          accessibilityLabel={placeholder}
+          autoCapitalize="none"
+          autoCorrect={false}
+          clearButtonMode="never"
+          placeholder={placeholder}
+          placeholderTextColor="#8A8D91"
+          returnKeyType="search"
+          style={styles.projectPickerSearchInput}
+          value={value}
+          onChangeText={onChangeText}
+        />
+        {value.length > 0 ? (
+          <Pressable
+            accessibilityLabel={`清除${placeholder}`}
+            accessibilityRole="button"
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.projectPickerSearchClear,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={() => onChangeText('')}
+          >
+            <Ionicons color={COLORS.muted} name="close-circle" size={18} />
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function ProjectPickerEmptyResult({ query, type }: { query: string; type: '项目' | '任务' }) {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return null;
+  return (
+    <View style={styles.attributionPickerEmpty}>
+      <Ionicons color={COLORS.muted} name="search-outline" size={22} />
+      <Text style={styles.emptyText}>{`没有匹配“${trimmedQuery}”的${type}`}</Text>
+    </View>
   );
 }
 
@@ -3005,8 +2894,14 @@ function SessionDetailScreen({
       >
         <View style={styles.sessionDetailShell}>
           <SessionNavigationBar
+            acceptsInput={detail?.session.acceptsInput ?? false}
+            live={detail?.session.running ?? false}
             projectLabel={projectName(projects, task.projectId)}
+            resumable={detail?.session.resumable ?? false}
+            runtimeStatus={detail?.session.runtimeStatus ?? null}
+            sending={sendingInput}
             title={session?.title ?? task.name}
+            uploadProgress={sessionUploadProgress}
             onBack={onBack}
           />
           <ScrollView
@@ -3071,16 +2966,13 @@ function SessionDetailScreen({
             </Pressable>
           ) : null}
           <SessionInputComposer
-            live={detail?.session.running ?? false}
             acceptsInput={detail?.session.acceptsInput ?? false}
             resumable={detail?.session.resumable ?? false}
             images={sessionImages}
             imagesEnabled={
               projects.find((project) => project.id === task.projectId)?.type === 'local'
             }
-            runtimeStatus={detail?.session.runtimeStatus ?? null}
             sending={sendingInput}
-            uploadProgress={sessionUploadProgress}
             speechContext={[
               taskProject?.displayName,
               taskProject?.name,
@@ -3101,12 +2993,24 @@ function SessionDetailScreen({
 }
 
 function SessionNavigationBar({
+  acceptsInput,
+  live,
   projectLabel,
+  resumable,
+  runtimeStatus,
+  sending,
   title,
+  uploadProgress,
   onBack,
 }: {
+  acceptsInput: boolean;
+  live: boolean;
   projectLabel: string;
+  resumable: boolean;
+  runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
+  sending: boolean;
   title: string;
+  uploadProgress: MobileInputUploadProgress | null;
   onBack: () => void;
 }) {
   return (
@@ -3130,6 +3034,14 @@ function SessionNavigationBar({
           {title}
         </Text>
       </View>
+      <SessionRuntimeStatus
+        acceptsInput={acceptsInput}
+        live={live}
+        resumable={resumable}
+        runtimeStatus={runtimeStatus}
+        sending={sending}
+        uploadProgress={uploadProgress}
+      />
     </View>
   );
 }
@@ -3429,14 +3341,11 @@ function InputMediaControls({
 }
 
 function SessionInputComposer({
-  live,
   acceptsInput,
   resumable,
   images,
   imagesEnabled,
-  runtimeStatus,
   sending,
-  uploadProgress,
   speechContext,
   value,
   onChange,
@@ -3444,14 +3353,11 @@ function SessionInputComposer({
   onImagesChange,
   onSend,
 }: {
-  live: boolean;
   acceptsInput: boolean;
   resumable: boolean;
   images: MobileImageDraft[];
   imagesEnabled: boolean;
-  runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
   sending: boolean;
-  uploadProgress: MobileInputUploadProgress | null;
   speechContext: readonly (string | null | undefined)[];
   value: string;
   onChange: (value: string) => void;
@@ -3467,15 +3373,6 @@ function SessionInputComposer({
     !sending;
   return (
     <View style={styles.sessionInputBar}>
-      <SessionRuntimeStatus
-        acceptsInput={acceptsInput}
-        live={live}
-        resumable={resumable}
-        runtimeStatus={runtimeStatus}
-        sending={sending}
-        uploadProgress={uploadProgress}
-        valueLength={value.length}
-      />
       <InputMediaControls
         compact
         canSubmit={canSend}
@@ -3503,6 +3400,11 @@ function SessionInputComposer({
         onError={onError}
         onImagesChange={onImagesChange}
       />
+      {value.length > 0 ? (
+        <Text style={styles.sessionInputCount}>
+          {value.length}/{MOBILE_SESSION_INPUT_MAX_CHARS}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -3514,7 +3416,6 @@ function SessionRuntimeStatus({
   runtimeStatus,
   sending,
   uploadProgress,
-  valueLength,
 }: {
   acceptsInput: boolean;
   live: boolean;
@@ -3522,7 +3423,6 @@ function SessionRuntimeStatus({
   runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
   sending: boolean;
   uploadProgress: MobileInputUploadProgress | null;
-  valueLength: number;
 }) {
   const presentation = sending
     ? {
@@ -3563,19 +3463,9 @@ function SessionRuntimeStatus({
           <Ionicons color={presentation.color} name={presentation.icon} size={20} />
         )}
       </View>
-      <View style={styles.sessionRunStatusBody}>
-        <Text style={[styles.sessionRunStatusLabel, { color: presentation.color }]}>
-          {presentation.label}
-        </Text>
-        <Text style={styles.sessionRunStatusDetail} numberOfLines={1}>
-          {detail}
-        </Text>
-      </View>
-      {valueLength > 0 ? (
-        <Text style={styles.sessionInputCount}>
-          {valueLength}/{MOBILE_SESSION_INPUT_MAX_CHARS}
-        </Text>
-      ) : null}
+      <Text style={[styles.sessionRunStatusLabel, { color: presentation.color }]} numberOfLines={1}>
+        {presentation.label}
+      </Text>
     </View>
   );
 }
@@ -3687,6 +3577,11 @@ function RenderedSessionTranscript({
     () => mergeAdjacentAssistantBlocks(detail.transcript),
     [detail.transcript]
   );
+  const renderItems = useMemo(() => groupAdjacentMobileToolBlocks(transcript), [transcript]);
+  const latestToolId = useMemo(
+    () => transcript.findLast((block) => block.role === 'tool')?.id,
+    [transcript]
+  );
 
   if (detail.transcript.length === 0) {
     return <ReadableSessionOutput output={fallbackOutput} />;
@@ -3694,26 +3589,178 @@ function RenderedSessionTranscript({
 
   return (
     <View style={styles.transcriptList}>
-      {transcript.map((block) => (
-        <TranscriptBlock key={block.id} block={block} />
-      ))}
+      {renderItems.map((item) =>
+        item.kind === 'tool-group' ? (
+          <TranscriptToolGroup
+            key={item.id}
+            blocks={item.blocks}
+            latestToolId={latestToolId}
+            sessionRunning={detail.session.running && detail.session.runtimeStatus === 'working'}
+          />
+        ) : (
+          <TranscriptBlock key={item.id} block={item.block} />
+        )
+      )}
+    </View>
+  );
+}
+
+function isTranscriptToolRunning({
+  block,
+  latestToolId,
+  sessionRunning,
+}: {
+  block: MobileSessionTranscriptBlock;
+  latestToolId: string | undefined;
+  sessionRunning: boolean;
+}): boolean {
+  return (
+    sessionRunning &&
+    (block.toolStatus === 'running' ||
+      (block.toolStatus === undefined && block.id === latestToolId))
+  );
+}
+
+function ToolStateIcon({ running }: { running: boolean }) {
+  return running ? (
+    <ActivityIndicator color={COLORS.blue} size="small" />
+  ) : (
+    <Ionicons color={COLORS.green} name="checkmark-circle" size={17} />
+  );
+}
+
+function ToolExpandedContent({ block }: { block: MobileSessionTranscriptBlock }) {
+  return (
+    <View style={styles.toolExpandedBody}>
+      <CodeText value={formatMobileToolTranscriptContent(block.content)} />
+      {block.timestamp ? (
+        <Text style={styles.toolExpandedTime}>{formatTimestamp(block.timestamp)}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+function TranscriptToolGroup({
+  blocks,
+  latestToolId,
+  sessionRunning,
+}: {
+  blocks: MobileSessionTranscriptBlock[];
+  latestToolId: string | undefined;
+  sessionRunning: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const title = mobileToolGroupTitle(blocks);
+  const running = blocks.some((block) =>
+    isTranscriptToolRunning({ block, latestToolId, sessionRunning })
+  );
+  const latestBlock = blocks.at(-1);
+  const preview = latestBlock
+    ? summarizeMobileToolTranscriptContent(latestBlock.content)
+    : 'No details';
+
+  return (
+    <View
+      style={[
+        styles.transcriptBlock,
+        styles.transcriptToolBlock,
+        running ? styles.transcriptToolBlockRunning : null,
+      ]}
+    >
+      <Pressable
+        accessibilityHint={preview}
+        accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${title}. ${
+          running ? 'Running' : 'Completed'
+        }`}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.toolCompactRow, pressed ? styles.buttonPressed : null]}
+        onPress={() => setExpanded((current) => !current)}
+      >
+        <View style={styles.transcriptTitleRow}>
+          <ToolStateIcon running={running} />
+          <Text style={styles.transcriptTitle} numberOfLines={1}>
+            {title}
+          </Text>
+        </View>
+        <View style={styles.toolCompactMeta}>
+          <Text style={[styles.toolStateText, running ? styles.toolStateTextRunning : null]}>
+            {running ? 'Running' : 'Done'}
+          </Text>
+          <Ionicons
+            color={COLORS.muted}
+            name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+            size={16}
+          />
+        </View>
+      </Pressable>
+      {expanded ? (
+        blocks.length === 1 ? (
+          <ToolExpandedContent block={blocks[0]} />
+        ) : (
+          <View style={styles.toolGroupList}>
+            {blocks.map((block) => (
+              <TranscriptToolGroupItem
+                key={block.id}
+                block={block}
+                latestToolId={latestToolId}
+                sessionRunning={sessionRunning}
+              />
+            ))}
+          </View>
+        )
+      ) : null}
+    </View>
+  );
+}
+
+function TranscriptToolGroupItem({
+  block,
+  latestToolId,
+  sessionRunning,
+}: {
+  block: MobileSessionTranscriptBlock;
+  latestToolId: string | undefined;
+  sessionRunning: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const title = block.title ?? 'Command';
+  const running = isTranscriptToolRunning({ block, latestToolId, sessionRunning });
+  const preview = summarizeMobileToolTranscriptContent(block.content);
+
+  return (
+    <View style={[styles.toolGroupItem, running ? styles.toolGroupItemRunning : null]}>
+      <Pressable
+        accessibilityHint={preview}
+        accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${title}. ${
+          running ? 'Running' : 'Completed'
+        }`}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.toolGroupItemRow, pressed ? styles.buttonPressed : null]}
+        onPress={() => setExpanded((current) => !current)}
+      >
+        <View style={styles.transcriptTitleRow}>
+          <ToolStateIcon running={running} />
+          <Text style={styles.toolGroupItemTitle} numberOfLines={1}>
+            {title}
+          </Text>
+        </View>
+        <Ionicons
+          color={COLORS.muted}
+          name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+          size={15}
+        />
+      </Pressable>
+      {expanded ? <ToolExpandedContent block={block} /> : null}
     </View>
   );
 }
 
 function TranscriptBlock({ block }: { block: MobileSessionTranscriptBlock }) {
-  const [toolExpanded, setToolExpanded] = useState(false);
   const isUser = block.role === 'user';
   const isAssistant = block.role === 'assistant';
-  const isTool = block.role === 'tool';
   const isStatus = block.role === 'status';
   const title =
-    block.title ??
-    (isUser ? 'You' : isAssistant ? 'Codex' : isTool ? 'Command' : isStatus ? 'Status' : 'Message');
-  const toggleToolExpanded = useCallback(() => {
-    setToolExpanded((current) => !current);
-  }, []);
-  const showBody = !isTool || toolExpanded;
+    block.title ?? (isUser ? 'You' : isAssistant ? 'Codex' : isStatus ? 'Status' : 'Message');
   const headerContent = (
     <>
       <View style={styles.transcriptTitleRow}>
@@ -3721,7 +3768,6 @@ function TranscriptBlock({ block }: { block: MobileSessionTranscriptBlock }) {
           style={[
             styles.transcriptRoleDot,
             isUser ? styles.transcriptUserDot : null,
-            isTool ? styles.transcriptToolDot : null,
             isStatus ? styles.transcriptStatusDot : null,
           ]}
         />
@@ -3738,13 +3784,6 @@ function TranscriptBlock({ block }: { block: MobileSessionTranscriptBlock }) {
             {formatTimestamp(block.timestamp)}
           </Text>
         ) : null}
-        {isTool ? (
-          <Ionicons
-            color={COLORS.muted}
-            name={toolExpanded ? 'chevron-up-outline' : 'chevron-down-outline'}
-            size={17}
-          />
-        ) : null}
       </View>
     </>
   );
@@ -3754,47 +3793,22 @@ function TranscriptBlock({ block }: { block: MobileSessionTranscriptBlock }) {
       style={[
         styles.transcriptBlock,
         isUser ? styles.transcriptUserBlock : null,
-        isTool ? styles.transcriptToolBlock : null,
         isStatus ? styles.transcriptStatusBlock : null,
       ]}
     >
-      {isTool ? (
-        <Pressable
-          accessibilityLabel={`${toolExpanded ? 'Collapse' : 'Expand'} ${title}`}
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.transcriptHeader, pressed ? styles.buttonPressed : null]}
-          onPress={toggleToolExpanded}
-        >
-          {headerContent}
-        </Pressable>
-      ) : (
-        <View style={styles.transcriptHeader}>{headerContent}</View>
-      )}
-      {isTool && !toolExpanded ? (
-        <Pressable
-          accessibilityLabel={`Expand ${title} details`}
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.toolCollapsedBody, pressed ? styles.buttonPressed : null]}
-          onPress={toggleToolExpanded}
-        >
-          <Text style={styles.toolCollapsedText} numberOfLines={2}>
-            {summarizeToolContent(block.content)}
-          </Text>
-          <Text style={styles.toolCollapsedAction}>Show details</Text>
-        </Pressable>
-      ) : null}
-      {showBody && block.format === 'code' ? (
+      <View style={styles.transcriptHeader}>{headerContent}</View>
+      {block.format === 'code' ? (
         <CodeText value={block.content} />
-      ) : showBody && block.format === 'plain' ? (
+      ) : block.format === 'plain' ? (
         <Text
           selectable
           style={[styles.markdownParagraph, isUser ? styles.transcriptUserText : null]}
         >
           {block.content}
         </Text>
-      ) : showBody ? (
+      ) : (
         <RenderedMarkdown value={block.content} inverted={isUser} />
-      ) : null}
+      )}
     </View>
   );
 }
@@ -4096,24 +4110,18 @@ function TaskRow({
   task: MobileTaskSummary;
   onPress: () => void;
 }) {
-  const bootstrap =
-    task.bootstrapStatus.status === 'bootstrapping'
-      ? 'Booting'
-      : task.bootstrapStatus.status === 'error'
-        ? 'Error'
-        : task.bootstrapStatus.status === 'ready'
-          ? 'Ready'
-          : 'Idle';
+  const sessionCountLabel = `${task.conversationCount} ${task.conversationCount === 1 ? 'session' : 'sessions'}`;
 
   return (
     <Pressable
       accessibilityLabel={`Open task ${task.name}`}
       accessibilityRole="button"
+      testID={`mobile-task-card-two-line-v1-${task.id}`}
       style={({ pressed }) => [styles.taskRow, pressed ? styles.buttonPressed : null]}
       onPress={onPress}
     >
       <View style={styles.taskTopLine}>
-        <Text style={styles.taskName} numberOfLines={2}>
+        <Text style={styles.taskName} numberOfLines={1}>
           {task.name}
         </Text>
         <View style={[styles.statusPill, { borderColor: statusColor(task.activityStatus) }]}>
@@ -4122,51 +4130,17 @@ function TaskRow({
           </Text>
         </View>
       </View>
-      <Text style={styles.taskProject} numberOfLines={1}>
-        {projectLabel}
-      </Text>
-      <View style={styles.taskMetaLine}>
-        <MetaItem icon="pulse-outline" label={bootstrap} />
-        <MetaItem icon="chatbubbles-outline" label={`${task.conversationCount} sessions`} />
-        <MetaItem
-          icon="time-outline"
-          label={formatTimestamp(task.lastInteractedAt ?? task.updatedAt)}
-        />
-      </View>
-      <View style={styles.rowDisclosure}>
-        <Text style={styles.rowDisclosureText}>Sessions</Text>
-        <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={16} />
-      </View>
-    </Pressable>
-  );
-}
-
-function CompactTaskRow({
-  projectLabel,
-  task,
-  onPress,
-}: {
-  projectLabel: string;
-  task: MobileTaskSummary;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityLabel={`Open task ${task.name}`}
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.compactTaskRow, pressed ? styles.buttonPressed : null]}
-      onPress={onPress}
-    >
-      <View style={styles.compactTaskDot} />
-      <View style={styles.compactTaskBody}>
-        <Text style={styles.compactTaskName} numberOfLines={1}>
-          {task.name}
+      <View style={styles.taskSummaryLine}>
+        <Text style={styles.taskProject} numberOfLines={1}>
+          {projectLabel}
         </Text>
-        <Text style={styles.compactTaskProject} numberOfLines={1}>
-          {projectLabel} · {formatTimestamp(task.lastInteractedAt ?? task.updatedAt)}
-        </Text>
+        <View style={styles.taskSummaryMeta}>
+          <Text style={styles.taskSummaryText} numberOfLines={1}>
+            {sessionCountLabel} · {formatTimestamp(task.lastInteractedAt ?? task.updatedAt)}
+          </Text>
+          <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={16} />
+        </View>
       </View>
-      <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={16} />
     </Pressable>
   );
 }
@@ -4270,40 +4244,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 7,
     paddingBottom: Platform.OS === 'ios' ? 10 : 12,
-    gap: 6,
+    gap: 4,
   },
   sessionRunStatus: {
-    minHeight: 36,
+    maxWidth: 142,
+    minHeight: 30,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    flexShrink: 0,
+    gap: 5,
     borderWidth: 1,
-    borderRadius: 7,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    borderRadius: 15,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   sessionRunStatusIcon: {
     width: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sessionRunStatusBody: {
-    minWidth: 0,
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
   sessionRunStatusLabel: {
+    minWidth: 0,
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: '800',
   },
-  sessionRunStatusDetail: {
-    color: COLORS.muted,
-    fontSize: 11,
-    fontWeight: '600',
-  },
   sessionInputCount: {
+    alignSelf: 'flex-end',
+    marginRight: 54,
     color: COLORS.muted,
     fontSize: 11,
     fontWeight: '700',
@@ -4507,89 +4475,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: '600',
   },
-  commandPanel: {
-    borderWidth: 1,
-    borderColor: COLORS.charcoal,
-    borderRadius: 8,
-    backgroundColor: COLORS.charcoal,
-    padding: 16,
-    gap: 14,
-  },
-  commandPanelTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 14,
-  },
-  commandPanelLabel: {
-    color: '#D8D4CB',
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  commandPanelValue: {
-    color: COLORS.surface,
-    fontSize: 42,
-    fontWeight: '800',
-    lineHeight: 46,
-  },
-  commandPanelBadge: {
-    minHeight: 31,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderWidth: 1,
-    borderColor: '#555A60',
-    borderRadius: 8,
-    paddingHorizontal: 9,
-  },
-  commandPanelBadgeText: {
-    color: '#D8D4CB',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  commandPanelText: {
-    color: '#E7E4DC',
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '600',
-  },
-  quickActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  quickActionPrimary: {
-    minHeight: 44,
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: 8,
-    backgroundColor: COLORS.blue,
-  },
-  quickActionPrimaryText: {
-    color: COLORS.surface,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  quickActionSecondary: {
-    minHeight: 44,
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#555A60',
-    borderRadius: 8,
-    backgroundColor: '#F7F7F2',
-  },
-  quickActionSecondaryText: {
-    color: COLORS.charcoal,
-    fontSize: 14,
-    fontWeight: '800',
-  },
   screenHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -4729,35 +4614,6 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.45,
-  },
-  metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  metricCard: {
-    width: '48.5%',
-    minHeight: 92,
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 8,
-    backgroundColor: COLORS.surface,
-    padding: 13,
-    gap: 5,
-  },
-  metricCardActive: {
-    borderColor: COLORS.charcoal,
-    backgroundColor: '#EFEEE7',
-  },
-  metricValue: {
-    color: COLORS.ink,
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  metricLabel: {
-    color: COLORS.muted,
-    fontSize: 13,
-    fontWeight: '600',
   },
   profileScreen: {
     gap: 18,
@@ -5232,6 +5088,37 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     backgroundColor: COLORS.page,
   },
+  projectPickerSearchArea: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.faint,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  projectPickerSearchField: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 10,
+    backgroundColor: COLORS.page,
+    paddingHorizontal: 12,
+  },
+  projectPickerSearchInput: {
+    minWidth: 0,
+    flex: 1,
+    color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '600',
+    paddingVertical: 9,
+  },
+  projectPickerSearchClear: {
+    width: 26,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   projectPickerSort: {
     gap: 7,
     borderTopWidth: 1,
@@ -5343,41 +5230,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.line,
     borderRadius: 8,
     backgroundColor: COLORS.surface,
-    padding: 14,
-    gap: 10,
-  },
-  compactTaskRow: {
-    minHeight: 64,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 11,
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 8,
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: 13,
-    paddingVertical: 10,
-  },
-  compactTaskDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.blue,
-  },
-  compactTaskBody: {
-    minWidth: 0,
-    flex: 1,
-    gap: 3,
-  },
-  compactTaskName: {
-    color: COLORS.ink,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  compactTaskProject: {
-    color: COLORS.muted,
-    fontSize: 12,
-    fontWeight: '600',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 7,
   },
   projectDirectoryRow: {
     minHeight: 72,
@@ -5456,9 +5311,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 21,
   },
+  taskSummaryLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   taskProject: {
+    minWidth: 0,
+    flex: 1,
     color: COLORS.muted,
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  taskSummaryMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  taskSummaryText: {
+    color: COLORS.muted,
+    fontSize: 12,
     fontWeight: '600',
   },
   taskMetaLine: {
@@ -5552,7 +5424,14 @@ const styles = StyleSheet.create({
   },
   transcriptToolBlock: {
     borderColor: '#D0CCC2',
-    backgroundColor: '#F1F0EA',
+    backgroundColor: '#F7F6F1',
+    padding: 0,
+    gap: 0,
+    overflow: 'hidden',
+  },
+  transcriptToolBlockRunning: {
+    borderColor: '#A9C2F8',
+    backgroundColor: '#F7FAFF',
   },
   transcriptStatusBlock: {
     borderColor: COLORS.faint,
@@ -5610,22 +5489,72 @@ const styles = StyleSheet.create({
   transcriptUserMeta: {
     color: '#D8D4CB',
   },
-  toolCollapsedBody: {
+  toolCompactRow: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  toolCompactMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  toolStateText: {
+    color: COLORS.green,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  toolStateTextRunning: {
+    color: COLORS.blue,
+  },
+  toolGroupList: {
     gap: 7,
     borderTopWidth: 1,
     borderTopColor: '#D8D4CB',
-    paddingTop: 10,
+    padding: 8,
   },
-  toolCollapsedText: {
+  toolGroupItem: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#DDD9D0',
+    borderRadius: 7,
+    backgroundColor: COLORS.surface,
+  },
+  toolGroupItemRunning: {
+    borderColor: '#B9CDF7',
+    backgroundColor: '#F7FAFF',
+  },
+  toolGroupItemRow: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  toolGroupItemTitle: {
+    minWidth: 0,
+    flex: 1,
+    color: COLORS.ink,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  toolExpandedBody: {
+    gap: 7,
+    borderTopWidth: 1,
+    borderTopColor: '#D8D4CB',
+    padding: 10,
+  },
+  toolExpandedTime: {
     color: COLORS.muted,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  toolCollapsedAction: {
-    color: COLORS.charcoal,
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'right',
   },
   markdownStack: {
     gap: 10,

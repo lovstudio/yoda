@@ -474,6 +474,21 @@ describe('terminal file links', () => {
     });
   });
 
+  it('recognizes an attachment path enclosed in inline-code backticks', () => {
+    const text =
+      '@/var/folders/zd/dc59tkld3yb25ngy9khxsgm80000gn/T/yoda-attachments/pasted-fe20a82e.png';
+    const line = `› \`${text}\``;
+
+    expect(extractTerminalFileLinkCandidates(line)).toEqual([{ text, index: line.indexOf(text) }]);
+    expect(resolveTerminalFileLinkTarget(text)).toEqual({
+      originalText: text,
+      absolutePath:
+        '/var/folders/zd/dc59tkld3yb25ngy9khxsgm80000gn/T/yoda-attachments/pasted-fe20a82e.png',
+      line: undefined,
+      column: undefined,
+    });
+  });
+
   it('preserves absolute paths outside the workspace root as absolutePath only', () => {
     expect(resolveTerminalFileLinkTarget('/tmp/outside/file.html', '/Users/mark/project')).toEqual({
       originalText: '/tmp/outside/file.html',
@@ -629,6 +644,55 @@ describe('terminal file links', () => {
       }
     }
   );
+
+  it('keeps the screenshot absolute paths whole across indented TUI wraps', () => {
+    const cases = [
+      {
+        lines: [
+          '- “模型接入”现分为“中转渠道”和“直连渠道”。LiteLLM、New API、CLIProxyAPI 已迁入中转渠道， /Users/mark/lovstudio/coding/yoda/',
+          '  src/renderer/features/maas/components/MaasView.tsx:341。',
+        ],
+        text: '/Users/mark/lovstudio/coding/yoda/src/renderer/features/maas/components/MaasView.tsx:341',
+        filePath: 'src/renderer/features/maas/components/MaasView.tsx',
+        line: 341,
+      },
+      {
+        lines: [
+          '- CLIProxyAPI 支持一键安装、SHA256 校验、本地密钥、自动启动/连接、状态检测、管理后台及停止服务， /Users/mark/lovstudio/coding/yoda/src/main/core/maas/cliproxya',
+          '  pi-managed-service.ts:263。发行文件固定为官方 v7.2.120。',
+        ],
+        text: '/Users/mark/lovstudio/coding/yoda/src/main/core/maas/cliproxyapi-managed-service.ts:263',
+        filePath: 'src/main/core/maas/cliproxyapi-managed-service.ts',
+        line: 263,
+      },
+    ];
+    const options = {
+      workspaceRoot: '/Users/mark/lovstudio/coding/yoda/.worktrees/326lx',
+      workspaceRootAliases: ['/Users/mark/lovstudio/coding/yoda'],
+      onOpen: (): void => undefined,
+    };
+
+    for (const { lines, text, filePath, line } of cases) {
+      const terminal = makeTerminal(lines, { cols: 240 });
+      for (const row of [1, 2]) {
+        expect(
+          getTerminalFileLinkMatches(terminal, row, options).map((match) => ({
+            text: match.text,
+            filePath: match.target.filePath,
+            absolutePath: match.target.absolutePath,
+            line: match.target.line,
+          }))
+        ).toEqual([
+          {
+            text,
+            filePath,
+            absolutePath: text.slice(0, text.lastIndexOf(':')),
+            line,
+          },
+        ]);
+      }
+    }
+  });
 
   it('keeps unindented paths on separate non-full rows independent', () => {
     const terminal = makeTerminal(

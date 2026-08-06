@@ -10,7 +10,6 @@ import linearSvg from '@/assets/images/Linear.svg?raw';
 import lovcodeSvg from '@/assets/images/Lovcode.svg?raw';
 import plainSvg from '@/assets/images/Plain.svg?raw';
 import { LOVCODE_DOWNLOAD_URL, type LovcodeAvailability } from '@shared/lovcode';
-import type { MaasPlatformTemplateId } from '@shared/maas';
 import { useIntegrationsContext } from '@renderer/features/integrations/integrations-provider';
 import { HeaderActionToolbar } from '@renderer/lib/components/header-actions';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
@@ -20,8 +19,6 @@ import { useGithubContext } from '@renderer/lib/providers/github-context-provide
 import { Button } from '@renderer/lib/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { IntegrationCardShell } from './IntegrationCardShell';
-import { LiteLlmIntegrationCard } from './LiteLlmIntegrationCard';
-import { NewApiIntegrationCard } from './NewApiIntegrationCard';
 
 /** Light mode: original SVG colors. Dark / dark-black: primary colour. */
 const SvgLogo = ({ raw }: { raw: string }) => {
@@ -60,9 +57,7 @@ type IntegrationItem = {
   connectIcon?: React.ReactNode;
 };
 
-const IntegrationsCard: React.FC<{
-  onOpenMaasPlatform: (platformId: MaasPlatformTemplateId) => void;
-}> = ({ onOpenMaasPlatform }) => {
+const IntegrationsCard: React.FC = () => {
   const { t } = useTranslation();
   const [lovcodeAvailability, setLovcodeAvailability] = useState<LovcodeAvailability | null>(null);
   const [lovcodeLoading, setLovcodeLoading] = useState(true);
@@ -262,8 +257,6 @@ const IntegrationsCard: React.FC<{
       className="grid gap-3"
       style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
     >
-      <LiteLlmIntegrationCard onOpenManualSettings={() => onOpenMaasPlatform('litellm')} />
-      <NewApiIntegrationCard onOpenManualSettings={() => onOpenMaasPlatform('newapi')} />
       {integrations.map((integration) => (
         <IntegrationCardShell
           key={integration.id}

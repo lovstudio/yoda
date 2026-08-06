@@ -1,12 +1,4 @@
-import {
-  Archive,
-  Bookmark,
-  ChevronRight,
-  GitBranch,
-  ListPlus,
-  MoreHorizontal,
-  Users,
-} from 'lucide-react';
+import { Archive, Bookmark, GitBranch, ListPlus, MoreHorizontal, Users } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -42,6 +34,7 @@ import { branchColor } from '@renderer/utils/branch-color';
 import { cn } from '@renderer/utils/utils';
 import { PrBadge } from '../../lib/components/pr-badge';
 import { SidebarItemMiniButton, SidebarMenuRow } from './sidebar-primitives';
+import { TaskTreeToggleButton } from './task-tree-toggle-button';
 import { useSidebarHoverIntent } from './use-sidebar-hover-intent';
 
 interface SidebarTaskItemProps {
@@ -255,20 +248,12 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
       >
         <div className="flex min-w-0 flex-1 items-center gap-1 self-stretch overflow-hidden">
           {hasRootToggle && (
-            <SidebarItemMiniButton
-              type="button"
-              aria-label={t('sidebar.toggleSubtasks')}
-              aria-expanded={!isCollapsed}
-              className="shrink-0 transition-opacity duration-150 opacity-0 group-hover/row:opacity-100"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleToggleSubtasks();
-              }}
-            >
-              <ChevronRight
-                className={cn('h-4 w-4 transition-transform', !isCollapsed && 'rotate-90')}
-              />
-            </SidebarItemMiniButton>
+            <TaskTreeToggleButton
+              collapsed={isCollapsed}
+              label={t('sidebar.toggleSubtasks')}
+              variant="root"
+              onToggle={handleToggleSubtasks}
+            />
           )}
           {guideTrail.length > 0 && (
             <span className="flex shrink-0 self-stretch">
@@ -286,24 +271,12 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
                     fadeOnRowHover={isToggleSlot}
                   >
                     {isToggleSlot && (
-                      <button
-                        type="button"
-                        aria-label={t('sidebar.toggleSubtasks')}
-                        aria-expanded={!isCollapsed}
-                        className="absolute inset-0 flex items-center justify-center rounded-sm text-foreground-tertiary opacity-0 transition-opacity duration-150 hover:bg-background-tertiary-2 hover:text-foreground group-hover/row:opacity-100"
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleSubtasks();
-                        }}
-                      >
-                        <ChevronRight
-                          className={cn(
-                            'h-3.5 w-3.5 transition-transform',
-                            !isCollapsed && 'rotate-90'
-                          )}
-                        />
-                      </button>
+                      <TaskTreeToggleButton
+                        collapsed={isCollapsed}
+                        label={t('sidebar.toggleSubtasks')}
+                        variant="nested"
+                        onToggle={handleToggleSubtasks}
+                      />
                     )}
                   </TreeGuideSlot>
                 );
@@ -330,7 +303,11 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               label={markerLabel}
               className={cn(
                 'absolute left-1 top-1/2 -translate-y-1/2',
-                hasRootToggle && 'transition-opacity group-hover/row:opacity-0'
+                // The appearance marker and the root disclosure share the
+                // reserved icon slot. Opacity alone does not remove the marker
+                // from hit testing while it fades, so let pointer input reach
+                // the disclosure button underneath.
+                hasRootToggle && 'pointer-events-none transition-opacity group-hover/row:opacity-0'
               )}
             />
           )}

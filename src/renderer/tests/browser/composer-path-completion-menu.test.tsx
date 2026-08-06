@@ -126,4 +126,41 @@ describe('ComposerPromptInput path completion menu', () => {
     expect(menuRect.right).toBeLessThanOrEqual(window.innerWidth - 8);
     expect(menuRect.bottom).toBeLessThanOrEqual(window.innerHeight - 8);
   });
+
+  it('exposes quick action mode as a persistent pressed icon toggle', async () => {
+    const { ComposerPromptInput } = await import('@renderer/app/composer-prompt-input');
+
+    function Harness() {
+      const [value, setValue] = useState('Start the project');
+      const [tokens, setTokens] = useState<PromptToken[]>([]);
+      const [quickActionMode, setQuickActionMode] = useState(false);
+      return (
+        <QueryClientProvider client={queryClient}>
+          <ComposerPromptInput
+            value={value}
+            onChange={setValue}
+            tokens={tokens}
+            onTokensChange={setTokens}
+            runtimeId="codex"
+            projectId="project-1"
+            quickActionMode={quickActionMode}
+            onQuickActionModeChange={setQuickActionMode}
+          />
+        </QueryClientProvider>
+      );
+    }
+
+    await act(async () => root.render(<Harness />));
+    const enable = clippingHost.querySelector<HTMLButtonElement>(
+      '[aria-label="home.quickActionModeEnable"]'
+    );
+    expect(enable?.getAttribute('aria-pressed')).toBe('false');
+
+    await act(async () => enable?.click());
+
+    const disable = clippingHost.querySelector<HTMLButtonElement>(
+      '[aria-label="home.quickActionModeDisable"]'
+    );
+    expect(disable?.getAttribute('aria-pressed')).toBe('true');
+  });
 });

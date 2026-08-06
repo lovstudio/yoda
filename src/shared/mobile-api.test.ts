@@ -3,6 +3,8 @@ import {
   canContinueMobileSession,
   createExpoGoPairingUrl,
   createMobilePairingUrl,
+  filterMobileProjects,
+  filterMobileTasks,
   getMobileProjectActivityById,
   parseMobilePairingUrl,
   sortMobileProjects,
@@ -174,6 +176,28 @@ describe('mobile project ordering', () => {
     ]);
   });
 
+  it('filters projects by display or source name with multi-term matching', () => {
+    const projects = [
+      project('yoda-mobile', '2026-07-31T08:00:00.000Z', { displayName: 'Yoda Mobile' }),
+      project('lovstudio-web', '2026-07-30T08:00:00.000Z', {
+        displayName: 'LovStudio 官网',
+      }),
+      project('archive', '2026-07-29T08:00:00.000Z', { displayName: '历史项目' }),
+    ];
+
+    expect(filterMobileProjects(projects, '  YODA mobile ').map(({ id }) => id)).toEqual([
+      'yoda-mobile',
+    ]);
+    expect(filterMobileProjects(projects, 'lovstudio').map(({ id }) => id)).toEqual([
+      'lovstudio-web',
+    ]);
+    expect(filterMobileProjects(projects, '').map(({ id }) => id)).toEqual([
+      'yoda-mobile',
+      'lovstudio-web',
+      'archive',
+    ]);
+  });
+
   it('derives project activity from the latest task interaction with project fallback', () => {
     const projects = [
       project('active', '2026-06-08T08:00:00.000Z'),
@@ -250,6 +274,22 @@ describe('mobile task attribution ordering', () => {
       'recent',
       'Task 2',
       'Task 10',
+    ]);
+  });
+
+  it('filters task choices without changing their established order', () => {
+    const tasks = [
+      task('Yoda Mobile 发布', '2026-08-05T12:00:00.000Z'),
+      task('Yoda 桌面端', '2026-08-04T12:00:00.000Z'),
+      task('LovStudio 官网', '2026-08-03T12:00:00.000Z'),
+    ];
+
+    expect(filterMobileTasks(tasks, 'yoda').map(({ id }) => id)).toEqual([
+      'Yoda Mobile 发布',
+      'Yoda 桌面端',
+    ]);
+    expect(filterMobileTasks(tasks, 'mobile 发布').map(({ id }) => id)).toEqual([
+      'Yoda Mobile 发布',
     ]);
   });
 });

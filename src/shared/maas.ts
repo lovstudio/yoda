@@ -7,22 +7,23 @@ export const MAAS_PLATFORM_IDS = [
   'siliconflow',
   'litellm',
   'newapi',
+  'cliproxyapi',
   'custom',
 ] as const;
 
 export type MaasPlatformTemplateId = (typeof MAAS_PLATFORM_IDS)[number];
+export type MaasProfileId = `${MaasPlatformTemplateId}:${string}`;
 export type CustomMaasPlatformId = `custom:${string}`;
-export type MaasPlatformId = MaasPlatformTemplateId | CustomMaasPlatformId;
+export type MaasPlatformId = MaasPlatformTemplateId | MaasProfileId;
 
 const CUSTOM_MAAS_PLATFORM_PREFIX = 'custom:';
 
 export function isMaasPlatformId(value: unknown): value is MaasPlatformId {
   if (typeof value !== 'string') return false;
   if ((MAAS_PLATFORM_IDS as readonly string[]).includes(value)) return true;
-  return (
-    value.startsWith(CUSTOM_MAAS_PLATFORM_PREFIX) &&
-    value.length > CUSTOM_MAAS_PLATFORM_PREFIX.length
-  );
+  const separatorIndex = value.indexOf(':');
+  if (separatorIndex <= 0 || separatorIndex === value.length - 1) return false;
+  return (MAAS_PLATFORM_IDS as readonly string[]).includes(value.slice(0, separatorIndex));
 }
 
 export function isCustomMaasPlatformId(
@@ -32,13 +33,23 @@ export function isCustomMaasPlatformId(
 }
 
 export function getMaasPlatformTemplateId(platformId: MaasPlatformId): MaasPlatformTemplateId {
-  return isCustomMaasPlatformId(platformId) ? 'custom' : platformId;
+  const separatorIndex = platformId.indexOf(':');
+  return (
+    separatorIndex < 0 ? platformId : platformId.slice(0, separatorIndex)
+  ) as MaasPlatformTemplateId;
+}
+
+export function createMaasProfileId(
+  templateId: MaasPlatformTemplateId,
+  uuid: string = globalThis.crypto.randomUUID()
+): MaasProfileId {
+  return `${templateId}:${uuid}`;
 }
 
 export function createCustomMaasPlatformId(
   uuid: string = globalThis.crypto.randomUUID()
 ): CustomMaasPlatformId {
-  return `${CUSTOM_MAAS_PLATFORM_PREFIX}${uuid}`;
+  return createMaasProfileId('custom', uuid) as CustomMaasPlatformId;
 }
 
 export const MAAS_INVOCATION_KINDS = ['text', 'image', 'embedding', 'video'] as const;
@@ -55,6 +66,7 @@ export type MaasPlatformConnection = {
   inferenceKeyFingerprint: string | null;
   connectedAt: string | null;
   lastCheckedAt: string | null;
+  lastTest: MaasConnectionCheckResult | null;
 };
 
 export type MaasConnection = MaasPlatformConnection & {
@@ -64,10 +76,9 @@ export type MaasConnection = MaasPlatformConnection & {
 };
 
 export function hasMaasInferenceCredential(connection: MaasConnection): boolean {
+  const templateId = getMaasPlatformTemplateId(connection.platformId);
   return Boolean(
-    connection.platformId === 'zenmux'
-      ? connection.inferenceKeyFingerprint
-      : connection.keyFingerprint
+    templateId === 'zenmux' ? connection.inferenceKeyFingerprint : connection.keyFingerprint
   );
 }
 
@@ -77,7 +88,8 @@ export function supportsMaasPlatformForRuntime(
 ): boolean {
   if (runtimeId === 'codex') return true;
   if (runtimeId === 'claude') {
-    return platformId === 'zenmux' || platformId === 'openrouter';
+    const templateId = getMaasPlatformTemplateId(platformId);
+    return templateId === 'zenmux' || templateId === 'openrouter';
   }
   return false;
 }
@@ -101,6 +113,12 @@ export type MaasConnectionCheckResult = {
   ok: boolean;
   error: string | null;
   checkedAt: string;
+  samples: Array<{
+    durationMs: number;
+    ok: boolean;
+    error: string | null;
+  }>;
+  averageLatencyMs: number | null;
 };
 
 export type MaasRuntimeBinding = {
@@ -140,9 +158,18 @@ export type MaasSetGlobalBindingInput = {
   enabled: boolean;
 };
 
+export const MAAS_PLATFORM_CATEGORIES = [
+  'hosted-platform',
+  'self-hosted-gateway',
+  'custom',
+] as const;
+
+export type MaasPlatformCategory = (typeof MAAS_PLATFORM_CATEGORIES)[number];
+
 export type MaasPlatformDefinition = {
   id: MaasPlatformTemplateId;
   name: string;
+  category: MaasPlatformCategory;
   description: string;
   defaultEndpoint: string;
   docsUrl: string;
@@ -227,6 +254,7 @@ export const MAAS_PLATFORMS: Record<MaasPlatformTemplateId, MaasPlatformDefiniti
   zenmux: {
     id: 'zenmux',
     name: 'ZenMux',
+    category: 'hosted-platform',
     description: 'Use a unified API standard to invoke models from different providers.',
     defaultEndpoint: 'https://zenmux.ai/api/v1',
     docsUrl: 'https://zenmux.ai/docs/',
@@ -236,6 +264,7 @@ export const MAAS_PLATFORMS: Record<MaasPlatformTemplateId, MaasPlatformDefiniti
   openrouter: {
     id: 'openrouter',
     name: 'OpenRouter',
+    category: 'hosted-platform',
     description:
       'Access hundreds of AI models through a single endpoint, while automatically handling fallbacks.',
     defaultEndpoint: 'https://openrouter.ai/api/v1',
@@ -246,6 +275,7 @@ export const MAAS_PLATFORMS: Record<MaasPlatformTemplateId, MaasPlatformDefiniti
   siliconflow: {
     id: 'siliconflow',
     name: 'SiliconFlow',
+    category: 'hosted-platform',
     description: 'Use SiliconFlow API to call GenAI capabilities; call via OpenAI interface.',
     defaultEndpoint: 'https://api.siliconflow.cn/v1',
     docsUrl: 'https://docs.siliconflow.cn/',
@@ -255,6 +285,7 @@ export const MAAS_PLATFORMS: Record<MaasPlatformTemplateId, MaasPlatformDefiniti
   litellm: {
     id: 'litellm',
     name: 'LiteLLM',
+    category: 'self-hosted-gateway',
     description:
       'Connect to a LiteLLM Gateway that routes requests across multiple model providers with load balancing and fallbacks.',
     defaultEndpoint: 'http://127.0.0.1:4000/v1',
@@ -265,6 +296,7 @@ export const MAAS_PLATFORMS: Record<MaasPlatformTemplateId, MaasPlatformDefiniti
   newapi: {
     id: 'newapi',
     name: 'New API',
+    category: 'self-hosted-gateway',
     description:
       'Manage OpenAI-compatible upstream channels through a lightweight local gateway with routing and failover.',
     defaultEndpoint: 'http://127.0.0.1:4001/v1',
@@ -272,9 +304,21 @@ export const MAAS_PLATFORMS: Record<MaasPlatformTemplateId, MaasPlatformDefiniti
     officialDescriptionUrl: 'https://docs.newapi.pro/',
     capabilities: ['text', 'image', 'embedding'],
   },
+  cliproxyapi: {
+    id: 'cliproxyapi',
+    name: 'CLIProxyAPI',
+    category: 'self-hosted-gateway',
+    description:
+      'Expose CLI and OAuth accounts through OpenAI, Gemini, Claude, and Codex-compatible APIs with multi-account routing.',
+    defaultEndpoint: 'http://127.0.0.1:8317/v1',
+    docsUrl: 'https://github.com/router-for-me/CLIProxyAPI',
+    officialDescriptionUrl: 'https://github.com/router-for-me/CLIProxyAPI',
+    capabilities: ['text', 'image'],
+  },
   custom: {
     id: 'custom',
     name: 'Custom',
+    category: 'custom',
     description: 'Connect a custom OpenAI-compatible model platform.',
     defaultEndpoint: 'https://api.example.com/v1',
     docsUrl: 'https://platform.openai.com/docs/api-reference',

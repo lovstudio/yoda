@@ -68,6 +68,9 @@ export const SETTINGS_DEFAULTS = {
   automations: {
     items: [],
   },
+  issueWorker: {
+    projects: {},
+  },
   kanban: {
     hooksByStatus: {},
   },

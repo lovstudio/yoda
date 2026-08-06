@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MaasConnection } from '@shared/maas';
-import { getAvailableMaasPlatformIds, getVisibleMaasPlatformIds } from './maas-platform-list';
+import { getVisibleMaasPlatformIds } from './maas-platform-list';
 
 function connection(overrides: Partial<MaasConnection>): MaasConnection {
   return {
@@ -11,6 +11,7 @@ function connection(overrides: Partial<MaasConnection>): MaasConnection {
     inferenceKeyFingerprint: null,
     connectedAt: null,
     lastCheckedAt: null,
+    lastTest: null,
     configured: false,
     connected: false,
     error: null,
@@ -31,17 +32,7 @@ describe('MaaS platform list', () => {
     ]);
   });
 
-  it('only offers platforms that have not already been added', () => {
-    expect(getAvailableMaasPlatformIds(['zenmux', 'custom'])).toEqual([
-      'openrouter',
-      'siliconflow',
-      'litellm',
-      'newapi',
-      'custom',
-    ]);
-  });
-
-  it('keeps every Custom instance visible and always offers another one', () => {
+  it('keeps every profile instance visible', () => {
     const connections = [
       connection({ platformId: 'custom:first', configured: true }),
       connection({ platformId: 'custom:second', configured: true }),
@@ -52,6 +43,5 @@ describe('MaaS platform list', () => {
       'custom:second',
       'custom:third',
     ]);
-    expect(getAvailableMaasPlatformIds(['custom:first', 'custom:second'])).toContain('custom');
   });
 });

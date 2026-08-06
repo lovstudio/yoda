@@ -4,8 +4,10 @@ import type {
   ConnectionStatusMap,
   IssueProviderType,
 } from '@shared/issue-providers';
+import type { IssueWorkerConfigPatch } from '@shared/issue-worker';
 import { projectManager } from '@main/core/projects/project-manager';
 import type { IssueProvider, IssueQueryOpts, IssueSearchOpts } from './issue-provider';
+import { issueWorkerService } from './issue-worker-service';
 import { getAllIssueProviders, getIssueProvider } from './registry';
 
 const DEFAULT_CAPABILITIES = {
@@ -62,6 +64,11 @@ async function withResolvedRemote<T extends IssueQueryOpts>(opts: T): Promise<T>
 }
 
 export const issueController = createRPCController({
+  getWorkerStatus: (projectId: string) => issueWorkerService.getStatus(projectId),
+  configureWorker: (projectId: string, patch: IssueWorkerConfigPatch) =>
+    issueWorkerService.configure(projectId, patch),
+  runWorkerNow: (projectId: string) => issueWorkerService.runNow(projectId),
+
   checkConnection: async (provider: IssueProviderType) => {
     const issueProvider = getIssueProvider(provider);
     if (!issueProvider) {

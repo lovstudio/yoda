@@ -335,6 +335,23 @@ export function sortMobileProjects(
     .map(({ project }) => project);
 }
 
+function matchesMobileSearchQuery(query: string, values: readonly string[]): boolean {
+  const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const searchableText = values.join('\n').toLocaleLowerCase();
+  return terms.every((term) => searchableText.includes(term));
+}
+
+/** Filters projects by their user-facing and source names while preserving the current sort order. */
+export function filterMobileProjects(
+  projects: readonly MobileProjectSummary[],
+  query: string
+): MobileProjectSummary[] {
+  return projects.filter((project) =>
+    matchesMobileSearchQuery(query, [project.displayName, project.name])
+  );
+}
+
 export type MobileTaskSummary = {
   id: string;
   projectId: string;
@@ -375,6 +392,14 @@ export function sortMobileTaskAttributionCandidates(
         a.index - b.index
     )
     .map(({ task }) => task);
+}
+
+/** Filters task choices by name while preserving long-term, pinned, and activity ordering. */
+export function filterMobileTasks(
+  tasks: readonly MobileTaskSummary[],
+  query: string
+): MobileTaskSummary[] {
+  return tasks.filter((task) => matchesMobileSearchQuery(query, [task.name]));
 }
 
 export type MobileDashboardMetrics = {
@@ -492,12 +517,15 @@ export type MobileSessionContentSource = 'live' | 'history' | 'empty';
 export type MobileSessionTranscriptRole = 'user' | 'assistant' | 'tool' | 'status';
 export type MobileSessionTranscriptFormat = 'markdown' | 'code' | 'plain';
 export type MobileSessionTranscriptAgentPhase = 'commentary' | 'final';
+export type MobileSessionTranscriptToolStatus = 'running' | 'completed';
 
 export type MobileSessionTranscriptBlock = {
   id: string;
   role: MobileSessionTranscriptRole;
   /** Present for Agent text when the runtime exposes reply-phase metadata. */
   agentPhase?: MobileSessionTranscriptAgentPhase;
+  /** Present for tool blocks when the transcript exposes call/result boundaries. */
+  toolStatus?: MobileSessionTranscriptToolStatus;
   title?: string;
   timestamp: string | null;
   format: MobileSessionTranscriptFormat;
