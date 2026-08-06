@@ -15,9 +15,12 @@ const codexState = vi.hoisted(() => ({
     id: string;
     cwd: string;
     title: string;
+    firstUserMessage: string;
     createdAtMs: number;
     updatedAtMs: number;
     archived: number;
+    rolloutPath?: string;
+    tokensUsed?: number;
   }>,
 }));
 
@@ -227,6 +230,72 @@ describe('CodexSessionTitleSource helpers', () => {
     }
   });
 
+  it('rebinds a routed conversation from an interrupted stub to its relaunched thread', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    const source = new CodexSessionTitleSource();
+    const bindings: string[] = [];
+    const stubRolloutPath = join(dir, 'stub.jsonl');
+    writeFileSync(
+      stubRolloutPath,
+      [
+        JSON.stringify({ type: 'session_meta', payload: { id: 'stub-thread' } }),
+        JSON.stringify({
+          type: 'response_item',
+          payload: { type: 'message', role: 'user' },
+        }),
+        JSON.stringify({
+          type: 'event_msg',
+          payload: { type: 'turn_aborted', reason: 'interrupted' },
+        }),
+      ].join('\n')
+    );
+    const watcher = source.watch(
+      {
+        runtimeId: 'codex',
+        conversationId: 'routed-conversation',
+        projectId: 'project',
+        taskId: 'task',
+        cwd: '/repo',
+        startedAtMs: 10_000,
+        isResuming: false,
+      },
+      () => {},
+      (sessionId) => bindings.push(sessionId)
+    );
+
+    insertThread({
+      id: 'stub-thread',
+      cwd: '/repo',
+      title: '$solu 接入 twitter',
+      firstUserMessage: '$solu 接入 twitter',
+      createdAtMs: 10_100,
+      updatedAtMs: 10_200,
+      rolloutPath: stubRolloutPath,
+      tokensUsed: 0,
+    });
+
+    try {
+      vi.advanceTimersByTime(0);
+      expect(bindings).toEqual(['stub-thread']);
+
+      insertThread({
+        id: 'real-thread',
+        cwd: '/repo',
+        title: '$solution-architect  接入 twitter',
+        firstUserMessage: '$solution-architect  接入 twitter',
+        createdAtMs: 10_500,
+        updatedAtMs: 11_000,
+        tokensUsed: 1,
+      });
+      vi.advanceTimersByTime(1_000);
+
+      expect(bindings).toEqual(['stub-thread', 'real-thread']);
+    } finally {
+      watcher.stop();
+    }
+  });
+
   it('reads an already-bound Codex thread title by id', () => {
     insertThread({ id: 'thread-1', cwd: '/repo', title: 'Renamed by Codex', updatedAtMs: 6_000 });
 
@@ -254,17 +323,23 @@ describe('CodexSessionTitleSource helpers', () => {
     id: string;
     cwd: string;
     title: string;
+    firstUserMessage?: string;
     updatedAtMs: number;
     createdAtMs?: number;
     archived?: number;
+    rolloutPath?: string;
+    tokensUsed?: number;
   }): void {
     codexState.rows.push({
       id: params.id,
       cwd: params.cwd,
       title: params.title,
+      firstUserMessage: params.firstUserMessage ?? '',
       createdAtMs: params.createdAtMs ?? params.updatedAtMs,
       updatedAtMs: params.updatedAtMs,
       archived: params.archived ?? 0,
+      ...(params.rolloutPath ? { rolloutPath: params.rolloutPath } : {}),
+      ...(params.tokensUsed === undefined ? {} : { tokensUsed: params.tokensUsed }),
     });
   }
 });
