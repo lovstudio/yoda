@@ -1,9 +1,4 @@
-import {
-  MAAS_PLATFORM_IDS,
-  type MaasConnection,
-  type MaasPlatformId,
-  type MaasPlatformTemplateId,
-} from '@shared/maas';
+import type { MaasConnection, MaasPlatformId } from '@shared/maas';
 
 export function getVisibleMaasPlatformIds(
   connections: readonly MaasConnection[] | undefined,
@@ -18,13 +13,4 @@ export function getVisibleMaasPlatformIds(
     if (!visiblePlatformIds.includes(platformId)) visiblePlatformIds.push(platformId);
   }
   return visiblePlatformIds;
-}
-
-export function getAvailableMaasPlatformIds(
-  visiblePlatformIds: readonly MaasPlatformId[]
-): MaasPlatformTemplateId[] {
-  const visibleIds = new Set(visiblePlatformIds);
-  return MAAS_PLATFORM_IDS.filter(
-    (platformId) => platformId === 'custom' || !visibleIds.has(platformId)
-  );
 }

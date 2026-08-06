@@ -4157,10 +4157,16 @@
   "maas": {
     "title": "模型接入",
     "subtitle": "统一管理直连渠道与中转渠道，并应用到 Agent Client。",
-    "platformsTitle": "直连渠道",
+    "platformsTitle": "云端集成",
+    "cloudProfiles": {
+      "title": "云端集成",
+      "description": "每个 Router 配置都是一条独立 Profile；可不限量新增，同一目标平台也可保存多个 Key。",
+      "docs": "服务商与测试"
+    },
     "managedGateways": {
-      "title": "中转渠道",
-      "description": "由 Yoda 安装并运行本地中转服务，或连接你已有的远程部署。",
+      "title": "本地集成（开源）",
+      "description": "按 GitHub Star 排序。Yoda 可快捷安装、启停并管理本地 Router，也支持连接已有服务。",
+      "integrationDocs": "集成文档",
       "oneClickInstall": "一键安装",
       "start": "启动",
       "stopService": "停止服务",
@@ -4225,10 +4231,12 @@
     "addedCount": "已添加 {{count}} 个",
     "activeCount": "生效中 {{count}} 个",
     "addPlatform": "新增接入",
+    "addProfile": "新增 Profile",
     "selectPlatform": "选择接入服务",
+    "selectTargetPlatform": "选择目标平台（可重复添加）",
     "cancelAddPlatform": "取消添加 {{platform}}",
-    "emptyTitle": "还没有添加直连渠道",
-    "emptyDescription": "新增一个模型平台或自定义接入，并保存端点与 API Key；同时最多只有一个渠道生效。",
+    "emptyTitle": "还没有云端 Profile",
+    "emptyDescription": "新增一条 Profile 并保存目标端点与 API Key；同一平台可配置多条，同时最多只有一条生效。",
     "global": {
       "title": "当前生效接入",
       "description": "全局允许 0 或 1 个接入服务生效。启用后会备份所有兼容 Agent CLI 的当前配置；启用另一服务会自动切换，停用时自动复原。",
@@ -4354,7 +4362,12 @@
       "keyFingerprint": "Key {{fingerprint}}",
       "noKey": "未保存 Key",
       "lastChecked": "检查于 {{time}}",
-      "neverChecked": "尚未检查"
+      "neverChecked": "尚未检查",
+      "test": "测试连接",
+      "testing": "正在测试 3 次…",
+      "testFailed": "连接测试未通过",
+      "averageLatency": "平均 {{latency}} ms",
+      "testSamples": "3 次：{{samples}}"
     },
     "records": {
       "title": "ZenMux 账单与用量",

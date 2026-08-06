@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Copy,
   Download,
   Ellipsis,
@@ -16,8 +17,10 @@ import {
   type CliProxyApiManagedOperation,
 } from '@shared/cliproxyapi-managed';
 import type { MaasConnection } from '@shared/maas';
+import { YODA_MAAS_DOCS_URL } from '@shared/urls';
 import { HeaderActionButton, HeaderActionToolbar } from '@renderer/lib/components/header-actions';
 import { useToast } from '@renderer/lib/hooks/use-toast';
+import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
 import {
   DropdownMenu,
@@ -343,6 +346,12 @@ export function CliProxyApiManagedCard({ onOpenManualSettings }: CliProxyApiMana
             <DropdownMenuItem onClick={onOpenManualSettings}>
               <Settings2 className="size-4" />
               {t('maas.managedGateways.connectionSettings')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => void rpc.app.openExternal(`${YODA_MAAS_DOCS_URL}#cliproxyapi`)}
+            >
+              <BookOpen className="size-4" />
+              {t('maas.managedGateways.integrationDocs')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => void statusQuery.refetch()}>
               <RefreshCw className="size-4" />

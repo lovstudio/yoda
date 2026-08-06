@@ -223,6 +223,22 @@ export const maasConnectionSchema = z.object({
   inferenceKeyFingerprint: z.string().nullable().default(null),
   connectedAt: z.string().nullable(),
   lastCheckedAt: z.string().nullable(),
+  lastTest: z
+    .object({
+      ok: z.boolean(),
+      error: z.string().nullable(),
+      checkedAt: z.string(),
+      samples: z.array(
+        z.object({
+          durationMs: z.number().nonnegative(),
+          ok: z.boolean(),
+          error: z.string().nullable(),
+        })
+      ),
+      averageLatencyMs: z.number().nonnegative().nullable(),
+    })
+    .nullable()
+    .default(null),
 });
 
 export const maasRuntimeBindingSchema = z.object({

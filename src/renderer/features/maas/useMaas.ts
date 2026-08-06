@@ -382,6 +382,7 @@ export function useDisconnectMaasPlatform() {
                 inferenceKeyFingerprint: null,
                 connectedAt: null,
                 lastCheckedAt: null,
+                lastTest: null,
                 configured: false,
                 connected: false,
                 error: null,
@@ -400,8 +401,10 @@ export function useDisconnectMaasPlatform() {
 }
 
 export function useCheckMaasConnection() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (platformId: MaasPlatformId) => rpc.maas.checkConnection(platformId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections }),
   });
 }
 

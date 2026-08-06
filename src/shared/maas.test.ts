@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createCustomMaasPlatformId,
+  createMaasProfileId,
   getMaasPlatformDefinition,
   getMaasPlatformTemplateId,
   isMaasPlatformId,
@@ -22,6 +23,17 @@ describe('MaaS platform instances', () => {
   it('keeps the legacy fixed Custom ID valid', () => {
     expect(isMaasPlatformId('custom')).toBe(true);
     expect(getMaasPlatformTemplateId('custom')).toBe('custom');
+  });
+
+  it('creates independent profiles for the same cloud target platform', () => {
+    const first = createMaasProfileId('zenmux', 'first-key');
+    const second = createMaasProfileId('zenmux', 'second-key');
+
+    expect(first).toBe('zenmux:first-key');
+    expect(second).toBe('zenmux:second-key');
+    expect(first).not.toBe(second);
+    expect(isMaasPlatformId(first)).toBe(true);
+    expect(getMaasPlatformTemplateId(first)).toBe('zenmux');
   });
 
   it('provides a local LiteLLM Gateway preset that supports Responses API routing', () => {

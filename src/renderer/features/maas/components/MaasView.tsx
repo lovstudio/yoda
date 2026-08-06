@@ -1,6 +1,7 @@
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import {
   Activity,
+  BookOpen,
   ChevronDown,
   Copy,
   ExternalLink,
@@ -17,19 +18,19 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   createCustomMaasPlatformId,
+  createMaasProfileId,
   getMaasPlatformDefinition,
   getMaasPlatformTemplateId,
   hasMaasInferenceCredential,
   isMaasPlatformId,
-  MAAS_PLATFORM_CATEGORIES,
   MAAS_PLATFORMS,
   type MaasApiKeyKind,
   type MaasConnection,
-  type MaasPlatformCategory,
   type MaasPlatformId,
   type MaasPlatformOfficialDescription,
   type MaasPlatformTemplateId,
 } from '@shared/maas';
+import { YODA_MAAS_DOCS_URL } from '@shared/urls';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -54,8 +55,9 @@ import {
 import { Switch } from '@renderer/lib/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
-import { getAvailableMaasPlatformIds, getVisibleMaasPlatformIds } from '../maas-platform-list';
+import { getVisibleMaasPlatformIds } from '../maas-platform-list';
 import {
+  useCheckMaasConnection,
   useConnectMaasPlatform,
   useDisconnectMaasPlatform,
   useMaasConnections,
@@ -70,6 +72,7 @@ import { MaasGatewayRequirement } from './MaasGatewayRequirement';
 import { NewApiManagedCard } from './NewApiManagedCard';
 
 const MANAGED_GATEWAY_IDS = ['litellm', 'newapi', 'cliproxyapi'] as const;
+const CLOUD_PROFILE_TEMPLATE_IDS = ['zenmux', 'openrouter', 'siliconflow', 'custom'] as const;
 type ManagedGatewayId = (typeof MANAGED_GATEWAY_IDS)[number];
 
 function isManagedGatewayId(platformId: MaasPlatformId): platformId is ManagedGatewayId {
@@ -90,6 +93,7 @@ function findConnection(
       inferenceKeyFingerprint: null,
       connectedAt: null,
       lastCheckedAt: null,
+      lastTest: null,
       configured: false,
       connected: false,
       error: null,
@@ -173,13 +177,9 @@ export const MaasView: React.FC<{
     [connections, draftPlatformIds]
   );
   const visiblePlatformIds = useMemo(
-    () => allVisiblePlatformIds.filter((platformId) => !isManagedGatewayId(platformId)),
-    [allVisiblePlatformIds]
-  );
-  const availablePlatformIds = useMemo(
     () =>
-      getAvailableMaasPlatformIds(allVisiblePlatformIds).filter(
-        (platformId) => !isManagedGatewayId(platformId)
+      allVisiblePlatformIds.filter(
+        (platformId) => !isManagedGatewayId(getMaasPlatformTemplateId(platformId))
       ),
     [allVisiblePlatformIds]
   );
@@ -187,14 +187,6 @@ export const MaasView: React.FC<{
     () =>
       new Map(platformDescriptions?.map((description) => [description.platformId, description])),
     [platformDescriptions]
-  );
-  const visiblePlatformGroups = useMemo(
-    () => groupMaasPlatformIds(visiblePlatformIds),
-    [visiblePlatformIds]
-  );
-  const availablePlatformGroups = useMemo(
-    () => groupMaasPlatformIds(availablePlatformIds),
-    [availablePlatformIds]
   );
 
   const handlePlatformValueChange = useCallback((value: string) => {
@@ -207,7 +199,7 @@ export const MaasView: React.FC<{
   }, []);
 
   const handleAddPlatform = useCallback((templateId: MaasPlatformTemplateId) => {
-    const platformId = templateId === 'custom' ? createCustomMaasPlatformId() : templateId;
+    const platformId = createMaasProfileId(templateId);
     setDraftPlatformIds((current) => [...current, platformId]);
     setExpandedPlatformId(platformId);
   }, []);
@@ -284,7 +276,9 @@ export const MaasView: React.FC<{
             key={platformId}
             connection={connection}
             officialDescription={platformDescriptionById.get(templateId)}
-            onOpenUsage={platformId === 'zenmux' ? () => showZenmuxUsage({}) : undefined}
+            onOpenUsage={
+              templateId === 'zenmux' ? () => showZenmuxUsage({ platformId }) : undefined
+            }
             onCancelDraft={isDraft ? () => handleCancelDraft(platformId) : undefined}
             onConnected={() => handlePlatformConnected(platformId)}
             enabled={enabled}
@@ -302,21 +296,7 @@ export const MaasView: React.FC<{
 
   const platformSections =
     visiblePlatformIds.length > 0 ? (
-      <div className="grid gap-5">
-        {visiblePlatformGroups.map(({ category, platformIds }) => (
-          <section key={category} data-maas-platform-category={category} className="grid gap-2.5">
-            <div className="px-0.5">
-              <h4 className="text-xs font-medium text-foreground">
-                {t(`maas.categories.${category}.title`)}
-              </h4>
-              <p className="mt-0.5 text-xs leading-relaxed text-foreground-muted">
-                {t(`maas.categories.${category}.description`)}
-              </p>
-            </div>
-            {renderPlatformAccordion(platformIds)}
-          </section>
-        ))}
-      </div>
+      renderPlatformAccordion(visiblePlatformIds)
     ) : (
       <div className="flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/10 px-6 py-8 text-center">
         <Layers className="h-5 w-5 text-foreground-muted" />
@@ -338,16 +318,86 @@ export const MaasView: React.FC<{
         availability={gateway.availability}
         onOpenMarketplace={onOpenMarketplace}
       />
+      {showSectionChrome ? (
+        <MaasChapter
+          title={t('maas.cloudProfiles.title')}
+          description={t('maas.cloudProfiles.description')}
+          action={
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => void rpc.app.openExternal(YODA_MAAS_DOCS_URL)}
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                {t('maas.cloudProfiles.docs')}
+              </Button>
+              <Badge variant="secondary">{t('maas.addedCount', { count: configuredCount })}</Badge>
+              <Badge variant="secondary">{t('maas.activeCount', { count: activeCount })}</Badge>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button type="button" variant="outline" size="sm" disabled={isLoading}>
+                      <Plus className="h-3.5 w-3.5" />
+                      {t('maas.addProfile')}
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end" className="w-72">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>{t('maas.selectTargetPlatform')}</DropdownMenuLabel>
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  {CLOUD_PROFILE_TEMPLATE_IDS.map((templateId) => {
+                    const platform = MAAS_PLATFORMS[templateId];
+                    return (
+                      <DropdownMenuItem
+                        key={templateId}
+                        className="items-start py-2"
+                        onClick={() => handleAddPlatform(templateId)}
+                      >
+                        <Layers className="mt-0.5 h-4 w-4" />
+                        <span className="min-w-0">
+                          <span className="block text-sm text-foreground">{platform.name}</span>
+                          <span className="mt-0.5 block line-clamp-2 text-xs leading-relaxed text-foreground-muted">
+                            {t(`maas.platforms.${templateId}.description`)}
+                          </span>
+                        </span>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          }
+        >
+          {platformSections}
+        </MaasChapter>
+      ) : (
+        platformSections
+      )}
       <MaasChapter
         title={t('maas.managedGateways.title')}
         description={t('maas.managedGateways.description')}
+        action={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => void rpc.app.openExternal(`${YODA_MAAS_DOCS_URL}#local-integrations`)}
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            {t('maas.managedGateways.integrationDocs')}
+          </Button>
+        }
       >
         <div className="grid gap-3 @4xl:grid-cols-2" data-testid="maas-managed-gateway-cards">
           <LiteLlmManagedCard onOpenManualSettings={() => handleOpenManagedConnection('litellm')} />
-          <NewApiManagedCard onOpenManualSettings={() => handleOpenManagedConnection('newapi')} />
           <CliProxyApiManagedCard
             onOpenManualSettings={() => handleOpenManagedConnection('cliproxyapi')}
           />
+          <NewApiManagedCard onOpenManualSettings={() => handleOpenManagedConnection('newapi')} />
         </div>
         {managedConnectionPlatformId && (
           <div className="grid gap-2.5" data-testid="maas-managed-connection-settings">
@@ -360,96 +410,20 @@ export const MaasView: React.FC<{
                   {t('maas.managedGateways.connectionSettingsDescription')}
                 </p>
               </div>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={t('common.close')}
-                      onClick={() => setManagedConnectionPlatformId(null)}
-                    >
-                      <X className="size-3.5" />
-                    </Button>
-                  }
-                />
-                <TooltipContent>{t('common.close')}</TooltipContent>
-              </Tooltip>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label={t('common.close')}
+                onClick={() => setManagedConnectionPlatformId(null)}
+              >
+                <X className="size-3.5" />
+              </Button>
             </div>
             {renderPlatformAccordion([managedConnectionPlatformId])}
           </div>
         )}
       </MaasChapter>
-      {showSectionChrome ? (
-        <>
-          <MaasChapter
-            title={t('maas.platformsTitle')}
-            action={
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <Badge variant="secondary">
-                  {t('maas.addedCount', { count: configuredCount })}
-                </Badge>
-                <Badge variant="secondary">{t('maas.activeCount', { count: activeCount })}</Badge>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={isLoading || availablePlatformIds.length === 0}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        {t('maas.addPlatform')}
-                      </Button>
-                    }
-                  />
-                  <DropdownMenuContent align="end" className="w-72">
-                    <DropdownMenuGroup>
-                      <DropdownMenuLabel>{t('maas.selectPlatform')}</DropdownMenuLabel>
-                    </DropdownMenuGroup>
-                    {availablePlatformGroups.map(({ category, platformIds }) => (
-                      <React.Fragment key={category}>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuGroup>
-                          <DropdownMenuLabel>
-                            {t(`maas.categories.${category}.title`)}
-                          </DropdownMenuLabel>
-                          {platformIds.map((platformId) => {
-                            const platform = MAAS_PLATFORMS[platformId];
-                            return (
-                              <DropdownMenuItem
-                                key={platformId}
-                                className="items-start py-2"
-                                onClick={() => handleAddPlatform(platformId)}
-                              >
-                                <Layers className="mt-0.5 h-4 w-4" />
-                                <span className="min-w-0">
-                                  <span className="block text-sm text-foreground">
-                                    {platform.name}
-                                  </span>
-                                  <span className="mt-0.5 block line-clamp-2 text-xs leading-relaxed text-foreground-muted">
-                                    {t(`maas.platforms.${platformId}.description`)}
-                                  </span>
-                                </span>
-                              </DropdownMenuItem>
-                            );
-                          })}
-                        </DropdownMenuGroup>
-                      </React.Fragment>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            }
-          >
-            {platformSections}
-          </MaasChapter>
-        </>
-      ) : (
-        platformSections
-      )}
     </div>
   );
 
@@ -475,17 +449,6 @@ export const MaasView: React.FC<{
     </div>
   );
 };
-
-function groupMaasPlatformIds<TPlatformId extends MaasPlatformId>(
-  platformIds: readonly TPlatformId[]
-): Array<{ category: MaasPlatformCategory; platformIds: TPlatformId[] }> {
-  return MAAS_PLATFORM_CATEGORIES.map((category) => ({
-    category,
-    platformIds: platformIds.filter(
-      (platformId) => getMaasPlatformDefinition(platformId).category === category
-    ),
-  })).filter((group) => group.platformIds.length > 0);
-}
 
 const MaasDescriptionSourceBadge: React.FC<{
   description: MaasPlatformOfficialDescription;
@@ -738,7 +701,7 @@ const PlatformAccordionItem: React.FC<{
           />
           <TooltipContent>{t('maas.connection.openDocs')}</TooltipContent>
         </Tooltip>
-        {connection.platformId === 'zenmux' && onOpenUsage && (
+        {templateId === 'zenmux' && onOpenUsage && (
           <Tooltip>
             <TooltipTrigger
               render={
@@ -905,6 +868,8 @@ const ConnectionPanel: React.FC<{
   const { toast } = useToast();
   const connectMutation = useConnectMaasPlatform();
   const disconnectMutation = useDisconnectMaasPlatform();
+  const checkMutation = useCheckMaasConnection();
+  const templateId = getMaasPlatformTemplateId(connection.platformId);
   const [apiKey, setApiKey] = useState('');
   const [inferenceApiKey, setInferenceApiKey] = useState('');
   const [replacingKey, setReplacingKey] = useState(!connection.connected);
@@ -917,7 +882,7 @@ const ConnectionPanel: React.FC<{
   const saving = connectMutation.isPending;
   const disconnecting = disconnectMutation.isPending;
   const hasStoredKey = connection.connected && !!connection.keyFingerprint;
-  const hasNewInferenceKey = connection.platformId === 'zenmux' && !!inferenceApiKey.trim();
+  const hasNewInferenceKey = templateId === 'zenmux' && !!inferenceApiKey.trim();
   const submitDisabled =
     saving ||
     (!apiKey.trim() && !hasNewInferenceKey && (!hasStoredKey || replacingKey)) ||
@@ -931,17 +896,15 @@ const ConnectionPanel: React.FC<{
         ? t('maas.connection.storedKeyHelper')
         : t('maas.connection.newKeyHelper');
   const apiKeyLabel =
-    connection.platformId === 'zenmux'
-      ? t('maas.connection.managementApiKey')
-      : t('maas.connection.apiKey');
+    templateId === 'zenmux' ? t('maas.connection.managementApiKey') : t('maas.connection.apiKey');
   const apiKeyPlaceholder =
-    connection.platformId === 'zenmux'
+    templateId === 'zenmux'
       ? t('maas.connection.zenmuxManagementKeyPlaceholder')
-      : connection.platformId === 'litellm'
+      : templateId === 'litellm'
         ? t('maas.connection.litellmKeyPlaceholder')
-        : connection.platformId === 'newapi'
+        : templateId === 'newapi'
           ? t('maas.connection.newApiKeyPlaceholder')
-          : connection.platformId === 'cliproxyapi'
+          : templateId === 'cliproxyapi'
             ? t('maas.connection.cliProxyApiKeyPlaceholder')
             : t('maas.connection.apiKeyPlaceholder');
   const platformDescription =
@@ -981,6 +944,16 @@ const ConnectionPanel: React.FC<{
   const handleDisconnect = () => {
     setFormError(null);
     disconnectMutation.mutate(connection.platformId, {
+      onError: (error) => setFormError(error instanceof Error ? error.message : String(error)),
+    });
+  };
+
+  const handleCheckConnection = () => {
+    setFormError(null);
+    checkMutation.mutate(connection.platformId, {
+      onSuccess: (result) => {
+        if (!result.ok) setFormError(result.error ?? t('maas.connection.testFailed'));
+      },
       onError: (error) => setFormError(error instanceof Error ? error.message : String(error)),
     });
   };
@@ -1047,17 +1020,17 @@ const ConnectionPanel: React.FC<{
           {officialDescription && <MaasDescriptionSourceBadge description={officialDescription} />}
         </div>
 
-        {connection.platformId === 'litellm' && (
+        {templateId === 'litellm' && (
           <div className="max-w-2xl rounded-lg border border-border/60 bg-background-secondary px-3 py-2 text-xs leading-relaxed text-foreground-muted">
             {t('maas.connection.litellmSetupHelper')}
           </div>
         )}
-        {connection.platformId === 'newapi' && (
+        {templateId === 'newapi' && (
           <div className="max-w-2xl rounded-lg border border-border/60 bg-background-secondary px-3 py-2 text-xs leading-relaxed text-foreground-muted">
             {t('maas.connection.newApiSetupHelper')}
           </div>
         )}
-        {connection.platformId === 'cliproxyapi' && (
+        {templateId === 'cliproxyapi' && (
           <div className="max-w-2xl rounded-lg border border-border/60 bg-background-secondary px-3 py-2 text-xs leading-relaxed text-foreground-muted">
             {t('maas.connection.cliProxyApiSetupHelper')}
           </div>
@@ -1117,7 +1090,7 @@ const ConnectionPanel: React.FC<{
             />
             <span className="text-xs leading-relaxed text-foreground-muted">{keyHelper}</span>
           </label>
-          {connection.platformId === 'zenmux' && (
+          {templateId === 'zenmux' && (
             <label className="grid gap-1.5 @3xl:col-span-2">
               <span className="text-xs font-medium text-muted-foreground">
                 {t('maas.connection.inferenceApiKey')}
@@ -1152,15 +1125,53 @@ const ConnectionPanel: React.FC<{
                   })
                 : t('maas.connection.neverChecked')}
             </span>
-          </div>
-          <Button type="submit" size="sm" disabled={submitDisabled} className="w-full @3xl:w-auto">
-            {saving ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Plug className="h-3.5 w-3.5" />
+            {connection.lastTest?.averageLatencyMs != null && (
+              <span className="inline-flex min-h-7 items-center rounded-md border border-border/60 bg-background-1 px-2">
+                {t('maas.connection.averageLatency', {
+                  latency: connection.lastTest.averageLatencyMs,
+                })}
+              </span>
             )}
-            {saving ? t('maas.connection.saving') : t('maas.connection.saveChanges')}
-          </Button>
+            {connection.lastTest?.samples.length ? (
+              <span className="text-foreground-muted">
+                {t('maas.connection.testSamples', {
+                  samples: connection.lastTest.samples
+                    .map((sample) => `${sample.durationMs} ms`)
+                    .join(' · '),
+                })}
+              </span>
+            ) : null}
+          </div>
+          <div className="flex w-full gap-2 @3xl:w-auto">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!connection.connected || checkMutation.isPending}
+              onClick={handleCheckConnection}
+              className="flex-1 @3xl:flex-none"
+            >
+              {checkMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Activity className="h-3.5 w-3.5" />
+              )}
+              {checkMutation.isPending ? t('maas.connection.testing') : t('maas.connection.test')}
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={submitDisabled}
+              className="flex-1 @3xl:flex-none"
+            >
+              {saving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Plug className="h-3.5 w-3.5" />
+              )}
+              {saving ? t('maas.connection.saving') : t('maas.connection.saveChanges')}
+            </Button>
+          </div>
         </div>
       </form>
     </section>

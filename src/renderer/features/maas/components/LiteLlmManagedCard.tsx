@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Copy,
   Download,
   Ellipsis,
@@ -19,6 +20,7 @@ import {
   type LiteLlmManagedOperation,
 } from '@shared/litellm-managed';
 import type { MaasConnection } from '@shared/maas';
+import { YODA_MAAS_DOCS_URL } from '@shared/urls';
 import {
   useCopyLiteLlmAdminPassword,
   useInstallLiteLlm,
@@ -430,6 +432,12 @@ export function LiteLlmManagedCard({ onOpenManualSettings }: LiteLlmManagedCardP
                   ? 'settings.integrationsTab.litellmUseExisting'
                   : 'settings.integrationsTab.litellmConnectionSettings'
               )}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => void rpc.app.openExternal(`${YODA_MAAS_DOCS_URL}#litellm`)}
+            >
+              <BookOpen className="size-4" />
+              {t('maas.managedGateways.integrationDocs')}
             </DropdownMenuItem>
             {showRecheck && (
               <DropdownMenuItem onClick={() => void statusQuery.refetch()}>

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   failRuntimeId: null as string | null,
   secrets: {} as Record<string, string>,
   clipboardWriteText: vi.fn(),
+  netFetch: vi.fn(),
   codexAuthDisable: vi.fn(),
   codexAuthEnable: vi.fn(),
   codexAuthRollback: vi.fn(),
@@ -25,7 +26,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('electron', () => ({
   clipboard: { writeText: mocks.clipboardWriteText },
-  net: { request: vi.fn() },
+  net: { request: vi.fn(), fetch: mocks.netFetch },
 }));
 
 vi.mock('../settings/runtime-settings-service', () => ({
@@ -134,6 +135,7 @@ describe('global MaaS binding', () => {
       runtime: { state: 'running' },
     });
     mocks.gatewayClear.mockResolvedValue(undefined);
+    mocks.netFetch.mockResolvedValue(new Response('{}', { status: 200 }));
     mocks.gatewayProviderId = null;
     mocks.gatewayConfigure.mockImplementation(async (configuration: { providerId: string }) => {
       mocks.gatewayProviderId = configuration.providerId;
@@ -560,6 +562,7 @@ describe('stored MaaS keys', () => {
           inferenceKeyFingerprint: 'in...ce',
           connectedAt: '2026-07-16T00:00:00.000Z',
           lastCheckedAt: null,
+          lastTest: null,
         },
       ],
       runtimeBindings: [],
@@ -582,13 +585,14 @@ describe('stored MaaS keys', () => {
     });
     mocks.gatewayClear.mockResolvedValue(undefined);
     mocks.gatewayProviderId = null;
+    mocks.netFetch.mockResolvedValue(new Response('{}', { status: 200 }));
     mocks.gatewayConfigure.mockImplementation(async (configuration: { providerId: string }) => {
       mocks.gatewayProviderId = configuration.providerId;
       return mocks.gatewayRollback;
     });
   });
 
-  it('distinguishes saved platforms from built-in platforms that have not been added', async () => {
+  it('lists only saved profiles and does not synthesize built-in cloud routers', async () => {
     const service = new MaasService();
 
     const connections = await service.listConnections();
@@ -597,10 +601,9 @@ describe('stored MaaS keys', () => {
       configured: true,
       connected: true,
     });
-    expect(connections.find((connection) => connection.platformId === 'openrouter')).toMatchObject({
-      configured: false,
-      connected: false,
-    });
+    expect(
+      connections.find((connection) => connection.platformId === 'openrouter')
+    ).toBeUndefined();
   });
 
   it('copies the selected key kind without exposing the other stored key', async () => {
@@ -615,6 +618,27 @@ describe('stored MaaS keys', () => {
       service.copyStoredApiKeyToClipboard({ platformId: 'zenmux', kind: 'primary' })
     ).resolves.toEqual({ success: true });
     expect(mocks.clipboardWriteText).toHaveBeenLastCalledWith('management-secret');
+  });
+
+  it('tests the target router three times and persists the raw samples and average', async () => {
+    const service = new MaasService();
+
+    const result = await service.checkConnection('zenmux');
+
+    expect(result).toMatchObject({ ok: true, error: null });
+    expect(result.samples).toHaveLength(3);
+    expect(result.averageLatencyMs).not.toBeNull();
+    expect(mocks.netFetch).toHaveBeenCalledTimes(3);
+    expect(mocks.netFetch).toHaveBeenCalledWith(
+      'https://zenmux.ai/api/v1/models',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer inference-secret' },
+      })
+    );
+    expect(mocks.settings.connections[0]).toMatchObject({
+      lastCheckedAt: result.checkedAt,
+      lastTest: result,
+    });
   });
 
   it('immediately republishes an edited endpoint and key for an active Codex binding', async () => {
@@ -753,6 +777,7 @@ describe('stored MaaS keys', () => {
           inferenceKeyFingerprint: 'le...cy',
           connectedAt: '2026-07-16T00:00:00.000Z',
           lastCheckedAt: null,
+          lastTest: null,
         },
       ],
       runtimeBindings: [],

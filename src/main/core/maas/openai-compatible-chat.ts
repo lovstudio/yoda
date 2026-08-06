@@ -1,4 +1,8 @@
-import type { MaasPlatformConnection, MaasPlatformId } from '@shared/maas';
+import {
+  getMaasPlatformTemplateId,
+  type MaasPlatformConnection,
+  type MaasPlatformId,
+} from '@shared/maas';
 import { log } from '@main/lib/logger';
 
 const SECRET_PREFIX = 'yoda-maas-token';
@@ -128,7 +132,7 @@ async function loadActiveConnection(): Promise<MaasPlatformConnection | undefine
 
 async function inferModel(platformId: MaasPlatformId): Promise<string | undefined> {
   try {
-    if (platformId === 'zenmux') {
+    if (getMaasPlatformTemplateId(platformId) === 'zenmux') {
       const { maasService } = await import('./maas-service');
       return (
         (await maasService.listTextModelCandidates())[0] ??

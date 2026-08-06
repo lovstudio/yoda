@@ -4157,10 +4157,16 @@
   "maas": {
     "title": "Model access",
     "subtitle": "Manage direct providers and relay channels, then apply them to Agent Clients.",
-    "platformsTitle": "Direct providers",
+    "platformsTitle": "Cloud integrations",
+    "cloudProfiles": {
+      "title": "Cloud integrations",
+      "description": "Each router configuration is an independent profile. Add unlimited profiles and keep multiple keys for the same target platform.",
+      "docs": "MaaS services & tests"
+    },
     "managedGateways": {
-      "title": "Relay channels",
-      "description": "Let Yoda install and run a local relay, or connect an existing remote deployment.",
+      "title": "Local integrations (open source)",
+      "description": "Ordered by GitHub stars. Yoda can install, start, stop, and manage a local router, or connect an existing service.",
+      "integrationDocs": "Integration docs",
       "oneClickInstall": "Install",
       "start": "Start",
       "stopService": "Stop service",
@@ -4225,10 +4231,12 @@
     "addedCount": "{{count}} added",
     "activeCount": "{{count}} active",
     "addPlatform": "Add access",
+    "addProfile": "Add profile",
     "selectPlatform": "Choose an access service",
+    "selectTargetPlatform": "Choose target platform (duplicates allowed)",
     "cancelAddPlatform": "Cancel adding {{platform}}",
-    "emptyTitle": "No direct providers added",
-    "emptyDescription": "Add a model provider or custom connection and save its endpoint and API key. At most one provider can be active at a time.",
+    "emptyTitle": "No cloud profiles yet",
+    "emptyDescription": "Add a profile and save its target endpoint and API key. A platform can have multiple profiles; at most one is active.",
     "global": {
       "title": "Active access",
       "description": "Globally, zero or one access service can be active. Enabling one backs up every compatible Agent CLI configuration; choosing another switches automatically, and disabling restores the originals.",
@@ -4354,7 +4362,12 @@
       "keyFingerprint": "Key {{fingerprint}}",
       "noKey": "No key stored",
       "lastChecked": "Checked {{time}}",
-      "neverChecked": "Not checked yet"
+      "neverChecked": "Not checked yet",
+      "test": "Test connection",
+      "testing": "Testing 3 times…",
+      "testFailed": "Connection test failed",
+      "averageLatency": "Average {{latency}} ms",
+      "testSamples": "3 runs: {{samples}}"
     },
     "records": {
       "title": "ZenMux billing and usage",

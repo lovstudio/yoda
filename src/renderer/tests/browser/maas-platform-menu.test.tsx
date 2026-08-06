@@ -76,6 +76,7 @@ vi.mock('react-i18next', async (importOriginal) => ({
 
 vi.mock('@renderer/features/maas/useMaas', () => ({
   useConnectMaasPlatform: () => ({ isPending: false, mutate: vi.fn() }),
+  useCheckMaasConnection: () => ({ isPending: false, mutate: vi.fn() }),
   useDisconnectMaasPlatform: () => ({ isPending: false, mutate: vi.fn() }),
   useMaasConnections: () => ({ data: mocks.connections, isLoading: false }),
   useMaasGlobalBinding: () => ({ data: mocks.globalBinding, isLoading: false }),
@@ -186,29 +187,38 @@ describe('MaaS platform menu', () => {
     host.remove();
   });
 
-  it('separates managed gateways from the direct-provider add menu', async () => {
+  it('shows cloud profiles before local integrations and keeps target platforms repeatable', async () => {
     const { MaasView } = await import('@renderer/features/maas/components/MaasView');
     await act(async () => root.render(createElement(MaasView, { embedded: true })));
 
     const addButton = Array.from(host.querySelectorAll('button')).find(
-      (button) => button.textContent === 'maas.addPlatform'
+      (button) => button.textContent === 'maas.addProfile'
     );
     expect(addButton).toBeDefined();
+    expect(host.textContent?.indexOf('maas.cloudProfiles.title')).toBeLessThan(
+      host.textContent?.indexOf('maas.managedGateways.title') ?? 0
+    );
     expect(host.textContent).toContain('maas.managedGateways.title');
     expect(host.querySelector('[data-testid="litellm-integration-card"]')).not.toBeNull();
     expect(host.querySelector('[data-testid="new-api-integration-card"]')).not.toBeNull();
     expect(host.textContent).toContain('CLIProxyAPI');
+    const localCards = host.querySelector('[data-testid="maas-managed-gateway-cards"]');
+    expect(localCards?.textContent?.indexOf('LiteLLM')).toBeLessThan(
+      localCards?.textContent?.indexOf('CLIProxyAPI') ?? 0
+    );
+    expect(localCards?.textContent?.indexOf('CLIProxyAPI')).toBeLessThan(
+      localCards?.textContent?.indexOf('New API') ?? 0
+    );
 
     await act(async () => addButton?.click());
 
     const menu = document.querySelector('[data-slot="dropdown-menu-content"]');
-    expect(menu?.textContent).toContain('maas.selectPlatform');
+    expect(menu?.textContent).toContain('maas.selectTargetPlatform');
     expect(menu?.textContent).toContain('ZenMux');
     expect(menu?.textContent).not.toContain('LiteLLM');
     expect(menu?.textContent).not.toContain('New API');
     expect(menu?.textContent).not.toContain('CLIProxyAPI');
-    expect(menu?.textContent).toContain('maas.categories.hosted-platform.title');
-    expect(menu?.textContent).toContain('maas.categories.custom.title');
+    expect(menu?.textContent).toContain('Custom');
   });
 
   it('installs LiteLLM from its managed gateway card', async () => {
@@ -302,7 +312,7 @@ describe('MaaS platform menu', () => {
 
     const addCustomDraft = async () => {
       const addButton = Array.from(host.querySelectorAll('button')).find(
-        (button) => button.textContent === 'maas.addPlatform'
+        (button) => button.textContent === 'maas.addProfile'
       );
       await act(async () => addButton?.click());
       const customItem = Array.from(
@@ -431,6 +441,7 @@ function connection(overrides: Partial<MaasConnection> = {}): MaasConnection {
     inferenceKeyFingerprint: 'ke...ey',
     connectedAt: '2026-07-25T00:00:00.000Z',
     lastCheckedAt: null,
+    lastTest: null,
     configured: true,
     connected: true,
     error: null,

@@ -1,7 +1,7 @@
 import { BarChart3, ExternalLink, FileSearch, ListChecks, ReceiptText } from 'lucide-react';
 import type React from 'react';
 import { useTranslation } from 'react-i18next';
-import { MAAS_PLATFORMS, type MaasConnection } from '@shared/maas';
+import { MAAS_PLATFORMS, type MaasConnection, type MaasPlatformId } from '@shared/maas';
 import { rpc } from '@renderer/lib/ipc';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { Badge } from '@renderer/lib/ui/badge';
@@ -19,18 +19,22 @@ const ZENMUX_COST_URL = 'https://zenmux.ai/platform/cost';
 const ZENMUX_USAGE_URL = 'https://zenmux.ai/platform/usage';
 const ZENMUX_LOGS_URL = 'https://zenmux.ai/platform/logs';
 
-type Props = BaseModalProps<void>;
+type Props = BaseModalProps<void> & { platformId: MaasPlatformId };
 
-function findZenmuxConnection(connections: MaasConnection[] | undefined): MaasConnection {
+function findZenmuxConnection(
+  connections: MaasConnection[] | undefined,
+  platformId: MaasPlatformId
+): MaasConnection {
   return (
-    connections?.find((connection) => connection.platformId === 'zenmux') ?? {
-      platformId: 'zenmux',
+    connections?.find((connection) => connection.platformId === platformId) ?? {
+      platformId,
       displayName: MAAS_PLATFORMS.zenmux.name,
       endpoint: MAAS_PLATFORMS.zenmux.defaultEndpoint,
       keyFingerprint: null,
       inferenceKeyFingerprint: null,
       connectedAt: null,
       lastCheckedAt: null,
+      lastTest: null,
       configured: false,
       connected: false,
       error: null,
@@ -48,10 +52,10 @@ function formatDateTime(value: string | null): string {
   }).format(new Date(value));
 }
 
-export function ZenmuxUsageModal(_props: Props) {
+export function ZenmuxUsageModal({ platformId }: Props) {
   const { t } = useTranslation();
   const { data: connections } = useMaasConnections();
-  const connection = findZenmuxConnection(connections);
+  const connection = findZenmuxConnection(connections, platformId);
 
   return (
     <>

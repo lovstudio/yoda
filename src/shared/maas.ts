@@ -12,18 +12,18 @@ export const MAAS_PLATFORM_IDS = [
 ] as const;
 
 export type MaasPlatformTemplateId = (typeof MAAS_PLATFORM_IDS)[number];
+export type MaasProfileId = `${MaasPlatformTemplateId}:${string}`;
 export type CustomMaasPlatformId = `custom:${string}`;
-export type MaasPlatformId = MaasPlatformTemplateId | CustomMaasPlatformId;
+export type MaasPlatformId = MaasPlatformTemplateId | MaasProfileId;
 
 const CUSTOM_MAAS_PLATFORM_PREFIX = 'custom:';
 
 export function isMaasPlatformId(value: unknown): value is MaasPlatformId {
   if (typeof value !== 'string') return false;
   if ((MAAS_PLATFORM_IDS as readonly string[]).includes(value)) return true;
-  return (
-    value.startsWith(CUSTOM_MAAS_PLATFORM_PREFIX) &&
-    value.length > CUSTOM_MAAS_PLATFORM_PREFIX.length
-  );
+  const separatorIndex = value.indexOf(':');
+  if (separatorIndex <= 0 || separatorIndex === value.length - 1) return false;
+  return (MAAS_PLATFORM_IDS as readonly string[]).includes(value.slice(0, separatorIndex));
 }
 
 export function isCustomMaasPlatformId(
@@ -33,13 +33,23 @@ export function isCustomMaasPlatformId(
 }
 
 export function getMaasPlatformTemplateId(platformId: MaasPlatformId): MaasPlatformTemplateId {
-  return isCustomMaasPlatformId(platformId) ? 'custom' : platformId;
+  const separatorIndex = platformId.indexOf(':');
+  return (
+    separatorIndex < 0 ? platformId : platformId.slice(0, separatorIndex)
+  ) as MaasPlatformTemplateId;
+}
+
+export function createMaasProfileId(
+  templateId: MaasPlatformTemplateId,
+  uuid: string = globalThis.crypto.randomUUID()
+): MaasProfileId {
+  return `${templateId}:${uuid}`;
 }
 
 export function createCustomMaasPlatformId(
   uuid: string = globalThis.crypto.randomUUID()
 ): CustomMaasPlatformId {
-  return `${CUSTOM_MAAS_PLATFORM_PREFIX}${uuid}`;
+  return createMaasProfileId('custom', uuid) as CustomMaasPlatformId;
 }
 
 export const MAAS_INVOCATION_KINDS = ['text', 'image', 'embedding', 'video'] as const;
@@ -56,6 +66,7 @@ export type MaasPlatformConnection = {
   inferenceKeyFingerprint: string | null;
   connectedAt: string | null;
   lastCheckedAt: string | null;
+  lastTest: MaasConnectionCheckResult | null;
 };
 
 export type MaasConnection = MaasPlatformConnection & {
@@ -65,10 +76,9 @@ export type MaasConnection = MaasPlatformConnection & {
 };
 
 export function hasMaasInferenceCredential(connection: MaasConnection): boolean {
+  const templateId = getMaasPlatformTemplateId(connection.platformId);
   return Boolean(
-    connection.platformId === 'zenmux'
-      ? connection.inferenceKeyFingerprint
-      : connection.keyFingerprint
+    templateId === 'zenmux' ? connection.inferenceKeyFingerprint : connection.keyFingerprint
   );
 }
 
@@ -78,7 +88,8 @@ export function supportsMaasPlatformForRuntime(
 ): boolean {
   if (runtimeId === 'codex') return true;
   if (runtimeId === 'claude') {
-    return platformId === 'zenmux' || platformId === 'openrouter';
+    const templateId = getMaasPlatformTemplateId(platformId);
+    return templateId === 'zenmux' || templateId === 'openrouter';
   }
   return false;
 }
@@ -102,6 +113,12 @@ export type MaasConnectionCheckResult = {
   ok: boolean;
   error: string | null;
   checkedAt: string;
+  samples: Array<{
+    durationMs: number;
+    ok: boolean;
+    error: string | null;
+  }>;
+  averageLatencyMs: number | null;
 };
 
 export type MaasRuntimeBinding = {

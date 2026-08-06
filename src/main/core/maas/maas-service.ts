@@ -179,6 +179,7 @@ function defaultConnection(platformId: MaasPlatformId): MaasConnection {
     inferenceKeyFingerprint: null,
     connectedAt: null,
     lastCheckedAt: null,
+    lastTest: null,
     configured: false,
     connected: false,
     error: null,
@@ -513,28 +514,13 @@ export class MaasService {
 
   async listConnections(): Promise<MaasConnection[]> {
     const settings = await appSettingsService.get('maas');
-    const fixedPlatformIds = MAAS_PLATFORM_IDS.filter(
-      (platformId): platformId is Exclude<MaasPlatformTemplateId, 'custom'> =>
-        platformId !== 'custom'
-    );
-    const customConnections = settings.connections.filter((connection) =>
-      isCustomMaasPlatformId(connection.platformId)
-    );
-    const connectionEntries: Array<readonly [MaasPlatformId, MaasPlatformConnection | undefined]> =
-      [
-        ...fixedPlatformIds.map(
-          (platformId) => [platformId, getConnectedPlatform(settings, platformId)] as const
-        ),
-        ...customConnections.map((connection) => [connection.platformId, connection] as const),
-      ];
-
     return Promise.all(
-      connectionEntries.map(async ([platformId, saved]) => {
-        if (!saved) return defaultConnection(platformId);
-
+      settings.connections.map(async (saved) => {
+        const platformId = saved.platformId;
+        const templateId = getMaasPlatformTemplateId(platformId);
         const apiKey = await encryptedAppSecretsStore.getSecret(secretKey(platformId));
         const inferenceApiKey = await encryptedAppSecretsStore.getSecret(
-          platformId === 'zenmux' ? inferenceSecretKey(platformId) : secretKey(platformId)
+          templateId === 'zenmux' ? inferenceSecretKey(platformId) : secretKey(platformId)
         );
         const connection = {
           ...saved,
@@ -1008,7 +994,9 @@ export class MaasService {
     const connection = getConnectedPlatform(settings, platformId);
     if (!connection) return undefined;
     const apiKey = await encryptedAppSecretsStore.getSecret(
-      platformId === 'zenmux' ? inferenceSecretKey(platformId) : secretKey(platformId)
+      getMaasPlatformTemplateId(platformId) === 'zenmux'
+        ? inferenceSecretKey(platformId)
+        : secretKey(platformId)
     );
     if (!apiKey) return undefined;
     return { displayName: connection.displayName, endpoint: connection.endpoint, apiKey };
@@ -1024,7 +1012,7 @@ export class MaasService {
       if (input.kind !== 'primary' && input.kind !== 'inference') {
         return { success: false, error: 'Unsupported MaaS API key kind.' };
       }
-      if (input.kind === 'inference' && input.platformId !== 'zenmux') {
+      if (input.kind === 'inference' && getMaasPlatformTemplateId(input.platformId) !== 'zenmux') {
         return { success: false, error: 'This platform does not use a separate inference key.' };
       }
 
@@ -1070,17 +1058,14 @@ export class MaasService {
       }
 
       const platform = getMaasPlatformDefinition(input.platformId);
+      const templateId = getMaasPlatformTemplateId(input.platformId);
       const settings = await appSettingsService.get('maas');
       settingsToRestore = settings;
       const existing = getConnectedPlatform(settings, input.platformId);
       const apiKey = input.apiKey?.trim() ?? '';
       const inferenceApiKey = input.inferenceApiKey?.trim() ?? '';
       let retainedApiKey: string | null = null;
-      if (
-        !apiKey &&
-        !existing?.keyFingerprint &&
-        !(input.platformId === 'zenmux' && inferenceApiKey)
-      ) {
+      if (!apiKey && !existing?.keyFingerprint && !(templateId === 'zenmux' && inferenceApiKey)) {
         return { success: false, error: 'A MaaS API key is required.' };
       }
       if (!apiKey && existing?.keyFingerprint) {
@@ -1107,7 +1092,7 @@ export class MaasService {
             ? keyFingerprint(retainedApiKey)
             : (existing?.keyFingerprint ?? null),
         inferenceKeyFingerprint:
-          input.platformId === 'zenmux'
+          templateId === 'zenmux'
             ? inferenceApiKey
               ? keyFingerprint(inferenceApiKey)
               : (existing?.inferenceKeyFingerprint ?? null)
@@ -1117,7 +1102,8 @@ export class MaasService {
                 ? keyFingerprint(retainedApiKey)
                 : (existing?.inferenceKeyFingerprint ?? existing?.keyFingerprint ?? null),
         connectedAt: existing?.connectedAt ?? now,
-        lastCheckedAt: now,
+        lastCheckedAt: existing?.lastCheckedAt ?? null,
+        lastTest: existing?.lastTest ?? null,
       };
 
       if (apiKey) {
@@ -1125,7 +1111,7 @@ export class MaasService {
         secretsToRestore.set(key, await encryptedAppSecretsStore.getSecret(key));
         await encryptedAppSecretsStore.setSecret(key, apiKey);
       }
-      if (input.platformId === 'zenmux' && inferenceApiKey) {
+      if (templateId === 'zenmux' && inferenceApiKey) {
         const key = inferenceSecretKey(input.platformId);
         secretsToRestore.set(key, await encryptedAppSecretsStore.getSecret(key));
         await encryptedAppSecretsStore.setSecret(key, inferenceApiKey);
@@ -1141,7 +1127,7 @@ export class MaasService {
       );
       if (activeCodexBinding) {
         const activeApiKey =
-          input.platformId === 'zenmux'
+          templateId === 'zenmux'
             ? await encryptedAppSecretsStore.getSecret(inferenceSecretKey(input.platformId))
             : await encryptedAppSecretsStore.getSecret(secretKey(input.platformId));
         if (!activeApiKey) {
@@ -1166,7 +1152,7 @@ export class MaasService {
       }
 
       this.recordsCacheByConnection.clear();
-      telemetryService.capture('maas_platform_connected', { platform: input.platformId });
+      telemetryService.capture('maas_platform_connected', { platform: templateId });
 
       return { success: true, connection: toConnection(connection, input.platformId) };
     } catch (error) {
@@ -1220,44 +1206,80 @@ export class MaasService {
 
   async checkConnection(platformId: MaasPlatformId): Promise<MaasConnectionCheckResult> {
     const checkedAt = new Date().toISOString();
+    const failedResult = (error: string): MaasConnectionCheckResult => ({
+      ok: false,
+      error,
+      checkedAt,
+      samples: [],
+      averageLatencyMs: null,
+    });
     try {
       if (!isMaasPlatformId(platformId)) {
-        return { ok: false, error: 'Unsupported MaaS platform.', checkedAt };
+        return failedResult('Unsupported MaaS platform.');
       }
 
       const settings = await appSettingsService.get('maas');
       const connection = getConnectedPlatform(settings, platformId);
       if (!connection) {
-        return { ok: false, error: 'Platform is not connected.', checkedAt };
+        return failedResult('Platform is not connected.');
       }
 
-      if (platformId !== 'zenmux') {
-        return {
-          ok: false,
-          error: `${getMaasPlatformDefinition(platformId).name} connectivity checks are not available yet.`,
-          checkedAt,
-        };
-      }
-
-      const apiKey = await encryptedAppSecretsStore.getSecret(secretKey(platformId));
+      const apiKey = await encryptedAppSecretsStore.getSecret(
+        getMaasPlatformTemplateId(platformId) === 'zenmux'
+          ? inferenceSecretKey(platformId)
+          : secretKey(platformId)
+      );
       if (!apiKey) {
-        return {
-          ok: false,
-          error: 'Stored API key is missing. Reconnect the platform to restore it.',
-          checkedAt,
-        };
+        return failedResult('Stored API key is missing. Reconnect the platform to restore it.');
       }
 
-      // A real Management API round-trip: the cheapest call that exercises
-      // both the endpoint and the key.
-      await this.fetchZenmuxTimeseries(connection.endpoint, apiKey, 'cost');
-      return { ok: true, error: null, checkedAt };
-    } catch (error) {
-      return {
-        ok: false,
-        error: error instanceof Error ? error.message : 'Connectivity check failed.',
+      const modelsUrl = `${connection.endpoint.replace(/\/+$/, '')}/models`;
+      const samples: MaasConnectionCheckResult['samples'] = [];
+      for (let index = 0; index < 3; index += 1) {
+        const startedAt = performance.now();
+        try {
+          const response = await net.fetch(modelsUrl, {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            signal: AbortSignal.timeout(10_000),
+          });
+          const durationMs = Math.round((performance.now() - startedAt) * 10) / 10;
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          samples.push({ durationMs, ok: true, error: null });
+        } catch (error) {
+          samples.push({
+            durationMs: Math.round((performance.now() - startedAt) * 10) / 10,
+            ok: false,
+            error: error instanceof Error ? error.message : 'Connectivity check failed.',
+          });
+        }
+      }
+      const successfulSamples = samples.filter((sample) => sample.ok);
+      const averageLatencyMs =
+        successfulSamples.length > 0
+          ? Math.round(
+              (successfulSamples.reduce((total, sample) => total + sample.durationMs, 0) /
+                successfulSamples.length) *
+                10
+            ) / 10
+          : null;
+      const firstFailure = samples.find((sample) => !sample.ok)?.error ?? null;
+      const result: MaasConnectionCheckResult = {
+        ok: successfulSamples.length === 3,
+        error: firstFailure,
         checkedAt,
+        samples,
+        averageLatencyMs,
       };
+      await appSettingsService.update('maas', {
+        connections: upsertConnection(settings.connections, {
+          ...connection,
+          lastCheckedAt: checkedAt,
+          lastTest: result,
+        }),
+      });
+      return result;
+    } catch (error) {
+      return failedResult(error instanceof Error ? error.message : 'Connectivity check failed.');
     }
   }
 
@@ -1300,7 +1322,9 @@ export class MaasService {
         ),
       });
       this.recordsCacheByConnection.clear();
-      telemetryService.capture('maas_platform_disconnected', { platform: platformId });
+      telemetryService.capture('maas_platform_disconnected', {
+        platform: getMaasPlatformTemplateId(platformId),
+      });
       return { success: true };
     } catch (error) {
       log.error('Failed to disconnect MaaS platform:', error);
@@ -1424,7 +1448,7 @@ export class MaasService {
       };
     }
 
-    if (platformId !== 'zenmux') {
+    if (getMaasPlatformTemplateId(platformId) !== 'zenmux') {
       throw new Error(
         `${getMaasPlatformDefinition(platformId).name} real usage history is not available yet. ZenMux usage data is loaded from its Management API.`
       );

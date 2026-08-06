@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Copy,
   Download,
   Ellipsis,
@@ -20,6 +21,7 @@ import {
   NEW_API_MANAGED_ENDPOINT,
   type NewApiManagedOperation,
 } from '@shared/new-api-managed';
+import { YODA_MAAS_DOCS_URL } from '@shared/urls';
 import {
   useCopyNewApiAdminPassword,
   useInitializeNewApi,
@@ -465,6 +467,12 @@ export function NewApiManagedCard({ onOpenManualSettings }: NewApiManagedCardPro
                   ? 'settings.integrationsTab.newApiUseExisting'
                   : 'settings.integrationsTab.newApiConnectionSettings'
               )}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => void rpc.app.openExternal(`${YODA_MAAS_DOCS_URL}#new-api`)}
+            >
+              <BookOpen className="size-4" />
+              {t('maas.managedGateways.integrationDocs')}
             </DropdownMenuItem>
             {showRecheck && (
               <DropdownMenuItem onClick={() => void statusQuery.refetch()}>
