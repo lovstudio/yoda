@@ -11,6 +11,7 @@ import {
   Paperclip,
   Search,
   Sparkles,
+  TerminalSquare,
 } from 'lucide-react';
 import {
   useCallback,
@@ -50,6 +51,8 @@ import {
   ComboboxTrigger,
 } from '@renderer/lib/ui/combobox';
 import { Textarea } from '@renderer/lib/ui/textarea';
+import { Toggle } from '@renderer/lib/ui/toggle';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
 import {
@@ -130,6 +133,9 @@ export interface ComposerPromptInputProps {
   autoFocus?: boolean;
   canSubmit?: boolean;
   showSubmitButton?: boolean;
+  quickActionMode?: boolean;
+  quickActionModeDisabled?: boolean;
+  onQuickActionModeChange?: (enabled: boolean) => void;
   onSubmit?: () => void;
 }
 
@@ -377,6 +383,9 @@ export function ComposerPromptInput({
   autoFocus = false,
   canSubmit = false,
   showSubmitButton,
+  quickActionMode = false,
+  quickActionModeDisabled = false,
+  onQuickActionModeChange,
   onSubmit,
 }: ComposerPromptInputProps) {
   const { t } = useTranslation();
@@ -1410,6 +1419,33 @@ export function ComposerPromptInput({
                 onInsert={commitSkillShortcut}
                 className="h-8 gap-1.5 rounded-full border-0 bg-background-2/60 px-3 text-xs font-medium text-foreground transition-colors hover:bg-background-2"
               />
+              {onQuickActionModeChange ? (
+                <Tooltip>
+                  <TooltipTrigger render={<span className="inline-flex" />}>
+                    <Toggle
+                      type="button"
+                      pressed={quickActionMode}
+                      disabled={disabled || quickActionModeDisabled}
+                      aria-label={t(
+                        quickActionMode
+                          ? 'home.quickActionModeDisable'
+                          : 'home.quickActionModeEnable'
+                      )}
+                      onPressedChange={onQuickActionModeChange}
+                      className="size-8 rounded-full border-0 p-0 data-pressed:bg-primary/10 data-pressed:text-primary"
+                    >
+                      <TerminalSquare className="size-4" />
+                    </Toggle>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {t(
+                      quickActionModeDisabled
+                        ? 'home.quickActionModeUnavailable'
+                        : 'home.quickActionModeTooltip'
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
               <button
                 type="button"
                 aria-label={t('home.voiceAria')}
