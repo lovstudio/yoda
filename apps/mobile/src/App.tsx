@@ -39,6 +39,8 @@ import yodaMarkSource from '../../../src/assets/images/yoda/yoda_logo.png';
 import {
   appendMobileVoiceTranscript,
   canContinueMobileSession,
+  filterMobileProjects,
+  filterMobileTasks,
   getMobileProjectActivityById,
   mergeMobileVoiceRecognitionResult,
   MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
@@ -1923,9 +1925,15 @@ function TaskAttributionPickerSheet({
 }) {
   const [sortMode, setSortMode] = useState<MobileProjectSortMode>('recent');
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [projectSearchQuery, setProjectSearchQuery] = useState('');
+  const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const sortedProjects = useMemo(
     () => sortMobileProjects(projects, sortMode),
     [projects, sortMode]
+  );
+  const visibleProjects = useMemo(
+    () => filterMobileProjects(sortedProjects, projectSearchQuery),
+    [projectSearchQuery, sortedProjects]
   );
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
   const taskStatsByProjectId = useMemo(() => {
@@ -1938,13 +1946,13 @@ function TaskAttributionPickerSheet({
     }
     return stats;
   }, [tasks]);
-  const activeTasks = useMemo(
-    () =>
-      sortMobileTaskAttributionCandidates(
-        tasks.filter((task) => task.projectId === activeProjectId)
-      ),
-    [activeProjectId, tasks]
-  );
+  const activeTasks = useMemo(() => {
+    const sortedTasks = sortMobileTaskAttributionCandidates(
+      tasks.filter((task) => task.projectId === activeProjectId)
+    );
+    return filterMobileTasks(sortedTasks, taskSearchQuery);
+  }, [activeProjectId, taskSearchQuery, tasks]);
+  const activeProjectTaskCount = tasks.filter((task) => task.projectId === activeProjectId).length;
 
   return (
     <Modal
@@ -1996,6 +2004,12 @@ function TaskAttributionPickerSheet({
             </Pressable>
           </View>
 
+          <ProjectPickerSearchInput
+            placeholder={activeProject ? '搜索任务' : '搜索项目'}
+            value={activeProject ? taskSearchQuery : projectSearchQuery}
+            onChangeText={activeProject ? setTaskSearchQuery : setProjectSearchQuery}
+          />
+
           {activeProject ? (
             <View style={styles.attributionPickerStepHint}>
               <Text style={styles.attributionPickerStepHintText}>
@@ -2032,13 +2046,15 @@ function TaskAttributionPickerSheet({
           >
             {activeProject ? (
               <>
-                <AttributionPickerOption
-                  icon="folder-outline"
-                  label={`仅归属「${activeProject.displayName}」`}
-                  meta="创建为项目下的独立任务"
-                  selected={selectedProjectId === activeProject.id && !parentTask}
-                  onPress={() => onChange(activeProject.id, null)}
-                />
+                {!taskSearchQuery.trim() ? (
+                  <AttributionPickerOption
+                    icon="folder-outline"
+                    label={`仅归属「${activeProject.displayName}」`}
+                    meta="创建为项目下的独立任务"
+                    selected={selectedProjectId === activeProject.id && !parentTask}
+                    onPress={() => onChange(activeProject.id, null)}
+                  />
+                ) : null}
                 {activeTasks.map((task) => (
                   <AttributionPickerOption
                     key={task.id}
@@ -2051,21 +2067,31 @@ function TaskAttributionPickerSheet({
                 ))}
                 {activeTasks.length === 0 ? (
                   <View style={styles.attributionPickerEmpty}>
-                    <Ionicons color={COLORS.muted} name="git-branch-outline" size={22} />
-                    <Text style={styles.emptyText}>这个项目还没有可选择的任务。</Text>
+                    <Ionicons
+                      color={COLORS.muted}
+                      name={taskSearchQuery.trim() ? 'search-outline' : 'git-branch-outline'}
+                      size={22}
+                    />
+                    <Text style={styles.emptyText}>
+                      {taskSearchQuery.trim() && activeProjectTaskCount > 0
+                        ? `没有匹配“${taskSearchQuery.trim()}”的任务`
+                        : '这个项目还没有可选择的任务。'}
+                    </Text>
                   </View>
                 ) : null}
               </>
             ) : (
               <>
-                <AttributionPickerOption
-                  icon="documents-outline"
-                  label="草稿箱"
-                  meta="不归属具体项目"
-                  selected={selectedProjectId === null && !parentTask}
-                  onPress={() => onChange(null, null)}
-                />
-                {sortedProjects.map((project) => {
+                {!projectSearchQuery.trim() ? (
+                  <AttributionPickerOption
+                    icon="documents-outline"
+                    label="草稿箱"
+                    meta="不归属具体项目"
+                    selected={selectedProjectId === null && !parentTask}
+                    onPress={() => onChange(null, null)}
+                  />
+                ) : null}
+                {visibleProjects.map((project) => {
                   const taskStats = taskStatsByProjectId.get(project.id) ?? {
                     count: 0,
                     longTermCount: 0,
@@ -2082,6 +2108,9 @@ function TaskAttributionPickerSheet({
                     />
                   );
                 })}
+                {visibleProjects.length === 0 ? (
+                  <ProjectPickerEmptyResult query={projectSearchQuery} type="项目" />
+                ) : null}
               </>
             )}
           </ScrollView>
@@ -2168,10 +2197,23 @@ function ProjectPickerSheet({
   onProjectChange: (projectId: string | null) => void;
 }) {
   const [sortMode, setSortMode] = useState<MobileProjectSortMode>('recent');
+  const [searchQuery, setSearchQuery] = useState('');
   const sortedProjects = useMemo(
     () => sortMobileProjects(projects, sortMode),
     [projects, sortMode]
   );
+  const visibleProjects = useMemo(
+    () => filterMobileProjects(sortedProjects, searchQuery),
+    [searchQuery, sortedProjects]
+  );
+  const closePicker = () => {
+    setSearchQuery('');
+    onClose();
+  };
+  const selectProject = (projectId: string | null) => {
+    setSearchQuery('');
+    onProjectChange(projectId);
+  };
   return (
     <Modal
       animationType="slide"
@@ -2179,10 +2221,10 @@ function ProjectPickerSheet({
       statusBarTranslucent
       transparent
       visible={open}
-      onRequestClose={onClose}
+      onRequestClose={closePicker}
     >
       <View accessibilityViewIsModal style={styles.projectPickerOverlay}>
-        <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={closePicker} />
         <SafeAreaView style={styles.projectPickerSheet}>
           <View style={styles.projectPickerHandle} />
           <View style={styles.projectPickerHeader}>
@@ -2198,11 +2240,16 @@ function ProjectPickerSheet({
                 styles.projectPickerClose,
                 pressed ? styles.buttonPressed : null,
               ]}
-              onPress={onClose}
+              onPress={closePicker}
             >
               <Ionicons color={COLORS.charcoal} name="close-outline" size={22} />
             </Pressable>
           </View>
+          <ProjectPickerSearchInput
+            placeholder="搜索项目"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
           <View style={styles.projectPickerSort}>
             <Text style={styles.projectPickerSortLabel}>项目排序</Text>
             <View accessibilityRole="radiogroup" style={styles.projectPickerSortOptions}>
@@ -2229,27 +2276,87 @@ function ProjectPickerSheet({
             keyboardShouldPersistTaps="handled"
             style={styles.projectPickerListViewport}
           >
-            <ProjectPickerOption
-              icon={unscopedOption.icon}
-              label={unscopedOption.label}
-              meta={unscopedOption.meta}
-              selected={selectedProjectId === null}
-              onPress={() => onProjectChange(null)}
-            />
-            {sortedProjects.map((project) => (
+            {!searchQuery.trim() ? (
+              <ProjectPickerOption
+                icon={unscopedOption.icon}
+                label={unscopedOption.label}
+                meta={unscopedOption.meta}
+                selected={selectedProjectId === null}
+                onPress={() => selectProject(null)}
+              />
+            ) : null}
+            {visibleProjects.map((project) => (
               <ProjectPickerOption
                 key={project.id}
                 icon={project.isOpen ? 'desktop-outline' : 'folder-outline'}
                 label={project.displayName}
                 meta={`Active ${formatTimestamp(project.lastActivityAt ?? project.updatedAt)}`}
                 selected={selectedProjectId === project.id}
-                onPress={() => onProjectChange(project.id)}
+                onPress={() => selectProject(project.id)}
               />
             ))}
+            {visibleProjects.length === 0 ? (
+              <ProjectPickerEmptyResult query={searchQuery} type="项目" />
+            ) : null}
           </ScrollView>
         </SafeAreaView>
       </View>
     </Modal>
+  );
+}
+
+function ProjectPickerSearchInput({
+  placeholder,
+  value,
+  onChangeText,
+}: {
+  placeholder: string;
+  value: string;
+  onChangeText: (value: string) => void;
+}) {
+  return (
+    <View style={styles.projectPickerSearchArea}>
+      <View style={styles.projectPickerSearchField}>
+        <Ionicons color={COLORS.muted} name="search-outline" size={18} />
+        <TextInput
+          accessibilityLabel={placeholder}
+          autoCapitalize="none"
+          autoCorrect={false}
+          clearButtonMode="never"
+          placeholder={placeholder}
+          placeholderTextColor="#8A8D91"
+          returnKeyType="search"
+          style={styles.projectPickerSearchInput}
+          value={value}
+          onChangeText={onChangeText}
+        />
+        {value.length > 0 ? (
+          <Pressable
+            accessibilityLabel={`清除${placeholder}`}
+            accessibilityRole="button"
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.projectPickerSearchClear,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={() => onChangeText('')}
+          >
+            <Ionicons color={COLORS.muted} name="close-circle" size={18} />
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function ProjectPickerEmptyResult({ query, type }: { query: string; type: '项目' | '任务' }) {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return null;
+  return (
+    <View style={styles.attributionPickerEmpty}>
+      <Ionicons color={COLORS.muted} name="search-outline" size={22} />
+      <Text style={styles.emptyText}>{`没有匹配“${trimmedQuery}”的${type}`}</Text>
+    </View>
   );
 }
 
@@ -4980,6 +5087,37 @@ const styles = StyleSheet.create({
     borderColor: COLORS.line,
     borderRadius: 19,
     backgroundColor: COLORS.page,
+  },
+  projectPickerSearchArea: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.faint,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  projectPickerSearchField: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 10,
+    backgroundColor: COLORS.page,
+    paddingHorizontal: 12,
+  },
+  projectPickerSearchInput: {
+    minWidth: 0,
+    flex: 1,
+    color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '600',
+    paddingVertical: 9,
+  },
+  projectPickerSearchClear: {
+    width: 26,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   projectPickerSort: {
     gap: 7,
