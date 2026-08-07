@@ -38,6 +38,10 @@ import {
 import yodaMarkSource from '../../../src/assets/images/yoda/yoda_logo.png';
 import { applyAgentCommandPrefix } from '../../../src/shared/agent-command-prefix';
 import {
+  AGENT_REPLY_DISPLAY_LEVELS,
+  type AgentReplyDisplayLevel,
+} from '../../../src/shared/agent-reply-display';
+import {
   appendMobileVoiceTranscript,
   canContinueMobileSession,
   filterMobileProjects,
@@ -67,6 +71,7 @@ import {
   canonicalizeMobileRelayPairing,
   parseMobileRelayPairingUrl,
 } from '../../../src/shared/mobile-relay';
+import { filterMobileSessionTranscript } from '../../../src/shared/mobile-session-display';
 import {
   formatMobileToolTranscriptContent,
   groupAdjacentMobileToolBlocks,
@@ -98,6 +103,12 @@ import {
   type MobileInputUploadProgress,
 } from './input-upload';
 import { parseMarkdownBlocks, tokenizeInlineMarkdown } from './markdown';
+import {
+  DEFAULT_SESSION_DISPLAY_PREFERENCES,
+  loadSessionDisplayPreferences,
+  saveSessionDisplayPreferences,
+  type SessionOutputMode,
+} from './session-display-preferences';
 import { subscribeSessionEvents } from './session-event-stream';
 import { startMobileVoiceInput, type MobileVoiceInputSession } from './voice-input';
 
@@ -136,7 +147,6 @@ type ConnectDraft = {
 };
 
 type TaskScope = 'all' | 'open' | 'inProgress' | 'review';
-type SessionOutputMode = 'rendered' | 'raw';
 
 type ReadableOutputBlock = {
   id: string;
@@ -2650,7 +2660,13 @@ function SessionDetailScreen({
   const scrollViewRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const isAtBottomRef = useRef(true);
   const [detail, setDetail] = useState<MobileSessionDetail | null>(null);
-  const [outputMode, setOutputMode] = useState<SessionOutputMode>('rendered');
+  const [outputMode, setOutputMode] = useState<SessionOutputMode>(
+    DEFAULT_SESSION_DISPLAY_PREFERENCES.outputMode
+  );
+  const [replyDisplayLevel, setReplyDisplayLevel] = useState<AgentReplyDisplayLevel>(
+    DEFAULT_SESSION_DISPLAY_PREFERENCES.replyDisplayLevel
+  );
+  const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [sessionInput, setSessionInput] = useState('');
   const [sessionImages, setSessionImages] = useState<MobileImageDraft[]>([]);
@@ -2673,6 +2689,37 @@ function SessionDetailScreen({
     isAtBottomRef.current = next;
     setIsAtBottom((current) => (current === next ? current : next));
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    void loadSessionDisplayPreferences()
+      .then((preferences) => {
+        if (!active) return;
+        setOutputMode(preferences.outputMode);
+        setReplyDisplayLevel(preferences.replyDisplayLevel);
+      })
+      .catch((cause) => {
+        if (active) setError(`显示设置读取失败：${errorMessage(cause)}`);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const updateDisplayPreferences = useCallback(
+    (next: { outputMode?: SessionOutputMode; replyDisplayLevel?: AgentReplyDisplayLevel }) => {
+      const preferences = {
+        outputMode: next.outputMode ?? outputMode,
+        replyDisplayLevel: next.replyDisplayLevel ?? replyDisplayLevel,
+      };
+      setOutputMode(preferences.outputMode);
+      setReplyDisplayLevel(preferences.replyDisplayLevel);
+      void saveSessionDisplayPreferences(preferences).catch((cause) => {
+        setError(`显示设置保存失败：${errorMessage(cause)}`);
+      });
+    },
+    [outputMode, replyDisplayLevel]
+  );
 
   const scrollToBottom = useCallback((animated = true) => {
     requestAnimationFrame(() => {
@@ -2903,6 +2950,7 @@ function SessionDetailScreen({
             title={session?.title ?? task.name}
             uploadProgress={sessionUploadProgress}
             onBack={onBack}
+            onOpenSettings={() => setDisplaySettingsOpen(true)}
           />
           <ScrollView
             ref={scrollViewRef}
@@ -2943,9 +2991,12 @@ function SessionDetailScreen({
                     {detail.transcript.length} updates
                   </Text>
                 </View>
-                <OutputModeToggle mode={outputMode} onChange={setOutputMode} />
                 {outputMode === 'rendered' ? (
-                  <RenderedSessionTranscript detail={detail} fallbackOutput={output} />
+                  <RenderedSessionTranscript
+                    detail={detail}
+                    displayLevel={replyDisplayLevel}
+                    fallbackOutput={output}
+                  />
                 ) : (
                   <RawSessionOutput output={output} />
                 )}
@@ -2991,6 +3042,16 @@ function SessionDetailScreen({
             onImagesChange={setSessionImages}
             onSend={handleSendInput}
           />
+          <SessionDisplaySettingsSheet
+            displayLevel={replyDisplayLevel}
+            open={displaySettingsOpen}
+            outputMode={outputMode}
+            onClose={() => setDisplaySettingsOpen(false)}
+            onDisplayLevelChange={(nextLevel) =>
+              updateDisplayPreferences({ replyDisplayLevel: nextLevel })
+            }
+            onOutputModeChange={(nextMode) => updateDisplayPreferences({ outputMode: nextMode })}
+          />
         </View>
       </KeyboardAvoidingView>
     </SwipeBackScreen>
@@ -3007,6 +3068,7 @@ function SessionNavigationBar({
   title,
   uploadProgress,
   onBack,
+  onOpenSettings,
 }: {
   acceptsInput: boolean;
   live: boolean;
@@ -3017,27 +3079,41 @@ function SessionNavigationBar({
   title: string;
   uploadProgress: MobileInputUploadProgress | null;
   onBack: () => void;
+  onOpenSettings: () => void;
 }) {
   return (
     <View style={styles.sessionNavBar}>
-      <Pressable
-        accessibilityLabel="Back to sessions"
-        accessibilityRole="button"
-        style={({ pressed }) => [
-          styles.sessionNavBackButton,
-          pressed ? styles.buttonPressed : null,
-        ]}
-        onPress={onBack}
-      >
-        <Ionicons color={COLORS.charcoal} name="chevron-back-outline" size={22} />
-      </Pressable>
-      <View style={styles.sessionNavTitleBlock}>
-        <Text style={styles.sessionNavEyebrow} numberOfLines={1}>
-          Session · {projectLabel}
-        </Text>
-        <Text style={styles.sessionNavTitle} numberOfLines={1}>
-          {title}
-        </Text>
+      <View style={styles.sessionNavPrimaryRow}>
+        <Pressable
+          accessibilityLabel="返回会话列表"
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.sessionNavActionButton,
+            pressed ? styles.buttonPressed : null,
+          ]}
+          onPress={onBack}
+        >
+          <Ionicons color={COLORS.charcoal} name="chevron-back-outline" size={22} />
+        </Pressable>
+        <View style={styles.sessionNavTitleBlock}>
+          <Text style={styles.sessionNavEyebrow} numberOfLines={1}>
+            Session · {projectLabel}
+          </Text>
+          <Text style={styles.sessionNavTitle} numberOfLines={1}>
+            {title}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityLabel="设置会话显示"
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.sessionNavActionButton,
+            pressed ? styles.buttonPressed : null,
+          ]}
+          onPress={onOpenSettings}
+        >
+          <Ionicons color={COLORS.charcoal} name="settings-outline" size={20} />
+        </Pressable>
       </View>
       <SessionRuntimeStatus
         acceptsInput={acceptsInput}
@@ -3705,25 +3781,28 @@ function SessionRuntimeStatus({
           : live
             ? 'Connected, input unavailable.'
             : 'Session offline.';
+  const visibleDetail = uploadProgress
+    ? mobileInputUploadProgressText(uploadProgress)
+    : sending
+      ? '正在发送'
+      : null;
 
   return (
     <View
       accessibilityLabel={`${presentation.label}. ${detail}`}
       accessibilityLiveRegion="polite"
-      style={[
-        styles.sessionRunStatus,
-        { borderColor: presentation.color, backgroundColor: presentation.backgroundColor },
-      ]}
+      style={styles.sessionRunStatus}
     >
       <View style={styles.sessionRunStatusIcon}>
         {presentation.animated ? (
-          <ActivityIndicator color={presentation.color} size="small" />
+          <ActivityIndicator color={presentation.color} size={12} />
         ) : (
-          <Ionicons color={presentation.color} name={presentation.icon} size={20} />
+          <Ionicons color={presentation.color} name={presentation.icon} size={13} />
         )}
       </View>
       <Text style={[styles.sessionRunStatusLabel, { color: presentation.color }]} numberOfLines={1}>
         {presentation.label}
+        {visibleDetail ? ` · ${visibleDetail}` : ''}
       </Text>
     </View>
   );
@@ -3788,6 +3867,119 @@ function sessionRuntimePresentation(status: MobileSessionSummary['runtimeStatus'
   }
 }
 
+const AGENT_REPLY_DISPLAY_COPY: Record<
+  AgentReplyDisplayLevel,
+  { description: string; label: string }
+> = {
+  hidden: { label: '不显示', description: '只显示你的对话' },
+  concise: { label: '精简', description: '只显示 Agent 的最终回复' },
+  detailed: { label: '详细', description: '显示除工具调用以外的对话' },
+  verbose: { label: '全部', description: '显示回复、状态与工具调用' },
+};
+
+function SessionDisplaySettingsSheet({
+  displayLevel,
+  open,
+  outputMode,
+  onClose,
+  onDisplayLevelChange,
+  onOutputModeChange,
+}: {
+  displayLevel: AgentReplyDisplayLevel;
+  open: boolean;
+  outputMode: SessionOutputMode;
+  onClose: () => void;
+  onDisplayLevelChange: (level: AgentReplyDisplayLevel) => void;
+  onOutputModeChange: (mode: SessionOutputMode) => void;
+}) {
+  return (
+    <Modal
+      animationType="slide"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      transparent
+      visible={open}
+      onRequestClose={onClose}
+    >
+      <View accessibilityViewIsModal style={styles.projectPickerOverlay}>
+        <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
+        <SafeAreaView style={styles.sessionDisplaySettingsSheet}>
+          <View style={styles.projectPickerHandle} />
+          <View style={styles.projectPickerHeader}>
+            <View style={styles.projectPickerTitleBlock}>
+              <Text style={styles.projectPickerEyebrow}>当前会话</Text>
+              <Text style={styles.projectPickerTitle}>显示设置</Text>
+            </View>
+            <Pressable
+              accessibilityLabel="关闭显示设置"
+              accessibilityRole="button"
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.projectPickerClose,
+                pressed ? styles.buttonPressed : null,
+              ]}
+              onPress={onClose}
+            >
+              <Ionicons color={COLORS.charcoal} name="close-outline" size={22} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.sessionDisplaySettingsContent}>
+            <View style={styles.sessionDisplaySettingsGroup}>
+              <View style={styles.sessionDisplaySettingsHeading}>
+                <Text style={styles.sessionDisplaySettingsLabel}>显示模式</Text>
+                <Text style={styles.sessionDisplaySettingsDescription}>
+                  选择适合阅读的排版，或查看原始记录。
+                </Text>
+              </View>
+              <OutputModeToggle mode={outputMode} onChange={onOutputModeChange} />
+            </View>
+            <View style={styles.sessionDisplaySettingsGroup}>
+              <View style={styles.sessionDisplaySettingsHeading}>
+                <Text style={styles.sessionDisplaySettingsLabel}>对话详细度</Text>
+                <Text style={styles.sessionDisplaySettingsDescription}>
+                  控制会话里保留多少过程信息；原始记录始终完整显示。
+                </Text>
+              </View>
+              <View accessibilityRole="radiogroup" style={styles.sessionDisplayLevelList}>
+                {AGENT_REPLY_DISPLAY_LEVELS.map((level) => {
+                  const selected = displayLevel === level;
+                  const copy = AGENT_REPLY_DISPLAY_COPY[level];
+                  return (
+                    <Pressable
+                      key={level}
+                      accessibilityLabel={`${copy.label}，${copy.description}`}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: selected }}
+                      style={({ pressed }) => [
+                        styles.sessionDisplayLevelOption,
+                        selected ? styles.sessionDisplayLevelOptionSelected : null,
+                        pressed ? styles.buttonPressed : null,
+                      ]}
+                      onPress={() => onDisplayLevelChange(level)}
+                    >
+                      <View style={styles.sessionDisplayLevelOptionBody}>
+                        <Text style={styles.sessionDisplayLevelOptionLabel}>{copy.label}</Text>
+                        <Text style={styles.sessionDisplayLevelOptionDescription}>
+                          {copy.description}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        color={selected ? COLORS.charcoal : COLORS.line}
+                        name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={21}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </View>
+    </Modal>
+  );
+}
+
 function OutputModeToggle({
   mode,
   onChange,
@@ -3796,18 +3988,19 @@ function OutputModeToggle({
   onChange: (mode: SessionOutputMode) => void;
 }) {
   const options: Array<{ label: string; value: SessionOutputMode }> = [
-    { label: 'Rendered', value: 'rendered' },
-    { label: 'Raw', value: 'raw' },
+    { label: '阅读', value: 'rendered' },
+    { label: '原始记录', value: 'raw' },
   ];
 
   return (
-    <View style={styles.outputModeControl}>
+    <View accessibilityRole="radiogroup" style={styles.outputModeControl}>
       {options.map((option) => {
         const active = option.value === mode;
         return (
           <Pressable
             key={option.value}
-            accessibilityRole="button"
+            accessibilityRole="radio"
+            accessibilityState={{ checked: active }}
             style={({ pressed }) => [
               styles.outputModeButton,
               active ? styles.outputModeButtonActive : null,
@@ -3827,14 +4020,17 @@ function OutputModeToggle({
 
 function RenderedSessionTranscript({
   detail,
+  displayLevel,
   fallbackOutput,
 }: {
   detail: MobileSessionDetail;
+  displayLevel: AgentReplyDisplayLevel;
   fallbackOutput: string;
 }) {
   const transcript = useMemo(
-    () => mergeAdjacentAssistantBlocks(detail.transcript),
-    [detail.transcript]
+    () =>
+      mergeAdjacentAssistantBlocks(filterMobileSessionTranscript(detail.transcript, displayLevel)),
+    [detail.transcript, displayLevel]
   );
   const renderItems = useMemo(() => groupAdjacentMobileToolBlocks(transcript), [transcript]);
   const latestToolId = useMemo(
@@ -3844,6 +4040,15 @@ function RenderedSessionTranscript({
 
   if (detail.transcript.length === 0) {
     return <ReadableSessionOutput output={fallbackOutput} />;
+  }
+
+  if (transcript.length === 0) {
+    return (
+      <View style={styles.emptyState}>
+        <Ionicons color={COLORS.muted} name="chatbubble-ellipses-outline" size={22} />
+        <Text style={styles.emptyText}>当前详细度下暂无可显示的对话</Text>
+      </View>
+    );
   }
 
   return (
@@ -4448,17 +4653,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sessionNavBar: {
-    minHeight: 64,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    minHeight: 74,
+    gap: 5,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.line,
     backgroundColor: COLORS.surface,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingTop: 8,
+    paddingBottom: 7,
   },
-  sessionNavBackButton: {
+  sessionNavPrimaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sessionNavActionButton: {
     width: 42,
     height: 42,
     alignItems: 'center',
@@ -4506,27 +4715,28 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   sessionRunStatus: {
-    maxWidth: 142,
-    minHeight: 30,
+    maxWidth: '100%',
+    minHeight: 14,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
     flexShrink: 0,
-    gap: 5,
-    borderWidth: 1,
-    borderRadius: 15,
+    gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 4,
   },
   sessionRunStatusIcon: {
-    width: 20,
+    width: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sessionRunStatusLabel: {
     minWidth: 0,
     flexShrink: 1,
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   sessionInputCount: {
     alignSelf: 'flex-end',
@@ -5356,6 +5566,74 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 18,
     backgroundColor: COLORS.surface,
     paddingTop: 9,
+  },
+  sessionDisplaySettingsSheet: {
+    maxHeight: '78%',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    backgroundColor: COLORS.surface,
+    paddingTop: 9,
+  },
+  sessionDisplaySettingsContent: {
+    gap: 22,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.faint,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 22,
+  },
+  sessionDisplaySettingsGroup: {
+    gap: 11,
+  },
+  sessionDisplaySettingsHeading: {
+    gap: 3,
+  },
+  sessionDisplaySettingsLabel: {
+    color: COLORS.ink,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  sessionDisplaySettingsDescription: {
+    color: COLORS.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  sessionDisplayLevelList: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 10,
+    backgroundColor: COLORS.surface,
+  },
+  sessionDisplayLevelOption: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.faint,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  sessionDisplayLevelOptionSelected: {
+    backgroundColor: '#F2F0E9',
+  },
+  sessionDisplayLevelOptionBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+  },
+  sessionDisplayLevelOptionLabel: {
+    color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  sessionDisplayLevelOptionDescription: {
+    color: COLORS.muted,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
   },
   projectPickerHandle: {
     width: 42,
