@@ -4,6 +4,7 @@ import type {
   ConnectionStatusMap,
   IssueProviderType,
 } from '@shared/issue-providers';
+import type { Issue } from '@shared/tasks';
 import { projectManager } from '@main/core/projects/project-manager';
 import type { IssueProvider, IssueQueryOpts, IssueSearchOpts } from './issue-provider';
 import { getAllIssueProviders, getIssueProvider } from './registry';
@@ -104,5 +105,11 @@ export const issueController = createRPCController({
     }
 
     return issueProvider.searchIssues(await withResolvedRemote(opts));
+  },
+
+  hydrateIssue: async (issue: Issue): Promise<Issue> => {
+    const issueProvider = getIssueProvider(issue.provider);
+    if (!issueProvider?.hydrateIssue) return issue;
+    return issueProvider.hydrateIssue(issue);
   },
 });

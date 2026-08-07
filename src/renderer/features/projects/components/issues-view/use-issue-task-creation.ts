@@ -9,6 +9,7 @@ import {
   mountedProjectData,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
+import { hydrateIssueContext } from '@renderer/features/tasks/components/issue-selector/hydrate-issue';
 import { initialConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { resolveBranchLikeTaskStrategy } from '@renderer/features/tasks/create-task-modal/create-task-strategy';
@@ -149,9 +150,10 @@ export function useIssueTaskCreation(projectId: string, issues: Issue[]) {
       const failures: string[] = [];
 
       for (const issue of pendingIssues) {
+        const hydratedIssue = await hydrateIssueContext(issue);
         const id = crypto.randomUUID();
         const name = ensureUniqueTaskDisplayName(
-          issueTaskDisplayName(issue, translate),
+          issueTaskDisplayName(hydratedIssue, translate),
           existingNames
         );
         existingNames.add(name);
@@ -159,7 +161,7 @@ export function useIssueTaskCreation(projectId: string, issues: Issue[]) {
         const params = buildIssueTaskParams({
           id,
           projectId,
-          issue,
+          issue: hydratedIssue,
           name,
           sourceBranch,
           isUnborn: repo.isUnborn,

@@ -24,4 +24,5 @@ export interface IssueProvider {
   checkConnection(): Promise<ConnectionStatus>;
   listIssues(opts: IssueQueryOpts): Promise<IssueListResult>;
   searchIssues(opts: IssueSearchOpts): Promise<IssueListResult>;
+  hydrateIssue?(issue: Issue): Promise<Issue>;
 }

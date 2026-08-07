@@ -8,6 +8,11 @@ import gitlabSvg from '@/assets/images/GitLab.svg?raw';
 import jiraSvg from '@/assets/images/Jira.svg?raw';
 import linearSvg from '@/assets/images/Linear.svg?raw';
 import lovcodeSvg from '@/assets/images/Lovcode.svg?raw';
+import asanaSvg from '@/assets/images/mcp/asana.svg?raw';
+import mondaySvg from '@/assets/images/mcp/monday.svg?raw';
+import notionSvg from '@/assets/images/mcp/notion.svg?raw';
+import planeSvg from '@/assets/images/mcp/plane.svg?raw';
+import trelloSvg from '@/assets/images/mcp/trello.svg?raw';
 import plainSvg from '@/assets/images/Plain.svg?raw';
 import { LOVCODE_DOWNLOAD_URL, type LovcodeAvailability } from '@shared/lovcode';
 import type { MaasPlatformTemplateId } from '@shared/maas';
@@ -96,6 +101,21 @@ const IntegrationsCard: React.FC<{
     isFeaturebaseConnected,
     isFeaturebaseLoading,
     disconnectFeaturebase,
+    isAsanaConnected,
+    isAsanaLoading,
+    disconnectAsana,
+    isMondayConnected,
+    isMondayLoading,
+    disconnectMonday,
+    isTrelloConnected,
+    isTrelloLoading,
+    disconnectTrello,
+    isPlaneConnected,
+    isPlaneLoading,
+    disconnectPlane,
+    isNotionConnected,
+    isNotionLoading,
+    disconnectNotion,
   } = useIntegrationsContext();
 
   const showIntegrationSetup = useShowModal('integrationSetupModal');
@@ -254,6 +274,71 @@ const IntegrationsCard: React.FC<{
       loading: isFeaturebaseLoading,
       onConnect: () => showIntegrationSetup({ integration: 'featurebase' }),
       onDisconnect: disconnectFeaturebase,
+    },
+    {
+      id: 'asana',
+      name: 'Asana',
+      description:
+        isAsanaConnected && connectionStatus.asana.displayName
+          ? connectionStatus.asana.displayName
+          : t('settings.integrationsTab.asanaDescription'),
+      logoSvg: asanaSvg,
+      connected: !!isAsanaConnected,
+      loading: isAsanaLoading,
+      onConnect: () => showIntegrationSetup({ integration: 'asana' }),
+      onDisconnect: disconnectAsana,
+    },
+    {
+      id: 'monday',
+      name: 'Monday.com',
+      description:
+        isMondayConnected && connectionStatus.monday.displayName
+          ? connectionStatus.monday.displayName
+          : t('settings.integrationsTab.mondayDescription'),
+      logoSvg: mondaySvg,
+      connected: !!isMondayConnected,
+      loading: isMondayLoading,
+      onConnect: () => showIntegrationSetup({ integration: 'monday' }),
+      onDisconnect: disconnectMonday,
+    },
+    {
+      id: 'trello',
+      name: 'Trello',
+      description:
+        isTrelloConnected && connectionStatus.trello.displayName
+          ? connectionStatus.trello.displayName
+          : t('settings.integrationsTab.trelloDescription'),
+      logoSvg: trelloSvg,
+      connected: !!isTrelloConnected,
+      loading: isTrelloLoading,
+      onConnect: () => showIntegrationSetup({ integration: 'trello' }),
+      onDisconnect: disconnectTrello,
+    },
+    {
+      id: 'plane',
+      name: 'Plane',
+      description:
+        isPlaneConnected && connectionStatus.plane.displayName
+          ? connectionStatus.plane.displayName
+          : t('settings.integrationsTab.planeDescription'),
+      logoSvg: planeSvg,
+      connected: !!isPlaneConnected,
+      loading: isPlaneLoading,
+      onConnect: () => showIntegrationSetup({ integration: 'plane' }),
+      onDisconnect: disconnectPlane,
+    },
+    {
+      id: 'notion',
+      name: 'Notion',
+      description:
+        isNotionConnected && connectionStatus.notion.displayName
+          ? connectionStatus.notion.displayName
+          : t('settings.integrationsTab.notionDescription'),
+      logoSvg: notionSvg,
+      connected: !!isNotionConnected,
+      loading: isNotionLoading,
+      onConnect: () => showIntegrationSetup({ integration: 'notion' }),
+      onDisconnect: disconnectNotion,
     },
   ];
 

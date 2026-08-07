@@ -107,6 +107,11 @@ vi.mock('@renderer/features/integrations/integrations-provider', () => ({
       plain: {},
       forgejo: {},
       featurebase: {},
+      asana: {},
+      monday: {},
+      trello: {},
+      plane: {},
+      notion: {},
     },
     isLinearConnected: false,
     isLinearLoading: false,
@@ -126,6 +131,21 @@ vi.mock('@renderer/features/integrations/integrations-provider', () => ({
     isFeaturebaseConnected: false,
     isFeaturebaseLoading: false,
     disconnectFeaturebase: vi.fn(),
+    isAsanaConnected: false,
+    isAsanaLoading: false,
+    disconnectAsana: vi.fn(),
+    isMondayConnected: false,
+    isMondayLoading: false,
+    disconnectMonday: vi.fn(),
+    isTrelloConnected: false,
+    isTrelloLoading: false,
+    disconnectTrello: vi.fn(),
+    isPlaneConnected: false,
+    isPlaneLoading: false,
+    disconnectPlane: vi.fn(),
+    isNotionConnected: false,
+    isNotionLoading: false,
+    disconnectNotion: vi.fn(),
   }),
 }));
 
@@ -216,6 +236,19 @@ describe('Settings integrations', () => {
     await act(async () => installButton?.click());
     expect(mocks.installLiteLlm).toHaveBeenCalledOnce();
     expect(mocks.openMaasPlatform).not.toHaveBeenCalled();
+  });
+
+  it('shows the latest upstream issue integrations, including Notion', async () => {
+    const { default: IntegrationsCard } = await import(
+      '@renderer/features/settings/components/IntegrationsCard'
+    );
+    await act(async () =>
+      root.render(createElement(IntegrationsCard, { onOpenMaasPlatform: mocks.openMaasPlatform }))
+    );
+
+    for (const provider of ['asana', 'monday', 'trello', 'plane', 'notion']) {
+      expect(host.querySelector(`[data-testid="integration-card-${provider}"]`)).not.toBeNull();
+    }
   });
 
   it('keeps an existing remote LiteLLM connection manageable without replacing it', async () => {

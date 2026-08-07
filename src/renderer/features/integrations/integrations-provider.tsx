@@ -81,6 +81,47 @@ const PROVIDER_CONNECTION_CONFIG = {
     fallbackError: DEFAULT_CONNECT_ERROR,
     validateInput: validateTokenInput,
   },
+  asana: {
+    connectMutationFn: (accessToken: string) => rpc.asana.saveToken(accessToken),
+    disconnectMutationFn: () => rpc.asana.clearToken(),
+    fallbackError: DEFAULT_CONNECT_ERROR,
+    validateInput: validateTokenInput,
+  },
+  monday: {
+    connectMutationFn: (apiToken: string) => rpc.monday.saveToken(apiToken),
+    disconnectMutationFn: () => rpc.monday.clearToken(),
+    fallbackError: DEFAULT_CONNECT_ERROR,
+    validateInput: validateTokenInput,
+  },
+  trello: {
+    connectMutationFn: (credentials: { apiKey: string; apiToken: string }) =>
+      rpc.trello.saveCredentials(credentials),
+    disconnectMutationFn: () => rpc.trello.clearCredentials(),
+    fallbackError: DEFAULT_CONNECT_ERROR,
+    validateInput: (credentials: { apiKey: string; apiToken: string }) =>
+      credentials.apiKey.trim() && credentials.apiToken.trim()
+        ? null
+        : 'API key and API token are required.',
+  },
+  plane: {
+    connectMutationFn: (credentials: {
+      apiBaseUrl: string;
+      workspaceSlug: string;
+      apiKey: string;
+    }) => rpc.plane.saveCredentials(credentials),
+    disconnectMutationFn: () => rpc.plane.clearCredentials(),
+    fallbackError: DEFAULT_CONNECT_ERROR,
+    validateInput: (credentials: { apiBaseUrl: string; workspaceSlug: string; apiKey: string }) =>
+      credentials.apiBaseUrl.trim() && credentials.workspaceSlug.trim() && credentials.apiKey.trim()
+        ? null
+        : 'API base URL, workspace slug, and API key are required.',
+  },
+  notion: {
+    connectMutationFn: (apiToken: string) => rpc.notion.saveToken(apiToken),
+    disconnectMutationFn: () => rpc.notion.clearToken(),
+    fallbackError: DEFAULT_CONNECT_ERROR,
+    validateInput: validateTokenInput,
+  },
 } as const;
 
 type IntegrationsContextValue = {
@@ -94,6 +135,11 @@ type IntegrationsContextValue = {
   isPlainConnected: boolean | null;
   isForgejoConnected: boolean | null;
   isFeaturebaseConnected: boolean | null;
+  isAsanaConnected: boolean | null;
+  isMondayConnected: boolean | null;
+  isTrelloConnected: boolean | null;
+  isPlaneConnected: boolean | null;
+  isNotionConnected: boolean | null;
 
   // Auth mutations stay per provider.
   isLinearLoading: boolean;
@@ -102,6 +148,11 @@ type IntegrationsContextValue = {
   isPlainLoading: boolean;
   isForgejoLoading: boolean;
   isFeaturebaseLoading: boolean;
+  isAsanaLoading: boolean;
+  isMondayLoading: boolean;
+  isTrelloLoading: boolean;
+  isPlaneLoading: boolean;
+  isNotionLoading: boolean;
   connectLinear: (apiKey: string) => Promise<void>;
   disconnectLinear: () => Promise<void>;
   connectJira: (credentials: { siteUrl: string; email: string; token: string }) => Promise<void>;
@@ -114,6 +165,20 @@ type IntegrationsContextValue = {
   disconnectForgejo: () => Promise<void>;
   connectFeaturebase: (apiKey: string) => Promise<void>;
   disconnectFeaturebase: () => Promise<void>;
+  connectAsana: (accessToken: string) => Promise<void>;
+  disconnectAsana: () => Promise<void>;
+  connectMonday: (apiToken: string) => Promise<void>;
+  disconnectMonday: () => Promise<void>;
+  connectTrello: (credentials: { apiKey: string; apiToken: string }) => Promise<void>;
+  disconnectTrello: () => Promise<void>;
+  connectPlane: (credentials: {
+    apiBaseUrl: string;
+    workspaceSlug: string;
+    apiKey: string;
+  }) => Promise<void>;
+  disconnectPlane: () => Promise<void>;
+  connectNotion: (apiToken: string) => Promise<void>;
+  disconnectNotion: () => Promise<void>;
 };
 
 const IntegrationsContext = createContext<IntegrationsContextValue | null>(null);
@@ -171,6 +236,26 @@ export function IntegrationsProvider({ children }: { children: React.ReactNode }
     ...PROVIDER_CONNECTION_CONFIG.featurebase,
     invalidate: invalidateStatuses,
   });
+  const asanaConnection = useProviderConnection({
+    ...PROVIDER_CONNECTION_CONFIG.asana,
+    invalidate: invalidateStatuses,
+  });
+  const mondayConnection = useProviderConnection({
+    ...PROVIDER_CONNECTION_CONFIG.monday,
+    invalidate: invalidateStatuses,
+  });
+  const trelloConnection = useProviderConnection({
+    ...PROVIDER_CONNECTION_CONFIG.trello,
+    invalidate: invalidateStatuses,
+  });
+  const planeConnection = useProviderConnection({
+    ...PROVIDER_CONNECTION_CONFIG.plane,
+    invalidate: invalidateStatuses,
+  });
+  const notionConnection = useProviderConnection({
+    ...PROVIDER_CONNECTION_CONFIG.notion,
+    invalidate: invalidateStatuses,
+  });
 
   const connectionStatus = statusData ?? DEFAULT_CONNECTION_STATUS;
 
@@ -185,12 +270,22 @@ export function IntegrationsProvider({ children }: { children: React.ReactNode }
         isPlainConnected: isConnected(statusData, 'plain'),
         isForgejoConnected: isConnected(statusData, 'forgejo'),
         isFeaturebaseConnected: isConnected(statusData, 'featurebase'),
+        isAsanaConnected: isConnected(statusData, 'asana'),
+        isMondayConnected: isConnected(statusData, 'monday'),
+        isTrelloConnected: isConnected(statusData, 'trello'),
+        isPlaneConnected: isConnected(statusData, 'plane'),
+        isNotionConnected: isConnected(statusData, 'notion'),
         isLinearLoading: isInitialConnectionCheck || linearConnection.isLoading,
         isJiraLoading: isInitialConnectionCheck || jiraConnection.isLoading,
         isGitlabLoading: isInitialConnectionCheck || gitlabConnection.isLoading,
         isPlainLoading: isInitialConnectionCheck || plainConnection.isLoading,
         isForgejoLoading: isInitialConnectionCheck || forgejoConnection.isLoading,
         isFeaturebaseLoading: isInitialConnectionCheck || featurebaseConnection.isLoading,
+        isAsanaLoading: isInitialConnectionCheck || asanaConnection.isLoading,
+        isMondayLoading: isInitialConnectionCheck || mondayConnection.isLoading,
+        isTrelloLoading: isInitialConnectionCheck || trelloConnection.isLoading,
+        isPlaneLoading: isInitialConnectionCheck || planeConnection.isLoading,
+        isNotionLoading: isInitialConnectionCheck || notionConnection.isLoading,
         connectLinear: linearConnection.connect,
         disconnectLinear: linearConnection.disconnect,
         connectJira: jiraConnection.connect,
@@ -203,6 +298,16 @@ export function IntegrationsProvider({ children }: { children: React.ReactNode }
         disconnectForgejo: forgejoConnection.disconnect,
         connectFeaturebase: featurebaseConnection.connect,
         disconnectFeaturebase: featurebaseConnection.disconnect,
+        connectAsana: asanaConnection.connect,
+        disconnectAsana: asanaConnection.disconnect,
+        connectMonday: mondayConnection.connect,
+        disconnectMonday: mondayConnection.disconnect,
+        connectTrello: trelloConnection.connect,
+        disconnectTrello: trelloConnection.disconnect,
+        connectPlane: planeConnection.connect,
+        disconnectPlane: planeConnection.disconnect,
+        connectNotion: notionConnection.connect,
+        disconnectNotion: notionConnection.disconnect,
       }}
     >
       {children}

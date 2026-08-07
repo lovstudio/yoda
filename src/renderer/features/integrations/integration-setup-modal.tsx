@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@renderer/lib/ui/dialog';
+import { ExternalIssueSetupForm } from './ExternalIssueSetupForm';
 import FeaturebaseSetupForm from './FeaturebaseSetupForm';
 import ForgejoSetupForm from './ForgejoSetupForm';
 import GitLabSetupForm from './GitLabSetupForm';
@@ -19,7 +20,18 @@ import JiraSetupForm from './JiraSetupForm';
 import LinearSetupForm from './LinearSetupForm';
 import PlainSetupForm from './PlainSetupForm';
 
-type IntegrationType = 'linear' | 'jira' | 'gitlab' | 'plain' | 'forgejo' | 'featurebase';
+type IntegrationType =
+  | 'linear'
+  | 'jira'
+  | 'gitlab'
+  | 'plain'
+  | 'forgejo'
+  | 'featurebase'
+  | 'asana'
+  | 'monday'
+  | 'trello'
+  | 'plane'
+  | 'notion';
 
 type IntegrationSetupModalArgs = {
   integration: IntegrationType;
@@ -52,6 +64,26 @@ const descriptions: Record<IntegrationType, { titleKey: string; subtitleKey: str
     titleKey: 'integrations.setupModal.featurebase.title',
     subtitleKey: 'integrations.setupModal.featurebase.subtitle',
   },
+  asana: {
+    titleKey: 'integrations.setupModal.asana.title',
+    subtitleKey: 'integrations.setupModal.asana.subtitle',
+  },
+  monday: {
+    titleKey: 'integrations.setupModal.monday.title',
+    subtitleKey: 'integrations.setupModal.monday.subtitle',
+  },
+  trello: {
+    titleKey: 'integrations.setupModal.trello.title',
+    subtitleKey: 'integrations.setupModal.trello.subtitle',
+  },
+  plane: {
+    titleKey: 'integrations.setupModal.plane.title',
+    subtitleKey: 'integrations.setupModal.plane.subtitle',
+  },
+  notion: {
+    titleKey: 'integrations.setupModal.notion.title',
+    subtitleKey: 'integrations.setupModal.notion.subtitle',
+  },
 };
 
 export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props) {
@@ -63,12 +95,22 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
     connectPlain,
     connectForgejo,
     connectFeaturebase,
+    connectAsana,
+    connectMonday,
+    connectTrello,
+    connectPlane,
+    connectNotion,
     isLinearLoading,
     isJiraLoading,
     isGitlabLoading,
     isPlainLoading,
     isForgejoLoading,
     isFeaturebaseLoading,
+    isAsanaLoading,
+    isMondayLoading,
+    isTrelloLoading,
+    isPlaneLoading,
+    isNotionLoading,
   } = useIntegrationsContext();
 
   // Linear state
@@ -93,6 +135,15 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
   // Featurebase state
   const [featurebaseKey, setFeaturebaseKey] = useState('');
 
+  const [asanaToken, setAsanaToken] = useState('');
+  const [mondayToken, setMondayToken] = useState('');
+  const [trelloKey, setTrelloKey] = useState('');
+  const [trelloToken, setTrelloToken] = useState('');
+  const [planeApiBaseUrl, setPlaneApiBaseUrl] = useState('https://api.plane.so');
+  const [planeWorkspaceSlug, setPlaneWorkspaceSlug] = useState('');
+  const [planeApiKey, setPlaneApiKey] = useState('');
+  const [notionToken, setNotionToken] = useState('');
+
   const [error, setError] = useState<string | null>(null);
 
   const isLoading =
@@ -101,7 +152,12 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
     (integration === 'gitlab' && isGitlabLoading) ||
     (integration === 'plain' && isPlainLoading) ||
     (integration === 'forgejo' && isForgejoLoading) ||
-    (integration === 'featurebase' && isFeaturebaseLoading);
+    (integration === 'featurebase' && isFeaturebaseLoading) ||
+    (integration === 'asana' && isAsanaLoading) ||
+    (integration === 'monday' && isMondayLoading) ||
+    (integration === 'trello' && isTrelloLoading) ||
+    (integration === 'plane' && isPlaneLoading) ||
+    (integration === 'notion' && isNotionLoading);
 
   const canSubmit =
     (integration === 'linear' && !!linearKey.trim()) ||
@@ -109,7 +165,13 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
     (integration === 'gitlab' && !!(gitlabInstanceUrl.trim() && gitlabToken.trim())) ||
     (integration === 'plain' && !!plainKey.trim()) ||
     (integration === 'forgejo' && !!(forgejoInstanceUrl.trim() && forgejoToken.trim())) ||
-    (integration === 'featurebase' && !!featurebaseKey.trim());
+    (integration === 'featurebase' && !!featurebaseKey.trim()) ||
+    (integration === 'asana' && !!asanaToken.trim()) ||
+    (integration === 'monday' && !!mondayToken.trim()) ||
+    (integration === 'trello' && !!(trelloKey.trim() && trelloToken.trim())) ||
+    (integration === 'plane' &&
+      !!(planeApiBaseUrl.trim() && planeWorkspaceSlug.trim() && planeApiKey.trim())) ||
+    (integration === 'notion' && !!notionToken.trim());
 
   const handleSubmit = useCallback(async () => {
     setError(null);
@@ -143,6 +205,25 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
         case 'featurebase':
           await connectFeaturebase(featurebaseKey.trim());
           break;
+        case 'asana':
+          await connectAsana(asanaToken.trim());
+          break;
+        case 'monday':
+          await connectMonday(mondayToken.trim());
+          break;
+        case 'trello':
+          await connectTrello({ apiKey: trelloKey.trim(), apiToken: trelloToken.trim() });
+          break;
+        case 'plane':
+          await connectPlane({
+            apiBaseUrl: planeApiBaseUrl.trim(),
+            workspaceSlug: planeWorkspaceSlug.trim(),
+            apiKey: planeApiKey.trim(),
+          });
+          break;
+        case 'notion':
+          await connectNotion(notionToken.trim());
+          break;
       }
       onSuccess();
     } catch (e) {
@@ -166,6 +247,19 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
     connectPlain,
     connectForgejo,
     connectFeaturebase,
+    asanaToken,
+    mondayToken,
+    trelloKey,
+    trelloToken,
+    planeApiBaseUrl,
+    planeWorkspaceSlug,
+    planeApiKey,
+    notionToken,
+    connectAsana,
+    connectMonday,
+    connectTrello,
+    connectPlane,
+    connectNotion,
     onSuccess,
     t,
   ]);
@@ -224,6 +318,107 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
           <FeaturebaseSetupForm
             apiKey={featurebaseKey}
             onChange={setFeaturebaseKey}
+            error={error}
+          />
+        )}
+        {integration === 'asana' && (
+          <ExternalIssueSetupForm
+            provider="asana"
+            fields={[
+              {
+                id: 'accessToken',
+                value: asanaToken,
+                type: 'password',
+                placeholderKey: 'integrations.setup.asana.tokenPlaceholder',
+                autoFocus: true,
+              },
+            ]}
+            onChange={(_, value) => setAsanaToken(value)}
+            error={error}
+          />
+        )}
+        {integration === 'monday' && (
+          <ExternalIssueSetupForm
+            provider="monday"
+            fields={[
+              {
+                id: 'apiToken',
+                value: mondayToken,
+                type: 'password',
+                placeholderKey: 'integrations.setup.monday.tokenPlaceholder',
+                autoFocus: true,
+              },
+            ]}
+            onChange={(_, value) => setMondayToken(value)}
+            error={error}
+          />
+        )}
+        {integration === 'trello' && (
+          <ExternalIssueSetupForm
+            provider="trello"
+            fields={[
+              {
+                id: 'apiKey',
+                value: trelloKey,
+                placeholderKey: 'integrations.setup.trello.keyPlaceholder',
+                autoFocus: true,
+              },
+              {
+                id: 'apiToken',
+                value: trelloToken,
+                type: 'password',
+                placeholderKey: 'integrations.setup.trello.tokenPlaceholder',
+              },
+            ]}
+            onChange={(id, value) =>
+              id === 'apiKey' ? setTrelloKey(value) : setTrelloToken(value)
+            }
+            error={error}
+          />
+        )}
+        {integration === 'plane' && (
+          <ExternalIssueSetupForm
+            provider="plane"
+            fields={[
+              {
+                id: 'apiBaseUrl',
+                value: planeApiBaseUrl,
+                placeholderKey: 'integrations.setup.plane.urlPlaceholder',
+                autoFocus: true,
+              },
+              {
+                id: 'workspaceSlug',
+                value: planeWorkspaceSlug,
+                placeholderKey: 'integrations.setup.plane.workspacePlaceholder',
+              },
+              {
+                id: 'apiKey',
+                value: planeApiKey,
+                type: 'password',
+                placeholderKey: 'integrations.setup.plane.keyPlaceholder',
+              },
+            ]}
+            onChange={(id, value) => {
+              if (id === 'apiBaseUrl') setPlaneApiBaseUrl(value);
+              if (id === 'workspaceSlug') setPlaneWorkspaceSlug(value);
+              if (id === 'apiKey') setPlaneApiKey(value);
+            }}
+            error={error}
+          />
+        )}
+        {integration === 'notion' && (
+          <ExternalIssueSetupForm
+            provider="notion"
+            fields={[
+              {
+                id: 'apiToken',
+                value: notionToken,
+                type: 'password',
+                placeholderKey: 'integrations.setup.notion.tokenPlaceholder',
+                autoFocus: true,
+              },
+            ]}
+            onChange={(_, value) => setNotionToken(value)}
             error={error}
           />
         )}

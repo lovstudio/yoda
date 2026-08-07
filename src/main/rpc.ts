@@ -6,6 +6,7 @@ import { agentsConfigController } from './core/agents-config/controller';
 import { aiLabController } from './core/ai-lab/controller';
 import { aiLogsController } from './core/ai-logs/controller';
 import { appController } from './core/app/controller';
+import { asanaController } from './core/asana/controller';
 import { automationController } from './core/automation/controller';
 import { conversationController } from './core/conversations/controller';
 import { dependenciesController } from './core/dependencies/controller';
@@ -27,7 +28,10 @@ import { lovcodeController } from './core/lovcode/controller';
 import { maasController } from './core/maas/controller';
 import { mcpController } from './core/mcp/controller';
 import { mobileGatewayController } from './core/mobile-gateway/controller';
+import { mondayController } from './core/monday/controller';
+import { notionController } from './core/notion/controller';
 import { plainController } from './core/plain/controller';
+import { planeController } from './core/plane/controller';
 import { pluginsController } from './core/plugins/controller';
 import { projectController } from './core/projects/controller';
 import { promptLibraryController } from './core/prompt-library/controller';
@@ -48,6 +52,7 @@ import { taskController } from './core/tasks/controller';
 import { teamRoomController } from './core/team-rooms/controller';
 import { telemetryController } from './core/telemetry/controller';
 import { terminalsController } from './core/terminals/controller';
+import { trelloController } from './core/trello/controller';
 import { updateController } from './core/updates/controller';
 import { viewStateController } from './core/view-state/controller';
 import { workspaceController } from './core/workspaces/controller';
@@ -63,6 +68,7 @@ export const rpcRouter = createRPCRouter({
   automation: automationController,
   legacyPort: legacyPortController,
   app: appController,
+  asana: asanaController,
   appSettings: appSettingsController,
   runtimeSettings: runtimeSettingsController,
   settingsSync: settingsSyncController,
@@ -82,6 +88,9 @@ export const rpcRouter = createRPCRouter({
   lovcode: lovcodeController,
   maas: maasController,
   mobileGateway: mobileGatewayController,
+  monday: mondayController,
+  notion: notionController,
+  plane: planeController,
   plain: plainController,
   plugins: pluginsController,
   promptLibrary: promptLibraryController,
@@ -94,6 +103,7 @@ export const rpcRouter = createRPCRouter({
   tasks: taskController,
   conversations: conversationController,
   terminals: terminalsController,
+  trello: trelloController,
   git: gitController,
   dependencies: dependenciesController,
   doctor: doctorController,

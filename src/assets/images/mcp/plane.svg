@@ -1,0 +1,5 @@
+<svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <title>Plane</title>
+  <rect width="24" height="24" rx="5" fill="#6C5CE7"/>
+  <path d="M6 6h7.2a4.8 4.8 0 0 1 0 9.6H9.8V20H6V6zm3.8 3.3v3h3.1a1.5 1.5 0 0 0 0-3H9.8z" fill="#fff"/>
+</svg>
