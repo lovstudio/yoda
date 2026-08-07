@@ -54,6 +54,7 @@ import {
   parseMobilePairingUrl,
   parseMobileTimestamp,
   prependMobileSkillCommand,
+  resolveMobileSiblingTaskAttribution,
   sortMobileProjects,
   sortMobileTaskAttributionCandidates,
   type MobileDashboardSnapshot,
@@ -599,6 +600,8 @@ export function App() {
   const [homeTab, setHomeTab] = useState<HomeTab>(DEFAULT_HOME_TAB);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskParent, setNewTaskParent] = useState<MobileTaskSummary | null>(null);
+  const [newTaskParentId, setNewTaskParentId] = useState<string | null>(null);
+  const [newTaskSiblingOf, setNewTaskSiblingOf] = useState<MobileTaskSummary | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState('all');
   const [taskScope, setTaskScope] = useState<TaskScope>('all');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -672,6 +675,8 @@ export function App() {
     setHomeTab(DEFAULT_HOME_TAB);
     setNewTaskOpen(false);
     setNewTaskParent(null);
+    setNewTaskParentId(null);
+    setNewTaskSiblingOf(null);
     setSelectedProjectId('all');
     setTaskScope('all');
     setSelectedTaskId(null);
@@ -839,13 +844,29 @@ export function App() {
 
   const openNewTask = useCallback((parentTask: MobileTaskSummary | null = null) => {
     setNewTaskParent(parentTask);
+    setNewTaskParentId(parentTask?.id ?? null);
+    setNewTaskSiblingOf(null);
     if (parentTask) setDemandProjectId(parentTask.projectId);
     setNewTaskOpen(true);
   }, []);
 
+  const openNewSiblingTask = useCallback(
+    (task: MobileTaskSummary) => {
+      const attribution = resolveMobileSiblingTaskAttribution(task, snapshot?.tasks ?? []);
+      setNewTaskParent(attribution.parentTask);
+      setNewTaskParentId(attribution.parentTaskId);
+      setNewTaskSiblingOf(task);
+      setDemandProjectId(attribution.projectId);
+      setNewTaskOpen(true);
+    },
+    [snapshot?.tasks]
+  );
+
   const closeNewTask = useCallback(() => {
     setNewTaskOpen(false);
     setNewTaskParent(null);
+    setNewTaskParentId(null);
+    setNewTaskSiblingOf(null);
   }, []);
 
   const handleSubmitDemand = useCallback(async () => {
@@ -863,7 +884,7 @@ export function App() {
       setDemandUploadProgress(null);
       const result = await createDemand(connection, {
         projectId: demandProjectId,
-        parentTaskId: newTaskParent?.id,
+        parentTaskId: newTaskParentId ?? undefined,
         prompt: prompt.trim(),
         attachmentIds,
       });
@@ -908,7 +929,7 @@ export function App() {
     demandImages,
     demandProjectId,
     loadDashboard,
-    newTaskParent?.id,
+    newTaskParentId,
     prompt,
     snapshot,
     submitting,
@@ -920,6 +941,7 @@ export function App() {
       images={demandImages}
       open={newTaskOpen}
       parentTask={newTaskParent}
+      siblingOfTask={newTaskSiblingOf}
       projects={visibleProjects}
       tasks={snapshot?.tasks ?? []}
       prompt={prompt}
@@ -930,6 +952,8 @@ export function App() {
       onAttributionChange={(projectId, parentTask) => {
         setDemandProjectId(projectId);
         setNewTaskParent(parentTask);
+        setNewTaskParentId(parentTask?.id ?? null);
+        setNewTaskSiblingOf(null);
       }}
       onImagesChange={setDemandImages}
       onMediaError={setError}
@@ -987,6 +1011,7 @@ export function App() {
           }}
           onOpenSession={(sessionId) => setSelectedSessionId(sessionId)}
           onCreateSubtask={() => openNewTask(selectedTask)}
+          onCreateSibling={() => openNewSiblingTask(selectedTask)}
         />
         {newTaskModal}
       </>
@@ -1897,12 +1922,14 @@ function NewTaskModal({
   open,
   onClose,
   parentTask = null,
+  siblingOfTask = null,
   ...composerProps
 }: Omit<Parameters<typeof DemandComposer>[0], 'onSubmit'> & {
   open: boolean;
   onClose: () => void;
   onSubmit: () => void;
   parentTask?: MobileTaskSummary | null;
+  siblingOfTask?: MobileTaskSummary | null;
 }) {
   return (
     <Modal
@@ -1923,7 +1950,7 @@ function NewTaskModal({
           <View style={styles.newTaskWindowHeader}>
             <View style={styles.newTaskWindowHeaderTitleBlock}>
               <Text style={styles.newTaskWindowEyebrow}>
-                {parentTask ? '新建子任务' : '新建任务'}
+                {siblingOfTask ? '新建同级任务' : parentTask ? '新建子任务' : '新建任务'}
               </Text>
               <Text style={styles.newTaskWindowTitle} numberOfLines={2}>
                 开始一项工作
@@ -2509,6 +2536,7 @@ function TaskSessionsScreen({
   task,
   onBack,
   onCreateSubtask,
+  onCreateSibling,
   onOpenSession,
 }: {
   connection: MobileConnection;
@@ -2516,6 +2544,7 @@ function TaskSessionsScreen({
   task: MobileTaskSummary;
   onBack: () => void;
   onCreateSubtask: () => void;
+  onCreateSibling: () => void;
   onOpenSession: (sessionId: string) => void;
 }) {
   const [sessions, setSessions] = useState<MobileSessionSummary[]>([]);
@@ -2591,15 +2620,11 @@ function TaskSessionsScreen({
           <DetailItem label="Updated" value={formatTimestamp(task.updatedAt)} />
         </View>
 
-        <Pressable
-          accessibilityLabel="在当前任务下新建子任务并启动 Session"
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.primaryButton, pressed ? styles.buttonPressed : null]}
-          onPress={onCreateSubtask}
-        >
-          <Ionicons color={COLORS.surface} name="add-circle-outline" size={18} />
-          <Text style={styles.primaryButtonText}>新建子任务并启动 Session</Text>
-        </Pressable>
+        <TaskCreationActions
+          taskName={task.name}
+          onCreateSibling={onCreateSibling}
+          onCreateSubtask={onCreateSubtask}
+        />
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -2625,6 +2650,108 @@ function TaskSessionsScreen({
         </View>
       </ScrollView>
     </SwipeBackScreen>
+  );
+}
+
+function TaskCreationActions({
+  taskName,
+  onCreateSibling,
+  onCreateSubtask,
+}: {
+  taskName: string;
+  onCreateSibling: () => void;
+  onCreateSubtask: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const createSibling = () => {
+    setMenuOpen(false);
+    onCreateSibling();
+  };
+
+  return (
+    <View style={styles.taskCreationActions}>
+      <Pressable
+        accessibilityLabel="新建子任务并启动 Session"
+        accessibilityRole="button"
+        style={({ pressed }) => [
+          styles.primaryButton,
+          styles.taskCreationPrimary,
+          pressed ? styles.buttonPressed : null,
+        ]}
+        onPress={onCreateSubtask}
+      >
+        <Ionicons color={COLORS.surface} name="add-circle-outline" size={18} />
+        <Text style={styles.primaryButtonText}>新建子任务</Text>
+      </Pressable>
+      <Pressable
+        accessibilityLabel="更多新建任务选项"
+        accessibilityRole="button"
+        style={({ pressed }) => [
+          styles.taskCreationMoreButton,
+          pressed ? styles.buttonPressed : null,
+        ]}
+        onPress={() => setMenuOpen(true)}
+      >
+        <Ionicons color={COLORS.charcoal} name="ellipsis-horizontal" size={22} />
+      </Pressable>
+      <Modal
+        animationType="slide"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        transparent
+        visible={menuOpen}
+        onRequestClose={() => setMenuOpen(false)}
+      >
+        <View accessibilityViewIsModal style={styles.projectPickerOverlay}>
+          <Pressable
+            accessible={false}
+            style={StyleSheet.absoluteFill}
+            onPress={() => setMenuOpen(false)}
+          />
+          <SafeAreaView style={styles.taskCreationMenuSheet}>
+            <View style={styles.projectPickerHandle} />
+            <View style={styles.taskCreationMenuHeader}>
+              <View style={styles.projectPickerTitleBlock}>
+                <Text style={styles.projectPickerEyebrow}>新建任务</Text>
+                <Text style={styles.taskCreationMenuTitle}>选择任务层级</Text>
+              </View>
+              <Pressable
+                accessibilityLabel="关闭新建任务选项"
+                accessibilityRole="button"
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.projectPickerClose,
+                  pressed ? styles.buttonPressed : null,
+                ]}
+                onPress={() => setMenuOpen(false)}
+              >
+                <Ionicons color={COLORS.charcoal} name="close-outline" size={22} />
+              </Pressable>
+            </View>
+            <Pressable
+              accessibilityLabel={`新建与${taskName}同级的任务`}
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.taskCreationMenuOption,
+                pressed ? styles.buttonPressed : null,
+              ]}
+              onPress={createSibling}
+            >
+              <View style={styles.taskCreationMenuOptionIcon}>
+                <Ionicons color={COLORS.charcoal} name="git-branch-outline" size={20} />
+              </View>
+              <View style={styles.taskCreationMenuOptionBody}>
+                <Text style={styles.taskCreationMenuOptionLabel}>新建同级任务</Text>
+                <Text style={styles.taskCreationMenuOptionMeta} numberOfLines={2}>
+                  与「{taskName}」保持同一层级，并启动 Session
+                </Text>
+              </View>
+              <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={20} />
+            </Pressable>
+          </SafeAreaView>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
@@ -5307,6 +5434,81 @@ const styles = StyleSheet.create({
     color: COLORS.surface,
     fontSize: 15,
     fontWeight: '700',
+  },
+  taskCreationActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  taskCreationPrimary: {
+    minWidth: 0,
+    flex: 1,
+  },
+  taskCreationMoreButton: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+  },
+  taskCreationMenuSheet: {
+    marginTop: 'auto',
+    gap: 12,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    backgroundColor: COLORS.surface,
+    paddingTop: 9,
+    paddingHorizontal: 18,
+    paddingBottom: 18,
+  },
+  taskCreationMenuHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 7,
+  },
+  taskCreationMenuTitle: {
+    color: COLORS.ink,
+    fontSize: 21,
+    fontWeight: '800',
+  },
+  taskCreationMenuOption: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 12,
+    backgroundColor: COLORS.page,
+    padding: 12,
+  },
+  taskCreationMenuOptionIcon: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: '#E8E6DC',
+  },
+  taskCreationMenuOptionBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 3,
+  },
+  taskCreationMenuOptionLabel: {
+    color: COLORS.ink,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  taskCreationMenuOptionMeta: {
+    color: COLORS.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
   },
   buttonPressed: {
     opacity: 0.78,
