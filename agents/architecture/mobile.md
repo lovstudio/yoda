@@ -35,6 +35,7 @@
 - The new-request attribution selector is a compact input-toolbar badge. Its bounded, scrollable modal sheet first selects a project, then either creates an independent project task or selects an existing task as the parent. Keep long-term tasks easy to identify and near the top; never let a long project/task list push the primary submit action down the page.
 - Project and task picker sheets must keep their search field visible above the scrollable results. Project search covers both display and source names; parent-task search preserves the established long-term, pinned, and recent ordering.
 - The shared mobile input toolbar exposes installed Skills through its expandable tools tray. Skill search is served by the authenticated gateway for the current project or conversation; selecting one inserts the runtime-native explicit command into the visible input so new tasks and follow-up turns use the same editable send path.
+- Every new mobile gateway route must be added to both `src/shared/mobile-relay.ts` and `services/relay/src/route-policy.ts`, with matching allow/reject tests, so direct and Relay connections expose the same bounded API surface.
 
 ## Development
 

@@ -10,6 +10,13 @@ describe('resolveForwardableMobileRoute', () => {
   it.each([
     ['GET', '/v1/devices/desktop-1/v1/snapshot', '/v1/snapshot', false],
     ['GET', '/v1/devices/desktop-1/v1/profile', '/v1/profile', false],
+    ['GET', '/v1/devices/desktop-1/v1/skills', '/v1/skills', false],
+    [
+      'GET',
+      '/v1/devices/desktop-1/v1/projects/project%20one/skills',
+      '/v1/projects/project%20one/skills',
+      false,
+    ],
     ['POST', '/v1/devices/desktop-1/v1/demands', '/v1/demands', false],
     ['POST', '/v1/devices/desktop-1/v1/attachments', '/v1/attachments', false],
     [
@@ -31,6 +38,12 @@ describe('resolveForwardableMobileRoute', () => {
       true,
     ],
     [
+      'GET',
+      '/v1/devices/desktop-1/v1/projects/p/tasks/t/sessions/session/skills',
+      '/v1/projects/p/tasks/t/sessions/session/skills',
+      false,
+    ],
+    [
       'POST',
       '/v1/devices/desktop-1/v1/projects/p/tasks/t/sessions/session/input',
       '/v1/projects/p/tasks/t/sessions/session/input',
@@ -49,6 +62,9 @@ describe('resolveForwardableMobileRoute', () => {
     ['GET', '/v1/devices/desktop-1/health'],
     ['GET', '/v1/devices/desktop-1/v1/projects/p/tasks/t/sessions/s/input'],
     ['POST', '/v1/devices/desktop-1/v1/projects/p/tasks/t/sessions/s/events'],
+    ['POST', '/v1/devices/desktop-1/v1/skills'],
+    ['POST', '/v1/devices/desktop-1/v1/projects/p/skills'],
+    ['POST', '/v1/devices/desktop-1/v1/projects/p/tasks/t/sessions/s/skills'],
     ['GET', '/v1/devices/desktop-1/v1/snapshot?admin=true'],
     ['GET', '/v1/devices/desktop-1/v1/projects/a%2Fb/tasks/t/sessions'],
   ])('rejects %s %s', (method, url) => {

@@ -60,7 +60,9 @@ function isSessionsPrefix(segments: string[]): boolean {
 
 function assertAllowedUpstreamRoute(method: string, segments: string[]): boolean {
   if (method === 'GET' && segments.length === 2 && segments[0] === 'v1') {
-    if (segments[1] === 'snapshot' || segments[1] === 'profile') return false;
+    if (segments[1] === 'snapshot' || segments[1] === 'profile' || segments[1] === 'skills') {
+      return false;
+    }
   }
   if (method === 'POST' && segments.length === 2 && segments[0] === 'v1') {
     if (segments[1] === 'demands' || segments[1] === 'attachments') return false;
@@ -75,6 +77,16 @@ function assertAllowedUpstreamRoute(method: string, segments: string[]): boolean
   ) {
     return false;
   }
+  if (
+    method === 'GET' &&
+    segments.length === 4 &&
+    segments[0] === 'v1' &&
+    segments[1] === 'projects' &&
+    Boolean(segments[2]) &&
+    segments[3] === 'skills'
+  ) {
+    return false;
+  }
 
   if (!isSessionsPrefix(segments)) {
     throw new RoutePolicyError(404, 'not_found', 'Relay endpoint was not found.');
@@ -83,6 +95,9 @@ function assertAllowedUpstreamRoute(method: string, segments: string[]): boolean
   if (method === 'GET' && segments.length === 7 && segments[6]) return false;
   if (method === 'GET' && segments.length === 8 && segments[6] && segments[7] === 'events') {
     return true;
+  }
+  if (method === 'GET' && segments.length === 8 && segments[6] && segments[7] === 'skills') {
+    return false;
   }
   if (method === 'POST' && segments.length === 8 && segments[6] && segments[7] === 'input') {
     return false;
