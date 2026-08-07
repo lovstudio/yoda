@@ -2044,9 +2044,9 @@
       "createSkill": "创建 Skill",
       "saveInstruction": "保存为运行指令",
       "saveCommand": "保存为命令",
-      "commandToastTitle": "这次操作可以直接复用",
-      "commandToastDescription": "确认后会加入快捷操作：{{command}}",
-      "confirmCommand": "确认保存",
+      "commandToastTitle": "发现可复用操作",
+      "commandToastDescription": "可加入快捷操作：{{command}}",
+      "confirmCommand": "加入快捷操作",
       "commandSaved": "已加入快捷操作，下次会直接在终端执行。",
       "instructionSaved": "已加入快捷操作，下次会创建新的任务会话。",
       "saveFailed": "快捷操作保存失败。"

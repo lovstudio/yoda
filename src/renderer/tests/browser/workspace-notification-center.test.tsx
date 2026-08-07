@@ -48,13 +48,18 @@ describe('WorkspaceNotificationCenter', () => {
   });
 
   it('opens details and lets the user delete an individual notification', async () => {
-    workspaceNotificationStore.enqueue({
-      title: 'Build finished',
-      description: 'Desktop bundle is ready.',
-      details: 'Build finished\n\nArtifact: release/Yoda.dmg',
-      kind: 'success',
-      source: 'toast',
-    });
+    const runAction = vi.fn();
+    workspaceNotificationStore.enqueue(
+      {
+        title: 'Build finished',
+        description: 'Desktop bundle is ready.',
+        details: 'Build finished\n\nArtifact: release/Yoda.dmg',
+        kind: 'success',
+        source: 'toast',
+      },
+      undefined,
+      { label: 'Open build', onClick: runAction }
+    );
     workspaceNotificationStore.enqueue({
       title: 'Agent needs input',
       details: 'Session: SESSION_ID',
@@ -81,6 +86,13 @@ describe('WorkspaceNotificationCenter', () => {
     await act(async () => openDetails?.click());
 
     expect(document.body.textContent).toContain('Artifact: release/Yoda.dmg');
+
+    const actionButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.includes('Open build')
+    );
+    expect(actionButton).toBeDefined();
+    await act(async () => actionButton?.click());
+    expect(runAction).toHaveBeenCalledOnce();
 
     const deleteButton = document.querySelector<HTMLButtonElement>(
       '[aria-label="Delete Build finished"]'

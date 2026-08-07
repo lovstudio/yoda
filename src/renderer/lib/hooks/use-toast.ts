@@ -3,6 +3,7 @@ import { toast as sonnerToast, type ExternalToast } from 'sonner';
 import i18n from '@renderer/lib/i18n';
 import {
   workspaceNotificationStore,
+  type WorkspaceNotificationAction,
   type WorkspaceNotificationKind,
 } from '@renderer/lib/stores/notification-store';
 
@@ -40,14 +41,16 @@ function toast(input: Toast | ToastDisplayContent, externalOptions?: ExternalToa
       'info',
       { title: input, description: externalOptions?.description },
       toastId,
-      externalOptions
+      externalOptions,
+      externalOptions?.action
     );
     return toastId;
   }
 
   const { title, description, variant, action, debugInfo } = input;
   const options: ExternalToast = {
-    description,
+    ...(externalOptions ?? {}),
+    description: description ?? externalOptions?.description,
   };
 
   if (action) {
@@ -57,17 +60,35 @@ function toast(input: Toast | ToastDisplayContent, externalOptions?: ExternalToa
   if (variant === 'destructive') {
     addCopyAction(options, { title, description, debugInfo });
     const toastId = sonnerToast.error(title, options);
-    recordToast('error', { title, description, debugInfo }, toastId, options);
+    recordToast(
+      'error',
+      { title, description: options.description, debugInfo },
+      toastId,
+      options,
+      action ?? externalOptions?.action
+    );
     return toastId;
   }
   const toastId = sonnerToast(title ?? '', options);
-  recordToast('info', { title, description, debugInfo }, toastId, options);
+  recordToast(
+    'info',
+    { title, description: options.description, debugInfo },
+    toastId,
+    options,
+    action ?? externalOptions?.action
+  );
   return toastId;
 }
 
 toast.success = (message: ToastDisplayContent, options?: ExternalToast) => {
   const toastId = sonnerToast.success(message, options);
-  recordToast('success', { title: message, description: options?.description }, toastId, options);
+  recordToast(
+    'success',
+    { title: message, description: options?.description },
+    toastId,
+    options,
+    options?.action
+  );
   return toastId;
 };
 
@@ -77,13 +98,25 @@ toast.error = (message: ToastDisplayContent, options?: ExternalToast) => {
     description: options?.description,
   });
   const toastId = sonnerToast.error(message, nextOptions);
-  recordToast('error', { title: message, description: options?.description }, toastId, nextOptions);
+  recordToast(
+    'error',
+    { title: message, description: options?.description },
+    toastId,
+    nextOptions,
+    options?.action
+  );
   return toastId;
 };
 
 toast.loading = (message: ToastDisplayContent, options?: ExternalToast) => {
   const toastId = sonnerToast.loading(message, options);
-  recordToast('loading', { title: message, description: options?.description }, toastId, options);
+  recordToast(
+    'loading',
+    { title: message, description: options?.description },
+    toastId,
+    options,
+    options?.action
+  );
   return toastId;
 };
 
@@ -166,7 +199,8 @@ function recordToast(
   kind: WorkspaceNotificationKind,
   payload: ToastCopyPayload,
   toastId: string | number,
-  options?: ExternalToast
+  options?: ExternalToast,
+  action?: unknown
 ): void {
   const titleText = nodeToText(payload.title);
   const descriptionText = nodeToText(payload.description);
@@ -181,9 +215,23 @@ function recordToast(
       kind,
       source: 'toast',
     },
-    toastNotificationIds.get(toastKey)
+    toastNotificationIds.get(toastKey),
+    toNotificationAction(action)
   );
   toastNotificationIds.set(toastKey, notificationId);
+}
+
+function toNotificationAction(action: unknown): WorkspaceNotificationAction | undefined {
+  if (!action || typeof action !== 'object' || isValidElement(action)) return undefined;
+  const candidate = action as { label?: unknown; onClick?: unknown };
+  const label = nodeToText(candidate.label);
+  if (!label || typeof candidate.onClick !== 'function') return undefined;
+  return {
+    label,
+    onClick: (event) => {
+      (candidate.onClick as (event: unknown) => void)(event);
+    },
+  };
 }
 
 function formatDebugInfo(debugInfo: unknown): string {

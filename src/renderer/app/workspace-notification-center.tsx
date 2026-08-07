@@ -187,6 +187,7 @@ function NotificationDetails({
 }) {
   const { t } = useTranslation();
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const action = workspaceNotificationStore.getAction(notification.id);
   const details =
     notification.details ??
     [notification.title, notification.description].filter(Boolean).join('\n\n');
@@ -253,6 +254,16 @@ function NotificationDetails({
             ) : null}
           </div>
         </div>
+        {action ? (
+          <Button
+            type="button"
+            size="sm"
+            className="mt-3 w-full"
+            onClick={(event) => workspaceNotificationStore.invokeAction(notification.id, event)}
+          >
+            {action.label}
+          </Button>
+        ) : null}
         <dl className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-y border-border py-3 text-[11px]">
           <dt className="text-foreground-passive">{t('workspaceRuntime.notifications.type')}</dt>
           <dd className="text-foreground-muted">

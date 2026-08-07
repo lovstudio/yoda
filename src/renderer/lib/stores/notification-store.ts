@@ -23,6 +23,11 @@ export type WorkspaceNotification = {
 
 export type WorkspaceNotificationInput = Omit<WorkspaceNotification, 'id' | 'createdAt'>;
 
+export type WorkspaceNotificationAction = {
+  label: string;
+  onClick: (event: unknown) => void;
+};
+
 type NotificationStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 let notificationSequence = 0;
@@ -64,6 +69,7 @@ export class WorkspaceNotificationStore {
   private loaded = false;
   private storageListenerAttached = false;
   private readonly listeners = new Set<() => void>();
+  private readonly actions = new Map<string, WorkspaceNotificationAction>();
 
   constructor(
     private readonly storageKey = WORKSPACE_NOTIFICATION_STORAGE_KEY,
@@ -82,7 +88,11 @@ export class WorkspaceNotificationStore {
     return () => this.listeners.delete(listener);
   };
 
-  enqueue(input: WorkspaceNotificationInput, existingId?: string): string {
+  enqueue(
+    input: WorkspaceNotificationInput,
+    existingId?: string,
+    action?: WorkspaceNotificationAction
+  ): string {
     this.ensureLoaded();
     this.refreshFromStorage();
 
@@ -99,22 +109,42 @@ export class WorkspaceNotificationStore {
       0,
       WORKSPACE_NOTIFICATION_LIMIT
     );
+    if (action) {
+      this.actions.set(id, action);
+    } else {
+      this.actions.delete(id);
+    }
     this.persistAndEmit();
     return id;
+  }
+
+  getAction(id: string): WorkspaceNotificationAction | undefined {
+    return this.actions.get(id);
+  }
+
+  invokeAction(id: string, event: unknown): void {
+    const action = this.actions.get(id);
+    if (!action) return;
+    action.onClick(event);
+    this.actions.delete(id);
+    this.entries = [...this.entries];
+    this.emit();
   }
 
   remove(id: string): void {
     this.ensureLoaded();
     const next = this.entries.filter((entry) => entry.id !== id);
-    if (next.length === this.entries.length) return;
+    const removedAction = this.actions.delete(id);
+    if (next.length === this.entries.length && !removedAction) return;
     this.entries = next;
     this.persistAndEmit();
   }
 
   clear(): void {
     this.ensureLoaded();
-    if (this.entries.length === 0) return;
+    if (this.entries.length === 0 && this.actions.size === 0) return;
     this.entries = [];
+    this.actions.clear();
     const storage = this.getStorage();
     try {
       storage?.removeItem(this.storageKey);
@@ -158,6 +188,10 @@ export class WorkspaceNotificationStore {
     window.addEventListener('storage', (event) => {
       if (event.key !== this.storageKey) return;
       this.entries = event.newValue ? this.parseEntries(event.newValue) : [];
+      const availableIds = new Set(this.entries.map((entry) => entry.id));
+      for (const id of this.actions.keys()) {
+        if (!availableIds.has(id)) this.actions.delete(id);
+      }
       this.emit();
     });
   }

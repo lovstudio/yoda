@@ -69,15 +69,25 @@ describe('toast', () => {
   it('keeps a custom action on a non-error toast without adding copy', () => {
     const undo = vi.fn();
 
-    toast({
-      title: 'Task archived',
-      action: { label: 'Undo', onClick: undo },
-    });
+    toast(
+      {
+        title: 'Task archived',
+        action: { label: 'Undo', onClick: undo },
+      },
+      { duration: 12_000 }
+    );
 
     expect(mocks.sonnerToast).toHaveBeenCalledTimes(1);
     const options = mocks.sonnerToast.mock.calls[0][1] as ToastOptions;
     expect(options.action?.label).toBe('Undo');
     expect(options.cancel).toBeUndefined();
+    expect(options).toMatchObject({ duration: 12_000 });
+
+    const notification = workspaceNotificationStore.getSnapshot()[0];
+    expect(workspaceNotificationStore.getAction(notification.id)?.label).toBe('Undo');
+    workspaceNotificationStore.invokeAction(notification.id, undefined);
+    expect(undo).toHaveBeenCalledTimes(1);
+    expect(workspaceNotificationStore.getAction(notification.id)).toBeUndefined();
   });
 
   it('adds a copy action to error toasts', async () => {

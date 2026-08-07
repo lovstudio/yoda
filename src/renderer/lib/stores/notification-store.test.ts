@@ -48,4 +48,24 @@ describe('WorkspaceNotificationStore', () => {
     expect(store.getSnapshot()).toEqual([]);
     expect(storage.removeItem).toHaveBeenCalledWith('notifications');
   });
+
+  it('keeps live actions executable without persisting callbacks', () => {
+    const storage = createStorage();
+    const store = new WorkspaceNotificationStore('notifications', () => storage);
+    const onClick = vi.fn();
+    const id = store.enqueue(
+      { title: 'Reusable operation', kind: 'info', source: 'toast' },
+      undefined,
+      { label: 'Save operation', onClick }
+    );
+
+    expect(store.getAction(id)?.label).toBe('Save operation');
+    expect(storage.setItem.mock.calls.at(-1)?.[1]).not.toContain('Save operation');
+
+    store.invokeAction(id, 'event');
+
+    expect(onClick).toHaveBeenCalledWith('event');
+    expect(store.getAction(id)).toBeUndefined();
+    expect(store.getSnapshot()).toHaveLength(1);
+  });
 });
