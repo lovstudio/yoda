@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   extractFirstJsonObject,
+  getCohubProjectStateFile,
+  isCohubSandboxReady,
+  parseCohubJsonOutput,
+  selectReusableCohubSpace,
   splitCohubPromptCommand,
   TerminalPromptDecoder,
 } from './cohub-runtime-adapter';
@@ -13,6 +17,16 @@ describe('Cohub runtime adapter', () => {
     expect(extractFirstJsonObject('{"message":"a } brace"} trailing')).toBe(
       '{"message":"a } brace"}'
     );
+  });
+
+  it('parses complete Cohub JSON arrays without collapsing them to one object', () => {
+    expect(parseCohubJsonOutput('[{"id":"space-1"},{"id":"space-2"}]')).toEqual([
+      { id: 'space-1' },
+      { id: 'space-2' },
+    ]);
+    expect(parseCohubJsonOutput('status\n{"spaceId":"space-1"}\n')).toEqual({
+      spaceId: 'space-1',
+    });
   });
 
   it('separates global Cohub arguments from prompt options', () => {
@@ -54,5 +68,46 @@ describe('Cohub runtime adapter', () => {
       output: '\b \b并发送\r\n',
       prompts: ['继续交并发送'],
     });
+  });
+
+  it('uses a stable project-level state file across conversations', () => {
+    expect(getCohubProjectStateFile('/data/yoda/cohub/sessions/a.json', '/repo/task')).toBe(
+      getCohubProjectStateFile('/data/yoda/cohub/sessions/b.json', '/repo/task')
+    );
+    expect(getCohubProjectStateFile('/data/yoda/cohub/sessions/a.json', '/repo/other')).not.toBe(
+      getCohubProjectStateFile('/data/yoda/cohub/sessions/a.json', '/repo/task')
+    );
+  });
+
+  it('selects the one running local Space for the project name', () => {
+    expect(
+      selectReusableCohubSpace(
+        [
+          {
+            id: 'cloud-space',
+            name: 'Yoda · demo',
+            sandboxStatus: 'running',
+            meta: { config: { sandbox: { provider: 'cloud' } } },
+          },
+          {
+            id: 'local-space',
+            name: 'Yoda · demo',
+            sandboxStatus: 'running',
+            meta: { config: { sandbox: { provider: 'local' } } },
+          },
+        ],
+        'Yoda · demo'
+      )?.id
+    ).toBe('local-space');
+  });
+
+  it('recognizes running Cohub sandboxes unless explicitly unhealthy', () => {
+    expect(isCohubSandboxReady({ sandbox: { status: 'running', runtimeStatus: 'healthy' } })).toBe(
+      true
+    );
+    expect(
+      isCohubSandboxReady({ sandbox: { status: 'running', runtimeStatus: 'unhealthy' } })
+    ).toBe(false);
+    expect(isCohubSandboxReady({ sandbox: { status: 'stopped' } })).toBe(false);
   });
 });

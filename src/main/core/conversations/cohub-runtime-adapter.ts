@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { basename, dirname } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 type AgentCommand = { command: string; args: string[] };
@@ -18,6 +19,7 @@ type StoredCohubTurn = {
   userText: string;
 };
 type AdapterState = { sessionId?: string; spaceId?: string; turns?: StoredCohubTurn[] };
+type ProjectState = { cwd: string; spaceId: string };
 type CohubPromptResult = {
   session?: { id?: string };
   turn?: { id?: string };
@@ -30,6 +32,16 @@ type CohubTurn = {
   id?: string;
   status?: string;
   userText?: string | null;
+};
+type CohubSpace = {
+  id?: string;
+  meta?: { config?: { sandbox?: { provider?: string } } };
+  name?: string;
+  sandboxStatus?: string;
+};
+type CohubSandboxStatus = {
+  sandbox?: { runtimeStatus?: string; status?: string };
+  spaceId?: string;
 };
 
 const activeChildren = new Set<ChildProcess>();
@@ -61,6 +73,17 @@ export function extractFirstJsonObject(text: string): string | undefined {
     if (depth === 0) return text.slice(start, index + 1);
   }
   return undefined;
+}
+
+export function parseCohubJsonOutput(text: string): unknown {
+  const trimmed = text.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const object = extractFirstJsonObject(text);
+    if (!object) throw new Error(`Cohub returned invalid JSON: ${trimmed.slice(0, 500)}`);
+    return JSON.parse(object);
+  }
 }
 
 export function splitCohubPromptCommand(command: AgentCommand): {
@@ -183,6 +206,30 @@ async function writeState(file: string, state: AdapterState): Promise<void> {
   await rename(temporary, file);
 }
 
+async function readProjectState(file: string): Promise<ProjectState | undefined> {
+  try {
+    const state = JSON.parse(await readFile(file, 'utf8')) as Partial<ProjectState>;
+    if (typeof state.cwd === 'string' && typeof state.spaceId === 'string') {
+      return { cwd: state.cwd, spaceId: state.spaceId };
+    }
+  } catch {
+    // Missing or stale project mappings are recovered from Cohub below.
+  }
+  return undefined;
+}
+
+async function writeProjectState(file: string, state: ProjectState): Promise<void> {
+  await mkdir(dirname(file), { recursive: true });
+  const temporary = `${file}.${process.pid}.tmp`;
+  await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+  await rename(temporary, file);
+}
+
+export function getCohubProjectStateFile(stateFile: string, cwd: string): string {
+  const projectKey = createHash('sha256').update(resolve(cwd)).digest('hex').slice(0, 24);
+  return join(dirname(dirname(stateFile)), 'projects', `${projectKey}.json`);
+}
+
 function cohubEnvironment(spaceId?: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
@@ -216,11 +263,10 @@ async function runJson(command: string, args: string[], spaceId?: string): Promi
         reject(new Error(stderr.trim() || stdout.trim() || `Cohub exited with code ${code}.`));
         return;
       }
-      const json = extractFirstJsonObject(stdout) ?? stdout.trim();
       try {
-        resolve(JSON.parse(json));
-      } catch {
-        reject(new Error(`Cohub returned invalid JSON: ${stdout.trim().slice(0, 500)}`));
+        resolve(parseCohubJsonOutput(stdout));
+      } catch (error) {
+        reject(error);
       }
     });
   });
@@ -283,6 +329,103 @@ async function startSandbox(
       );
     });
   });
+}
+
+export function isCohubSandboxReady(status: CohubSandboxStatus): boolean {
+  return status.sandbox?.status === 'running' && status.sandbox.runtimeStatus !== 'unhealthy';
+}
+
+export function selectReusableCohubSpace(
+  spaces: CohubSpace[],
+  projectName: string
+): CohubSpace | undefined {
+  const matching = spaces.filter(
+    (space) =>
+      space.name === projectName &&
+      typeof space.id === 'string' &&
+      space.meta?.config?.sandbox?.provider === 'local'
+  );
+  const running = matching.filter((space) => space.sandboxStatus === 'running');
+  if (running.length === 1) return running[0];
+  if (matching.length === 1) return matching[0];
+  return undefined;
+}
+
+async function getSandboxStatus(
+  command: string,
+  globalArgs: string[],
+  spaceId: string
+): Promise<CohubSandboxStatus> {
+  return (await runJson(
+    command,
+    [...globalArgs, 'sandbox', 'status', '--space', spaceId, '--json'],
+    spaceId
+  )) as CohubSandboxStatus;
+}
+
+async function findProjectSpace(
+  command: string,
+  globalArgs: string[],
+  cwd: string
+): Promise<CohubSpace | undefined> {
+  const spaces = (await runJson(command, [
+    ...globalArgs,
+    'spaces',
+    'ls',
+    '--json',
+  ])) as CohubSpace[];
+  return selectReusableCohubSpace(spaces, `Yoda · ${basename(cwd)}`);
+}
+
+type SandboxConnection = { child?: ChildProcess; reused: boolean; spaceId: string };
+
+async function connectProjectSandbox(
+  command: string,
+  globalArgs: string[],
+  cwd: string,
+  preferredSpaceId?: string
+): Promise<SandboxConnection> {
+  if (preferredSpaceId) {
+    try {
+      if (isCohubSandboxReady(await getSandboxStatus(command, globalArgs, preferredSpaceId))) {
+        return { reused: true, spaceId: preferredSpaceId };
+      }
+    } catch {
+      // The mapping can outlive a deleted Space. Starting or discovery repairs it.
+    }
+    try {
+      const started = await startSandbox(command, globalArgs, cwd, preferredSpaceId);
+      return { ...started, reused: false };
+    } catch {
+      try {
+        if (isCohubSandboxReady(await getSandboxStatus(command, globalArgs, preferredSpaceId))) {
+          return { reused: true, spaceId: preferredSpaceId };
+        }
+      } catch {
+        // Fall through to name-based recovery.
+      }
+    }
+  }
+
+  let createError: unknown;
+  try {
+    const started = await startSandbox(command, globalArgs, cwd);
+    return { ...started, reused: false };
+  } catch (error) {
+    createError = error;
+  }
+
+  try {
+    const existing = await findProjectSpace(command, globalArgs, cwd);
+    if (!existing?.id) throw createError;
+    if (isCohubSandboxReady(await getSandboxStatus(command, globalArgs, existing.id))) {
+      return { reused: true, spaceId: existing.id };
+    }
+    const started = await startSandbox(command, globalArgs, cwd, existing.id);
+    return { ...started, reused: false };
+  } catch (recoveryError) {
+    throw createError ?? recoveryError;
+  }
 }
 
 function writeIncrementalText(previous: string, current: string): string {
@@ -366,8 +509,10 @@ async function hydrateStoredTurns(
 async function sendTurn(
   options: AdapterOptions,
   state: AdapterState,
-  prompt: string
+  prompt: string,
+  ensureSandboxReady: () => Promise<void>
 ): Promise<void> {
+  await ensureSandboxReady();
   const { command, globalArgs, promptArgs } = splitCohubPromptCommand(options.cohubCommand);
   process.stdout.write('\nCohub 正在处理…\n\n');
   const result = (await runJson(
@@ -403,9 +548,53 @@ async function main(): Promise<void> {
   const options = parseOptions(process.argv.slice(2));
   process.chdir(options.cwd);
   const state = await readState(options.stateFile);
+  const projectStateFile = getCohubProjectStateFile(options.stateFile, options.cwd);
+  const projectState = await readProjectState(projectStateFile);
   const parsedCommand = splitCohubPromptCommand(options.cohubCommand);
   const configuredSpaceId = process.env.COHUB_SPACE_ID?.trim();
   let sandbox: ChildProcess | undefined;
+  let announcedSandboxSpaceId: string | undefined;
+  const watchSandbox = (child: ChildProcess | undefined) => {
+    if (!child) return;
+    child.once('exit', (code, signal) => {
+      if (sandbox === child) sandbox = undefined;
+      if (!shuttingDown) {
+        process.stderr.write(
+          `\n[Cohub][SANDBOX_EXITED] 本地 sandbox 已停止（${signal ?? `code ${code}`}）\n`
+        );
+      }
+    });
+  };
+
+  const ensureSandboxReady = async () => {
+    if (configuredSpaceId || (sandbox && sandbox.exitCode === null)) return;
+    const previousSpaceId = state.spaceId;
+    const connected = await connectProjectSandbox(
+      parsedCommand.command,
+      parsedCommand.globalArgs,
+      options.cwd,
+      state.spaceId ?? projectState?.spaceId
+    );
+    sandbox = connected.child;
+    watchSandbox(sandbox);
+    if (previousSpaceId && previousSpaceId !== connected.spaceId) delete state.sessionId;
+    state.spaceId = connected.spaceId;
+    await Promise.all([
+      writeState(options.stateFile, state),
+      writeProjectState(projectStateFile, {
+        cwd: resolve(options.cwd),
+        spaceId: connected.spaceId,
+      }),
+    ]);
+    if (announcedSandboxSpaceId !== connected.spaceId) {
+      announcedSandboxSpaceId = connected.spaceId;
+      process.stdout.write(
+        connected.reused
+          ? `✓ Cohub sandbox 已复用：${connected.spaceId}\n`
+          : `✓ Cohub sandbox 已连接：${connected.spaceId}\n`
+      );
+    }
+  };
 
   if (configuredSpaceId) {
     if (state.spaceId !== configuredSpaceId) delete state.sessionId;
@@ -413,29 +602,7 @@ async function main(): Promise<void> {
     await writeState(options.stateFile, state);
     process.stdout.write(`✓ Cohub Space 已连接：${configuredSpaceId}\n`);
   } else {
-    try {
-      const started = await startSandbox(
-        parsedCommand.command,
-        parsedCommand.globalArgs,
-        options.cwd,
-        state.spaceId
-      );
-      sandbox = started.child;
-      state.spaceId = started.spaceId;
-    } catch (error) {
-      if (!state.spaceId) throw error;
-      delete state.spaceId;
-      delete state.sessionId;
-      const started = await startSandbox(
-        parsedCommand.command,
-        parsedCommand.globalArgs,
-        options.cwd
-      );
-      sandbox = started.child;
-      state.spaceId = started.spaceId;
-    }
-    await writeState(options.stateFile, state);
-    process.stdout.write(`✓ Cohub sandbox 已连接：${state.spaceId}\n`);
+    await ensureSandboxReady();
   }
 
   try {
@@ -450,7 +617,7 @@ async function main(): Promise<void> {
   let queue = Promise.resolve();
   const enqueue = (prompt: string) => {
     queue = queue
-      .then(() => sendTurn(options, state, prompt))
+      .then(() => sendTurn(options, state, prompt, ensureSandboxReady))
       .catch((error) => {
         process.stderr.write(
           `\n[Cohub][TURN_FAILED] ${error instanceof Error ? error.message : String(error)}\n`
@@ -474,14 +641,6 @@ async function main(): Promise<void> {
 
   if (options.initialPrompt?.trim()) enqueue(options.initialPrompt);
   else process.stdout.write('\nCohub 已就绪，输入消息并按 Enter 发送\n> ');
-
-  sandbox?.once('exit', (code, signal) => {
-    if (!shuttingDown) {
-      process.stderr.write(
-        `\n[Cohub][SANDBOX_EXITED] 本地 sandbox 已停止（${signal ?? `code ${code}`}）\n`
-      );
-    }
-  });
 }
 
 process.once('SIGINT', () => {
