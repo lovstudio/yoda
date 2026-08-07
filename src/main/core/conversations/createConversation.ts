@@ -12,6 +12,7 @@ import { db } from '@main/db/client';
 import { conversations, tasks } from '@main/db/schema';
 import { telemetryService } from '@main/lib/telemetry';
 import { resolveTask } from '../projects/utils';
+import { buildConversationCreatedTelemetry } from './conversation-created-telemetry';
 import { conversationEvents } from './conversation-events';
 import { localAgentSessionCatalog } from './local-agent-session-catalog-instance';
 import { pendingInitialPromptFromParams } from './pending-initial-prompt';
@@ -166,13 +167,10 @@ export async function createConversation(params: CreateConversationParams): Prom
         await clearPendingInitialPrompt(id);
       }
     }
-    telemetryService.capture('conversation_created', {
-      runtime: params.runtime,
-      is_first_in_task: existingConversation === undefined,
-      project_id: params.projectId,
-      task_id: params.taskId,
-      conversation_id: id,
-    });
+    telemetryService.capture(
+      'conversation_created',
+      buildConversationCreatedTelemetry(params, id, existingConversation === undefined)
+    );
 
     return mapConversationRowToConversation(row);
   } finally {

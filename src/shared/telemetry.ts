@@ -1,3 +1,4 @@
+import type { ConversationClientSource } from '@shared/conversations';
 import type { MaasPlatformId } from '@shared/maas';
 import type { OpenInAppId } from '@shared/openInApps';
 import type { RuntimeId } from '@shared/runtime-registry';
@@ -104,7 +105,11 @@ export type TelemetryEventProperties = {
   task_deleted: EmptyProps;
   task_moved_to_project: EmptyProps;
 
-  conversation_created: { provider: RuntimeId; is_first_in_task: boolean };
+  conversation_created: {
+    provider: RuntimeId;
+    is_first_in_task: boolean;
+    source: ConversationClientSource;
+  };
   conversation_archived: EmptyProps;
   conversation_unarchived: EmptyProps;
   conversation_deleted: EmptyProps;

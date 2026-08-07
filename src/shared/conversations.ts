@@ -3,6 +3,7 @@ import type { SkillSelectionInput, SkillSessionPolicy } from '@shared/skills/typ
 import type { TaskNamingContextSnapshot, TaskNamingStatus } from '@shared/task-naming';
 
 export type ConversationExecutionMode = 'interactive' | 'automation';
+export type ConversationClientSource = 'desktop' | 'mobile';
 
 export type Conversation = {
   id: string;
@@ -421,6 +422,8 @@ export type CreateConversationParams = {
   skillSelection?: SkillSelectionInput;
   /** Defaults to interactive. Automation mode applies an unattended, single-run contract. */
   executionMode?: ConversationExecutionMode;
+  /** Surface where this Yoda conversation was created. Defaults to desktop. */
+  clientSource?: ConversationClientSource;
   /**
    * Adopt an existing provider-native session without starting a fresh agent.
    * Opening the resulting Yoda conversation resumes this source on demand.
