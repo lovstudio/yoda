@@ -583,11 +583,14 @@ export type MobileSessionInputRequest = {
   input: string;
   submit?: boolean;
   attachmentIds?: string[];
+  /** Stable across retries so a lost HTTP response cannot duplicate a turn. */
+  clientRequestId?: string;
 };
 
 export type MobileSessionInputResponse = {
   ok: true;
   generatedAt: string;
+  requestId?: string;
 };
 
 export type MobileInputAttachmentKind = 'image';

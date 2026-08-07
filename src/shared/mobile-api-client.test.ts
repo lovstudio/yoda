@@ -4,6 +4,8 @@ import {
   fetchProfile,
   fetchSkills,
   fetchSnapshot,
+  sendSessionInput,
+  SESSION_INPUT_REQUEST_TIMEOUT_MS,
   uploadInputImage,
 } from '../../apps/mobile/src/api-client';
 import { MOBILE_RELAY_BASE_URL } from './mobile-relay';
@@ -15,6 +17,7 @@ const relayConnection = {
 
 describe('mobile API connectivity diagnostics', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -138,6 +141,62 @@ describe('mobile API connectivity diagnostics', () => {
         prompt: '实现移动端子任务入口',
       }),
     });
+  });
+
+  it('sends the stable request id used to deduplicate a retried follow-up', async () => {
+    const connection = { baseUrl: 'http://127.0.0.1:3879', token: 'dev-token' };
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          generatedAt: '2026-08-07T15:23:38.175Z',
+          requestId: 'mobile-request-123456',
+        }),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      sendSessionInput(connection, 'project 1', 'task/1', 'session 1', {
+        input: '继续完成',
+        clientRequestId: 'mobile-request-123456',
+      })
+    ).resolves.toMatchObject({ ok: true, requestId: 'mobile-request-123456' });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:3879/v1/projects/project%201/tasks/task%2F1/sessions/session%201/input',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          input: '继续完成',
+          clientRequestId: 'mobile-request-123456',
+        }),
+        signal: expect.any(AbortSignal),
+      })
+    );
+  });
+
+  it('bounds a stalled follow-up request and explains that the draft is retained', async () => {
+    vi.useFakeTimers();
+    const connection = { baseUrl: 'http://127.0.0.1:3879', token: 'dev-token' };
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const request = sendSessionInput(connection, 'project', 'task', 'session', {
+      input: '继续完成',
+      clientRequestId: 'mobile-request-123456',
+    });
+    const assertion = expect(request).rejects.toThrow('内容已保留，可以重试');
+    await vi.advanceTimersByTimeAsync(SESSION_INPUT_REQUEST_TIMEOUT_MS);
+
+    await assertion;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('uploads image data in ordered chunks before completing it', async () => {

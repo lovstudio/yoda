@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Pty, PtyExitInfo } from '@main/core/pty/pty';
-import { injectPrompt } from './inject-prompt';
+import { injectPrompt, injectPromptUsingWriter } from './inject-prompt';
 import { injectConversationPrompt } from './injectConversationPrompt';
 
 const mocks = vi.hoisted(() => ({
@@ -108,6 +108,33 @@ describe('prompt injection', () => {
 
     await expect(result).resolves.toBe(true);
     expect(pty.writes).toEqual(['$lovstudio-git-commit-with-context', ' ', '\r']);
+  });
+
+  it('uses the same protected submission flow for a provider-backed writer', async () => {
+    const write = vi.fn<(data: string) => Promise<boolean>>().mockResolvedValue(true);
+
+    const result = injectPromptUsingWriter(
+      session,
+      'codex',
+      '$lovstudio-git-commit-with-context',
+      write
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(write.mock.calls.map(([data]) => data)).toEqual([
+      '$lovstudio-git-commit-with-context',
+      ' ',
+    ]);
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    await expect(result).resolves.toBe(true);
+    expect(write.mock.calls.map(([data]) => data)).toEqual([
+      '$lovstudio-git-commit-with-context',
+      ' ',
+      '\r',
+    ]);
+    expect(mocks.setStatus).toHaveBeenCalledWith(session, 'working');
   });
 
   it('returns false when the deferred PTY never starts', async () => {

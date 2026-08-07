@@ -6,11 +6,6 @@ import { networkInterfaces } from 'node:os';
 import path from 'node:path';
 import { URL } from 'node:url';
 import { app } from 'electron';
-import {
-  buildPromptInjectionPayload,
-  getAgentCommandSubmitDelayMs,
-  getAgentCommandSubmitInput,
-} from '@shared/agent-command-prefix';
 import type { Conversation } from '@shared/conversations';
 import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import {
@@ -78,6 +73,7 @@ import {
 import { getConversationRuntimeStatuses } from '@main/core/conversations/getConversationRuntimeStatuses';
 import { getConversationSessionInfo } from '@main/core/conversations/getConversationSessionInfo';
 import { getConversationsForTask } from '@main/core/conversations/getConversationsForTask';
+import { injectPromptUsingWriter } from '@main/core/conversations/inject-prompt';
 import { injectConversationPrompt } from '@main/core/conversations/injectConversationPrompt';
 import { subscribeConversationTranscriptChanges } from '@main/core/conversations/transcript-feed';
 import { getProjectById, getProjects } from '@main/core/projects/operations/getProjects';
@@ -106,6 +102,11 @@ import {
   MOBILE_SESSION_RECONNECT_RETRY_MS,
   MobileSessionEventStream,
 } from './mobile-session-event-stream';
+import { submitMobileSessionInput } from './mobile-session-input-delivery';
+import {
+  MobileSessionInputRequestCache,
+  MobileSessionInputRequestConflictError,
+} from './mobile-session-input-requests';
 import { mobileSkillSummaries } from './mobile-skills';
 import { mobileGatewayNetworkUrls } from './network-addresses';
 
@@ -537,11 +538,6 @@ function mapCreateTaskWarning(warning: CreateTaskWarning): string {
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  if (ms <= 0) return Promise.resolve();
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function normalizeCreateDemandRequest(body: unknown): MobileCreateDemandRequest {
   if (!body || typeof body !== 'object') {
     throw new MobileGatewayError(400, 'invalid_body', 'Request body must be an object.');
@@ -595,7 +591,21 @@ function normalizeSessionInputRequest(body: unknown): MobileSessionInputRequest 
     input,
     submit: typeof value.submit === 'boolean' ? value.submit : true,
     attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
+    clientRequestId: normalizeMobileClientRequestId(value.clientRequestId),
   };
+}
+
+function normalizeMobileClientRequestId(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== 'string' ||
+    value.length < 16 ||
+    value.length > 128 ||
+    !/^[A-Za-z0-9._:-]+$/.test(value)
+  ) {
+    throw new MobileGatewayError(400, 'invalid_request_id', 'Mobile request id is invalid.');
+  }
+  return value;
 }
 
 function normalizeAttachmentIds(value: unknown): string[] {
@@ -651,6 +661,8 @@ export class MobileGatewayService {
   private server: http.Server | null = null;
   private attachmentStore: MobileInputAttachmentStore | null = null;
   private readonly sessionEventStreams = new Set<MobileSessionEventStream>();
+  private readonly sessionInputRequests =
+    new MobileSessionInputRequestCache<MobileSessionInputResponse>();
   private readonly sessionEventEpoch = randomUUID();
   private sessionEventSequence = 0;
   private lifecycleGeneration = 0;
@@ -718,6 +730,7 @@ export class MobileGatewayService {
     this.lifecycleGeneration += 1;
     this.disposeMetroProcess();
     for (const stream of [...this.sessionEventStreams]) stream.close();
+    this.sessionInputRequests.clear();
     if (!this.server) return;
     this.server.close();
     this.server = null;
@@ -1445,6 +1458,42 @@ export class MobileGatewayService {
     conversationId: string,
     params: MobileSessionInputRequest
   ): Promise<MobileSessionInputResponse> {
+    const requestId = params.clientRequestId;
+    if (!requestId) {
+      return this.deliverSessionInput(projectId, taskId, conversationId, params);
+    }
+
+    const key = `${projectId}:${taskId}:${conversationId}:${requestId}`;
+    const signature = JSON.stringify({
+      attachmentIds: params.attachmentIds ?? [],
+      input: params.input,
+      submit: params.submit !== false,
+    });
+    try {
+      return await this.sessionInputRequests.run(key, signature, () =>
+        this.deliverSessionInput(projectId, taskId, conversationId, params)
+      );
+    } catch (error) {
+      log.warn('MobileGateway: session input request failed', {
+        requestId,
+        projectId,
+        taskId,
+        conversationId,
+        error: String(error),
+      });
+      if (error instanceof MobileSessionInputRequestConflictError) {
+        throw new MobileGatewayError(409, 'request_id_conflict', error.message);
+      }
+      throw error;
+    }
+  }
+
+  private async deliverSessionInput(
+    projectId: string,
+    taskId: string,
+    conversationId: string,
+    params: MobileSessionInputRequest
+  ): Promise<MobileSessionInputResponse> {
     const data = await this.loadTaskSessionData(projectId, taskId);
     const conversation = data.conversations.find((item) => item.id === conversationId);
     const session = data.sessions.find((item) => item.id === conversationId);
@@ -1479,60 +1528,50 @@ export class MobileGatewayService {
           'Image input must be submitted in the same request.'
         );
       }
-      await this.ensureConversationInputSession(projectId, taskId, conversationId);
-      const sent = await injectConversationPrompt({
-        projectId,
-        taskId,
-        conversationId,
-        runtime: conversation.runtimeId,
-        prompt: promptWithImageMarkers(params.input, attachments.length),
-        imagePaths: attachments.map((attachment) => attachment.filePath),
-      });
-      if (!sent) {
-        throw new MobileGatewayError(
-          409,
-          'session_not_live',
-          'This session is not currently accepting input.'
-        );
-      }
-      this.requireAttachmentStore().release(attachmentIds);
-      return { ok: true, generatedAt: new Date().toISOString() };
-    }
-
-    const payload = buildPromptInjectionPayload(params.input);
-    if (!payload) {
-      throw new MobileGatewayError(400, 'missing_input', 'Input is required.');
     }
 
     await this.ensureConversationInputSession(projectId, taskId, conversationId);
-    if (!(await this.writeConversationInput(projectId, taskId, conversationId, payload))) {
+    const sent = await submitMobileSessionInput({
+      imagePaths: attachments.map((attachment) => attachment.filePath),
+      input:
+        attachments.length > 0
+          ? promptWithImageMarkers(params.input, attachments.length)
+          : params.input,
+      submit: params.submit !== false,
+      target: { projectId, taskId, conversationId, runtime: conversation.runtimeId },
+      injectPrompt: (input) =>
+        input.imagePaths.length > 0
+          ? injectConversationPrompt(input)
+          : injectPromptUsingWriter(
+              { projectId, taskId, conversationId },
+              conversation.runtimeId,
+              input.prompt,
+              (data) => this.writeConversationInput(projectId, taskId, conversationId, data)
+            ),
+      writeInput: (data) => this.writeConversationInput(projectId, taskId, conversationId, data),
+    });
+    if (!sent) {
       throw new MobileGatewayError(
         409,
         'session_not_live',
         'This session is not currently accepting input.'
       );
     }
-    if (params.submit !== false) {
-      await sleep(getAgentCommandSubmitDelayMs(conversation.runtimeId));
-      if (
-        !(await this.writeConversationInput(
-          projectId,
-          taskId,
-          conversationId,
-          getAgentCommandSubmitInput(conversation.runtimeId)
-        ))
-      ) {
-        throw new MobileGatewayError(
-          409,
-          'session_not_live',
-          'This session stopped before the input could be submitted.'
-        );
-      }
-    }
+
+    if (attachmentIds.length > 0) this.requireAttachmentStore().release(attachmentIds);
+
+    log.info('MobileGateway: session input accepted', {
+      requestId: params.clientRequestId ?? '<legacy-client>',
+      projectId,
+      taskId,
+      conversationId,
+      attachmentCount: attachmentIds.length,
+    });
 
     return {
       ok: true,
       generatedAt: new Date().toISOString(),
+      requestId: params.clientRequestId,
     };
   }
 

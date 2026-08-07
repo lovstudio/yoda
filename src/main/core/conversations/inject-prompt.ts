@@ -17,6 +17,7 @@ import { agentSessionRuntimeStore } from './agent-session-runtime';
 export const SUBMIT_DELAY_FLOOR_MS = 300;
 
 export type InjectSession = { projectId: string; taskId: string; conversationId: string };
+export type PromptInputWriter = (data: string) => boolean | Promise<boolean>;
 
 /**
  * Inject a prompt into a running agent PTY and submit it. Seeds the session
@@ -31,14 +32,34 @@ export async function injectPrompt(
 ): Promise<boolean> {
   const pty = ptySessionRegistry.get(sessionId);
   if (!pty) return false;
+  return injectPromptUsingWriter(session, runtime, prompt, (data) => {
+    pty.write(data);
+    return true;
+  });
+}
+
+/**
+ * Canonical prompt submission for both direct PTYs and provider-backed/tmux
+ * writers. Keep provider suffixes, the paste/Enter delay, and run-state seeding
+ * in one place so every input surface submits with identical semantics.
+ */
+export async function injectPromptUsingWriter(
+  session: InjectSession,
+  runtime: RuntimeId,
+  prompt: string,
+  write: PromptInputWriter
+): Promise<boolean> {
   const payload = buildPromptInjectionPayload(prompt);
   if (!payload) return true;
-  pty.write(payload);
+  const payloadWrite = write(payload);
+  if (payloadWrite === false || (payloadWrite !== true && !(await payloadWrite))) return false;
   const submitSuffix = getAgentCommandSubmitSuffix(runtime, prompt);
-  if (submitSuffix) pty.write(submitSuffix);
+  if (submitSuffix) {
+    const suffixWrite = write(submitSuffix);
+    if (suffixWrite === false || (suffixWrite !== true && !(await suffixWrite))) return false;
+  }
   agentSessionRuntimeStore.setStatus(session, 'working');
   const submitDelay = Math.max(getAgentCommandSubmitDelayMs(runtime), SUBMIT_DELAY_FLOOR_MS);
   await new Promise((resolve) => setTimeout(resolve, submitDelay));
-  pty.write(getAgentCommandSubmitInput(runtime));
-  return true;
+  return write(getAgentCommandSubmitInput(runtime));
 }

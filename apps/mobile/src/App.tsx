@@ -148,6 +148,18 @@ type ConnectDraft = {
 
 type TaskScope = 'all' | 'open' | 'inProgress' | 'review';
 
+type PendingSessionInput = {
+  attachmentIds: string[] | null;
+  imageIds: string[];
+  input: string;
+  requestId: string;
+};
+
+type SessionInputIssue = {
+  detail: string;
+  message: string;
+};
+
 type ReadableOutputBlock = {
   id: string;
   kind: 'prose' | 'code';
@@ -251,6 +263,14 @@ function mobileInputUploadProgressText(progress: MobileInputUploadProgress): str
 
 function mobileInputUploadLabel(progress: MobileInputUploadProgress): string {
   return `正在上传 ${mobileInputUploadProgressText(progress)}`;
+}
+
+function createMobileSessionInputRequestId(): string {
+  return `mobile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+}
+
+function sameStringArray(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function runtimeColor(status: MobileSessionSummary['runtimeStatus']): string {
@@ -2671,6 +2691,7 @@ function SessionDetailScreen({
   const [sessionInput, setSessionInput] = useState('');
   const [sessionImages, setSessionImages] = useState<MobileImageDraft[]>([]);
   const [sendingInput, setSendingInput] = useState(false);
+  const [sessionInputIssue, setSessionInputIssue] = useState<SessionInputIssue | null>(null);
   const [sessionUploadProgress, setSessionUploadProgress] =
     useState<MobileInputUploadProgress | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2678,6 +2699,8 @@ function SessionDetailScreen({
   const [error, setError] = useState<string | null>(null);
   const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
   const mountedRef = useRef(true);
+  const sendingInputRef = useRef(false);
+  const pendingSessionInputRef = useRef<PendingSessionInput | null>(null);
   const detailRefreshQueueRef = useRef<{
     dirty: boolean;
     showLoading: boolean;
@@ -2868,22 +2891,42 @@ function SessionDetailScreen({
   const sessionCanContinue = canContinueMobileSession(detail?.session);
   const handleSendInput = useCallback(async () => {
     const input = sessionInput.trim();
-    if ((!input && sessionImages.length === 0) || !sessionCanContinue || sendingInput) return;
+    if ((!input && sessionImages.length === 0) || !sessionCanContinue || sendingInputRef.current)
+      return;
 
+    sendingInputRef.current = true;
     setSendingInput(true);
     setSessionUploadProgress(null);
-    let attachmentIds: string[] = [];
-    try {
-      attachmentIds = await uploadMobileInputImages(
-        connection,
-        sessionImages,
-        setSessionUploadProgress
-      );
-      setSessionUploadProgress(null);
-      await sendSessionInput(connection, task.projectId, task.id, sessionId, {
+    setSessionInputIssue(null);
+    const imageIds = sessionImages.map((image) => image.id);
+    let pending = pendingSessionInputRef.current;
+    if (!pending || pending.input !== input || !sameStringArray(pending.imageIds, imageIds)) {
+      pending = {
+        attachmentIds: null,
+        imageIds,
         input,
-        attachmentIds,
+        requestId: createMobileSessionInputRequestId(),
+      };
+      pendingSessionInputRef.current = pending;
+    }
+    try {
+      if (pending.attachmentIds === null) {
+        pending.attachmentIds = await uploadMobileInputImages(
+          connection,
+          sessionImages,
+          setSessionUploadProgress
+        );
+      }
+      setSessionUploadProgress(null);
+      const response = await sendSessionInput(connection, task.projectId, task.id, sessionId, {
+        input,
+        attachmentIds: pending.attachmentIds,
+        clientRequestId: pending.requestId,
       });
+      if (response.requestId && response.requestId !== pending.requestId) {
+        throw new Error('桌面端返回了不匹配的发送请求编号。');
+      }
+      pendingSessionInputRef.current = null;
       setSessionInput('');
       setSessionImages([]);
       setBottomState(true);
@@ -2891,13 +2934,19 @@ function SessionDetailScreen({
       scrollToBottom(true);
       setError(null);
     } catch (e) {
-      await Promise.all(
-        attachmentIds.map((attachmentId) =>
-          discardInputAttachment(connection, attachmentId).catch(() => undefined)
-        )
-      );
-      setError(errorMessage(e));
+      const cause = errorMessage(e);
+      setSessionInputIssue({
+        message: '消息尚未确认送达，输入内容已保留。',
+        detail: [
+          cause,
+          `requestId=${pending.requestId}`,
+          `projectId=${task.projectId}`,
+          `taskId=${task.id}`,
+          `sessionId=${sessionId}`,
+        ].join('\n'),
+      });
     } finally {
+      sendingInputRef.current = false;
       setSessionUploadProgress(null);
       setSendingInput(false);
     }
@@ -2905,7 +2954,6 @@ function SessionDetailScreen({
     connection,
     loadDetail,
     scrollToBottom,
-    sendingInput,
     sessionCanContinue,
     sessionId,
     sessionImages,
@@ -2914,6 +2962,23 @@ function SessionDetailScreen({
     task.id,
     task.projectId,
   ]);
+
+  const handleSessionInputChange = useCallback((value: string) => {
+    const pending = pendingSessionInputRef.current;
+    if (pending && pending.input !== value.trim()) pendingSessionInputRef.current = null;
+    setSessionInputIssue(null);
+    setSessionInput(value);
+  }, []);
+
+  const handleSessionImagesChange = useCallback((images: MobileImageDraft[]) => {
+    const pending = pendingSessionInputRef.current;
+    const imageIds = images.map((image) => image.id);
+    if (pending && !sameStringArray(pending.imageIds, imageIds)) {
+      pendingSessionInputRef.current = null;
+    }
+    setSessionInputIssue(null);
+    setSessionImages(images);
+  }, []);
 
   const session = detail?.session;
   const taskProject = projects.find((project) => project.id === task.projectId);
@@ -3016,6 +3081,14 @@ function SessionDetailScreen({
               <Ionicons color={COLORS.surface} name="arrow-down-outline" size={17} />
             </Pressable>
           ) : null}
+          {sessionInputIssue ? (
+            <SessionInputFailureNotice
+              detail={sessionInputIssue.detail}
+              message={sessionInputIssue.message}
+              retrying={sendingInput}
+              onRetry={handleSendInput}
+            />
+          ) : null}
           <SessionInputComposer
             acceptsInput={detail?.session.acceptsInput ?? false}
             connection={connection}
@@ -3037,9 +3110,14 @@ function SessionDetailScreen({
             value={sessionInput}
             projectId={task.projectId}
             taskId={task.id}
-            onChange={setSessionInput}
-            onError={setError}
-            onImagesChange={setSessionImages}
+            onChange={handleSessionInputChange}
+            onError={(message) =>
+              setSessionInputIssue({
+                message: '输入内容处理失败，请检查后重试。',
+                detail: `${message}\nprojectId=${task.projectId}\ntaskId=${task.id}\nsessionId=${sessionId}`,
+              })
+            }
+            onImagesChange={handleSessionImagesChange}
             onSend={handleSendInput}
           />
           <SessionDisplaySettingsSheet
@@ -3740,6 +3818,71 @@ function SessionInputComposer({
           {value.length}/{MOBILE_SESSION_INPUT_MAX_CHARS}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+function SessionInputFailureNotice({
+  detail,
+  message,
+  retrying,
+  onRetry,
+}: {
+  detail: string;
+  message: string;
+  retrying: boolean;
+  onRetry: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const copyDetail = useCallback(async () => {
+    await Clipboard.setStringAsync(`${message}\n${detail}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1_500);
+  }, [detail, message]);
+
+  return (
+    <View accessibilityLiveRegion="assertive" style={styles.sessionInputFailure}>
+      <Ionicons color={COLORS.red} name="alert-circle-outline" size={18} />
+      <View style={styles.sessionInputFailureBody}>
+        <Text style={styles.sessionInputFailureMessage}>{message}</Text>
+        <Text numberOfLines={2} selectable style={styles.sessionInputFailureDetail}>
+          {detail.split('\n')[0]}
+        </Text>
+      </View>
+      <Pressable
+        accessibilityLabel="重试发送消息"
+        accessibilityRole="button"
+        disabled={retrying}
+        hitSlop={6}
+        style={({ pressed }) => [
+          styles.sessionInputFailureAction,
+          pressed ? styles.buttonPressed : null,
+          retrying ? styles.buttonDisabled : null,
+        ]}
+        onPress={onRetry}
+      >
+        {retrying ? (
+          <ActivityIndicator color={COLORS.charcoal} size="small" />
+        ) : (
+          <Ionicons color={COLORS.charcoal} name="refresh-outline" size={18} />
+        )}
+      </Pressable>
+      <Pressable
+        accessibilityLabel="复制发送诊断信息"
+        accessibilityRole="button"
+        hitSlop={6}
+        style={({ pressed }) => [
+          styles.sessionInputFailureAction,
+          pressed ? styles.buttonPressed : null,
+        ]}
+        onPress={() => void copyDetail()}
+      >
+        <Ionicons
+          color={copied ? COLORS.green : COLORS.charcoal}
+          name={copied ? 'checkmark-outline' : 'copy-outline'}
+          size={18}
+        />
+      </Pressable>
     </View>
   );
 }
@@ -4713,6 +4856,42 @@ const styles = StyleSheet.create({
     paddingTop: 7,
     paddingBottom: Platform.OS === 'ios' ? 10 : 12,
     gap: 4,
+  },
+  sessionInputFailure: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F1C7C3',
+    backgroundColor: '#FFF5F4',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  sessionInputFailureBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 1,
+  },
+  sessionInputFailureMessage: {
+    color: COLORS.ink,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sessionInputFailureDetail: {
+    color: COLORS.muted,
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  sessionInputFailureAction: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 7,
+    backgroundColor: COLORS.surface,
   },
   sessionRunStatus: {
     maxWidth: '100%',

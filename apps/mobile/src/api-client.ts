@@ -19,6 +19,7 @@ import {
 import { MOBILE_RELAY_BASE_URL } from '../../../src/shared/mobile-relay';
 
 const RELAY_HEALTH_TIMEOUT_MS = 8_000;
+export const SESSION_INPUT_REQUEST_TIMEOUT_MS = 20_000;
 
 export type MobileConnection = {
   baseUrl: string;
@@ -132,6 +133,7 @@ async function request<T>(
       headers: mobileApiHeaders(connection, init.headers),
     });
   } catch (error) {
+    if (init.signal?.aborted) throw error;
     console.warn('[Yoda Mobile] Gateway request failed', {
       error: error instanceof Error ? error.message : String(error),
       url: mobileApiUrl(connection, path),
@@ -217,14 +219,30 @@ export function sendSessionInput(
   sessionId: string,
   body: MobileSessionInputRequest
 ): Promise<MobileSessionInputResponse> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, SESSION_INPUT_REQUEST_TIMEOUT_MS);
   return request<MobileSessionInputResponse>(
     connection,
     `/v1/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/sessions/${encodeURIComponent(sessionId)}/input`,
     {
       method: 'POST',
       body: JSON.stringify(body),
+      signal: controller.signal,
     }
-  );
+  )
+    .catch((error: unknown) => {
+      if (timedOut) {
+        throw new Error(
+          `发送请求等待桌面端超过 ${Math.round(SESSION_INPUT_REQUEST_TIMEOUT_MS / 1000)} 秒。内容已保留，可以重试。Diagnostic: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+      throw error;
+    })
+    .finally(() => clearTimeout(timeout));
 }
 
 export function createDemand(
