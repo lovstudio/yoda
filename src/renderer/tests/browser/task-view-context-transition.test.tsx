@@ -128,6 +128,35 @@ describe('TaskViewWrapper snapshot transitions', () => {
     expect(host.textContent).toBe('loading');
   });
 
+  it('keeps the last ready payload alive until a same-task ready consumer unmounts', async () => {
+    await act(async () => {
+      root.render(
+        <TaskViewWrapper
+          projectId="project-1"
+          taskId="task-a"
+          kind="ready"
+          provisionedTask={task('task-a:first')}
+        >
+          <UnguardedReadyProbe />
+        </TaskViewWrapper>
+      );
+    });
+    expect(host.textContent).toBe('task-a:first:task-a:first');
+
+    // A MobX child observer can render once after the owner publishes teardown
+    // but before its parent readiness guard commits the child's removal. That
+    // late render must keep reading the task from the lifetime boundary.
+    await act(async () => {
+      root.render(
+        <TaskViewWrapper projectId="project-1" taskId="task-a" kind="teardown">
+          <UnguardedReadyProbe />
+        </TaskViewWrapper>
+      );
+    });
+
+    expect(host.textContent).toBe('task-a:first:task-a:first');
+  });
+
   it('replaces ready-only consumers across teardown and reprovision of the same task', async () => {
     await act(async () => {
       root.render(

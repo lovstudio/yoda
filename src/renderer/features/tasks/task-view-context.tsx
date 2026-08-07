@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useRef, type ReactNode } from 'react';
 import { ProjectViewWrapper } from '@renderer/features/projects/components/project-view-wrapper';
 import { type ProvisionedTask } from '@renderer/features/tasks/stores/task';
 import { type TaskViewKind } from '@renderer/features/tasks/stores/task-selectors';
@@ -48,11 +48,23 @@ type TaskViewWrapperProps = {
 
 export const TaskViewWrapper = observer(function TaskViewWrapper(props: TaskViewWrapperProps) {
   const { children, projectId, taskId, hosted = false } = props;
+  const ownerKey = `${projectId}:${taskId}`;
+  const lifetimeTaskRef = useRef<{
+    ownerKey: string;
+    task: ProvisionedTask | null;
+  }>({ ownerKey, task: null });
+  if (lifetimeTaskRef.current.ownerKey !== ownerKey) {
+    lifetimeTaskRef.current = { ownerKey, task: null };
+  }
+  if (props.kind === 'ready') {
+    lifetimeTaskRef.current.task = props.provisionedTask;
+  }
+
   // Context updates reach every mounted consumer, including descendants that
   // the nearest ready guard is about to remove. Replace the subtree whenever
   // its entity or readiness boundary changes so an old ready consumer never
   // receives a different task's non-ready snapshot during reconciliation.
-  const snapshotBoundaryKey = `${projectId}:${taskId}:${props.kind === 'ready' ? 'ready' : 'pending'}`;
+  const snapshotBoundaryKey = `${ownerKey}:${props.kind === 'ready' ? 'ready' : 'pending'}`;
   const value: TaskViewContext =
     props.kind === 'ready'
       ? {
@@ -63,19 +75,21 @@ export const TaskViewWrapper = observer(function TaskViewWrapper(props: TaskView
           provisionedTask: props.provisionedTask,
         }
       : { projectId, taskId, hosted, kind: props.kind, provisionedTask: null };
-  const content =
-    props.kind === 'ready' ? (
-      <ProvisionedTaskContext.Provider value={props.provisionedTask}>
-        {children}
-      </ProvisionedTaskContext.Provider>
-    ) : (
-      children
-    );
 
   return (
     <ProjectViewWrapper projectId={projectId}>
       <TaskViewContext.Provider key={snapshotBoundaryKey} value={value}>
-        {content}
+        {/*
+          Keep the last valid payload available while a ready subtree is being
+          removed. MobX observers may receive the non-ready context update
+          before their nearest readiness guard commits its unmount; clearing
+          this provider in the same render made that harmless transition throw.
+          A new task identity resets the retained value above, so payloads never
+          cross task boundaries.
+        */}
+        <ProvisionedTaskContext.Provider value={lifetimeTaskRef.current.task}>
+          {children}
+        </ProvisionedTaskContext.Provider>
       </TaskViewContext.Provider>
     </ProjectViewWrapper>
   );
