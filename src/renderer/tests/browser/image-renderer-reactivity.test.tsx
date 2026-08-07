@@ -1,9 +1,13 @@
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FileTabStore } from '@renderer/features/tasks/tabs/file-tab-store';
 import { ImageRenderer } from '@renderer/lib/editor/image-renderer';
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 
 async function waitForImageSource(host: HTMLElement, source: string): Promise<void> {
   for (let i = 0; i < 50; i++) {
@@ -35,5 +39,12 @@ describe('ImageRenderer reactivity', () => {
 
     await waitForImageSource(host, dataUrl);
     expect(host.querySelector('img')?.getAttribute('src')).toBe(dataUrl);
+    expect(host.querySelector('.yoda-image-viewer')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="editor.imageViewer.download"]')).not.toBeNull();
+    expect(
+      host.querySelector('button[aria-label="editor.imageViewer.enterFullscreen"]')
+    ).not.toBeNull();
+    expect(host.querySelector('button[aria-label="editor.imageViewer.zoomIn"]')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="editor.imageViewer.zoomOut"]')).not.toBeNull();
   });
 });

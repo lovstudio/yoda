@@ -4352,6 +4352,16 @@
     "editSource": "Edit source",
     "preview": "Preview",
     "noFiles": "No files",
+    "imageViewer": {
+      "carousel": "Image preview",
+      "lightbox": "Fullscreen image preview",
+      "image": "Image",
+      "download": "Download image",
+      "enterFullscreen": "Enter fullscreen",
+      "exitFullscreen": "Exit fullscreen",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out"
+    },
     "conflict": {
       "title": "File Modified Externally",
       "description": "<code>{{path}}</code> was changed outside the editor while you have unsaved edits. What would you like to do?",
