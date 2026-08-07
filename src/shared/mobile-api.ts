@@ -355,6 +355,8 @@ export function filterMobileProjects(
 export type MobileTaskSummary = {
   id: string;
   projectId: string;
+  /** Parent task id, used by mobile task-detail actions that preserve hierarchy. */
+  parentTaskId?: string;
   name: string;
   status: string;
   activityStatus: MobileTaskActivityStatus;
@@ -368,6 +370,24 @@ export type MobileTaskSummary = {
   conversationCount: number;
   runtimeCounts: Record<string, number>;
 };
+
+/** Preserves project and parent identity when creating a sibling from task detail. */
+export function resolveMobileSiblingTaskAttribution(
+  task: MobileTaskSummary,
+  tasks: readonly MobileTaskSummary[]
+): {
+  projectId: string;
+  parentTaskId: string | null;
+  parentTask: MobileTaskSummary | null;
+} {
+  const parentTaskId = task.parentTaskId ?? null;
+  const parentTask = parentTaskId
+    ? (tasks.find(
+        (candidate) => candidate.id === parentTaskId && candidate.projectId === task.projectId
+      ) ?? null)
+    : null;
+  return { projectId: task.projectId, parentTaskId, parentTask };
+}
 
 /**
  * Orders tasks for the mobile attribution picker. Long-term work is the most

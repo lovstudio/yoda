@@ -9,6 +9,7 @@ import {
   getMobileProjectActivityById,
   parseMobilePairingUrl,
   prependMobileSkillCommand,
+  resolveMobileSiblingTaskAttribution,
   sortMobileProjects,
   sortMobileTaskAttributionCandidates,
   type MobileProjectSummary,
@@ -325,5 +326,33 @@ describe('mobile task attribution ordering', () => {
     expect(filterMobileTasks(tasks, 'mobile 发布').map(({ id }) => id)).toEqual([
       'Yoda Mobile 发布',
     ]);
+  });
+
+  it('preserves project and parent identity for sibling-task creation', () => {
+    const parent = task('parent', '2026-08-01T00:00:00.000Z');
+    const child = {
+      ...task('child', '2026-08-02T00:00:00.000Z'),
+      parentTaskId: parent.id,
+    };
+    const sameIdInAnotherProject = {
+      ...parent,
+      projectId: 'project-2',
+    };
+
+    expect(resolveMobileSiblingTaskAttribution(child, [sameIdInAnotherProject, parent])).toEqual({
+      projectId: 'project-1',
+      parentTaskId: 'parent',
+      parentTask: parent,
+    });
+    expect(resolveMobileSiblingTaskAttribution(child, [sameIdInAnotherProject])).toEqual({
+      projectId: 'project-1',
+      parentTaskId: 'parent',
+      parentTask: null,
+    });
+    expect(resolveMobileSiblingTaskAttribution(parent, [child])).toEqual({
+      projectId: 'project-1',
+      parentTaskId: null,
+      parentTask: null,
+    });
   });
 });

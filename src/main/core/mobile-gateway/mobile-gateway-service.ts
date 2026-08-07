@@ -1203,6 +1203,7 @@ export class MobileGatewayService {
     return {
       id: task.id,
       projectId: task.projectId,
+      parentTaskId: task.parentTaskId,
       name: task.name,
       status: task.status,
       activityStatus,
