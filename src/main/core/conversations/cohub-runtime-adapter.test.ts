@@ -32,11 +32,27 @@ describe('Cohub runtime adapter', () => {
     const decoder = new TerminalPromptDecoder();
     expect(decoder.feed('\u001b[200~第一行\n第二行\u001b[201~\r')).toEqual({
       interrupted: false,
+      output: '第一行\r\n第二行\r\n',
       prompts: ['第一行\n第二行'],
     });
     expect(decoder.feed('下一条\r')).toEqual({
       interrupted: false,
+      output: '下一条\r\n',
       prompts: ['下一条'],
+    });
+  });
+
+  it('echoes editable input so the terminal remains visibly interactive', () => {
+    const decoder = new TerminalPromptDecoder();
+    expect(decoder.feed('继续交互')).toEqual({
+      interrupted: false,
+      output: '继续交互',
+      prompts: [],
+    });
+    expect(decoder.feed('\u007f并发送\r')).toEqual({
+      interrupted: false,
+      output: '\b \b并发送\r\n',
+      prompts: ['继续交并发送'],
     });
   });
 });

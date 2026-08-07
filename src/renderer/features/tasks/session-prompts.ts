@@ -97,6 +97,14 @@ export async function resolveSessionConversation(
         messages: context?.messages ?? [],
       };
     }
+
+    if (conversation.runtimeId === 'cohub') {
+      const context = await rpc.conversations.getCohubSessionContext(conversation.id);
+      return {
+        prompts: context?.prompts ?? [],
+        messages: context?.messages ?? [],
+      };
+    }
   } catch {
     return EMPTY_SESSION_CONVERSATION;
   }
