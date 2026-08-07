@@ -471,6 +471,42 @@ export type MobileCreateDemandResponse = {
   warning?: string;
 };
 
+export type MobileSkillSummary = {
+  key: string;
+  id: string;
+  displayName: string;
+  description: string;
+};
+
+export type MobileSkillsResponse = {
+  runtimeId: RuntimeId;
+  skills: MobileSkillSummary[];
+};
+
+/** Search the compact mobile Skill catalog without changing the desktop-defined order. */
+export function filterMobileSkills(
+  skills: readonly MobileSkillSummary[],
+  query: string
+): MobileSkillSummary[] {
+  const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return [...skills];
+  return skills.filter((skill) => {
+    const searchableText = [skill.displayName, skill.id, skill.description]
+      .join('\n')
+      .toLocaleLowerCase();
+    return terms.every((term) => searchableText.includes(term));
+  });
+}
+
+/** Keep an explicit Skill invocation visible and editable in the task input. */
+export function prependMobileSkillCommand(value: string, command: string): string {
+  const normalizedCommand = command.trim();
+  if (!normalizedCommand) return value;
+  const escapedCommand = normalizedCommand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (new RegExp(`(?:^|\\s)${escapedCommand}(?=\\s|$)`).test(value)) return value;
+  return `${normalizedCommand}${value && !/^\s/.test(value) ? ' ' : ''}${value}`;
+}
+
 export type MobileSessionRuntimeStatus =
   | 'idle'
   | 'working'

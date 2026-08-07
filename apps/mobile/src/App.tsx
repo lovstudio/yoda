@@ -36,10 +36,12 @@ import {
   type TextStyle,
 } from 'react-native';
 import yodaMarkSource from '../../../src/assets/images/yoda/yoda_logo.png';
+import { applyAgentCommandPrefix } from '../../../src/shared/agent-command-prefix';
 import {
   appendMobileVoiceTranscript,
   canContinueMobileSession,
   filterMobileProjects,
+  filterMobileSkills,
   filterMobileTasks,
   getMobileProjectActivityById,
   mergeMobileVoiceRecognitionResult,
@@ -47,6 +49,7 @@ import {
   MOBILE_SESSION_INPUT_MAX_CHARS,
   parseMobilePairingUrl,
   parseMobileTimestamp,
+  prependMobileSkillCommand,
   sortMobileProjects,
   sortMobileTaskAttributionCandidates,
   type MobileDashboardSnapshot,
@@ -56,6 +59,7 @@ import {
   type MobileSessionDetail,
   type MobileSessionSummary,
   type MobileSessionTranscriptBlock,
+  type MobileSkillSummary,
   type MobileTaskActivityStatus,
   type MobileTaskSummary,
 } from '../../../src/shared/mobile-api';
@@ -74,6 +78,7 @@ import {
   discardInputAttachment,
   fetchProfile,
   fetchSessionDetail,
+  fetchSkills,
   fetchSnapshot,
   fetchTaskSessions,
   sendSessionInput,
@@ -883,8 +888,9 @@ export function App() {
     submitting,
   ]);
 
-  const newTaskModal = (
+  const newTaskModal = connection ? (
     <NewTaskModal
+      connection={connection}
       images={demandImages}
       open={newTaskOpen}
       parentTask={newTaskParent}
@@ -905,7 +911,7 @@ export function App() {
       onPromptChange={setPrompt}
       onSubmit={handleSubmitDemand}
     />
-  );
+  ) : null;
 
   if (booting) {
     return (
@@ -1726,6 +1732,7 @@ function TaskProjectScopeControl({
 
 function DemandComposer({
   attributionLocked = false,
+  connection,
   images,
   parentTask,
   projects,
@@ -1741,6 +1748,7 @@ function DemandComposer({
   onSubmit,
 }: {
   attributionLocked?: boolean;
+  connection: MobileConnection;
   images: MobileImageDraft[];
   parentTask: MobileTaskSummary | null;
   projects: MobileProjectSummary[];
@@ -1769,6 +1777,7 @@ function DemandComposer({
         <Text style={styles.sectionTitle}>任务说明</Text>
       </View>
       <InputMediaControls
+        connection={connection}
         disabled={submitting}
         images={images}
         imagesEnabled={imagesEnabled}
@@ -1783,6 +1792,7 @@ function DemandComposer({
               }
         }
         speechContext={[selectedProject?.displayName, selectedProject?.name, parentTask?.name]}
+        skillContext={{ projectId: selectedProjectId ?? undefined }}
         value={prompt}
         onChange={onPromptChange}
         onError={onMediaError}
@@ -2967,12 +2977,15 @@ function SessionDetailScreen({
           ) : null}
           <SessionInputComposer
             acceptsInput={detail?.session.acceptsInput ?? false}
+            connection={connection}
             resumable={detail?.session.resumable ?? false}
+            runtimeId={session?.runtimeId}
             images={sessionImages}
             imagesEnabled={
               projects.find((project) => project.id === task.projectId)?.type === 'local'
             }
             sending={sendingInput}
+            sessionId={sessionId}
             speechContext={[
               taskProject?.displayName,
               taskProject?.name,
@@ -2981,6 +2994,8 @@ function SessionDetailScreen({
               session?.runtimeId,
             ]}
             value={sessionInput}
+            projectId={task.projectId}
+            taskId={task.id}
             onChange={setSessionInput}
             onError={setError}
             onImagesChange={setSessionImages}
@@ -3048,6 +3063,7 @@ function SessionNavigationBar({
 
 function InputMediaControls({
   compact = false,
+  connection,
   disabled,
   images,
   imagesEnabled,
@@ -3056,12 +3072,14 @@ function InputMediaControls({
   onSubmit,
   projectSelector,
   speechContext = [],
+  skillContext,
   value,
   onChange,
   onError,
   onImagesChange,
 }: {
   compact?: boolean;
+  connection: MobileConnection;
   disabled: boolean;
   images: MobileImageDraft[];
   imagesEnabled: boolean;
@@ -3075,6 +3093,12 @@ function InputMediaControls({
     onPress: () => void;
   };
   speechContext?: readonly (string | null | undefined)[];
+  skillContext: {
+    projectId?: string;
+    taskId?: string;
+    sessionId?: string;
+    runtimeId?: MobileSessionSummary['runtimeId'];
+  };
   value: string;
   onChange: (value: string) => void;
   onError: (message: string) => void;
@@ -3082,8 +3106,21 @@ function InputMediaControls({
 }) {
   const [pickingImages, setPickingImages] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false);
+  const [skills, setSkills] = useState<MobileSkillSummary[]>([]);
+  const [skillsRuntimeId, setSkillsRuntimeId] = useState<MobileSessionSummary['runtimeId'] | null>(
+    null
+  );
+  const [skillsLoading, setSkillsLoading] = useState(false);
+  const [skillsError, setSkillsError] = useState<string | null>(null);
   const [voiceStarting, setVoiceStarting] = useState(false);
   const [voiceActive, setVoiceActive] = useState(false);
+  const {
+    projectId: skillProjectId,
+    taskId: skillTaskId,
+    sessionId: skillSessionId,
+    runtimeId: skillRuntimeId,
+  } = skillContext;
   const voiceBaseValueRef = useRef('');
   const voiceFinalTranscriptRef = useRef('');
   const voiceSessionRef = useRef<MobileVoiceInputSession | null>(null);
@@ -3119,6 +3156,52 @@ function InputMediaControls({
       setPickingImages(false);
     }
   }, [disabled, images, imagesEnabled, onError, onImagesChange, pickingImages]);
+
+  const loadSkills = useCallback(async () => {
+    setSkillsLoading(true);
+    setSkillsError(null);
+    setSkills([]);
+    try {
+      const response = await fetchSkills(connection, {
+        projectId: skillProjectId,
+        taskId: skillTaskId,
+        sessionId: skillSessionId,
+      });
+      setSkills(response.skills);
+      setSkillsRuntimeId(response.runtimeId);
+    } catch (error) {
+      setSkills([]);
+      setSkillsError(errorMessage(error));
+    } finally {
+      setSkillsLoading(false);
+    }
+  }, [connection, skillProjectId, skillSessionId, skillTaskId]);
+
+  const openSkillPicker = useCallback(() => {
+    if (disabled) return;
+    Keyboard.dismiss();
+    setToolsOpen(false);
+    setSkillPickerOpen(true);
+    void loadSkills();
+  }, [disabled, loadSkills]);
+
+  const selectSkill = useCallback(
+    (skill: MobileSkillSummary) => {
+      const runtimeId = skillRuntimeId ?? skillsRuntimeId;
+      if (!runtimeId) return;
+      const nextValue = prependMobileSkillCommand(
+        value,
+        applyAgentCommandPrefix(runtimeId, skill.id)
+      );
+      if (nextValue.length > MOBILE_SESSION_INPUT_MAX_CHARS) {
+        onError('输入内容已接近上限，请精简后再选择技能。');
+        return;
+      }
+      onChange(nextValue);
+      setSkillPickerOpen(false);
+    },
+    [onChange, onError, skillRuntimeId, skillsRuntimeId, value]
+  );
 
   const startVoiceInput = useCallback(async () => {
     if (disabled || voiceStarting || voiceActive) return;
@@ -3333,33 +3416,203 @@ function InputMediaControls({
             </View>
             <Text style={styles.inputToolText}>图片</Text>
           </Pressable>
+          <Pressable
+            accessibilityLabel="选择技能"
+            accessibilityRole="button"
+            disabled={disabled}
+            testID="mobile-skill-picker-trigger-v1"
+            style={({ pressed }) => [
+              styles.inputTool,
+              disabled ? styles.buttonDisabled : null,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={openSkillPicker}
+          >
+            <View style={styles.inputToolIcon}>
+              <Ionicons color={COLORS.charcoal} name="sparkles-outline" size={25} />
+            </View>
+            <Text style={styles.inputToolText}>技能</Text>
+          </Pressable>
           {!imagesEnabled ? <Text style={styles.inputMediaHint}>图片仅支持本地项目</Text> : null}
         </View>
       ) : null}
+      <SkillPickerSheet
+        error={skillsError}
+        loading={skillsLoading}
+        open={skillPickerOpen}
+        skills={skills}
+        onClose={() => setSkillPickerOpen(false)}
+        onRetry={() => void loadSkills()}
+        onSelect={selectSkill}
+      />
     </View>
+  );
+}
+
+function SkillPickerSheet({
+  error,
+  loading,
+  open,
+  skills,
+  onClose,
+  onRetry,
+  onSelect,
+}: {
+  error: string | null;
+  loading: boolean;
+  open: boolean;
+  skills: MobileSkillSummary[];
+  onClose: () => void;
+  onRetry: () => void;
+  onSelect: (skill: MobileSkillSummary) => void;
+}) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const visibleSkills = useMemo(
+    () => filterMobileSkills(skills, searchQuery),
+    [searchQuery, skills]
+  );
+  const closePicker = () => {
+    setSearchQuery('');
+    onClose();
+  };
+
+  return (
+    <Modal
+      animationType="slide"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      transparent
+      visible={open}
+      onRequestClose={closePicker}
+    >
+      <View accessibilityViewIsModal style={styles.projectPickerOverlay}>
+        <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={closePicker} />
+        <SafeAreaView style={styles.projectPickerSheet}>
+          <View style={styles.projectPickerHandle} />
+          <View style={styles.projectPickerHeader}>
+            <View style={styles.projectPickerTitleBlock}>
+              <Text style={styles.projectPickerEyebrow}>任务输入</Text>
+              <Text style={styles.projectPickerTitle}>选择技能</Text>
+            </View>
+            <Pressable
+              accessibilityLabel="关闭技能选择"
+              accessibilityRole="button"
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.projectPickerClose,
+                pressed ? styles.buttonPressed : null,
+              ]}
+              onPress={closePicker}
+            >
+              <Ionicons color={COLORS.charcoal} name="close-outline" size={22} />
+            </Pressable>
+          </View>
+          <ProjectPickerSearchInput
+            placeholder="搜索技能"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          <ScrollView
+            contentContainerStyle={styles.projectPickerList}
+            keyboardShouldPersistTaps="handled"
+            style={styles.projectPickerListViewport}
+          >
+            {error ? (
+              <Notice message={error} retrying={loading} tone="error" onRetry={onRetry} />
+            ) : null}
+            {loading && skills.length === 0 ? (
+              <View style={styles.skillPickerLoading}>
+                <ActivityIndicator color={COLORS.charcoal} />
+                <Text style={styles.emptyText}>正在加载技能…</Text>
+              </View>
+            ) : null}
+            {!loading && !error && visibleSkills.length === 0 ? (
+              <View style={styles.attributionPickerEmpty}>
+                <Ionicons
+                  color={COLORS.muted}
+                  name={searchQuery.trim() ? 'search-outline' : 'sparkles-outline'}
+                  size={22}
+                />
+                <Text style={styles.emptyText}>
+                  {searchQuery.trim()
+                    ? `没有匹配“${searchQuery.trim()}”的技能`
+                    : '当前没有可调用的已安装技能。'}
+                </Text>
+              </View>
+            ) : null}
+            {visibleSkills.map((skill) => (
+              <Pressable
+                key={skill.key}
+                accessibilityLabel={`选择技能 ${skill.displayName}`}
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.projectPickerOption,
+                  pressed ? styles.buttonPressed : null,
+                ]}
+                onPress={() => {
+                  setSearchQuery('');
+                  onSelect(skill);
+                }}
+              >
+                <View style={styles.projectPickerOptionIcon}>
+                  <Ionicons color={COLORS.muted} name="sparkles-outline" size={17} />
+                </View>
+                <View style={styles.projectPickerOptionBody}>
+                  <View style={styles.skillPickerTitleRow}>
+                    <Text
+                      style={[styles.projectPickerOptionLabel, styles.skillPickerName]}
+                      numberOfLines={1}
+                    >
+                      {skill.displayName}
+                    </Text>
+                    <Text style={styles.skillPickerCommand} numberOfLines={1}>
+                      {skill.id}
+                    </Text>
+                  </View>
+                  <Text style={styles.projectPickerOptionMeta} numberOfLines={2}>
+                    {skill.description}
+                  </Text>
+                </View>
+                <Ionicons color={COLORS.muted} name="add-circle-outline" size={20} />
+              </Pressable>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </View>
+    </Modal>
   );
 }
 
 function SessionInputComposer({
   acceptsInput,
+  connection,
   resumable,
+  runtimeId,
   images,
   imagesEnabled,
   sending,
+  sessionId,
   speechContext,
   value,
+  projectId,
+  taskId,
   onChange,
   onError,
   onImagesChange,
   onSend,
 }: {
   acceptsInput: boolean;
+  connection: MobileConnection;
   resumable: boolean;
+  runtimeId?: MobileSessionSummary['runtimeId'];
   images: MobileImageDraft[];
   imagesEnabled: boolean;
   sending: boolean;
+  sessionId: string;
   speechContext: readonly (string | null | undefined)[];
   value: string;
+  projectId: string;
+  taskId: string;
   onChange: (value: string) => void;
   onError: (message: string) => void;
   onImagesChange: (images: MobileImageDraft[]) => void;
@@ -3376,6 +3629,7 @@ function SessionInputComposer({
       <InputMediaControls
         compact
         canSubmit={canSend}
+        connection={connection}
         disabled={sending || !canContinue}
         images={images}
         imagesEnabled={imagesEnabled}
@@ -3395,6 +3649,7 @@ function SessionInputComposer({
         }
         onSubmit={onSend}
         speechContext={speechContext}
+        skillContext={{ projectId, taskId, sessionId, runtimeId }}
         value={value}
         onChange={onChange}
         onError={onError}
@@ -4426,6 +4681,33 @@ const styles = StyleSheet.create({
     color: COLORS.charcoal,
     fontSize: 12,
     fontWeight: '700',
+  },
+  skillPickerLoading: {
+    minHeight: 132,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  skillPickerTitleRow: {
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  skillPickerName: {
+    minWidth: 0,
+    flex: 1,
+  },
+  skillPickerCommand: {
+    maxWidth: '42%',
+    flexShrink: 1,
+    borderRadius: 5,
+    backgroundColor: '#EFEEE7',
+    color: COLORS.muted,
+    fontSize: 10,
+    fontWeight: '700',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
   },
   homeShell: {
     flex: 1,

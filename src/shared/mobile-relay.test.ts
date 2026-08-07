@@ -22,6 +22,8 @@ describe('mobile relay contract', () => {
   it('only allows the narrow mobile API surface', () => {
     expect(isAllowedMobileRelayRequest('GET', '/v1/snapshot')).toBe(true);
     expect(isAllowedMobileRelayRequest('GET', '/v1/profile')).toBe(true);
+    expect(isAllowedMobileRelayRequest('GET', '/v1/skills')).toBe(true);
+    expect(isAllowedMobileRelayRequest('GET', '/v1/projects/project/skills')).toBe(true);
     expect(isAllowedMobileRelayRequest('POST', '/v1/demands')).toBe(true);
     expect(
       isAllowedMobileRelayRequest(
@@ -30,6 +32,9 @@ describe('mobile relay contract', () => {
       )
     ).toBe(true);
     expect(isAllowedMobileRelayRequest('POST', '/v1/projects/x/tasks/y/sessions/z/input')).toBe(
+      true
+    );
+    expect(isAllowedMobileRelayRequest('GET', '/v1/projects/x/tasks/y/sessions/z/skills')).toBe(
       true
     );
     expect(isAllowedMobileRelayRequest('GET', '/health')).toBe(false);

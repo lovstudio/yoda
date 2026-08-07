@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createDemand,
   fetchProfile,
+  fetchSkills,
   fetchSnapshot,
   uploadInputImage,
 } from '../../apps/mobile/src/api-client';
@@ -74,6 +75,36 @@ describe('mobile API connectivity diagnostics', () => {
         'Content-Type': 'application/json',
       },
     });
+  });
+
+  it('loads the Skill catalog for the active conversation context', async () => {
+    const connection = { baseUrl: 'http://127.0.0.1:3879/', token: 'dev-token' };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ runtimeId: 'codex', skills: [{ key: 'skill:one', id: 'frontend' }] }),
+          { status: 200 }
+        )
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchSkills(connection, {
+        projectId: 'project 1',
+        taskId: 'task/1',
+        sessionId: 'session 1',
+      })
+    ).resolves.toMatchObject({ runtimeId: 'codex' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:3879/v1/projects/project%201/tasks/task%2F1/sessions/session%201/skills',
+      {
+        headers: {
+          Authorization: 'Bearer dev-token',
+          'Content-Type': 'application/json',
+        },
+      }
+    );
   });
 
   it('keeps the current task as the parent when creating a mobile subtask', async () => {

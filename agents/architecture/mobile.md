@@ -34,6 +34,7 @@
 - Voice input is speech-to-editable-text on the phone, not an audio file disguised as an Agent attachment. It uses `expo-localization` preferences negotiated against `expo-speech-recognition.getSupportedLocales()`; never pass an app-region hybrid such as `en-CN` directly to the recognizer. Pass bounded, deduplicated `contextualStrings` containing current project/task/session names plus Yoda's stable product and development vocabulary so native recognition can bias toward domain hot words. Both modules require a native development/production build; Expo Go keeps system-keyboard dictation as its fallback.
 - The new-request attribution selector is a compact input-toolbar badge. Its bounded, scrollable modal sheet first selects a project, then either creates an independent project task or selects an existing task as the parent. Keep long-term tasks easy to identify and near the top; never let a long project/task list push the primary submit action down the page.
 - Project and task picker sheets must keep their search field visible above the scrollable results. Project search covers both display and source names; parent-task search preserves the established long-term, pinned, and recent ordering.
+- The shared mobile input toolbar exposes installed Skills through its expandable tools tray. Skill search is served by the authenticated gateway for the current project or conversation; selecting one inserts the runtime-native explicit command into the visible input so new tasks and follow-up turns use the same editable send path.
 
 ## Development
 

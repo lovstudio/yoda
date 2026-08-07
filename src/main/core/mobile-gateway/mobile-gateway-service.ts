@@ -42,6 +42,7 @@ import {
   type MobileSessionInputResponse,
   type MobileSessionSummary,
   type MobileSessionTranscriptBlock,
+  type MobileSkillsResponse,
   type MobileTaskActivityStatus,
   type MobileTaskSessionsResponse,
   type MobileTaskSummary,
@@ -85,6 +86,7 @@ import { projectManager } from '@main/core/projects/project-manager';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { settingsSyncService } from '@main/core/settings-sync/service';
 import { appSettingsService } from '@main/core/settings/settings-service';
+import { skillsService } from '@main/core/skills/SkillsService';
 import { getUsageOverview } from '@main/core/stats/getUsageOverview';
 import { generateTaskName } from '@main/core/tasks/name-generation/generateTaskName';
 import { createTask } from '@main/core/tasks/operations/createTask';
@@ -104,6 +106,7 @@ import {
   MOBILE_SESSION_RECONNECT_RETRY_MS,
   MobileSessionEventStream,
 } from './mobile-session-event-stream';
+import { mobileSkillSummaries } from './mobile-skills';
 import { mobileGatewayNetworkUrls } from './network-addresses';
 
 const MAX_BODY_BYTES = 128 * 1024;
@@ -907,6 +910,11 @@ export class MobileGatewayService {
       return;
     }
 
+    if (req.method === 'GET' && url.pathname === '/v1/skills') {
+      writeJson(res, 200, await this.getSkills());
+      return;
+    }
+
     const segments = pathSegments(url.pathname);
     const isAttachmentRoute = segments[0] === 'v1' && segments[1] === 'attachments';
     if (req.method === 'POST' && isAttachmentRoute && segments.length === 2) {
@@ -961,6 +969,17 @@ export class MobileGatewayService {
       Boolean(segments[4]) &&
       segments[5] === 'sessions';
 
+    const isProjectSkillsRoute =
+      segments[0] === 'v1' &&
+      segments[1] === 'projects' &&
+      Boolean(segments[2]) &&
+      segments[3] === 'skills';
+
+    if (req.method === 'GET' && isProjectSkillsRoute && segments.length === 4) {
+      writeJson(res, 200, await this.getSkills(segments[2]!));
+      return;
+    }
+
     if (req.method === 'GET' && isTaskSessionsRoute && segments.length === 6) {
       writeJson(res, 200, await this.getTaskSessions(segments[2]!, segments[4]!));
       return;
@@ -968,6 +987,17 @@ export class MobileGatewayService {
 
     if (req.method === 'GET' && isTaskSessionsRoute && segments.length === 7 && segments[6]) {
       writeJson(res, 200, await this.getSessionDetail(segments[2]!, segments[4]!, segments[6]));
+      return;
+    }
+
+    if (
+      req.method === 'GET' &&
+      isTaskSessionsRoute &&
+      segments.length === 8 &&
+      segments[6] &&
+      segments[7] === 'skills'
+    ) {
+      writeJson(res, 200, await this.getSkills(segments[2]!, segments[4]!, segments[6]));
       return;
     }
 
@@ -1043,6 +1073,41 @@ export class MobileGatewayService {
         ).length,
         reviewTaskCount: mappedTasks.filter((task) => task.activityStatus === 'review').length,
       },
+    };
+  }
+
+  private async getSkills(
+    projectId?: string,
+    taskId?: string,
+    conversationId?: string
+  ): Promise<MobileSkillsResponse> {
+    let projectPath: string | undefined;
+    let runtimeId = await appSettingsService.get('defaultRuntime');
+    let allowedSkillKeys: Set<string> | null = null;
+
+    if (projectId) {
+      const project = await this.requireProject(projectId);
+      projectPath = taskId ? this.resolveTaskCwd(project, taskId) : project.path;
+    }
+
+    if (projectId && taskId && conversationId) {
+      const conversations = await getConversationsForTask(projectId, taskId);
+      const conversation = conversations.find((candidate) => candidate.id === conversationId);
+      if (!conversation) {
+        throw new MobileGatewayError(404, 'session_not_found', 'Mobile session was not found.');
+      }
+      runtimeId = conversation.runtimeId;
+      if (conversation.skillPolicy?.restriction === 'allowlist') {
+        allowedSkillKeys = new Set(
+          conversation.skillPolicy.entries.flatMap((entry) => [entry.key, entry.id])
+        );
+      }
+    }
+
+    const catalog = await skillsService.getCatalogIndex(projectPath);
+    return {
+      runtimeId,
+      skills: mobileSkillSummaries(catalog, allowedSkillKeys),
     };
   }
 

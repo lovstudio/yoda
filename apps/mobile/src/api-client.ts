@@ -13,6 +13,7 @@ import {
   type MobileSessionDetail,
   type MobileSessionInputRequest,
   type MobileSessionInputResponse,
+  type MobileSkillsResponse,
   type MobileTaskSessionsResponse,
 } from '../../../src/shared/mobile-api';
 import { MOBILE_RELAY_BASE_URL } from '../../../src/shared/mobile-relay';
@@ -162,6 +163,26 @@ export function fetchSnapshot(connection: MobileConnection): Promise<MobileDashb
 
 export function fetchProfile(connection: MobileConnection): Promise<MobileProfileSnapshot> {
   return request<MobileProfileSnapshot>(connection, '/v1/profile');
+}
+
+export function fetchSkills(
+  connection: MobileConnection,
+  context: { projectId?: string; taskId?: string; sessionId?: string } = {}
+): Promise<MobileSkillsResponse> {
+  const { projectId, taskId, sessionId } = context;
+  if (projectId && taskId && sessionId) {
+    return request<MobileSkillsResponse>(
+      connection,
+      `/v1/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/sessions/${encodeURIComponent(sessionId)}/skills`
+    );
+  }
+  if (projectId) {
+    return request<MobileSkillsResponse>(
+      connection,
+      `/v1/projects/${encodeURIComponent(projectId)}/skills`
+    );
+  }
+  return request<MobileSkillsResponse>(connection, '/v1/skills');
 }
 
 export function fetchTaskSessions(

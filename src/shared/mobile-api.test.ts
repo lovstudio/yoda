@@ -4,14 +4,48 @@ import {
   createExpoGoPairingUrl,
   createMobilePairingUrl,
   filterMobileProjects,
+  filterMobileSkills,
   filterMobileTasks,
   getMobileProjectActivityById,
   parseMobilePairingUrl,
+  prependMobileSkillCommand,
   sortMobileProjects,
   sortMobileTaskAttributionCandidates,
   type MobileProjectSummary,
   type MobileTaskSummary,
 } from './mobile-api';
+
+describe('mobile Skill input', () => {
+  const skills = [
+    {
+      key: 'skill:one',
+      id: 'frontend-design',
+      displayName: 'Frontend Design',
+      description: 'Build polished mobile interfaces',
+    },
+    {
+      key: 'skill:two',
+      id: 'debug-pro',
+      displayName: '调试专家',
+      description: '定位运行时错误',
+    },
+  ];
+
+  it('searches Skill names, ids, and descriptions with multiple terms', () => {
+    expect(filterMobileSkills(skills, 'front mobile')).toEqual([skills[0]]);
+    expect(filterMobileSkills(skills, '调试 错误')).toEqual([skills[1]]);
+    expect(filterMobileSkills(skills, '')).toEqual(skills);
+  });
+
+  it('prepends one visible invocation without duplicating it', () => {
+    expect(prependMobileSkillCommand('优化输入框', '$frontend-design')).toBe(
+      '$frontend-design 优化输入框'
+    );
+    expect(prependMobileSkillCommand('$frontend-design 优化输入框', '$frontend-design')).toBe(
+      '$frontend-design 优化输入框'
+    );
+  });
+});
 
 describe('mobile session continuation', () => {
   it('keeps both live and cold-resumable sessions actionable', () => {
