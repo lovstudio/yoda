@@ -1439,6 +1439,12 @@
     "acceptEdits": "Auto-accept edits",
     "fullAuto": "Full auto",
     "bypass": "Bypass permissions",
+    "cohub": {
+      "fullAccess": "Full project access",
+      "fullAccessDesc": "Let Cohub read and edit files and run commands in the current project",
+      "readOnly": "Read only",
+      "readOnlyDesc": "Let Cohub inspect the project without making changes"
+    },
     "codex": {
       "requestApproval": "Request approval",
       "requestApprovalDesc": "Always ask before editing external files or using the internet",

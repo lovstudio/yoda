@@ -21,6 +21,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve('src/main/index.ts'),
+          'cohub-runtime-adapter': resolve('src/main/core/conversations/cohub-runtime-adapter.ts'),
           'extension-workers/maas-gateway': resolve(
             'src/main/core/extensions/maas-gateway/worker.ts'
           ),

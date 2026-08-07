@@ -53,6 +53,7 @@ import {
 } from '../codex-session-id';
 import { getReservedCodexThreadIds } from '../codex-thread-reservations';
 import { ensureCodexThreadUnarchived } from '../codex-unarchive';
+import { buildCohubAdapterCommand, getCohubAdapterEnvironment } from '../cohub-adapter-command';
 import { getConversationRuntimeStateRoot } from '../conversation-session-source';
 import { withExecutionModeInstructions } from '../execution-mode';
 import { withRuntimeStateRoot } from '../session-state-roots';
@@ -359,14 +360,17 @@ export class LocalConversationProvider implements ConversationProvider {
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       const terminalThemeMode = await resolveTerminalThemeMode();
       if (!this.ownsPendingStart(sessionId, startToken)) return;
-      const { command, args: baseArgs } = buildAgentCommand({
+      const baseCommand = buildAgentCommand({
         runtimeId: conversation.runtimeId,
         providerConfig: sessionProviderConfig,
         autoApprove: conversation.autoApprove,
         permissionMode: conversation.permissionMode,
         sessionId: agentSessionId,
         isResuming: effectiveIsResuming,
-        initialPrompt: useClipboardImagePaste ? undefined : effectiveInitialPrompt,
+        initialPrompt:
+          useClipboardImagePaste || conversation.runtimeId === 'cohub'
+            ? undefined
+            : effectiveInitialPrompt,
         workingDirectory: this.taskPath,
         appendSystemPrompt,
         ...runtimeOverrides,
@@ -374,6 +378,16 @@ export class LocalConversationProvider implements ConversationProvider {
         skillPolicy: conversation.skillPolicy,
         executionMode: conversation.executionMode,
       });
+      const managedCommand =
+        conversation.runtimeId === 'cohub'
+          ? buildCohubAdapterCommand({
+              cohubCommand: baseCommand,
+              conversationId: conversation.id,
+              cwd: this.taskPath,
+              initialPrompt: effectiveIsResuming ? undefined : effectiveInitialPrompt,
+            })
+          : baseCommand;
+      const { command, args: baseArgs } = managedCommand;
       const argsWithNotify = withCodexRuntimeNotifyArgs(conversation.runtimeId, baseArgs, port);
 
       const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
@@ -382,9 +396,11 @@ export class LocalConversationProvider implements ConversationProvider {
         runtimeId: conversation.runtimeId,
         tmuxEnabled: Boolean(tmuxSessionName),
       });
+      const managedRuntimeEnv =
+        conversation.runtimeId === 'cohub' ? getCohubAdapterEnvironment() : undefined;
       const providerEnv =
-        configuredRuntimeEnv || maasRuntimeEnv
-          ? { ...configuredRuntimeEnv, ...maasRuntimeEnv }
+        configuredRuntimeEnv || maasRuntimeEnv || managedRuntimeEnv
+          ? { ...configuredRuntimeEnv, ...maasRuntimeEnv, ...managedRuntimeEnv }
           : undefined;
 
       const preparedSettings = prepareWindowsClaudeSettings(conversation.runtimeId, argsWithNotify);
@@ -401,7 +417,10 @@ export class LocalConversationProvider implements ConversationProvider {
           purpose: 'interactive-session',
           mode: 'interactive',
           runtime: conversation.runtimeId,
-          command: [command, ...args.filter((arg) => arg !== effectiveInitialPrompt)].join(' '),
+          command:
+            conversation.runtimeId === 'cohub'
+              ? [baseCommand.command, ...baseCommand.args].join(' ')
+              : [command, ...args.filter((arg) => arg !== effectiveInitialPrompt)].join(' '),
           prompt: effectiveInitialPrompt ?? null,
           metadata: {
             projectId: conversation.projectId,
@@ -434,7 +453,10 @@ export class LocalConversationProvider implements ConversationProvider {
               shellSetup: this.shellSetup,
               tmuxSessionName,
               tmuxSize: initialSize,
-              tmuxEnv: resolveRuntimeTmuxEnv(providerEnv),
+              tmuxEnv:
+                conversation.runtimeId === 'cohub'
+                  ? providerEnv
+                  : resolveRuntimeTmuxEnv(providerEnv),
               tmuxSessionIdentity: agentSessionId,
               tmuxSessionIdentityAliases:
                 conversation.runtimeId === 'codex' && !conversation.sessionSource

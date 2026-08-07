@@ -26,6 +26,8 @@ export function resolveRuntimePaths(id: RuntimeId): RuntimePaths {
         skills: '~/.codex/skills',
         settings: '~/.codex/config.toml',
       };
+    case 'cohub':
+      return { config: '~/.config/cohub' };
     case 'gemini':
       return {
         config: '~/.gemini',

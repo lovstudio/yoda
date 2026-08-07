@@ -1439,6 +1439,12 @@
     "acceptEdits": "自动接受编辑",
     "fullAuto": "全自动",
     "bypass": "跳过权限（危险）",
+    "cohub": {
+      "fullAccess": "完整项目访问",
+      "fullAccessDesc": "允许 Cohub 在当前项目中读取、编辑文件并运行命令",
+      "readOnly": "只读",
+      "readOnlyDesc": "允许 Cohub 分析项目，但不执行写入操作"
+    },
     "codex": {
       "requestApproval": "请求批准",
       "requestApprovalDesc": "编辑外部文件和使用互联网时始终询问",

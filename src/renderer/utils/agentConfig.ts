@@ -8,6 +8,7 @@ import charmLogo from '../../assets/images/charm.png';
 import claudeLogo from '../../assets/images/claude.png';
 import clineLogo from '../../assets/images/cline.png';
 import codebuffLogo from '../../assets/images/codebuff.png';
+import cohubLogoSvg from '../../assets/images/cohub.svg?raw';
 import continueLogo from '../../assets/images/continue.png';
 import cursorLogoSvg from '../../assets/images/cursor.svg?raw';
 import devinLogo from '../../assets/images/devin.png';
@@ -41,6 +42,7 @@ export type AgentInfo = {
 export const agentConfig: Record<RuntimeId, AgentInfo> = {
   claude: { name: 'Claude Code', logo: claudeLogo, alt: 'Claude Code' },
   codex: { name: 'Codex', logo: openaiLogoSvg, alt: 'Codex', isSvg: true },
+  cohub: { name: 'Cohub', logo: cohubLogoSvg, alt: 'Cohub', isSvg: true },
   devin: { name: 'Devin', logo: devinLogo, alt: 'Devin' },
   cursor: { name: 'Cursor', logo: cursorLogoSvg, alt: 'Cursor CLI', isSvg: true },
   gemini: { name: 'Gemini', logo: geminiLogo, alt: 'Gemini CLI' },

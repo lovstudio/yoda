@@ -7,6 +7,7 @@ import charmIcon from '@/assets/images/charm.png';
 import claudeIcon from '@/assets/images/claude.png';
 import clineIcon from '@/assets/images/cline.png';
 import codebuffIcon from '@/assets/images/codebuff.png';
+import cohubIcon from '@/assets/images/cohub.svg?raw';
 import continueIcon from '@/assets/images/continue.png';
 import cursorlogoIcon from '@/assets/images/cursor.svg?raw';
 import devinIcon from '@/assets/images/devin.png';
@@ -38,6 +39,7 @@ const ICONS: Record<string, string> = {
   'ampcode.png': ampcodeIcon,
   'openai.svg': openaiIcon,
   'claude.png': claudeIcon,
+  'cohub.svg': cohubIcon,
   'droid.svg': factorydroidIcon,
   'gemini.png': geminiIcon,
   'cursor.svg': cursorlogoIcon,
