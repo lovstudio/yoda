@@ -18,10 +18,11 @@ export type WorkspaceNotification = {
   kind: WorkspaceNotificationKind;
   source: WorkspaceNotificationSource;
   createdAt: string;
+  readAt: string | null;
   target?: WorkspaceNotificationTarget;
 };
 
-export type WorkspaceNotificationInput = Omit<WorkspaceNotification, 'id' | 'createdAt'>;
+export type WorkspaceNotificationInput = Omit<WorkspaceNotification, 'id' | 'createdAt' | 'readAt'>;
 
 export type WorkspaceNotificationAction = {
   label: string;
@@ -46,22 +47,37 @@ function createNotificationId(): string {
   return `${Date.now().toString(36)}-${notificationSequence.toString(36)}`;
 }
 
-function isNotification(value: unknown): value is WorkspaceNotification {
-  if (!value || typeof value !== 'object') return false;
+function parseNotification(value: unknown): WorkspaceNotification | null {
+  if (!value || typeof value !== 'object') return null;
   const entry = value as Partial<WorkspaceNotification>;
-  return (
-    typeof entry.id === 'string' &&
-    typeof entry.title === 'string' &&
-    typeof entry.createdAt === 'string' &&
-    (entry.kind === 'info' ||
-      entry.kind === 'success' ||
-      entry.kind === 'error' ||
-      entry.kind === 'loading') &&
-    (entry.source === 'toast' ||
-      entry.source === 'agent' ||
-      entry.source === 'automation' ||
-      entry.source === 'system')
-  );
+  if (
+    typeof entry.id !== 'string' ||
+    typeof entry.title !== 'string' ||
+    typeof entry.createdAt !== 'string' ||
+    (entry.kind !== 'info' &&
+      entry.kind !== 'success' &&
+      entry.kind !== 'error' &&
+      entry.kind !== 'loading') ||
+    (entry.source !== 'toast' &&
+      entry.source !== 'agent' &&
+      entry.source !== 'automation' &&
+      entry.source !== 'system')
+  ) {
+    return null;
+  }
+
+  return {
+    ...entry,
+    id: entry.id,
+    title: entry.title,
+    kind: entry.kind,
+    source: entry.source,
+    createdAt: entry.createdAt,
+    // Entries created before read tracking existed are historical, so migrate
+    // them as read instead of turning the entire retained queue into unread.
+    readAt:
+      entry.readAt === null || typeof entry.readAt === 'string' ? entry.readAt : entry.createdAt,
+  };
 }
 
 export class WorkspaceNotificationStore {
@@ -104,6 +120,7 @@ export class WorkspaceNotificationStore {
       description: input.description?.trim() || undefined,
       details: input.details?.trim() || undefined,
       createdAt: new Date().toISOString(),
+      readAt: null,
     };
     this.entries = [next, ...this.entries.filter((entry) => entry.id !== id)].slice(
       0,
@@ -129,6 +146,24 @@ export class WorkspaceNotificationStore {
     this.actions.delete(id);
     this.entries = [...this.entries];
     this.emit();
+  }
+
+  markRead(id: string): void {
+    this.setReadState(id, true);
+  }
+
+  markUnread(id: string): void {
+    this.setReadState(id, false);
+  }
+
+  markAllRead(): void {
+    this.ensureLoaded();
+    if (this.entries.every((entry) => entry.readAt !== null)) return;
+    const readAt = new Date().toISOString();
+    this.entries = this.entries.map((entry) =>
+      entry.readAt === null ? { ...entry, readAt } : entry
+    );
+    this.persistAndEmit();
   }
 
   remove(id: string): void {
@@ -166,7 +201,10 @@ export class WorkspaceNotificationStore {
       if (!raw) return;
       const parsed: unknown = JSON.parse(raw);
       if (!Array.isArray(parsed)) return;
-      this.entries = parsed.filter(isNotification).slice(0, WORKSPACE_NOTIFICATION_LIMIT);
+      this.entries = parsed
+        .map(parseNotification)
+        .filter((entry): entry is WorkspaceNotification => entry !== null)
+        .slice(0, WORKSPACE_NOTIFICATION_LIMIT);
     } catch {}
   }
 
@@ -176,6 +214,18 @@ export class WorkspaceNotificationStore {
       storage?.setItem(this.storageKey, JSON.stringify(this.entries));
     } catch {}
     this.emit();
+  }
+
+  private setReadState(id: string, read: boolean): void {
+    this.ensureLoaded();
+    const index = this.entries.findIndex((entry) => entry.id === id);
+    if (index === -1) return;
+    const current = this.entries[index];
+    if ((current.readAt !== null) === read) return;
+    const next = [...this.entries];
+    next[index] = { ...current, readAt: read ? new Date().toISOString() : null };
+    this.entries = next;
+    this.persistAndEmit();
   }
 
   private emit(): void {
@@ -200,7 +250,10 @@ export class WorkspaceNotificationStore {
     try {
       const parsed: unknown = JSON.parse(raw);
       return Array.isArray(parsed)
-        ? parsed.filter(isNotification).slice(0, WORKSPACE_NOTIFICATION_LIMIT)
+        ? parsed
+            .map(parseNotification)
+            .filter((entry): entry is WorkspaceNotification => entry !== null)
+            .slice(0, WORKSPACE_NOTIFICATION_LIMIT)
         : [];
     } catch {
       return [];

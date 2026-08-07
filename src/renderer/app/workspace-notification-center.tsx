@@ -1,10 +1,14 @@
 import {
   Bell,
+  CheckCheck,
   CheckCircle2,
   ChevronLeft,
   CircleAlert,
   Info,
   LoaderCircle,
+  Mail,
+  MailOpen,
+  MoreHorizontal,
   Trash2,
 } from 'lucide-react';
 import { useEffect, useState, useSyncExternalStore } from 'react';
@@ -16,6 +20,13 @@ import {
   type WorkspaceNotificationKind,
 } from '@renderer/lib/stores/notification-store';
 import { Button } from '@renderer/lib/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { cn } from '@renderer/utils/utils';
@@ -38,6 +49,7 @@ export function WorkspaceNotificationCenter({
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = notifications.find((notification) => notification.id === selectedId) ?? null;
+  const unreadCount = notifications.filter((notification) => notification.readAt === null).length;
 
   return (
     <Popover
@@ -49,21 +61,21 @@ export function WorkspaceNotificationCenter({
     >
       <PopoverTrigger
         aria-label={t('workspaceRuntime.notifications.triggerLabel', {
-          count: notifications.length,
+          count: unreadCount,
         })}
         className={cn(
           triggerClassName,
-          open || notifications.length > 0 ? 'text-foreground' : 'text-foreground-passive'
+          open || unreadCount > 0 ? 'text-foreground' : 'text-foreground-passive'
         )}
         title={t('workspaceRuntime.notifications.triggerLabel', {
-          count: notifications.length,
+          count: unreadCount,
         })}
       >
         <Bell aria-hidden className="size-3.5" />
         <span className={triggerLabelClassName}>{t('workspaceRuntime.notifications.title')}</span>
-        {notifications.length > 0 ? (
+        {unreadCount > 0 ? (
           <span className="min-w-4 rounded-full bg-foreground px-1 text-center font-mono text-[9px] leading-4 text-background tabular-nums">
-            {notifications.length > 99 ? '99+' : notifications.length}
+            {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         ) : null}
       </PopoverTrigger>
@@ -85,8 +97,14 @@ export function WorkspaceNotificationCenter({
         ) : (
           <NotificationList
             notifications={notifications}
-            onSelect={setSelectedId}
+            onSelect={(id) => {
+              workspaceNotificationStore.markRead(id);
+              setSelectedId(id);
+            }}
             onDelete={(id) => workspaceNotificationStore.remove(id)}
+            onMarkRead={(id) => workspaceNotificationStore.markRead(id)}
+            onMarkUnread={(id) => workspaceNotificationStore.markUnread(id)}
+            onMarkAllRead={() => workspaceNotificationStore.markAllRead()}
           />
         )}
       </PopoverContent>
@@ -98,31 +116,64 @@ function NotificationList({
   notifications,
   onSelect,
   onDelete,
+  onMarkRead,
+  onMarkUnread,
+  onMarkAllRead,
 }: {
   notifications: WorkspaceNotification[];
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
+  onMarkRead: (id: string) => void;
+  onMarkUnread: (id: string) => void;
+  onMarkAllRead: () => void;
 }) {
   const { t } = useTranslation();
+  const unreadCount = notifications.filter((notification) => notification.readAt === null).length;
 
   return (
     <>
-      <div className="border-b border-border p-3">
-        <div className="text-sm font-medium">{t('workspaceRuntime.notifications.title')}</div>
-        <div className="mt-0.5 text-xs text-foreground-passive">
-          {t('workspaceRuntime.notifications.description')}
+      <div className="flex items-start gap-3 border-b border-border p-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium">{t('workspaceRuntime.notifications.title')}</div>
+          <div className="mt-0.5 text-xs text-foreground-passive">
+            {notifications.length > 0
+              ? unreadCount > 0
+                ? t('workspaceRuntime.notifications.summary', {
+                    unread: unreadCount,
+                    total: notifications.length,
+                  })
+                : t('workspaceRuntime.notifications.allReadSummary', {
+                    total: notifications.length,
+                  })
+              : t('workspaceRuntime.notifications.description')}
+          </div>
         </div>
+        {unreadCount > 0 ? (
+          <Button type="button" variant="ghost" size="xs" onClick={onMarkAllRead}>
+            <CheckCheck aria-hidden />
+            {t('workspaceRuntime.notifications.markAllRead')}
+          </Button>
+        ) : null}
       </div>
       {notifications.length > 0 ? (
         <div className="max-h-[min(26rem,calc(100vh-6rem))] overflow-y-auto p-1.5">
           {notifications.map((notification) => (
             <div
               key={notification.id}
-              className="group flex min-w-0 items-center gap-1 rounded-md transition-colors hover:bg-background-2"
+              className={cn(
+                'group relative flex min-w-0 items-center gap-1 rounded-md transition-colors hover:bg-background-2',
+                notification.readAt === null && 'bg-background-secondary/60'
+              )}
             >
+              {notification.readAt === null ? (
+                <span
+                  aria-hidden
+                  className="absolute top-3.5 left-1 size-1.5 rounded-full bg-primary"
+                />
+              ) : null}
               <button
                 type="button"
-                className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-2 py-2 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                className="flex min-w-0 flex-1 items-start gap-2 rounded-md py-2 pr-2 pl-3 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
                 aria-label={t('workspaceRuntime.notifications.openDetails', {
                   title: notification.title,
                 })}
@@ -130,7 +181,14 @@ function NotificationList({
               >
                 <NotificationKindIcon kind={notification.kind} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm leading-5 text-foreground">
+                  <span
+                    className={cn(
+                      'block truncate text-sm leading-5',
+                      notification.readAt === null
+                        ? 'font-medium text-foreground'
+                        : 'text-foreground-muted'
+                    )}
+                  >
                     {notification.title}
                   </span>
                   {notification.description ? (
@@ -143,21 +201,13 @@ function NotificationList({
                   </span>
                 </span>
               </button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                className="mr-1 shrink-0 opacity-40 focus-visible:opacity-100 group-hover:opacity-100"
-                aria-label={t('workspaceRuntime.notifications.delete', {
-                  title: notification.title,
-                })}
-                title={t('workspaceRuntime.notifications.delete', {
-                  title: notification.title,
-                })}
-                onClick={() => onDelete(notification.id)}
-              >
-                <Trash2 aria-hidden />
-              </Button>
+              <NotificationActionsMenu
+                notification={notification}
+                className="mr-1 opacity-40 focus-visible:opacity-100 group-hover:opacity-100"
+                onDelete={() => onDelete(notification.id)}
+                onMarkRead={() => onMarkRead(notification.id)}
+                onMarkUnread={() => onMarkUnread(notification.id)}
+              />
             </div>
           ))}
         </div>
@@ -226,21 +276,12 @@ function NotificationDetails({
         <Button type="button" variant="ghost" size="xs" onClick={() => void copyDetails()}>
           {t(`workspaceRuntime.notifications.copy.${copyState}`)}
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="hover:text-destructive"
-          aria-label={t('workspaceRuntime.notifications.delete', {
-            title: notification.title,
-          })}
-          title={t('workspaceRuntime.notifications.delete', {
-            title: notification.title,
-          })}
-          onClick={onDelete}
-        >
-          <Trash2 aria-hidden />
-        </Button>
+        <NotificationActionsMenu
+          notification={notification}
+          onDelete={onDelete}
+          onMarkRead={() => workspaceNotificationStore.markRead(notification.id)}
+          onMarkUnread={() => workspaceNotificationStore.markUnread(notification.id)}
+        />
       </div>
       <div className="max-h-[min(28rem,calc(100vh-6rem))] overflow-y-auto p-3">
         <div className="flex items-start gap-2">
@@ -288,6 +329,63 @@ function NotificationDetails({
         </div>
       </div>
     </>
+  );
+}
+
+function NotificationActionsMenu({
+  notification,
+  className,
+  onDelete,
+  onMarkRead,
+  onMarkUnread,
+}: {
+  notification: WorkspaceNotification;
+  className?: string;
+  onDelete: () => void;
+  onMarkRead: () => void;
+  onMarkUnread: () => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className={cn('shrink-0', className)}
+            aria-label={t('workspaceRuntime.notifications.moreActions', {
+              title: notification.title,
+            })}
+            title={t('workspaceRuntime.notifications.moreActions', {
+              title: notification.title,
+            })}
+          >
+            <MoreHorizontal aria-hidden />
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-36">
+        {notification.readAt === null ? (
+          <DropdownMenuItem onClick={onMarkRead}>
+            <MailOpen aria-hidden />
+            {t('workspaceRuntime.notifications.markRead')}
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onClick={onMarkUnread}>
+            <Mail aria-hidden />
+            {t('workspaceRuntime.notifications.markUnread')}
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onClick={onDelete}>
+          <Trash2 aria-hidden />
+          {t('workspaceRuntime.notifications.deleteAction')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

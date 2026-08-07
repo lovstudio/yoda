@@ -49,6 +49,45 @@ describe('WorkspaceNotificationStore', () => {
     expect(storage.removeItem).toHaveBeenCalledWith('notifications');
   });
 
+  it('tracks unread state per notification and supports marking the queue read', () => {
+    const storage = createStorage();
+    const store = new WorkspaceNotificationStore('notifications', () => storage);
+    const first = store.enqueue({ title: 'First', kind: 'info', source: 'system' });
+    const second = store.enqueue({ title: 'Second', kind: 'success', source: 'toast' });
+
+    expect(store.getSnapshot().map((entry) => entry.readAt)).toEqual([null, null]);
+
+    store.markRead(first);
+    expect(store.getSnapshot().find((entry) => entry.id === first)?.readAt).not.toBeNull();
+    expect(store.getSnapshot().find((entry) => entry.id === second)?.readAt).toBeNull();
+
+    store.markUnread(first);
+    expect(store.getSnapshot().find((entry) => entry.id === first)?.readAt).toBeNull();
+
+    store.markAllRead();
+    expect(store.getSnapshot().every((entry) => entry.readAt !== null)).toBe(true);
+    expect(storage.setItem).toHaveBeenCalled();
+  });
+
+  it('migrates retained notifications from before read tracking as read', () => {
+    const storage = createStorage();
+    storage.setItem(
+      'notifications',
+      JSON.stringify([
+        {
+          id: 'legacy',
+          title: 'Earlier notification',
+          kind: 'info',
+          source: 'system',
+          createdAt: '2026-08-01T00:00:00.000Z',
+        },
+      ])
+    );
+    const store = new WorkspaceNotificationStore('notifications', () => storage);
+
+    expect(store.getSnapshot()[0].readAt).toBe('2026-08-01T00:00:00.000Z');
+  });
+
   it('keeps live actions executable without persisting callbacks', () => {
     const storage = createStorage();
     const store = new WorkspaceNotificationStore('notifications', () => storage);

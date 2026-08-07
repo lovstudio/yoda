@@ -18,6 +18,10 @@ vi.mock('react-i18next', () => ({
       if (key === 'workspaceRuntime.notifications.delete') {
         return `Delete ${options?.title ?? ''}`;
       }
+      if (key === 'workspaceRuntime.notifications.moreActions') {
+        return `More ${options?.title ?? ''}`;
+      }
+      if (key === 'workspaceRuntime.notifications.deleteAction') return 'Delete';
       return key;
     },
     i18n: { language: 'en' },
@@ -86,6 +90,11 @@ describe('WorkspaceNotificationCenter', () => {
     await act(async () => openDetails?.click());
 
     expect(document.body.textContent).toContain('Artifact: release/Yoda.dmg');
+    expect(
+      workspaceNotificationStore.getSnapshot().find((entry) => entry.title === 'Build finished')
+        ?.readAt
+    ).not.toBeNull();
+    expect(host.querySelector('[aria-label="Notifications 1"]')).not.toBeNull();
 
     const actionButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
       (button) => button.textContent?.includes('Open build')
@@ -94,13 +103,24 @@ describe('WorkspaceNotificationCenter', () => {
     await act(async () => actionButton?.click());
     expect(runAction).toHaveBeenCalledOnce();
 
-    const deleteButton = document.querySelector<HTMLButtonElement>(
-      '[aria-label="Delete Build finished"]'
+    const moreButton = document.querySelector<HTMLButtonElement>(
+      '[aria-label="More Build finished"]'
     );
+    await act(async () => moreButton?.click());
+    const deleteButton = Array.from(
+      document.querySelectorAll<HTMLElement>('[role="menuitem"]')
+    ).find((item) => item.textContent?.trim() === 'Delete');
     await act(async () => deleteButton?.click());
 
     expect(workspaceNotificationStore.getSnapshot().map((entry) => entry.title)).toEqual([
       'Agent needs input',
     ]);
+
+    const markAllReadButton = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('button')
+    ).find((button) => button.textContent?.includes('workspaceRuntime.notifications.markAllRead'));
+    await act(async () => markAllReadButton?.click());
+    expect(workspaceNotificationStore.getSnapshot()[0].readAt).not.toBeNull();
+    expect(host.querySelector('[aria-label="Notifications 0"]')).not.toBeNull();
   });
 });
