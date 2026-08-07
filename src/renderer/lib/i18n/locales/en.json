@@ -809,6 +809,11 @@
       "plainDescription": "Work on Plain threads",
       "forgejoDescription": "Work on Forgejo issues",
       "featurebaseDescription": "Work on Featurebase posts",
+      "asanaDescription": "Work on Asana tasks assigned to you",
+      "mondayDescription": "Start work from Monday.com items",
+      "trelloDescription": "Start work from Trello cards",
+      "planeDescription": "Work on Plane work items",
+      "notionDescription": "Start work from Notion database pages",
       "litellmDescription": "Manage multiple model services with automatic routing, load balancing, and failover",
       "litellmConnectedDescription": "Gateway: {{endpoint}}",
       "litellmManagedDescription": "Yoda downloads LiteLLM and PostgreSQL, generates credentials, and connects the local gateway",
@@ -4961,6 +4966,34 @@
       "forgejo": {
         "description": "Create a Forgejo access token and paste it below.",
         "tokenPlaceholder": "forgejo token"
+      },
+      "asana": {
+        "title": "Asana personal access token",
+        "help": "In Asana, open My Settings → Apps → Developer apps and create a personal access token.",
+        "tokenPlaceholder": "Asana personal access token"
+      },
+      "monday": {
+        "title": "Monday.com API token",
+        "help": "Generate a token from the API section in Monday.com administration settings.",
+        "tokenPlaceholder": "Monday.com API token"
+      },
+      "trello": {
+        "title": "Trello API credentials",
+        "help": "Create a Power-Up in Trello administration to get an API key, then generate a token from its API key page.",
+        "keyPlaceholder": "Trello API key",
+        "tokenPlaceholder": "Trello API token"
+      },
+      "plane": {
+        "title": "Plane API credentials",
+        "help": "Keep the default URL for Plane Cloud. For self-hosted Plane, enter the instance API URL, workspace slug, and API key.",
+        "urlPlaceholder": "https://api.plane.so",
+        "workspacePlaceholder": "Workspace slug",
+        "keyPlaceholder": "Plane API key"
+      },
+      "notion": {
+        "title": "Notion integration token",
+        "help": "Create a Notion internal integration, then share each page or database you want Yoda to access with it.",
+        "tokenPlaceholder": "ntn_…"
       }
     },
     "connectFailed": "Failed to connect.",
@@ -4989,6 +5022,26 @@
       "featurebase": {
         "title": "Connect Featurebase",
         "subtitle": "Enter your Featurebase API key to connect your workspace."
+      },
+      "asana": {
+        "title": "Connect Asana",
+        "subtitle": "Browse and search incomplete tasks assigned to you."
+      },
+      "monday": {
+        "title": "Connect Monday.com",
+        "subtitle": "Browse and search items across your workspace."
+      },
+      "trello": {
+        "title": "Connect Trello",
+        "subtitle": "Browse open cards from your recently active boards."
+      },
+      "plane": {
+        "title": "Connect Plane",
+        "subtitle": "Connect Plane Cloud or a self-hosted instance."
+      },
+      "notion": {
+        "title": "Connect Notion",
+        "subtitle": "Browse pages from databases shared with your integration."
       }
     }
   },

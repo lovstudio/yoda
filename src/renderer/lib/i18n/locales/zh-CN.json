@@ -809,6 +809,11 @@
       "plainDescription": "在 Plain 工单中协作",
       "forgejoDescription": "在 Forgejo issue 中协作",
       "featurebaseDescription": "在 Featurebase 帖子上协作",
+      "asanaDescription": "处理分配给你的 Asana 任务",
+      "mondayDescription": "从 Monday.com 条目开始工作",
+      "trelloDescription": "从 Trello 卡片开始工作",
+      "planeDescription": "处理 Plane 工作项",
+      "notionDescription": "从 Notion 数据库页面开始工作",
       "litellmDescription": "统一管理多个模型服务，并提供自动路由、负载均衡与故障切换",
       "litellmConnectedDescription": "Gateway：{{endpoint}}",
       "litellmManagedDescription": "Yoda 将自动下载 LiteLLM 与 PostgreSQL、生成密钥并完成本机连接",
@@ -4961,6 +4966,34 @@
       "forgejo": {
         "description": "创建 Forgejo access token 并粘贴到下方。",
         "tokenPlaceholder": "forgejo token"
+      },
+      "asana": {
+        "title": "Asana 个人访问令牌",
+        "help": "在 Asana 的「我的设置 → 应用 → 开发者应用」中创建个人访问令牌。",
+        "tokenPlaceholder": "Asana 个人访问令牌"
+      },
+      "monday": {
+        "title": "Monday.com API Token",
+        "help": "在 Monday.com 管理后台的 API 设置中生成 Token。",
+        "tokenPlaceholder": "Monday.com API Token"
+      },
+      "trello": {
+        "title": "Trello API 凭据",
+        "help": "在 Trello Power-Ups 管理页创建 Power-Up 获取 API Key，再从 Key 页面生成 Token。",
+        "keyPlaceholder": "Trello API Key",
+        "tokenPlaceholder": "Trello API Token"
+      },
+      "plane": {
+        "title": "Plane API 凭据",
+        "help": "Plane Cloud 保留默认地址；自托管实例请填写其 API 地址、工作区 slug 与 API Key。",
+        "urlPlaceholder": "https://api.plane.so",
+        "workspacePlaceholder": "工作区 slug",
+        "keyPlaceholder": "Plane API Key"
+      },
+      "notion": {
+        "title": "Notion 集成令牌",
+        "help": "创建 Notion 内部集成，并把需要访问的页面或数据库共享给该集成。",
+        "tokenPlaceholder": "ntn_…"
       }
     },
     "connectFailed": "连接失败。",
@@ -4989,6 +5022,26 @@
       "featurebase": {
         "title": "连接 Featurebase",
         "subtitle": "输入 Featurebase API Key 以连接工作区。"
+      },
+      "asana": {
+        "title": "连接 Asana",
+        "subtitle": "连接后可浏览和搜索分配给你的未完成任务。"
+      },
+      "monday": {
+        "title": "连接 Monday.com",
+        "subtitle": "连接后可浏览和搜索工作区条目。"
+      },
+      "trello": {
+        "title": "连接 Trello",
+        "subtitle": "连接后可浏览最近活跃看板中的开放卡片。"
+      },
+      "plane": {
+        "title": "连接 Plane",
+        "subtitle": "支持 Plane Cloud 与自托管实例。"
+      },
+      "notion": {
+        "title": "连接 Notion",
+        "subtitle": "连接后可浏览已共享数据库中的页面。"
       }
     }
   },

@@ -36,6 +36,26 @@ export const ISSUE_PROVIDER_CAPABILITIES: Record<IssueProviderType, IssueProvide
     requiresProjectPath: false,
     requiresRepositoryUrl: false,
   },
+  asana: {
+    requiresProjectPath: false,
+    requiresRepositoryUrl: false,
+  },
+  monday: {
+    requiresProjectPath: false,
+    requiresRepositoryUrl: false,
+  },
+  trello: {
+    requiresProjectPath: false,
+    requiresRepositoryUrl: false,
+  },
+  plane: {
+    requiresProjectPath: false,
+    requiresRepositoryUrl: false,
+  },
+  notion: {
+    requiresProjectPath: false,
+    requiresRepositoryUrl: false,
+  },
 };
 
 export type ConnectionStatus = {

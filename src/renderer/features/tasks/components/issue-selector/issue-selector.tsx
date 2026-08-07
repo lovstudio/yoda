@@ -24,6 +24,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@renderer/lib/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
+import { hydrateIssueContext } from './hydrate-issue';
 import { getLinkedIssueMap, type LinkedIssueInfo } from './use-linked-issue-urls';
 import { useIssueSearch } from './useIssueSearch';
 
@@ -168,15 +169,30 @@ export const IssueSelector = observer(function IssueSelector({
   const [comboboxOpen, setComboboxOpen] = useState(false);
   const providerSelectOpenRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const hydrateRequestRef = useRef(0);
 
   const handleSelectIssueProvider = useCallback(
     (provider: Issue['provider']) => {
+      hydrateRequestRef.current += 1;
       setSelectedIssueProvider(provider);
       if (value?.provider !== provider) {
         onValueChange(null);
       }
     },
     [setSelectedIssueProvider, value, onValueChange]
+  );
+
+  const handleIssueValueChange = useCallback(
+    async (next: Issue | null) => {
+      const requestId = ++hydrateRequestRef.current;
+      if (!next) {
+        onValueChange(null);
+        return;
+      }
+      const hydrated = await hydrateIssueContext(next);
+      if (requestId === hydrateRequestRef.current) onValueChange(hydrated);
+    },
+    [onValueChange]
   );
 
   const leftAddon = issueProvider ? (
@@ -228,7 +244,7 @@ export const IssueSelector = observer(function IssueSelector({
             issue ? `${issue.identifier} ${issue.title}` : ''
           }
           value={value}
-          onValueChange={(next: Issue | null) => onValueChange(next)}
+          onValueChange={(next: Issue | null) => void handleIssueValueChange(next)}
           onInputValueChange={(val: string, { reason }: { reason: string }) => {
             if (reason !== 'item-press') handleSetSearchTerm(val);
           }}

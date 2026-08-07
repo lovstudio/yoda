@@ -13,7 +13,19 @@ export type QuickActionTaskSource = {
 };
 
 export type Issue = {
-  provider: 'github' | 'linear' | 'jira' | 'gitlab' | 'plain' | 'forgejo' | 'featurebase';
+  provider:
+    | 'github'
+    | 'linear'
+    | 'jira'
+    | 'gitlab'
+    | 'plain'
+    | 'forgejo'
+    | 'featurebase'
+    | 'asana'
+    | 'monday'
+    | 'trello'
+    | 'plane'
+    | 'notion';
   url: string;
   title: string;
   identifier: string;

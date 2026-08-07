@@ -140,7 +140,21 @@ export type TelemetryEventProperties = {
 
   integration_connected: { provider: 'github' | 'linear' | 'jira' };
   integration_disconnected: { provider: 'github' | 'linear' | 'jira' };
-  issue_linked_to_task: { provider: 'github' | 'linear' | 'jira' | 'gitlab' | 'plain' | 'forgejo' };
+  issue_linked_to_task: {
+    provider:
+      | 'github'
+      | 'linear'
+      | 'jira'
+      | 'gitlab'
+      | 'plain'
+      | 'forgejo'
+      | 'featurebase'
+      | 'asana'
+      | 'monday'
+      | 'trello'
+      | 'plane'
+      | 'notion';
+  };
 
   open_in_external: { app: OpenInAppId | 'browser' };
   ssh_connection_attempted: { success: boolean };

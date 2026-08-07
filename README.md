@@ -164,6 +164,12 @@ Yoda 可以把 ticket、issue 和支持线程直接交给 agent。
 | [GitLab Issues](https://docs.gitlab.com/user/project/issues/) | GitLab URL + PAT with `read_api` |
 | [Forgejo Issues](https://forgejo.org/) | Forgejo URL + API token |
 | [Plain Threads](https://www.plain.com/) | Plain API key |
+| [Featurebase](https://www.featurebase.app/) | Featurebase API key |
+| [Asana](https://asana.com/) | Personal access token |
+| [Monday.com](https://monday.com/) | API token |
+| [Trello](https://trello.com/) | API key + API token |
+| [Plane](https://plane.so/) | API base URL + workspace slug + API key |
+| [Notion](https://www.notion.so/) | Integration token |
 
 <a id="architecture"></a>
 
@@ -186,7 +192,7 @@ Yoda 是一个 Electron 桌面应用，主要分为三层：
 - **前端**：React、MobX、TanStack Query、Radix UI、xterm.js、Tailwind CSS
 - **移动端**：Expo、React Native
 - **主进程**：TypeScript、Drizzle ORM、SQLite、node-pty、ssh2
-- **集成**：GitHub、Linear、Jira、GitLab、Forgejo、Plain、MCP
+- **集成**：GitHub、Linear、Jira、GitLab、Forgejo、Plain、Featurebase、Asana、Monday.com、Trello、Plane、Notion、MCP
 - **质量与发布**：Vitest、ESLint、Prettier、Changesets、GitHub Actions
 
 <a id="contributing"></a>

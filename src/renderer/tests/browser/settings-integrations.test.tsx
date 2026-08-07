@@ -36,6 +36,11 @@ vi.mock('@renderer/features/integrations/integrations-provider', () => ({
       plain: {},
       forgejo: {},
       featurebase: {},
+      asana: {},
+      monday: {},
+      trello: {},
+      plane: {},
+      notion: {},
     },
     isLinearConnected: false,
     isLinearLoading: false,
@@ -55,6 +60,21 @@ vi.mock('@renderer/features/integrations/integrations-provider', () => ({
     isFeaturebaseConnected: false,
     isFeaturebaseLoading: false,
     disconnectFeaturebase: vi.fn(),
+    isAsanaConnected: false,
+    isAsanaLoading: false,
+    disconnectAsana: vi.fn(),
+    isMondayConnected: false,
+    isMondayLoading: false,
+    disconnectMonday: vi.fn(),
+    isTrelloConnected: false,
+    isTrelloLoading: false,
+    disconnectTrello: vi.fn(),
+    isPlaneConnected: false,
+    isPlaneLoading: false,
+    disconnectPlane: vi.fn(),
+    isNotionConnected: false,
+    isNotionLoading: false,
+    disconnectNotion: vi.fn(),
   }),
 }));
 
@@ -111,6 +131,14 @@ describe('Settings integrations', () => {
     expect(host.textContent).not.toContain('CLIProxyAPI');
     expect(host.textContent).toContain('GitHub');
     expect(host.textContent).toContain('Linear');
+  });
+
+  it('shows the latest upstream issue integrations, including Notion', async () => {
+    await renderIntegrations();
+
+    for (const provider of ['asana', 'monday', 'trello', 'plane', 'notion']) {
+      expect(host.querySelector(`[data-testid="integration-card-${provider}"]`)).not.toBeNull();
+    }
   });
 
   it('shows Lovcode and opens the download page when it is not installed', async () => {

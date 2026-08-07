@@ -11,6 +11,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/lib/ui/i
 import { Kbd } from '@renderer/lib/ui/kbd';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@renderer/lib/ui/select';
 import { cn } from '@renderer/utils/utils';
+import { hydrateIssueContext } from './hydrate-issue';
 import { ConnectIssueIntegrationPlaceholder, IssueRow, ProviderLogo } from './issue-selector';
 import { getLinkedIssueMap } from './use-linked-issue-urls';
 import { useIssueSearch } from './useIssueSearch';
@@ -52,6 +53,7 @@ export const InlineIssueSelector = observer(function InlineIssueSelector({
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const hydrateRequestRef = useRef(0);
 
   // Scroll highlighted item into view whenever it changes
   useEffect(() => {
@@ -73,6 +75,7 @@ export const InlineIssueSelector = observer(function InlineIssueSelector({
 
   const handleProviderChange = useCallback(
     (provider: Issue['provider']) => {
+      hydrateRequestRef.current += 1;
       setSelectedIssueProvider(provider);
       if (value?.provider !== provider) {
         onValueChange(null);
@@ -83,8 +86,22 @@ export const InlineIssueSelector = observer(function InlineIssueSelector({
     [setSelectedIssueProvider, value, onValueChange]
   );
 
+  const handleIssueSelection = useCallback(
+    async (issue: Issue | null) => {
+      const requestId = ++hydrateRequestRef.current;
+      if (!issue) {
+        onValueChange(null);
+        return;
+      }
+      const hydrated = await hydrateIssueContext(issue);
+      if (requestId === hydrateRequestRef.current) onValueChange(hydrated);
+    },
+    [onValueChange]
+  );
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.nativeEvent.isComposing) return;
       if (issues.length === 0) return;
       switch (e.key) {
         case 'ArrowDown':
@@ -99,7 +116,7 @@ export const InlineIssueSelector = observer(function InlineIssueSelector({
           e.preventDefault();
           const issue = issues[highlightedIndex];
           if (!issue) break;
-          onValueChange(issue === value ? null : issue);
+          void handleIssueSelection(issue === value ? null : issue);
           break;
         }
         case 'Escape':
@@ -112,7 +129,7 @@ export const InlineIssueSelector = observer(function InlineIssueSelector({
           break;
       }
     },
-    [issues, highlightedIndex, value, query, onValueChange, handleSetSearchTerm]
+    [issues, highlightedIndex, value, query, handleIssueSelection, handleSetSearchTerm]
   );
 
   const providerAddon = issueProvider ? (
@@ -196,7 +213,7 @@ export const InlineIssueSelector = observer(function InlineIssueSelector({
                   isSelected && 'bg-background-2'
                 )}
                 onMouseEnter={() => setHighlightedIndex(index)}
-                onClick={() => onValueChange(isSelected ? null : issue)}
+                onClick={() => void handleIssueSelection(isSelected ? null : issue)}
               >
                 <IssueRow issue={issue} linkedTo={linkedTo} />
                 {isSelected && (
