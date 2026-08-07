@@ -1,6 +1,10 @@
 import { isValidElement, type ReactNode } from 'react';
 import { toast as sonnerToast, type ExternalToast } from 'sonner';
 import i18n from '@renderer/lib/i18n';
+import {
+  workspaceNotificationStore,
+  type WorkspaceNotificationKind,
+} from '@renderer/lib/stores/notification-store';
 
 type ToastAction = {
   label: string;
@@ -23,13 +27,22 @@ type ToastCopyPayload = {
   debugInfo?: unknown;
 };
 
+const toastNotificationIds = new Map<string, string>();
+
 // The copy action is only attached to error/destructive toasts — that is the
 // only place copying the message or debug info is useful. Success, loading and
 // neutral info toasts (including ones with their own action like "Undo") stay
 // clean.
 function toast(input: Toast | ToastDisplayContent, externalOptions?: ExternalToast) {
   if (!isToastObject(input)) {
-    return sonnerToast(input, externalOptions);
+    const toastId = sonnerToast(input, externalOptions);
+    recordToast(
+      'info',
+      { title: input, description: externalOptions?.description },
+      toastId,
+      externalOptions
+    );
+    return toastId;
   }
 
   const { title, description, variant, action, debugInfo } = input;
@@ -43,22 +56,36 @@ function toast(input: Toast | ToastDisplayContent, externalOptions?: ExternalToa
 
   if (variant === 'destructive') {
     addCopyAction(options, { title, description, debugInfo });
-    return sonnerToast.error(title, options);
+    const toastId = sonnerToast.error(title, options);
+    recordToast('error', { title, description, debugInfo }, toastId, options);
+    return toastId;
   }
-  return sonnerToast(title ?? '', options);
+  const toastId = sonnerToast(title ?? '', options);
+  recordToast('info', { title, description, debugInfo }, toastId, options);
+  return toastId;
 }
 
-toast.success = (message: ToastDisplayContent, options?: ExternalToast) =>
-  sonnerToast.success(message, options);
+toast.success = (message: ToastDisplayContent, options?: ExternalToast) => {
+  const toastId = sonnerToast.success(message, options);
+  recordToast('success', { title: message, description: options?.description }, toastId, options);
+  return toastId;
+};
 
-toast.error = (message: ToastDisplayContent, options?: ExternalToast) =>
-  sonnerToast.error(
-    message,
-    withCopyAction(options, { title: message, description: options?.description })
-  );
+toast.error = (message: ToastDisplayContent, options?: ExternalToast) => {
+  const nextOptions = withCopyAction(options, {
+    title: message,
+    description: options?.description,
+  });
+  const toastId = sonnerToast.error(message, nextOptions);
+  recordToast('error', { title: message, description: options?.description }, toastId, nextOptions);
+  return toastId;
+};
 
-toast.loading = (message: ToastDisplayContent, options?: ExternalToast) =>
-  sonnerToast.loading(message, options);
+toast.loading = (message: ToastDisplayContent, options?: ExternalToast) => {
+  const toastId = sonnerToast.loading(message, options);
+  recordToast('loading', { title: message, description: options?.description }, toastId, options);
+  return toastId;
+};
 
 toast.dismiss = sonnerToast.dismiss;
 
@@ -100,16 +127,16 @@ function addCopyAction(options: ExternalToast, payload: ToastCopyPayload): void 
 
 async function copyToastContent(payload: ToastCopyPayload): Promise<void> {
   try {
-    await writeTextToClipboard(formatToastCopyText(payload));
-    sonnerToast.success(
+    await copyTextToClipboard(formatToastCopyText(payload));
+    toast.success(
       i18n.t(payload.debugInfo !== undefined ? 'common.debugInfoCopied' : 'common.copied')
     );
   } catch {
-    sonnerToast.error(i18n.t('common.copyFailed'));
+    toast.error(i18n.t('common.copyFailed'));
   }
 }
 
-async function writeTextToClipboard(text: string): Promise<void> {
+export async function copyTextToClipboard(text: string): Promise<void> {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
     return;
@@ -133,6 +160,30 @@ async function writeTextToClipboard(text: string): Promise<void> {
   } finally {
     document.body.removeChild(textArea);
   }
+}
+
+function recordToast(
+  kind: WorkspaceNotificationKind,
+  payload: ToastCopyPayload,
+  toastId: string | number,
+  options?: ExternalToast
+): void {
+  const titleText = nodeToText(payload.title);
+  const descriptionText = nodeToText(payload.description);
+  const title = titleText ?? descriptionText ?? i18n.t('workspaceRuntime.notifications.untitled');
+  const details = formatToastCopyText(payload) || title;
+  const toastKey = String(options?.id ?? toastId);
+  const notificationId = workspaceNotificationStore.enqueue(
+    {
+      title,
+      description: titleText ? (descriptionText ?? undefined) : undefined,
+      details,
+      kind,
+      source: 'toast',
+    },
+    toastNotificationIds.get(toastKey)
+  );
+  toastNotificationIds.set(toastKey, notificationId);
 }
 
 function formatDebugInfo(debugInfo: unknown): string {

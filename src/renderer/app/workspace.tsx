@@ -2,6 +2,7 @@ import { observer } from 'mobx-react-lite';
 import { AppSidePane } from '@renderer/app/app-side-pane';
 import { moveDraggedTabToStrip } from '@renderer/app/open-task-target';
 import { useTabDropZone } from '@renderer/app/tab-drag';
+import { WorkspaceNotificationEvents } from '@renderer/app/workspace-notification-events';
 import { WorkspaceRuntimeBar } from '@renderer/app/workspace-runtime-bar';
 import { WorkspaceTerminalPanel } from '@renderer/app/workspace-terminal-panel';
 import { LeftSidebar } from '@renderer/features/sidebar/left-sidebar';
@@ -66,6 +67,7 @@ export const Workspace = observer(function Workspace() {
       <MonacoKeyboardBridge />
       <TmuxUnavailableNotifier />
       <QuitAgentSessionsPrompt />
+      <WorkspaceNotificationEvents />
       <WorkspaceLayout
         leftSidebar={
           <ErrorBoundary variant="inline" componentName="LeftSidebar">

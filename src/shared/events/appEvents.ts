@@ -31,6 +31,23 @@ export const notificationFocusTaskChannel = defineEvent<{
   conversationId?: string;
 }>('notification:focus-task');
 
+export type AppNotificationCreated = {
+  title: string;
+  description?: string;
+  details?: string;
+  kind: 'info' | 'success' | 'error';
+  source: 'agent' | 'automation' | 'system';
+  messageKey?: 'agentCompleted' | 'agentAwaitingInput';
+  target?: {
+    projectId: string;
+    taskId: string;
+    conversationId?: string;
+  };
+};
+
+export const notificationCreatedChannel =
+  defineEvent<AppNotificationCreated>('notification:created');
+
 export const deepLinkOpenChannel = defineEvent<DeepLinkTarget>('deep-link:open');
 
 export type TaskWindowReturnPayload = {

@@ -1,0 +1,301 @@
+import {
+  Bell,
+  CheckCircle2,
+  ChevronLeft,
+  CircleAlert,
+  Info,
+  LoaderCircle,
+  Trash2,
+} from 'lucide-react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useTranslation } from 'react-i18next';
+import { copyTextToClipboard } from '@renderer/lib/hooks/use-toast';
+import {
+  workspaceNotificationStore,
+  type WorkspaceNotification,
+  type WorkspaceNotificationKind,
+} from '@renderer/lib/stores/notification-store';
+import { Button } from '@renderer/lib/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
+import { RelativeTime } from '@renderer/lib/ui/relative-time';
+import { cn } from '@renderer/utils/utils';
+
+type WorkspaceNotificationCenterProps = {
+  triggerClassName: string;
+  triggerLabelClassName: string;
+};
+
+export function WorkspaceNotificationCenter({
+  triggerClassName,
+  triggerLabelClassName,
+}: WorkspaceNotificationCenterProps) {
+  const { t } = useTranslation();
+  const notifications = useSyncExternalStore(
+    workspaceNotificationStore.subscribe,
+    workspaceNotificationStore.getSnapshot,
+    workspaceNotificationStore.getSnapshot
+  );
+  const [open, setOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = notifications.find((notification) => notification.id === selectedId) ?? null;
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setSelectedId(null);
+      }}
+    >
+      <PopoverTrigger
+        aria-label={t('workspaceRuntime.notifications.triggerLabel', {
+          count: notifications.length,
+        })}
+        className={cn(
+          triggerClassName,
+          open || notifications.length > 0 ? 'text-foreground' : 'text-foreground-passive'
+        )}
+        title={t('workspaceRuntime.notifications.triggerLabel', {
+          count: notifications.length,
+        })}
+      >
+        <Bell aria-hidden className="size-3.5" />
+        <span className={triggerLabelClassName}>{t('workspaceRuntime.notifications.title')}</span>
+        {notifications.length > 0 ? (
+          <span className="min-w-4 rounded-full bg-foreground px-1 text-center font-mono text-[9px] leading-4 text-background tabular-nums">
+            {notifications.length > 99 ? '99+' : notifications.length}
+          </span>
+        ) : null}
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        side="top"
+        sideOffset={8}
+        className="w-[min(26rem,calc(100vw-1rem))] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+      >
+        {selected ? (
+          <NotificationDetails
+            notification={selected}
+            onBack={() => setSelectedId(null)}
+            onDelete={() => {
+              workspaceNotificationStore.remove(selected.id);
+              setSelectedId(null);
+            }}
+          />
+        ) : (
+          <NotificationList
+            notifications={notifications}
+            onSelect={setSelectedId}
+            onDelete={(id) => workspaceNotificationStore.remove(id)}
+          />
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function NotificationList({
+  notifications,
+  onSelect,
+  onDelete,
+}: {
+  notifications: WorkspaceNotification[];
+  onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <>
+      <div className="border-b border-border p-3">
+        <div className="text-sm font-medium">{t('workspaceRuntime.notifications.title')}</div>
+        <div className="mt-0.5 text-xs text-foreground-passive">
+          {t('workspaceRuntime.notifications.description')}
+        </div>
+      </div>
+      {notifications.length > 0 ? (
+        <div className="max-h-[min(26rem,calc(100vh-6rem))] overflow-y-auto p-1.5">
+          {notifications.map((notification) => (
+            <div
+              key={notification.id}
+              className="group flex min-w-0 items-center gap-1 rounded-md transition-colors hover:bg-background-2"
+            >
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-2 py-2 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                aria-label={t('workspaceRuntime.notifications.openDetails', {
+                  title: notification.title,
+                })}
+                onClick={() => onSelect(notification.id)}
+              >
+                <NotificationKindIcon kind={notification.kind} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm leading-5 text-foreground">
+                    {notification.title}
+                  </span>
+                  {notification.description ? (
+                    <span className="mt-0.5 block truncate text-[11px] leading-4 text-foreground-passive">
+                      {notification.description}
+                    </span>
+                  ) : null}
+                  <span className="mt-0.5 block text-[10px] leading-4 text-foreground-passive">
+                    <RelativeTime value={notification.createdAt} />
+                  </span>
+                </span>
+              </button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="mr-1 shrink-0 opacity-40 focus-visible:opacity-100 group-hover:opacity-100"
+                aria-label={t('workspaceRuntime.notifications.delete', {
+                  title: notification.title,
+                })}
+                title={t('workspaceRuntime.notifications.delete', {
+                  title: notification.title,
+                })}
+                onClick={() => onDelete(notification.id)}
+              >
+                <Trash2 aria-hidden />
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="px-4 py-10 text-center">
+          <Bell aria-hidden className="mx-auto size-5 text-foreground-disabled" />
+          <div className="mt-2 text-sm text-foreground-muted">
+            {t('workspaceRuntime.notifications.empty')}
+          </div>
+          <div className="mt-1 text-xs text-foreground-passive">
+            {t('workspaceRuntime.notifications.emptyDescription')}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function NotificationDetails({
+  notification,
+  onBack,
+  onDelete,
+}: {
+  notification: WorkspaceNotification;
+  onBack: () => void;
+  onDelete: () => void;
+}) {
+  const { t } = useTranslation();
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const details =
+    notification.details ??
+    [notification.title, notification.description].filter(Boolean).join('\n\n');
+
+  useEffect(() => {
+    if (copyState === 'idle') return;
+    const timer = window.setTimeout(() => setCopyState('idle'), 2_000);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
+  const copyDetails = async () => {
+    try {
+      await copyTextToClipboard(details);
+      setCopyState('copied');
+    } catch {
+      setCopyState('failed');
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center gap-2 border-b border-border p-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label={t('workspaceRuntime.notifications.back')}
+          title={t('workspaceRuntime.notifications.back')}
+          onClick={onBack}
+        >
+          <ChevronLeft aria-hidden />
+        </Button>
+        <div className="min-w-0 flex-1 truncate text-sm font-medium">
+          {t('workspaceRuntime.notifications.detailsTitle')}
+        </div>
+        <Button type="button" variant="ghost" size="xs" onClick={() => void copyDetails()}>
+          {t(`workspaceRuntime.notifications.copy.${copyState}`)}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="hover:text-destructive"
+          aria-label={t('workspaceRuntime.notifications.delete', {
+            title: notification.title,
+          })}
+          title={t('workspaceRuntime.notifications.delete', {
+            title: notification.title,
+          })}
+          onClick={onDelete}
+        >
+          <Trash2 aria-hidden />
+        </Button>
+      </div>
+      <div className="max-h-[min(28rem,calc(100vh-6rem))] overflow-y-auto p-3">
+        <div className="flex items-start gap-2">
+          <NotificationKindIcon kind={notification.kind} className="mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium text-foreground">{notification.title}</div>
+            {notification.description ? (
+              <div className="mt-1 text-xs leading-relaxed text-foreground-muted">
+                {notification.description}
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <dl className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-y border-border py-3 text-[11px]">
+          <dt className="text-foreground-passive">{t('workspaceRuntime.notifications.type')}</dt>
+          <dd className="text-foreground-muted">
+            {t(`workspaceRuntime.notifications.kind.${notification.kind}`)}
+          </dd>
+          <dt className="text-foreground-passive">{t('workspaceRuntime.notifications.source')}</dt>
+          <dd className="text-foreground-muted">
+            {t(`workspaceRuntime.notifications.sourceValue.${notification.source}`)}
+          </dd>
+          <dt className="text-foreground-passive">{t('workspaceRuntime.notifications.time')}</dt>
+          <dd className="font-mono text-foreground-muted">
+            {new Date(notification.createdAt).toLocaleString()}
+          </dd>
+        </dl>
+        <div className="mt-3">
+          <div className="text-[11px] font-medium text-foreground-muted">
+            {t('workspaceRuntime.notifications.details')}
+          </div>
+          <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap break-words rounded-md border border-border bg-background-secondary p-2.5 font-mono text-[11px] leading-relaxed text-foreground-muted">
+            {details}
+          </pre>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function NotificationKindIcon({
+  kind,
+  className,
+}: {
+  kind: WorkspaceNotificationKind;
+  className?: string;
+}) {
+  const iconClassName = cn('mt-0.5 size-4 shrink-0', className);
+  if (kind === 'success') {
+    return <CheckCircle2 aria-hidden className={cn(iconClassName, 'text-emerald-500')} />;
+  }
+  if (kind === 'error') {
+    return <CircleAlert aria-hidden className={cn(iconClassName, 'text-destructive')} />;
+  }
+  if (kind === 'loading') {
+    return <LoaderCircle aria-hidden className={cn(iconClassName, 'animate-spin text-primary')} />;
+  }
+  return <Info aria-hidden className={cn(iconClassName, 'text-foreground-muted')} />;
+}

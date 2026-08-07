@@ -1,6 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { Notification } from 'electron';
 import type { KanbanColumnHook } from '@shared/app-settings';
+import { notificationCreatedChannel } from '@shared/events/appEvents';
 import type { KanbanStatus } from '@shared/kanban';
 import { injectAgentCommand } from '@main/core/conversations/pre-archive-command';
 import { mapConversationRowToConversation } from '@main/core/conversations/utils';
@@ -8,6 +9,7 @@ import { projectManager } from '@main/core/projects/project-manager';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { db } from '@main/db/client';
 import { conversations, tasks } from '@main/db/schema';
+import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { quoteShellArg } from '@main/utils/shellEscape';
 
@@ -126,6 +128,14 @@ async function runCommandHook(ctx: HookContext, command: string): Promise<void> 
 }
 
 function runNotifyHook(ctx: HookContext, message: string): void {
+  events.emit(notificationCreatedChannel, {
+    title: ctx.taskName,
+    description: message,
+    details: [`Project: ${ctx.projectId}`, `Task: ${ctx.taskId}`].join('\n'),
+    kind: 'info',
+    source: 'automation',
+    target: { projectId: ctx.projectId, taskId: ctx.taskId },
+  });
   if (!Notification.isSupported()) return;
   new Notification({ title: ctx.taskName, body: message, silent: true }).show();
 }

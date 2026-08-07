@@ -4570,6 +4570,43 @@
       "title": "Config",
       "description": "Adjust common input and Agent options. Manage detailed prompts and instruction files in Library."
     },
+    "notifications": {
+      "title": "Notifications",
+      "description": "Toasts, agent alerts, and automation notifications are kept here.",
+      "triggerLabel": "Notifications ({{count}})",
+      "untitled": "Notification",
+      "empty": "No notifications",
+      "emptyDescription": "New toasts and system alerts will appear here.",
+      "openDetails": "Open details for notification “{{title}}”",
+      "detailsTitle": "Notification details",
+      "details": "Full details",
+      "back": "Back to notifications",
+      "delete": "Delete notification “{{title}}”",
+      "type": "Type",
+      "source": "Source",
+      "time": "Time",
+      "copy": {
+        "idle": "Copy details",
+        "copied": "Copied",
+        "failed": "Copy failed"
+      },
+      "kind": {
+        "info": "Information",
+        "success": "Success",
+        "error": "Error",
+        "loading": "In progress"
+      },
+      "sourceValue": {
+        "toast": "App toast",
+        "agent": "Agent",
+        "automation": "Automation",
+        "system": "System"
+      },
+      "system": {
+        "agentCompleted": "Agent finished working",
+        "agentAwaitingInput": "Agent is waiting for input"
+      }
+    },
     "model": {
       "title": "Model and parameters",
       "choose": "Choose model",

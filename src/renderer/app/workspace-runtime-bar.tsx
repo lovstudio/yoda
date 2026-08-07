@@ -78,6 +78,7 @@ import {
 } from './composer-settings-content';
 import { startRendererPerformanceReporter } from './renderer-performance-reporter';
 import { rankWorkspaceAgentSessions } from './workspace-agent-sessions';
+import { WorkspaceNotificationCenter } from './workspace-notification-center';
 import type { WorkspaceResourceDetailKind } from './workspace-resource-details-modal';
 import {
   getWorkspaceLatencyP95,
@@ -1253,6 +1254,10 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         </PopoverContent>
       </Popover>
       <span className="flex-1" />
+      <WorkspaceNotificationCenter
+        triggerClassName={RUNTIME_BAR_ACTION_CLASS}
+        triggerLabelClassName={RUNTIME_BAR_ACTION_LABEL_CLASS}
+      />
       <Popover open={isAgentPopoverOpen} onOpenChange={setIsAgentPopoverOpen}>
         <PopoverTrigger
           aria-label={t('workspaceRuntime.agents.triggerLabel', {

@@ -4570,6 +4570,43 @@
       "title": "配置",
       "description": "调整常用输入与 Agent 选项。Prompt、指令文件等详细内容在资源库统一管理。"
     },
+    "notifications": {
+      "title": "通知",
+      "description": "Toast、Agent 提醒与自动化通知会统一保留在这里。",
+      "triggerLabel": "通知（{{count}} 条）",
+      "untitled": "通知",
+      "empty": "暂无通知",
+      "emptyDescription": "新的 Toast 与系统提醒会出现在这里。",
+      "openDetails": "查看通知“{{title}}”的详情",
+      "detailsTitle": "通知详情",
+      "details": "完整详情",
+      "back": "返回通知列表",
+      "delete": "删除通知“{{title}}”",
+      "type": "类型",
+      "source": "来源",
+      "time": "时间",
+      "copy": {
+        "idle": "复制详情",
+        "copied": "已复制",
+        "failed": "复制失败"
+      },
+      "kind": {
+        "info": "信息",
+        "success": "成功",
+        "error": "错误",
+        "loading": "进行中"
+      },
+      "sourceValue": {
+        "toast": "应用提示",
+        "agent": "Agent",
+        "automation": "自动化",
+        "system": "系统"
+      },
+      "system": {
+        "agentCompleted": "Agent 已完成工作",
+        "agentAwaitingInput": "Agent 正在等待输入"
+      }
+    },
     "model": {
       "title": "模型与参数",
       "choose": "选择模型",

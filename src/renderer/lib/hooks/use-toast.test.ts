@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '@renderer/lib/i18n';
+import { workspaceNotificationStore } from '@renderer/lib/stores/notification-store';
 import { toast } from './use-toast';
 
 const mocks = vi.hoisted(() => {
@@ -8,6 +9,8 @@ const mocks = vi.hoisted(() => {
     {
       error: vi.fn<(message: unknown, options?: unknown) => string>(() => 'toast-id'),
       success: vi.fn<(message: unknown, options?: unknown) => string>(() => 'toast-id'),
+      loading: vi.fn<(message: unknown, options?: unknown) => string>(() => 'toast-id'),
+      dismiss: vi.fn(),
     }
   );
 
@@ -37,10 +40,12 @@ describe('toast', () => {
     mocks.sonnerToast.mockClear();
     mocks.sonnerToast.error.mockClear();
     mocks.sonnerToast.success.mockClear();
+    mocks.sonnerToast.loading.mockClear();
     mocks.writeText.mockReset();
     mocks.writeText.mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText: mocks.writeText } });
     await i18n.changeLanguage('en');
+    workspaceNotificationStore.clear();
   });
 
   it('does not add a copy action to non-error toasts', () => {
@@ -53,6 +58,12 @@ describe('toast', () => {
     const options = mocks.sonnerToast.mock.calls[0][1] as ToastOptions;
     expect(options.action).toBeUndefined();
     expect(options.cancel).toBeUndefined();
+    expect(workspaceNotificationStore.getSnapshot()[0]).toMatchObject({
+      title: 'Saved',
+      description: 'Project settings updated.',
+      kind: 'info',
+      source: 'toast',
+    });
   });
 
   it('keeps a custom action on a non-error toast without adding copy', () => {
@@ -79,7 +90,7 @@ describe('toast', () => {
     await options.action?.onClick();
 
     expect(mocks.writeText).toHaveBeenCalledWith('Something broke');
-    expect(mocks.sonnerToast.success).toHaveBeenCalledWith('Copied');
+    expect(mocks.sonnerToast.success).toHaveBeenCalledWith('Copied', undefined);
   });
 
   it('adds a one-click debug info copy action', async () => {
@@ -103,7 +114,7 @@ describe('toast', () => {
     expect(copiedText).toContain('Could not create the worktree.');
     expect(copiedText).toContain('"step": "clone"');
     expect(copiedText).toContain('"message": "branch not found"');
-    expect(mocks.sonnerToast.success).toHaveBeenCalledWith('Debug info copied');
+    expect(mocks.sonnerToast.success).toHaveBeenCalledWith('Debug info copied', undefined);
   });
 
   it('keeps an existing toast action and adds debug copy as the secondary action', () => {
@@ -136,5 +147,15 @@ describe('toast', () => {
     await options.action?.onClick();
 
     expect(mocks.writeText).toHaveBeenCalledWith('SSH failed\n\nconnecting\nauth failed');
+  });
+
+  it('updates a loading notification when a toast reuses the same id', () => {
+    toast.loading('Checking…', { id: 'progress' });
+    toast.success('Ready', { id: 'progress' });
+
+    expect(workspaceNotificationStore.getSnapshot()).toMatchObject([
+      { title: 'Ready', kind: 'success', source: 'toast' },
+    ]);
+    expect(workspaceNotificationStore.getSnapshot()).toHaveLength(1);
   });
 });

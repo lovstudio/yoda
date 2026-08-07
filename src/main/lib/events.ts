@@ -4,6 +4,7 @@ import { getMainWindow } from '@main/app/window';
 
 const mainWindowEventNames = new Set([
   'deep-link:open',
+  'notification:created',
   'notification:focus-task',
   'app:quit-agent-sessions-requested',
   'task-window:dock-hover',
