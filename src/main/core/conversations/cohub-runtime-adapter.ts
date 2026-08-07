@@ -10,16 +10,26 @@ type AdapterOptions = {
   initialPrompt?: string;
   stateFile: string;
 };
-type AdapterState = { sessionId?: string; spaceId?: string };
+type StoredCohubTurn = {
+  assistantText: string;
+  completedAt?: string;
+  createdAt?: string;
+  id: string;
+  userText: string;
+};
+type AdapterState = { sessionId?: string; spaceId?: string; turns?: StoredCohubTurn[] };
 type CohubPromptResult = {
   session?: { id?: string };
   turn?: { id?: string };
 };
 type CohubTurn = {
   assistantText?: string | null;
+  completedAt?: string | null;
+  createdAt?: string | null;
   errorMessage?: string | null;
   id?: string;
   status?: string;
+  userText?: string | null;
 };
 
 const activeChildren = new Set<ChildProcess>();
@@ -76,9 +86,10 @@ export class TerminalPromptDecoder {
   private inBracketedPaste = false;
   private previousWasCarriageReturn = false;
 
-  feed(chunk: string): { interrupted: boolean; prompts: string[] } {
+  feed(chunk: string): { interrupted: boolean; output: string; prompts: string[] } {
     const prompts: string[] = [];
     let interrupted = false;
+    let output = '';
     const input = this.controlPrefix + chunk;
     this.controlPrefix = '';
     for (let index = 0; index < input.length; index += 1) {
@@ -99,7 +110,11 @@ export class TerminalPromptDecoder {
         continue;
       }
       if (char === '\u007f') {
-        this.buffer = [...this.buffer].slice(0, -1).join('');
+        const characters = [...this.buffer];
+        if (characters.length > 0) {
+          this.buffer = characters.slice(0, -1).join('');
+          output += '\b \b';
+        }
         continue;
       }
       if (!this.inBracketedPaste && (char === '\r' || char === '\n')) {
@@ -108,6 +123,7 @@ export class TerminalPromptDecoder {
           continue;
         }
         this.previousWasCarriageReturn = char === '\r';
+        output += '\r\n';
         const prompt = this.buffer.trim();
         this.buffer = '';
         if (prompt) prompts.push(prompt);
@@ -115,8 +131,9 @@ export class TerminalPromptDecoder {
       }
       this.previousWasCarriageReturn = false;
       this.buffer += char;
+      output += char === '\n' ? '\r\n' : char;
     }
-    return { interrupted, prompts };
+    return { interrupted, output, prompts };
   }
 }
 
@@ -281,7 +298,7 @@ async function waitForTurn(
   spaceId: string,
   sessionId: string,
   turnId: string
-): Promise<void> {
+): Promise<CohubTurn> {
   let renderedText = '';
   while (!shuttingDown) {
     const result = (await runJson(
@@ -294,7 +311,7 @@ async function waitForTurn(
       renderedText = writeIncrementalText(renderedText, turn.assistantText?.trimEnd() ?? '');
       if (turn.status === 'completed') {
         process.stdout.write('\n');
-        return;
+        return turn;
       }
       if (turn.status === 'failed' || turn.status === 'cancelled') {
         throw new Error(turn.errorMessage?.trim() || `Cohub turn ${turn.status}.`);
@@ -302,6 +319,48 @@ async function waitForTurn(
     }
     await new Promise((resolve) => setTimeout(resolve, 600));
   }
+  throw new Error('Cohub adapter stopped.');
+}
+
+function storeTurn(state: AdapterState, turn: CohubTurn, fallbackPrompt = ''): void {
+  if (!turn.id) return;
+  const stored: StoredCohubTurn = {
+    id: turn.id,
+    userText: turn.userText?.trim() || fallbackPrompt.trim(),
+    assistantText: turn.assistantText?.trim() ?? '',
+    ...(turn.createdAt ? { createdAt: turn.createdAt } : {}),
+    ...(turn.completedAt ? { completedAt: turn.completedAt } : {}),
+  };
+  const turns = state.turns ?? [];
+  const existingIndex = turns.findIndex((candidate) => candidate.id === stored.id);
+  if (existingIndex >= 0) turns[existingIndex] = stored;
+  else turns.push(stored);
+  state.turns = turns;
+}
+
+async function hydrateStoredTurns(
+  options: AdapterOptions,
+  state: AdapterState,
+  globalArgs: string[]
+): Promise<void> {
+  if (!state.spaceId || !state.sessionId) return;
+  const result = (await runJson(
+    options.cohubCommand.command,
+    [
+      ...globalArgs,
+      'spaces',
+      'sessions',
+      'turns',
+      'ls',
+      state.sessionId,
+      '--limit',
+      '100',
+      '--json',
+    ],
+    state.spaceId
+  )) as { turns?: CohubTurn[] };
+  for (const turn of result.turns ?? []) storeTurn(state, turn);
+  await writeState(options.stateFile, state);
 }
 
 async function sendTurn(
@@ -329,8 +388,10 @@ async function sendTurn(
   if (!turnId) throw new Error('Cohub prompt response did not include a turn ID.');
   state.sessionId = sessionId;
   await writeState(options.stateFile, state);
-  await waitForTurn(command, globalArgs, state.spaceId!, sessionId, turnId);
-  process.stdout.write('\n✓ Cohub 已完成\n\nCohub 已就绪，等待下一条消息\n> ');
+  const turn = await waitForTurn(command, globalArgs, state.spaceId!, sessionId, turnId);
+  storeTurn(state, turn, prompt);
+  await writeState(options.stateFile, state);
+  process.stdout.write('\n✓ Cohub 已完成\n\nCohub 已就绪，输入消息并按 Enter 发送\n> ');
 }
 
 function stopChildren(): void {
@@ -377,6 +438,14 @@ async function main(): Promise<void> {
     process.stdout.write(`✓ Cohub sandbox 已连接：${state.spaceId}\n`);
   }
 
+  try {
+    await hydrateStoredTurns(options, state, parsedCommand.globalArgs);
+  } catch (error) {
+    process.stderr.write(
+      `\n[Cohub][HISTORY_SYNC_FAILED] ${error instanceof Error ? error.message : String(error)}\n`
+    );
+  }
+
   const decoder = new TerminalPromptDecoder();
   let queue = Promise.resolve();
   const enqueue = (prompt: string) => {
@@ -395,6 +464,7 @@ async function main(): Promise<void> {
   process.stdin.resume();
   process.stdin.on('data', (chunk: string) => {
     const result = decoder.feed(chunk);
+    if (result.output) process.stdout.write(result.output);
     if (result.interrupted) {
       stopChildren();
       process.exit(130);
@@ -403,7 +473,7 @@ async function main(): Promise<void> {
   });
 
   if (options.initialPrompt?.trim()) enqueue(options.initialPrompt);
-  else process.stdout.write('\nCohub 已就绪，等待下一条消息\n> ');
+  else process.stdout.write('\nCohub 已就绪，输入消息并按 Enter 发送\n> ');
 
   sandbox?.once('exit', (code, signal) => {
     if (!shuttingDown) {

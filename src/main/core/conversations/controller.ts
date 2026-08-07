@@ -21,6 +21,7 @@ import { getArchivedConversationsForTask } from './getArchivedConversationsForTa
 import { getClaudeSessionContext } from './getClaudeSessionContext';
 import { getClaudeSessionMetadata } from './getClaudeSessionMetadata';
 import { getCodexSessionContext } from './getCodexSessionContext';
+import { getCohubSessionContext } from './getCohubSessionContext';
 import { getConversationRuntimeStatuses } from './getConversationRuntimeStatuses';
 import { getConversations } from './getConversations';
 import { getConversationSessionInfo } from './getConversationSessionInfo';
@@ -158,6 +159,7 @@ export const conversationController = createRPCController({
   getClaudeStatusline,
   setClaudeStatusline,
   getCodexSessionContext: getConfiguredCodexSessionContext,
+  getCohubSessionContext,
   getInstructionFiles,
   getRuntimeInstructionFiles,
   getEditableRuntimeInstructionFiles,
