@@ -3,7 +3,7 @@
 ## Main Shared Areas
 
 - Provider registry:
-  - `src/shared/agent-provider-registry.ts`
+  - `src/shared/runtime-registry.ts`
 - Model provider catalog:
   - `src/shared/model-provider-catalog.ts` — OpenAI, Anthropic, Kimi and other model
     vendors; this is separate from the Agent Client/runtime registry
@@ -41,7 +41,7 @@ Aliases are resolved at build time by electron-vite. No runtime monkey-patching 
 
 When adding a provider:
 
-1. update `src/shared/agent-provider-registry.ts`
+1. update `src/shared/runtime-registry.ts`
 2. add any required env passthrough in `src/main/core/pty/pty-env.ts`
 3. add an agent event classifier in `src/main/core/conversations/impl/agent-event-classifiers/`
 4. update renderer surfaces that assume provider metadata

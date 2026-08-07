@@ -1,6 +1,7 @@
 export const RUNTIME_IDS = [
   'codex',
   'claude',
+  'cohub',
   'devin',
   'qwen',
   'droid',
@@ -341,6 +342,22 @@ const CODEX_PERMISSION_MODES: RuntimePermissionMode[] = [
   },
 ];
 
+const COHUB_PERMISSION_MODES: RuntimePermissionMode[] = [
+  {
+    id: 'full-access',
+    labelKey: 'permissionMode.cohub.fullAccess',
+    descriptionKey: 'permissionMode.cohub.fullAccessDesc',
+    args: [],
+    danger: true,
+  },
+  {
+    id: 'read-only',
+    labelKey: 'permissionMode.cohub.readOnly',
+    descriptionKey: 'permissionMode.cohub.readOnlyDesc',
+    args: ['--read-only'],
+  },
+];
+
 export const RUNTIMES: RuntimeDefinition[] = [
   {
     id: 'codex',
@@ -403,6 +420,25 @@ export const RUNTIMES: RuntimeDefinition[] = [
     terminalOnly: true,
     supportsHooks: true,
     supportsConversationFork: true,
+  },
+  {
+    id: 'cohub',
+    name: 'Cohub',
+    description:
+      'Connects a Yoda conversation to a Cohub Space and streams remote agent work against the active project.',
+    docUrl: 'https://cohub.run',
+    installCommand: 'npm install -g @neta-art/cohub-cli',
+    uninstallCommand: 'npm uninstall -g @neta-art/cohub-cli',
+    commands: ['cohub'],
+    versionArgs: ['-v'],
+    cli: 'cohub prompt',
+    permissionModes: COHUB_PERMISSION_MODES,
+    initialPromptFlag: '',
+    modelFlag: '--model',
+    modelFlagAliases: ['-m'],
+    icon: 'cohub.svg',
+    alt: 'Cohub',
+    terminalOnly: true,
   },
   {
     id: 'devin',
@@ -953,6 +989,14 @@ export const RUNTIME_ACCOUNT_PROFILES = {
         baseUrlEnvVars: ['ANTHROPIC_BASE_URL'],
       },
     },
+  },
+  cohub: {
+    officialSubscription: {
+      supported: true,
+      loginCommand: 'cohub auth login',
+    },
+    officialApi: { envVars: ['COHUB_EXECUTION_TOKEN'] },
+    maas: { supported: false, providerHints: [] },
   },
   devin: {
     officialSubscription: { supported: true },

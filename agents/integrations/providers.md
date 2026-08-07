@@ -2,21 +2,21 @@
 
 ## Terminology
 
-- **Agent Client/runtime**: Claude Code, Codex, Gemini CLI, Kimi CLI, and other
-  executables Yoda launches. Their registry is `src/shared/agent-provider-registry.ts`.
+- **Agent Client/runtime**: Claude Code, Codex, Cohub, Gemini CLI, Kimi CLI, and other
+  executables Yoda launches. Their registry is `src/shared/runtime-registry.ts`.
 - **Model provider/vendor**: OpenAI, Anthropic, Kimi, Google, and other companies
   that publish models. Their catalog is `src/shared/model-provider-catalog.ts`.
 - Do not use the Agent Client/runtime registry to build model-provider settings.
 
 ## Source Of Truth
 
-- `src/shared/agent-provider-registry.ts`
+- `src/shared/runtime-registry.ts`
 - `src/main/core/dependencies/dependency-manager.ts`
 - `src/main/core/pty/`
 
-## Current Providers (29)
+## Current Providers (30)
 
-codex, claude, devin, qwen, droid, gemini, cursor, copilot, amp, opencode, hermes, charm, auggie, goose, kimi, kilocode, kiro, rovo, cline, continue, codebuff, mistral, jules, junie, pi, letta, autohand, antigravity, grok
+codex, claude, cohub, devin, qwen, droid, gemini, cursor, copilot, amp, opencode, hermes, charm, auggie, goose, kimi, kilocode, kiro, rovo, cline, continue, codebuff, mistral, jules, junie, pi, letta, autohand, antigravity, grok
 
 ## Provider Metadata Includes
 
@@ -61,7 +61,7 @@ Each provider has a terminal output classifier in `src/main/core/conversations/i
 
 ## Adding Or Changing A Provider
 
-1. update `src/shared/agent-provider-registry.ts`
+1. update `src/shared/runtime-registry.ts`
 2. update allowlisted agent env vars in `src/main/core/pty/pty-env.ts` if needed
 3. add an agent event classifier in `src/main/core/conversations/impl/agent-event-classifiers/`
 4. validate detection behavior in `src/main/core/dependencies/`
