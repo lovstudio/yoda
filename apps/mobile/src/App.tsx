@@ -38,6 +38,10 @@ import {
 import yodaMarkSource from '../../../src/assets/images/yoda/yoda_logo.png';
 import { applyAgentCommandPrefix } from '../../../src/shared/agent-command-prefix';
 import {
+  AGENT_REPLY_DISPLAY_LEVELS,
+  type AgentReplyDisplayLevel,
+} from '../../../src/shared/agent-reply-display';
+import {
   appendMobileVoiceTranscript,
   canContinueMobileSession,
   filterMobileProjects,
@@ -68,6 +72,7 @@ import {
   canonicalizeMobileRelayPairing,
   parseMobileRelayPairingUrl,
 } from '../../../src/shared/mobile-relay';
+import { filterMobileSessionTranscript } from '../../../src/shared/mobile-session-display';
 import {
   formatMobileToolTranscriptContent,
   groupAdjacentMobileToolBlocks,
@@ -99,6 +104,12 @@ import {
   type MobileInputUploadProgress,
 } from './input-upload';
 import { parseMarkdownBlocks, tokenizeInlineMarkdown } from './markdown';
+import {
+  DEFAULT_SESSION_DISPLAY_PREFERENCES,
+  loadSessionDisplayPreferences,
+  saveSessionDisplayPreferences,
+  type SessionOutputMode,
+} from './session-display-preferences';
 import { subscribeSessionEvents } from './session-event-stream';
 import { startMobileVoiceInput, type MobileVoiceInputSession } from './voice-input';
 
@@ -137,7 +148,6 @@ type ConnectDraft = {
 };
 
 type TaskScope = 'all' | 'open' | 'inProgress' | 'review';
-type SessionOutputMode = 'rendered' | 'raw';
 
 type ReadableOutputBlock = {
   id: string;
@@ -572,7 +582,6 @@ export function App() {
   const [newTaskParent, setNewTaskParent] = useState<MobileTaskSummary | null>(null);
   const [newTaskParentId, setNewTaskParentId] = useState<string | null>(null);
   const [newTaskSiblingOf, setNewTaskSiblingOf] = useState<MobileTaskSummary | null>(null);
-  const [newTaskAttributionLocked, setNewTaskAttributionLocked] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState('all');
   const [taskScope, setTaskScope] = useState<TaskScope>('all');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -648,7 +657,6 @@ export function App() {
     setNewTaskParent(null);
     setNewTaskParentId(null);
     setNewTaskSiblingOf(null);
-    setNewTaskAttributionLocked(false);
     setSelectedProjectId('all');
     setTaskScope('all');
     setSelectedTaskId(null);
@@ -818,7 +826,6 @@ export function App() {
     setNewTaskParent(parentTask);
     setNewTaskParentId(parentTask?.id ?? null);
     setNewTaskSiblingOf(null);
-    setNewTaskAttributionLocked(Boolean(parentTask));
     if (parentTask) setDemandProjectId(parentTask.projectId);
     setNewTaskOpen(true);
   }, []);
@@ -829,7 +836,6 @@ export function App() {
       setNewTaskParent(attribution.parentTask);
       setNewTaskParentId(attribution.parentTaskId);
       setNewTaskSiblingOf(task);
-      setNewTaskAttributionLocked(true);
       setDemandProjectId(attribution.projectId);
       setNewTaskOpen(true);
     },
@@ -841,7 +847,6 @@ export function App() {
     setNewTaskParent(null);
     setNewTaskParentId(null);
     setNewTaskSiblingOf(null);
-    setNewTaskAttributionLocked(false);
   }, []);
 
   const handleSubmitDemand = useCallback(async () => {
@@ -923,12 +928,12 @@ export function App() {
       selectedProjectId={demandProjectId}
       submitting={submitting}
       uploadProgress={demandUploadProgress}
-      attributionLocked={newTaskAttributionLocked}
       onClose={closeNewTask}
       onAttributionChange={(projectId, parentTask) => {
         setDemandProjectId(projectId);
         setNewTaskParent(parentTask);
         setNewTaskParentId(parentTask?.id ?? null);
+        setNewTaskSiblingOf(null);
       }}
       onImagesChange={setDemandImages}
       onMediaError={setError}
@@ -1756,7 +1761,6 @@ function TaskProjectScopeControl({
 }
 
 function DemandComposer({
-  attributionLocked = false,
   connection,
   images,
   parentTask,
@@ -1772,7 +1776,6 @@ function DemandComposer({
   onMediaError,
   onSubmit,
 }: {
-  attributionLocked?: boolean;
   connection: MobileConnection;
   images: MobileImageDraft[];
   parentTask: MobileTaskSummary | null;
@@ -1788,9 +1791,10 @@ function DemandComposer({
   onMediaError: (message: string) => void;
   onSubmit: () => void;
 }) {
-  const [attributionPickerOpen, setAttributionPickerOpen] = useState(false);
+  const [attributionPickerMode, setAttributionPickerMode] = useState<'project' | 'task' | null>(
+    null
+  );
   const selectedProject = projects.find((project) => project.id === selectedProjectId);
-  const selectedAttributionLabel = parentTask?.name ?? selectedProject?.displayName ?? '草稿箱';
   const imagesEnabled = selectedProjectId === null || selectedProject?.type === 'local';
   const canSubmit =
     (prompt.trim().length > 0 || images.length > 0) &&
@@ -1806,16 +1810,33 @@ function DemandComposer({
         disabled={submitting}
         images={images}
         imagesEnabled={imagesEnabled}
-        projectSelector={
-          attributionLocked
-            ? undefined
-            : {
-                contextHint: parentTask ? '将创建为子任务' : '选择任务归属',
-                icon: parentTask ? 'git-branch-outline' : 'folder-outline',
-                label: selectedAttributionLabel,
-                onPress: () => setAttributionPickerOpen(true),
-              }
-        }
+        contextSelectors={[
+          {
+            accessibilityLabel: `切换项目，当前${selectedProject?.displayName ?? '草稿箱'}`,
+            icon: 'folder-outline',
+            label: '项目',
+            value: selectedProject?.displayName ?? '草稿箱',
+            onPress: () => {
+              Keyboard.dismiss();
+              setAttributionPickerMode('project');
+            },
+          },
+          {
+            accessibilityLabel: parentTask
+              ? `切换上级任务，当前${parentTask.name}`
+              : selectedProjectId
+                ? '选择上级任务，当前为独立任务'
+                : '草稿箱不支持选择上级任务',
+            disabled: selectedProjectId === null,
+            icon: 'git-branch-outline',
+            label: '上级任务',
+            value: parentTask?.name ?? (selectedProjectId ? '独立任务' : '无'),
+            onPress: () => {
+              Keyboard.dismiss();
+              setAttributionPickerMode('task');
+            },
+          },
+        ]}
         speechContext={[selectedProject?.displayName, selectedProject?.name, parentTask?.name]}
         skillContext={{ projectId: selectedProjectId ?? undefined }}
         value={prompt}
@@ -1829,22 +1850,23 @@ function DemandComposer({
             placeholder="描述你想完成的工作…"
             placeholderTextColor="#9A958C"
             style={styles.composerTextInput}
-            textAlignVertical="center"
+            textAlignVertical="top"
             value={prompt}
             onChangeText={onPromptChange}
           />
         }
       />
-      {!attributionLocked && attributionPickerOpen ? (
+      {attributionPickerMode ? (
         <TaskAttributionPickerSheet
+          mode={attributionPickerMode}
           parentTask={parentTask}
           projects={projects}
           selectedProjectId={selectedProjectId}
           tasks={tasks}
-          onClose={() => setAttributionPickerOpen(false)}
+          onClose={() => setAttributionPickerMode(null)}
           onChange={(projectId, nextParentTask) => {
             onAttributionChange(projectId, nextParentTask);
-            setAttributionPickerOpen(false);
+            setAttributionPickerMode(null);
           }}
         />
       ) : null}
@@ -1877,7 +1899,6 @@ function DemandComposer({
 }
 
 function NewTaskModal({
-  attributionLocked = false,
   open,
   onClose,
   parentTask = null,
@@ -1889,7 +1910,6 @@ function NewTaskModal({
   onSubmit: () => void;
   parentTask?: MobileTaskSummary | null;
   siblingOfTask?: MobileTaskSummary | null;
-  attributionLocked?: boolean;
 }) {
   return (
     <Modal
@@ -1908,16 +1928,12 @@ function NewTaskModal({
         <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
         <SafeAreaView style={styles.newTaskWindow}>
           <View style={styles.newTaskWindowHeader}>
-            <View>
+            <View style={styles.newTaskWindowHeaderTitleBlock}>
               <Text style={styles.newTaskWindowEyebrow}>
                 {siblingOfTask ? '新建同级任务' : parentTask ? '新建子任务' : '新建任务'}
               </Text>
               <Text style={styles.newTaskWindowTitle} numberOfLines={2}>
-                {siblingOfTask
-                  ? `与「${siblingOfTask.name}」保持同一层级`
-                  : parentTask
-                    ? `在「${parentTask.name}」下开始一项工作`
-                    : '开始一项工作'}
+                开始一项工作
               </Text>
             </View>
             <Pressable
@@ -1937,11 +1953,7 @@ function NewTaskModal({
             contentContainerStyle={styles.newTaskWindowContent}
             keyboardShouldPersistTaps="handled"
           >
-            <DemandComposer
-              {...composerProps}
-              attributionLocked={attributionLocked}
-              parentTask={parentTask}
-            />
+            <DemandComposer {...composerProps} parentTask={parentTask} />
           </ScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
@@ -1950,6 +1962,7 @@ function NewTaskModal({
 }
 
 function TaskAttributionPickerSheet({
+  mode,
   parentTask,
   projects,
   selectedProjectId,
@@ -1957,6 +1970,7 @@ function TaskAttributionPickerSheet({
   onChange,
   onClose,
 }: {
+  mode: 'project' | 'task';
   parentTask: MobileTaskSummary | null;
   projects: MobileProjectSummary[];
   selectedProjectId: string | null;
@@ -1965,18 +1979,16 @@ function TaskAttributionPickerSheet({
   onClose: () => void;
 }) {
   const [sortMode, setSortMode] = useState<MobileProjectSortMode>('recent');
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [projectSearchQuery, setProjectSearchQuery] = useState('');
-  const [taskSearchQuery, setTaskSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const sortedProjects = useMemo(
     () => sortMobileProjects(projects, sortMode),
     [projects, sortMode]
   );
   const visibleProjects = useMemo(
-    () => filterMobileProjects(sortedProjects, projectSearchQuery),
-    [projectSearchQuery, sortedProjects]
+    () => filterMobileProjects(sortedProjects, searchQuery),
+    [searchQuery, sortedProjects]
   );
-  const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
+  const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
   const taskStatsByProjectId = useMemo(() => {
     const stats = new Map<string, { count: number; longTermCount: number }>();
     for (const task of tasks) {
@@ -1987,13 +1999,15 @@ function TaskAttributionPickerSheet({
     }
     return stats;
   }, [tasks]);
-  const activeTasks = useMemo(() => {
+  const visibleTasks = useMemo(() => {
     const sortedTasks = sortMobileTaskAttributionCandidates(
-      tasks.filter((task) => task.projectId === activeProjectId)
+      tasks.filter((task) => task.projectId === selectedProjectId)
     );
-    return filterMobileTasks(sortedTasks, taskSearchQuery);
-  }, [activeProjectId, taskSearchQuery, tasks]);
-  const activeProjectTaskCount = tasks.filter((task) => task.projectId === activeProjectId).length;
+    return filterMobileTasks(sortedTasks, searchQuery);
+  }, [searchQuery, selectedProjectId, tasks]);
+  const selectedProjectTaskCount = tasks.filter(
+    (task) => task.projectId === selectedProjectId
+  ).length;
 
   return (
     <Modal
@@ -2010,24 +2024,14 @@ function TaskAttributionPickerSheet({
           <View style={styles.projectPickerHandle} />
           <View style={styles.projectPickerHeader}>
             <View style={styles.attributionPickerHeaderLead}>
-              {activeProject ? (
-                <Pressable
-                  accessibilityLabel="返回选择项目"
-                  accessibilityRole="button"
-                  hitSlop={8}
-                  style={({ pressed }) => [
-                    styles.projectPickerClose,
-                    pressed ? styles.buttonPressed : null,
-                  ]}
-                  onPress={() => setActiveProjectId(null)}
-                >
-                  <Ionicons color={COLORS.charcoal} name="chevron-back-outline" size={22} />
-                </Pressable>
-              ) : null}
               <View style={styles.projectPickerTitleBlock}>
-                <Text style={styles.projectPickerEyebrow}>任务归属</Text>
+                <Text style={styles.projectPickerEyebrow}>
+                  {mode === 'project' ? '任务项目' : '任务层级'}
+                </Text>
                 <Text style={styles.projectPickerTitle} numberOfLines={1}>
-                  {activeProject ? activeProject.displayName : '先选择项目'}
+                  {mode === 'project'
+                    ? '切换项目'
+                    : `选择${selectedProject ? `「${selectedProject.displayName}」的` : ''}上级任务`}
                 </Text>
               </View>
             </View>
@@ -2046,15 +2050,15 @@ function TaskAttributionPickerSheet({
           </View>
 
           <ProjectPickerSearchInput
-            placeholder={activeProject ? '搜索任务' : '搜索项目'}
-            value={activeProject ? taskSearchQuery : projectSearchQuery}
-            onChangeText={activeProject ? setTaskSearchQuery : setProjectSearchQuery}
+            placeholder={mode === 'project' ? '搜索项目' : '搜索任务'}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
           />
 
-          {activeProject ? (
+          {mode === 'task' ? (
             <View style={styles.attributionPickerStepHint}>
               <Text style={styles.attributionPickerStepHintText}>
-                直接归属项目，或选择一个已有任务作为上级任务
+                选择“独立任务”，或将新任务放在一个已有任务之下
               </Text>
             </View>
           ) : (
@@ -2085,45 +2089,45 @@ function TaskAttributionPickerSheet({
             keyboardShouldPersistTaps="handled"
             style={styles.projectPickerListViewport}
           >
-            {activeProject ? (
+            {mode === 'task' ? (
               <>
-                {!taskSearchQuery.trim() ? (
+                {!searchQuery.trim() && selectedProject ? (
                   <AttributionPickerOption
                     icon="folder-outline"
-                    label={`仅归属「${activeProject.displayName}」`}
-                    meta="创建为项目下的独立任务"
-                    selected={selectedProjectId === activeProject.id && !parentTask}
-                    onPress={() => onChange(activeProject.id, null)}
+                    label="独立任务"
+                    meta={`直接创建在「${selectedProject.displayName}」项目下`}
+                    selected={!parentTask}
+                    onPress={() => onChange(selectedProject.id, null)}
                   />
                 ) : null}
-                {activeTasks.map((task) => (
+                {visibleTasks.map((task) => (
                   <AttributionPickerOption
                     key={task.id}
                     icon={task.isLongTerm ? 'infinite-outline' : 'git-branch-outline'}
                     label={task.name}
                     meta={`${task.isLongTerm ? '长期任务 · ' : ''}创建为它的子任务 · ${formatTimestamp(task.lastInteractedAt ?? task.updatedAt)}`}
                     selected={parentTask?.id === task.id}
-                    onPress={() => onChange(activeProject.id, task)}
+                    onPress={() => onChange(task.projectId, task)}
                   />
                 ))}
-                {activeTasks.length === 0 ? (
+                {visibleTasks.length === 0 ? (
                   <View style={styles.attributionPickerEmpty}>
                     <Ionicons
                       color={COLORS.muted}
-                      name={taskSearchQuery.trim() ? 'search-outline' : 'git-branch-outline'}
+                      name={searchQuery.trim() ? 'search-outline' : 'git-branch-outline'}
                       size={22}
                     />
                     <Text style={styles.emptyText}>
-                      {taskSearchQuery.trim() && activeProjectTaskCount > 0
-                        ? `没有匹配“${taskSearchQuery.trim()}”的任务`
-                        : '这个项目还没有可选择的任务。'}
+                      {searchQuery.trim() && selectedProjectTaskCount > 0
+                        ? `没有匹配“${searchQuery.trim()}”的任务`
+                        : '这个项目还没有可选择的上级任务。'}
                     </Text>
                   </View>
                 ) : null}
               </>
             ) : (
               <>
-                {!projectSearchQuery.trim() ? (
+                {!searchQuery.trim() ? (
                   <AttributionPickerOption
                     icon="documents-outline"
                     label="草稿箱"
@@ -2140,17 +2144,16 @@ function TaskAttributionPickerSheet({
                   return (
                     <AttributionPickerOption
                       key={project.id}
-                      disclosure
                       icon={project.isOpen ? 'desktop-outline' : 'folder-outline'}
                       label={project.displayName}
                       meta={`${taskStats.count} 个任务${taskStats.longTermCount > 0 ? ` · ${taskStats.longTermCount} 个长期任务` : ''}`}
                       selected={selectedProjectId === project.id}
-                      onPress={() => setActiveProjectId(project.id)}
+                      onPress={() => onChange(project.id, null)}
                     />
                   );
                 })}
                 {visibleProjects.length === 0 ? (
-                  <ProjectPickerEmptyResult query={projectSearchQuery} type="项目" />
+                  <ProjectPickerEmptyResult query={searchQuery} type="项目" />
                 ) : null}
               </>
             )}
@@ -2162,14 +2165,12 @@ function TaskAttributionPickerSheet({
 }
 
 function AttributionPickerOption({
-  disclosure = false,
   icon,
   label,
   meta,
   selected,
   onPress,
 }: {
-  disclosure?: boolean;
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   meta: string;
@@ -2204,12 +2205,7 @@ function AttributionPickerOption({
           {meta}
         </Text>
       </View>
-      {selected && !disclosure ? (
-        <Ionicons color={COLORS.charcoal} name="checkmark-circle" size={20} />
-      ) : null}
-      {disclosure ? (
-        <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={19} />
-      ) : null}
+      {selected ? <Ionicons color={COLORS.charcoal} name="checkmark-circle" size={20} /> : null}
     </Pressable>
   );
 }
@@ -2791,7 +2787,13 @@ function SessionDetailScreen({
   const scrollViewRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const isAtBottomRef = useRef(true);
   const [detail, setDetail] = useState<MobileSessionDetail | null>(null);
-  const [outputMode, setOutputMode] = useState<SessionOutputMode>('rendered');
+  const [outputMode, setOutputMode] = useState<SessionOutputMode>(
+    DEFAULT_SESSION_DISPLAY_PREFERENCES.outputMode
+  );
+  const [replyDisplayLevel, setReplyDisplayLevel] = useState<AgentReplyDisplayLevel>(
+    DEFAULT_SESSION_DISPLAY_PREFERENCES.replyDisplayLevel
+  );
+  const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [sessionInput, setSessionInput] = useState('');
   const [sessionImages, setSessionImages] = useState<MobileImageDraft[]>([]);
@@ -2814,6 +2816,37 @@ function SessionDetailScreen({
     isAtBottomRef.current = next;
     setIsAtBottom((current) => (current === next ? current : next));
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    void loadSessionDisplayPreferences()
+      .then((preferences) => {
+        if (!active) return;
+        setOutputMode(preferences.outputMode);
+        setReplyDisplayLevel(preferences.replyDisplayLevel);
+      })
+      .catch((cause) => {
+        if (active) setError(`显示设置读取失败：${errorMessage(cause)}`);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const updateDisplayPreferences = useCallback(
+    (next: { outputMode?: SessionOutputMode; replyDisplayLevel?: AgentReplyDisplayLevel }) => {
+      const preferences = {
+        outputMode: next.outputMode ?? outputMode,
+        replyDisplayLevel: next.replyDisplayLevel ?? replyDisplayLevel,
+      };
+      setOutputMode(preferences.outputMode);
+      setReplyDisplayLevel(preferences.replyDisplayLevel);
+      void saveSessionDisplayPreferences(preferences).catch((cause) => {
+        setError(`显示设置保存失败：${errorMessage(cause)}`);
+      });
+    },
+    [outputMode, replyDisplayLevel]
+  );
 
   const scrollToBottom = useCallback((animated = true) => {
     requestAnimationFrame(() => {
@@ -3044,6 +3077,7 @@ function SessionDetailScreen({
             title={session?.title ?? task.name}
             uploadProgress={sessionUploadProgress}
             onBack={onBack}
+            onOpenSettings={() => setDisplaySettingsOpen(true)}
           />
           <ScrollView
             ref={scrollViewRef}
@@ -3084,9 +3118,12 @@ function SessionDetailScreen({
                     {detail.transcript.length} updates
                   </Text>
                 </View>
-                <OutputModeToggle mode={outputMode} onChange={setOutputMode} />
                 {outputMode === 'rendered' ? (
-                  <RenderedSessionTranscript detail={detail} fallbackOutput={output} />
+                  <RenderedSessionTranscript
+                    detail={detail}
+                    displayLevel={replyDisplayLevel}
+                    fallbackOutput={output}
+                  />
                 ) : (
                   <RawSessionOutput output={output} />
                 )}
@@ -3132,6 +3169,16 @@ function SessionDetailScreen({
             onImagesChange={setSessionImages}
             onSend={handleSendInput}
           />
+          <SessionDisplaySettingsSheet
+            displayLevel={replyDisplayLevel}
+            open={displaySettingsOpen}
+            outputMode={outputMode}
+            onClose={() => setDisplaySettingsOpen(false)}
+            onDisplayLevelChange={(nextLevel) =>
+              updateDisplayPreferences({ replyDisplayLevel: nextLevel })
+            }
+            onOutputModeChange={(nextMode) => updateDisplayPreferences({ outputMode: nextMode })}
+          />
         </View>
       </KeyboardAvoidingView>
     </SwipeBackScreen>
@@ -3148,6 +3195,7 @@ function SessionNavigationBar({
   title,
   uploadProgress,
   onBack,
+  onOpenSettings,
 }: {
   acceptsInput: boolean;
   live: boolean;
@@ -3158,27 +3206,41 @@ function SessionNavigationBar({
   title: string;
   uploadProgress: MobileInputUploadProgress | null;
   onBack: () => void;
+  onOpenSettings: () => void;
 }) {
   return (
     <View style={styles.sessionNavBar}>
-      <Pressable
-        accessibilityLabel="Back to sessions"
-        accessibilityRole="button"
-        style={({ pressed }) => [
-          styles.sessionNavBackButton,
-          pressed ? styles.buttonPressed : null,
-        ]}
-        onPress={onBack}
-      >
-        <Ionicons color={COLORS.charcoal} name="chevron-back-outline" size={22} />
-      </Pressable>
-      <View style={styles.sessionNavTitleBlock}>
-        <Text style={styles.sessionNavEyebrow} numberOfLines={1}>
-          Session · {projectLabel}
-        </Text>
-        <Text style={styles.sessionNavTitle} numberOfLines={1}>
-          {title}
-        </Text>
+      <View style={styles.sessionNavPrimaryRow}>
+        <Pressable
+          accessibilityLabel="返回会话列表"
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.sessionNavActionButton,
+            pressed ? styles.buttonPressed : null,
+          ]}
+          onPress={onBack}
+        >
+          <Ionicons color={COLORS.charcoal} name="chevron-back-outline" size={22} />
+        </Pressable>
+        <View style={styles.sessionNavTitleBlock}>
+          <Text style={styles.sessionNavEyebrow} numberOfLines={1}>
+            Session · {projectLabel}
+          </Text>
+          <Text style={styles.sessionNavTitle} numberOfLines={1}>
+            {title}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityLabel="设置会话显示"
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.sessionNavActionButton,
+            pressed ? styles.buttonPressed : null,
+          ]}
+          onPress={onOpenSettings}
+        >
+          <Ionicons color={COLORS.charcoal} name="settings-outline" size={20} />
+        </Pressable>
       </View>
       <SessionRuntimeStatus
         acceptsInput={acceptsInput}
@@ -3195,13 +3257,13 @@ function SessionNavigationBar({
 function InputMediaControls({
   compact = false,
   connection,
+  contextSelectors,
   disabled,
   images,
   imagesEnabled,
   input,
   canSubmit = false,
   onSubmit,
-  projectSelector,
   speechContext = [],
   skillContext,
   value,
@@ -3211,18 +3273,20 @@ function InputMediaControls({
 }: {
   compact?: boolean;
   connection: MobileConnection;
+  contextSelectors?: {
+    accessibilityLabel: string;
+    disabled?: boolean;
+    icon: keyof typeof Ionicons.glyphMap;
+    label: string;
+    value: string;
+    onPress: () => void;
+  }[];
   disabled: boolean;
   images: MobileImageDraft[];
   imagesEnabled: boolean;
   input: ReactNode;
   canSubmit?: boolean;
   onSubmit?: () => void;
-  projectSelector?: {
-    contextHint?: string;
-    icon?: keyof typeof Ionicons.glyphMap;
-    label: string;
-    onPress: () => void;
-  };
   speechContext?: readonly (string | null | undefined)[];
   skillContext: {
     projectId?: string;
@@ -3431,98 +3495,110 @@ function InputMediaControls({
           ))}
         </ScrollView>
       ) : null}
-      {projectSelector ? (
+      {contextSelectors && contextSelectors.length > 0 ? (
         <View style={styles.inputMediaContextRow}>
-          <Pressable
-            accessibilityHint="先选择项目，再选择项目下的任务"
-            accessibilityLabel={`选择任务归属，当前${projectSelector.label}`}
-            accessibilityRole="button"
-            accessibilityState={{ disabled }}
-            disabled={disabled}
-            style={({ pressed }) => [
-              styles.inputMediaProjectButton,
-              disabled ? styles.buttonDisabled : null,
-              pressed ? styles.buttonPressed : null,
-            ]}
-            onPress={projectSelector.onPress}
-          >
-            <Ionicons
-              color={COLORS.charcoal}
-              name={projectSelector.icon ?? 'folder-outline'}
-              size={16}
-            />
-            <Text numberOfLines={1} style={styles.inputMediaProjectText}>
-              {projectSelector.label}
-            </Text>
-            <Ionicons color={COLORS.muted} name="chevron-down-outline" size={13} />
-          </Pressable>
-          <Text style={styles.inputMediaContextHint}>
-            {projectSelector.contextHint ?? '选择任务归属'}
-          </Text>
+          {contextSelectors.map((selector) => {
+            const selectorDisabled = disabled || selector.disabled;
+            return (
+              <Pressable
+                key={selector.label}
+                accessibilityLabel={selector.accessibilityLabel}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: selectorDisabled }}
+                disabled={selectorDisabled}
+                style={({ pressed }) => [
+                  styles.inputMediaContextButton,
+                  selectorDisabled ? styles.inputMediaContextButtonDisabled : null,
+                  pressed ? styles.buttonPressed : null,
+                ]}
+                onPress={selector.onPress}
+              >
+                <Text style={styles.inputMediaContextLabel}>{selector.label}</Text>
+                <View style={styles.inputMediaContextValueRow}>
+                  <Ionicons color={COLORS.charcoal} name={selector.icon} size={15} />
+                  <Text numberOfLines={1} style={styles.inputMediaContextValue}>
+                    {selector.value}
+                  </Text>
+                  <Ionicons color={COLORS.muted} name="chevron-down-outline" size={13} />
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
       ) : null}
-      <View style={styles.wechatComposerRow}>
-        <Pressable
-          accessibilityHint={
-            voiceActive
-              ? 'Stops listening and keeps the transcribed text in the input.'
-              : 'Starts listening and shows speech as editable text in the input.'
-          }
-          accessibilityLabel={voiceActive ? 'Stop voice input' : 'Start voice input'}
-          accessibilityRole="button"
-          accessibilityState={{
-            busy: voiceStarting,
-            disabled: disabled || voiceStarting,
-            selected: voiceActive,
-          }}
-          disabled={disabled || voiceStarting}
-          hitSlop={5}
-          style={({ pressed }) => [
-            styles.composerVoiceButton,
-            voiceActive ? styles.composerVoiceButtonActive : null,
-            disabled ? styles.buttonDisabled : null,
-            pressed ? styles.buttonPressed : null,
-          ]}
-          onPress={handleVoiceButtonPress}
-        >
-          {voiceStarting ? (
-            <ActivityIndicator color={COLORS.green} size="small" />
-          ) : (
-            <Ionicons
-              color={voiceActive ? COLORS.green : COLORS.charcoal}
-              name={voiceActive ? 'stop-circle-outline' : 'mic-outline'}
-              size={25}
-            />
-          )}
-        </Pressable>
-        <View
-          style={[styles.composerTextShell, voiceActive ? styles.composerTextShellActive : null]}
-        >
-          {input}
+      <View style={[styles.composerSurface, voiceActive ? styles.composerSurfaceActive : null]}>
+        <View style={styles.composerTextShell}>{input}</View>
+        <View style={styles.composerToolbar}>
+          <View style={styles.composerToolbarLeading}>
+            <Pressable
+              accessibilityHint={
+                voiceActive ? '停止识别并保留文字' : '开始语音识别，识别结果可继续编辑'
+              }
+              accessibilityLabel={voiceActive ? '停止语音输入' : '开始语音输入'}
+              accessibilityRole="button"
+              accessibilityState={{
+                busy: voiceStarting,
+                disabled: disabled || voiceStarting,
+                selected: voiceActive,
+              }}
+              disabled={disabled || voiceStarting}
+              hitSlop={5}
+              style={({ pressed }) => [
+                styles.composerToolbarButton,
+                voiceActive ? styles.composerVoiceButtonActive : null,
+                disabled ? styles.buttonDisabled : null,
+                pressed ? styles.buttonPressed : null,
+              ]}
+              onPress={handleVoiceButtonPress}
+            >
+              {voiceStarting ? (
+                <ActivityIndicator color={COLORS.green} size="small" />
+              ) : (
+                <Ionicons
+                  color={voiceActive ? COLORS.green : COLORS.charcoal}
+                  name={voiceActive ? 'stop-circle-outline' : 'mic-outline'}
+                  size={22}
+                />
+              )}
+            </Pressable>
+            <Pressable
+              accessibilityLabel={toolsOpen ? '收起输入工具' : '打开输入工具'}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: toolsOpen, disabled }}
+              disabled={disabled}
+              hitSlop={5}
+              style={({ pressed }) => [
+                styles.composerToolbarButton,
+                toolsOpen ? styles.composerToolbarButtonActive : null,
+                disabled ? styles.buttonDisabled : null,
+                pressed ? styles.buttonPressed : null,
+              ]}
+              onPress={() => setToolsOpen((current) => !current)}
+            >
+              <Ionicons
+                color={COLORS.charcoal}
+                name={toolsOpen ? 'close-outline' : 'add-outline'}
+                size={23}
+              />
+            </Pressable>
+          </View>
+          {onSubmit ? (
+            <Pressable
+              accessibilityLabel="发送消息"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: disabled || !canSubmit }}
+              disabled={disabled || !canSubmit}
+              style={({ pressed }) => [
+                styles.composerSendButton,
+                !canSubmit ? styles.composerSendButtonDisabled : null,
+                pressed ? styles.buttonPressed : null,
+              ]}
+              onPress={onSubmit}
+            >
+              <Ionicons color={COLORS.surface} name="arrow-up-outline" size={20} />
+            </Pressable>
+          ) : null}
         </View>
-        <Pressable
-          accessibilityLabel={canSubmit && onSubmit ? 'Send message' : 'More input tools'}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: disabled || (canSubmit && !onSubmit) }}
-          disabled={disabled || (canSubmit && !onSubmit)}
-          hitSlop={5}
-          style={({ pressed }) => [
-            styles.composerTrailingButton,
-            canSubmit && onSubmit ? styles.composerSendButton : null,
-            disabled ? styles.buttonDisabled : null,
-            pressed ? styles.buttonPressed : null,
-          ]}
-          onPress={() => {
-            if (canSubmit && onSubmit) onSubmit();
-            else setToolsOpen((current) => !current);
-          }}
-        >
-          <Ionicons
-            color={canSubmit && onSubmit ? COLORS.surface : COLORS.charcoal}
-            name={canSubmit && onSubmit ? 'arrow-up-outline' : 'add-outline'}
-            size={28}
-          />
-        </Pressable>
       </View>
       {toolsOpen ? (
         <View style={styles.inputToolsTray}>
@@ -3773,7 +3849,7 @@ function SessionInputComposer({
             placeholderTextColor="#9A958C"
             scrollEnabled
             style={styles.composerTextInput}
-            textAlignVertical="center"
+            textAlignVertical="top"
             value={value}
             onChangeText={onChange}
           />
@@ -3832,25 +3908,28 @@ function SessionRuntimeStatus({
           : live
             ? 'Connected, input unavailable.'
             : 'Session offline.';
+  const visibleDetail = uploadProgress
+    ? mobileInputUploadProgressText(uploadProgress)
+    : sending
+      ? '正在发送'
+      : null;
 
   return (
     <View
       accessibilityLabel={`${presentation.label}. ${detail}`}
       accessibilityLiveRegion="polite"
-      style={[
-        styles.sessionRunStatus,
-        { borderColor: presentation.color, backgroundColor: presentation.backgroundColor },
-      ]}
+      style={styles.sessionRunStatus}
     >
       <View style={styles.sessionRunStatusIcon}>
         {presentation.animated ? (
-          <ActivityIndicator color={presentation.color} size="small" />
+          <ActivityIndicator color={presentation.color} size={12} />
         ) : (
-          <Ionicons color={presentation.color} name={presentation.icon} size={20} />
+          <Ionicons color={presentation.color} name={presentation.icon} size={13} />
         )}
       </View>
       <Text style={[styles.sessionRunStatusLabel, { color: presentation.color }]} numberOfLines={1}>
         {presentation.label}
+        {visibleDetail ? ` · ${visibleDetail}` : ''}
       </Text>
     </View>
   );
@@ -3915,6 +3994,119 @@ function sessionRuntimePresentation(status: MobileSessionSummary['runtimeStatus'
   }
 }
 
+const AGENT_REPLY_DISPLAY_COPY: Record<
+  AgentReplyDisplayLevel,
+  { description: string; label: string }
+> = {
+  hidden: { label: '不显示', description: '只显示你的对话' },
+  concise: { label: '精简', description: '只显示 Agent 的最终回复' },
+  detailed: { label: '详细', description: '显示除工具调用以外的对话' },
+  verbose: { label: '全部', description: '显示回复、状态与工具调用' },
+};
+
+function SessionDisplaySettingsSheet({
+  displayLevel,
+  open,
+  outputMode,
+  onClose,
+  onDisplayLevelChange,
+  onOutputModeChange,
+}: {
+  displayLevel: AgentReplyDisplayLevel;
+  open: boolean;
+  outputMode: SessionOutputMode;
+  onClose: () => void;
+  onDisplayLevelChange: (level: AgentReplyDisplayLevel) => void;
+  onOutputModeChange: (mode: SessionOutputMode) => void;
+}) {
+  return (
+    <Modal
+      animationType="slide"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      transparent
+      visible={open}
+      onRequestClose={onClose}
+    >
+      <View accessibilityViewIsModal style={styles.projectPickerOverlay}>
+        <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
+        <SafeAreaView style={styles.sessionDisplaySettingsSheet}>
+          <View style={styles.projectPickerHandle} />
+          <View style={styles.projectPickerHeader}>
+            <View style={styles.projectPickerTitleBlock}>
+              <Text style={styles.projectPickerEyebrow}>当前会话</Text>
+              <Text style={styles.projectPickerTitle}>显示设置</Text>
+            </View>
+            <Pressable
+              accessibilityLabel="关闭显示设置"
+              accessibilityRole="button"
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.projectPickerClose,
+                pressed ? styles.buttonPressed : null,
+              ]}
+              onPress={onClose}
+            >
+              <Ionicons color={COLORS.charcoal} name="close-outline" size={22} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.sessionDisplaySettingsContent}>
+            <View style={styles.sessionDisplaySettingsGroup}>
+              <View style={styles.sessionDisplaySettingsHeading}>
+                <Text style={styles.sessionDisplaySettingsLabel}>显示模式</Text>
+                <Text style={styles.sessionDisplaySettingsDescription}>
+                  选择适合阅读的排版，或查看原始记录。
+                </Text>
+              </View>
+              <OutputModeToggle mode={outputMode} onChange={onOutputModeChange} />
+            </View>
+            <View style={styles.sessionDisplaySettingsGroup}>
+              <View style={styles.sessionDisplaySettingsHeading}>
+                <Text style={styles.sessionDisplaySettingsLabel}>对话详细度</Text>
+                <Text style={styles.sessionDisplaySettingsDescription}>
+                  控制会话里保留多少过程信息；原始记录始终完整显示。
+                </Text>
+              </View>
+              <View accessibilityRole="radiogroup" style={styles.sessionDisplayLevelList}>
+                {AGENT_REPLY_DISPLAY_LEVELS.map((level) => {
+                  const selected = displayLevel === level;
+                  const copy = AGENT_REPLY_DISPLAY_COPY[level];
+                  return (
+                    <Pressable
+                      key={level}
+                      accessibilityLabel={`${copy.label}，${copy.description}`}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: selected }}
+                      style={({ pressed }) => [
+                        styles.sessionDisplayLevelOption,
+                        selected ? styles.sessionDisplayLevelOptionSelected : null,
+                        pressed ? styles.buttonPressed : null,
+                      ]}
+                      onPress={() => onDisplayLevelChange(level)}
+                    >
+                      <View style={styles.sessionDisplayLevelOptionBody}>
+                        <Text style={styles.sessionDisplayLevelOptionLabel}>{copy.label}</Text>
+                        <Text style={styles.sessionDisplayLevelOptionDescription}>
+                          {copy.description}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        color={selected ? COLORS.charcoal : COLORS.line}
+                        name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={21}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </View>
+    </Modal>
+  );
+}
+
 function OutputModeToggle({
   mode,
   onChange,
@@ -3923,18 +4115,19 @@ function OutputModeToggle({
   onChange: (mode: SessionOutputMode) => void;
 }) {
   const options: Array<{ label: string; value: SessionOutputMode }> = [
-    { label: 'Rendered', value: 'rendered' },
-    { label: 'Raw', value: 'raw' },
+    { label: '阅读', value: 'rendered' },
+    { label: '原始记录', value: 'raw' },
   ];
 
   return (
-    <View style={styles.outputModeControl}>
+    <View accessibilityRole="radiogroup" style={styles.outputModeControl}>
       {options.map((option) => {
         const active = option.value === mode;
         return (
           <Pressable
             key={option.value}
-            accessibilityRole="button"
+            accessibilityRole="radio"
+            accessibilityState={{ checked: active }}
             style={({ pressed }) => [
               styles.outputModeButton,
               active ? styles.outputModeButtonActive : null,
@@ -3954,14 +4147,17 @@ function OutputModeToggle({
 
 function RenderedSessionTranscript({
   detail,
+  displayLevel,
   fallbackOutput,
 }: {
   detail: MobileSessionDetail;
+  displayLevel: AgentReplyDisplayLevel;
   fallbackOutput: string;
 }) {
   const transcript = useMemo(
-    () => mergeAdjacentAssistantBlocks(detail.transcript),
-    [detail.transcript]
+    () =>
+      mergeAdjacentAssistantBlocks(filterMobileSessionTranscript(detail.transcript, displayLevel)),
+    [detail.transcript, displayLevel]
   );
   const renderItems = useMemo(() => groupAdjacentMobileToolBlocks(transcript), [transcript]);
   const latestToolId = useMemo(
@@ -3971,6 +4167,15 @@ function RenderedSessionTranscript({
 
   if (detail.transcript.length === 0) {
     return <ReadableSessionOutput output={fallbackOutput} />;
+  }
+
+  if (transcript.length === 0) {
+    return (
+      <View style={styles.emptyState}>
+        <Ionicons color={COLORS.muted} name="chatbubble-ellipses-outline" size={22} />
+        <Text style={styles.emptyText}>当前详细度下暂无可显示的对话</Text>
+      </View>
+    );
   }
 
   return (
@@ -4575,17 +4780,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sessionNavBar: {
-    minHeight: 64,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    minHeight: 74,
+    gap: 5,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.line,
     backgroundColor: COLORS.surface,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingTop: 8,
+    paddingBottom: 7,
   },
-  sessionNavBackButton: {
+  sessionNavPrimaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sessionNavActionButton: {
     width: 42,
     height: 42,
     alignItems: 'center',
@@ -4633,27 +4842,28 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   sessionRunStatus: {
-    maxWidth: 142,
-    minHeight: 30,
+    maxWidth: '100%',
+    minHeight: 14,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
     flexShrink: 0,
-    gap: 5,
-    borderWidth: 1,
-    borderRadius: 15,
+    gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 4,
   },
   sessionRunStatusIcon: {
-    width: 20,
+    width: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sessionRunStatusLabel: {
     minWidth: 0,
     flexShrink: 1,
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   sessionInputCount: {
     alignSelf: 'flex-end',
@@ -4700,32 +4910,42 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.charcoal,
   },
   inputMediaContextRow: {
-    minHeight: 26,
+    minHeight: 58,
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
   },
-  inputMediaProjectButton: {
-    maxWidth: 184,
-    minHeight: 26,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderRadius: 13,
-    backgroundColor: '#EFEEE7',
-    paddingHorizontal: 8,
-  },
-  inputMediaProjectText: {
+  inputMediaContextButton: {
     minWidth: 0,
-    flexShrink: 1,
-    color: COLORS.charcoal,
-    fontSize: 11,
+    flex: 1,
+    justifyContent: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 10,
+    backgroundColor: COLORS.page,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+  },
+  inputMediaContextButtonDisabled: {
+    opacity: 0.55,
+  },
+  inputMediaContextLabel: {
+    color: COLORS.muted,
+    fontSize: 10,
     fontWeight: '800',
   },
-  inputMediaContextHint: {
-    color: COLORS.muted,
-    fontSize: 11,
-    fontWeight: '600',
+  inputMediaContextValueRow: {
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  inputMediaContextValue: {
+    minWidth: 0,
+    flex: 1,
+    color: COLORS.charcoal,
+    fontSize: 13,
+    fontWeight: '800',
   },
   inputMediaHint: {
     alignSelf: 'center',
@@ -4734,57 +4954,71 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-  wechatComposerRow: {
-    minHeight: 46,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  composerSurface: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 12,
+    backgroundColor: COLORS.surface,
   },
-  composerVoiceButton: {
-    width: 34,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  composerVoiceButtonActive: {
-    borderRadius: 17,
-    backgroundColor: '#EAF7F2',
-  },
-  composerTextShell: {
-    minWidth: 0,
-    flex: 1,
-  },
-  composerTextShellActive: {
-    borderRadius: 9,
+  composerSurfaceActive: {
+    borderColor: COLORS.green,
     shadowColor: COLORS.green,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.14,
     shadowRadius: 5,
   },
+  composerVoiceButtonActive: {
+    backgroundColor: '#EAF7F2',
+  },
+  composerTextShell: {
+    minWidth: 0,
+  },
   composerTextInput: {
-    minHeight: 44,
-    maxHeight: 112,
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 7,
-    backgroundColor: COLORS.surface,
+    minHeight: 70,
+    maxHeight: 132,
     color: COLORS.ink,
     fontSize: 16,
     lineHeight: 22,
-    paddingHorizontal: 12,
-    paddingTop: 10,
+    paddingHorizontal: 13,
+    paddingTop: 12,
     paddingBottom: 10,
   },
-  composerTrailingButton: {
-    width: 38,
-    height: 44,
+  composerToolbar: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.faint,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+  },
+  composerToolbarLeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  composerToolbarButton: {
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 8,
+  },
+  composerToolbarButtonActive: {
+    backgroundColor: COLORS.page,
   },
   composerSendButton: {
-    width: 42,
-    borderRadius: 8,
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 17,
     backgroundColor: COLORS.green,
+  },
+  composerSendButtonDisabled: {
+    backgroundColor: '#AAA9A3',
   },
   inputToolsTray: {
     minHeight: 112,
@@ -5494,6 +5728,12 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 14,
   },
+  newTaskWindowHeaderTitleBlock: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+    paddingRight: 12,
+  },
   newTaskWindowEyebrow: {
     color: COLORS.muted,
     fontSize: 11,
@@ -5528,6 +5768,74 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 18,
     backgroundColor: COLORS.surface,
     paddingTop: 9,
+  },
+  sessionDisplaySettingsSheet: {
+    maxHeight: '78%',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    backgroundColor: COLORS.surface,
+    paddingTop: 9,
+  },
+  sessionDisplaySettingsContent: {
+    gap: 22,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.faint,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 22,
+  },
+  sessionDisplaySettingsGroup: {
+    gap: 11,
+  },
+  sessionDisplaySettingsHeading: {
+    gap: 3,
+  },
+  sessionDisplaySettingsLabel: {
+    color: COLORS.ink,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  sessionDisplaySettingsDescription: {
+    color: COLORS.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  sessionDisplayLevelList: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 10,
+    backgroundColor: COLORS.surface,
+  },
+  sessionDisplayLevelOption: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.faint,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  sessionDisplayLevelOptionSelected: {
+    backgroundColor: '#F2F0E9',
+  },
+  sessionDisplayLevelOptionBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+  },
+  sessionDisplayLevelOptionLabel: {
+    color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  sessionDisplayLevelOptionDescription: {
+    color: COLORS.muted,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
   },
   projectPickerHandle: {
     width: 42,

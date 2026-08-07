@@ -1762,6 +1762,7 @@ export class MobileGatewayService {
         taskId,
         runtime: provider,
         title: taskNameFromPrompt(params.prompt) || 'Mobile image request',
+        clientSource: 'mobile',
         initialPrompt,
         imagePaths: attachments.map((attachment) => attachment.filePath),
       },
