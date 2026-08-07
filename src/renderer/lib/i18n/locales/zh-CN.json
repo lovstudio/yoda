@@ -4439,6 +4439,16 @@
     "editSource": "编辑源码",
     "preview": "预览",
     "noFiles": "没有文件",
+    "imageViewer": {
+      "carousel": "图片预览",
+      "lightbox": "图片全屏预览",
+      "image": "图片",
+      "download": "下载图片",
+      "enterFullscreen": "进入全屏",
+      "exitFullscreen": "退出全屏",
+      "zoomIn": "放大",
+      "zoomOut": "缩小"
+    },
     "conflict": {
       "title": "文件已在外部修改",
       "description": "<code>{{path}}</code> 在编辑器外被修改，而你还有未保存的编辑。要如何处理？",

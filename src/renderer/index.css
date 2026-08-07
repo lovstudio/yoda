@@ -2,6 +2,7 @@
 @import 'tw-animate-css';
 @import '@xterm/xterm/css/xterm.css';
 @import 'allotment/dist/style.css';
+@import 'yet-another-react-lightbox/styles.css';
 
 @custom-variant dark (&:is(.dark *));
 @custom-variant dark-black (&:is(.dark-black *));
@@ -115,6 +116,46 @@
 ::selection {
   background: var(--selection);
   color: var(--selection-foreground);
+}
+
+/* Shared image preview: adapt the lightbox controls to Yoda's compact editor chrome. */
+.yoda-image-viewer {
+  --yarl__container_background_color: var(--background);
+  --yarl__color_button: var(--foreground-muted);
+  --yarl__color_button_active: var(--foreground);
+  --yarl__color_button_disabled: var(--foreground-passive);
+  --yarl__button_filter: none;
+  --yarl__icon_size: 18px;
+  --yarl__button_padding: 7px;
+  --yarl__toolbar_padding: 4px;
+}
+
+.yoda-image-viewer .yarl__toolbar {
+  top: 8px;
+  right: 8px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--background-secondary) 90%, transparent);
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--foreground) 8%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.yoda-image-viewer .yarl__button {
+  border-radius: calc(var(--radius-md) - 2px);
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.yoda-image-viewer .yarl__button:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+@media (hover: hover) {
+  .yoda-image-viewer .yarl__button:not(:disabled):hover {
+    background: var(--background-2);
+  }
 }
 
 /*
