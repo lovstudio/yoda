@@ -3,6 +3,7 @@ import {
   findSidebarSelectionRow,
   resolveSidebarSelectionTarget,
   revealSidebarSelectionRow,
+  shouldRevealSidebarSelection,
   shouldSuppressSidebarRouteScroll,
 } from '@renderer/features/sidebar/sidebar-selection-sync';
 import '../../index.css';
@@ -63,6 +64,13 @@ describe('sidebar selection sync', () => {
         'task:route-project:route-task'
       )
     ).toBe(false);
+  });
+
+  it('does not reveal the same selected task again when unpinning rehomes its row', () => {
+    const selectionKey = 'task:project-1:task-1';
+
+    expect(shouldRevealSidebarSelection(selectionKey, null)).toBe(true);
+    expect(shouldRevealSidebarSelection(selectionKey, selectionKey)).toBe(false);
   });
 
   it('finds the selected project row across the whole sidebar', () => {

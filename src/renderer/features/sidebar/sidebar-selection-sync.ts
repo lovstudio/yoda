@@ -38,6 +38,13 @@ export function shouldSuppressSidebarRouteScroll(
   return requestId === undefined && selectionKey !== null && selectionKey === suppressedRouteKey;
 }
 
+export function shouldRevealSidebarSelection(
+  selectionKey: string,
+  lastRevealedSelectionKey: string | null
+): boolean {
+  return selectionKey !== lastRevealedSelectionKey;
+}
+
 export function findSidebarSelectionRow(
   root: HTMLElement | null,
   projectId: string,
