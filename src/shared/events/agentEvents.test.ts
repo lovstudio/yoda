@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { agentEventRequiresUserAction } from './agentEvents';
+import { shouldRetainAppNotification } from './appEvents';
 
 describe('agentEventRequiresUserAction', () => {
   it('keeps only agent events that are waiting on the user', () => {
@@ -17,5 +18,13 @@ describe('agentEventRequiresUserAction', () => {
         payload: { notificationType: 'auth_success' },
       })
     ).toBe(false);
+  });
+});
+
+describe('shouldRetainAppNotification', () => {
+  it('retains errors and action-required events while dropping informational events', () => {
+    expect(shouldRetainAppNotification({ kind: 'error', requiresAction: false })).toBe(true);
+    expect(shouldRetainAppNotification({ kind: 'info', requiresAction: true })).toBe(true);
+    expect(shouldRetainAppNotification({ kind: 'success', requiresAction: false })).toBe(false);
   });
 });

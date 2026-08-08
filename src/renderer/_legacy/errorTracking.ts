@@ -1,4 +1,5 @@
 import type { TelemetryEventProperties } from '@shared/telemetry';
+import { enqueueRendererErrorNotification } from '@renderer/lib/stores/renderer-error-notification';
 import { log } from '@renderer/utils/logger';
 import { captureTelemetry } from '../utils/telemetryClient';
 
@@ -51,6 +52,15 @@ class RendererErrorTracking {
 
       // Determine severity if not provided
       const severity = context?.severity || this.determineSeverity(errorMessage, context);
+
+      enqueueRendererErrorNotification(errorObj, {
+        component: context?.component,
+        operation: context?.operation,
+        action: context?.action,
+        errorType: context?.error_type,
+        severity,
+        details: this.sanitizeContext(context),
+      });
 
       // Build error properties following PostHog's $exception format
       const properties: Record<string, any> = {

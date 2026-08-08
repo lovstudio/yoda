@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { notificationCreatedChannel } from '@shared/events/appEvents';
+import { notificationCreatedChannel, shouldRetainAppNotification } from '@shared/events/appEvents';
 import { events } from '@renderer/lib/ipc';
 import { workspaceNotificationStore } from '@renderer/lib/stores/notification-store';
 
@@ -10,7 +10,7 @@ export function WorkspaceNotificationEvents() {
   useEffect(
     () =>
       events.on(notificationCreatedChannel, (notification) => {
-        if (!notification.requiresAction) return;
+        if (!shouldRetainAppNotification(notification)) return;
         const description = notification.messageKey
           ? t(`workspaceRuntime.notifications.system.${notification.messageKey}`)
           : notification.description;

@@ -205,7 +205,7 @@ function recordToast(
   const toastKey = String(options?.id ?? toastId);
   const existingNotificationId = toastNotificationIds.get(toastKey);
   const notificationAction = toNotificationAction(action);
-  if (!notificationAction) {
+  if (!notificationAction && kind !== 'error') {
     if (existingNotificationId) {
       workspaceNotificationStore.remove(existingNotificationId);
       toastNotificationIds.delete(toastKey);

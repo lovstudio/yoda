@@ -10,6 +10,7 @@ import type {
   NavigationSnapshot,
   SidebarSnapshot,
 } from '@shared/view-state';
+import { captureException } from '@renderer/_legacy/errorTracking';
 import { isAiLabWindowLaunch } from '@renderer/lib/ai-lab-window-launch-target';
 import { setupAppCommandProvider } from '@renderer/lib/commands/app-commands';
 import { setupViewCommandProvider } from '@renderer/lib/commands/registry';
@@ -129,5 +130,10 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error: unknown) => {
+  captureException(error, {
+    component: 'bootstrap',
+    error_type: 'bootstrap_error',
+    severity: 'critical',
+  });
   log.error('Renderer bootstrap failed:', error);
 });

@@ -46,6 +46,12 @@ export type AppNotificationCreated = {
   };
 };
 
+export function shouldRetainAppNotification(
+  notification: Pick<AppNotificationCreated, 'kind' | 'requiresAction'>
+): boolean {
+  return notification.kind === 'error' || notification.requiresAction;
+}
+
 export const notificationCreatedChannel =
   defineEvent<AppNotificationCreated>('notification:created');
 

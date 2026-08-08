@@ -4,12 +4,14 @@ import { workspaceNotificationStore } from '@renderer/lib/stores/notification-st
 import { toast } from './use-toast';
 
 const mocks = vi.hoisted(() => {
+  let toastSequence = 0;
+  const nextToastId = () => `toast-id-${++toastSequence}`;
   const sonnerToast = Object.assign(
-    vi.fn<(message: unknown, options?: unknown) => string>(() => 'toast-id'),
+    vi.fn<(message: unknown, options?: unknown) => string>(nextToastId),
     {
-      error: vi.fn<(message: unknown, options?: unknown) => string>(() => 'toast-id'),
-      success: vi.fn<(message: unknown, options?: unknown) => string>(() => 'toast-id'),
-      loading: vi.fn<(message: unknown, options?: unknown) => string>(() => 'toast-id'),
+      error: vi.fn<(message: unknown, options?: unknown) => string>(nextToastId),
+      success: vi.fn<(message: unknown, options?: unknown) => string>(nextToastId),
+      loading: vi.fn<(message: unknown, options?: unknown) => string>(nextToastId),
       dismiss: vi.fn(),
     }
   );
@@ -17,6 +19,9 @@ const mocks = vi.hoisted(() => {
   return {
     sonnerToast,
     writeText: vi.fn<(text: string) => Promise<void>>(),
+    resetToastSequence: () => {
+      toastSequence = 0;
+    },
   };
 });
 
@@ -41,6 +46,7 @@ describe('toast', () => {
     mocks.sonnerToast.error.mockClear();
     mocks.sonnerToast.success.mockClear();
     mocks.sonnerToast.loading.mockClear();
+    mocks.resetToastSequence();
     mocks.writeText.mockReset();
     mocks.writeText.mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText: mocks.writeText } });
@@ -97,7 +103,9 @@ describe('toast', () => {
 
     expect(mocks.writeText).toHaveBeenCalledWith('Something broke');
     expect(mocks.sonnerToast.success).toHaveBeenCalledWith('Copied', undefined);
-    expect(workspaceNotificationStore.getSnapshot()).toEqual([]);
+    expect(workspaceNotificationStore.getSnapshot()).toMatchObject([
+      { title: 'Something broke', kind: 'error', source: 'toast' },
+    ]);
   });
 
   it('adds a one-click debug info copy action', async () => {
@@ -122,6 +130,7 @@ describe('toast', () => {
     expect(copiedText).toContain('"step": "clone"');
     expect(copiedText).toContain('"message": "branch not found"');
     expect(mocks.sonnerToast.success).toHaveBeenCalledWith('Debug info copied', undefined);
+    expect(workspaceNotificationStore.getSnapshot()[0].details).toContain('branch not found');
   });
 
   it('keeps an existing toast action and adds debug copy as the secondary action', () => {
