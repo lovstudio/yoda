@@ -11,6 +11,7 @@ import '../../index.css';
 const mocks = vi.hoisted(() => ({
   createTeam: vi.fn(),
   showAgentModal: vi.fn(),
+  agents: [] as Agent[],
 }));
 
 vi.mock('react-i18next', async (importOriginal) => ({
@@ -32,7 +33,7 @@ vi.mock('@renderer/features/agent-teams/use-agent-teams', () => ({
 }));
 
 vi.mock('@renderer/features/agents-config/use-agents', () => ({
-  useAgents: () => ({ agents: [] }),
+  useAgents: () => ({ agents: mocks.agents }),
 }));
 
 vi.mock('@renderer/lib/ipc', () => ({
@@ -73,6 +74,7 @@ describe('AgentTeamsMainPanel', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.agents = [];
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -120,6 +122,47 @@ describe('AgentTeamsMainPanel', () => {
     });
     expect(saveButton?.disabled).toBe(false);
   });
+
+  it('keeps the member picker scrollable and reusable after closing', async () => {
+    mocks.agents = Array.from({ length: 18 }, (_, index) => ({
+      ...fixtureAgent(),
+      id: `agent-${index}`,
+      slug: `agent-${index}`,
+      name: `Agent ${index + 1}`,
+    }));
+    const { AgentTeamsMainPanel } = await import(
+      '@renderer/features/agent-teams/agent-teams-panel'
+    );
+    await act(async () => root.render(createElement(AgentTeamsMainPanel)));
+    await clickUser(host.querySelector('[aria-label="agentTeams.newTeam"]')!);
+
+    const trigger = host.querySelector<HTMLButtonElement>('[aria-label="agentTeams.addAgent"]');
+    expect(trigger?.disabled).toBe(false);
+    await clickUser(trigger!);
+    await settle();
+
+    const firstPopup = document.querySelector<HTMLElement>(
+      '[data-slot="select-content"][data-open]'
+    );
+    expect(firstPopup).not.toBeNull();
+    expect(firstPopup?.style.maxHeight).toBe('16rem');
+    const firstList = firstPopup!.querySelector<HTMLElement>('[role="listbox"]');
+    expect(firstList).not.toBeNull();
+    expect(getComputedStyle(firstList!).overflowY).toBe('auto');
+    expect(firstList!.scrollHeight).toBeGreaterThan(firstList!.clientHeight);
+    await act(async () => {
+      firstList!.scrollTop = 80;
+      firstList!.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+    expect(firstList!.scrollTop).toBeGreaterThan(0);
+
+    await act(async () => userEvent.keyboard('{Escape}'));
+    await settle(150);
+    await clickUser(trigger!);
+    await settle();
+
+    expect(document.querySelector('[data-slot="select-content"][data-open]')).not.toBeNull();
+  });
 });
 
 function fixtureAgent(): Agent {
@@ -145,4 +188,10 @@ function fixtureAgent(): Agent {
 
 async function clickUser(element: Element): Promise<void> {
   await act(async () => userEvent.click(element));
+}
+
+async function settle(delay = 0): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => window.setTimeout(resolve, delay));
+  });
 }

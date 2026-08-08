@@ -283,6 +283,7 @@ const RoomSettingsPopover = observer(function RoomSettingsPopover({
           <div className="space-y-2">
             <Label className="text-xs">{t('agentRoom.communication.mode')}</Label>
             <Select
+              modal={false}
               value={communication.mode}
               onValueChange={(mode) =>
                 setCommunication((current) => ({

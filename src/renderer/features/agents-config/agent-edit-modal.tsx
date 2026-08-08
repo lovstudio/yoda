@@ -130,7 +130,12 @@ function SkillModeSelect({
 }) {
   const { t } = useTranslation();
   return (
-    <Select value={value} onValueChange={(next) => onChange(next as SkillMode)} disabled={disabled}>
+    <Select
+      modal={false}
+      value={value}
+      onValueChange={(next) => onChange(next as SkillMode)}
+      disabled={disabled}
+    >
       <SelectTrigger className="h-7 w-28 shrink-0 text-[11px]">
         <SelectValue />
       </SelectTrigger>
@@ -468,6 +473,7 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
                   <OptionalLabel>{t('agentManager.reasoningEffort')}</OptionalLabel>
                 </Label>
                 <Select
+                  modal={false}
                   value={draft.reasoningEffort ?? 'inherit'}
                   onValueChange={(value) =>
                     set('reasoningEffort', value === 'inherit' ? null : value)
@@ -497,6 +503,7 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
                   <OptionalLabel>{t('agentManager.accessMode')}</OptionalLabel>
                 </Label>
                 <Select
+                  modal={false}
                   value={draft.accessMode}
                   onValueChange={(value) => set('accessMode', value as AgentAccessMode)}
                 >
@@ -562,6 +569,7 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
                 </p>
               </div>
               <Select
+                modal={false}
                 value={draft.skillPolicyMode}
                 onValueChange={(value) =>
                   setSkillPolicyMode(value as AgentDraft['skillPolicyMode'])
