@@ -5,6 +5,13 @@ import type { TaskNamingContextSnapshot, TaskNamingStatus } from '@shared/task-n
 export type ConversationExecutionMode = 'interactive' | 'automation';
 export type ConversationClientSource = 'desktop' | 'mobile';
 
+/** The reusable Agent profile bound to a conversation when it was created. */
+export type ConversationAgent = {
+  id: string;
+  name: string;
+  icon?: string;
+};
+
 export type Conversation = {
   id: string;
   projectId: string;
@@ -17,8 +24,11 @@ export type Conversation = {
   lastInteractedAt: string | null;
   resume?: boolean;
   autoApprove?: boolean;
+  agent?: ConversationAgent;
   /** Selected permission-mode id for this runtime (see runtime-registry permissionModes). */
   permissionMode?: string;
+  /** Runtime settings captured for the current session and future resumes. */
+  runtimeOverrides?: SessionRuntimeOverrides;
   /** Immutable effective skill set captured when this session was created. */
   skillPolicy?: SkillSessionPolicy;
   /**
@@ -376,7 +386,23 @@ export type SessionRuntimeOverrides = {
   reasoningEffort?: string | null;
   /** Codex Fast mode. `false` explicitly selects standard routing. */
   fastMode?: boolean;
+  /** Permission mode selected for this launch. */
+  permissionMode?: string;
 };
+
+/** Explicit runtime fields override inherited values; undefined keeps the base value. */
+export function mergeSessionRuntimeOverrides(
+  base?: SessionRuntimeOverrides,
+  override?: SessionRuntimeOverrides
+): SessionRuntimeOverrides | undefined {
+  if (!base && !override) return undefined;
+  const next: SessionRuntimeOverrides = { ...base };
+  if (override?.model !== undefined) next.model = override.model;
+  if (override?.reasoningEffort !== undefined) next.reasoningEffort = override.reasoningEffort;
+  if (override?.fastMode !== undefined) next.fastMode = override.fastMode;
+  if (override?.permissionMode !== undefined) next.permissionMode = override.permissionMode;
+  return next;
+}
 
 export type CodexSessionContext = {
   threadId: string;
@@ -410,6 +436,8 @@ export type CreateConversationParams = {
   runtime: RuntimeId;
   title: string;
   autoApprove?: boolean;
+  /** Reusable Agent profile selected for this conversation. */
+  agent?: ConversationAgent;
   /** Selected permission-mode id; resolved server-side from settings when omitted. */
   permissionMode?: string;
   isInitialConversation?: boolean;

@@ -475,6 +475,59 @@ export type MobileProfileSnapshot = {
   };
 };
 
+export type MobileRunMode = 'normal' | 'brainstorm';
+export type MobileTaskStrategyKind = 'new-branch' | 'no-worktree';
+
+export type MobilePermissionModeOption = {
+  id: string;
+  label: string;
+  description?: string;
+  danger?: boolean;
+};
+
+export type MobileRuntimeOption = {
+  id: RuntimeId;
+  name: string;
+};
+
+/** Compact Agent profile exposed to the phone; prompts and Skill internals stay on desktop. */
+export type MobileAgentSummary = {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  preferredRuntime: RuntimeId;
+  model: string | null;
+  reasoningEffort: string | null;
+  accessMode: string;
+};
+
+export type MobileSessionAgent = {
+  id: string | null;
+  name: string;
+  icon?: string;
+};
+
+export type MobileConfigurationSnapshot = {
+  generatedAt: string;
+  defaultRuntimeId: RuntimeId;
+  defaultAgentId: string | null;
+  runtimes: MobileRuntimeOption[];
+  agents: MobileAgentSummary[];
+  permissionModes: Partial<Record<RuntimeId, MobilePermissionModeOption[]>>;
+  defaultPermissionModes: Partial<Record<RuntimeId, string>>;
+};
+
+export type MobileDemandConfiguration = {
+  agentId: string | null;
+  runtimeId: RuntimeId;
+  runMode: MobileRunMode;
+  strategyKind: MobileTaskStrategyKind;
+  model: string | null;
+  reasoningEffort: string | null;
+  permissionMode: string | null;
+};
+
 export type MobileCreateDemandRequest = {
   projectId?: string | null;
   /** Parent task for context-aware creation from a task detail on mobile. */
@@ -483,6 +536,12 @@ export type MobileCreateDemandRequest = {
   title?: string;
   provider?: string;
   attachmentIds?: string[];
+  agentId?: string | null;
+  runMode?: MobileRunMode;
+  strategyKind?: MobileTaskStrategyKind;
+  model?: string | null;
+  reasoningEffort?: string | null;
+  permissionMode?: string;
 };
 
 export type MobileCreateDemandResponse = {
@@ -554,6 +613,10 @@ export type MobileSessionSummary = {
   tmuxEnabled: boolean;
   sessionId: string;
   sessionTitle?: string;
+  agent?: MobileSessionAgent;
+  model: string | null;
+  reasoningEffort: string | null;
+  permissionMode: string | null;
 };
 
 export function canContinueMobileSession(
@@ -611,6 +674,17 @@ export type MobileSessionInputResponse = {
   ok: true;
   generatedAt: string;
   requestId?: string;
+};
+
+export type MobileSessionRuntimeConfigurationUpdate = {
+  model?: string | null;
+  reasoningEffort?: string | null;
+  permissionMode?: string;
+};
+
+export type MobileSessionRuntimeConfigurationResponse = {
+  ok: true;
+  generatedAt: string;
 };
 
 export type MobileInputAttachmentKind = 'image';

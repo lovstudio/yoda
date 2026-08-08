@@ -57,11 +57,14 @@ import {
   resolveMobileSiblingTaskAttribution,
   sortMobileProjects,
   sortMobileTaskAttributionCandidates,
+  type MobileConfigurationSnapshot,
   type MobileDashboardSnapshot,
+  type MobileDemandConfiguration,
   type MobileProfileSnapshot,
   type MobileProjectSortMode,
   type MobileProjectSummary,
   type MobileSessionDetail,
+  type MobileSessionRuntimeConfigurationUpdate,
   type MobileSessionSummary,
   type MobileSessionTranscriptBlock,
   type MobileSkillSummary,
@@ -82,12 +85,14 @@ import {
 import {
   createDemand,
   discardInputAttachment,
+  fetchConfiguration,
   fetchProfile,
   fetchSessionDetail,
   fetchSkills,
   fetchSnapshot,
   fetchTaskSessions,
   sendSessionInput,
+  updateSessionRuntimeConfiguration,
   type MobileConnection,
 } from './api-client';
 import {
@@ -272,6 +277,31 @@ function createMobileSessionInputRequestId(): string {
 
 function sameStringArray(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function createDefaultMobileDemandConfiguration(
+  configuration: MobileConfigurationSnapshot
+): MobileDemandConfiguration {
+  const agent = configuration.agents.find(
+    (candidate) => candidate.id === configuration.defaultAgentId
+  );
+  const runtimeId = agent?.preferredRuntime ?? configuration.defaultRuntimeId;
+  return {
+    agentId: agent?.id ?? null,
+    runtimeId,
+    runMode: 'normal',
+    strategyKind: 'no-worktree',
+    model: agent?.model ?? null,
+    reasoningEffort: agent?.reasoningEffort ?? null,
+    permissionMode: configuration.defaultPermissionModes[runtimeId] ?? null,
+  };
+}
+
+function mobileRuntimeName(
+  configuration: MobileConfigurationSnapshot | null,
+  runtimeId: MobileDemandConfiguration['runtimeId']
+): string {
+  return configuration?.runtimes.find((runtime) => runtime.id === runtimeId)?.name ?? runtimeId;
 }
 
 function runtimeColor(status: MobileSessionSummary['runtimeStatus']): string {
@@ -597,6 +627,12 @@ export function App() {
   });
   const [snapshot, setSnapshot] = useState<MobileDashboardSnapshot | null>(null);
   const [profile, setProfile] = useState<MobileProfileSnapshot | null>(null);
+  const [mobileConfiguration, setMobileConfiguration] =
+    useState<MobileConfigurationSnapshot | null>(null);
+  const [mobileConfigurationError, setMobileConfigurationError] = useState<string | null>(null);
+  const [demandConfiguration, setDemandConfiguration] = useState<MobileDemandConfiguration | null>(
+    null
+  );
   const [homeTab, setHomeTab] = useState<HomeTab>(DEFAULT_HOME_TAB);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskParent, setNewTaskParent] = useState<MobileTaskSummary | null>(null);
@@ -757,6 +793,30 @@ export function App() {
     [connection]
   );
 
+  const loadMobileConfiguration = useCallback(async () => {
+    if (!connection) return;
+    setMobileConfiguration(null);
+    setDemandConfiguration(null);
+    setMobileConfigurationError(null);
+    try {
+      const next = await fetchConfiguration(connection);
+      setMobileConfiguration(next);
+      setDemandConfiguration(createDefaultMobileDemandConfiguration(next));
+    } catch (cause) {
+      setMobileConfigurationError(`运行配置读取失败：${errorMessage(cause)}`);
+    }
+  }, [connection]);
+
+  useEffect(() => {
+    if (!connection) {
+      setMobileConfiguration(null);
+      setMobileConfigurationError(null);
+      setDemandConfiguration(null);
+      return;
+    }
+    void loadMobileConfiguration();
+  }, [connection, loadMobileConfiguration]);
+
   useEffect(() => {
     if (!connection) return;
     void loadDashboard(false);
@@ -887,6 +947,13 @@ export function App() {
         parentTaskId: newTaskParentId ?? undefined,
         prompt: prompt.trim(),
         attachmentIds,
+        agentId: demandConfiguration?.agentId,
+        provider: demandConfiguration?.runtimeId,
+        runMode: demandConfiguration?.runMode,
+        strategyKind: demandConfiguration?.strategyKind,
+        model: demandConfiguration?.model,
+        reasoningEffort: demandConfiguration?.reasoningEffort,
+        permissionMode: demandConfiguration?.permissionMode ?? undefined,
       });
       setPrompt('');
       setDemandImages([]);
@@ -927,6 +994,7 @@ export function App() {
     closeNewTask,
     connection,
     demandImages,
+    demandConfiguration,
     demandProjectId,
     loadDashboard,
     newTaskParentId,
@@ -938,6 +1006,9 @@ export function App() {
   const newTaskModal = connection ? (
     <NewTaskModal
       connection={connection}
+      configuration={mobileConfiguration}
+      configurationError={mobileConfigurationError}
+      demandConfiguration={demandConfiguration}
       images={demandImages}
       open={newTaskOpen}
       parentTask={newTaskParent}
@@ -948,6 +1019,7 @@ export function App() {
       selectedProjectId={demandProjectId}
       submitting={submitting}
       uploadProgress={demandUploadProgress}
+      onRetryConfiguration={() => void loadMobileConfiguration()}
       onClose={closeNewTask}
       onAttributionChange={(projectId, parentTask) => {
         setDemandProjectId(projectId);
@@ -958,6 +1030,7 @@ export function App() {
       onImagesChange={setDemandImages}
       onMediaError={setError}
       onPromptChange={setPrompt}
+      onConfigurationChange={setDemandConfiguration}
       onSubmit={handleSubmitDemand}
     />
   ) : null;
@@ -990,6 +1063,7 @@ export function App() {
       <SessionDetailScreen
         key={`${connection.baseUrl}\0${connection.token}\0${selectedTask.id}\0${selectedSessionId}`}
         connection={connection}
+        configuration={mobileConfiguration}
         projects={snapshot?.projects ?? []}
         sessionId={selectedSessionId}
         task={selectedTask}
@@ -1703,6 +1777,7 @@ function HomeTabBar({
         return (
           <Pressable
             key={tab.value}
+            accessibilityLabel={tab.label}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
             style={({ pressed }) => [
@@ -1782,6 +1857,9 @@ function TaskProjectScopeControl({
 
 function DemandComposer({
   connection,
+  configuration,
+  configurationError,
+  demandConfiguration,
   images,
   parentTask,
   projects,
@@ -1794,9 +1872,14 @@ function DemandComposer({
   onPromptChange,
   onImagesChange,
   onMediaError,
+  onConfigurationChange,
+  onRetryConfiguration,
   onSubmit,
 }: {
   connection: MobileConnection;
+  configuration: MobileConfigurationSnapshot | null;
+  configurationError: string | null;
+  demandConfiguration: MobileDemandConfiguration | null;
   images: MobileImageDraft[];
   parentTask: MobileTaskSummary | null;
   projects: MobileProjectSummary[];
@@ -1809,11 +1892,14 @@ function DemandComposer({
   onPromptChange: (prompt: string) => void;
   onImagesChange: (images: MobileImageDraft[]) => void;
   onMediaError: (message: string) => void;
+  onConfigurationChange: (configuration: MobileDemandConfiguration) => void;
+  onRetryConfiguration: () => void;
   onSubmit: () => void;
 }) {
   const [attributionPickerMode, setAttributionPickerMode] = useState<'project' | 'task' | null>(
     null
   );
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const selectedProject = projects.find((project) => project.id === selectedProjectId);
   const imagesEnabled = selectedProjectId === null || selectedProject?.type === 'local';
   const canSubmit =
@@ -1825,6 +1911,45 @@ function DemandComposer({
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>任务说明</Text>
       </View>
+      <Pressable
+        accessibilityLabel="配置 Agent、模型和开发方式"
+        accessibilityRole="button"
+        style={({ pressed }) => [
+          styles.composerConfigurationCard,
+          pressed ? styles.buttonPressed : null,
+        ]}
+        onPress={() => {
+          Keyboard.dismiss();
+          setSettingsOpen(true);
+        }}
+      >
+        <View style={styles.composerConfigurationIcon}>
+          <Ionicons color={COLORS.blue} name="options-outline" size={18} />
+        </View>
+        <View style={styles.composerConfigurationBody}>
+          <Text style={styles.composerConfigurationLabel}>执行配置</Text>
+          <Text style={styles.composerConfigurationValue} numberOfLines={1}>
+            {demandConfiguration
+              ? `${configuration?.agents.find((agent) => agent.id === demandConfiguration.agentId)?.name ?? '默认 Agent'} · ${mobileRuntimeName(configuration, demandConfiguration.runtimeId)}`
+              : '读取 Agent、模型和开发方式'}
+          </Text>
+          <Text style={styles.composerConfigurationMeta} numberOfLines={1}>
+            {demandConfiguration
+              ? `${demandConfiguration.runMode === 'brainstorm' ? '方案讨论' : '普通开发'} · ${demandConfiguration.strategyKind === 'new-branch' ? '新建分支' : '当前项目'}`
+              : '点击查看'}
+          </Text>
+        </View>
+        <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={19} />
+      </Pressable>
+      <MobileDemandSettingsSheet
+        configuration={configuration}
+        configurationError={configurationError}
+        open={settingsOpen}
+        value={demandConfiguration}
+        onChange={onConfigurationChange}
+        onClose={() => setSettingsOpen(false)}
+        onRetryConfiguration={onRetryConfiguration}
+      />
       <InputMediaControls
         connection={connection}
         disabled={submitting}
@@ -1892,6 +2017,7 @@ function DemandComposer({
       ) : null}
       <Pressable
         accessibilityLabel="Submit new mobile request"
+        accessibilityRole="button"
         disabled={!canSubmit}
         style={({ pressed }) => [
           styles.primaryButton,
@@ -1915,6 +2041,341 @@ function DemandComposer({
         )}
       </Pressable>
     </View>
+  );
+}
+
+function MobileDemandSettingsSheet({
+  configuration,
+  configurationError,
+  open,
+  value,
+  onChange,
+  onClose,
+  onRetryConfiguration,
+}: {
+  configuration: MobileConfigurationSnapshot | null;
+  configurationError: string | null;
+  open: boolean;
+  value: MobileDemandConfiguration | null;
+  onChange: (configuration: MobileDemandConfiguration) => void;
+  onClose: () => void;
+  onRetryConfiguration: () => void;
+}) {
+  const selectedAgent = configuration?.agents.find((agent) => agent.id === value?.agentId);
+  const permissionModes = value ? (configuration?.permissionModes[value.runtimeId] ?? []) : [];
+  const update = (patch: Partial<MobileDemandConfiguration>) => {
+    if (value) onChange({ ...value, ...patch });
+  };
+
+  return (
+    <Modal
+      animationType="slide"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      transparent
+      visible={open}
+      onRequestClose={onClose}
+    >
+      <View accessibilityViewIsModal style={styles.projectPickerOverlay}>
+        <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
+        <SafeAreaView style={styles.mobileDemandSettingsSheet}>
+          <View style={styles.projectPickerHandle} />
+          <View style={styles.projectPickerHeader}>
+            <View style={styles.projectPickerTitleBlock}>
+              <Text style={styles.projectPickerEyebrow}>开始任务前</Text>
+              <Text style={styles.projectPickerTitle}>执行配置</Text>
+            </View>
+            <Pressable
+              accessibilityLabel="关闭执行配置"
+              accessibilityRole="button"
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.projectPickerClose,
+                pressed ? styles.buttonPressed : null,
+              ]}
+              onPress={onClose}
+            >
+              <Ionicons color={COLORS.charcoal} name="close-outline" size={22} />
+            </Pressable>
+          </View>
+          <ScrollView
+            contentContainerStyle={styles.mobileDemandSettingsContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            {!configuration || !value ? (
+              configurationError ? (
+                <Notice message={configurationError} tone="error" onRetry={onRetryConfiguration} />
+              ) : (
+                <View style={styles.emptyState}>
+                  <ActivityIndicator color={COLORS.charcoal} />
+                  <Text style={styles.emptyText}>正在读取可用配置…</Text>
+                </View>
+              )
+            ) : (
+              <>
+                <Text style={styles.mobileSettingsHint}>
+                  本次任务会携带以下配置；开始后可在会话里查看并调整模型参数。
+                </Text>
+
+                <View style={styles.mobileSettingsGroup}>
+                  <Text style={styles.mobileSettingsGroupTitle}>Agent</Text>
+                  <View style={styles.mobileSettingsOptionList}>
+                    {configuration.agents.map((agent) => {
+                      const selected = agent.id === value.agentId;
+                      return (
+                        <Pressable
+                          key={agent.id}
+                          accessibilityLabel={`选择 Agent ${agent.name}`}
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: selected }}
+                          style={({ pressed }) => [
+                            styles.mobileSettingsOption,
+                            selected ? styles.mobileSettingsOptionSelected : null,
+                            pressed ? styles.buttonPressed : null,
+                          ]}
+                          onPress={() => {
+                            const runtimeId = agent.preferredRuntime;
+                            onChange({
+                              ...value,
+                              agentId: agent.id,
+                              runtimeId,
+                              model: agent.model,
+                              reasoningEffort: agent.reasoningEffort,
+                              permissionMode:
+                                configuration.defaultPermissionModes[runtimeId] ?? null,
+                            });
+                          }}
+                        >
+                          <Text style={styles.mobileSettingsOptionIcon}>{agent.icon || '◎'}</Text>
+                          <View style={styles.mobileSettingsOptionBody}>
+                            <Text style={styles.mobileSettingsOptionLabel}>{agent.name}</Text>
+                            <Text style={styles.mobileSettingsOptionDescription} numberOfLines={2}>
+                              {agent.description ||
+                                mobileRuntimeName(configuration, agent.preferredRuntime)}
+                            </Text>
+                          </View>
+                          <Ionicons
+                            color={selected ? COLORS.blue : COLORS.line}
+                            name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                            size={21}
+                          />
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  {selectedAgent ? (
+                    <Text style={styles.mobileSettingsFootnote}>
+                      当前 Agent：{selectedAgent.name}
+                    </Text>
+                  ) : null}
+                </View>
+
+                <View style={styles.mobileSettingsGroup}>
+                  <Text style={styles.mobileSettingsGroupTitle}>开发模式</Text>
+                  <View style={styles.mobileSettingsSegmentedControl}>
+                    {(
+                      [
+                        { label: '普通开发', value: 'normal' as const },
+                        { label: '方案讨论', value: 'brainstorm' as const },
+                      ] as const
+                    ).map((option) => {
+                      const selected = value.runMode === option.value;
+                      return (
+                        <Pressable
+                          key={option.value}
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: selected }}
+                          style={({ pressed }) => [
+                            styles.mobileSettingsSegment,
+                            selected ? styles.mobileSettingsSegmentSelected : null,
+                            pressed ? styles.buttonPressed : null,
+                          ]}
+                          onPress={() => update({ runMode: option.value })}
+                        >
+                          <Text
+                            style={[
+                              styles.mobileSettingsSegmentText,
+                              selected ? styles.mobileSettingsSegmentTextSelected : null,
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <Text style={styles.mobileSettingsFootnote}>
+                    方案讨论会先整理目标、步骤和验收方式。
+                  </Text>
+                </View>
+
+                <View style={styles.mobileSettingsGroup}>
+                  <Text style={styles.mobileSettingsGroupTitle}>开发方式</Text>
+                  <View style={styles.mobileSettingsOptionList}>
+                    {(
+                      [
+                        {
+                          label: '当前项目',
+                          description: '直接在当前工作目录中继续',
+                          value: 'no-worktree' as const,
+                        },
+                        {
+                          label: '新建分支',
+                          description: '从当前分支创建独立工作分支',
+                          value: 'new-branch' as const,
+                        },
+                      ] as const
+                    ).map((option) => {
+                      const selected = value.strategyKind === option.value;
+                      return (
+                        <Pressable
+                          key={option.value}
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: selected }}
+                          style={({ pressed }) => [
+                            styles.mobileSettingsOption,
+                            selected ? styles.mobileSettingsOptionSelected : null,
+                            pressed ? styles.buttonPressed : null,
+                          ]}
+                          onPress={() => update({ strategyKind: option.value })}
+                        >
+                          <View style={styles.mobileSettingsOptionBody}>
+                            <Text style={styles.mobileSettingsOptionLabel}>{option.label}</Text>
+                            <Text style={styles.mobileSettingsOptionDescription}>
+                              {option.description}
+                            </Text>
+                          </View>
+                          <Ionicons
+                            color={selected ? COLORS.blue : COLORS.line}
+                            name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                            size={21}
+                          />
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={styles.mobileSettingsGroup}>
+                  <Text style={styles.mobileSettingsGroupTitle}>Agent 客户端</Text>
+                  <View style={styles.mobileSettingsOptionList}>
+                    {configuration.runtimes.map((runtime) => {
+                      const selected = value.runtimeId === runtime.id;
+                      return (
+                        <Pressable
+                          key={runtime.id}
+                          accessibilityLabel={`选择 Agent 客户端 ${runtime.name}`}
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: selected }}
+                          style={({ pressed }) => [
+                            styles.mobileSettingsOption,
+                            selected ? styles.mobileSettingsOptionSelected : null,
+                            pressed ? styles.buttonPressed : null,
+                          ]}
+                          onPress={() =>
+                            update({
+                              runtimeId: runtime.id,
+                              permissionMode:
+                                configuration.defaultPermissionModes[runtime.id] ?? null,
+                            })
+                          }
+                        >
+                          <View style={styles.mobileSettingsOptionBody}>
+                            <Text style={styles.mobileSettingsOptionLabel}>{runtime.name}</Text>
+                            <Text style={styles.mobileSettingsOptionDescription}>{runtime.id}</Text>
+                          </View>
+                          <Ionicons
+                            color={selected ? COLORS.blue : COLORS.line}
+                            name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                            size={21}
+                          />
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={styles.mobileSettingsGroup}>
+                  <Text style={styles.mobileSettingsGroupTitle}>模型</Text>
+                  <TextInput
+                    autoCapitalize="none"
+                    placeholder="使用客户端默认模型"
+                    placeholderTextColor={COLORS.muted}
+                    style={styles.mobileSettingsTextInput}
+                    value={value.model ?? ''}
+                    onChangeText={(model) => update({ model: model.trim() || null })}
+                  />
+                  <Text style={styles.mobileSettingsFootnote}>留空时使用客户端默认模型。</Text>
+                </View>
+
+                <View style={styles.mobileSettingsGroup}>
+                  <Text style={styles.mobileSettingsGroupTitle}>推理深度</Text>
+                  <TextInput
+                    autoCapitalize="none"
+                    placeholder="例如 medium / high"
+                    placeholderTextColor={COLORS.muted}
+                    style={styles.mobileSettingsTextInput}
+                    value={value.reasoningEffort ?? ''}
+                    onChangeText={(reasoningEffort) =>
+                      update({ reasoningEffort: reasoningEffort.trim() || null })
+                    }
+                  />
+                  <Text style={styles.mobileSettingsFootnote}>
+                    仅在客户端支持时生效；留空时使用默认深度。
+                  </Text>
+                </View>
+
+                <View style={styles.mobileSettingsGroup}>
+                  <Text style={styles.mobileSettingsGroupTitle}>权限模式</Text>
+                  <View style={styles.mobileSettingsOptionList}>
+                    {permissionModes.map((mode) => {
+                      const selected = value.permissionMode === mode.id;
+                      return (
+                        <Pressable
+                          key={mode.id}
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: selected }}
+                          style={({ pressed }) => [
+                            styles.mobileSettingsOption,
+                            selected ? styles.mobileSettingsOptionSelected : null,
+                            pressed ? styles.buttonPressed : null,
+                          ]}
+                          onPress={() => update({ permissionMode: mode.id })}
+                        >
+                          <View style={styles.mobileSettingsOptionBody}>
+                            <Text style={styles.mobileSettingsOptionLabel}>{mode.label}</Text>
+                            <Text style={styles.mobileSettingsOptionDescription}>
+                              {mode.danger ? '执行时减少确认步骤' : '保留客户端的常规确认流程'}
+                            </Text>
+                          </View>
+                          <Ionicons
+                            color={selected ? COLORS.blue : COLORS.line}
+                            name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                            size={21}
+                          />
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <Pressable
+                  accessibilityRole="button"
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    pressed ? styles.buttonPressed : null,
+                  ]}
+                  onPress={onClose}
+                >
+                  <Ionicons color={COLORS.surface} name="checkmark-outline" size={18} />
+                  <Text style={styles.primaryButtonText}>完成配置</Text>
+                </Pressable>
+              </>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </View>
+    </Modal>
   );
 }
 
@@ -2793,12 +3254,14 @@ function SessionRow({ session, onPress }: { session: MobileSessionSummary; onPre
 
 function SessionDetailScreen({
   connection,
+  configuration,
   projects,
   sessionId,
   task,
   onBack,
 }: {
   connection: MobileConnection;
+  configuration: MobileConfigurationSnapshot | null;
   projects: MobileProjectSummary[];
   sessionId: string;
   task: MobileTaskSummary;
@@ -2814,6 +3277,10 @@ function SessionDetailScreen({
     DEFAULT_SESSION_DISPLAY_PREFERENCES.replyDisplayLevel
   );
   const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
+  const [runtimeSettingsSaving, setRuntimeSettingsSaving] = useState(false);
+  const [runtimeModelDraft, setRuntimeModelDraft] = useState('');
+  const [runtimeReasoningDraft, setRuntimeReasoningDraft] = useState('');
+  const [runtimePermissionDraft, setRuntimePermissionDraft] = useState('');
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [sessionInput, setSessionInput] = useState('');
   const [sessionImages, setSessionImages] = useState<MobileImageDraft[]>([]);
@@ -3015,6 +3482,36 @@ function SessionDetailScreen({
     setRefreshing(false);
   }, [loadDetail]);
 
+  const openSessionSettings = useCallback(() => {
+    setRuntimeModelDraft(detail?.session.model ?? '');
+    setRuntimeReasoningDraft(detail?.session.reasoningEffort ?? '');
+    setRuntimePermissionDraft(detail?.session.permissionMode ?? '');
+    setDisplaySettingsOpen(true);
+  }, [detail]);
+
+  const handleApplyRuntimeConfiguration = useCallback(
+    async (update: MobileSessionRuntimeConfigurationUpdate) => {
+      setRuntimeSettingsSaving(true);
+      try {
+        await updateSessionRuntimeConfiguration(
+          connection,
+          task.projectId,
+          task.id,
+          sessionId,
+          update
+        );
+        await loadDetail(false);
+        setDisplaySettingsOpen(false);
+        setError(null);
+      } catch (cause) {
+        setError(`运行配置应用失败：${errorMessage(cause)}`);
+      } finally {
+        setRuntimeSettingsSaving(false);
+      }
+    },
+    [connection, loadDetail, sessionId, task.id, task.projectId]
+  );
+
   const sessionCanContinue = canContinueMobileSession(detail?.session);
   const handleSendInput = useCallback(async () => {
     const input = sessionInput.trim();
@@ -3142,7 +3639,7 @@ function SessionDetailScreen({
             title={session?.title ?? task.name}
             uploadProgress={sessionUploadProgress}
             onBack={onBack}
-            onOpenSettings={() => setDisplaySettingsOpen(true)}
+            onOpenSettings={openSessionSettings}
           />
           <ScrollView
             ref={scrollViewRef}
@@ -3168,9 +3665,22 @@ function SessionDetailScreen({
             {detail ? (
               <>
                 <View style={styles.summaryPanel}>
-                  <DetailItem label="Agent" value={detail.session.runtimeId} />
-                  <DetailItem label="Status" value={runtimeLabel(detail.session.runtimeStatus)} />
-                  <DetailItem label="Source" value={contentSourceLabel(detail.source)} />
+                  <DetailItem
+                    label="Agent"
+                    value={detail.session.agent?.name ?? detail.session.runtimeId}
+                  />
+                  <DetailItem label="客户端" value={detail.session.runtimeId} />
+                  <DetailItem label="模型" value={detail.session.model ?? '客户端默认'} />
+                  <DetailItem
+                    label="推理深度"
+                    value={detail.session.reasoningEffort ?? '客户端默认'}
+                  />
+                  <DetailItem
+                    label="权限模式"
+                    value={detail.session.permissionMode ?? '客户端默认'}
+                  />
+                  <DetailItem label="状态" value={runtimeLabel(detail.session.runtimeStatus)} />
+                  <DetailItem label="来源" value={contentSourceLabel(detail.source)} />
                   <DetailItem
                     label="Updated"
                     value={formatTimestamp(detail.session.lastInteractedAt ?? detail.generatedAt)}
@@ -3248,13 +3758,23 @@ function SessionDetailScreen({
             onSend={handleSendInput}
           />
           <SessionDisplaySettingsSheet
+            configuration={configuration}
             displayLevel={replyDisplayLevel}
             open={displaySettingsOpen}
             outputMode={outputMode}
+            runtimeSettingsSaving={runtimeSettingsSaving}
+            model={runtimeModelDraft}
+            reasoningEffort={runtimeReasoningDraft}
+            permissionMode={runtimePermissionDraft}
+            session={session ?? null}
             onClose={() => setDisplaySettingsOpen(false)}
+            onModelChange={setRuntimeModelDraft}
+            onReasoningEffortChange={setRuntimeReasoningDraft}
+            onPermissionModeChange={setRuntimePermissionDraft}
             onDisplayLevelChange={(nextLevel) =>
               updateDisplayPreferences({ replyDisplayLevel: nextLevel })
             }
+            onApplyRuntimeConfiguration={handleApplyRuntimeConfiguration}
             onOutputModeChange={(nextMode) => updateDisplayPreferences({ outputMode: nextMode })}
           />
         </View>
@@ -4148,20 +4668,42 @@ const AGENT_REPLY_DISPLAY_COPY: Record<
 };
 
 function SessionDisplaySettingsSheet({
+  configuration,
   displayLevel,
   open,
   outputMode,
+  runtimeSettingsSaving,
+  model,
+  reasoningEffort,
+  permissionMode,
+  session,
   onClose,
+  onApplyRuntimeConfiguration,
   onDisplayLevelChange,
+  onModelChange,
+  onPermissionModeChange,
+  onReasoningEffortChange,
   onOutputModeChange,
 }: {
+  configuration: MobileConfigurationSnapshot | null;
   displayLevel: AgentReplyDisplayLevel;
   open: boolean;
   outputMode: SessionOutputMode;
+  runtimeSettingsSaving: boolean;
+  model: string;
+  reasoningEffort: string;
+  permissionMode: string;
+  session: MobileSessionSummary | null;
   onClose: () => void;
+  onApplyRuntimeConfiguration: (update: MobileSessionRuntimeConfigurationUpdate) => Promise<void>;
   onDisplayLevelChange: (level: AgentReplyDisplayLevel) => void;
+  onModelChange: (value: string) => void;
+  onPermissionModeChange: (value: string) => void;
+  onReasoningEffortChange: (value: string) => void;
   onOutputModeChange: (mode: SessionOutputMode) => void;
 }) {
+  const permissionModes = session ? (configuration?.permissionModes[session.runtimeId] ?? []) : [];
+
   return (
     <Modal
       animationType="slide"
@@ -4178,7 +4720,7 @@ function SessionDisplaySettingsSheet({
           <View style={styles.projectPickerHeader}>
             <View style={styles.projectPickerTitleBlock}>
               <Text style={styles.projectPickerEyebrow}>当前会话</Text>
-              <Text style={styles.projectPickerTitle}>显示设置</Text>
+              <Text style={styles.projectPickerTitle}>会话设置</Text>
             </View>
             <Pressable
               accessibilityLabel="关闭显示设置"
@@ -4194,6 +4736,107 @@ function SessionDisplaySettingsSheet({
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.sessionDisplaySettingsContent}>
+            <View style={styles.sessionDisplaySettingsGroup}>
+              <View style={styles.sessionDisplaySettingsHeading}>
+                <Text style={styles.sessionDisplaySettingsLabel}>执行配置</Text>
+                <Text style={styles.sessionDisplaySettingsDescription}>
+                  当前 Agent 会话已绑定；模型、推理深度和权限模式应用后会重启会话。
+                </Text>
+              </View>
+              <View style={styles.sessionRuntimeIdentityCard}>
+                <View style={styles.sessionRuntimeIdentityIcon}>
+                  <Text style={styles.sessionRuntimeIdentityIconText}>
+                    {session?.agent?.icon || '◎'}
+                  </Text>
+                </View>
+                <View style={styles.sessionRuntimeIdentityBody}>
+                  <Text style={styles.sessionRuntimeIdentityName} numberOfLines={1}>
+                    {session?.agent?.name ?? session?.runtimeId ?? '当前 Agent'}
+                  </Text>
+                  <Text style={styles.sessionRuntimeIdentityMeta} numberOfLines={1}>
+                    {session?.runtimeId ?? '读取中'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.mobileSettingsFieldLabel}>模型</Text>
+              <TextInput
+                autoCapitalize="none"
+                placeholder="使用客户端默认模型"
+                placeholderTextColor={COLORS.muted}
+                style={styles.mobileSettingsTextInput}
+                value={model}
+                onChangeText={onModelChange}
+              />
+              <Text style={styles.mobileSettingsFieldLabel}>推理深度</Text>
+              <TextInput
+                autoCapitalize="none"
+                placeholder="例如 medium / high"
+                placeholderTextColor={COLORS.muted}
+                style={styles.mobileSettingsTextInput}
+                value={reasoningEffort}
+                onChangeText={onReasoningEffortChange}
+              />
+              {permissionModes.length > 0 ? (
+                <>
+                  <Text style={styles.mobileSettingsFieldLabel}>权限模式</Text>
+                  <View style={styles.mobileSettingsOptionList}>
+                    {permissionModes.map((mode) => {
+                      const selected = permissionMode === mode.id;
+                      return (
+                        <Pressable
+                          key={mode.id}
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: selected }}
+                          style={({ pressed }) => [
+                            styles.mobileSettingsOption,
+                            selected ? styles.mobileSettingsOptionSelected : null,
+                            pressed ? styles.buttonPressed : null,
+                          ]}
+                          onPress={() => onPermissionModeChange(mode.id)}
+                        >
+                          <View style={styles.mobileSettingsOptionBody}>
+                            <Text style={styles.mobileSettingsOptionLabel}>{mode.label}</Text>
+                            <Text style={styles.mobileSettingsOptionDescription}>
+                              {mode.danger ? '执行时减少确认步骤' : '保留客户端的常规确认流程'}
+                            </Text>
+                          </View>
+                          <Ionicons
+                            color={selected ? COLORS.blue : COLORS.line}
+                            name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                            size={21}
+                          />
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                disabled={!session || runtimeSettingsSaving}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  !session || runtimeSettingsSaving ? styles.buttonDisabled : null,
+                  pressed ? styles.buttonPressed : null,
+                ]}
+                onPress={() =>
+                  void onApplyRuntimeConfiguration({
+                    model: model.trim() || null,
+                    reasoningEffort: reasoningEffort.trim() || null,
+                    ...(permissionMode ? { permissionMode } : {}),
+                  })
+                }
+              >
+                {runtimeSettingsSaving ? (
+                  <ActivityIndicator color={COLORS.surface} />
+                ) : (
+                  <Ionicons color={COLORS.surface} name="refresh-outline" size={18} />
+                )}
+                <Text style={styles.primaryButtonText}>
+                  {runtimeSettingsSaving ? '正在应用…' : '应用并重启会话'}
+                </Text>
+              </Pressable>
+            </View>
             <View style={styles.sessionDisplaySettingsGroup}>
               <View style={styles.sessionDisplaySettingsHeading}>
                 <Text style={styles.sessionDisplaySettingsLabel}>显示模式</Text>
@@ -5140,6 +5783,46 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: COLORS.surface,
   },
+  composerConfigurationCard: {
+    minHeight: 66,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 10,
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+  },
+  composerConfigurationIcon: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#EEF3FF',
+  },
+  composerConfigurationBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+  },
+  composerConfigurationLabel: {
+    color: COLORS.muted,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  composerConfigurationValue: {
+    color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  composerConfigurationMeta: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '600',
+  },
   composerSurfaceActive: {
     borderColor: COLORS.green,
     shadowColor: COLORS.green,
@@ -5954,6 +6637,165 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 18,
     backgroundColor: COLORS.surface,
     paddingTop: 9,
+  },
+  mobileDemandSettingsSheet: {
+    maxHeight: '90%',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    backgroundColor: COLORS.surface,
+    paddingTop: 9,
+  },
+  mobileDemandSettingsContent: {
+    gap: 22,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.faint,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 28,
+  },
+  mobileSettingsHint: {
+    color: COLORS.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  mobileSettingsGroup: {
+    gap: 10,
+  },
+  mobileSettingsGroupTitle: {
+    color: COLORS.ink,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  mobileSettingsOptionList: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 10,
+    backgroundColor: COLORS.surface,
+  },
+  mobileSettingsOption: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.faint,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  mobileSettingsOptionSelected: {
+    backgroundColor: '#F2F0E9',
+  },
+  mobileSettingsOptionIcon: {
+    width: 28,
+    color: COLORS.ink,
+    fontSize: 20,
+    textAlign: 'center',
+  },
+  mobileSettingsOptionBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+  },
+  mobileSettingsOptionLabel: {
+    color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  mobileSettingsOptionDescription: {
+    color: COLORS.muted,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
+  },
+  mobileSettingsFootnote: {
+    color: COLORS.muted,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
+  },
+  mobileSettingsSegmentedControl: {
+    flexDirection: 'row',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 10,
+    backgroundColor: '#EFEEE7',
+    padding: 3,
+  },
+  mobileSettingsSegment: {
+    minHeight: 38,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 7,
+  },
+  mobileSettingsSegmentSelected: {
+    backgroundColor: COLORS.surface,
+  },
+  mobileSettingsSegmentText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  mobileSettingsSegmentTextSelected: {
+    color: COLORS.ink,
+  },
+  mobileSettingsFieldLabel: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  mobileSettingsTextInput: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 9,
+    backgroundColor: COLORS.page,
+    color: COLORS.ink,
+    fontSize: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  sessionRuntimeIdentityCard: {
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 10,
+    backgroundColor: COLORS.page,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  sessionRuntimeIdentityIcon: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+  },
+  sessionRuntimeIdentityIconText: {
+    color: COLORS.ink,
+    fontSize: 19,
+  },
+  sessionRuntimeIdentityBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+  },
+  sessionRuntimeIdentityName: {
+    color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  sessionRuntimeIdentityMeta: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '600',
   },
   sessionDisplaySettingsContent: {
     gap: 22,

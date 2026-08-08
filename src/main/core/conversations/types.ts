@@ -1,6 +1,7 @@
 import {
   type AgentSessionSource,
   type Conversation,
+  type ConversationAgent,
   type ConversationExecutionMode,
   type PendingInitialPrompt,
   type SessionRuntimeOverrides,
@@ -43,7 +44,9 @@ export interface ConversationProvider {
 
 export type ConversationConfig = {
   autoApprove?: boolean;
+  agent?: ConversationAgent;
   permissionMode?: string;
+  runtimeOverrides?: SessionRuntimeOverrides;
   skillPolicy?: SkillSessionPolicy;
   executionMode?: ConversationExecutionMode;
   sessionSource?: AgentSessionSource;

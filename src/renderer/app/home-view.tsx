@@ -293,6 +293,13 @@ function agentSkillSelection(agent: Agent | null): SkillSelectionInput | undefin
 
 function agentRuntimeSettings(agent: Agent | null, runtimeId: RuntimeId) {
   return {
+    agent: agent
+      ? {
+          id: agent.id,
+          name: agent.name,
+          icon: agent.icon,
+        }
+      : undefined,
     model: agent?.model,
     reasoningEffort: runtimeId === 'codex' ? agent?.reasoningEffort : undefined,
     permissionMode: agent ? resolveAgentPermissionMode(runtimeId, agent.accessMode) : undefined,
