@@ -22,6 +22,18 @@ import { AgentInfoHover } from '@renderer/lib/components/agent-slot/agent-info-c
 import { AvatarInput, type AvatarFileError } from '@renderer/lib/components/avatar-input';
 import { avatarDisplayText, AvatarValue } from '@renderer/lib/components/avatar-value';
 import { useToast } from '@renderer/lib/hooks/use-toast';
+import { useShowModal } from '@renderer/lib/modal/modal-provider';
+import { Button } from '@renderer/lib/ui/button';
+import { Checkbox } from '@renderer/lib/ui/checkbox';
+import { Input } from '@renderer/lib/ui/input';
+import { Label } from '@renderer/lib/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/lib/ui/select';
 import { cn } from '@renderer/utils/utils';
 import { useAgentTeams } from './use-agent-teams';
 
@@ -156,10 +168,6 @@ const ROUTING_LABEL_KEYS: Record<TeamRouting, string> = {
   freeform: 'agentTeams.routing.freeform',
 };
 
-function formatRoutingHopLimit(limit: RoutingHopLimit): string {
-  return limit === null ? 'Unlimited routing steps' : `${limit} routing steps per prompt`;
-}
-
 export function AgentTeamsMainPanel() {
   const { t } = useTranslation();
   const { teams, create, update, remove, duplicate } = useAgentTeams();
@@ -196,8 +204,12 @@ export function AgentTeamsMainPanel() {
 
   const save = async () => {
     if (!draft) return;
-    if (isNew) await create(draft);
-    else if (selected) await update({ id: selected.id, draft });
+    if (isNew) {
+      const created = await create(draft);
+      setSelectedId(created.id);
+    } else if (selected) {
+      await update({ id: selected.id, draft });
+    }
     setDraft(null);
   };
 
@@ -207,12 +219,13 @@ export function AgentTeamsMainPanel() {
       <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-background-secondary">
         <div className="flex items-center justify-between px-3 py-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">
-            Teams
+            {t('agentTeams.title')}
           </span>
           <button
             type="button"
             onClick={startNew}
-            title="New team"
+            title={t('agentTeams.newTeam')}
+            aria-label={t('agentTeams.newTeam')}
             className="flex size-6 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
           >
             <Plus className="size-4" />
@@ -222,7 +235,7 @@ export function AgentTeamsMainPanel() {
           {isNew && (
             <div className="flex items-center gap-2 rounded-md bg-primary/10 px-2.5 py-2 text-sm text-primary">
               <Users className="size-4 shrink-0" />
-              <span className="flex-1 truncate">New team…</span>
+              <span className="flex-1 truncate">{t('agentTeams.newTeamDraft')}</span>
             </div>
           )}
           {teams.map((team) => (
@@ -247,7 +260,9 @@ export function AgentTeamsMainPanel() {
               />
               <span className="min-w-0 flex-1 truncate">{team.name}</span>
               {isBuiltinTeamId(team.id) && (
-                <span className="shrink-0 text-[10px] text-foreground-muted">built-in</span>
+                <span className="shrink-0 text-[10px] text-foreground-muted">
+                  {t('agentTeams.builtin')}
+                </span>
               )}
             </button>
           ))}
@@ -263,6 +278,7 @@ export function AgentTeamsMainPanel() {
             onChange={setDraft}
             onSave={() => void save()}
             onCancel={() => setDraft(null)}
+            isNew={isNew}
           />
         ) : selected ? (
           <div className="mx-auto w-full max-w-lg">
@@ -279,7 +295,7 @@ export function AgentTeamsMainPanel() {
                   onClick={() => duplicate(selected.id)}
                   className="flex items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 py-1.5 text-xs transition-colors hover:bg-background-2"
                 >
-                  <Copy className="size-3.5" /> Duplicate to edit
+                  <Copy className="size-3.5" /> {t('agentTeams.duplicateToEdit')}
                 </button>
               ) : (
                 <>
@@ -288,7 +304,7 @@ export function AgentTeamsMainPanel() {
                     onClick={() => startEdit(selected)}
                     className="rounded-md border border-border bg-background-1 px-2.5 py-1.5 text-xs transition-colors hover:bg-background-2"
                   >
-                    Edit
+                    {t('common.edit')}
                   </button>
                   <button
                     type="button"
@@ -296,7 +312,8 @@ export function AgentTeamsMainPanel() {
                       void remove(selected.id);
                       setSelectedId(null);
                     }}
-                    title="Delete team"
+                    title={t('agentTeams.deleteTeam')}
+                    aria-label={t('agentTeams.deleteTeam')}
                     className="flex size-7 items-center justify-center rounded-md border border-border text-foreground-muted transition-colors hover:border-red-500 hover:text-red-500"
                   >
                     <Trash2 className="size-3.5" />
@@ -308,18 +325,18 @@ export function AgentTeamsMainPanel() {
               {t(ROUTING_LABEL_KEYS[selected.routing])}
             </p>
             <p className="mb-2 text-xs text-foreground-passive">
-              {formatRoutingHopLimit(selected.routingHopLimit)}
+              {selected.routingHopLimit === null
+                ? t('agentTeams.routingUnlimited')
+                : t('agentTeams.routingSteps', { count: selected.routingHopLimit })}
             </p>
             <MemberList members={selected.members} agents={agents} />
             {isBuiltin && (
-              <p className="mt-3 text-xs text-foreground-muted">
-                Built-in teams are read-only. Duplicate to customize members & runtimes.
-              </p>
+              <p className="mt-3 text-xs text-foreground-muted">{t('agentTeams.readOnlyHint')}</p>
             )}
           </div>
         ) : (
           <div className="flex flex-1 items-center justify-center text-sm text-foreground-muted">
-            Select a team, or create one.
+            {t('agentTeams.selectTeam')}
           </div>
         )}
       </section>
@@ -328,6 +345,7 @@ export function AgentTeamsMainPanel() {
 }
 
 function MemberList({ members, agents }: { members: AgentTeamMember[]; agents: Agent[] }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-1.5">
       {members.map((m) => (
@@ -335,7 +353,7 @@ function MemberList({ members, agents }: { members: AgentTeamMember[]; agents: A
       ))}
       {members.length === 0 && (
         <p className="rounded-lg border border-border bg-background-1 px-2 py-3 text-center text-xs text-foreground-muted">
-          No members yet.
+          {t('agentTeams.noMembers')}
         </p>
       )}
     </div>
@@ -348,15 +366,18 @@ function TeamEditor({
   onChange,
   onSave,
   onCancel,
+  isNew,
 }: {
   draft: NonNullable<Editing>;
   agents: ReturnType<typeof useAgents>['agents'];
   onChange: (d: NonNullable<Editing>) => void;
   onSave: () => void;
   onCancel: () => void;
+  isNew: boolean;
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const showAgentModal = useShowModal('agentEditModal');
   const runtimeOptions = RUNTIMES.filter((r) => r.terminalOnly);
   const setMembers = (members: AgentTeamMember[]) => onChange({ ...draft, members });
   const showAvatarFileError = (error: AvatarFileError) => {
@@ -369,9 +390,8 @@ function TeamEditor({
     toast({ title: t(key), variant: 'destructive' });
   };
 
-  const addAgent = (agentId: string) => {
-    const agent = agents.find((a) => a.id === agentId);
-    if (!agent) return;
+  const addAgent = (agent: Agent) => {
+    if (draft.members.some((member) => member.agentRef === agent.id)) return;
     const member: AgentTeamMember = {
       handle: agent.slug,
       displayName: agent.name,
@@ -389,86 +409,124 @@ function TeamEditor({
 
   const canSave = draft.name.trim().length > 0 && draft.members.length > 0;
   const usedAgentRefs = new Set(draft.members.map((m) => m.agentRef));
+  const availableAgents = agents.filter((agent) => !usedAgentRefs.has(agent.id));
 
   return (
     <div className="mx-auto w-full max-w-lg">
-      <h2 className="mb-4 text-lg font-semibold">Team</h2>
-      <div className="flex flex-col gap-3">
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+      <h2 className="mb-4 text-lg font-semibold">
+        {t(isNew ? 'agentTeams.newTeam' : 'agentTeams.editTeam')}
+      </h2>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-end gap-3 rounded-xl border border-border bg-muted/15 p-3">
           <AvatarInput
             id="agent-team-avatar"
             name={draft.name}
             value={draft.icon}
             onChange={(icon) => onChange({ ...draft, icon })}
-            inputLabel="Team avatar"
+            inputLabel={t('agentTeams.teamAvatar')}
             placeholder={t('common.avatarPlaceholder')}
             uploadTitle={t('common.uploadPhoto')}
             clearTitle={t('common.clearAvatar')}
             onFileError={showAvatarFileError}
+            appearance="profile"
           />
-          <input
-            value={draft.name}
-            onChange={(e) => onChange({ ...draft, name: e.target.value })}
-            placeholder="Team name (e.g. My review duo)"
-            className="flex-1 rounded-md border border-border bg-background-1 px-3 py-2 text-sm outline-none focus:border-primary/60"
-          />
+          <div className="min-w-0 flex-1 space-y-2">
+            <Label htmlFor="agent-team-name" className="text-xs">
+              {t('agentTeams.teamName')}
+              <span className="ml-0.5 text-destructive" aria-hidden>
+                *
+              </span>
+            </Label>
+            <Input
+              id="agent-team-name"
+              required
+              aria-required="true"
+              value={draft.name}
+              onChange={(e) => onChange({ ...draft, name: e.target.value })}
+              placeholder={t('agentTeams.teamNamePlaceholder')}
+              className="text-sm"
+            />
+          </div>
         </div>
 
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-foreground-muted">Collaboration</span>
-          <select
-            value={draft.routing}
-            onChange={(e) => onChange({ ...draft, routing: e.target.value as TeamRouting })}
-            className="rounded-md border border-border bg-background-1 px-3 py-2 text-sm outline-none focus:border-primary/60"
-          >
-            {(Object.keys(ROUTING_LABEL_KEYS) as TeamRouting[]).map((r) => (
-              <option key={r} value={r}>
-                {t(ROUTING_LABEL_KEYS[r])}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label className="text-xs">{t('agentTeams.collaboration')}</Label>
+            <Select
+              value={draft.routing}
+              onValueChange={(value) => onChange({ ...draft, routing: value as TeamRouting })}
+            >
+              <SelectTrigger className="h-9 w-full text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(ROUTING_LABEL_KEYS) as TeamRouting[]).map((routing) => (
+                  <SelectItem key={routing} value={routing}>
+                    {t(ROUTING_LABEL_KEYS[routing])}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-foreground-muted">Routing limit</span>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min={1}
-              step={1}
-              disabled={draft.routingHopLimit === null}
-              value={draft.routingHopLimit ?? ''}
-              onChange={(e) =>
-                onChange({
-                  ...draft,
-                  routingHopLimit: normalizeRoutingHopLimit(Number(e.target.value)),
-                })
-              }
-              className="min-w-0 flex-1 rounded-md border border-border bg-background-1 px-3 py-2 text-sm outline-none focus:border-primary/60 disabled:opacity-50"
-            />
-            <span className="flex shrink-0 items-center gap-1.5 text-xs text-foreground-muted">
-              <input
-                type="checkbox"
-                checked={draft.routingHopLimit === null}
+          <div className="space-y-2">
+            <Label htmlFor="agent-team-routing-limit" className="text-xs">
+              {t('agentTeams.routingLimit')}
+            </Label>
+            <div className="flex h-9 items-center gap-2">
+              <Input
+                id="agent-team-routing-limit"
+                type="number"
+                min={1}
+                step={1}
+                disabled={draft.routingHopLimit === null}
+                value={draft.routingHopLimit ?? ''}
                 onChange={(e) =>
                   onChange({
                     ...draft,
-                    routingHopLimit: e.target.checked ? null : DEFAULT_ROUTING_HOP_LIMIT,
+                    routingHopLimit: normalizeRoutingHopLimit(Number(e.target.value)),
                   })
                 }
+                className="h-9 min-w-0 flex-1 text-sm"
               />
-              Unlimited
-            </span>
+              <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-foreground-muted">
+                <Checkbox
+                  checked={draft.routingHopLimit === null}
+                  onCheckedChange={(checked) =>
+                    onChange({
+                      ...draft,
+                      routingHopLimit: checked ? null : DEFAULT_ROUTING_HOP_LIMIT,
+                    })
+                  }
+                />
+                {t('agentTeams.unlimited')}
+              </label>
+            </div>
+            <p className="text-[10px] text-muted-foreground">{t('agentTeams.routingLimitHint')}</p>
           </div>
-          <span className="text-[11px] text-foreground-passive">
-            Max agent deliveries per human prompt.
-          </span>
-        </label>
+        </div>
 
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-foreground-muted">
-            Members — pick the leader (runs first, then hands off)
-          </span>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-end justify-between gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">
+                {t('agentTeams.members')}
+                <span className="ml-0.5 text-destructive" aria-hidden>
+                  *
+                </span>
+              </Label>
+              <p className="text-[10px] text-muted-foreground">{t('agentTeams.membersHint')}</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => showAgentModal({ onSuccess: addAgent })}
+            >
+              <Plus className="size-3.5" />
+              {t('agentTeams.createAgent')}
+            </Button>
+          </div>
           <div className="flex flex-col gap-1.5">
             {draft.members.map((m) => (
               <MemberCard
@@ -482,7 +540,8 @@ function TeamEditor({
                     <button
                       type="button"
                       onClick={() => setLeader(m.handle)}
-                      title="Make leader"
+                      title={t('agentTeams.makeLeader')}
+                      aria-label={t('agentTeams.makeLeader')}
                       className={cn(
                         'flex size-6 items-center justify-center rounded-md border transition-colors',
                         m.role === 'leader'
@@ -492,28 +551,31 @@ function TeamEditor({
                     >
                       <Crown className="size-3.5" />
                     </button>
-                    <select
+                    <Select
                       value={m.runtime}
-                      onChange={(e) =>
+                      onValueChange={(value) =>
                         setMembers(
                           draft.members.map((x) =>
-                            x.handle === m.handle
-                              ? { ...x, runtime: e.target.value as typeof x.runtime }
-                              : x
+                            x.handle === m.handle ? { ...x, runtime: value as typeof x.runtime } : x
                           )
                         )
                       }
-                      className="rounded-md border border-border bg-background-2 px-2 py-1 text-xs outline-none"
                     >
-                      {runtimeOptions.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.name}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger size="sm" className="w-28 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {runtimeOptions.map((runtime) => (
+                          <SelectItem key={runtime.id} value={runtime.id}>
+                            {runtime.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <button
                       type="button"
                       onClick={() => setMembers(draft.members.filter((x) => x.handle !== m.handle))}
+                      aria-label={t('common.remove')}
                       className="flex size-6 items-center justify-center rounded-md text-foreground-muted hover:text-red-500"
                     >
                       <X className="size-3.5" />
@@ -524,44 +586,37 @@ function TeamEditor({
             ))}
             {draft.members.length === 0 && (
               <p className="rounded-lg border border-border bg-background-1 px-2 py-2 text-center text-xs text-foreground-muted">
-                Add agents from your library below.
+                {t('agentTeams.noMembers')}
               </p>
             )}
           </div>
-          <select
-            value=""
-            onChange={(e) => {
-              if (e.target.value) addAgent(e.target.value);
+          <Select
+            value={null}
+            onValueChange={(agentId) => {
+              const agent = agents.find((candidate) => candidate.id === agentId);
+              if (agent) addAgent(agent);
             }}
-            className="rounded-md border border-border bg-background-1 px-3 py-2 text-sm outline-none focus:border-primary/60"
           >
-            <option value="">+ Add agent…</option>
-            {agents
-              .filter((a) => !usedAgentRefs.has(a.id))
-              .map((a) => (
-                <option key={a.id} value={a.id}>
-                  {avatarDisplayText(a.name, a.icon)} {a.name}
-                </option>
+            <SelectTrigger className="h-9 w-full text-sm" aria-label={t('agentTeams.addAgent')}>
+              <SelectValue placeholder={t('agentTeams.addAgent')} />
+            </SelectTrigger>
+            <SelectContent>
+              {availableAgents.map((agent) => (
+                <SelectItem key={agent.id} value={agent.id}>
+                  {avatarDisplayText(agent.name, agent.icon)} {agent.name}
+                </SelectItem>
               ))}
-          </select>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="mt-2 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-md border border-border bg-background-1 px-3 py-2 text-sm transition-colors hover:bg-background-2"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={!canSave}
-            className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
-          >
-            Save team
-          </button>
+          <Button type="button" variant="outline" onClick={onCancel}>
+            {t('common.cancel')}
+          </Button>
+          <Button type="button" onClick={onSave} disabled={!canSave}>
+            {t('agentTeams.saveTeam')}
+          </Button>
         </div>
       </div>
     </div>

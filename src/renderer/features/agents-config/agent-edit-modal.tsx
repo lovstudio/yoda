@@ -1,13 +1,4 @@
-import {
-  AlertTriangle,
-  ChevronDown,
-  FilePenLine,
-  ListChecks,
-  MousePointer2,
-  ShieldCheck,
-  Sparkles,
-  X,
-} from 'lucide-react';
+import { AlertTriangle, ChevronDown, MousePointer2, Sparkles, X } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -52,7 +43,6 @@ import {
 import { Input } from '@renderer/lib/ui/input';
 import { InputGroupButton } from '@renderer/lib/ui/input-group';
 import { Label } from '@renderer/lib/ui/label';
-import { RadioGroup, RadioGroupItem } from '@renderer/lib/ui/radio-group';
 import {
   Select,
   SelectContent,
@@ -506,47 +496,32 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
                 <Label className="text-xs">
                   <OptionalLabel>{t('agentManager.accessMode')}</OptionalLabel>
                 </Label>
-                <p className="text-[10px] text-muted-foreground">
-                  {t('agentManager.accessModeHint')}
+                <Select
+                  value={draft.accessMode}
+                  onValueChange={(value) => set('accessMode', value as AgentAccessMode)}
+                >
+                  <SelectTrigger
+                    className="h-9 w-full text-sm"
+                    aria-label={t('agentManager.accessMode')}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(['inherit', 'plan', 'write', 'full-access'] as const).map((mode) => (
+                      <SelectItem key={mode} value={mode}>
+                        {t(`agentManager.accessModes.${mode}.label`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p
+                  className="text-[10px] leading-relaxed text-muted-foreground"
+                  title={t('agentManager.accessModeHint')}
+                >
+                  {t(`agentManager.accessModes.${draft.accessMode}.description`)}
                 </p>
               </div>
             </div>
-            <RadioGroup
-              value={draft.accessMode}
-              onValueChange={(value) => set('accessMode', value as AgentAccessMode)}
-              className="grid gap-2 sm:grid-cols-2"
-            >
-              {(
-                [
-                  ['inherit', ListChecks],
-                  ['plan', ListChecks],
-                  ['write', FilePenLine],
-                  ['full-access', ShieldCheck],
-                ] as const
-              ).map(([mode, Icon]) => (
-                <label
-                  key={mode}
-                  className={cn(
-                    'flex min-h-12 cursor-pointer items-start gap-2.5 rounded-lg border border-border px-3 py-2 transition-colors hover:bg-muted/35',
-                    draft.accessMode === mode && 'border-foreground/30 bg-muted/40',
-                    mode === 'full-access' &&
-                      draft.accessMode === mode &&
-                      'border-destructive/40 bg-destructive/5'
-                  )}
-                >
-                  <RadioGroupItem value={mode} className="mt-0.5" />
-                  <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0">
-                    <span className="block text-xs font-medium">
-                      {t(`agentManager.accessModes.${mode}.label`)}
-                    </span>
-                    <span className="mt-0.5 block text-[10px] leading-relaxed text-muted-foreground">
-                      {t(`agentManager.accessModes.${mode}.description`)}
-                    </span>
-                  </span>
-                </label>
-              ))}
-            </RadioGroup>
           </div>
 
           <div className="space-y-2">
