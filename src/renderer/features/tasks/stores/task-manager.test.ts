@@ -302,6 +302,36 @@ describe('TaskManagerStore external task reconciliation', () => {
   });
 });
 
+describe('TaskManagerStore task hierarchy index', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    mocks.listeners.clear();
+    mocks.unsubscribers.length = 0;
+  });
+
+  it('indexes direct children and reacts to re-parenting', () => {
+    const manager = createManager();
+    const parent = createUnprovisionedTask(makeTask('Parent'));
+    const child = createUnprovisionedTask(makeTask('Child', 'task-1', 'task-2'));
+    const otherParent = createUnprovisionedTask(makeTask('Other parent', undefined, 'task-3'));
+
+    manager.tasks.set('task-1', parent);
+    manager.tasks.set('task-2', child);
+    manager.tasks.set('task-3', otherParent);
+
+    expect(manager.childrenByParent.get('task-1')).toEqual([child]);
+    expect(manager.childrenByParent.get('task-3')).toBeUndefined();
+
+    const childData = registeredTaskData(child);
+    if (!childData) throw new Error('Expected child task data to be registered');
+    childData.parentTaskId = 'task-3';
+
+    expect(manager.childrenByParent.get('task-1')).toBeUndefined();
+    expect(manager.childrenByParent.get('task-3')).toEqual([child]);
+    manager.dispose();
+  });
+});
+
 describe('TaskManagerStore task view preload', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -444,11 +474,12 @@ function makeCreateTaskParams(name: string): CreateTaskParams {
   };
 }
 
-function makeTask(name: string): Task {
+function makeTask(name: string, parentTaskId?: string, id = 'task-1'): Task {
   return {
-    id: 'task-1',
+    id,
     projectId: 'project-1',
     name,
+    parentTaskId,
     status: 'in_progress',
     sourceBranch: { type: 'local', branch: 'main' },
     createdAt: '2026-06-05T10:00:00.000Z',

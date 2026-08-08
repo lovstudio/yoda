@@ -1,4 +1,4 @@
-import { makeObservable, observable, reaction, runInAction, toJS } from 'mobx';
+import { computed, makeObservable, observable, reaction, runInAction, toJS } from 'mobx';
 import type { Conversation } from '@shared/conversations';
 import { conversationMovedChannel } from '@shared/events/conversationEvents';
 import { prSyncProgressChannel, prUpdatedChannel } from '@shared/events/prEvents';
@@ -210,6 +210,27 @@ export class TaskManagerStore {
    */
   archivingTaskIds = observable.set<string>();
 
+  /**
+   * Direct task-tree children indexed once per observable task-map snapshot.
+   * Sidebar rows and task menus ask this question independently, so scanning
+   * the full task map from each row turns a sidebar render into O(n²) work.
+   */
+  get childrenByParent(): ReadonlyMap<string, readonly TaskStore[]> {
+    const childrenByParent = new Map<string, TaskStore[]>();
+    for (const store of this.tasks.values()) {
+      if (!isRegistered(store)) continue;
+      const parentId = store.data.parentTaskId;
+      if (!parentId) continue;
+      const children = childrenByParent.get(parentId);
+      if (children) {
+        children.push(store);
+      } else {
+        childrenByParent.set(parentId, [store]);
+      }
+    }
+    return childrenByParent;
+  }
+
   constructor(
     projectId: string,
     repository: RepositoryStore,
@@ -224,6 +245,7 @@ export class TaskManagerStore {
       tasks: observable,
       taskLoadState: observable,
       archivingTaskIds: observable,
+      childrenByParent: computed,
     });
 
     this._unsubTaskStatusUpdated = events.on(

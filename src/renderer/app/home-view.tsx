@@ -27,8 +27,11 @@ import {
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import {
+  forwardRef,
+  memo,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -119,7 +122,7 @@ import {
   withComposerDefault,
   type ComposerOverrideScope,
 } from './composer-project-overrides';
-import { ComposerPromptInput } from './composer-prompt-input';
+import { ComposerPromptInput, type ComposerPromptInputProps } from './composer-prompt-input';
 import {
   ComposerSettingsContent,
   DEFAULT_INPUT_PROMPT_LANGUAGE,
@@ -173,6 +176,65 @@ function branchNeedsCheckout(
   if (branch.type === 'remote') return true;
   return branch.branch !== currentBranchName;
 }
+
+type HomeComposerPromptHandle = {
+  getValue: () => string;
+  setValue: (value: string) => void;
+};
+
+type HomeComposerPromptProps = Omit<ComposerPromptInputProps, 'value' | 'onChange'> & {
+  draftLoaded: boolean;
+  persistedPrompt: string;
+  onPersistPrompt: (value: string) => void;
+  onValueChange: (value: string) => void;
+};
+
+/**
+ * Keep prompt keystrokes inside the input subtree. The home composer owns many
+ * project and agent selectors; lifting the full text into it makes every
+ * character re-run all of those selectors and render paths.
+ */
+const HomeComposerPrompt = memo(
+  forwardRef<HomeComposerPromptHandle, HomeComposerPromptProps>(function HomeComposerPrompt(
+    { draftLoaded, persistedPrompt, onPersistPrompt, onValueChange, ...inputProps },
+    ref
+  ) {
+    const [value, setValue] = useState(persistedPrompt);
+    const valueRef = useRef(value);
+    const promptWriteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const setLocalValue = useCallback(
+      (next: string) => {
+        valueRef.current = next;
+        setValue(next);
+        onValueChange(next);
+      },
+      [onValueChange]
+    );
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        getValue: () => valueRef.current,
+        setValue: setLocalValue,
+      }),
+      [setLocalValue]
+    );
+
+    useEffect(() => {
+      if (!draftLoaded || value === persistedPrompt) return;
+      if (promptWriteRef.current) clearTimeout(promptWriteRef.current);
+      promptWriteRef.current = setTimeout(() => {
+        onPersistPrompt(value);
+      }, 300);
+      return () => {
+        if (promptWriteRef.current) clearTimeout(promptWriteRef.current);
+      };
+    }, [draftLoaded, onPersistPrompt, persistedPrompt, value]);
+
+    return <ComposerPromptInput {...inputProps} value={value} onChange={setLocalValue} />;
+  })
+);
 
 /**
  * Humanize a model id for the run-mode chip, e.g. `claude-opus-4-8` → `Opus 4.8`.
@@ -829,7 +891,18 @@ export const HomeComposer = observer(function HomeComposer({
   // alongside the global ones. SSH projects have no local path to scan.
   const skillProjectPath = projectData?.type === 'local' ? projectData.path : undefined;
   const persistedPrompt = draft?.prompt ?? '';
-  const [prompt, setPrompt] = useState(persistedPrompt);
+  const promptInputRef = useRef<HomeComposerPromptHandle>(null);
+  const promptValueRef = useRef(persistedPrompt);
+  const [promptHasText, setPromptHasText] = useState(() => persistedPrompt.trim().length > 0);
+  const handlePromptValueChange = useCallback((value: string) => {
+    promptValueRef.current = value;
+    const nextHasText = value.trim().length > 0;
+    setPromptHasText((current) => (current === nextHasText ? current : nextHasText));
+  }, []);
+  const persistPrompt = useCallback(
+    (value: string) => updateDraft({ prompt: value }),
+    [updateDraft]
+  );
   const [promptTokens, setPromptTokens] = useState<PromptToken[]>([]);
   const [quickActionMode, setQuickActionMode] = useState(false);
   const clearPromptTokens = useCallback(() => {
@@ -853,12 +926,11 @@ export const HomeComposer = observer(function HomeComposer({
     },
     [updateDraft]
   );
-  const hydratedPromptRef = useRef(false);
+  const hydratedPromptTokensRef = useRef(false);
   useEffect(() => {
-    if (hydratedPromptRef.current) return;
+    if (hydratedPromptTokensRef.current) return;
     if (draft === undefined) return;
-    hydratedPromptRef.current = true;
-    setPrompt(draft.prompt ?? '');
+    hydratedPromptTokensRef.current = true;
     // Re-link the attachment-token registry persisted with the draft — the
     // composer remounts on every navigation and the sentinels in the restored
     // prompt would otherwise be orphaned plain text. Image hover previews
@@ -867,18 +939,6 @@ export const HomeComposer = observer(function HomeComposer({
       (draft.promptTokens ?? []).map((token) => ({ ...token, id: crypto.randomUUID() }))
     );
   }, [draft]);
-  const promptWriteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!hydratedPromptRef.current) return;
-    if (prompt === persistedPrompt) return;
-    if (promptWriteRef.current) clearTimeout(promptWriteRef.current);
-    promptWriteRef.current = setTimeout(() => {
-      updateDraft({ prompt });
-    }, 300);
-    return () => {
-      if (promptWriteRef.current) clearTimeout(promptWriteRef.current);
-    };
-  }, [prompt, persistedPrompt, updateDraft]);
 
   const [submitting, setSubmitting] = useState(false);
   const standardStrategyOverridden = composerDefaults?.standardStrategyKind !== undefined;
@@ -1015,7 +1075,6 @@ export const HomeComposer = observer(function HomeComposer({
     },
     [appPromptLanguage, inputPromptLanguage, runtimeId, selectedProjectId]
   );
-  const trimmed = prompt.trim();
   // A slot can run only when it has an Agent assigned (the Agent supplies the
   // runtime + prompt). Each mode requires all its slots filled.
   const hasSlotAgent = (slotKey: string) => !!slotAgentId(slotKey);
@@ -1047,7 +1106,7 @@ export const HomeComposer = observer(function HomeComposer({
   const featureWorkflowNeedsBrief =
     runMode === 'team' &&
     Boolean(activeTeam && hasFeatureWorkflowContract(activeTeam)) &&
-    trimmed.length === 0;
+    !promptHasText;
   // A worktree-requiring mode on a repo without a base commit can't fork until
   // one exists. This covers both an unborn repo (git init, no commit) and a
   // plain folder that was never `git init`-ed — both surface as `isUnborn` with
@@ -1060,7 +1119,7 @@ export const HomeComposer = observer(function HomeComposer({
     modeHasAgents &&
     !featureWorkflowNeedsBrief &&
     compareVariantsReady &&
-    (runMode !== 'build' || trimmed.length > 0) &&
+    (runMode !== 'build' || promptHasText) &&
     (runMode === 'build'
       ? true
       : taskScopedTarget
@@ -1071,6 +1130,8 @@ export const HomeComposer = observer(function HomeComposer({
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || submitting) return;
+    const prompt = promptValueRef.current;
+    const trimmed = prompt.trim();
     setSubmitting(true);
     try {
       // Every successful new-task submit lands on the new task; modal hosts close on it.
@@ -1115,7 +1176,7 @@ export const HomeComposer = observer(function HomeComposer({
       const imagePaths = serialized.imagePaths.length > 0 ? serialized.imagePaths : undefined;
       const sessionImagePaths = deferInitialPrompt ? undefined : imagePaths;
       const resetComposer = () => {
-        setPrompt('');
+        promptInputRef.current?.setValue('');
         updateDraft({ prompt: '', promptTokens: [] });
         clearPromptTokens();
         setCompareVariants([]);
@@ -1959,8 +2020,6 @@ export const HomeComposer = observer(function HomeComposer({
     standardSubmitKind,
     projectSubmitSourceBranch,
     projectSubmitStrategyKind,
-    prompt,
-    trimmed,
     submitting,
     runMode,
     compareVariants,
@@ -2174,7 +2233,11 @@ export const HomeComposer = observer(function HomeComposer({
               prompt: t('home.dreamActionFixPrompt'),
             },
           ].map(({ Icon, title, prompt }) => (
-            <button key={title} type="button" onClick={() => setPrompt(prompt)}>
+            <button
+              key={title}
+              type="button"
+              onClick={() => promptInputRef.current?.setValue(prompt)}
+            >
               <span className="dream-skin-action-icon">
                 <Icon />
               </span>
@@ -2188,9 +2251,13 @@ export const HomeComposer = observer(function HomeComposer({
       ) : null}
 
       <div data-yoda-surface="home-composer-input">
-        <ComposerPromptInput
-          value={prompt}
-          onChange={setPrompt}
+        <HomeComposerPrompt
+          ref={promptInputRef}
+          key={draft !== undefined ? 'draft-loaded' : 'draft-loading'}
+          draftLoaded={draft !== undefined}
+          persistedPrompt={persistedPrompt}
+          onPersistPrompt={persistPrompt}
+          onValueChange={handlePromptValueChange}
           tokens={promptTokens}
           onTokensChange={persistPromptTokens}
           runtimeId={runtimeId}
