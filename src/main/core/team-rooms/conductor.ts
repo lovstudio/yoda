@@ -47,6 +47,7 @@ import {
 } from './store';
 import { installTeamScripts } from './team-at-script';
 import { teamRoomEvents } from './team-room-events';
+import { completeTeamRoomTask } from './team-room-task-status';
 
 const STATUS_POLL_MS = 1_500;
 /** Cadence of the conductor's "standup" roster summary while work is in progress. */
@@ -304,6 +305,15 @@ class RoomConductor {
         deliveryError = outcome.error;
       }
     }
+    if (humanTargeted && targets.length === 0 && author?.runtime && !isFeatureWorkflow) {
+      await completeTeamRoomTask(room).catch((error: unknown) => {
+        log.warn('RoomConductor: failed to complete team task', {
+          roomId,
+          taskId: room.taskId,
+          error: String(error),
+        });
+      });
+    }
     if (author?.runtime && deliveredHandles.length > 0) this.handedOff.add(author.id);
     return { deliveredHandles, rejectedHandles, error: deliveryError };
   }
@@ -482,13 +492,27 @@ class RoomConductor {
     if (!snapshot || snapshot.room.status !== 'active') return;
     const { room, members } = snapshot;
     const leader = members.find((m) => m.role === 'leader' && m.runtime);
+    const leaderEnded = leader?.id === finished.id;
 
     if (!leader || finished.id === leader.id) {
+      let taskCompleted = false;
+      if (leaderEnded) {
+        taskCompleted = await completeTeamRoomTask(room).catch((error: unknown) => {
+          log.warn('RoomConductor: failed to complete team task', {
+            roomId,
+            taskId: room.taskId,
+            error: String(error),
+          });
+          return false;
+        });
+      }
       if (room.communication.syncToRoom) {
         await postMessage({
           roomId,
           kind: 'system',
-          body: `${finished.displayName} ended its turn — over to you. @mention a teammate to continue.`,
+          body: taskCompleted
+            ? `${finished.displayName} completed the team task — over to you.`
+            : `${finished.displayName} ended its turn — over to you. @mention a teammate to continue.`,
           mentions: [],
         });
       }
