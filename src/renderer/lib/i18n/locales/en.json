@@ -2266,7 +2266,9 @@
       "createParent": "Add parent task (group)",
       "moveToProject": "Move to project",
       "moveToProjectEmpty": "No other projects",
-      "moveToProjectSearch": "Search projects..."
+      "moveToProjectSearch": "Search projects...",
+      "moveToProjectCreate": "Create a project and move here...",
+      "moveToProjectCreateNamed": "Create \"{{name}}\" and move here"
     },
     "moveToProject": {
       "confirmTitle": "Move task to another project?",

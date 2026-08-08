@@ -130,6 +130,8 @@ export interface TaskMenuActions extends TaskMenuInfoFields {
    * Only set for eligible tasks (no worktree, no subtasks).
    */
   onMoveToProject?: (targetProjectId: string) => void;
+  /** Create a project and move this task into it. */
+  onCreateProject?: (defaultName?: string) => void;
 }
 
 interface MenuItemDescriptor {
@@ -557,6 +559,7 @@ export function TaskContextMenuItems(actions: TaskMenuActions) {
         <MoveToProjectContextSubmenu
           currentProjectId={actions.projectId}
           onMove={actions.onMoveToProject}
+          onCreateProject={actions.onCreateProject}
         />
       )}
       {actions.onAssignWorkspace && (
@@ -635,6 +638,7 @@ export function TaskActionsMenu({
           <MoveToProjectDropdownSubmenu
             currentProjectId={actions.projectId}
             onMove={actions.onMoveToProject}
+            onCreateProject={actions.onCreateProject}
           />
         )}
         {actions.onAssignWorkspace && (
