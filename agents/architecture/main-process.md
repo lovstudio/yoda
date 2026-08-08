@@ -48,9 +48,10 @@ The main process is organized into domain modules under `src/main/core/`. Each d
 - `src/main/utils/` — Shell environment, shell escaping, child process env, external links
 - `src/main/core/agent-hooks/` — Hook server, event enrichment, OS notifications, hook config writer for Claude/Codex
 
-Agent Room communication keeps routing separate from presentation. The conductor accepts both
-persisted room messages and ephemeral control signals; `syncToRoom` only decides whether activity is
-mirrored to the human timeline. See `docs/adr/0006-pluggable-agent-room-communication.md`.
+Agent Rooms use one Coordinator-led, durable assignment protocol. Control-only hand-offs are
+persisted even when they are hidden from chat; process/session, room, shared-file, and GitHub choices
+describe the work record rather than changing delivery semantics. `syncToRoom` controls presentation
+only. See `docs/adr/0007-coordinator-led-agent-room-orchestration.md`.
 
 ## IPC / RPC Structure
 

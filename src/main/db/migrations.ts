@@ -174,6 +174,30 @@ function ensureTeamCommunicationCompatibility(connection: BetterSqlite3.Database
   }
 }
 
+function ensureTeamOrchestrationCompatibility(connection: BetterSqlite3.Database): void {
+  const columns: Record<string, Array<[name: string, definition: string]>> = {
+    room_members: [
+      ['model', 'text'],
+      ['reasoning_effort', 'text'],
+      ['permission_mode', 'text'],
+    ],
+    room_messages: [
+      ['visibility', "text DEFAULT 'room' NOT NULL"],
+      ['delivery_status', "text DEFAULT 'none' NOT NULL"],
+      ['delivery_error', 'text'],
+    ],
+  };
+  for (const [tableName, additions] of Object.entries(columns)) {
+    if (!tableExists(connection, tableName)) continue;
+    for (const [columnName, definition] of additions) {
+      if (columnExists(connection, tableName, columnName)) continue;
+      connection.exec(
+        `ALTER TABLE ${quoteIdentifier(tableName)} ADD ${quoteIdentifier(columnName)} ${definition}`
+      );
+    }
+  }
+}
+
 export function getBundledMigrationCount(): number {
   return migrationEntries.length;
 }
@@ -203,6 +227,8 @@ export function runBundledMigrations(connection: BetterSqlite3.Database): void {
         ensureAgentExecutionSettingsCompatibility(connection);
       } else if (record.tag === '0051_massive_banshee') {
         ensureTeamCommunicationCompatibility(connection);
+      } else if (record.tag === '0053_lean_wendell_rand') {
+        ensureTeamOrchestrationCompatibility(connection);
       } else {
         const sqlKey = Object.keys(sqlFiles).find((k) => k.includes(record.tag));
         if (!sqlKey) throw new Error(`Missing bundled SQL for migration: ${record.tag}`);
@@ -221,4 +247,5 @@ export function runBundledMigrations(connection: BetterSqlite3.Database): void {
 
   ensureWorkspaceSchemaCompatibility(connection);
   ensureTeamCommunicationCompatibility(connection);
+  ensureTeamOrchestrationCompatibility(connection);
 }

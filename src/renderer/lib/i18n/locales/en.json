@@ -2551,19 +2551,19 @@
     "teamName": "Name",
     "teamNamePlaceholder": "e.g. Product review team",
     "collaboration": "Collaboration",
-    "communicationMode": "Communication mode",
+    "communicationMode": "Work record",
     "communicationModes": {
       "process": {
-        "label": "Process observation",
-        "description": "Observe agent processes and transcripts; full work stays in each session."
+        "label": "Agent sessions",
+        "description": "Keep full work in each Agent session and transcript."
       },
       "message-hub": {
-        "label": "Message hub",
-        "description": "Agents hand off tasks and results through the room hub."
+        "label": "Room messages",
+        "description": "Mirror work conclusions to the room for Agents and people to inspect."
       },
       "shared-file": {
         "label": "Shared file",
-        "description": "Agents coordinate through a shared file inside the task worktree."
+        "description": "Keep the full artifact in a shared file inside the task worktree."
       },
       "github": {
         "label": "GitHub collaboration",
@@ -2571,7 +2571,7 @@
       }
     },
     "syncToRoom": "Sync work updates to room",
-    "syncToRoomHint": "When off, routing continues but the room only shows messages you send. Agent status and artifacts remain available in agent details.",
+    "syncToRoomHint": "Controls only whether work updates appear in the room. Yoda scheduling continues, and status and artifacts remain available in Agent details.",
     "sharedFilePath": "Shared file path",
     "githubRepository": "GitHub repository",
     "githubRepositoryPlaceholder": "Inherit project origin or enter owner/repo",
@@ -2599,6 +2599,8 @@
     }
   },
   "agentRoom": {
+    "dispatchFailed": "Assignment delivery failed",
+    "copyDispatchError": "Copy delivery error and debug details",
     "rooms": "Rooms",
     "newRoom": "New Agent Room",
     "noRooms": "No rooms yet. Create one to gather a few agents into a chat.",
@@ -2637,7 +2639,7 @@
         "lead": "Open collaboration — you direct the team:",
         "steps": [
           "@mention a teammate to delegate a task.",
-          "they work in their own session, and Yoda continues according to the selected communication mode.",
+          "they work in their own session, then the lead decides the next step.",
           "@all to broadcast to everyone."
         ],
         "note": "Each teammate works independently; click an Agent to inspect status and artifacts."
@@ -2649,6 +2651,10 @@
       "noInstructions": "No custom instructions",
       "avatar": "Avatar",
       "name": "Name",
+      "runtime": "Client",
+      "model": "Model",
+      "reasoningEffort": "Reasoning length",
+      "permissionMode": "Permission mode",
       "editProfile": "Edit agent",
       "saveProfile": "Save agent",
       "cancelEdit": "Cancel",
@@ -2677,21 +2683,21 @@
     },
     "settings": { "title": "Room settings" },
     "communication": {
-      "mode": "Communication mode",
+      "mode": "Work record",
       "modes": {
-        "process": "Process observation",
-        "message-hub": "Message hub",
+        "process": "Agent sessions",
+        "message-hub": "Room messages",
         "shared-file": "Shared file",
         "github": "GitHub collaboration"
       },
       "descriptions": {
-        "process": "Yoda observes process state, hooks, and transcripts; agents hand off by ending their turn.",
-        "message-hub": "Agents send hand-off messages through the room hub.",
-        "shared-file": "Full artifacts live in a shared worktree file while the room handles routing.",
-        "github": "Issues and PRs are the record; Yoda checks them locally for updates."
+        "process": "Full work stays in each Agent session and transcript.",
+        "message-hub": "Work conclusions appear in the room for people and teammates to inspect.",
+        "shared-file": "Full artifacts live in a shared worktree file.",
+        "github": "Issues and pull requests are the work record; Yoda checks them locally for updates."
       },
       "syncToRoom": "Sync work updates to room",
-      "syncToRoomHint": "When off, the room stays quiet while agent status, transcripts, and artifacts remain available from the right side.",
+      "syncToRoomHint": "Controls only whether work updates appear in the room. Scheduling continues, and Agent status, transcripts, and artifacts remain available from the right side.",
       "sharedFile": "Shared file path",
       "githubRepository": "GitHub repository",
       "githubRepositoryPlaceholder": "Inherit project origin or enter owner/repo",

@@ -14,7 +14,14 @@ import {
 import { makePtySessionId } from '@shared/ptySessionId';
 import type { RuntimeId } from '@shared/runtime-registry';
 import type { TeamCommunicationConfig } from '@shared/team-communication';
-import type { MemberStatus, RoomMember, RoomMessage, TeamRoom } from '@shared/team-room';
+import {
+  LEAD_HANDLE,
+  normalizeTeamHandle,
+  type MemberStatus,
+  type RoomMember,
+  type RoomMessage,
+  type TeamRoom,
+} from '@shared/team-room';
 import type { RoutingHopLimit } from '@shared/team-routing-limit';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { createConversation } from '@main/core/conversations/createConversation';
@@ -29,10 +36,12 @@ import { log } from '@main/lib/logger';
 import {
   getAllRooms,
   getMemberByConversation,
+  getPendingRoomMessages,
   getRoom,
   postMessage,
   setMemberConversation,
   setMemberStatus,
+  setMessageDelivery,
 } from './store';
 import { installTeamScripts } from './team-at-script';
 import { teamRoomEvents } from './team-room-events';
@@ -44,6 +53,16 @@ const STANDUP_MS = 120_000;
 const ALL_HANDLE = 'all';
 
 type Session = { projectId: string; taskId: string; conversationId: string };
+
+export type TeamRouteResult = {
+  deliveredHandles: string[];
+  rejectedHandles: string[];
+  error: string | null;
+};
+
+function rejectedRoute(handles: string[], error: string): TeamRouteResult {
+  return { deliveredHandles: [], rejectedHandles: handles, error };
+}
 
 function mapStatus(s: AgentSessionRuntimeStatus): MemberStatus {
   switch (s) {
@@ -80,7 +99,7 @@ class RoomConductor {
     if (this.started) return;
     this.started = true;
     teamRoomEvents.on('room:message-posted', (roomId, message) => {
-      void this.onMessage(roomId, message).catch((e: unknown) => {
+      void this.routeMessage(roomId, message).catch((e: unknown) => {
         log.warn('RoomConductor: routing failed', { roomId, error: String(e) });
       });
     });
@@ -90,6 +109,9 @@ class RoomConductor {
   async resumePending(): Promise<void> {
     const rooms = await getAllRooms();
     for (const room of rooms) {
+      // A main-process restart starts a fresh bounded cascade instead of making
+      // every subsequent hand-off look as if the budget were already empty.
+      this.hops.set(room.id, room.routingHopLimit);
       const snapshot = await getRoom(room.id);
       if (!snapshot) continue;
       for (const member of snapshot.members) {
@@ -98,37 +120,72 @@ class RoomConductor {
         }
       }
     }
+    const pending = await getPendingRoomMessages();
+    for (const message of pending) {
+      await this.routeMessage(message.roomId, message);
+    }
   }
 
-  /** Route a control-plane signal without requiring a human-visible room row. */
+  /** Persist and route a control-plane signal without adding chat noise. */
   async routeSignal(args: {
     roomId: string;
     authorMemberId: string | null;
     body: string;
     mentions: string[];
     sessionRef?: string | null;
-  }): Promise<void> {
-    await this.onMessage(args.roomId, {
-      id: randomUUID(),
-      roomId: args.roomId,
-      authorMemberId: args.authorMemberId,
-      kind: 'handoff',
-      body: args.body,
-      mentions: args.mentions,
-      sessionRef: args.sessionRef ?? null,
-      verdict: null,
-      createdAt: new Date().toISOString(),
-    });
+    visibility?: 'room' | 'control';
+  }): Promise<TeamRouteResult> {
+    const message = await postMessage(
+      {
+        roomId: args.roomId,
+        authorMemberId: args.authorMemberId,
+        kind: 'handoff',
+        body: args.body,
+        mentions: args.mentions,
+        sessionRef: args.sessionRef ?? null,
+        visibility: args.visibility ?? 'control',
+      },
+      { route: false }
+    );
+    return this.routeMessage(args.roomId, message);
   }
 
-  private async onMessage(roomId: string, message: RoomMessage): Promise<void> {
+  async routeMessage(roomId: string, message: RoomMessage): Promise<TeamRouteResult> {
+    if (message.kind === 'system' || message.deliveryStatus === 'none') {
+      return { deliveredHandles: [], rejectedHandles: [], error: null };
+    }
+    try {
+      const result = await this.onMessage(roomId, message);
+      const delivered = result.deliveredHandles.length > 0 && result.rejectedHandles.length === 0;
+      await setMessageDelivery(
+        message.id,
+        delivered ? 'delivered' : 'failed',
+        delivered ? null : result.error
+      );
+      return result;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      await setMessageDelivery(message.id, 'failed', detail).catch(() => {});
+      throw error;
+    }
+  }
+
+  private async onMessage(roomId: string, message: RoomMessage): Promise<TeamRouteResult> {
+    const originalHandles = message.mentions.map(normalizeTeamHandle).filter(Boolean);
+    if (originalHandles.length === 0) {
+      return rejectedRoute([], 'No teammate was addressed.');
+    }
     // System lines are display-only narration (referee transitions, standups,
     // notices). They have no author, so they must NEVER re-enter routing —
     // otherwise each one would re-trigger the referee and loop infinitely.
-    if (message.kind === 'system') return;
+    if (message.kind === 'system') {
+      return rejectedRoute(originalHandles, 'System messages are not routable.');
+    }
 
     const snapshot = await getRoom(roomId);
-    if (!snapshot || snapshot.room.status !== 'active') return;
+    if (!snapshot || snapshot.room.status !== 'active') {
+      return rejectedRoute(originalHandles, 'The Agent Room is not active.');
+    }
     const { room, members } = snapshot;
 
     const author = message.authorMemberId
@@ -141,13 +198,9 @@ class RoomConductor {
 
     // An agent that addressed someone this turn has explicitly handed off, so its
     // turn-end must NOT also trigger the automatic hand-back to the lead.
-    if (author?.runtime && message.mentions.length > 0) this.handedOff.add(author.id);
-
-    const wantsAll = message.mentions.includes(ALL_HANDLE);
+    const wantsAll = originalHandles.includes(ALL_HANDLE);
     const isFeatureWorkflow = room.preset === FEATURE_WORKFLOW_ROOM_PRESET;
-    let requestedHandles = wantsAll
-      ? [ALL_HANDLE]
-      : message.mentions.map((handle) => handle.toLowerCase());
+    let requestedHandles = wantsAll ? [ALL_HANDLE] : originalHandles;
     let handsToHuman = false;
     if (isFeatureWorkflow && requestedHandles.length > 0) {
       const feature = room.featureId
@@ -161,7 +214,7 @@ class RoomConductor {
           body: 'Feature routing paused — this Room is not linked to an authoritative Feature workspace.',
           mentions: [],
         });
-        return;
+        return rejectedRoute(requestedHandles, 'The Feature Room has no authoritative Feature.');
       }
       const allowed = new Set(featureWorkflowAllowedTargetHandles(feature, members, message));
       const rejected = requestedHandles.filter((handle) => !allowed.has(handle));
@@ -189,7 +242,7 @@ class RoomConductor {
             }`,
             mentions: [],
           });
-          return;
+          return rejectedRoute(requestedHandles, 'Feature evidence was rejected.');
         }
       }
     }
@@ -199,11 +252,19 @@ class RoomConductor {
         member.id !== message.authorMemberId &&
         ((!isFeatureWorkflow && wantsAll) || requestedHandles.includes(member.handle.toLowerCase()))
     );
-    if (targets.length === 0) {
+    const humanTargeted = requestedHandles.includes('you') && message.visibility === 'room';
+    if (targets.length === 0 && !humanTargeted) {
       if (isFeatureWorkflow && author?.runtime && !handsToHuman && message.mentions.length > 0) {
         this.handedOff.delete(author.id);
       }
-      return;
+      const available = members
+        .filter((member) => member.runtime)
+        .map((member) => `@${member.handle}`)
+        .join(', ');
+      return rejectedRoute(
+        requestedHandles,
+        `No matching teammate. Available teammates: ${available || '(none)'}.`
+      );
     }
 
     const roster: RosterEntry[] = members.map((m) => ({
@@ -213,9 +274,17 @@ class RoomConductor {
     }));
     const fromName = author?.displayName ?? 'the lead';
 
+    const deliveredHandles = humanTargeted ? ['you'] : [];
+    const rejectedHandles: string[] = [];
+    let deliveryError: string | null = null;
     for (const member of targets) {
-      if (!this.spend(roomId)) return this.pauseRouting(roomId, room.routingHopLimit);
-      await this.deliverTo(
+      if (!this.spend(roomId)) {
+        await this.pauseRouting(roomId, room.routingHopLimit);
+        rejectedHandles.push(member.handle);
+        deliveryError = 'The routing-step limit was reached.';
+        continue;
+      }
+      const outcome = await this.deliverTo(
         room.projectId,
         room.taskId,
         roomId,
@@ -225,9 +294,17 @@ class RoomConductor {
         {
           fromName,
           body: message.body,
+          dispatchId: message.id,
         }
       );
+      if (outcome.ok) deliveredHandles.push(member.handle);
+      else {
+        rejectedHandles.push(member.handle);
+        deliveryError = outcome.error;
+      }
     }
+    if (author?.runtime && deliveredHandles.length > 0) this.handedOff.add(author.id);
+    return { deliveredHandles, rejectedHandles, error: deliveryError };
   }
 
   /** Spend one delivery from the room's cascade budget. False when exhausted. */
@@ -263,14 +340,16 @@ class RoomConductor {
     member: RoomMember,
     roster: RosterEntry[],
     communication: TeamCommunicationConfig,
-    incoming: { fromName: string; body: string }
-  ): Promise<void> {
+    incoming: { fromName: string; body: string; dispatchId: string }
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
     const runtime = member.runtime as RuntimeId;
     const turnPrompt = buildMemberTurnPrompt({
       fromDisplayName: incoming.fromName,
       // Strip the leading @handle(s) — they addressed the message, they aren't
       // part of what the teammate is being asked to do.
-      body: incoming.body.replace(/^(?:\s*@[a-z0-9][a-z0-9_-]*)+[ \t]*/i, '').trimStart(),
+      body: `${incoming.body
+        .replace(/^(?:\s*@[a-z0-9][a-z0-9_-]*)+[ \t]*/i, '')
+        .trimStart()}\n\nYoda assignment id: ${incoming.dispatchId}.`,
       communication,
     });
 
@@ -304,7 +383,13 @@ class RoomConductor {
           taskId,
           runtime,
           title: member.displayName,
-          autoApprove: member.autoApprove,
+          autoApprove: member.permissionMode === 'inherit' ? undefined : member.autoApprove,
+          permissionMode:
+            member.permissionMode && member.permissionMode !== 'inherit'
+              ? member.permissionMode
+              : undefined,
+          model: member.model,
+          reasoningEffort: member.reasoningEffort,
           skillSelection: member.skillSelection ?? undefined,
           initialPrompt: subst(`${systemPrompt}\n\n${turnPrompt}`),
         });
@@ -319,7 +404,7 @@ class RoomConductor {
         );
         if (!ok) {
           await setMemberStatus(roomId, member.id, 'idle', conversationId);
-          return;
+          return { ok: false, error: `${member.displayName}'s session rejected the assignment.` };
         }
       }
 
@@ -328,16 +413,17 @@ class RoomConductor {
       await setMemberStatus(roomId, member.id, 'running', conversationId);
       this.watchStatus(roomId, member, { projectId, taskId, conversationId });
       this.ensureStandup(roomId);
+      return { ok: true };
     } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
       await setMemberStatus(roomId, member.id, 'error', member.conversationId).catch(() => {});
       await postMessage({
         roomId,
         kind: 'system',
-        body: `${member.displayName} couldn't start: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        body: `${member.displayName} couldn't start: ${detail}`,
         mentions: [],
       }).catch(() => {});
+      return { ok: false, error: detail };
     }
   }
 
@@ -413,16 +499,13 @@ class RoomConductor {
       return;
     }
 
-    if (!this.spend(roomId)) return this.pauseRouting(roomId, room.routingHopLimit);
-    const roster: RosterEntry[] = members.map((m) => ({
-      handle: m.handle,
-      displayName: m.displayName,
-      role: m.role,
-    }));
     const artifact = await this.describeTurnArtifact(room, finished);
-    await this.deliverTo(room.projectId, room.taskId, roomId, leader, roster, room.communication, {
-      fromName: finished.displayName,
-      body: `${finished.displayName} (@${finished.handle}) finished its turn without reporting back. Inspect ${artifact} and decide the next step.`,
+    await this.routeSignal({
+      roomId,
+      authorMemberId: finished.id,
+      mentions: [leader.handle],
+      sessionRef: finished.conversationId,
+      body: `${finished.displayName} (@${finished.handle}) finished its turn. Inspect ${artifact} and decide the next step.`,
     });
   }
 
@@ -512,27 +595,26 @@ export async function handleTeamAt(
   conversationId: string,
   to: string[] | 'all',
   message: string
-): Promise<void> {
+): Promise<TeamRouteResult> {
   const found = await getMemberByConversation(conversationId);
   if (!found) {
     log.warn('handleTeamAt: no room member for conversation', { conversationId });
-    return;
+    return rejectedRoute([], 'The calling session is not attached to an active Agent Room.');
   }
-  const mentions = to === 'all' ? [ALL_HANDLE] : to.map((h) => h.toLowerCase()).filter(Boolean);
+  const mentions =
+    to === 'all' ? [ALL_HANDLE] : [...new Set(to.map(normalizeTeamHandle).filter(Boolean))];
   const snapshot = await getRoom(found.roomId);
-  if (!snapshot) return;
-  const signal = {
+  if (!snapshot) return rejectedRoute(mentions, 'The Agent Room no longer exists.');
+  const visibility =
+    snapshot.room.communication.syncToRoom || mentions.includes(LEAD_HANDLE) ? 'room' : 'control';
+  return roomConductor.routeSignal({
     roomId: found.roomId,
     authorMemberId: found.member.id,
     body: message.trim() || '(no message)',
     mentions,
     sessionRef: found.member.conversationId,
-  };
-  if (snapshot.room.communication.syncToRoom) {
-    await postMessage({ ...signal, kind: 'handoff' });
-  } else {
-    await roomConductor.routeSignal(signal);
-  }
+    visibility,
+  });
 }
 
 /**

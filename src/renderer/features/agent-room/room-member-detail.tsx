@@ -259,8 +259,26 @@ export const RoomMemberDetail = observer(function RoomMemberDetail({
         <dd>{member.role}</dd>
         {member.runtime && (
           <>
-            <dt className="text-foreground-muted">runtime</dt>
+            <dt className="text-foreground-muted">{t('agentRoom.member.runtime')}</dt>
             <dd className="font-mono">{member.runtime}</dd>
+          </>
+        )}
+        {member.model && (
+          <>
+            <dt className="text-foreground-muted">{t('agentRoom.member.model')}</dt>
+            <dd className="font-mono">{member.model}</dd>
+          </>
+        )}
+        {member.reasoningEffort && (
+          <>
+            <dt className="text-foreground-muted">{t('agentRoom.member.reasoningEffort')}</dt>
+            <dd className="font-mono">{member.reasoningEffort}</dd>
+          </>
+        )}
+        {member.permissionMode && (
+          <>
+            <dt className="text-foreground-muted">{t('agentRoom.member.permissionMode')}</dt>
+            <dd className="font-mono">{member.permissionMode}</dd>
           </>
         )}
       </dl>

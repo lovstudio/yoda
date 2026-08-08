@@ -24,17 +24,24 @@ port=$(sed -n 's/.*"port":\\([0-9]*\\).*/\\1/p' "$ep")
 token=$(sed -n 's/.*"token":"\\([^"]*\\)".*/\\1/p' "$ep")
 pty="${ptyId}"`;
 
-  // Common epilogue: POST $body and surface the HTTP status on failure.
+  // Preserve the response body so a successful HTTP exchange cannot masquerade
+  // as a successful assignment when the router found no target.
   const post = (
     name: string,
     eventType: string
-  ) => `code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://127.0.0.1:$port/hook" \\
+  ) => `result=$(curl -sS -w $'\\n%{http_code}' -X POST "http://127.0.0.1:$port/hook" \\
   -H "X-Yoda-Token: $token" \\
   -H "X-Yoda-Pty-Id: $pty" \\
   -H "X-Yoda-Event-Type: ${eventType}" \\
   -H "Content-Type: application/json" \\
   -d "$body")
-if [ "$code" != "200" ]; then echo "${name}: hook rejected (HTTP $code)" >&2; exit 1; fi`;
+code="\${result##*$'\\n'}"
+response="\${result%$'\\n'*}"
+if [ "$code" != "200" ]; then
+  if [ -n "$response" ]; then printf '%s\\n' "$response" >&2; else echo "${name}: hook rejected (HTTP $code)" >&2; fi
+  exit 1
+fi
+if [ -n "$response" ]; then printf '%s\\n' "$response"; fi`;
 
   // JSON-encode "$msg" into $esc (prefer python3; fall back to a naive quote).
   const escMsg = `esc=$(printf '%s' "$msg" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' 2>/dev/null || printf '"%s"' "$msg")`;
@@ -49,7 +56,6 @@ if [ "$handle" = "all" ]; then to='"all"'; else to="[\\"$handle\\"]"; fi
 ${escMsg}
 body="{\\"to\\": $to, \\"message\\": $esc}"
 ${post('team-at', 'team-at')}
-echo "team-at: delivered to $handle"
 `,
     'team-status': `${head('team-status')}
 # Usage: team-status <message...>
