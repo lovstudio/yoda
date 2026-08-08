@@ -56,6 +56,27 @@ describe('buildAgentCommand', () => {
     });
   });
 
+  it('keeps Codex plan mode read-only without interrupting for approvals', () => {
+    const command = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig: runtimeConfigDefaults.codex,
+      permissionMode: 'plan',
+      initialPrompt: 'Inspect the repository and propose a plan',
+      sessionId: 'session-1',
+    });
+
+    expect(command).toEqual({
+      command: 'codex',
+      args: [
+        '--sandbox',
+        'read-only',
+        '--ask-for-approval',
+        'never',
+        'Inspect the repository and propose a plan',
+      ],
+    });
+  });
+
   it('maps Codex approve-for-me mode to on-request approvals', () => {
     const command = buildAgentCommand({
       runtimeId: 'codex',

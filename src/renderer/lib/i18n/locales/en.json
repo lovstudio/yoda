@@ -1453,7 +1453,7 @@
       "readOnlyDesc": "Let Cohub inspect the project without making changes"
     },
     "codex": {
-      "planDesc": "Analyze read-only and ask before execution",
+      "planDesc": "Analyze read-only; writes are blocked without approval prompts",
       "requestApproval": "Request approval",
       "requestApprovalDesc": "Always ask before editing external files or using the internet",
       "autoApprove": "Approve for me",

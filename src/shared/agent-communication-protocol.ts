@@ -53,6 +53,11 @@ export function buildTeammateSystemPrompt(args: {
     `The human lead is @you. Your teammates:`,
     roster,
     ``,
+    `Yoda owns this roster and each teammate's execution profile. Do not create or use client-native subagents,`,
+    `delegation tools, or background agents as substitutes for these teammates. Route work only through the`,
+    `${TEAM_AT_SCRIPT} command below so Yoda can apply the target member's model, permissions, and status tracking.`,
+    `If routing fails, report that failure and stop; do not perform the teammate's assignment yourself.`,
+    ``,
   ];
   return [...header, ...buildCommunicationInstructions(communication)].join('\n');
 }

@@ -19,6 +19,8 @@ describe('agent communication protocol', () => {
     });
     expect(prompt).toContain('finish your turn normally');
     expect(prompt).toContain('do not need to copy your work into the room');
+    expect(prompt).toContain('Do not create or use client-native subagents');
+    expect(prompt).toContain('If routing fails, report that failure and stop');
   });
 
   it('points shared-file turns to the configured artifact', () => {
