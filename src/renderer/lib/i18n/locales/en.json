@@ -231,7 +231,10 @@
       "matchesName": "Alias is the same as the default name; leave empty instead.",
       "submit": "Save",
       "saving": "Saving…",
-      "failed": "Failed to rename project"
+      "failed": "Failed to rename project",
+      "pathRenameTitle": "Rename the project path too?",
+      "pathRenameDescription": "The project name matches the last directory in its path. Rename the project folder to \"{{name}}\" too?",
+      "pathRenameConfirm": "Rename path too"
     },
     "moveProjectPath": {
       "menuLabel": "Move project path…",
