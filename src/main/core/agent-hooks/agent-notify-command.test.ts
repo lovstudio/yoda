@@ -36,6 +36,7 @@ describe('makeClaudeHookCommand', () => {
     // ...but PTY id stays from env (stable per PTY across restarts).
     expect(cmd).toContain('$YODA_PTY_ID');
     expect(cmd).toContain('X-Yoda-Event-Type: stop');
+    expect(cmd).toContain("curl --noproxy '*' -sf");
     // No longer relies on the stale spawn-time port env.
     expect(cmd).not.toContain('YODA_HOOK_PORT');
     // Must NOT wrap itself in `sh -c '...'` — CC runs the command string in a
@@ -53,6 +54,7 @@ describe('makeCodexNotifyCommand (posix)', () => {
     const script = argv.join(' ');
     expect(script).toContain('hook-endpoint.json');
     expect(script).toContain('$YH_PORT');
+    expect(script).toContain("curl --noproxy '*' -sf");
     expect(script).not.toContain('YODA_HOOK_PORT');
   });
 });

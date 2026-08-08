@@ -14,7 +14,7 @@ import { log } from '@main/lib/logger';
  * are still read live from `~/.yoda/hook-endpoint.json` (they change across app
  * restarts; the conversation id does not).
  */
-function buildScripts(ptyId: string): Record<'team-at' | 'team-status', string> {
+export function buildTeamScripts(ptyId: string): Record<'team-at' | 'team-status', string> {
   // Common prologue: resolve the live endpoint and bake this member's ptyId.
   const head = (name: string) => `#!/usr/bin/env bash
 set -euo pipefail
@@ -29,7 +29,7 @@ pty="${ptyId}"`;
   const post = (
     name: string,
     eventType: string
-  ) => `result=$(curl -sS -w $'\\n%{http_code}' -X POST "http://127.0.0.1:$port/hook" \\
+  ) => `result=$(curl --noproxy '*' -sS -w $'\\n%{http_code}' -X POST "http://127.0.0.1:$port/hook" \\
   -H "X-Yoda-Token: $token" \\
   -H "X-Yoda-Pty-Id: $pty" \\
   -H "X-Yoda-Event-Type: ${eventType}" \\
@@ -86,7 +86,7 @@ export async function installTeamScripts(
   try {
     const dir = join(worktree, relDir);
     await mkdir(dir, { recursive: true });
-    const scripts = buildScripts(makePtyId(runtime, conversationId));
+    const scripts = buildTeamScripts(makePtyId(runtime, conversationId));
     await Promise.all([
       writeFile(join(dir, 'team-at'), scripts['team-at'], { mode: 0o755 }),
       writeFile(join(dir, 'team-status'), scripts['team-status'], { mode: 0o755 }),
