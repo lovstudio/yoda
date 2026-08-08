@@ -3,11 +3,8 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { PendingAction, RunStateEvent } from '@shared/events/agent-run-state';
-import { encodeClaudeProjectDir } from '@main/core/session-title/claude-title-source';
 import { log } from '@main/lib/logger';
-import { iterateLines } from '@main/utils/text-lines';
-import { classifyClaudeTranscriptVerdict } from './claude-run-state-source';
-import { markInterrupted } from './interrupt-marker';
+import { clearInterruptMarker, hasInterruptMarker } from './interrupt-marker';
 
 type ClaudeSessionStatus = 'busy' | 'idle' | 'waiting';
 
@@ -31,7 +28,7 @@ export interface ClaudeSessionActivityContext {
   processPid?: number;
   /** Test seam; production defaults to ~/.claude. */
   claudeHomeDir?: string;
-  /** Test seam; production waits briefly for transcript writes to settle. */
+  /** Test seam for the short interrupt-marker settle window. */
   idleSettleMs?: number;
 }
 
@@ -39,23 +36,17 @@ export type ClaudeSessionActivityDispatch = (event: RunStateEvent) => void;
 
 const READY_POLL_INTERVAL_MS = 1_000;
 const READY_POLL_MAX_MS = 5 * 60_000;
-const IDLE_SETTLE_MS = 1_000;
+const IDLE_SETTLE_MS = 250;
 const STALE_ACTIVITY_GRACE_MS = 5_000;
 const PID_FILE_RE = /^\d+\.json$/;
 const SESSION_STATUSES = new Set(['busy', 'idle', 'waiting']);
-const INTERRUPT_SENTINELS = new Set([
-  '[Request interrupted by user]',
-  '[Request interrupted by user for tool use]',
-]);
 
 /**
  * Watches Claude Code's process activity files (`~/.claude/sessions/<pid>.json`).
  *
- * Early Esc is invisible to hooks and to the transcript: Claude writes the user
- * prompt, flips its process status `busy -> idle`, then auto-restores the prompt
- * in the TUI before any assistant row or interrupt sentinel lands. The activity
- * file is therefore the only real-time positive signal; the transcript is used
- * as a cross-check so a normal completed turn is not treated as an interrupt.
+ * The PID-keyed activity record is Claude's direct process-state signal. It is
+ * the sole source used here for `busy` / `waiting` / `idle`; transcripts remain
+ * session artifacts and are not read for live status inference.
  */
 export function watchClaudeSessionActivity(
   ctx: ClaudeSessionActivityContext,
@@ -91,7 +82,7 @@ export async function getClaudeSessionActivity({
   processPid,
   claudeHomeDir,
 }: {
-  cwd: string;
+  cwd?: string;
   conversationId: string;
   processPid?: number;
   claudeHomeDir?: string;
@@ -100,58 +91,9 @@ export async function getClaudeSessionActivity({
   return findMatchingActivity({ sessionsDir, cwd, conversationId, processPid, minUpdatedAt: null });
 }
 
-export function hasClaudeLeafPrompt(raw: string): boolean {
-  let lastUserIdx = -1;
-  let lastStopIdx = -1;
-  let hasMeaningfulAfterLastUser = false;
-  let idx = -1;
-
-  for (const line of iterateLines(raw)) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    idx += 1;
-    let row: Record<string, unknown>;
-    try {
-      row = JSON.parse(trimmed) as Record<string, unknown>;
-    } catch {
-      continue;
-    }
-
-    if (row.subtype === 'stop_hook_summary') {
-      lastStopIdx = idx;
-      hasMeaningfulAfterLastUser = lastUserIdx !== -1;
-      continue;
-    }
-
-    const message = row.message;
-    const content =
-      typeof message === 'object' && message !== null
-        ? (message as Record<string, unknown>).content
-        : undefined;
-
-    if (row.type === 'user' && isUserMessage(message)) {
-      if (isInterruptContent(content)) {
-        lastStopIdx = idx;
-        hasMeaningfulAfterLastUser = lastUserIdx !== -1;
-        continue;
-      }
-      lastUserIdx = idx;
-      hasMeaningfulAfterLastUser = false;
-      continue;
-    }
-
-    if (lastUserIdx !== -1 && isMeaningfulPostPromptRow(row)) {
-      hasMeaningfulAfterLastUser = true;
-    }
-  }
-
-  return lastUserIdx > lastStopIdx && !hasMeaningfulAfterLastUser;
-}
-
 class ClaudeSessionActivityTailer implements ClaudeSessionActivityWatcher {
   private readonly claudeHomeDir: string;
   private readonly sessionsDir: string;
-  private readonly transcriptPath: string;
   private readonly idleSettleMs: number;
   private readonly minUpdatedAt = Date.now() - STALE_ACTIVITY_GRACE_MS;
   private readonly readyDeadline = Date.now() + READY_POLL_MAX_MS;
@@ -171,12 +113,6 @@ class ClaudeSessionActivityTailer implements ClaudeSessionActivityWatcher {
   ) {
     this.claudeHomeDir = ctx.claudeHomeDir ?? join(homedir(), '.claude');
     this.sessionsDir = join(this.claudeHomeDir, 'sessions');
-    this.transcriptPath = join(
-      this.claudeHomeDir,
-      'projects',
-      encodeClaudeProjectDir(ctx.cwd),
-      `${ctx.conversationId}.jsonl`
-    );
     this.idleSettleMs = ctx.idleSettleMs ?? IDLE_SETTLE_MS;
     this.waitForDirectory();
   }
@@ -277,6 +213,8 @@ class ClaudeSessionActivityTailer implements ClaudeSessionActivityWatcher {
     }
 
     if (activity.status === 'busy' && previous?.status !== 'busy') {
+      if (this.idleTimer) clearTimeout(this.idleTimer);
+      clearInterruptMarker(this.ctx.conversationId);
       const force = this.awaitingInputObserved || previous?.status === 'waiting';
       this.awaitingInputObserved = false;
       this.dispatch({
@@ -287,59 +225,29 @@ class ClaudeSessionActivityTailer implements ClaudeSessionActivityWatcher {
       return;
     }
 
-    if (previous?.status === 'busy' && activity.status === 'idle') {
-      this.scheduleIdleReconcile(activity.updatedAt);
+    if (activity.status === 'idle' && previous?.status !== 'idle') {
+      this.awaitingInputObserved = false;
+      if (!previous) {
+        this.dispatch({ kind: 'watchdog-idle', at: Date.now() });
+        return;
+      }
+      this.scheduleIdle(previous.status, activity.updatedAt);
     }
   }
 
-  private scheduleIdleReconcile(updatedAt: number | null): void {
+  private scheduleIdle(previousStatus: ClaudeSessionStatus, updatedAt: number | null): void {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = setTimeout(() => {
       this.idleTimer = undefined;
-      void this.reconcileIdle(updatedAt).catch((err) => {
-        log.warn('ClaudeSessionActivitySource: idle reconcile failed', {
-          conversationId: this.ctx.conversationId,
-          error: String(err),
-        });
+      if (this.stopped || this.lastActivity?.status !== 'idle') return;
+      if (this.lastActivity.updatedAt !== updatedAt) return;
+      const interrupted =
+        previousStatus === 'waiting' || hasInterruptMarker(this.ctx.conversationId);
+      this.dispatch({
+        kind: interrupted ? 'turn-interrupted' : 'turn-completed',
+        at: Date.now(),
       });
     }, this.idleSettleMs);
-  }
-
-  private async reconcileIdle(updatedAt: number | null): Promise<void> {
-    if (this.stopped) return;
-    if (!this.lastActivity || this.lastActivity.status !== 'idle') return;
-    if (this.lastActivity.updatedAt !== updatedAt) return;
-
-    const raw = await readFile(this.transcriptPath, 'utf8').catch(() => null);
-    if (!raw) return;
-
-    if (hasClaudeLeafPrompt(raw)) {
-      // Claude says the process is idle, but the transcript still has the last
-      // prompt as a leaf. That is the early-Esc negative-space signature.
-      markInterrupted(this.ctx.conversationId);
-      this.dispatch({ kind: 'turn-interrupted', at: Date.now() });
-      return;
-    }
-
-    const verdict = classifyClaudeTranscriptVerdict(raw);
-    if (verdict.state === 'awaiting-input') {
-      this.dispatch({
-        kind: 'awaiting-input',
-        at: Date.now(),
-        pendingAction: { notificationType: 'elicitation_dialog' },
-      });
-      return;
-    }
-    if (verdict.interrupted) {
-      this.dispatch({ kind: 'turn-interrupted', at: Date.now() });
-      return;
-    }
-    // A busy -> idle process transition is Claude Code's own lifecycle signal.
-    // If the transcript is not the early-Esc negative space and not an interrupt
-    // sentinel, treat it as a completed turn. This also covers missed Stop hook /
-    // missing stop_hook_summary cases where assistant output exists but the
-    // transcript-only classifier would otherwise stay `working`.
-    this.dispatch({ kind: 'turn-completed', at: Date.now() });
   }
 }
 
@@ -351,11 +259,24 @@ async function findMatchingActivity({
   minUpdatedAt,
 }: {
   sessionsDir: string;
-  cwd: string;
+  cwd?: string;
   conversationId: string;
   processPid?: number;
   minUpdatedAt: number | null;
 }): Promise<ClaudeSessionActivity | null> {
+  if (processPid !== undefined) {
+    const exactRaw = await readFile(join(sessionsDir, `${processPid}.json`), 'utf8').catch(
+      () => undefined
+    );
+    const exact = exactRaw ? parseClaudeSessionActivity(exactRaw) : null;
+    if (
+      exact?.pid === processPid &&
+      (minUpdatedAt === null || exact.updatedAt === null || exact.updatedAt >= minUpdatedAt)
+    ) {
+      return exact;
+    }
+  }
+
   let files: string[];
   try {
     files = await readdir(sessionsDir);
@@ -376,16 +297,25 @@ async function findMatchingActivity({
       if (!activity) return false;
       if (minUpdatedAt !== null && activity.updatedAt !== null && activity.updatedAt < minUpdatedAt)
         return false;
-      return activity.cwd === null || activity.cwd === cwd;
+      return true;
     })
     .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 
+  // The direct PID path above is the fast path. Keep this fallback for clients
+  // that write a wrapper PID in the PTY while the activity payload exposes the
+  // child process PID.
   if (processPid !== undefined) {
     const pidMatch = candidates.find((activity) => activity.pid === processPid);
     if (pidMatch) return pidMatch;
   }
 
-  return candidates.find((activity) => activity.sessionId === conversationId) ?? null;
+  return (
+    candidates.find(
+      (activity) =>
+        activity.sessionId === conversationId &&
+        (cwd === undefined || activity.cwd === null || activity.cwd === cwd)
+    ) ?? null
+  );
 }
 
 function sameActivity(
@@ -418,41 +348,4 @@ function pendingActionForWaitingFor(waitingFor: string | null): PendingAction {
     notificationType: 'idle_prompt',
     actionDescription: waitingFor ?? undefined,
   };
-}
-
-function isUserMessage(message: unknown): boolean {
-  return (
-    typeof message === 'object' &&
-    message !== null &&
-    (message as Record<string, unknown>).role === 'user'
-  );
-}
-
-function isInterruptContent(content: unknown): boolean {
-  if (!Array.isArray(content)) return false;
-  return content.some(
-    (item) =>
-      typeof item === 'object' &&
-      item !== null &&
-      (item as Record<string, unknown>).type === 'text' &&
-      INTERRUPT_SENTINELS.has((item as Record<string, unknown>).text as string)
-  );
-}
-
-function isMeaningfulPostPromptRow(row: Record<string, unknown>): boolean {
-  if (row.subtype === 'api_error') return true;
-  if (row.type !== 'assistant') return false;
-  const message = row.message;
-  const content =
-    typeof message === 'object' && message !== null
-      ? (message as Record<string, unknown>).content
-      : undefined;
-  if (typeof content === 'string') return content.trim().length > 0;
-  if (!Array.isArray(content)) return false;
-  return content.some((item) => {
-    if (typeof item !== 'object' || item === null) return false;
-    const block = item as Record<string, unknown>;
-    if (block.type === 'tool_use') return true;
-    return block.type === 'text' && typeof block.text === 'string' && block.text.trim() !== '';
-  });
 }

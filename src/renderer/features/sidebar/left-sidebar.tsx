@@ -41,6 +41,7 @@ import {
   findSidebarSelectionRow,
   resolveSidebarSelectionTarget,
   revealSidebarSelectionRow,
+  shouldRevealSidebarSelection,
   shouldSuppressSidebarRouteScroll,
 } from './sidebar-selection-sync';
 import { SidebarSpace } from './sidebar-space';
@@ -65,7 +66,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   const updateAiLabApp = useUpdateAiLabApp();
   const sidebarContentRef = React.useRef<HTMLDivElement>(null);
   const lastScrolledSelectionRef = React.useRef<string | null>(null);
-  const lastScrolledRowRef = React.useRef<HTMLElement | null>(null);
   const suppressedRouteScrollKeyRef = React.useRef<string | null>(null);
   const pinnedApps = (aiLabApps.data ?? []).filter((app) => app.pinned);
   const currentProjectId =
@@ -122,7 +122,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
     if (!selectionKey || !selectionProjectId || !root) {
       suppressedRouteScrollKeyRef.current = null;
       lastScrolledSelectionRef.current = null;
-      lastScrolledRowRef.current = null;
       return;
     }
     if (
@@ -134,7 +133,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
     ) {
       suppressedRouteScrollKeyRef.current = null;
       lastScrolledSelectionRef.current = selectionKey;
-      lastScrolledRowRef.current = null;
       return;
     }
     if (selectionRequestId === undefined) {
@@ -143,17 +141,11 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
 
     const scrollSelectionIntoView = () => {
       const row = findSidebarSelectionRow(root, selectionProjectId, selectionTaskId);
-      if (!row) {
-        lastScrolledRowRef.current = null;
+      if (!row || !shouldRevealSidebarSelection(selectionKey, lastScrolledSelectionRef.current))
         return;
-      }
-      if (lastScrolledSelectionRef.current === selectionKey && lastScrolledRowRef.current === row) {
-        return;
-      }
 
       revealSidebarSelectionRow(root, selectionProjectId, selectionTaskId, shouldFocusSelection);
       lastScrolledSelectionRef.current = selectionKey;
-      lastScrolledRowRef.current = row;
       if (selectionRequestId !== undefined) {
         suppressedRouteScrollKeyRef.current = routeSelectionKey;
         sidebarStore.completeSelectionReveal(selectionRequestId);

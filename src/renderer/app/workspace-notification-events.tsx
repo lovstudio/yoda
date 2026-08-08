@@ -14,14 +14,34 @@ export function WorkspaceNotificationEvents() {
         const description = notification.messageKey
           ? t(`workspaceRuntime.notifications.system.${notification.messageKey}`)
           : notification.description;
-        workspaceNotificationStore.enqueue({
-          title: notification.title,
-          description,
-          details: [description, notification.details].filter(Boolean).join('\n\n'),
-          kind: notification.kind,
-          source: notification.source,
-          target: notification.target,
-        });
+        const details = [description, notification.details].filter(Boolean).join('\n\n');
+        const existing = notification.notificationKey
+          ? workspaceNotificationStore.getByDedupeKey(notification.notificationKey)
+          : undefined;
+        if (notification.status === 'resolved') {
+          if (existing) {
+            workspaceNotificationStore.resolve(existing.id, {
+              title: notification.title,
+              description,
+              details,
+              kind: notification.kind,
+            });
+          }
+          return;
+        }
+        workspaceNotificationStore.enqueue(
+          {
+            title: notification.title,
+            description,
+            details,
+            kind: notification.kind,
+            source: notification.source,
+            reason: notification.reason ?? 'error',
+            dedupeKey: notification.notificationKey,
+            target: notification.target,
+          },
+          existing?.id
+        );
       }),
     [t]
   );

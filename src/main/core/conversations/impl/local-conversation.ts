@@ -4,7 +4,11 @@ import { agentSessionExitedChannel } from '@shared/events/agentEvents';
 import type { ProjectPromptPrinciples } from '@shared/project-settings';
 import { makePtyId } from '@shared/ptyId';
 import { makePtySessionId } from '@shared/ptySessionId';
-import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
+import { getRuntime } from '@shared/runtime-registry';
+import {
+  resolveRuntimeStatusMonitor,
+  type RuntimeStatusMonitorId,
+} from '@shared/runtime-status-monitor';
 import { agentHookService } from '@main/core/agent-hooks/agent-hook-service';
 import { makeCodexNotifyCommand } from '@main/core/agent-hooks/agent-notify-command';
 import { wireAgentClassifier } from '@main/core/agent-hooks/classifier-wiring';
@@ -21,6 +25,7 @@ import { createClaudeInterruptSniffer } from '@main/core/conversations/claude-in
 import { watchClaudeRunState } from '@main/core/conversations/claude-run-state-source';
 import { watchClaudeSessionActivity } from '@main/core/conversations/claude-session-activity-source';
 import { watchCodexRunState } from '@main/core/conversations/codex-run-state-source';
+import { runtimeStatusMonitorRegistry } from '@main/core/conversations/runtime-status-monitor-registry';
 import type {
   ActiveConversationSession,
   ConversationProvider,
@@ -74,22 +79,6 @@ import { prepareWindowsClaudeSettings } from './windows-claude-settings';
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
-
-/**
- * Runtimes that ship a deterministic, hook-independent run-state source — the
- * transcript/rollout tailers wired in {@link LocalConversationProvider.startRunStateWatcher}
- * (Claude reads its own `~/.claude/projects/**.jsonl`, Codex its rollout file).
- *
- * For these the PTY keyword classifier is not just redundant but actively
- * harmful: its heuristic tail-scan fires a false `awaiting-input` on a FINISHED
- * turn (e.g. the assistant's last message ended with a question mark, or the
- * output contained "confirm"/"permission"/"allow"). Once the turn is over no
- * further transcript change re-triggers the authoritative tailer, so nothing
- * reconciles the false state away and the session is pinned at "awaiting input"
- * forever. The classifier is only a fallback for providers WITHOUT such a
- * source, so skip it entirely here.
- */
-const RUNTIMES_WITH_DETERMINISTIC_RUN_STATE = new Set<RuntimeId>(['claude', 'codex']);
 
 type RunStateWatcher = { stop(): void };
 
@@ -343,6 +332,18 @@ export class LocalConversationProvider implements ConversationProvider {
       const port = agentHookService.getPort();
       const token = agentHookService.getToken();
       const providerDef = getRuntime(conversation.runtimeId);
+      const hooksAvailable = port > 0 && providerDef?.supportsHooks;
+      const configuredStatusMonitor = resolveRuntimeStatusMonitor(
+        conversation.runtimeId,
+        sessionProviderConfig?.statusMonitor
+      );
+      // A selected hook monitor needs the local hook server. If it is down,
+      // retain observability through the terminal classifier for this session.
+      const statusMonitor: RuntimeStatusMonitorId =
+        configuredStatusMonitor === 'hooks' && !hooksAvailable
+          ? 'terminal'
+          : configuredStatusMonitor;
+      runtimeStatusMonitorRegistry.set(conversation.id, statusMonitor);
       // Image attachments: runtimes with clipboard paste get them injected as
       // native pastes after the TUI boots (so the prompt must NOT go through the
       // CLI arg, or the turn would start before the images land). Everyone else
@@ -508,16 +509,9 @@ export class LocalConversationProvider implements ConversationProvider {
         pty.onExit(() => this.cleanupSessionArtifacts(sessionId, pty));
       }
 
-      const hookActive = port > 0;
-      const useHooksOnly = hookActive && providerDef?.supportsHooks;
-      // Skip the heuristic PTY classifier when an authoritative run-state source
-      // exists: hooks (useHooksOnly), OR a deterministic transcript/rollout tailer
-      // (Claude/Codex). See RUNTIMES_WITH_DETERMINISTIC_RUN_STATE — wiring the
-      // classifier for those pins a false `awaiting-input` after a finished turn.
-      const hasAuthoritativeRunState =
-        useHooksOnly || RUNTIMES_WITH_DETERMINISTIC_RUN_STATE.has(conversation.runtimeId);
+      const hasAuthoritativeRunState = statusMonitor !== 'terminal';
 
-      if (!hasAuthoritativeRunState) {
+      if (statusMonitor === 'terminal') {
         wireAgentClassifier({
           pty,
           runtimeId: conversation.runtimeId,
@@ -535,7 +529,7 @@ export class LocalConversationProvider implements ConversationProvider {
           conversationId: conversation.id,
         },
         {
-          // Claude transcript / session-activity and Codex rollout tailers are
+          // Claude session activity and Codex rollout tailers are
           // authoritative. Their turns may legitimately produce no PTY output
           // during a long-running tool call, so silence must not clear `working`.
           // Keep the shared tracker lifecycle attached for diagnostics and
@@ -650,7 +644,8 @@ export class LocalConversationProvider implements ConversationProvider {
         sessionStartedAtMs,
         effectiveIsResuming,
         agentSessionId,
-        runtimeStateRoot
+        runtimeStateRoot,
+        statusMonitor
       );
       telemetryService.capture('agent_run_started', {
         provider: conversation.runtimeId,
@@ -699,32 +694,33 @@ export class LocalConversationProvider implements ConversationProvider {
       if (!registrationCompleted) {
         ptySessionRegistry.cancelRegistration(sessionId, registrationEpoch);
       }
+      if (!startCommitted) runtimeStatusMonitorRegistry.remove(conversation.id);
       if (ownsStart) this.pendingStarts.delete(sessionId);
       if (!startFailed) resolveCompletion();
     }
   }
 
   /**
-   * Attach a deterministic run-state source that tails the transcript the CLI
-   * writes itself — the authoritative turn-started/ended signal, independent of
-   * how the user submits and of hook delivery. Codex tails its rollout JSONL;
-   * Claude tails its session transcript. No-op for other providers (they fall
-   * back to the classifier).
+   * Attach the run-state source selected for this client. Native choices tail
+   * the CLI's own state; hooks and terminal classification are wired earlier in
+   * startup and therefore need no watcher here.
    */
   private startRunStateWatcher(
     conversation: Conversation,
     startedAtMs: number,
     isResuming: boolean,
     agentSessionId: string,
-    stateRoot?: string
+    stateRoot: string | undefined,
+    statusMonitor: RuntimeStatusMonitorId
   ): void {
     this.stopRunStateWatcher(conversation.id);
+    runtimeStatusMonitorRegistry.set(conversation.id, statusMonitor);
     const session = {
       projectId: conversation.projectId,
       taskId: conversation.taskId,
       conversationId: conversation.id,
     };
-    if (conversation.runtimeId === 'codex') {
+    if (conversation.runtimeId === 'codex' && statusMonitor === 'rollout') {
       const watcher = watchCodexRunState(
         {
           conversationId: conversation.id,
@@ -739,22 +735,26 @@ export class LocalConversationProvider implements ConversationProvider {
       this.runStateWatchers.set(conversation.id, [watcher]);
       return;
     }
-    if (conversation.runtimeId === 'claude') {
+    if (conversation.runtimeId === 'claude' && statusMonitor === 'transcript') {
+      const watcher = watchClaudeRunState(
+        { conversationId: conversation.id, cwd: this.taskPath },
+        (event) => agentSessionRuntimeStore.dispatch(session, event, 'claude-transcript'),
+        () => agentSessionRuntimeStore.getStatus(session),
+        {
+          sessionId: agentSessionId,
+          claudeConfigDir: stateRoot,
+        }
+      );
+      this.runStateWatchers.set(conversation.id, [watcher]);
+      return;
+    }
+    if (conversation.runtimeId === 'claude' && statusMonitor === 'activity') {
       const processPid = this.getSessionProcessPid(conversation.id);
       const activityContext =
         processPid === undefined
           ? { conversationId: conversation.id, cwd: this.taskPath }
           : { conversationId: conversation.id, cwd: this.taskPath, processPid };
       this.runStateWatchers.set(conversation.id, [
-        watchClaudeRunState(
-          { conversationId: conversation.id, cwd: this.taskPath },
-          (event) => agentSessionRuntimeStore.dispatch(session, event, 'claude-transcript'),
-          () => agentSessionRuntimeStore.getStatus(session),
-          {
-            sessionId: agentSessionId,
-            claudeConfigDir: stateRoot,
-          }
-        ),
         watchClaudeSessionActivity({ ...activityContext, claudeHomeDir: stateRoot }, (event) =>
           agentSessionRuntimeStore.dispatch(session, event, 'claude-session-activity')
         ),
@@ -768,6 +768,7 @@ export class LocalConversationProvider implements ConversationProvider {
   }
 
   private stopRunStateWatcher(conversationId: string): void {
+    runtimeStatusMonitorRegistry.remove(conversationId);
     const watchers = this.runStateWatchers.get(conversationId);
     if (!watchers) return;
     for (const watcher of watchers) {

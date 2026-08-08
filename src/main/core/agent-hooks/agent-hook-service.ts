@@ -2,6 +2,7 @@ import { agentEventChannel } from '@shared/events/agentEvents';
 import { parsePtyId } from '@shared/ptyId';
 import { interactiveTurnLogger } from '@main/core/ai-logs/interactive-turn-logger';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
+import { runtimeStatusMonitorRegistry } from '@main/core/conversations/runtime-status-monitor-registry';
 import { events } from '@main/lib/events';
 import type { IDisposable, IInitializable } from '@main/lib/lifecycle';
 import { enrichEvent } from './event-enricher';
@@ -54,7 +55,12 @@ class AgentHookService implements IInitializable, IDisposable {
       const event = await enrichEvent(raw);
       if (!event) return;
       event.source = 'hook';
-      agentSessionRuntimeStore.setFromAgentEvent(event);
+      // Sessions that explicitly selected activity/transcript/rollout keep one
+      // state authority. Hooks still power logs and notifications, but only the
+      // hook monitor may fold them into live run-state.
+      if (runtimeStatusMonitorRegistry.accepts(event.conversationId, 'hooks')) {
+        agentSessionRuntimeStore.setFromAgentEvent(event);
+      }
       await interactiveTurnLogger.onAgentEvent(event);
       const appFocused = isAppFocused();
       await maybeShowNotification(event, appFocused);

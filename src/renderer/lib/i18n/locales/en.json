@@ -3753,6 +3753,31 @@
       "execTitle": "Execution parameters",
       "execDescription": "Override the launch command, CLI, and extra args for {{name}}.",
       "editExec": "Edit execution",
+      "statusMonitorTitle": "Status monitoring",
+      "statusMonitorDescription": "Choose how Yoda determines whether {{name}} is busy, idle, or waiting for input. Applies when a new session starts.",
+      "recommended": "Recommended",
+      "statusMonitors": {
+        "activity": {
+          "label": "Process activity",
+          "description": "Reads the PID-keyed activity state written by the client. Low overhead and recommended for Claude Code."
+        },
+        "transcript": {
+          "label": "Session transcript",
+          "description": "Infers state from transcript content for older Claude Code versions or status diagnostics."
+        },
+        "rollout": {
+          "label": "Rollout events",
+          "description": "Reads native Codex rollout events to track turn start, waiting, and completion precisely."
+        },
+        "hooks": {
+          "label": "Hooks",
+          "description": "Uses client lifecycle hooks and falls back to terminal monitoring when the local hook service is unavailable."
+        },
+        "terminal": {
+          "label": "Terminal output",
+          "description": "Infers state from terminal output patterns for clients without a native status source."
+        }
+      },
       "defaultModelTitle": "Default session model",
       "defaultModelDescription": "Use this model for new {{name}} sessions when the selected Agent does not override it.",
       "defaultModelPlaceholder": "Use the CLI default",
@@ -4724,7 +4749,7 @@
     },
     "notifications": {
       "title": "Notifications",
-      "description": "Items that need your attention and application errors are kept here.",
+      "description": "Action items, application errors, blocking warnings, and subscribed results are kept here.",
       "triggerLabel": "Notifications ({{count}} unread)",
       "summary": "{{unread}} unread, {{total}} total",
       "allReadSummary": "All read, {{total}} total",
@@ -4733,7 +4758,7 @@
       "markUnread": "Mark as unread",
       "untitled": "Notification",
       "empty": "Nothing needs attention",
-      "emptyDescription": "Toasts that need confirmation, Agent requests, and application errors will appear here.",
+      "emptyDescription": "New action items, errors, warnings, and subscribed results will appear here.",
       "openDetails": "Open details for notification “{{title}}”",
       "detailsTitle": "Notification details",
       "details": "Full details",
@@ -4744,8 +4769,13 @@
       "openTarget": "Open to handle",
       "programErrorTitle": "Application error",
       "type": "Type",
+      "reason": "Reason",
+      "status": "Status",
       "source": "Source",
-      "time": "Time",
+      "occurrenceCount": "Occurrences",
+      "occurrences": "{{count}} times",
+      "firstSeen": "First seen",
+      "lastUpdated": "Last updated",
       "copy": {
         "idle": "Copy details",
         "copied": "Copied",
@@ -4756,6 +4786,17 @@
         "success": "Success",
         "error": "Error",
         "loading": "In progress"
+      },
+      "reasonValue": {
+        "action-required": "Action required",
+        "error": "Application error",
+        "blocking-warning": "Blocking warning",
+        "subscribed-result": "Subscribed result"
+      },
+      "statusValue": {
+        "active": "Needs attention",
+        "newResult": "New result",
+        "resolved": "Resolved"
       },
       "sourceValue": {
         "toast": "App toast",

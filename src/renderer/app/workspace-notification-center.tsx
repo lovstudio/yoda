@@ -203,8 +203,26 @@ function NotificationList({
                       {notification.description}
                     </span>
                   ) : null}
-                  <span className="mt-0.5 block text-[10px] leading-4 text-foreground-passive">
-                    <RelativeTime value={notification.createdAt} />
+                  <span className="mt-0.5 flex items-center gap-1 text-[10px] leading-4 text-foreground-passive">
+                    <RelativeTime value={notification.updatedAt} />
+                    {notification.occurrenceCount > 1 ? (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span>
+                          {t('workspaceRuntime.notifications.occurrences', {
+                            count: notification.occurrenceCount,
+                          })}
+                        </span>
+                      </>
+                    ) : null}
+                    {notification.status === 'resolved' ? (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span className="text-emerald-600 dark:text-emerald-400">
+                          {t('workspaceRuntime.notifications.statusValue.resolved')}
+                        </span>
+                      </>
+                    ) : null}
                   </span>
                 </span>
               </button>
@@ -304,7 +322,7 @@ function NotificationDetails({
             ) : null}
           </div>
         </div>
-        {action || notification.target ? (
+        {notification.status === 'active' && (action || notification.target) ? (
           <Button
             type="button"
             size="sm"
@@ -325,13 +343,43 @@ function NotificationDetails({
           <dd className="text-foreground-muted">
             {t(`workspaceRuntime.notifications.kind.${notification.kind}`)}
           </dd>
+          <dt className="text-foreground-passive">{t('workspaceRuntime.notifications.reason')}</dt>
+          <dd className="text-foreground-muted">
+            {t(`workspaceRuntime.notifications.reasonValue.${notification.reason}`)}
+          </dd>
+          <dt className="text-foreground-passive">{t('workspaceRuntime.notifications.status')}</dt>
+          <dd className="text-foreground-muted">
+            {t(
+              notification.status === 'active' && notification.reason === 'subscribed-result'
+                ? 'workspaceRuntime.notifications.statusValue.newResult'
+                : `workspaceRuntime.notifications.statusValue.${notification.status}`
+            )}
+          </dd>
           <dt className="text-foreground-passive">{t('workspaceRuntime.notifications.source')}</dt>
           <dd className="text-foreground-muted">
             {t(`workspaceRuntime.notifications.sourceValue.${notification.source}`)}
           </dd>
-          <dt className="text-foreground-passive">{t('workspaceRuntime.notifications.time')}</dt>
+          {notification.occurrenceCount > 1 ? (
+            <>
+              <dt className="text-foreground-passive">
+                {t('workspaceRuntime.notifications.occurrenceCount')}
+              </dt>
+              <dd className="font-mono text-foreground-muted tabular-nums">
+                {notification.occurrenceCount}
+              </dd>
+            </>
+          ) : null}
+          <dt className="text-foreground-passive">
+            {t('workspaceRuntime.notifications.firstSeen')}
+          </dt>
           <dd className="font-mono text-foreground-muted">
             {new Date(notification.createdAt).toLocaleString()}
+          </dd>
+          <dt className="text-foreground-passive">
+            {t('workspaceRuntime.notifications.lastUpdated')}
+          </dt>
+          <dd className="font-mono text-foreground-muted">
+            {new Date(notification.updatedAt).toLocaleString()}
           </dd>
         </dl>
         <div className="mt-3">

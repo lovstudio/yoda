@@ -61,6 +61,7 @@ describe('WorkspaceNotificationCenter', () => {
         details: 'Build finished\n\nArtifact: release/Yoda.dmg',
         kind: 'success',
         source: 'toast',
+        reason: 'action-required',
       },
       undefined,
       { label: 'Open build', onClick: runAction }
@@ -70,6 +71,7 @@ describe('WorkspaceNotificationCenter', () => {
       details: 'Session: SESSION_ID',
       kind: 'info',
       source: 'agent',
+      reason: 'action-required',
       target: { projectId: 'project-1', taskId: 'task-1', conversationId: 'session-1' },
     });
 

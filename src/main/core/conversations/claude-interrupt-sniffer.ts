@@ -7,16 +7,16 @@ import { markInterrupted } from './interrupt-marker';
  * Opportunistic Esc-interrupt detection for Claude sessions, from PTY output.
  *
  * When the user interrupts a turn, the CC TUI immediately renders
- * `Interrupted · What should Claude do instead?`. The authoritative landed
- * signal is the session activity file (`~/.claude/sessions/<pid>.json`) plus a
- * transcript cross-check; this sniffer is only a fast UI-path supplement. It
+ * `Interrupted · What should Claude do instead?`. The authoritative process
+ * signal is the session activity file (`~/.claude/sessions/<pid>.json`); this
+ * sniffer preserves the more specific interrupted-vs-completed distinction. It
  * observes the session's rendered effect — not the user's keystrokes, which are
  * decoupled from what the session actually did.
  *
  * False-positive surface: a full-screen redraw (e.g. resize) can re-emit an
  * old "Interrupted" line while a new turn is working. Cheap to tolerate — the
- * status drops to idle and the transcript tailer re-asserts `working` on the
- * next decisive row; the cooldown keeps repeated redraws from thrashing.
+ * status drops to idle and the next `busy` activity transition re-asserts
+ * `working`; the cooldown keeps repeated redraws from thrashing.
  */
 const INTERRUPT_UI_PATTERN = /Interrupted\s*·\s*What should Claude do instead\?/;
 
@@ -43,8 +43,7 @@ export function createClaudeInterruptSniffer(session: AgentSessionKey): (chunk: 
     tail = '';
     if (agentSessionRuntimeStore.getStatus(session) !== 'working') return;
     log.debug('ClaudeInterruptSniffer: interrupt UI detected, clearing working', session);
-    // Mark first so the stateless deriveStatus / transcript tailer can't
-    // resurrect the zombie `working` from a transcript frozen mid-turn.
+    // Preserve the interrupt marker for other reconciliation paths.
     markInterrupted(session.conversationId);
     agentSessionRuntimeStore.dispatch(
       session,

@@ -5,20 +5,25 @@ import {
   type AgentSessionRuntimeStatus,
 } from '@shared/events/agentEvents';
 import { makePtySessionId } from '@shared/ptySessionId';
+import { isValidRuntimeId } from '@shared/runtime-registry';
+import { resolveRuntimeStatusMonitor } from '@shared/runtime-status-monitor';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { resolveClaudeTranscriptPath } from '@main/core/session-title/claude-title-source';
 import { resolveCodexStatePath } from '@main/core/session-title/codex-title-source';
+import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
 import { resolveTask } from '../projects/utils';
 import { agentSessionRuntimeStore } from './agent-session-runtime';
 import { readClaudeTurnVerdictFile } from './claude-run-state-source';
+import { getClaudeSessionActivity } from './claude-session-activity-source';
 import { findClaudeTranscriptPathBySessionId } from './claude-transcript-locator';
 import { readCodexTurnVerdict } from './codex-run-state-source';
 import { resolveCodexThreadIdForConversation } from './codex-session-id';
 import { getReservedCodexThreadIds } from './codex-thread-reservations';
 import { parseConversationSessionSource } from './conversation-session-source';
 import { isInterruptedSinceLastPrompt } from './interrupt-marker';
+import { runtimeStatusMonitorRegistry } from './runtime-status-monitor-registry';
 
 /**
  * Stateless run-state for a task's conversations.
@@ -26,8 +31,8 @@ import { isInterruptedSinceLastPrompt } from './interrupt-marker';
  * The authority is NOT an in-memory map (which a main-process restart / HMR would
  * wipe, and which goes stale when a terminal event is missed). Instead each
  * conversation's status is *derived on demand* from a hook-independent source of
- * truth — the transcript the CLI itself writes (Claude transcript / Codex
- * rollout) — and gated by whether a PTY is actually connected.
+ * truth selected for that client — for example Claude's PID activity record or
+ * Codex's rollout — and gated by whether a PTY is actually connected.
  *
  * The in-memory store (`agentSessionRuntimeStore`) is kept only as a fast cache
  * for live in-session pushes; here it is just a fallback for providers without a
@@ -92,6 +97,17 @@ async function deriveStatus(args: {
   const { projectId, taskId, conversationId, provider, createdAt, title, sessionSource, cwd } =
     args;
   const mountedTask = resolveTask(projectId, taskId);
+  const activeSession = mountedTask?.conversations
+    .getActiveSessions()
+    .find((session) => session.conversationId === conversationId);
+  const runtimeId = isValidRuntimeId(provider) ? provider : undefined;
+  const statusMonitor = runtimeId
+    ? (runtimeStatusMonitorRegistry.get(conversationId) ??
+      resolveRuntimeStatusMonitor(
+        runtimeId,
+        (await runtimeOverrideSettings.getItem(runtimeId))?.statusMonitor
+      ))
+    : undefined;
 
   // Live in-memory state (set this session via hooks/tailers). Used as the base
   // and as the fallback for providers without a file truth source.
@@ -99,10 +115,19 @@ async function deriveStatus(args: {
 
   // Truth source — overrides memory when available.
   let truth: AgentSessionRuntimeStatus | undefined;
-  if (provider === 'claude') {
-    // Without a cwd (task not provisioned — e.g. cold load right after an app
-    // restart while the agent keeps running in tmux), locate the transcript by
-    // session id instead so the status still derives from the truth source.
+  if (provider === 'claude' && statusMonitor === 'activity') {
+    const sessionId =
+      sessionSource?.runtimeId === 'claude' ? sessionSource.sessionId : conversationId;
+    const activity = await getClaudeSessionActivity({
+      cwd,
+      conversationId: sessionId,
+      processPid: activeSession?.pid,
+      claudeHomeDir: sessionSource?.runtimeId === 'claude' ? sessionSource.stateRoot : undefined,
+    }).catch(() => null);
+    if (activity?.status === 'busy') truth = 'working';
+    else if (activity?.status === 'waiting') truth = 'awaiting-input';
+    else if (activity?.status === 'idle') truth = 'idle';
+  } else if (provider === 'claude' && statusMonitor === 'transcript') {
     const sessionId =
       sessionSource?.runtimeId === 'claude' ? sessionSource.sessionId : conversationId;
     const filePath =
@@ -114,12 +139,7 @@ async function deriveStatus(args: {
     if (filePath) {
       const verdict = await readClaudeTurnVerdictFile(filePath).catch(() => null);
       if (verdict) {
-        truth = verdict.state; // 'working' | 'awaiting-input' | 'idle'
-        // A `working` verdict frozen since before a user interrupt is stale: a
-        // turn killed before its first assistant output leaves no interrupt
-        // sentinel and no stop row, so the transcript alone can never leave
-        // `working`. The marker (set by the stop button / a typed Esc) breaks
-        // the tie; a newer prompt row invalidates it automatically.
+        truth = verdict.state;
         if (
           truth === 'working' &&
           isInterruptedSinceLastPrompt(conversationId, verdict.lastUserAt)
@@ -128,7 +148,7 @@ async function deriveStatus(args: {
         }
       }
     }
-  } else if (provider === 'codex') {
+  } else if (provider === 'codex' && statusMonitor === 'rollout') {
     const startedAtMs = parseTimestampMs(createdAt);
     const reservedThreadIds = await getReservedCodexThreadIds(conversationId);
     const statePath =
@@ -155,33 +175,24 @@ async function deriveStatus(args: {
     else if (verdict?.state === 'idle') truth = 'idle';
   }
 
-  // The transcript truth source is the primary authority: a turn is mid-flight
-  // iff the CLI is processing or blocked on the user. This survives a main-
-  // process restart / HMR and missed hooks because we re-derive it from the
-  // file source of truth.
+  // The provider-owned truth source is the primary authority: a turn is
+  // mid-flight iff the CLI is processing or blocked on the user. This survives
+  // a main-process restart / HMR and missed hooks because it is re-derived from
+  // the client's selected durable status source.
   //
   // There is one local-UI caveat: for a mounted task, if there is neither a
-  // connected PTY nor an active provider session, a transcript-only `working`
-  // verdict is stale (e.g. Esc killed the turn before Claude wrote an interrupt
-  // sentinel). Cold-load/unmounted tasks stay transcript-authoritative so tmux
-  // sessions can still be shown as running without a connected PTY.
-  // Transcript classifiers intentionally collapse a cleanly finished turn to
-  // `idle`. Do not let that less-specific durable verdict erase a precise
-  // terminal status already observed by the live run-state reducer. A later
-  // `working`/`awaiting-input` truth still wins when the next turn starts.
+  // connected PTY nor an active provider session, a file-only `working` verdict
+  // is stale. Cold-load/unmounted tasks stay provider-authoritative so tmux
+  // sessions can still be shown as running without a connected PTY. An `idle`
+  // activity/rollout verdict must not erase a more specific terminal status
+  // already observed by the live reducer.
   let derived =
     truth === 'idle' && (memory === 'completed' || memory === 'error') ? memory : (truth ?? memory);
   if (isAgentSessionRunningStatus(derived)) {
     const livePty = hasLivePty(projectId, taskId, conversationId);
     if (truth === undefined) {
       if (!livePty) derived = 'idle';
-    } else if (
-      mountedTask &&
-      !livePty &&
-      !mountedTask.conversations
-        .getActiveSessions()
-        .some((session) => session.conversationId === conversationId)
-    ) {
+    } else if (mountedTask && !livePty && !activeSession) {
       derived = 'idle';
     }
   }
