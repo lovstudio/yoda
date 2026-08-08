@@ -48,6 +48,7 @@ export type PendingInitialPrompt = {
   prompt?: string;
   imagePaths?: string[];
   model?: string | null;
+  reasoningEffort?: string | null;
 };
 
 export type AgentSessionSource = {
@@ -418,6 +419,8 @@ export type CreateConversationParams = {
   imagePaths?: string[];
   /** Agent's configured model for this new session (passed via the runtime's modelFlag). */
   model?: string | null;
+  /** Agent's configured reasoning depth for runtimes that support it. */
+  reasoningEffort?: string | null;
   /** Agent profile selection; resolved to concrete paths by the main process. */
   skillSelection?: SkillSelectionInput;
   /** Defaults to interactive. Automation mode applies an unattended, single-run contract. */

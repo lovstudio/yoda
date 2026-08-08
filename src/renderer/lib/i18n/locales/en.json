@@ -1453,6 +1453,7 @@
       "readOnlyDesc": "Let Cohub inspect the project without making changes"
     },
     "codex": {
+      "planDesc": "Analyze read-only and ask before execution",
       "requestApproval": "Request approval",
       "requestApprovalDesc": "Always ask before editing external files or using the internet",
       "autoApprove": "Approve for me",
@@ -3333,13 +3334,43 @@
     "anyRuntime": "Any client",
     "skillsCount": "{{count}} skills",
     "icon": "Icon",
+    "optional": "Optional",
     "namePlaceholder": "e.g. Spec Writer",
     "descPlaceholder": "What is this agent for?",
     "preferredRuntime": "Preferred client",
     "preferredRuntimeHint": "Used when available; otherwise falls back to the mode default.",
+    "runtimeDefault": "Use global client",
+    "runtimeSettings": "Execution settings",
+    "runtimeSettingsHint": "Empty fields inherit global settings; configured values apply only to this agent.",
     "model": "Model",
     "modelPlaceholder": "Client default",
     "modelDefault": "Default model",
+    "modelCandidates": "Open model suggestions",
+    "modelCustom": "Custom",
+    "modelCustomHint": "Type any model name to use a custom model",
+    "reasoningEffort": "Reasoning effort",
+    "reasoningDefault": "Use client default",
+    "reasoningClientHint": "Choose Codex to configure reasoning effort for this agent.",
+    "accessMode": "Execution permissions",
+    "accessModeHint": "Yoda maps this level to the selected client's runtime parameters.",
+    "accessModes": {
+      "inherit": {
+        "label": "Use global setting",
+        "description": "Use the current client's global permission setting"
+      },
+      "plan": {
+        "label": "Plan mode",
+        "description": "Analyze and plan without writing to the project"
+      },
+      "write": {
+        "label": "Writing mode",
+        "description": "Create and edit files within the project"
+      },
+      "full-access": {
+        "label": "Full access",
+        "description": "Run with the client's highest available permissions"
+      }
+    },
     "systemPrompt": "System prompt",
     "systemPromptPlaceholder": "Describe this agent's role, constraints and how it works.",
     "noSystemPrompt": "No system prompt",

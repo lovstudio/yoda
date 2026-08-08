@@ -10,6 +10,7 @@ export type HydratedConversationStart = {
   initialPrompt?: string;
   imagePaths?: string[];
   model?: string | null;
+  reasoningEffort?: string | null;
 };
 
 export function hydratedConversationStart(conversation: Conversation): HydratedConversationStart {
@@ -19,6 +20,7 @@ export function hydratedConversationStart(conversation: Conversation): HydratedC
     initialPrompt: pending?.prompt,
     imagePaths: pending?.imagePaths,
     model: pending?.model,
+    reasoningEffort: pending?.reasoningEffort,
   };
 }
 
@@ -33,6 +35,7 @@ export function pendingInitialPromptFromParams(
     prompt,
     imagePaths,
     model: params.model,
+    reasoningEffort: params.reasoningEffort,
   };
 }
 

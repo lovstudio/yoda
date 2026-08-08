@@ -17,11 +17,13 @@ describe('pending initial prompt delivery', () => {
         initialPrompt: 'Restore the original context',
         imagePaths: ['/tmp/context.png'],
         model: null,
+        reasoningEffort: 'high',
       })
     ).toEqual({
       prompt: 'Restore the original context',
       imagePaths: ['/tmp/context.png'],
       model: null,
+      reasoningEffort: 'high',
     });
   });
 
@@ -53,6 +55,7 @@ describe('pending initial prompt delivery', () => {
           prompt: 'Restore the original context',
           imagePaths: ['/tmp/context.png'],
           model: null,
+          reasoningEffort: 'high',
         },
       })
     ).toEqual({
@@ -60,6 +63,7 @@ describe('pending initial prompt delivery', () => {
       initialPrompt: 'Restore the original context',
       imagePaths: ['/tmp/context.png'],
       model: null,
+      reasoningEffort: 'high',
     });
   });
 

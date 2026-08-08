@@ -147,6 +147,16 @@ export function ensureWorkspaceSchemaCompatibility(connection: BetterSqlite3.Dat
   }
 }
 
+function ensureAgentExecutionSettingsCompatibility(connection: BetterSqlite3.Database): void {
+  if (!tableExists(connection, 'agents')) return;
+  if (!columnExists(connection, 'agents', 'reasoning_effort')) {
+    connection.exec('ALTER TABLE agents ADD reasoning_effort text');
+  }
+  if (!columnExists(connection, 'agents', 'access_mode')) {
+    connection.exec("ALTER TABLE agents ADD access_mode text DEFAULT 'inherit' NOT NULL");
+  }
+}
+
 export function getBundledMigrationCount(): number {
   return migrationEntries.length;
 }
@@ -172,6 +182,8 @@ export function runBundledMigrations(connection: BetterSqlite3.Database): void {
 
       if (record.tag === '0021_polite_unus' && workspaceSchemaPartiallyExists(connection)) {
         ensureWorkspaceSchemaCompatibility(connection);
+      } else if (record.tag === '0050_stale_owl') {
+        ensureAgentExecutionSettingsCompatibility(connection);
       } else {
         const sqlKey = Object.keys(sqlFiles).find((k) => k.includes(record.tag));
         if (!sqlKey) throw new Error(`Missing bundled SQL for migration: ${record.tag}`);

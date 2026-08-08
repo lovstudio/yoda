@@ -1,8 +1,26 @@
-import { AlertTriangle, MousePointer2, Sparkles, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import {
+  AlertTriangle,
+  ChevronDown,
+  FilePenLine,
+  ListChecks,
+  MousePointer2,
+  ShieldCheck,
+  Sparkles,
+  X,
+} from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { agentToDraft, emptyAgentDraft, type Agent, type AgentDraft } from '@shared/agents';
+import {
+  agentToDraft,
+  emptyAgentDraft,
+  type Agent,
+  type AgentAccessMode,
+  type AgentDraft,
+} from '@shared/agents';
+import { toRuntimeModelId, type ModelProviderCatalogSource } from '@shared/model-provider-catalog';
 import { groupSkillFamilies, type SkillFamily } from '@shared/skills/grouping';
+import { useModelProviderCatalog } from '@renderer/features/settings/model-provider-catalog-query';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import SkillFamilyCount from '@renderer/features/skills/components/SkillFamilyCount';
 import { useSkills } from '@renderer/features/skills/components/useSkills';
 import { buildSkillTree } from '@renderer/features/skills/skill-tree';
@@ -12,6 +30,18 @@ import { useToast } from '@renderer/lib/hooks/use-toast';
 import type { BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { useCloseGuard } from '@renderer/lib/modal/use-close-guard';
 import { Button } from '@renderer/lib/ui/button';
+import {
+  Combobox,
+  ComboboxCollection,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxGroup,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxLabel,
+  ComboboxList,
+  ComboboxTrigger,
+} from '@renderer/lib/ui/combobox';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
 import {
   DialogContentArea,
@@ -20,7 +50,9 @@ import {
   DialogTitle,
 } from '@renderer/lib/ui/dialog';
 import { Input } from '@renderer/lib/ui/input';
+import { InputGroupButton } from '@renderer/lib/ui/input-group';
 import { Label } from '@renderer/lib/ui/label';
+import { RadioGroup, RadioGroupItem } from '@renderer/lib/ui/radio-group';
 import {
   Select,
   SelectContent,
@@ -29,11 +61,73 @@ import {
   SelectValue,
 } from '@renderer/lib/ui/select';
 import { Textarea } from '@renderer/lib/ui/textarea';
+import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
 import { useAgents } from './use-agents';
 
 type Props = BaseModalProps<Agent> & { agent?: Agent };
 type SkillMode = 'auto' | 'manual' | 'off';
+
+const CODEX_REASONING_EFFORTS = [
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+  'ultra',
+] as const;
+
+type AgentModelOption = {
+  key: string;
+  providerId: string;
+  providerName: string;
+  modelId: string;
+  value: string;
+  sources: ModelProviderCatalogSource[];
+};
+
+type AgentModelGroup = {
+  value: string;
+  label: string;
+  items: AgentModelOption[];
+};
+
+function OptionalLabel({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
+  return (
+    <span className="flex items-center gap-1.5">
+      <span>{children}</span>
+      <span className="font-normal text-[10px] text-muted-foreground">
+        {t('agentManager.optional')}
+      </span>
+    </span>
+  );
+}
+
+function buildAgentModelGroups(
+  providers: readonly {
+    id: string;
+    name: string;
+    models: readonly { id: string; sources: ModelProviderCatalogSource[] }[];
+  }[]
+): AgentModelGroup[] {
+  return providers
+    .map((provider) => ({
+      value: provider.id,
+      label: provider.name,
+      items: provider.models.map((model) => ({
+        key: `${provider.id}:${model.id}`,
+        providerId: provider.id,
+        providerName: provider.name,
+        modelId: model.id,
+        value: toRuntimeModelId(provider.id, model.id),
+        sources: model.sources,
+      })),
+    }))
+    .filter((group) => group.items.length > 0);
+}
 
 function SkillModeSelect({
   value,
@@ -78,8 +172,24 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
   const { toast } = useToast();
   const { create, update } = useAgents();
   const { installedSkills, isLoading: skillsLoading } = useSkills();
+  const { value: defaultRuntime } = useAppSettingsKey('defaultRuntime');
+  const modelCatalog = useModelProviderCatalog();
   const [draft, setDraft] = useState<AgentDraft>(agent ? agentToDraft(agent) : emptyAgentDraft());
   const [saving, setSaving] = useState(false);
+  const reasoningRuntime = draft.preferredRuntime ?? defaultRuntime;
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const modelGroups = useMemo(
+    () => buildAgentModelGroups(modelCatalog.data?.providers ?? []),
+    [modelCatalog.data]
+  );
+  const modelOptions = useMemo(() => modelGroups.flatMap((group) => group.items), [modelGroups]);
+  const selectedModelOption = useMemo(() => {
+    const value = draft.model?.trim();
+    if (!value) return null;
+    return (
+      modelOptions.find((option) => option.value === value || option.modelId === value) ?? null
+    );
+  }, [draft.model, modelOptions]);
   const installedSkillFamilies = useMemo(() => {
     const configuredIdentifiers = new Set([...draft.enabledSkillIds, ...draft.manualSkillIds]);
     const preferredKeys = new Set(
@@ -214,29 +324,30 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
 
       <DialogContentArea>
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-            <div className="space-y-2">
-              <Label htmlFor="agent-icon" className="text-xs">
-                {t('agentManager.icon')}
-              </Label>
-              <AvatarInput
-                id="agent-icon"
-                name={draft.name}
-                value={draft.icon}
-                onChange={(value) => set('icon', value)}
-                inputLabel={t('agentManager.icon')}
-                placeholder={t('common.avatarPlaceholder')}
-                uploadTitle={t('common.uploadPhoto')}
-                clearTitle={t('common.clearAvatar')}
-                onFileError={showAvatarFileError}
-              />
-            </div>
-            <div className="space-y-2">
+          <div className="flex items-end gap-3 rounded-xl border border-border bg-muted/15 p-3">
+            <AvatarInput
+              id="agent-icon"
+              name={draft.name}
+              value={draft.icon}
+              onChange={(value) => set('icon', value)}
+              inputLabel={t('agentManager.icon')}
+              placeholder={t('common.avatarPlaceholder')}
+              uploadTitle={t('common.uploadPhoto')}
+              clearTitle={t('common.clearAvatar')}
+              onFileError={showAvatarFileError}
+              appearance="profile"
+            />
+            <div className="min-w-0 flex-1 space-y-2">
               <Label htmlFor="agent-name" className="text-xs">
                 {t('common.name')}
+                <span className="ml-0.5 text-destructive" aria-hidden>
+                  *
+                </span>
               </Label>
               <Input
                 id="agent-name"
+                required
+                aria-required="true"
                 placeholder={t('agentManager.namePlaceholder')}
                 value={draft.name}
                 onChange={(e) => set('name', e.target.value)}
@@ -247,7 +358,7 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
 
           <div className="space-y-2">
             <Label htmlFor="agent-desc" className="text-xs">
-              {t('common.description')}
+              <OptionalLabel>{t('common.description')}</OptionalLabel>
             </Label>
             <Input
               id="agent-desc"
@@ -258,43 +369,196 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
             />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label className="text-xs">{t('agentManager.preferredRuntime')}</Label>
-              <AgentSelector
-                value={draft.preferredRuntime}
-                model={draft.model}
-                onChange={(provider) => set('preferredRuntime', provider)}
-                className="h-9 text-sm"
-              />
-              <p className="text-[10px] text-muted-foreground">
-                {t('agentManager.preferredRuntimeHint')}
+          <div className="space-y-3 rounded-xl border border-border p-3">
+            <div>
+              <p className="text-xs font-medium text-foreground">
+                {t('agentManager.runtimeSettings')}
+              </p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                {t('agentManager.runtimeSettingsHint')}
               </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="agent-model" className="text-xs">
-                {t('agentManager.model')}
-              </Label>
-              <Input
-                id="agent-model"
-                placeholder={t('agentManager.modelPlaceholder')}
-                value={draft.model ?? ''}
-                onChange={(e) => set('model', e.target.value || null)}
-                className="text-sm"
-              />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-xs">
+                  <OptionalLabel>{t('agentManager.preferredRuntime')}</OptionalLabel>
+                </Label>
+                <AgentSelector
+                  value={draft.preferredRuntime}
+                  model={draft.model}
+                  onChange={(provider) => set('preferredRuntime', provider)}
+                  onClear={() => set('preferredRuntime', null)}
+                  emptyLabel={t('agentManager.runtimeDefault')}
+                  className="h-9 text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="agent-model" className="text-xs">
+                  <OptionalLabel>{t('agentManager.model')}</OptionalLabel>
+                </Label>
+                <Combobox
+                  items={modelGroups}
+                  value={selectedModelOption}
+                  inputValue={draft.model ?? ''}
+                  open={modelMenuOpen}
+                  onOpenChange={setModelMenuOpen}
+                  onInputValueChange={(value, { reason }: { reason: string }) => {
+                    if (reason === 'input-change') set('model', value || null);
+                  }}
+                  onValueChange={(option: AgentModelOption | null) => {
+                    if (!option) return;
+                    set('model', option.value);
+                    setModelMenuOpen(false);
+                  }}
+                  itemToStringLabel={(option: AgentModelOption) => option.value}
+                  itemToStringValue={(option: AgentModelOption) => option.key}
+                  isItemEqualToValue={(left: AgentModelOption, right: AgentModelOption) =>
+                    left.key === right.key
+                  }
+                  filter={(option: AgentModelOption, query) =>
+                    `${option.providerName} ${option.modelId} ${option.value}`
+                      .toLowerCase()
+                      .includes(query.trim().toLowerCase())
+                  }
+                  autoHighlight
+                >
+                  <ComboboxInput
+                    id="agent-model"
+                    placeholder={t('agentManager.modelPlaceholder')}
+                    className="h-9 text-sm"
+                    showTrigger={false}
+                    rightAddon={
+                      <InputGroupButton
+                        size="icon-xs"
+                        variant="ghost"
+                        render={<ComboboxTrigger />}
+                        aria-label={t('agentManager.modelCandidates')}
+                      >
+                        <ChevronDown className="size-3.5" />
+                      </InputGroupButton>
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && isImeComposing(event)) event.stopPropagation();
+                    }}
+                  />
+                  <ComboboxContent className="w-[min(24rem,var(--available-width))]">
+                    <ComboboxEmpty>
+                      {modelCatalog.isLoading
+                        ? t('common.loading')
+                        : t('agentManager.modelCustomHint')}
+                    </ComboboxEmpty>
+                    <ComboboxList>
+                      {(group: AgentModelGroup) => (
+                        <ComboboxGroup key={group.value} items={group.items}>
+                          <ComboboxLabel>{group.label}</ComboboxLabel>
+                          <ComboboxCollection>
+                            {(option: AgentModelOption) => (
+                              <ComboboxItem key={option.key} value={option} className="text-xs">
+                                <span className="min-w-0 flex-1 truncate font-mono">
+                                  {option.value}
+                                </span>
+                                {option.sources.includes('custom') ? (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {t('agentManager.modelCustom')}
+                                  </span>
+                                ) : null}
+                              </ComboboxItem>
+                            )}
+                          </ComboboxCollection>
+                        </ComboboxGroup>
+                      )}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
+              </div>
             </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-xs">
+                  <OptionalLabel>{t('agentManager.reasoningEffort')}</OptionalLabel>
+                </Label>
+                <Select
+                  value={draft.reasoningEffort ?? 'inherit'}
+                  onValueChange={(value) =>
+                    set('reasoningEffort', value === 'inherit' ? null : value)
+                  }
+                  disabled={reasoningRuntime !== 'codex'}
+                >
+                  <SelectTrigger className="h-9 w-full text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inherit">{t('agentManager.reasoningDefault')}</SelectItem>
+                    {CODEX_REASONING_EFFORTS.map((effort) => (
+                      <SelectItem key={effort} value={effort}>
+                        {t(`workspaceRuntime.model.reasoning.${effort}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {reasoningRuntime !== 'codex' ? (
+                  <p className="text-[10px] text-muted-foreground">
+                    {t('agentManager.reasoningClientHint')}
+                  </p>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs">
+                  <OptionalLabel>{t('agentManager.accessMode')}</OptionalLabel>
+                </Label>
+                <p className="text-[10px] text-muted-foreground">
+                  {t('agentManager.accessModeHint')}
+                </p>
+              </div>
+            </div>
+            <RadioGroup
+              value={draft.accessMode}
+              onValueChange={(value) => set('accessMode', value as AgentAccessMode)}
+              className="grid gap-2 sm:grid-cols-2"
+            >
+              {(
+                [
+                  ['inherit', ListChecks],
+                  ['plan', ListChecks],
+                  ['write', FilePenLine],
+                  ['full-access', ShieldCheck],
+                ] as const
+              ).map(([mode, Icon]) => (
+                <label
+                  key={mode}
+                  className={cn(
+                    'flex min-h-12 cursor-pointer items-start gap-2.5 rounded-lg border border-border px-3 py-2 transition-colors hover:bg-muted/35',
+                    draft.accessMode === mode && 'border-foreground/30 bg-muted/40',
+                    mode === 'full-access' &&
+                      draft.accessMode === mode &&
+                      'border-destructive/40 bg-destructive/5'
+                  )}
+                >
+                  <RadioGroupItem value={mode} className="mt-0.5" />
+                  <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-medium">
+                      {t(`agentManager.accessModes.${mode}.label`)}
+                    </span>
+                    <span className="mt-0.5 block text-[10px] leading-relaxed text-muted-foreground">
+                      {t(`agentManager.accessModes.${mode}.description`)}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </RadioGroup>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="agent-prompt" className="text-xs">
-              {t('agentManager.systemPrompt')}
+              <OptionalLabel>{t('agentManager.systemPrompt')}</OptionalLabel>
             </Label>
             <Textarea
               id="agent-prompt"
               placeholder={t('agentManager.systemPromptPlaceholder')}
               value={draft.systemPrompt}
               onChange={(e) => set('systemPrompt', e.target.value)}
-              className="h-48 max-h-[36dvh] resize-y overflow-y-auto field-sizing-fixed font-mono text-xs leading-relaxed"
+              className="h-36 max-h-[32dvh] resize-y overflow-y-auto field-sizing-fixed font-mono text-xs leading-relaxed"
             />
           </div>
 

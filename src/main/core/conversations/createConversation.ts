@@ -161,7 +161,7 @@ export async function createConversation(params: CreateConversationParams): Prom
         sessionInitialPrompt,
         undefined,
         sessionImagePaths,
-        { model: params.model }
+        { model: params.model, reasoningEffort: params.reasoningEffort }
       );
       if (pendingInitialPrompt) {
         await clearPendingInitialPrompt(id);

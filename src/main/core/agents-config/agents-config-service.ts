@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { desc, eq } from 'drizzle-orm';
-import type { Agent, AgentDraft, AgentSource } from '@shared/agents';
+import { isAgentAccessMode, type Agent, type AgentDraft, type AgentSource } from '@shared/agents';
 import { isValidRuntimeId } from '@shared/runtime-registry';
 import { db } from '@main/db/client';
 import { agents, type AgentRow } from '@main/db/schema';
@@ -31,6 +31,8 @@ function rowToAgent(row: AgentRow): Agent {
     skillPolicyMode: skillPolicy.skillPolicyMode,
     preferredRuntime: isValidRuntimeId(row.preferredRuntime) ? row.preferredRuntime : null,
     model: row.model ?? null,
+    reasoningEffort: row.reasoningEffort ?? null,
+    accessMode: isAgentAccessMode(row.accessMode) ? row.accessMode : 'inherit',
     source: row.source === 'imported' ? 'imported' : 'local',
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -54,6 +56,8 @@ function sanitizeDraft(draft: AgentDraft): Omit<AgentDraft, 'name'> & { name: st
     skillPolicyMode: draft.skillPolicyMode,
     preferredRuntime: isValidRuntimeId(draft.preferredRuntime) ? draft.preferredRuntime : null,
     model: draft.model?.trim() ? draft.model.trim() : null,
+    reasoningEffort: draft.reasoningEffort?.trim() ? draft.reasoningEffort.trim() : null,
+    accessMode: isAgentAccessMode(draft.accessMode) ? draft.accessMode : 'inherit',
   };
 }
 
@@ -103,6 +107,8 @@ class AgentsConfigService {
         enabledSkillIds: encodeAgentSkillPolicy(clean),
         preferredRuntime: clean.preferredRuntime,
         model: clean.model,
+        reasoningEffort: clean.reasoningEffort,
+        accessMode: clean.accessMode,
         source,
       })
       .execute();
@@ -123,6 +129,8 @@ class AgentsConfigService {
         enabledSkillIds: encodeAgentSkillPolicy(clean),
         preferredRuntime: clean.preferredRuntime,
         model: clean.model,
+        reasoningEffort: clean.reasoningEffort,
+        accessMode: clean.accessMode,
         updatedAt: new Date().toISOString(),
       })
       .where(eq(agents.id, id))
@@ -150,6 +158,8 @@ class AgentsConfigService {
         skillPolicyMode: source.skillPolicyMode,
         preferredRuntime: source.preferredRuntime,
         model: source.model,
+        reasoningEffort: source.reasoningEffort,
+        accessMode: source.accessMode,
       },
       'local'
     );

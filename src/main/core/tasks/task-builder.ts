@@ -201,7 +201,7 @@ export async function buildTaskFromWorkspace(
           start.initialPrompt,
           undefined,
           start.imagePaths,
-          { model: start.model }
+          { model: start.model, reasoningEffort: start.reasoningEffort }
         );
         if (pending) {
           await clearPendingInitialPrompt(conv.id);
