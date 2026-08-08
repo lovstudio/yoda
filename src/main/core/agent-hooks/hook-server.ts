@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -33,6 +33,8 @@ export class HookServer {
   private server: http.Server | null = null;
   private port = 0;
   private token = '';
+
+  constructor(private readonly endpointPath = HOOK_ENDPOINT_PATH) {}
 
   async start(handler: HookHandler): Promise<void> {
     if (this.server) return;
@@ -103,13 +105,13 @@ export class HookServer {
   /** Write the current `{ port, token }` to the well-known endpoint file. */
   private publishEndpoint(): void {
     try {
-      mkdirSync(dirname(HOOK_ENDPOINT_PATH), { recursive: true });
-      writeFileSync(HOOK_ENDPOINT_PATH, JSON.stringify({ port: this.port, token: this.token }), {
+      mkdirSync(dirname(this.endpointPath), { recursive: true });
+      writeFileSync(this.endpointPath, JSON.stringify({ port: this.port, token: this.token }), {
         mode: 0o600,
       });
     } catch (err) {
       log.warn('HookServer: failed to publish endpoint file', {
-        path: HOOK_ENDPOINT_PATH,
+        path: this.endpointPath,
         error: String(err),
       });
     }
@@ -121,8 +123,16 @@ export class HookServer {
       this.server = null;
       this.port = 0;
     }
+    this.removeOwnedEndpoint();
+  }
+
+  /** A stale server must not erase a newer server's published endpoint. */
+  private removeOwnedEndpoint(): void {
     try {
-      rmSync(HOOK_ENDPOINT_PATH, { force: true });
+      const current = JSON.parse(readFileSync(this.endpointPath, 'utf8')) as { token?: unknown };
+      if (current.token === this.token) {
+        rmSync(this.endpointPath, { force: true });
+      }
     } catch {}
   }
   getPort(): number {
