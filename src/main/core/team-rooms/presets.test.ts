@@ -215,6 +215,19 @@ describe('Feature Team Room creation', () => {
         permissionMode: 'full-auto',
       })
     );
+    const planner = mocks.addMember.mock.calls.find(
+      ([input]) => input.handle === 'planner-agent'
+    )?.[0];
+    const implementer = mocks.addMember.mock.calls.find(
+      ([input]) => input.handle === 'implementer-agent'
+    )?.[0];
+    expect(planner?.systemPrompt).toContain(
+      'First complete the responsibility defined by your own Agent profile yourself.'
+    );
+    expect(planner?.systemPrompt).toContain('Only after your own result is ready');
+    expect(planner?.systemPrompt).not.toContain('you do NOT do it yourself');
+    expect(implementer?.systemPrompt).toContain("Do not redo the previous stage's work.");
+    expect(implementer?.systemPrompt).toContain('instead of taking over its role');
   });
 
   it('reuses a complete active Room for retries', async () => {

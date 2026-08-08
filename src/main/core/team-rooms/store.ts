@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import {
   roomMemberStatusChangedChannel,
   roomMessagePostedChannel,
@@ -456,6 +456,53 @@ export async function postMessage(
     teamRoomEvents._emit('room:message-posted', params.roomId, message);
   }
   return message;
+}
+
+/**
+ * Reuse a failed agent hand-off when the caller retries the exact same signal.
+ * The durable message keeps its identity while the room timeline shows one
+ * semantic hand-off instead of appending a duplicate card.
+ */
+export async function retryFailedHandoff(
+  params: Required<
+    Pick<PostMessageParams, 'roomId' | 'authorMemberId' | 'body' | 'mentions' | 'visibility'>
+  > &
+    Pick<PostMessageParams, 'sessionRef'>
+): Promise<RoomMessage | null> {
+  const [failed] = await db
+    .select()
+    .from(roomMessages)
+    .where(
+      and(
+        eq(roomMessages.roomId, params.roomId),
+        params.authorMemberId === null
+          ? isNull(roomMessages.authorMemberId)
+          : eq(roomMessages.authorMemberId, params.authorMemberId),
+        eq(roomMessages.kind, 'handoff'),
+        eq(roomMessages.body, params.body),
+        eq(roomMessages.mentions, JSON.stringify(params.mentions)),
+        params.sessionRef === null || params.sessionRef === undefined
+          ? isNull(roomMessages.sessionRef)
+          : eq(roomMessages.sessionRef, params.sessionRef),
+        eq(roomMessages.visibility, params.visibility),
+        eq(roomMessages.deliveryStatus, 'failed')
+      )
+    )
+    .orderBy(desc(roomMessages.createdAt), desc(roomMessages.id))
+    .limit(1);
+  if (!failed) return null;
+
+  const createdAt = nextMessageCreatedAt();
+  const [row] = await db
+    .update(roomMessages)
+    .set({ deliveryStatus: 'pending', deliveryError: null, createdAt })
+    .where(eq(roomMessages.id, failed.id))
+    .returning();
+  if (!row) return null;
+
+  await db.update(teamRooms).set({ updatedAt: createdAt }).where(eq(teamRooms.id, params.roomId));
+  events.emit(teamRoomUpdatedChannel, { roomId: params.roomId }, params.roomId);
+  return mapMessage(row);
 }
 
 export async function getMessages(roomId: string): Promise<RoomMessage[]> {

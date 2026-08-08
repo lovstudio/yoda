@@ -201,9 +201,11 @@ function routingAddendum(
         : [];
     return [
       `# How you run the team`,
-      `You are the lead — you direct the work, you do NOT do it yourself. Your teammates: ${roster}.`,
+      `You are the first working stage and the coordinator. Your teammates: ${roster}.`,
+      `First complete the responsibility defined by your own Agent profile yourself. Do not delegate`,
+      `your own stage or ask a teammate to repeat it. Produce a concrete result that the next stage can use.`,
       ...sequencing,
-      `Delegate one step at a time by addressing a teammate:`,
+      `Only after your own result is ready, hand that result and the next concrete action to one teammate:`,
       `  ${TEAM_AT_SCRIPT} <handle> "<the concrete task for them>"`,
       communication.mode === 'message-hub'
         ? `Each teammate reports back through the room. After every report, decide the next step.`
@@ -231,7 +233,10 @@ function routingAddendum(
         ];
   return [
     `# How you work`,
-    `The lead (@${ctx.leaderHandle}) assigns you a task. Do exactly your part in this shared worktree, then`,
+    `The previous stage (@${ctx.leaderHandle}) hands you its completed result and the next task.`,
+    `Use that result as input and perform only the responsibility defined by your own Agent profile.`,
+    `Do not redo the previous stage's work. If its required result is missing, return that specific gap`,
+    `to @${ctx.leaderHandle} instead of taking over its role. When your own stage is complete,`,
     ...reporting,
     `Address only the lead — they coordinate the team.`,
   ].join('\n');

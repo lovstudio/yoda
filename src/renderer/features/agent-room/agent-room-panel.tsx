@@ -568,7 +568,7 @@ const TeamIntroPanel = observer(function TeamIntroPanel({
   );
 });
 
-function MessageRow({
+export function MessageRow({
   message,
   byId,
   byHandle,
@@ -672,6 +672,39 @@ function MessageRow({
         <div className="whitespace-pre-wrap break-words text-sm text-foreground">
           {renderBody(message.body, byHandle, onOpenMember)}
         </div>
+        {message.kind === 'handoff' &&
+          message.deliveryStatus === 'failed' &&
+          message.deliveryError && (
+            <div className="mt-2 flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/8 px-2.5 py-2 text-xs text-destructive">
+              <AlertTriangle className="size-3.5 shrink-0" />
+              <span className="font-medium">{t('agentRoom.dispatchFailed')}</span>
+              <span className="min-w-0 flex-1 break-words text-foreground-muted">
+                {message.deliveryError}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  void navigator.clipboard.writeText(
+                    JSON.stringify(
+                      {
+                        roomId: message.roomId,
+                        dispatchId: message.id,
+                        targets: message.mentions,
+                        error: message.deliveryError,
+                        createdAt: message.createdAt,
+                      },
+                      null,
+                      2
+                    )
+                  )
+                }
+                title={t('agentRoom.copyDispatchError')}
+                className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-destructive/10"
+              >
+                <Copy className="size-3.5" />
+              </button>
+            </div>
+          )}
       </div>
     </div>
   );
