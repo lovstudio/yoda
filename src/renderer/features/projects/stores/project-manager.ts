@@ -22,6 +22,12 @@ interface BaseModeData {
   path: string;
 }
 
+// Opening every registered project at once creates a burst of repository
+// watchers, task hydration, and MobX notifications in the renderer. Keep the
+// same eventual behavior while making startup work yield between a small
+// number of projects.
+const INITIAL_PROJECT_MOUNT_CONCURRENCY = 4;
+
 export interface PickModeData extends BaseModeData {
   mode: 'pick';
   initGitRepository?: boolean;
@@ -83,7 +89,9 @@ export class ProjectManagerStore {
         toMount.push(p.id);
       }
     });
-    await Promise.allSettled(toMount.map((id) => this.mountProject(id)));
+    await mountProjectsWithConcurrency(toMount, INITIAL_PROJECT_MOUNT_CONCURRENCY, (projectId) =>
+      this.mountProject(projectId)
+    );
   }
 
   /**
@@ -551,4 +559,26 @@ export class ProjectManagerStore {
       }
     });
   }
+}
+
+async function mountProjectsWithConcurrency(
+  projectIds: string[],
+  concurrency: number,
+  mountProject: (projectId: string) => Promise<void>
+): Promise<void> {
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), projectIds.length);
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < projectIds.length) {
+        const projectId = projectIds[nextIndex++];
+        try {
+          await mountProject(projectId);
+        } catch {
+          // mountProject records the project error state; one broken project
+          // should not prevent the remaining projects from loading.
+        }
+      }
+    })
+  );
 }

@@ -231,6 +231,24 @@ export class TaskManagerStore {
     return childrenByParent;
   }
 
+  /**
+   * Tasks waiting for review, indexed by MobX instead of rescanned by every
+   * runtime-bar render. The computed value still updates when a task is added,
+   * archived, or its review marker changes, while unrelated task changes reuse
+   * the cached result.
+   */
+  get tasksNeedingReview(): readonly TaskStore[] {
+    const tasks: TaskStore[] = [];
+    for (const store of this.tasks.values()) {
+      if (!isRegistered(store)) continue;
+      if (store.data.archivedAt || store.data.archiveRequestedAt || !store.data.needsReview) {
+        continue;
+      }
+      tasks.push(store);
+    }
+    return tasks;
+  }
+
   constructor(
     projectId: string,
     repository: RepositoryStore,
@@ -246,6 +264,7 @@ export class TaskManagerStore {
       taskLoadState: observable,
       archivingTaskIds: observable,
       childrenByParent: computed,
+      tasksNeedingReview: computed,
     });
 
     this._unsubTaskStatusUpdated = events.on(

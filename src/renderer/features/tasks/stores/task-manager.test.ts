@@ -332,6 +332,39 @@ describe('TaskManagerStore task hierarchy index', () => {
   });
 });
 
+describe('TaskManagerStore review index', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    mocks.listeners.clear();
+    mocks.unsubscribers.length = 0;
+  });
+
+  it('returns only active registered tasks needing review', () => {
+    const manager = createManager();
+    const pending = createUnprovisionedTask(makeTask('Pending review', undefined, 'task-1'));
+    pending.data.needsReview = true;
+    const archived = createUnprovisionedTask(makeTask('Archived', undefined, 'task-2'));
+    archived.data.needsReview = true;
+    const archivedData = registeredTaskData(archived);
+    if (!archivedData) throw new Error('Expected archived task data to be registered');
+    archivedData.archivedAt = '2026-06-06T10:00:00.000Z';
+    const archiving = createUnprovisionedTask(makeTask('Archiving', undefined, 'task-3'));
+    archiving.data.needsReview = true;
+    const archivingData = registeredTaskData(archiving);
+    if (!archivingData) throw new Error('Expected archiving task data to be registered');
+    archivingData.archiveRequestedAt = '2026-06-06T10:00:00.000Z';
+
+    manager.tasks.set('task-1', pending);
+    manager.tasks.set('task-2', archived);
+    manager.tasks.set('task-3', archiving);
+
+    expect(manager.tasksNeedingReview).toEqual([pending]);
+    pending.data.needsReview = false;
+    expect(manager.tasksNeedingReview).toEqual([]);
+    manager.dispose();
+  });
+});
+
 describe('TaskManagerStore task view preload', () => {
   afterEach(() => {
     vi.clearAllMocks();

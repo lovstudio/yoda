@@ -455,9 +455,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     const mountedProject = asMounted(project);
     if (!mountedProject) return [];
     const projectName = project.displayName;
-    return Array.from(mountedProject.taskManager.tasks.values()).flatMap((task) => {
+    return mountedProject.taskManager.tasksNeedingReview.flatMap((task) => {
       const taskData = registeredTaskData(task);
-      if (!taskData || taskData.archivedAt || !taskData.needsReview) return [];
+      if (!taskData) return [];
       return [
         {
           projectId: taskData.projectId,
