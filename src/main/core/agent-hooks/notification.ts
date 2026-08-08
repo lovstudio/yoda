@@ -16,13 +16,13 @@ import { log } from '@main/lib/logger';
 
 function getNotificationMessage(
   event: AgentEvent
-): Pick<AppNotificationCreated, 'description' | 'kind' | 'messageKey' | 'requiresAction'> | null {
+): Pick<AppNotificationCreated, 'description' | 'kind' | 'messageKey' | 'reason'> | null {
   if (!agentEventRequiresUserAction(event)) return null;
   return {
     description: 'Your agent is waiting for input',
     kind: 'info',
     messageKey: 'agentAwaitingInput',
-    requiresAction: true,
+    reason: 'action-required',
   };
 }
 

@@ -23,8 +23,13 @@ describe('agentEventRequiresUserAction', () => {
 
 describe('shouldRetainAppNotification', () => {
   it('retains errors and action-required events while dropping informational events', () => {
-    expect(shouldRetainAppNotification({ kind: 'error', requiresAction: false })).toBe(true);
-    expect(shouldRetainAppNotification({ kind: 'info', requiresAction: true })).toBe(true);
-    expect(shouldRetainAppNotification({ kind: 'success', requiresAction: false })).toBe(false);
+    expect(shouldRetainAppNotification({ kind: 'error' })).toBe(true);
+    expect(shouldRetainAppNotification({ kind: 'info', reason: 'action-required' })).toBe(true);
+    expect(shouldRetainAppNotification({ kind: 'success' })).toBe(false);
+    expect(shouldRetainAppNotification({ kind: 'info', reason: 'blocking-warning' })).toBe(true);
+    expect(shouldRetainAppNotification({ kind: 'success', reason: 'subscribed-result' })).toBe(
+      true
+    );
+    expect(shouldRetainAppNotification({ kind: 'success', status: 'resolved' })).toBe(true);
   });
 });

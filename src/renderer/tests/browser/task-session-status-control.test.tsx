@@ -162,6 +162,7 @@ function makeTask(): Task {
     updatedAt: '2026-07-19T10:00:00.000Z',
     statusChangedAt: '2026-07-19T10:00:00.000Z',
     isPinned: false,
+    isFavorite: false,
     isLongTerm: false,
     needsReview: false,
     isUserNamed: false,

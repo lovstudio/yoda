@@ -1,6 +1,7 @@
 import type { DeepLinkTarget } from '@shared/deep-links';
 import type { DependencyStatusUpdatedEvent } from '@shared/dependencies';
 import { defineEvent } from '@shared/ipc/events';
+import type { NotificationReason, NotificationStatus } from '@shared/notifications';
 import type { RuntimeId } from '@shared/runtime-registry';
 import type { TaskWindowTarget } from '@shared/task-window';
 
@@ -37,7 +38,12 @@ export type AppNotificationCreated = {
   details?: string;
   kind: 'info' | 'success' | 'error';
   source: 'agent' | 'automation' | 'system';
-  requiresAction: boolean;
+  /** Setting a reason opts the event into the retained notification queue. */
+  reason?: NotificationReason;
+  /** A resolved event updates its matching active entry instead of creating a new one. */
+  status?: NotificationStatus;
+  /** Stable identity used to coalesce repeats and match later recovery events. */
+  notificationKey?: string;
   messageKey?: 'agentAwaitingInput';
   target?: {
     projectId: string;
@@ -47,9 +53,13 @@ export type AppNotificationCreated = {
 };
 
 export function shouldRetainAppNotification(
-  notification: Pick<AppNotificationCreated, 'kind' | 'requiresAction'>
+  notification: Pick<AppNotificationCreated, 'kind' | 'reason' | 'status'>
 ): boolean {
-  return notification.kind === 'error' || notification.requiresAction;
+  return (
+    notification.kind === 'error' ||
+    notification.reason !== undefined ||
+    notification.status === 'resolved'
+  );
 }
 
 export const notificationCreatedChannel =

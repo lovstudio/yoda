@@ -475,6 +475,7 @@ export class TaskManagerStore {
           status: params.initialStatus ?? 'in_progress',
           statusChangedAt: new Date().toISOString(),
           isPinned: false,
+          isFavorite: false,
           isLongTerm: false,
           needsReview: false,
           setupStatus: 'pending',

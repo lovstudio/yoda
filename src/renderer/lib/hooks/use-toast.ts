@@ -1,5 +1,6 @@
 import { isValidElement, type ReactNode } from 'react';
 import { toast as sonnerToast, type ExternalToast } from 'sonner';
+import type { NotificationReason } from '@shared/notifications';
 import i18n from '@renderer/lib/i18n';
 import {
   workspaceNotificationStore,
@@ -17,6 +18,8 @@ type Toast = {
   description?: string;
   variant?: 'default' | 'destructive';
   action?: ToastAction;
+  notification?: Extract<NotificationReason, 'blocking-warning' | 'subscribed-result'>;
+  notificationKey?: string;
   debugInfo?: unknown;
 };
 
@@ -47,7 +50,7 @@ function toast(input: Toast | ToastDisplayContent, externalOptions?: ExternalToa
     return toastId;
   }
 
-  const { title, description, variant, action, debugInfo } = input;
+  const { title, description, variant, action, debugInfo, notificationKey } = input;
   const options: ExternalToast = {
     ...(externalOptions ?? {}),
     description: description ?? externalOptions?.description,
@@ -65,7 +68,9 @@ function toast(input: Toast | ToastDisplayContent, externalOptions?: ExternalToa
       { title, description: options.description, debugInfo },
       toastId,
       options,
-      action ?? externalOptions?.action
+      action ?? externalOptions?.action,
+      input.notification,
+      notificationKey
     );
     return toastId;
   }
@@ -75,7 +80,9 @@ function toast(input: Toast | ToastDisplayContent, externalOptions?: ExternalToa
     { title, description: options.description, debugInfo },
     toastId,
     options,
-    action ?? externalOptions?.action
+    action ?? externalOptions?.action,
+    input.notification,
+    notificationKey
   );
   return toastId;
 }
@@ -131,7 +138,12 @@ function isToastObject(value: Toast | ToastDisplayContent): value is Toast {
     typeof value === 'object' &&
     value !== null &&
     !isValidElement(value) &&
-    ('title' in value || 'description' in value || 'variant' in value || 'debugInfo' in value)
+    ('title' in value ||
+      'description' in value ||
+      'variant' in value ||
+      'notification' in value ||
+      'notificationKey' in value ||
+      'debugInfo' in value)
   );
 }
 
@@ -200,30 +212,57 @@ function recordToast(
   payload: ToastCopyPayload,
   toastId: string | number,
   options?: ExternalToast,
-  action?: unknown
+  action?: unknown,
+  requestedReason?: Extract<NotificationReason, 'blocking-warning' | 'subscribed-result'>,
+  notificationKey?: string
 ): void {
   const toastKey = String(options?.id ?? toastId);
-  const existingNotificationId = toastNotificationIds.get(toastKey);
+  const existingNotificationId =
+    toastNotificationIds.get(toastKey) ??
+    (notificationKey ? workspaceNotificationStore.getByDedupeKey(notificationKey)?.id : undefined);
+  const existingNotification = existingNotificationId
+    ? workspaceNotificationStore.get(existingNotificationId)
+    : undefined;
   const notificationAction = toNotificationAction(action);
-  if (!notificationAction && kind !== 'error') {
+  const reason: NotificationReason | undefined =
+    requestedReason ??
+    (kind === 'error' ? 'error' : notificationAction ? 'action-required' : undefined);
+  const titleText = nodeToText(payload.title);
+  const descriptionText = nodeToText(payload.description);
+  const title = titleText ?? descriptionText ?? i18n.t('workspaceRuntime.notifications.untitled');
+  const description = titleText ? (descriptionText ?? undefined) : undefined;
+  const details = formatToastCopyText(payload) || title;
+
+  if (!reason) {
     if (existingNotificationId) {
-      workspaceNotificationStore.remove(existingNotificationId);
+      if (
+        kind === 'success' &&
+        (existingNotification?.reason === 'error' ||
+          existingNotification?.reason === 'blocking-warning')
+      ) {
+        workspaceNotificationStore.resolve(existingNotificationId, {
+          title,
+          description,
+          details,
+          kind,
+        });
+      } else {
+        workspaceNotificationStore.remove(existingNotificationId);
+      }
       toastNotificationIds.delete(toastKey);
     }
     return;
   }
 
-  const titleText = nodeToText(payload.title);
-  const descriptionText = nodeToText(payload.description);
-  const title = titleText ?? descriptionText ?? i18n.t('workspaceRuntime.notifications.untitled');
-  const details = formatToastCopyText(payload) || title;
   const notificationId = workspaceNotificationStore.enqueue(
     {
       title,
-      description: titleText ? (descriptionText ?? undefined) : undefined,
+      description,
       details,
       kind,
       source: 'toast',
+      reason,
+      dedupeKey: notificationKey,
     },
     existingNotificationId,
     notificationAction

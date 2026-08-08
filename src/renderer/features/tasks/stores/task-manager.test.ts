@@ -122,6 +122,7 @@ describe('TaskManagerStore task rename events', () => {
         createdAt: '2026-06-05T10:00:00.000Z',
         statusChangedAt: '2026-06-05T10:00:00.000Z',
         isPinned: false,
+        isFavorite: false,
         isLongTerm: false,
         needsReview: false,
       })
@@ -286,6 +287,7 @@ describe('TaskManagerStore external task reconciliation', () => {
       createdAt: '2026-06-05T10:00:00.000Z',
       statusChangedAt: '2026-06-05T10:00:00.000Z',
       isPinned: false,
+      isFavorite: false,
       isLongTerm: false,
       needsReview: false,
     });
@@ -454,6 +456,7 @@ function makeTask(name: string): Task {
     statusChangedAt: '2026-06-05T10:00:00.000Z',
     lastInteractedAt: '2026-06-05T10:00:00.000Z',
     isPinned: false,
+    isFavorite: false,
     isLongTerm: false,
     needsReview: false,
     isUserNamed: false,

@@ -1,3 +1,5 @@
+import type { NotificationReason, NotificationStatus } from '@shared/notifications';
+
 export const WORKSPACE_NOTIFICATION_STORAGE_KEY = 'yoda:workspace-notifications:v2';
 export const WORKSPACE_NOTIFICATION_LIMIT = 200;
 
@@ -17,12 +19,27 @@ export type WorkspaceNotification = {
   details?: string;
   kind: WorkspaceNotificationKind;
   source: WorkspaceNotificationSource;
+  reason: NotificationReason;
+  status: NotificationStatus;
   createdAt: string;
+  updatedAt: string;
   readAt: string | null;
+  resolvedAt?: string;
+  occurrenceCount: number;
+  dedupeKey?: string;
   target?: WorkspaceNotificationTarget;
 };
 
-export type WorkspaceNotificationInput = Omit<WorkspaceNotification, 'id' | 'createdAt' | 'readAt'>;
+export type WorkspaceNotificationInput = Omit<
+  WorkspaceNotification,
+  'id' | 'createdAt' | 'updatedAt' | 'readAt' | 'resolvedAt' | 'occurrenceCount' | 'status'
+> & {
+  status?: NotificationStatus;
+};
+
+export type WorkspaceNotificationResolution = Partial<
+  Pick<WorkspaceNotification, 'title' | 'description' | 'details' | 'kind'>
+>;
 
 export type WorkspaceNotificationAction = {
   label: string;
@@ -73,6 +90,21 @@ function parseNotification(value: unknown): WorkspaceNotification | null {
     kind: entry.kind,
     source: entry.source,
     createdAt: entry.createdAt,
+    updatedAt: typeof entry.updatedAt === 'string' ? entry.updatedAt : entry.createdAt,
+    reason:
+      entry.reason === 'action-required' ||
+      entry.reason === 'error' ||
+      entry.reason === 'blocking-warning' ||
+      entry.reason === 'subscribed-result'
+        ? entry.reason
+        : entry.kind === 'error'
+          ? 'error'
+          : 'action-required',
+    status: entry.status === 'resolved' ? 'resolved' : 'active',
+    occurrenceCount:
+      typeof entry.occurrenceCount === 'number' && entry.occurrenceCount > 0
+        ? entry.occurrenceCount
+        : 1,
     // Entries created before read tracking existed are historical, so migrate
     // them as read instead of turning the entire retained queue into unread.
     readAt:
@@ -112,15 +144,28 @@ export class WorkspaceNotificationStore {
     this.ensureLoaded();
     this.refreshFromStorage();
 
-    const id = existingId ?? createNotificationId();
+    const matchedId =
+      existingId ??
+      (input.dedupeKey
+        ? this.entries.find((entry) => entry.dedupeKey === input.dedupeKey)?.id
+        : undefined);
+    const previous = matchedId ? this.entries.find((entry) => entry.id === matchedId) : undefined;
+    const id = matchedId ?? createNotificationId();
+    const now = new Date().toISOString();
+    const status = input.status ?? 'active';
     const next: WorkspaceNotification = {
       ...input,
       id,
       title: input.title.trim(),
       description: input.description?.trim() || undefined,
       details: input.details?.trim() || undefined,
-      createdAt: new Date().toISOString(),
-      readAt: null,
+      status,
+      createdAt: previous?.createdAt ?? now,
+      updatedAt: now,
+      readAt: status === 'resolved' ? now : null,
+      resolvedAt: status === 'resolved' ? now : undefined,
+      occurrenceCount: previous ? previous.occurrenceCount + 1 : 1,
+      dedupeKey: input.dedupeKey ?? previous?.dedupeKey,
     };
     this.entries = [next, ...this.entries.filter((entry) => entry.id !== id)].slice(
       0,
@@ -139,11 +184,49 @@ export class WorkspaceNotificationStore {
     return this.actions.get(id);
   }
 
+  get(id: string): WorkspaceNotification | undefined {
+    this.ensureLoaded();
+    return this.entries.find((entry) => entry.id === id);
+  }
+
+  getByDedupeKey(dedupeKey: string): WorkspaceNotification | undefined {
+    this.ensureLoaded();
+    return this.entries.find((entry) => entry.dedupeKey === dedupeKey);
+  }
+
   invokeAction(id: string, event: unknown): void {
     const action = this.actions.get(id);
     if (!action) return;
     action.onClick(event);
     this.remove(id);
+  }
+
+  resolve(id: string, resolution: WorkspaceNotificationResolution = {}): void {
+    this.ensureLoaded();
+    const index = this.entries.findIndex((entry) => entry.id === id);
+    if (index === -1) return;
+    const now = new Date().toISOString();
+    const current = this.entries[index];
+    const next = [...this.entries];
+    next[index] = {
+      ...current,
+      ...resolution,
+      title: resolution.title?.trim() || current.title,
+      description:
+        resolution.description === undefined
+          ? current.description
+          : resolution.description.trim() || undefined,
+      details:
+        resolution.details === undefined ? current.details : resolution.details.trim() || undefined,
+      kind: resolution.kind ?? 'success',
+      status: 'resolved',
+      updatedAt: now,
+      resolvedAt: now,
+      readAt: now,
+    };
+    this.entries = next;
+    this.actions.delete(id);
+    this.persistAndEmit();
   }
 
   markRead(id: string): void {

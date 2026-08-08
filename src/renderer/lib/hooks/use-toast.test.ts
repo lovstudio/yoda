@@ -183,4 +183,64 @@ describe('toast', () => {
 
     expect(workspaceNotificationStore.getSnapshot()).toEqual([]);
   });
+
+  it('retains explicitly subscribed results without an action button', () => {
+    toast({
+      title: 'Export finished',
+      description: 'The requested archive is ready.',
+      notification: 'subscribed-result',
+    });
+
+    expect(workspaceNotificationStore.getSnapshot()).toMatchObject([
+      {
+        title: 'Export finished',
+        reason: 'subscribed-result',
+        status: 'active',
+      },
+    ]);
+  });
+
+  it('coalesces repeated warnings by their stable notification key', () => {
+    toast({
+      title: 'tmux is unavailable',
+      notification: 'blocking-warning',
+      notificationKey: 'tmux-unavailable:local',
+    });
+    toast({
+      title: 'tmux is still unavailable',
+      notification: 'blocking-warning',
+      notificationKey: 'tmux-unavailable:local',
+    });
+
+    expect(workspaceNotificationStore.getSnapshot()).toMatchObject([
+      {
+        title: 'tmux is still unavailable',
+        reason: 'blocking-warning',
+        occurrenceCount: 2,
+        dedupeKey: 'tmux-unavailable:local',
+      },
+    ]);
+  });
+
+  it('updates a blocking warning in place when the condition recovers', () => {
+    toast(
+      {
+        title: 'Disk space is low',
+        notification: 'blocking-warning',
+      },
+      { id: 'disk-space' }
+    );
+
+    toast.success('Disk space recovered', { id: 'disk-space' });
+
+    expect(workspaceNotificationStore.getSnapshot()).toMatchObject([
+      {
+        title: 'Disk space recovered',
+        reason: 'blocking-warning',
+        status: 'resolved',
+        kind: 'success',
+      },
+    ]);
+    expect(workspaceNotificationStore.getSnapshot()[0].readAt).not.toBeNull();
+  });
 });

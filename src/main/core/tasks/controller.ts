@@ -17,6 +17,7 @@ import { moveTaskToProject } from './operations/moveTaskToProject';
 import { regenerateTaskName } from './operations/regenerateTaskName';
 import { renameTask } from './operations/renameTask';
 import { restoreTask } from './operations/restoreTask';
+import { setTaskFavorite } from './operations/setTaskFavorite';
 import { setTaskLongTerm } from './operations/setTaskLongTerm';
 import { setTaskNeedsReview } from './operations/setTaskNeedsReview';
 import { setTaskParent } from './operations/setTaskParent';
@@ -51,6 +52,7 @@ export const taskController = createRPCController({
   updateTaskStatus,
   moveTaskStatus,
   setTaskPinned,
+  setTaskFavorite,
   setTaskLongTerm,
   setTaskNeedsReview,
   setTaskParent,

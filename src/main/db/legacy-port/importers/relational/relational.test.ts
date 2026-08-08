@@ -64,6 +64,7 @@ function createAppDb(): {
       last_interacted_at TEXT,
       status_changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       is_pinned INTEGER NOT NULL DEFAULT 0,
+      is_favorite INTEGER NOT NULL DEFAULT 0,
       is_long_term INTEGER NOT NULL DEFAULT 0,
       needs_review INTEGER NOT NULL DEFAULT 0,
       is_user_named INTEGER NOT NULL DEFAULT 0,
@@ -296,7 +297,7 @@ describe('legacy-port table passes', () => {
 
     const insertedTask = appSqlite
       .prepare(
-        `SELECT project_id, status, source_branch, task_branch, status_changed_at, last_interacted_at, is_pinned, is_long_term FROM tasks WHERE id = ?`
+        `SELECT project_id, status, source_branch, task_branch, status_changed_at, last_interacted_at, is_pinned, is_favorite, is_long_term FROM tasks WHERE id = ?`
       )
       .get(insertedTaskId) as {
       project_id: string;
@@ -306,6 +307,7 @@ describe('legacy-port table passes', () => {
       status_changed_at: string | null;
       last_interacted_at: string | null;
       is_pinned: number;
+      is_favorite: number;
       is_long_term: number;
     };
 
@@ -316,6 +318,7 @@ describe('legacy-port table passes', () => {
     expect(insertedTask.status_changed_at).toBe('2026-01-02T12:00:00.000Z');
     expect(insertedTask.last_interacted_at).toBe('2026-01-02T12:00:00.000Z');
     expect(insertedTask.is_pinned).toBe(0);
+    expect(insertedTask.is_favorite).toBe(0);
     expect(insertedTask.is_long_term).toBe(0);
 
     expect(conversationsSummary.considered).toBe(2);

@@ -66,6 +66,8 @@ describe('TaskContextMenu drag isolation', () => {
           createElement(TaskContextMenu, {
             isPinned: false,
             canPin: false,
+            isFavorite: false,
+            canFavorite: false,
             isArchived: false,
             needsReview: false,
             canMarkReview: false,
@@ -73,6 +75,8 @@ describe('TaskContextMenu drag isolation', () => {
             canMarkLongTerm: false,
             onPin: vi.fn(),
             onUnpin: vi.fn(),
+            onFavorite: vi.fn(),
+            onUnfavorite: vi.fn(),
             onMarkNeedsReview: vi.fn(),
             onUnmarkNeedsReview: vi.fn(),
             onMarkLongTerm: vi.fn(),

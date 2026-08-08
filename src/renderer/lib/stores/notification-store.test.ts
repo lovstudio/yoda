@@ -16,7 +16,12 @@ describe('WorkspaceNotificationStore', () => {
     const store = new WorkspaceNotificationStore('notifications', () => storage);
 
     for (let index = 0; index < WORKSPACE_NOTIFICATION_LIMIT + 4; index += 1) {
-      store.enqueue({ title: `Notification ${index}`, kind: 'info', source: 'toast' });
+      store.enqueue({
+        title: `Notification ${index}`,
+        kind: 'info',
+        source: 'toast',
+        reason: 'action-required',
+      });
     }
 
     expect(store.getSnapshot()).toHaveLength(WORKSPACE_NOTIFICATION_LIMIT);
@@ -26,9 +31,17 @@ describe('WorkspaceNotificationStore', () => {
 
   it('updates an existing notification in place without duplicating it', () => {
     const store = new WorkspaceNotificationStore('notifications', () => null);
-    const id = store.enqueue({ title: 'Working…', kind: 'loading', source: 'toast' });
+    const id = store.enqueue({
+      title: 'Working…',
+      kind: 'loading',
+      source: 'toast',
+      reason: 'subscribed-result',
+    });
 
-    store.enqueue({ title: 'Finished', kind: 'success', source: 'toast' }, id);
+    store.enqueue(
+      { title: 'Finished', kind: 'success', source: 'toast', reason: 'subscribed-result' },
+      id
+    );
 
     expect(store.getSnapshot()).toMatchObject([
       { id, title: 'Finished', kind: 'success', source: 'toast' },
@@ -38,8 +51,13 @@ describe('WorkspaceNotificationStore', () => {
   it('supports deleting one notification and clearing the queue', () => {
     const storage = createStorage();
     const store = new WorkspaceNotificationStore('notifications', () => storage);
-    const first = store.enqueue({ title: 'First', kind: 'info', source: 'system' });
-    store.enqueue({ title: 'Second', kind: 'error', source: 'toast' });
+    const first = store.enqueue({
+      title: 'First',
+      kind: 'info',
+      source: 'system',
+      reason: 'action-required',
+    });
+    store.enqueue({ title: 'Second', kind: 'error', source: 'toast', reason: 'error' });
 
     store.remove(first);
     expect(store.getSnapshot().map((entry) => entry.title)).toEqual(['Second']);
@@ -52,8 +70,18 @@ describe('WorkspaceNotificationStore', () => {
   it('tracks unread state per notification and supports marking the queue read', () => {
     const storage = createStorage();
     const store = new WorkspaceNotificationStore('notifications', () => storage);
-    const first = store.enqueue({ title: 'First', kind: 'info', source: 'system' });
-    const second = store.enqueue({ title: 'Second', kind: 'success', source: 'toast' });
+    const first = store.enqueue({
+      title: 'First',
+      kind: 'info',
+      source: 'system',
+      reason: 'action-required',
+    });
+    const second = store.enqueue({
+      title: 'Second',
+      kind: 'success',
+      source: 'toast',
+      reason: 'subscribed-result',
+    });
 
     expect(store.getSnapshot().map((entry) => entry.readAt)).toEqual([null, null]);
 
@@ -93,7 +121,12 @@ describe('WorkspaceNotificationStore', () => {
     const store = new WorkspaceNotificationStore('notifications', () => storage);
     const onClick = vi.fn();
     const id = store.enqueue(
-      { title: 'Reusable operation', kind: 'info', source: 'toast' },
+      {
+        title: 'Reusable operation',
+        kind: 'info',
+        source: 'toast',
+        reason: 'action-required',
+      },
       undefined,
       { label: 'Save operation', onClick }
     );
@@ -106,5 +139,45 @@ describe('WorkspaceNotificationStore', () => {
     expect(onClick).toHaveBeenCalledWith('event');
     expect(store.getAction(id)).toBeUndefined();
     expect(store.getSnapshot()).toEqual([]);
+  });
+
+  it('coalesces repeated events and resolves the original notification', () => {
+    const store = new WorkspaceNotificationStore('notifications', () => null);
+    const firstId = store.enqueue({
+      title: 'Connection unavailable',
+      kind: 'info',
+      source: 'system',
+      reason: 'blocking-warning',
+      dedupeKey: 'gateway:offline',
+    });
+    const secondId = store.enqueue({
+      title: 'Connection still unavailable',
+      kind: 'info',
+      source: 'system',
+      reason: 'blocking-warning',
+      dedupeKey: 'gateway:offline',
+    });
+
+    expect(secondId).toBe(firstId);
+    expect(store.getSnapshot()).toMatchObject([
+      { id: firstId, occurrenceCount: 2, status: 'active', readAt: null },
+    ]);
+
+    store.resolve(firstId, {
+      title: 'Connection restored',
+      description: 'The gateway is reachable again.',
+    });
+
+    expect(store.getSnapshot()).toMatchObject([
+      {
+        id: firstId,
+        title: 'Connection restored',
+        kind: 'success',
+        status: 'resolved',
+        occurrenceCount: 2,
+      },
+    ]);
+    expect(store.getSnapshot()[0].readAt).not.toBeNull();
+    expect(store.getSnapshot()[0].resolvedAt).not.toBeNull();
   });
 });

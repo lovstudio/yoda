@@ -504,6 +504,7 @@ function makeTask(
     parentTaskId: timestamps.parentTaskId,
     archivedAt: timestamps.archivedAt,
     isPinned: timestamps.isPinned ?? false,
+    isFavorite: false,
     isLongTerm: false,
     needsReview: timestamps.needsReview ?? false,
     isUserNamed: false,
