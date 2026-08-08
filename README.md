@@ -170,6 +170,7 @@ Yoda 可以把 ticket、issue 和支持线程直接交给 agent。
 | [Trello](https://trello.com/) | API key + API token |
 | [Plane](https://plane.so/) | API base URL + workspace slug + API key |
 | [Notion](https://www.notion.so/) | Integration token |
+| [飞书任务](https://www.feishu.cn/product/tasks) | Official `lark-cli` user authorization |
 
 <a id="architecture"></a>
 
@@ -192,7 +193,7 @@ Yoda 是一个 Electron 桌面应用，主要分为三层：
 - **前端**：React、MobX、TanStack Query、Radix UI、xterm.js、Tailwind CSS
 - **移动端**：Expo、React Native
 - **主进程**：TypeScript、Drizzle ORM、SQLite、node-pty、ssh2
-- **集成**：GitHub、Linear、Jira、GitLab、Forgejo、Plain、Featurebase、Asana、Monday.com、Trello、Plane、Notion、MCP
+- **集成**：GitHub、Linear、Jira、GitLab、Forgejo、Plain、Featurebase、Asana、Monday.com、Trello、Plane、Notion、飞书、MCP
 - **质量与发布**：Vitest、ESLint、Prettier、Changesets、GitHub Actions
 
 <a id="contributing"></a>

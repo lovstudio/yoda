@@ -140,6 +140,7 @@ type IntegrationsContextValue = {
   isTrelloConnected: boolean | null;
   isPlaneConnected: boolean | null;
   isNotionConnected: boolean | null;
+  isFeishuConnected: boolean | null;
 
   // Auth mutations stay per provider.
   isLinearLoading: boolean;
@@ -153,6 +154,7 @@ type IntegrationsContextValue = {
   isTrelloLoading: boolean;
   isPlaneLoading: boolean;
   isNotionLoading: boolean;
+  isFeishuLoading: boolean;
   connectLinear: (apiKey: string) => Promise<void>;
   disconnectLinear: () => Promise<void>;
   connectJira: (credentials: { siteUrl: string; email: string; token: string }) => Promise<void>;
@@ -275,6 +277,7 @@ export function IntegrationsProvider({ children }: { children: React.ReactNode }
         isTrelloConnected: isConnected(statusData, 'trello'),
         isPlaneConnected: isConnected(statusData, 'plane'),
         isNotionConnected: isConnected(statusData, 'notion'),
+        isFeishuConnected: isConnected(statusData, 'feishu'),
         isLinearLoading: isInitialConnectionCheck || linearConnection.isLoading,
         isJiraLoading: isInitialConnectionCheck || jiraConnection.isLoading,
         isGitlabLoading: isInitialConnectionCheck || gitlabConnection.isLoading,
@@ -286,6 +289,7 @@ export function IntegrationsProvider({ children }: { children: React.ReactNode }
         isTrelloLoading: isInitialConnectionCheck || trelloConnection.isLoading,
         isPlaneLoading: isInitialConnectionCheck || planeConnection.isLoading,
         isNotionLoading: isInitialConnectionCheck || notionConnection.isLoading,
+        isFeishuLoading: isInitialConnectionCheck,
         connectLinear: linearConnection.connect,
         disconnectLinear: linearConnection.disconnect,
         connectJira: jiraConnection.connect,

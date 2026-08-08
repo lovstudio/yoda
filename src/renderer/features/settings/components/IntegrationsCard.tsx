@@ -9,6 +9,7 @@ import jiraSvg from '@/assets/images/Jira.svg?raw';
 import linearSvg from '@/assets/images/Linear.svg?raw';
 import lovcodeSvg from '@/assets/images/Lovcode.svg?raw';
 import asanaSvg from '@/assets/images/mcp/asana.svg?raw';
+import feishuSvg from '@/assets/images/mcp/feishu.svg?raw';
 import mondaySvg from '@/assets/images/mcp/monday.svg?raw';
 import notionSvg from '@/assets/images/mcp/notion.svg?raw';
 import planeSvg from '@/assets/images/mcp/plane.svg?raw';
@@ -111,6 +112,8 @@ const IntegrationsCard: React.FC = () => {
     isNotionConnected,
     isNotionLoading,
     disconnectNotion,
+    isFeishuConnected,
+    isFeishuLoading,
   } = useIntegrationsContext();
 
   const showIntegrationSetup = useShowModal('integrationSetupModal');
@@ -334,6 +337,21 @@ const IntegrationsCard: React.FC = () => {
       loading: isNotionLoading,
       onConnect: () => showIntegrationSetup({ integration: 'notion' }),
       onDisconnect: disconnectNotion,
+    },
+    {
+      id: 'feishu',
+      name: '飞书',
+      description:
+        isFeishuConnected && connectionStatus.feishu.displayName
+          ? connectionStatus.feishu.displayName
+          : t('settings.integrationsTab.feishuDescription'),
+      logoSvg: feishuSvg,
+      connected: !!isFeishuConnected,
+      loading: isFeishuLoading,
+      onConnect: () => showIntegrationSetup({ integration: 'feishu' }),
+      disabledTooltip: isFeishuConnected
+        ? t('settings.integrationsTab.feishuCliManagedTooltip')
+        : undefined,
     },
   ];
 

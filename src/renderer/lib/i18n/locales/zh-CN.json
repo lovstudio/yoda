@@ -814,6 +814,8 @@
       "trelloDescription": "从 Trello 卡片开始工作",
       "planeDescription": "处理 Plane 工作项",
       "notionDescription": "从 Notion 数据库页面开始工作",
+      "feishuDescription": "从分配给你的飞书任务开始工作",
+      "feishuCliManagedTooltip": "登录态由 lark-cli 管理",
       "litellmDescription": "统一管理多个模型服务，并提供自动路由、负载均衡与故障切换",
       "litellmConnectedDescription": "Gateway：{{endpoint}}",
       "litellmManagedDescription": "Yoda 将自动下载 LiteLLM 与 PostgreSQL、生成密钥并完成本机连接",
@@ -4994,6 +4996,13 @@
         "title": "Notion 集成令牌",
         "help": "创建 Notion 内部集成，并把需要访问的页面或数据库共享给该集成。",
         "tokenPlaceholder": "ntn_…"
+      },
+      "feishu": {
+        "title": "使用飞书 CLI 连接",
+        "help": "Yoda 复用当前 lark-cli profile，只申请读取飞书任务所需的最小权限，不额外保存飞书密钥。",
+        "startAuthorization": "在飞书中授权",
+        "finishAuthorization": "我已完成授权",
+        "waiting": "授权页面已打开。确认授权后返回 Yoda，点击“我已完成授权”。"
       }
     },
     "connectFailed": "连接失败。",
@@ -5042,6 +5051,10 @@
       "notion": {
         "title": "连接 Notion",
         "subtitle": "连接后可浏览已共享数据库中的页面。"
+      },
+      "feishu": {
+        "title": "连接飞书任务",
+        "subtitle": "通过官方 lark-cli 读取、搜索并补全分配给你的飞书任务。"
       }
     }
   },

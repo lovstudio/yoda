@@ -1,6 +1,7 @@
 import type { IssueProviderType } from '@shared/issue-providers';
 import { asanaIssueProvider } from '@main/core/asana/asana-issue-provider';
 import { featurebaseIssueProvider } from '@main/core/featurebase/featurebase-issue-provider';
+import { feishuIssueProvider } from '@main/core/feishu/feishu-issue-provider';
 import { forgejoIssueProvider } from '@main/core/forgejo/forgejo-issue-provider';
 import { githubIssueProvider } from '@main/core/github/github-issue-provider';
 import { gitlabIssueProvider } from '@main/core/gitlab/gitlab-issue-provider';
@@ -31,6 +32,7 @@ register(mondayIssueProvider);
 register(trelloIssueProvider);
 register(planeIssueProvider);
 register(notionIssueProvider);
+register(feishuIssueProvider);
 
 export function getIssueProvider(type: IssueProviderType): IssueProvider | undefined {
   return providers.get(type);
