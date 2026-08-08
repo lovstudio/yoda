@@ -1,4 +1,4 @@
-import { Copy, Crown, Plus, Trash2, Users, X } from 'lucide-react';
+import { Copy, Crown, Plus, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -390,6 +390,7 @@ function TeamEditor({
   const { t } = useTranslation();
   const { toast } = useToast();
   const showAgentModal = useShowModal('agentEditModal');
+  const [memberPickerOpen, setMemberPickerOpen] = useState(false);
   const runtimeOptions = RUNTIMES.filter((r) => r.terminalOnly);
   const setMembers = (members: AgentTeamMember[]) => onChange({ ...draft, members });
   const showAvatarFileError = (error: AvatarFileError) => {
@@ -428,7 +429,7 @@ function TeamEditor({
       <h2 className="mb-4 text-lg font-semibold">
         {t(isNew ? 'agentTeams.newTeam' : 'agentTeams.editTeam')}
       </h2>
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3">
         <div className="flex items-end gap-3 rounded-xl border border-border bg-muted/15 p-3">
           <AvatarInput
             id="agent-team-avatar"
@@ -461,68 +462,32 @@ function TeamEditor({
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label className="text-xs">{t('agentTeams.collaboration')}</Label>
-            <Select
-              value={draft.routing}
-              onValueChange={(value) => onChange({ ...draft, routing: value as TeamRouting })}
-            >
-              <SelectTrigger className="h-9 w-full text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(ROUTING_LABEL_KEYS) as TeamRouting[]).map((routing) => (
-                  <SelectItem key={routing} value={routing}>
-                    {t(ROUTING_LABEL_KEYS[routing])}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="agent-team-routing-limit" className="text-xs">
-              {t('agentTeams.routingLimit')}
-            </Label>
-            <div className="flex h-9 items-center gap-2">
-              <Input
-                id="agent-team-routing-limit"
-                type="number"
-                min={1}
-                step={1}
-                disabled={draft.routingHopLimit === null}
-                value={draft.routingHopLimit ?? ''}
-                onChange={(e) =>
-                  onChange({
-                    ...draft,
-                    routingHopLimit: normalizeRoutingHopLimit(Number(e.target.value)),
-                  })
-                }
-                className="h-9 min-w-0 flex-1 text-sm"
-              />
-              <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-foreground-muted">
-                <Checkbox
-                  checked={draft.routingHopLimit === null}
-                  onCheckedChange={(checked) =>
-                    onChange({
-                      ...draft,
-                      routingHopLimit: checked ? null : DEFAULT_ROUTING_HOP_LIMIT,
-                    })
-                  }
-                />
-                {t('agentTeams.unlimited')}
-              </label>
-            </div>
-            <p className="text-[10px] text-muted-foreground">{t('agentTeams.routingLimitHint')}</p>
-          </div>
-        </div>
-
-        <div className="space-y-3 rounded-xl border border-border bg-muted/10 p-3">
+        <section className="space-y-3 rounded-xl border border-border bg-muted/10 p-3">
           <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label className="text-xs">{t('agentTeams.collaboration')}</Label>
+              <Select
+                modal={false}
+                value={draft.routing}
+                onValueChange={(value) => onChange({ ...draft, routing: value as TeamRouting })}
+              >
+                <SelectTrigger className="h-9 w-full text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(ROUTING_LABEL_KEYS) as TeamRouting[]).map((routing) => (
+                    <SelectItem key={routing} value={routing}>
+                      {t(ROUTING_LABEL_KEYS[routing])}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <Label className="text-xs">{t('agentTeams.communicationMode')}</Label>
               <Select
+                modal={false}
                 value={draft.communication.mode}
                 onValueChange={(mode) =>
                   onChange({
@@ -548,11 +513,51 @@ function TeamEditor({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-[10px] leading-relaxed text-muted-foreground">
-                {t(`agentTeams.communicationModes.${draft.communication.mode}.description`)}
-              </p>
             </div>
-            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-background/50 p-3">
+
+            <div className="space-y-2">
+              <Label
+                htmlFor="agent-team-routing-limit"
+                className="text-xs"
+                title={t('agentTeams.routingLimitHint')}
+              >
+                {t('agentTeams.routingLimit')}
+              </Label>
+              <div className="flex h-9 items-center gap-2">
+                <Input
+                  id="agent-team-routing-limit"
+                  type="number"
+                  min={1}
+                  step={1}
+                  disabled={draft.routingHopLimit === null}
+                  value={draft.routingHopLimit ?? ''}
+                  onChange={(e) =>
+                    onChange({
+                      ...draft,
+                      routingHopLimit: normalizeRoutingHopLimit(Number(e.target.value)),
+                    })
+                  }
+                  className="h-9 min-w-0 flex-1 text-sm"
+                />
+                <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-foreground-muted">
+                  <Checkbox
+                    checked={draft.routingHopLimit === null}
+                    onCheckedChange={(checked) =>
+                      onChange({
+                        ...draft,
+                        routingHopLimit: checked ? null : DEFAULT_ROUTING_HOP_LIMIT,
+                      })
+                    }
+                  />
+                  {t('agentTeams.unlimited')}
+                </label>
+              </div>
+            </div>
+
+            <label
+              className="flex h-9 cursor-pointer items-center gap-2 self-end rounded-md border border-border bg-background/40 px-2.5"
+              title={t('agentTeams.syncToRoomHint')}
+            >
               <Checkbox
                 checked={draft.communication.syncToRoom}
                 onCheckedChange={(checked) =>
@@ -562,14 +567,13 @@ function TeamEditor({
                   })
                 }
               />
-              <span className="space-y-1">
-                <span className="block text-xs font-medium">{t('agentTeams.syncToRoom')}</span>
-                <span className="block text-[10px] leading-relaxed text-muted-foreground">
-                  {t('agentTeams.syncToRoomHint')}
-                </span>
-              </span>
+              <span className="text-xs font-medium">{t('agentTeams.syncToRoom')}</span>
             </label>
           </div>
+
+          <p className="text-[10px] leading-relaxed text-muted-foreground">
+            {t(`agentTeams.communicationModes.${draft.communication.mode}.description`)}
+          </p>
 
           {draft.communication.mode === 'shared-file' ? (
             <div className="space-y-2">
@@ -642,28 +646,23 @@ function TeamEditor({
               </p>
             </div>
           ) : null}
-        </div>
+        </section>
 
-        <div className="flex flex-col gap-2">
-          <div className="flex items-end justify-between gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">
-                {t('agentTeams.members')}
-                <span className="ml-0.5 text-destructive" aria-hidden>
-                  *
-                </span>
-              </Label>
-              <p className="text-[10px] text-muted-foreground">{t('agentTeams.membersHint')}</p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => showAgentModal({ onSuccess: addAgent })}
-            >
-              <Plus className="size-3.5" />
-              {t('agentTeams.createAgent')}
-            </Button>
+        <section
+          aria-labelledby="agent-team-members-label"
+          aria-describedby="agent-team-members-hint"
+          className="space-y-3 rounded-xl border border-border bg-muted/10 p-3"
+        >
+          <div className="space-y-1">
+            <Label id="agent-team-members-label" className="text-xs">
+              {t('agentTeams.members')}
+              <span className="ml-0.5 text-destructive" aria-hidden>
+                *
+              </span>
+            </Label>
+            <p id="agent-team-members-hint" className="text-[10px] text-muted-foreground">
+              {t('agentTeams.membersHint')}
+            </p>
           </div>
           <div className="flex flex-col gap-1.5">
             {draft.members.map((m) => (
@@ -690,6 +689,7 @@ function TeamEditor({
                       <Crown className="size-3.5" />
                     </button>
                     <Select
+                      modal={false}
                       value={m.runtime}
                       onValueChange={(value) =>
                         setMembers(
@@ -723,30 +723,62 @@ function TeamEditor({
               />
             ))}
             {draft.members.length === 0 && (
-              <p className="rounded-lg border border-border bg-background-1 px-2 py-2 text-center text-xs text-foreground-muted">
-                {t('agentTeams.noMembers')}
-              </p>
+              <div className="flex flex-col items-center gap-1 py-3 text-center text-foreground-muted">
+                <Users className="size-5 opacity-50" />
+                <p className="text-xs">{t('agentTeams.noMembers')}</p>
+              </div>
             )}
           </div>
-          <Select
-            value={null}
-            onValueChange={(agentId) => {
-              const agent = agents.find((candidate) => candidate.id === agentId);
-              if (agent) addAgent(agent);
-            }}
-          >
-            <SelectTrigger className="h-9 w-full text-sm" aria-label={t('agentTeams.addAgent')}>
-              <SelectValue placeholder={t('agentTeams.addAgent')} />
-            </SelectTrigger>
-            <SelectContent>
-              {availableAgents.map((agent) => (
-                <SelectItem key={agent.id} value={agent.id}>
-                  {avatarDisplayText(agent.name, agent.icon)} {agent.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+          <div className="flex items-center gap-2">
+            <Select
+              modal={false}
+              open={memberPickerOpen}
+              onOpenChange={setMemberPickerOpen}
+              value={null}
+              onValueChange={(agentId) => {
+                const agent = agents.find((candidate) => candidate.id === agentId);
+                if (agent) addAgent(agent);
+                setMemberPickerOpen(false);
+              }}
+            >
+              <SelectTrigger
+                disabled={availableAgents.length === 0}
+                className="h-9 min-w-0 flex-1 justify-start text-sm"
+                aria-label={t('agentTeams.addAgent')}
+              >
+                <UserPlus className="size-3.5 text-foreground-muted" />
+                <SelectValue
+                  placeholder={
+                    availableAgents.length > 0
+                      ? t('agentTeams.addAgent')
+                      : t('agentTeams.noAvailableAgents')
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent
+                align="start"
+                alignItemWithTrigger={false}
+                className="min-w-(--anchor-width)"
+                style={{ maxHeight: '16rem' }}
+              >
+                {availableAgents.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {avatarDisplayText(agent.name, agent.icon)} {agent.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 shrink-0"
+              onClick={() => showAgentModal({ onSuccess: addAgent })}
+            >
+              <Plus className="size-3.5" />
+              {t('agentTeams.createAgent')}
+            </Button>
+          </div>
+        </section>
 
         <div className="mt-2 flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onCancel}>
