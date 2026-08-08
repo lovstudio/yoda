@@ -27,6 +27,10 @@ import { runtimeIdSchema } from '@shared/runtime-id-schema';
 import { RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES } from '@shared/runtime-model-candidates';
 import { AGENT_ACCOUNT_PROVIDER_IDS, RUNTIMES } from '@shared/runtime-registry';
 import {
+  getDefaultRuntimeStatusMonitor,
+  RUNTIME_STATUS_MONITOR_IDS,
+} from '@shared/runtime-status-monitor';
+import {
   DEFAULT_SUMMARY_CONTEXT_GLOBAL,
   DEFAULT_SUMMARY_CONTEXT_RECENT,
   SUMMARY_CONTEXT_SOURCE_IDS,
@@ -232,6 +236,8 @@ export const runtimeCustomConfigEntrySchema = z.object({
   defaultReasoningEffort: z.string().optional(),
   /** Default Codex Fast mode for new sessions. */
   defaultFastMode: z.boolean().optional(),
+  /** Client-specific source used to observe live session state. */
+  statusMonitor: z.enum(RUNTIME_STATUS_MONITOR_IDS).optional(),
   namingModel: z.string().optional(),
   namingCommand: z.string().optional(),
 });
@@ -516,6 +522,7 @@ export const runtimeConfigDefaults = Object.fromEntries(
       ...(p.sessionIdFlag ? { sessionIdFlag: p.sessionIdFlag } : {}),
       ...(p.sessionIdOnResumeOnly ? { sessionIdOnResumeOnly: p.sessionIdOnResumeOnly } : {}),
       ...(p.namingCommand ? { namingCommand: p.namingCommand } : {}),
+      statusMonitor: getDefaultRuntimeStatusMonitor(p.id),
     },
   ])
 );

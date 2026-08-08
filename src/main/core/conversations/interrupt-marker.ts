@@ -24,12 +24,15 @@ export function markInterrupted(conversationId: string, at = Date.now()): void {
 }
 
 /**
- * Drop the marker on a confirmed new turn (`UserPromptSubmit` hook) so the
- * stateless deriveStatus can't gate the fresh `working` during the short
- * window before the prompt row lands in the transcript.
+ * Drop the marker on a confirmed new turn (hook or PID activity) so the
+ * stateless deriveStatus cannot gate the fresh `working` transition.
  */
 export function clearInterruptMarker(conversationId: string): void {
   markers.delete(conversationId);
+}
+
+export function hasInterruptMarker(conversationId: string): boolean {
+  return markers.has(conversationId);
 }
 
 /**

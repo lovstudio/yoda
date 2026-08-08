@@ -17,11 +17,9 @@ const INTERRUPT_INPUT = '\x1b';
 
 /**
  * How long the authoritative run-state sources get to confirm the interrupt. A
- * real interrupt lands in the transcript within ~100ms (interrupt sentinel /
- * turn_aborted) and flips the status through the normal pipeline. Hitting this
- * timeout means the session was stale-working — e.g. a turn killed by an app
- * restart leaves the transcript frozen mid-turn while the resumed CLI idles at
- * the prompt, so Esc has nothing to interrupt and no terminal row ever arrives.
+ * real interrupt lands in the selected activity/transcript/rollout source and
+ * flips status through the normal pipeline. Hitting this timeout means the
+ * session was stale-working, so Esc had nothing active to interrupt.
  */
 const CONFIRM_TIMEOUT_MS = 3_000;
 
@@ -29,8 +27,8 @@ const CONFIRM_TIMEOUT_MS = 3_000;
  * Interrupt a working agent session: send Esc to its PTY and, if no
  * authoritative source confirms a status change in time, force-clear the
  * status so a stale `working` can always be dismissed by the user. If the CLI
- * was genuinely working and ignored Esc, the next transcript-derived
- * transition re-asserts `working` — the force-clear is self-correcting.
+ * was genuinely working and ignored Esc, the next monitor transition re-asserts
+ * `working` — the force-clear is self-correcting.
  */
 export function interruptConversation(projectId: string, taskId: string, conversationId: string) {
   const session = { projectId, taskId, conversationId };
@@ -68,12 +66,11 @@ export function interruptConversation(projectId: string, taskId: string, convers
  * After an Esc was sent (or typed), give the authoritative sources
  * {@link CONFIRM_TIMEOUT_MS} to confirm; if the session is still `working`,
  * force-clear it. Self-correcting: a genuinely working CLI that ignored the
- * Esc re-asserts `working` on its next transcript-derived transition.
+ * Esc re-asserts `working` on its next monitor transition.
  */
 function scheduleInterruptReconcile(session: AgentSessionKey): void {
-  // Mark immediately: from this instant, transcript-`working` verdicts older
-  // than the interrupt are stale and must not self-heal back into the store
-  // (deriveStatus) or be re-asserted by the transcript tailer.
+  // Mark immediately so activity can distinguish busy -> idle interruption and
+  // the optional transcript monitor cannot resurrect a frozen working verdict.
   markInterrupted(session.conversationId);
   setTimeout(() => {
     if (agentSessionRuntimeStore.getStatus(session) !== 'working') return;

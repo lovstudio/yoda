@@ -7,6 +7,11 @@ import type { RuntimeCustomConfig } from '@shared/app-settings';
 import type { AgentModelCandidateInferenceResult } from '@shared/runtime-model-candidates';
 import { expandRuntimeHome, resolveRuntimePaths } from '@shared/runtime-paths';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
+import {
+  getRuntimeStatusMonitors,
+  resolveRuntimeStatusMonitor,
+  type RuntimeStatusMonitorId,
+} from '@shared/runtime-status-monitor';
 import CustomCommandModal from '@renderer/features/settings/components/CustomCommandModal';
 import StatuslineSettingsCard from '@renderer/features/settings/components/StatuslineSettingsCard';
 import { useRuntimeSettings } from '@renderer/features/settings/use-runtime-settings';
@@ -14,6 +19,13 @@ import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { Label } from '@renderer/lib/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/lib/ui/select';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { isImeComposing } from '@renderer/utils/ime';
 import { log } from '@renderer/utils/logger';
@@ -39,6 +51,8 @@ export const AgentTabSettings: React.FC<{ agentId: RuntimeId }> = observer(
             {t('agents.settings.editExec')}
           </Button>
         </AgentSection>
+
+        <AgentStatusMonitorSettings agentId={agentId} agentName={provider.name} />
 
         <AgentDefaultModelSettings agentId={agentId} agentName={provider.name} />
 
@@ -77,6 +91,54 @@ export const AgentTabSettings: React.FC<{ agentId: RuntimeId }> = observer(
     );
   }
 );
+
+const AgentStatusMonitorSettings: React.FC<{ agentId: RuntimeId; agentName: string }> = ({
+  agentId,
+  agentName,
+}) => {
+  const { t } = useTranslation();
+  const { value, isLoading, isSaving, update } = useRuntimeSettings(agentId);
+  const options = getRuntimeStatusMonitors(agentId);
+  const selected = resolveRuntimeStatusMonitor(agentId, value?.statusMonitor);
+
+  return (
+    <AgentSection
+      title={t('agents.settings.statusMonitorTitle')}
+      description={t('agents.settings.statusMonitorDescription', { name: agentName })}
+    >
+      <div className="space-y-2">
+        <Select
+          value={selected}
+          disabled={isLoading || isSaving}
+          onValueChange={(next) =>
+            update({
+              ...(value ?? {}),
+              statusMonitor: next as RuntimeStatusMonitorId,
+            })
+          }
+        >
+          <SelectTrigger
+            className="h-8 w-full max-w-sm text-xs"
+            aria-label={t('agents.settings.statusMonitorTitle')}
+          >
+            <SelectValue>{t(`agents.settings.statusMonitors.${selected}.label`)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((option) => (
+              <SelectItem key={option.id} value={option.id}>
+                {t(`agents.settings.statusMonitors.${option.id}.label`)}
+                {option.recommended ? ` · ${t('agents.settings.recommended')}` : ''}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {t(`agents.settings.statusMonitors.${selected}.description`)}
+        </p>
+      </div>
+    </AgentSection>
+  );
+};
 
 const AgentDefaultModelSettings: React.FC<{ agentId: RuntimeId; agentName: string }> = ({
   agentId,

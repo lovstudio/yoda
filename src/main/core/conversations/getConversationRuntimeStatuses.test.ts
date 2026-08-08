@@ -1,18 +1,15 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getConversationRunStatus } from './getConversationRuntimeStatuses';
-
-const state = vi.hoisted(() => ({
-  transcriptDir: '',
-}));
 
 const mocks = vi.hoisted(() => ({
   findClaudeTranscriptPathBySessionId: vi.fn(),
+  getClaudeSessionActivity: vi.fn(),
+  getProviderConfig: vi.fn(),
   getRuntimeStatus: vi.fn(),
   isInterruptedSinceLastPrompt: vi.fn(),
+  monitorRegistryGet: vi.fn(),
   ptyGet: vi.fn(),
+  readClaudeTurnVerdictFile: vi.fn(),
   readCodexTurnVerdict: vi.fn(),
   resolveTask: vi.fn(),
   setRuntimeStatus: vi.fn(),
@@ -26,7 +23,13 @@ vi.mock('@main/core/pty/pty-session-registry', () => ({
 
 vi.mock('@main/core/session-title/claude-title-source', () => ({
   resolveClaudeTranscriptPath: (_cwd: string, sessionId: string) =>
-    `${state.transcriptDir}/${sessionId}.jsonl`,
+    `/transcripts/${sessionId}.jsonl`,
+}));
+
+vi.mock('@main/core/settings/runtime-settings-service', () => ({
+  runtimeOverrideSettings: {
+    getItem: mocks.getProviderConfig,
+  },
 }));
 
 vi.mock('@main/db/client', () => ({
@@ -42,6 +45,14 @@ vi.mock('./agent-session-runtime', () => ({
   },
 }));
 
+vi.mock('./claude-run-state-source', () => ({
+  readClaudeTurnVerdictFile: mocks.readClaudeTurnVerdictFile,
+}));
+
+vi.mock('./claude-session-activity-source', () => ({
+  getClaudeSessionActivity: mocks.getClaudeSessionActivity,
+}));
+
 vi.mock('./claude-transcript-locator', () => ({
   findClaudeTranscriptPathBySessionId: mocks.findClaudeTranscriptPathBySessionId,
 }));
@@ -54,30 +65,22 @@ vi.mock('./interrupt-marker', () => ({
   isInterruptedSinceLastPrompt: mocks.isInterruptedSinceLastPrompt,
 }));
 
+vi.mock('./runtime-status-monitor-registry', () => ({
+  runtimeStatusMonitorRegistry: {
+    get: mocks.monitorRegistryGet,
+  },
+}));
+
 vi.mock('../projects/utils', () => ({
   resolveTask: mocks.resolveTask,
 }));
-
-function writeTranscript(conversationId: string): void {
-  const rows = [
-    { type: 'system', subtype: 'stop_hook_summary' },
-    {
-      type: 'user',
-      timestamp: '2026-06-10T00:00:05.000Z',
-      message: { role: 'user', content: 'continue' },
-    },
-  ];
-  writeFileSync(
-    join(state.transcriptDir, `${conversationId}.jsonl`),
-    `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`
-  );
-}
 
 function mountedTask(activeConversationIds: string[] = []) {
   return {
     conversations: {
       taskPath: '/repo',
-      getActiveSessions: () => activeConversationIds.map((conversationId) => ({ conversationId })),
+      getActiveSessions: () =>
+        activeConversationIds.map((conversationId) => ({ conversationId, pid: 4321 })),
     },
   };
 }
@@ -104,44 +107,82 @@ async function readCodexStatus(conversationId = 'conv-1') {
 
 describe('getConversationRunStatus', () => {
   beforeEach(() => {
-    state.transcriptDir = mkdtempSync(join(tmpdir(), 'yoda-runtime-status-'));
     vi.clearAllMocks();
     mocks.getRuntimeStatus.mockReturnValue('idle');
+    mocks.getProviderConfig.mockResolvedValue(undefined);
+    mocks.getClaudeSessionActivity.mockResolvedValue(null);
     mocks.isInterruptedSinceLastPrompt.mockReturnValue(false);
+    mocks.monitorRegistryGet.mockReturnValue(undefined);
     mocks.ptyGet.mockReturnValue(undefined);
   });
 
-  afterEach(() => {
-    rmSync(state.transcriptDir, { recursive: true, force: true });
-  });
-
-  it('gates a mounted transcript-only working verdict when no session is active', async () => {
-    writeTranscript('conv-1');
-    mocks.resolveTask.mockReturnValue(mountedTask());
-
-    await expect(readStatus()).resolves.toBe('idle');
-    expect(mocks.setRuntimeStatus).not.toHaveBeenCalled();
-  });
-
-  it('keeps transcript-derived working for cold-load tasks without a mounted provider', async () => {
-    writeTranscript('conv-1');
-    mocks.resolveTask.mockReturnValue(undefined);
+  it('derives Claude working directly from the active PID activity record', async () => {
+    mocks.resolveTask.mockReturnValue(mountedTask(['conv-1']));
+    mocks.getClaudeSessionActivity.mockResolvedValue({
+      pid: 4321,
+      sessionId: 'native-session',
+      cwd: '/repo',
+      status: 'busy',
+      waitingFor: null,
+      updatedAt: Date.now(),
+    });
 
     await expect(readStatus()).resolves.toBe('working');
-    expect(mocks.setRuntimeStatus).toHaveBeenCalledWith(
-      { projectId: 'project-1', taskId: 'task-1', conversationId: 'conv-1' },
-      'working'
+    expect(mocks.getClaudeSessionActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ processPid: 4321 })
     );
   });
 
-  it('keeps transcript-derived working when the mounted provider still has an active session', async () => {
-    writeTranscript('conv-1');
+  it('derives Claude awaiting-input from activity waiting state', async () => {
     mocks.resolveTask.mockReturnValue(mountedTask(['conv-1']));
+    mocks.getClaudeSessionActivity.mockResolvedValue({
+      pid: 4321,
+      sessionId: 'conv-1',
+      cwd: '/repo',
+      status: 'waiting',
+      waitingFor: 'AskUserQuestion',
+      updatedAt: Date.now(),
+    });
+
+    await expect(readStatus()).resolves.toBe('awaiting-input');
+  });
+
+  it('uses the selected Claude transcript monitor when configured', async () => {
+    mocks.resolveTask.mockReturnValue(mountedTask(['conv-1']));
+    mocks.getProviderConfig.mockResolvedValue({ statusMonitor: 'transcript' });
+    mocks.readClaudeTurnVerdictFile.mockResolvedValue({
+      state: 'working',
+      interrupted: false,
+      lastUserAt: Date.now(),
+    });
 
     await expect(readStatus()).resolves.toBe('working');
+    expect(mocks.readClaudeTurnVerdictFile).toHaveBeenCalledWith('/transcripts/conv-1.jsonl');
+    expect(mocks.getClaudeSessionActivity).not.toHaveBeenCalled();
+  });
+
+  it('uses the monitor fixed for the live session over a later settings change', async () => {
+    mocks.resolveTask.mockReturnValue(mountedTask(['conv-1']));
+    mocks.monitorRegistryGet.mockReturnValue('transcript');
+    mocks.getProviderConfig.mockResolvedValue({ statusMonitor: 'activity' });
+    mocks.readClaudeTurnVerdictFile.mockResolvedValue({
+      state: 'working',
+      interrupted: false,
+      lastUserAt: Date.now(),
+    });
+
+    await expect(readStatus()).resolves.toBe('working');
+    expect(mocks.getProviderConfig).not.toHaveBeenCalled();
+  });
+
+  it('gates cached working when no provider truth or live PTY remains', async () => {
+    mocks.getRuntimeStatus.mockReturnValue('working');
+    mocks.resolveTask.mockReturnValue(mountedTask());
+
+    await expect(readStatus()).resolves.toBe('idle');
     expect(mocks.setRuntimeStatus).toHaveBeenCalledWith(
       { projectId: 'project-1', taskId: 'task-1', conversationId: 'conv-1' },
-      'working'
+      'idle'
     );
   });
 
@@ -155,10 +196,6 @@ describe('getConversationRunStatus', () => {
 
     await expect(readCodexStatus()).resolves.toBe('working');
     expect(mocks.isInterruptedSinceLastPrompt).not.toHaveBeenCalled();
-    expect(mocks.setRuntimeStatus).toHaveBeenCalledWith(
-      { projectId: 'project-1', taskId: 'task-1', conversationId: 'conv-1' },
-      'working'
-    );
   });
 
   it('surfaces Codex request_user_input as awaiting-input for active sessions', async () => {
@@ -169,21 +206,21 @@ describe('getConversationRunStatus', () => {
     });
 
     await expect(readCodexStatus()).resolves.toBe('awaiting-input');
-    expect(mocks.setRuntimeStatus).toHaveBeenCalledWith(
-      { projectId: 'project-1', taskId: 'task-1', conversationId: 'conv-1' },
-      'awaiting-input'
-    );
   });
 
-  it('does not downgrade a live completed status when the rollout classifier reports idle', async () => {
+  it('does not downgrade a live completed status when the monitor reports idle', async () => {
     mocks.getRuntimeStatus.mockReturnValue('completed');
     mocks.resolveTask.mockReturnValue(mountedTask());
-    mocks.readCodexTurnVerdict.mockResolvedValue({
-      state: 'idle',
-      lastStartedAt: Date.parse('2026-06-10T00:00:05.000Z'),
+    mocks.getClaudeSessionActivity.mockResolvedValue({
+      pid: 4321,
+      sessionId: 'conv-1',
+      cwd: '/repo',
+      status: 'idle',
+      waitingFor: null,
+      updatedAt: Date.now(),
     });
 
-    await expect(readCodexStatus()).resolves.toBe('completed');
+    await expect(readStatus()).resolves.toBe('completed');
     expect(mocks.setRuntimeStatus).not.toHaveBeenCalled();
   });
 });
