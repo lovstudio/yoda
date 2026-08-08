@@ -127,7 +127,13 @@ describe('AgentEditModal', () => {
     await act(async () => {
       await userEvent.keyboard('{Escape}');
     });
-    await clickUser(host.querySelector('label:has([value="plan"])')!);
+    await clickUser(host.querySelector('[aria-label="agentManager.accessMode"]')!);
+    await settle();
+    const planMode = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-slot="select-item"]')
+    ).find((item) => item.textContent?.includes('agentManager.accessModes.plan.label'));
+    expect(planMode).not.toBeUndefined();
+    await clickUser(planMode!);
     const save = Array.from(host.querySelectorAll('button')).find(
       (button) => button.textContent === 'common.save'
     );
