@@ -229,7 +229,10 @@
       "matchesName": "别名与默认名称相同，留空即可。",
       "submit": "保存",
       "saving": "保存中…",
-      "failed": "重命名项目失败"
+      "failed": "重命名项目失败",
+      "pathRenameTitle": "同时重命名项目路径？",
+      "pathRenameDescription": "项目名与路径末级目录相同。是否同时将项目文件夹重命名为「{{name}}」？",
+      "pathRenameConfirm": "同时重命名路径"
     },
     "moveProjectPath": {
       "menuLabel": "移动项目路径…",
