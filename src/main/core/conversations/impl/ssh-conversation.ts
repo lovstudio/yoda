@@ -36,6 +36,7 @@ import { buildAgentCommand } from './agent-command';
 import { substituteImageMentions } from './image-attachments';
 import { getEnabledPromptPrinciplesText } from './prompt-principles';
 import { resolveRuntimeEnv, resolveRuntimeTmuxEnv } from './runtime-env';
+import { injectTuiStartupInput } from './tui-startup-input';
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
@@ -170,7 +171,7 @@ export class SshConversationProvider implements ConversationProvider {
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       const terminalThemeMode = await resolveTerminalThemeMode();
       if (!this.ownsPendingStart(sessionId, startToken)) return;
-      const { command, args } = buildAgentCommand({
+      const { command, args, startupInput } = buildAgentCommand({
         runtimeId: conversation.runtimeId,
         providerConfig,
         autoApprove: conversation.autoApprove,
@@ -243,6 +244,10 @@ export class SshConversationProvider implements ConversationProvider {
 
       const pty = result.data;
       spawnedPty = pty;
+      const startupInputPromise = startupInput
+        ? injectTuiStartupInput({ pty, runtimeId: conversation.runtimeId, input: startupInput })
+        : undefined;
+      void startupInputPromise?.catch(() => {});
 
       // hooks not supported yet, rely on classifier for visual indicator
       wireAgentClassifier({
@@ -327,6 +332,11 @@ export class SshConversationProvider implements ConversationProvider {
         },
         initialPrompt?.trim() ? 'working' : 'idle'
       );
+      if (startupInputPromise) {
+        const delivered = await startupInputPromise;
+        if (!this.ownsPendingStart(sessionId, startToken)) return;
+        if (!delivered) throw new Error(`${conversation.runtimeId} exited before startup input.`);
+      }
       if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
       telemetryService.capture('agent_run_started', {
         provider: conversation.runtimeId,

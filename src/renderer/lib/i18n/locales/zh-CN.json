@@ -1453,7 +1453,7 @@
       "readOnlyDesc": "允许 Cohub 分析项目，但不执行写入操作"
     },
     "codex": {
-      "planDesc": "只读分析；写操作会被拦截，全程无需人工确认",
+      "planDesc": "原生计划模式；严格只读，全程无需人工确认",
       "requestApproval": "请求批准",
       "requestApprovalDesc": "编辑外部文件和使用互联网时始终询问",
       "autoApprove": "替我审批",

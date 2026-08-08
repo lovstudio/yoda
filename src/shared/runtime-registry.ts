@@ -388,6 +388,7 @@ export const RUNTIMES: RuntimeDefinition[] = [
     resumeFlag: 'resume',
     resumeSessionIdArg: true,
     commandPrefix: '$',
+    planActivateCommand: '/plan',
     commandSubmitSuffix: ' ',
     commandSubmitDelayMs: 200,
     namingCommand:

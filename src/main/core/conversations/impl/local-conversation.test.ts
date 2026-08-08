@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   getHookToken: vi.fn(),
   getProviderConfig: vi.fn(),
   getRuntimeInferenceCredentials: vi.fn(),
+  injectTuiStartupInput: vi.fn(),
   ensureCodexResumeProviderCompatible: vi.fn(),
   migrateLegacyCodexMaasHistory: vi.fn(),
   logDebug: vi.fn(),
@@ -145,6 +146,10 @@ vi.mock('@main/core/maas/codex-history-compat', () => ({
 
 vi.mock('@main/core/pty/local-pty', () => ({
   spawnLocalPty: mocks.spawnLocalPty,
+}));
+
+vi.mock('./tui-startup-input', () => ({
+  injectTuiStartupInput: mocks.injectTuiStartupInput,
 }));
 
 vi.mock('@main/core/prompt-library/prompt-library-service', () => ({
@@ -305,6 +310,7 @@ describe('LocalConversationProvider', () => {
     vi.clearAllMocks();
     mocks.getHookPort.mockReturnValue(0);
     mocks.getHookToken.mockReturnValue('token');
+    mocks.injectTuiStartupInput.mockResolvedValue(true);
     mocks.aiLogFinish.mockResolvedValue(undefined);
     mocks.aiLogStart.mockResolvedValue('ai-log-id');
     mocks.buildAgentEnv.mockReturnValue({});
@@ -649,6 +655,40 @@ describe('LocalConversationProvider', () => {
         cwd: '/workspace',
       }
     );
+  });
+
+  it('activates native Codex Plan mode before delivering the initial task', async () => {
+    mocks.getProviderConfig.mockResolvedValue({
+      cli: 'codex',
+      resumeFlag: 'resume',
+      resumeSessionIdArg: true,
+      initialPromptFlag: '',
+    });
+    const codexConversation: Conversation = {
+      ...conversation,
+      runtimeId: 'codex',
+      permissionMode: 'plan',
+    };
+    const provider = createProvider();
+
+    await provider.startSession(
+      codexConversation,
+      { cols: 80, rows: 24 },
+      false,
+      'Inspect the repository and propose a plan'
+    );
+
+    expect(spawned[0].options.args).toEqual([
+      '--sandbox',
+      'read-only',
+      '--ask-for-approval',
+      'never',
+    ]);
+    expect(mocks.injectTuiStartupInput).toHaveBeenCalledWith({
+      pty: spawned[0].pty,
+      runtimeId: 'codex',
+      input: '/plan Inspect the repository and propose a plan',
+    });
   });
 
   it('resumes an adopted Codex session through its original account state root', async () => {
