@@ -10,8 +10,6 @@ export type RendererErrorNotificationContext = {
   details?: Record<string, unknown>;
 };
 
-const notificationIdsByFingerprint = new Map<string, string>();
-
 export function enqueueRendererErrorNotification(
   error: Error,
   context: RendererErrorNotificationContext = {}
@@ -45,16 +43,13 @@ export function enqueueRendererErrorNotification(
     .filter((part): part is string => Boolean(part))
     .join('\n\n');
 
-  const id = workspaceNotificationStore.enqueue(
-    {
-      title: i18n.t('workspaceRuntime.notifications.programErrorTitle'),
-      description: error.message,
-      details,
-      kind: 'error',
-      source: 'system',
-    },
-    notificationIdsByFingerprint.get(fingerprint)
-  );
-  notificationIdsByFingerprint.set(fingerprint, id);
-  return id;
+  return workspaceNotificationStore.enqueue({
+    title: i18n.t('workspaceRuntime.notifications.programErrorTitle'),
+    description: error.message,
+    details,
+    kind: 'error',
+    source: 'system',
+    reason: 'error',
+    dedupeKey: `renderer-error:${fingerprint}`,
+  });
 }

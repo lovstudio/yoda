@@ -27,6 +27,8 @@ describe('enqueueRendererErrorNotification', () => {
       description: 'render failed',
       kind: 'error',
       source: 'system',
+      reason: 'error',
+      occurrenceCount: 2,
     });
     expect(workspaceNotificationStore.getSnapshot()[0].details).toContain('WorkspaceView');
     expect(workspaceNotificationStore.getSnapshot()[0].details).toContain('task-1');

@@ -4747,7 +4747,7 @@
     },
     "notifications": {
       "title": "通知",
-      "description": "需要你处理的事项和程序错误会保留在这里。",
+      "description": "待处理事项、程序错误、阻塞预警和订阅结果会保留在这里。",
       "triggerLabel": "通知（{{count}} 条未读）",
       "summary": "{{unread}} 条未读，共 {{total}} 条",
       "allReadSummary": "全部已读，共 {{total}} 条",
@@ -4756,7 +4756,7 @@
       "markUnread": "标为未读",
       "untitled": "通知",
       "empty": "暂无待处理通知",
-      "emptyDescription": "需要确认的 Toast、Agent 请求与程序错误会出现在这里。",
+      "emptyDescription": "新的待处理事项、错误、预警与订阅结果会出现在这里。",
       "openDetails": "查看通知“{{title}}”的详情",
       "detailsTitle": "通知详情",
       "details": "完整详情",
@@ -4767,8 +4767,13 @@
       "openTarget": "前往处理",
       "programErrorTitle": "程序错误",
       "type": "类型",
+      "reason": "进入原因",
+      "status": "状态",
       "source": "来源",
-      "time": "时间",
+      "occurrenceCount": "发生次数",
+      "occurrences": "{{count}} 次",
+      "firstSeen": "首次发生",
+      "lastUpdated": "最近更新",
       "copy": {
         "idle": "复制详情",
         "copied": "已复制",
@@ -4779,6 +4784,17 @@
         "success": "成功",
         "error": "错误",
         "loading": "进行中"
+      },
+      "reasonValue": {
+        "action-required": "需要处理",
+        "error": "程序错误",
+        "blocking-warning": "阻塞预警",
+        "subscribed-result": "订阅结果"
+      },
+      "statusValue": {
+        "active": "待处理",
+        "newResult": "待查看",
+        "resolved": "已恢复"
       },
       "sourceValue": {
         "toast": "应用提示",

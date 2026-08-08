@@ -24,6 +24,8 @@ export function TmuxUnavailableNotifier() {
         description: event.connectionId
           ? t('settings.tasks.tmuxUnavailableRemoteDescription')
           : t('settings.tasks.tmuxUnavailableDescription'),
+        notification: 'blocking-warning',
+        notificationKey: `tmux-unavailable:${targetKey}`,
         action: {
           label: t('settings.tasks.installTmux'),
           onClick: () => {
