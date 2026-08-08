@@ -61,7 +61,7 @@ function buildCommunicationInstructions(config: TeamCommunicationConfig): string
   if (config.mode === 'process') {
     return [
       `# Process-observed collaboration`,
-      `Yoda observes your process state and transcript. Keep the full work in this session and finish your turn normally.`,
+      `Yoda observes your client state and session output. Keep the full work in this session and finish your turn normally.`,
       `You do not need to copy your work into the room. The human can open this session from your status card.`,
       `If you must explicitly hand control to a teammate, send only a short routing signal:`,
       `  ${TEAM_AT_SCRIPT} <handle> "<what they should inspect or do next>"`,

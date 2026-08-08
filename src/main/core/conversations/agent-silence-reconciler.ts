@@ -15,11 +15,9 @@ import { markInterrupted } from './interrupt-marker';
  * Automatic reconciliation catches gaps where a watcher is unavailable or the
  * process exited before another source could report a terminal transition:
  *
- *  - Esc pressed before the first assistant output: CC writes no interrupt
- *    sentinel and fires no Stop hook, so the transcript freezes in a `working`
- *    shape if the session activity watcher is unavailable.
- *  - A turn killed by an app/CLI restart: the resumed CLI idles at the prompt
- *    while the transcript still looks mid-turn.
+ *  - A provider without a native activity source misses its terminal event.
+ *  - A turn is killed by an app/CLI restart before the fallback classifier
+ *    observes a terminal transition.
  *
  * Deliberately NOT keystroke detection — what the user pressed is decoupled
  * from what the session actually did; silence observes the effect, not the
@@ -45,7 +43,7 @@ interface AgentSilenceReconcilerOptions {
   /**
    * Whether prolonged silence may automatically clear a stale `working`
    * status. Disable this when the session has an authoritative run-state
-   * source (for example a Claude transcript or Codex rollout tailer).
+   * source (for example Claude PID activity or a Codex rollout tailer).
    *
    * Silence is still tracked for diagnostics; explicit interrupts must still
    * reach authoritative sessions because a quiet tool call can be genuinely
@@ -119,8 +117,7 @@ export class AgentSilenceReconciler {
         continue;
       }
       log.debug('AgentSilenceReconciler: working but silent, clearing', session);
-      // Mark first so the stateless deriveStatus / transcript tailer can't
-      // resurrect the zombie `working` from the frozen transcript.
+      // Preserve the interrupt marker for other reconciliation paths.
       markInterrupted(session.conversationId);
       agentSessionRuntimeStore.dispatch(
         session,

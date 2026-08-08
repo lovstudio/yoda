@@ -3751,6 +3751,31 @@
       "execTitle": "执行参数",
       "execDescription": "覆盖 {{name}} 的启动命令、CLI、附加参数等。",
       "editExec": "编辑执行参数",
+      "statusMonitorTitle": "状态监听",
+      "statusMonitorDescription": "选择 Yoda 判断 {{name}} 忙碌、空闲或等待输入的依据。新会话开始时生效。",
+      "recommended": "推荐",
+      "statusMonitors": {
+        "activity": {
+          "label": "进程状态",
+          "description": "读取客户端按 PID 写入的 Activity 状态，开销低，默认用于 Claude Code。"
+        },
+        "transcript": {
+          "label": "会话记录",
+          "description": "监听 Transcript 内容推断状态，适合兼容旧版 Claude Code 或排查状态差异。"
+        },
+        "rollout": {
+          "label": "运行记录",
+          "description": "读取 Codex 原生 Rollout 事件，精确跟踪每轮开始、等待与结束。"
+        },
+        "hooks": {
+          "label": "Hooks",
+          "description": "根据客户端生命周期 Hook 更新状态；本地 Hook 服务未就绪时自动回退到终端监听。"
+        },
+        "terminal": {
+          "label": "终端输出",
+          "description": "通过终端输出特征判断状态，适用于尚未提供原生状态源的客户端。"
+        }
+      },
       "defaultModelTitle": "默认会话模型",
       "defaultModelDescription": "当所选 Agent 没有覆盖模型时，新建 {{name}} 会话使用这里的模型。",
       "defaultModelPlaceholder": "使用 CLI 默认模型",

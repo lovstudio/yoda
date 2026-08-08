@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => ({
   spawnLocalPty: vi.fn(),
   startTitle: vi.fn(),
   stopTitle: vi.fn(),
+  watchClaudeRunState: vi.fn(() => ({ stop: vi.fn() })),
   watchClaudeSessionActivity: vi.fn(() => ({ stop: vi.fn() })),
   wireAgentClassifier: vi.fn(),
 }));
@@ -114,6 +115,10 @@ vi.mock('@main/core/conversations/agent-session-runtime', () => ({
 
 vi.mock('@main/core/conversations/claude-session-activity-source', () => ({
   watchClaudeSessionActivity: mocks.watchClaudeSessionActivity,
+}));
+
+vi.mock('@main/core/conversations/claude-run-state-source', () => ({
+  watchClaudeRunState: mocks.watchClaudeRunState,
 }));
 
 // Pulls in the DB client transitively; unit tests have no Electron app.
@@ -963,6 +968,49 @@ describe('LocalConversationProvider', () => {
       taskId: conversation.taskId,
       conversationId: conversation.id,
     });
+  });
+
+  it('starts only the selected Claude transcript monitor', async () => {
+    mocks.getProviderConfig.mockResolvedValue({
+      cli: 'claude',
+      statusMonitor: 'transcript',
+    });
+    const provider = createProvider();
+
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    expect(mocks.watchClaudeRunState).toHaveBeenCalledOnce();
+    expect(mocks.watchClaudeSessionActivity).not.toHaveBeenCalled();
+    expect(mocks.wireAgentClassifier).not.toHaveBeenCalled();
+  });
+
+  it('uses hooks alone when the selected hook monitor is available', async () => {
+    mocks.getHookPort.mockReturnValue(43210);
+    mocks.getProviderConfig.mockResolvedValue({
+      cli: 'claude',
+      statusMonitor: 'hooks',
+    });
+    const provider = createProvider();
+
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    expect(mocks.watchClaudeRunState).not.toHaveBeenCalled();
+    expect(mocks.watchClaudeSessionActivity).not.toHaveBeenCalled();
+    expect(mocks.wireAgentClassifier).not.toHaveBeenCalled();
+  });
+
+  it('falls back to terminal monitoring when selected hooks are unavailable', async () => {
+    mocks.getProviderConfig.mockResolvedValue({
+      cli: 'claude',
+      statusMonitor: 'hooks',
+    });
+    const provider = createProvider();
+
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    expect(mocks.wireAgentClassifier).toHaveBeenCalledOnce();
+    expect(mocks.watchClaudeRunState).not.toHaveBeenCalled();
+    expect(mocks.watchClaudeSessionActivity).not.toHaveBeenCalled();
   });
 
   it('marks sessions without an initial prompt as idle until the renderer reports work', async () => {

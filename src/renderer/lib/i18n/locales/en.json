@@ -3751,6 +3751,31 @@
       "execTitle": "Execution parameters",
       "execDescription": "Override the launch command, CLI, and extra args for {{name}}.",
       "editExec": "Edit execution",
+      "statusMonitorTitle": "Status monitoring",
+      "statusMonitorDescription": "Choose how Yoda determines whether {{name}} is busy, idle, or waiting for input. Applies when a new session starts.",
+      "recommended": "Recommended",
+      "statusMonitors": {
+        "activity": {
+          "label": "Process activity",
+          "description": "Reads the PID-keyed activity state written by the client. Low overhead and recommended for Claude Code."
+        },
+        "transcript": {
+          "label": "Session transcript",
+          "description": "Infers state from transcript content for older Claude Code versions or status diagnostics."
+        },
+        "rollout": {
+          "label": "Rollout events",
+          "description": "Reads native Codex rollout events to track turn start, waiting, and completion precisely."
+        },
+        "hooks": {
+          "label": "Hooks",
+          "description": "Uses client lifecycle hooks and falls back to terminal monitoring when the local hook service is unavailable."
+        },
+        "terminal": {
+          "label": "Terminal output",
+          "description": "Infers state from terminal output patterns for clients without a native status source."
+        }
+      },
       "defaultModelTitle": "Default session model",
       "defaultModelDescription": "Use this model for new {{name}} sessions when the selected Agent does not override it.",
       "defaultModelPlaceholder": "Use the CLI default",
