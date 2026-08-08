@@ -134,6 +134,9 @@ describe('runBundledMigrations', () => {
       expect(
         db.prepare('SELECT is_long_term FROM tasks WHERE id = ?').get('existing-task')
       ).toEqual({ is_long_term: 0 });
+      expect(db.prepare('SELECT is_favorite FROM tasks WHERE id = ?').get('existing-task')).toEqual(
+        { is_favorite: 0 }
+      );
     } finally {
       db.close();
     }
@@ -212,6 +215,7 @@ describe('runBundledMigrations', () => {
       expect(columnExists(db, 'prompts', 'version')).toBe(true);
       expect(tableExists(db, 'prompt_versions')).toBe(true);
       expect(columnExists(db, 'tasks', 'is_long_term')).toBe(true);
+      expect(columnExists(db, 'tasks', 'is_favorite')).toBe(true);
       expect(columnExists(db, 'workspace_terminals', 'id')).toBe(true);
       expect(indexExists(db, 'idx_workspace_terminals_project_scope')).toBe(true);
       expect(countAppliedMigrations(db)).toBe(

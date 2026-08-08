@@ -60,6 +60,8 @@ export type Task = {
   /** @deprecated Use linkedIssues. Preserved as the primary linked issue for compatibility. */
   linkedIssue?: Issue;
   isPinned: boolean;
+  /** User-curated marker for keeping a task available for later retrospectives. */
+  isFavorite: boolean;
   /** User-marked task expected to stay active over an extended period. */
   isLongTerm: boolean;
   needsReview: boolean;

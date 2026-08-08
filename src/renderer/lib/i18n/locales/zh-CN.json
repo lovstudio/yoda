@@ -2228,6 +2228,8 @@
       "tileCandidates": "并排所有候选",
       "unpinTask": "取消置顶",
       "pinTask": "置顶",
+      "favoriteTask": "收藏",
+      "unfavoriteTask": "取消收藏",
       "markLongTerm": "标记为长期任务",
       "unmarkLongTerm": "取消长期任务标记",
       "unmarkReview": "移出待验收队列",

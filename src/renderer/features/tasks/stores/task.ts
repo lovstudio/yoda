@@ -34,6 +34,7 @@ export type UnregisteredTaskData = {
   createdAt: string;
   statusChangedAt: string;
   isPinned: boolean;
+  isFavorite: boolean;
   isLongTerm: boolean;
   needsReview: boolean;
   isUserNamed?: boolean;
@@ -328,6 +329,25 @@ export class TaskStore {
     } catch (e) {
       runInAction(() => {
         task.isPinned = previous;
+      });
+      log.error(e);
+      throw e;
+    }
+  }
+
+  async setFavorite(isFavorite: boolean): Promise<void> {
+    if (this.state === 'unregistered') return;
+    const task = registeredTaskData(this);
+    if (!task || task.isFavorite === isFavorite) return;
+    const previous = task.isFavorite;
+    runInAction(() => {
+      task.isFavorite = isFavorite;
+    });
+    try {
+      await rpc.tasks.setTaskFavorite(task.id, isFavorite);
+    } catch (e) {
+      runInAction(() => {
+        task.isFavorite = previous;
       });
       log.error(e);
       throw e;

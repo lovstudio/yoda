@@ -78,11 +78,17 @@ vi.mock('@renderer/lib/ui/dropdown-menu', async () => {
     (slot: string) =>
     ({ children }: { children?: ReactNode }) =>
       create('div', { 'data-slot': slot }, children);
+  const item = ({
+    children,
+    variant: _variant,
+    ...props
+  }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string }) =>
+    create('button', props, children);
 
   return {
     DropdownMenu: container('dropdown-menu'),
     DropdownMenuContent: container('dropdown-menu-content'),
-    DropdownMenuItem: container('dropdown-menu-item'),
+    DropdownMenuItem: item,
     DropdownMenuSeparator: () => create('hr'),
     DropdownMenuTrigger: ({ render }: { render: ReactElement }) => render,
   };
@@ -92,6 +98,8 @@ function taskMenuActions(overrides: Partial<TaskMenuActions> = {}): TaskMenuActi
   return {
     isPinned: false,
     canPin: false,
+    isFavorite: false,
+    canFavorite: false,
     isLongTerm: false,
     canMarkLongTerm: false,
     isArchived: false,
@@ -99,6 +107,8 @@ function taskMenuActions(overrides: Partial<TaskMenuActions> = {}): TaskMenuActi
     canMarkReview: false,
     onPin: vi.fn(),
     onUnpin: vi.fn(),
+    onFavorite: vi.fn(),
+    onUnfavorite: vi.fn(),
     onMarkLongTerm: vi.fn(),
     onUnmarkLongTerm: vi.fn(),
     onMarkNeedsReview: vi.fn(),
@@ -155,6 +165,7 @@ describe('TaskContextMenuItems grouping', () => {
             taskId: 'task-1',
             taskName: 'Task 1',
             canPin: true,
+            canFavorite: true,
             canMarkLongTerm: true,
             canMarkReview: true,
             onOpenDetails: vi.fn(),
@@ -184,6 +195,7 @@ describe('TaskContextMenuItems grouping', () => {
       [
         'common.rename',
         'tasks.context.pinTask',
+        'tasks.context.favoriteTask',
         'tasks.context.markLongTerm',
         'tasks.context.markForReview',
       ],
@@ -224,4 +236,74 @@ describe('TaskContextMenuItems grouping', () => {
       ['tasks.context.moveToProject'],
     ]);
   });
+
+  it('keeps favorite available for archived tasks because it is independent of status', async () => {
+    const { TaskContextMenuItems } = await import(
+      '@renderer/features/tasks/components/task-context-menu'
+    );
+
+    await act(async () => {
+      root.render(
+        createElement(
+          TaskContextMenuItems,
+          taskMenuActions({
+            isArchived: true,
+            isFavorite: true,
+            canFavorite: true,
+            onArchiveWithSkill: undefined,
+            onRestore: vi.fn(),
+          })
+        )
+      );
+    });
+
+    expect(host.textContent).toContain('tasks.context.unfavoriteTask');
+    expect(host.textContent).not.toContain('tasks.context.favoriteTask');
+  });
+
+  it.each(['context', 'dropdown'] as const)(
+    'toggles favorite from the shared %s menu',
+    async (surface) => {
+      const { TaskActionsMenu, TaskContextMenu } = await import(
+        '@renderer/features/tasks/components/task-context-menu'
+      );
+      const onFavorite = vi.fn();
+      const onUnfavorite = vi.fn();
+      const renderMenu = async (isFavorite: boolean) => {
+        const actions = taskMenuActions({
+          isFavorite,
+          canFavorite: true,
+          onFavorite,
+          onUnfavorite,
+        });
+        await act(async () => {
+          root.render(
+            surface === 'context'
+              ? createElement(TaskContextMenu, {
+                  ...actions,
+                  children: createElement('div', null, 'Task'),
+                })
+              : createElement(TaskActionsMenu, {
+                  ...actions,
+                  trigger: createElement('button', null, 'More'),
+                })
+          );
+        });
+      };
+
+      await renderMenu(false);
+      await act(async () => findButton(host, 'tasks.context.favoriteTask')?.click());
+      expect(onFavorite).toHaveBeenCalledOnce();
+
+      await renderMenu(true);
+      await act(async () => findButton(host, 'tasks.context.unfavoriteTask')?.click());
+      expect(onUnfavorite).toHaveBeenCalledOnce();
+    }
+  );
 });
+
+function findButton(host: HTMLElement, label: string): HTMLButtonElement | undefined {
+  return Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
+    button.textContent?.includes(label)
+  );
+}

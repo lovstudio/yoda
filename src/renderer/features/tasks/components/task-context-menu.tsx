@@ -20,6 +20,8 @@ import {
   RefreshCw,
   RotateCcw,
   Sparkles,
+  Star,
+  StarOff,
 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -68,6 +70,8 @@ interface TaskMenuInfoFields extends TaskBasicInfoFields, TaskSessionInfoFields 
 export interface TaskMenuActions extends TaskMenuInfoFields {
   isPinned: boolean;
   canPin: boolean;
+  isFavorite: boolean;
+  canFavorite: boolean;
   isLongTerm: boolean;
   canMarkLongTerm: boolean;
   isArchived: boolean;
@@ -81,6 +85,8 @@ export interface TaskMenuActions extends TaskMenuInfoFields {
   onOpenDetails?: () => void;
   onPin: () => void;
   onUnpin: () => void;
+  onFavorite: () => void;
+  onUnfavorite: () => void;
   onMarkLongTerm: () => void;
   onUnmarkLongTerm: () => void;
   onMarkNeedsReview: () => void;
@@ -187,7 +193,7 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
     });
   }
 
-  // group 1 — rename, pin, task category markers
+  // group 1 — rename, independent task markers
   items.push({
     key: 'rename',
     group: 1,
@@ -211,6 +217,25 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
             icon: Pin,
             label: t('tasks.context.pinTask'),
             onSelect: actions.onPin,
+          }
+    );
+  }
+  if (actions.canFavorite) {
+    items.push(
+      actions.isFavorite
+        ? {
+            key: 'unfavorite',
+            group: 1,
+            icon: StarOff,
+            label: t('tasks.context.unfavoriteTask'),
+            onSelect: actions.onUnfavorite,
+          }
+        : {
+            key: 'favorite',
+            group: 1,
+            icon: Star,
+            label: t('tasks.context.favoriteTask'),
+            onSelect: actions.onFavorite,
           }
     );
   }

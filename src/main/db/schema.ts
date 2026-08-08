@@ -322,6 +322,7 @@ export const tasks = sqliteTable(
     diffDeletions: integer('diff_deletions'),
     diffCapturedAt: text('diff_captured_at'),
     isPinned: integer('is_pinned').notNull().default(0), // boolean, 0=false, 1=true
+    isFavorite: integer('is_favorite').notNull().default(0), // boolean, user-curated for later retrospectives
     isLongTerm: integer('is_long_term').notNull().default(0), // boolean, user-marked long-term task
     needsReview: integer('needs_review').notNull().default(0), // boolean, 0=false, 1=true — surfaces a review marker in the UI
     isUserNamed: integer('is_user_named').notNull().default(0), // 1 if user manually renamed

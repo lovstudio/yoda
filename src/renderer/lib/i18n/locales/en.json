@@ -2228,6 +2228,8 @@
       "tileCandidates": "Tile all candidates",
       "unpinTask": "Unpin",
       "pinTask": "Pin",
+      "favoriteTask": "Favorite",
+      "unfavoriteTask": "Remove from favorites",
       "markLongTerm": "Mark as long-term task",
       "unmarkLongTerm": "Remove long-term task mark",
       "unmarkReview": "Remove from acceptance queue",

@@ -22,6 +22,7 @@ function taskRow(setupData: string | null): TaskRow {
     diffDeletions: null,
     diffCapturedAt: null,
     isPinned: 0,
+    isFavorite: 0,
     isLongTerm: 0,
     needsReview: 0,
     isUserNamed: 0,
