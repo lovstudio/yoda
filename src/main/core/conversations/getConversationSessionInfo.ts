@@ -2,7 +2,12 @@ import { and, eq } from 'drizzle-orm';
 import type { Conversation, ConversationSessionInfo } from '@shared/conversations';
 import type { RuntimeId } from '@shared/runtime-registry';
 import {
+  resolveClaudeTranscriptPath,
+  resolveClaudeTranscriptPathFromConfigDir,
+} from '@main/core/session-title/claude-title-source';
+import {
   readCodexThreadArchiveStatus,
+  readCodexThreadRolloutPath,
   resolveCodexStatePath,
 } from '@main/core/session-title/codex-title-source';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
@@ -11,6 +16,7 @@ import { conversations, projects } from '@main/db/schema';
 import { resolveTask } from '../projects/utils';
 import { getClaudeSessionActivity } from './claude-session-activity-source';
 import { resolveAgentResumeSession } from './codex-session-id';
+import { resolveLatestCodexThreadIdInLineage } from './codex-thread-lineage';
 import { getReservedCodexThreadIds } from './codex-thread-reservations';
 import { getConversationRuntimeStateRoot } from './conversation-session-source';
 import { buildAgentCommand, buildAgentSubcommand } from './impl/agent-command';
@@ -77,11 +83,21 @@ export async function getConversationSessionInfo(
               }
             : undefined
         )
-      : undefined;
+      : activeSession
+        ? { pid: activeSession.pid }
+        : undefined;
+  const transcriptPath = resolveTranscriptPath({
+    conversation,
+    workingDirectory,
+    stateRoot,
+    sessionId: session.sessionId,
+    reservedThreadIds,
+  });
 
   return {
     sessionId: session.sessionId,
     sessionTitle: session.sessionTitle,
+    transcriptPath,
     running: activeSession !== undefined,
     tmuxEnabled: activeSession?.detachable ?? false,
     process,
@@ -96,6 +112,34 @@ export async function getConversationSessionInfo(
         readCodexThreadArchiveStatus(resolveCodexStatePath(stateRoot), session.sessionId) === true,
     }),
   };
+}
+
+function resolveTranscriptPath({
+  conversation,
+  workingDirectory,
+  stateRoot,
+  sessionId,
+  reservedThreadIds,
+}: {
+  conversation: Conversation;
+  workingDirectory: string;
+  stateRoot: string | undefined;
+  sessionId: string;
+  reservedThreadIds?: ReadonlySet<string>;
+}): string | undefined {
+  if (conversation.runtimeId === 'claude') {
+    return stateRoot
+      ? resolveClaudeTranscriptPathFromConfigDir(workingDirectory, sessionId, stateRoot)
+      : resolveClaudeTranscriptPath(workingDirectory, sessionId);
+  }
+  if (conversation.runtimeId !== 'codex') return undefined;
+  const statePath = resolveCodexStatePath(stateRoot);
+  const currentThreadId = resolveLatestCodexThreadIdInLineage({
+    statePath,
+    rootThreadId: sessionId,
+    reservedThreadIds: reservedThreadIds ?? new Set<string>(),
+  });
+  return readCodexThreadRolloutPath(statePath, currentThreadId) ?? undefined;
 }
 
 async function buildResumeCommand({

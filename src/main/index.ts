@@ -45,6 +45,7 @@ import { appSettingsService } from './core/settings/settings-service';
 import { resumePendingTaskArchives } from './core/tasks/operations/archiveTask';
 import { taskManager } from './core/tasks/task-manager';
 import { roomConductor } from './core/team-rooms/conductor';
+import { githubRoomMonitor } from './core/team-rooms/github-room-monitor';
 import { workspaceTerminalService } from './core/terminals/workspace-terminal-service';
 import { updateService } from './core/updates/update-service';
 import { viewStateService } from './core/view-state/view-state-service';
@@ -266,6 +267,7 @@ void app.whenReady().then(async () => {
   // Team Room @-mention routing engine: subscribe to room message posts, then
   // recover any room left mid-turn by a previous app lifetime.
   roomConductor.initialize();
+  githubRoomMonitor.initialize();
   roomConductor.resumePending().catch((e) => {
     log.warn('Failed to resume pending team-room turns:', e);
   });
@@ -342,6 +344,7 @@ function prepareShutdown(mode: TeardownMode): Promise<void> {
       promptSourceService.dispose();
       automationScheduler.dispose();
       issueWorkerService.dispose();
+      githubRoomMonitor.dispose();
       await cliProxyApiManagedService.dispose();
       await workspaceTerminalService.dispose(mode);
       const [extensionResult, gitWatcherResult, projectManagerResult] = await Promise.allSettled([

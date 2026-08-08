@@ -14,6 +14,7 @@ import {
 } from '@shared/feature-workflow';
 import type { RuntimeId } from '@shared/runtime-registry';
 import type { SkillSelectionInput } from '@shared/skills/types';
+import type { TeamCommunicationConfig } from '@shared/team-communication';
 import type { MemberAccent } from '@shared/team-room';
 import type { RoutingHopLimit } from '@shared/team-routing-limit';
 import { agentTeamsService } from '@main/core/agent-teams/agent-teams-service';
@@ -165,8 +166,15 @@ async function resolveMemberSeedProfile(member: AgentTeamMember): Promise<Member
 function routingAddendum(
   routing: TeamRouting,
   kind: 'leader' | 'worker',
-  ctx: { leaderHandle: string; workerHandles: string[] }
+  ctx: { leaderHandle: string; workerHandles: string[] },
+  communication: TeamCommunicationConfig
 ): string {
+  const source =
+    communication.mode === 'shared-file'
+      ? `the shared hand-off file at ${communication.sharedFilePath}`
+      : communication.mode === 'github'
+        ? 'the configured GitHub Issue or Pull Request'
+        : 'the teammate session and transcript';
   if (kind === 'leader') {
     const roster = ctx.workerHandles.length
       ? ctx.workerHandles.map((h) => `@${h}`).join(', ')
@@ -185,17 +193,34 @@ function routingAddendum(
       ...sequencing,
       `Delegate one step at a time by addressing a teammate:`,
       `  ${TEAM_AT_SCRIPT} <handle> "<the concrete task for them>"`,
-      `Each teammate works in this shared worktree and reports back to you when their turn ends — so after`,
-      `every report, decide the next step (re-assign, bring in another teammate, or finish).`,
-      `When the whole task is complete, end it by telling the human lead:`,
-      `  ${TEAM_AT_SCRIPT} you "<one-line summary of what the team delivered>"`,
+      communication.mode === 'message-hub'
+        ? `Each teammate reports back through the room. After every report, decide the next step.`
+        : `Yoda observes turn completion. When control returns, inspect ${source} and decide the next step.`,
+      ...(communication.mode === 'message-hub'
+        ? [
+            `When the whole task is complete, end it by telling the human lead:`,
+            `  ${TEAM_AT_SCRIPT} you "<one-line summary of what the team delivered>"`,
+          ]
+        : [
+            `When the whole task is complete, record the final result in ${source} and finish your turn normally.`,
+            `The human lead can inspect your status and artifact without a room message.`,
+          ]),
     ].join('\n');
   }
+  const reporting =
+    communication.mode === 'message-hub'
+      ? [
+          `report the result back to the lead so they can decide what's next:`,
+          `  ${TEAM_AT_SCRIPT} ${ctx.leaderHandle} "<your result, verdict, or what you changed>"`,
+        ]
+      : [
+          `leave the substantive result in ${source}, then finish your turn normally.`,
+          `Yoda observes completion and returns control to the lead; use team-at only for an explicit early hand-off.`,
+        ];
   return [
     `# How you work`,
     `The lead (@${ctx.leaderHandle}) assigns you a task. Do exactly your part in this shared worktree, then`,
-    `report the result back to the lead so they can decide what's next:`,
-    `  ${TEAM_AT_SCRIPT} ${ctx.leaderHandle} "<your result, verdict, or what you changed>"`,
+    ...reporting,
     `Address only the lead — they coordinate the team.`,
   ].join('\n');
 }
@@ -241,6 +266,7 @@ export async function seedRoomFromTeam(args: {
     // editing; other teams continue to use the generic freeform conductor.
     preset: isFeatureWorkflow ? FEATURE_WORKFLOW_ROOM_PRESET : 'freeform',
     routingHopLimit: team.routingHopLimit,
+    communication: team.communication,
   });
 
   const lead = await addMember({
@@ -285,10 +311,15 @@ export async function seedRoomFromTeam(args: {
     // the end of their prompts and could stall the gate reducer.
     const addendum = isFeatureWorkflow
       ? undefined
-      : routingAddendum(team.routing, isLeader ? 'leader' : 'worker', {
-          leaderHandle,
-          workerHandles,
-        });
+      : routingAddendum(
+          team.routing,
+          isLeader ? 'leader' : 'worker',
+          {
+            leaderHandle,
+            workerHandles,
+          },
+          team.communication
+        );
     await addMember({
       roomId: room.id,
       handle: handles[i],

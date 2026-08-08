@@ -1,17 +1,20 @@
 /**
- * Agent Communication Protocol (ACP) — the GENERAL way agents collaborate in a
- * Team Room, independent of any one workflow. Agents talk to the room out-of-band
- * by running the `team-at` / `team-status` scripts (they POST to Yoda's hook
- * server), NOT by writing @handles or markers into their normal output. The
- * conductor injects whatever a member is told into that member's live session —
- * so "@ing" a teammate is literally continuing its agent session with new input,
- * which every CLI supports.
+ * Agent Communication Protocol (ACP) — the general control plane for Team Room
+ * collaboration. The conductor can receive persisted room messages, ephemeral
+ * hook signals, observed turn completion, or external work-item changes. It
+ * injects normalized instructions into a target member's live session, while the
+ * substantive work can remain in a transcript, room message, shared file, or
+ * GitHub work item.
  *
- * Collaboration MODES are expressed purely as prompt instructions (see the
- * per-routing addendum in team-rooms/presets.ts): review, fan-out and freeform
- * all run on this one substrate — agents drive every hand-off and decide when to
- * stop (by addressing @you). The conductor adds no per-mode control logic.
+ * Workflow routing (review, fan-out, sequential, freeform) stays independent of
+ * the selected communication mode. `team-at` remains the explicit routing hook;
+ * process-observed turns can also hand control back automatically.
  */
+
+import {
+  normalizeTeamCommunicationConfig,
+  type TeamCommunicationConfig,
+} from './team-communication';
 
 /**
  * Placeholder for a member's per-conversation scripts directory. The conductor
@@ -38,7 +41,9 @@ export function buildTeammateSystemPrompt(args: {
   displayName: string;
   handle: string;
   roster: RosterEntry[];
+  communication?: TeamCommunicationConfig;
 }): string {
+  const communication = normalizeTeamCommunicationConfig(args.communication);
   const others = args.roster.filter((r) => r.handle !== args.handle);
   const roster = others.length
     ? others.map((r) => `  - @${r.handle} — ${r.displayName} (${r.role})`).join('\n')
@@ -49,8 +54,43 @@ export function buildTeammateSystemPrompt(args: {
     roster,
     ``,
   ];
+  return [...header, ...buildCommunicationInstructions(communication)].join('\n');
+}
+
+function buildCommunicationInstructions(config: TeamCommunicationConfig): string[] {
+  if (config.mode === 'process') {
+    return [
+      `# Process-observed collaboration`,
+      `Yoda observes your process state and transcript. Keep the full work in this session and finish your turn normally.`,
+      `You do not need to copy your work into the room. The human can open this session from your status card.`,
+      `If you must explicitly hand control to a teammate, send only a short routing signal:`,
+      `  ${TEAM_AT_SCRIPT} <handle> "<what they should inspect or do next>"`,
+    ];
+  }
+  if (config.mode === 'shared-file') {
+    return [
+      `# Shared-file collaboration`,
+      `Use ${config.sharedFilePath} as the durable hand-off artifact. Read it before working and update it atomically with your result, decisions, and artifact paths.`,
+      `If an immediate explicit hand-off is needed, keep the room signal short and put the substantive work in the shared file:`,
+      `  ${TEAM_AT_SCRIPT} <handle> "Updated ${config.sharedFilePath}; continue from the latest hand-off."`,
+      `The human can inspect both your session and the shared file without requiring a room transcript.`,
+    ];
+  }
+  if (config.mode === 'github') {
+    const repository = config.githubRepository || 'the project GitHub remote';
+    const issue = config.githubIssueNumber ? ` issue #${config.githubIssueNumber}` : '';
+    const pullRequest = config.githubPullRequestNumber
+      ? ` pull request #${config.githubPullRequestNumber}`
+      : '';
+    return [
+      `# GitHub collaboration`,
+      `Use ${repository}${issue}${pullRequest} as the durable coordination record. Keep analysis, acceptance decisions, commits, reviews, and completion state on the relevant Issue or Pull Request.`,
+      `Yoda watches the configured work items. If an immediate explicit hand-off is needed, send only a concise routing reference:`,
+      `  ${TEAM_AT_SCRIPT} <handle> "GitHub updated; inspect the linked Issue or Pull Request."`,
+      `Yoda watches configured Issue and Pull Request state locally while this room is active.`,
+    ];
+  }
   return [
-    ...header,
     `# Talking to the team`,
     `To send a message to a teammate or the lead, run this command from the worktree root:`,
     ``,
@@ -70,10 +110,25 @@ export function buildTeammateSystemPrompt(args: {
     `To share progress without addressing anyone (a standup update), run:`,
     `  ${TEAM_STATUS_SCRIPT} "<one line on what you're doing>"`,
     `It's broadcast-only — no hand-off. Use it sparingly on longer tasks.`,
-  ].join('\n');
+  ];
 }
 
 /** Content delivered into a member's session when it's addressed in the room. */
-export function buildMemberTurnPrompt(args: { fromDisplayName: string; body: string }): string {
-  return [`Message from ${args.fromDisplayName}:`, args.body].join('\n');
+export function buildMemberTurnPrompt(args: {
+  fromDisplayName: string;
+  body: string;
+  communication?: TeamCommunicationConfig;
+}): string {
+  const communication = normalizeTeamCommunicationConfig(args.communication);
+  const source =
+    communication.mode === 'process'
+      ? 'Inspect the relevant teammate session or transcript when context is needed.'
+      : communication.mode === 'shared-file'
+        ? `Read ${communication.sharedFilePath} before continuing.`
+        : communication.mode === 'github'
+          ? 'Inspect the configured GitHub Issue or Pull Request before continuing.'
+          : null;
+  return [`Message from ${args.fromDisplayName}:`, args.body, ...(source ? ['', source] : [])].join(
+    '\n'
+  );
 }

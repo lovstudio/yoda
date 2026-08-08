@@ -8,6 +8,10 @@ import {
 import type { RuntimeId } from '@shared/runtime-registry';
 import type { SkillSelectionInput } from '@shared/skills/types';
 import {
+  normalizeTeamCommunicationConfig,
+  type TeamCommunicationConfig,
+} from '@shared/team-communication';
+import {
   parseMentions,
   type MemberAccent,
   type MemberStatus,
@@ -46,6 +50,7 @@ function mapRoom(row: TeamRoomRow): TeamRoom {
     preset: row.preset as RoomPreset,
     status: row.status as TeamRoom['status'],
     routingHopLimit: normalizeRoutingHopLimit(row.routingHopLimit),
+    communication: normalizeTeamCommunicationConfig(row.communication),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -93,6 +98,7 @@ export type CreateRoomParams = {
   name: string;
   preset?: RoomPreset;
   routingHopLimit?: RoutingHopLimit;
+  communication?: TeamCommunicationConfig;
 };
 
 export async function createRoom(params: CreateRoomParams): Promise<TeamRoom> {
@@ -106,6 +112,7 @@ export async function createRoom(params: CreateRoomParams): Promise<TeamRoom> {
     preset: params.preset ?? 'freeform',
     status: 'active',
     routingHopLimit: normalizeRoutingHopLimit(params.routingHopLimit),
+    communication: normalizeTeamCommunicationConfig(params.communication),
     createdAt: sql`CURRENT_TIMESTAMP`,
     updatedAt: sql`CURRENT_TIMESTAMP`,
   } as const;
@@ -229,6 +236,7 @@ export async function getRoom(roomId: string): Promise<RoomSnapshot | null> {
 export type UpdateRoomConfigParams = {
   roomId: string;
   routingHopLimit: RoutingHopLimit;
+  communication?: TeamCommunicationConfig;
 };
 
 export async function updateRoomConfig(params: UpdateRoomConfigParams): Promise<TeamRoom> {
@@ -236,6 +244,9 @@ export async function updateRoomConfig(params: UpdateRoomConfigParams): Promise<
     .update(teamRooms)
     .set({
       routingHopLimit: normalizeRoutingHopLimit(params.routingHopLimit),
+      communication: params.communication
+        ? normalizeTeamCommunicationConfig(params.communication)
+        : undefined,
       updatedAt: new Date().toISOString(),
     })
     .where(eq(teamRooms.id, params.roomId))

@@ -33,6 +33,8 @@ The main process is organized into domain modules under `src/main/core/`. Each d
 - **shared** — Shared utilities (OAuth flow)
 - **skills** — Skills service and controller
 - **ssh** — SSH connection management, credentials, config parsing, client proxy
+- **team-rooms** — Agent Room persistence and session routing, pluggable process/message/file/GitHub
+  communication, per-member observation snapshots, and active-room GitHub polling
 - **tasks** — Task CRUD (create, delete, archive, restore, provision)
 - **terminals** — Terminal lifecycle with provider pattern (`local-terminal-provider.ts`, `ssh-terminal-provider.ts`), lifecycle scripts
 - **terminals/workspace-terminal-service** — Task-free project/global terminals backed by canonical terminal providers; project terminals persist independently from task terminals, reattach through tmux, and share the app quit decision with Agent sessions
@@ -45,6 +47,10 @@ The main process is organized into domain modules under `src/main/core/`. Each d
 - `src/main/db/` — Database schema and initialization
 - `src/main/utils/` — Shell environment, shell escaping, child process env, external links
 - `src/main/core/agent-hooks/` — Hook server, event enrichment, OS notifications, hook config writer for Claude/Codex
+
+Agent Room communication keeps routing separate from presentation. The conductor accepts both
+persisted room messages and ephemeral control signals; `syncToRoom` only decides whether activity is
+mirrored to the human timeline. See `docs/adr/0006-pluggable-agent-room-communication.md`.
 
 ## IPC / RPC Structure
 

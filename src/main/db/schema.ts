@@ -12,6 +12,7 @@ import type { AgentTeamMember } from '@shared/agent-team';
 import type { AgentAccountProviderId } from '@shared/runtime-registry';
 import type { SkillSelectionInput } from '@shared/skills/types';
 import type { TaskNamingContextSnapshot, TaskNamingStatus } from '@shared/task-naming';
+import type { TeamCommunicationConfig } from '@shared/team-communication';
 import type { StoredBranch } from '@main/core/tasks/stored-branch';
 
 export const sshConnections = sqliteTable(
@@ -832,6 +833,13 @@ export const teamRooms = sqliteTable(
     status: text('status').notNull().default('active'),
     /** Max conductor routing deliveries per human prompt; NULL = unlimited. */
     routingHopLimit: integer('routing_hop_limit').default(100),
+    /** Transport and visibility policy for agent-to-agent communication. */
+    communication: text('communication', { mode: 'json' })
+      .$type<TeamCommunicationConfig>()
+      .notNull()
+      .default(
+        sql`'{"mode":"message-hub","syncToRoom":true,"sharedFilePath":".yoda/team/shared-handoff.md","githubRepository":"","githubIssueNumber":null,"githubPullRequestNumber":null}'`
+      ),
     createdAt: text('created_at')
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),
@@ -978,6 +986,12 @@ export const agentTeams = sqliteTable('agent_teams', {
   routing: text('routing').notNull().default('freeform'),
   /** Max conductor routing deliveries per human prompt; NULL = unlimited. */
   routingHopLimit: integer('routing_hop_limit').default(100),
+  communication: text('communication', { mode: 'json' })
+    .$type<TeamCommunicationConfig>()
+    .notNull()
+    .default(
+      sql`'{"mode":"message-hub","syncToRoom":true,"sharedFilePath":".yoda/team/shared-handoff.md","githubRepository":"","githubIssueNumber":null,"githubPullRequestNumber":null}'`
+    ),
   members: text('members', { mode: 'json' })
     .notNull()
     .$type<AgentTeamMember[]>()

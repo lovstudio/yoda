@@ -9,6 +9,7 @@ import {
   type TeamRouting,
 } from '@shared/agent-team';
 import { isValidRuntimeId } from '@shared/runtime-registry';
+import { normalizeTeamCommunicationConfig } from '@shared/team-communication';
 import { normalizeRoutingHopLimit } from '@shared/team-routing-limit';
 import { db } from '@main/db/client';
 import { agentTeams, type AgentTeamRow } from '@main/db/schema';
@@ -24,6 +25,7 @@ function rowToTeam(row: AgentTeamRow): AgentTeam {
       ? (row.routing as TeamRouting)
       : 'freeform',
     routingHopLimit: normalizeRoutingHopLimit(row.routingHopLimit),
+    communication: normalizeTeamCommunicationConfig(row.communication),
     builtin: false,
     members: Array.isArray(row.members) ? row.members : [],
     createdAt: row.createdAt,
@@ -64,6 +66,7 @@ function sanitizeDraft(draft: AgentTeamDraft): AgentTeamDraft {
     name: draft.name.trim() || 'Untitled team',
     icon: draft.icon.trim() || '👥',
     routing: ROUTINGS.includes(draft.routing) ? draft.routing : 'freeform',
+    communication: normalizeTeamCommunicationConfig(draft.communication),
     routingHopLimit: normalizeRoutingHopLimit(draft.routingHopLimit),
     members: sanitizeMembers(draft.members),
   };
@@ -94,6 +97,7 @@ class AgentTeamsService {
         icon: clean.icon,
         routing: clean.routing,
         routingHopLimit: clean.routingHopLimit,
+        communication: clean.communication,
         members: clean.members,
       })
       .execute();
@@ -113,6 +117,7 @@ class AgentTeamsService {
         icon: clean.icon,
         routing: clean.routing,
         routingHopLimit: clean.routingHopLimit,
+        communication: clean.communication,
         members: clean.members,
       })
       .where(eq(agentTeams.id, id))
@@ -136,6 +141,7 @@ class AgentTeamsService {
       icon: source.icon,
       routing: source.routing,
       routingHopLimit: source.routingHopLimit,
+      communication: source.communication,
       members: source.members,
     });
   }

@@ -1,8 +1,21 @@
 import { useQuery } from '@tanstack/react-query';
-import { Check, Loader2, Pencil, TerminalSquare, Users, X } from 'lucide-react';
+import {
+  Activity,
+  Check,
+  Copy,
+  ExternalLink,
+  FileText,
+  GitPullRequest,
+  Loader2,
+  Pencil,
+  TerminalSquare,
+  Users,
+  X,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TeamMemberObservation } from '@shared/team-communication';
 import type { RoomMember } from '@shared/team-room';
 import {
   useRequireProvisionedTask,
@@ -69,6 +82,13 @@ export const RoomMemberDetail = observer(function RoomMemberDetail({
   }, [roomId]);
 
   const member = memberById(memberId);
+  const observationQuery = useQuery({
+    queryKey: ['team-room-member-observation', roomId, memberId],
+    queryFn: () => rpc.teamRooms.getMemberObservation(roomId!, memberId),
+    enabled: Boolean(roomId && member?.runtime),
+    refetchInterval: 2_000,
+  });
+  const observation = observationQuery.data ?? null;
 
   useEffect(() => {
     if (!member || editing) return;
@@ -123,6 +143,17 @@ export const RoomMemberDetail = observer(function RoomMemberDetail({
     } finally {
       setSaving(false);
     }
+  };
+
+  const openMemberSession = () => {
+    const conversationId = member?.conversationId;
+    if (!conversationId) return;
+    void (async () => {
+      const loaded = await conversations.ensureConversation(conversationId);
+      if (!loaded) return;
+      taskView.tabManager.openConversationInSidebar(conversationId);
+      taskView.setSidebarCollapsed(false);
+    })();
   };
 
   if (!member) {
@@ -233,6 +264,13 @@ export const RoomMemberDetail = observer(function RoomMemberDetail({
           </>
         )}
       </dl>
+      {member.runtime && (
+        <MemberObservationCard
+          observation={observation}
+          loading={observationQuery.isLoading}
+          onOpenSession={member.conversationId ? openMemberSession : undefined}
+        />
+      )}
       <div className="mt-4">
         <div className="mb-1 text-xs font-semibold text-foreground-muted">
           {t('agentRoom.member.instructions')}
@@ -244,20 +282,7 @@ export const RoomMemberDetail = observer(function RoomMemberDetail({
       {member.conversationId && (
         <button
           type="button"
-          onClick={() => {
-            const conversationId = member.conversationId;
-            if (!conversationId) return;
-            void (async () => {
-              // The agent's session was created in the main process and may not
-              // be in the renderer store yet — there is no `conversation:created`
-              // bridge. Load it first, or the tab resolves to no store and the
-              // pane is blank.
-              const loaded = await conversations.ensureConversation(conversationId);
-              if (!loaded) return;
-              taskView.tabManager.openConversationInSidebar(conversationId);
-              taskView.setSidebarCollapsed(false);
-            })();
-          }}
+          onClick={openMemberSession}
           className="mt-4 inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-background-1 px-3 py-1.5 text-xs text-foreground-muted transition-colors hover:border-primary hover:text-foreground"
         >
           <TerminalSquare className="size-3.5" /> {t('agentRoom.openSession')}
@@ -266,3 +291,161 @@ export const RoomMemberDetail = observer(function RoomMemberDetail({
     </div>
   );
 });
+
+function MemberObservationCard({
+  observation,
+  loading,
+  onOpenSession,
+}: {
+  observation: TeamMemberObservation | null;
+  loading: boolean;
+  onOpenSession?: () => void;
+}) {
+  const { t } = useTranslation();
+  if (!observation && loading) {
+    return (
+      <div className="mt-4 flex items-center gap-2 rounded-lg border border-border bg-background-1 p-3 text-xs text-foreground-muted">
+        <Loader2 className="size-3.5 animate-spin" /> {t('agentRoom.member.readingStatus')}
+      </div>
+    );
+  }
+  if (!observation) return null;
+
+  return (
+    <section className="mt-4 overflow-hidden rounded-lg border border-border bg-background-1">
+      <header className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+        <Activity className="size-3.5 text-primary" />
+        <span className="text-xs font-semibold">{t('agentRoom.member.workStatus')}</span>
+        <span className="ml-auto rounded-full bg-background-2 px-2 py-0.5 text-[10px] text-foreground-muted">
+          {t(`agentRoom.communication.modes.${observation.mode}`)}
+        </span>
+      </header>
+      <div className="divide-y divide-border">
+        <ObservationRow
+          icon={<Activity className="size-3.5" />}
+          label={t('agentRoom.member.process')}
+          value={
+            observation.processId
+              ? `PID ${observation.processId}${observation.processStatus ? ` · ${t(`agentRoom.member.processStates.${observation.processStatus}`)}` : ''}`
+              : STATUS_LABEL[observation.runtimeStatus]
+          }
+        />
+        {observation.transcriptPath && (
+          <ObservationRow
+            icon={<TerminalSquare className="size-3.5" />}
+            label={t('agentRoom.member.transcript')}
+            value={observation.transcriptPath}
+            action={onOpenSession}
+          />
+        )}
+        {observation.sharedFilePath && (
+          <ObservationRow
+            icon={<FileText className="size-3.5" />}
+            label={t('agentRoom.member.sharedFile')}
+            value={
+              observation.sharedFileExists
+                ? observation.sharedFilePath
+                : `${observation.sharedFilePath} · ${t('agentRoom.member.notCreated')}`
+            }
+            action={
+              observation.sharedFileExists
+                ? () =>
+                    void rpc.app.openIn({
+                      app: 'finder',
+                      path: observation.sharedFilePath!,
+                      reveal: true,
+                    })
+                : undefined
+            }
+          />
+        )}
+        {observation.githubIssueUrl && (
+          <ObservationRow
+            icon={<GitPullRequest className="size-3.5" />}
+            label={t('agentRoom.member.githubIssue')}
+            value={observation.githubIssueUrl}
+            action={() => void rpc.app.openExternal(observation.githubIssueUrl!)}
+          />
+        )}
+        {observation.githubPullRequestUrl && (
+          <ObservationRow
+            icon={<GitPullRequest className="size-3.5" />}
+            label={t('agentRoom.member.githubPullRequest')}
+            value={observation.githubPullRequestUrl}
+            action={() => void rpc.app.openExternal(observation.githubPullRequestUrl!)}
+          />
+        )}
+        {observation.githubMonitorState && (
+          <ObservationRow
+            icon={<Activity className="size-3.5" />}
+            label={t('agentRoom.member.githubMonitor')}
+            value={
+              observation.githubMonitorError ??
+              `${t(`agentRoom.member.githubMonitorStates.${observation.githubMonitorState}`)}${observation.githubLastCheckedAt ? ` · ${observation.githubLastCheckedAt}` : ''}`
+            }
+            action={
+              observation.githubMonitorError
+                ? () =>
+                    void navigator.clipboard
+                      .writeText(
+                        [
+                          `memberId: ${observation.memberId}`,
+                          `mode: ${observation.mode}`,
+                          `state: ${observation.githubMonitorState}`,
+                          `error: ${observation.githubMonitorError}`,
+                        ].join('\n')
+                      )
+                      .catch(() => {})
+                : undefined
+            }
+            actionIcon={<Copy className="size-3" />}
+            actionTitle={t('agentRoom.member.copyMonitorError')}
+          />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ObservationRow({
+  icon,
+  label,
+  value,
+  action,
+  actionIcon,
+  actionTitle,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  action?: () => void;
+  actionIcon?: ReactNode;
+  actionTitle?: string;
+}) {
+  const content = (
+    <>
+      <span className="mt-0.5 text-foreground-muted">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[10px] text-foreground-muted">{label}</span>
+        <span className="block truncate font-mono text-[11px] text-foreground">{value}</span>
+      </span>
+      {action && (
+        <span className="shrink-0 text-foreground-passive">
+          {actionIcon ?? <ExternalLink className="size-3" />}
+        </span>
+      )}
+    </>
+  );
+  return action ? (
+    <button
+      type="button"
+      onClick={action}
+      title={actionTitle}
+      className="flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-background-2"
+    >
+      {content}
+    </button>
+  ) : (
+    <div className="flex items-start gap-2 px-3 py-2">{content}</div>
+  );
+}

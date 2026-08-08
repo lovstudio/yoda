@@ -74,6 +74,8 @@ export type LocalAgentSession = AgentSessionSource & {
 export type ConversationSessionInfo = {
   sessionId: string;
   sessionTitle?: string;
+  /** Absolute provider transcript/rollout path, when the runtime exposes one locally. */
+  transcriptPath?: string;
   resumeCommand?: string;
   running?: boolean;
   tmuxEnabled?: boolean;

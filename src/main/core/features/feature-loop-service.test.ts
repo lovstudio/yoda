@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Feature, FeatureStageId } from '@shared/features';
+import { DEFAULT_TEAM_COMMUNICATION_CONFIG } from '@shared/team-communication';
 import type { RoomMember, RoomMessage, TeamRoom } from '@shared/team-room';
 
 const mocks = vi.hoisted(() => ({
@@ -31,6 +32,7 @@ const room: TeamRoom = {
   preset: 'feature-workflow',
   status: 'active',
   routingHopLimit: 100,
+  communication: DEFAULT_TEAM_COMMUNICATION_CONFIG,
   createdAt: '2026-07-13T00:00:00.000Z',
   updatedAt: '2026-07-13T00:00:00.000Z',
 };

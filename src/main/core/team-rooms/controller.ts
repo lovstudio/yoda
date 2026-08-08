@@ -1,5 +1,8 @@
 import { createRPCController } from '@shared/ipc/rpc';
+import type { GitHubRoomMonitorState, TeamMemberObservation } from '@shared/team-communication';
 import type { RoomMember, RoomMessage, RoomSnapshot, TeamRoom } from '@shared/team-room';
+import { githubRoomMonitor } from './github-room-monitor';
+import { getTeamMemberObservation } from './member-observation';
 import {
   createRoomFromTeam,
   seedFreeformRoom,
@@ -43,4 +46,10 @@ export const teamRoomController = createRPCController({
     updateMemberProfile(params),
   postMessage: (params: PostMessageParams): Promise<RoomMessage> => postMessage(params),
   getMessages: (roomId: string): Promise<RoomMessage[]> => getMessages(roomId),
+  getMemberObservation: (roomId: string, memberId: string): Promise<TeamMemberObservation | null> =>
+    getTeamMemberObservation(roomId, memberId),
+  getGitHubMonitorState: (roomId: string): Promise<GitHubRoomMonitorState> =>
+    githubRoomMonitor.getState(roomId),
+  refreshGitHubMonitor: (roomId: string): Promise<GitHubRoomMonitorState> =>
+    githubRoomMonitor.runNow(roomId),
 });

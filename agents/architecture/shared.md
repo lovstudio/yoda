@@ -18,6 +18,8 @@
   - `src/shared/skills/`
 - Domain type modules (flat files):
   - `conversations.ts`, `fs.ts`, `git.ts`, `github.ts`, `hostPreview.ts`, `lifecycle.ts`, `projects.ts`, `pull-requests.ts`, `ssh.ts`, `tasks.ts`, `terminals.ts`, `urls.ts`, `utils.ts`
+  - `team-communication.ts` — normalized Agent Team/Room communication modes and observation types
+  - `team-room.ts` — room, member, message, and snapshot contracts
 - PTY helpers:
   - `ptyId.ts`, `ptySessionId.ts`
 - App settings types:

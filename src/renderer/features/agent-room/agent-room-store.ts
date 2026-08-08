@@ -4,6 +4,7 @@ import {
   roomMessagePostedChannel,
   teamRoomUpdatedChannel,
 } from '@shared/events/teamRoomEvents';
+import type { TeamCommunicationConfig } from '@shared/team-communication';
 import type { RoomSnapshot, TeamRoom } from '@shared/team-room';
 import type { RoutingHopLimit } from '@shared/team-routing-limit';
 import { events, rpc } from '@renderer/lib/ipc';
@@ -156,6 +157,7 @@ class AgentRoomStore {
   async updateRoomConfig(params: {
     roomId: string;
     routingHopLimit: RoutingHopLimit;
+    communication: TeamCommunicationConfig;
   }): Promise<void> {
     await rpc.teamRooms.updateRoomConfig(params);
     if (this.activeRoomId === params.roomId) {
