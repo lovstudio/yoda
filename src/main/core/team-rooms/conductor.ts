@@ -33,6 +33,7 @@ import { resolveTask } from '@main/core/projects/utils';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
+import { ensureRoomTaskAvailable } from './ensure-room-task';
 import {
   getAllRooms,
   getMemberByConversation,
@@ -362,6 +363,7 @@ class RoomConductor {
     const conversationId = alive && member.conversationId ? member.conversationId : randomUUID();
 
     try {
+      await ensureRoomTaskAvailable(projectId, taskId);
       // Install this member's own team-* scripts (ptyId baked in) and resolve the
       // per-member scripts dir its prompt should reference.
       const scriptsDir = await installTeamScripts(projectId, taskId, conversationId, runtime);
