@@ -105,6 +105,6 @@ describe('WorkspaceNotificationStore', () => {
 
     expect(onClick).toHaveBeenCalledWith('event');
     expect(store.getAction(id)).toBeUndefined();
-    expect(store.getSnapshot()).toHaveLength(1);
+    expect(store.getSnapshot()).toEqual([]);
   });
 });

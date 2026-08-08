@@ -1257,6 +1257,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       <WorkspaceNotificationCenter
         triggerClassName={RUNTIME_BAR_ACTION_CLASS}
         triggerLabelClassName={RUNTIME_BAR_ACTION_LABEL_CLASS}
+        onOpenTarget={(target) => openTaskTarget(target, navigate)}
       />
       <Popover open={isAgentPopoverOpen} onOpenChange={setIsAgentPopoverOpen}>
         <PopoverTrigger

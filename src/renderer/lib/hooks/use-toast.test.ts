@@ -48,7 +48,7 @@ describe('toast', () => {
     workspaceNotificationStore.clear();
   });
 
-  it('does not add a copy action to non-error toasts', () => {
+  it('does not retain non-actionable toasts in the notification queue', () => {
     toast({
       title: 'Saved',
       description: 'Project settings updated.',
@@ -58,12 +58,7 @@ describe('toast', () => {
     const options = mocks.sonnerToast.mock.calls[0][1] as ToastOptions;
     expect(options.action).toBeUndefined();
     expect(options.cancel).toBeUndefined();
-    expect(workspaceNotificationStore.getSnapshot()[0]).toMatchObject({
-      title: 'Saved',
-      description: 'Project settings updated.',
-      kind: 'info',
-      source: 'toast',
-    });
+    expect(workspaceNotificationStore.getSnapshot()).toEqual([]);
   });
 
   it('keeps a custom action on a non-error toast without adding copy', () => {
@@ -88,6 +83,7 @@ describe('toast', () => {
     workspaceNotificationStore.invokeAction(notification.id, undefined);
     expect(undo).toHaveBeenCalledTimes(1);
     expect(workspaceNotificationStore.getAction(notification.id)).toBeUndefined();
+    expect(workspaceNotificationStore.getSnapshot()).toEqual([]);
   });
 
   it('adds a copy action to error toasts', async () => {
@@ -101,6 +97,7 @@ describe('toast', () => {
 
     expect(mocks.writeText).toHaveBeenCalledWith('Something broke');
     expect(mocks.sonnerToast.success).toHaveBeenCalledWith('Copied', undefined);
+    expect(workspaceNotificationStore.getSnapshot()).toEqual([]);
   });
 
   it('adds a one-click debug info copy action', async () => {
@@ -159,13 +156,22 @@ describe('toast', () => {
     expect(mocks.writeText).toHaveBeenCalledWith('SSH failed\n\nconnecting\nauth failed');
   });
 
-  it('updates a loading notification when a toast reuses the same id', () => {
+  it('does not retain progress-only toast updates', () => {
     toast.loading('Checking…', { id: 'progress' });
     toast.success('Ready', { id: 'progress' });
 
-    expect(workspaceNotificationStore.getSnapshot()).toMatchObject([
-      { title: 'Ready', kind: 'success', source: 'toast' },
-    ]);
+    expect(workspaceNotificationStore.getSnapshot()).toEqual([]);
+  });
+
+  it('removes a retained toast when an update no longer requires action', () => {
+    toast.success('Update available', {
+      id: 'update',
+      action: { label: 'Download', onClick: vi.fn() },
+    });
     expect(workspaceNotificationStore.getSnapshot()).toHaveLength(1);
+
+    toast.success('Up to date', { id: 'update' });
+
+    expect(workspaceNotificationStore.getSnapshot()).toEqual([]);
   });
 });

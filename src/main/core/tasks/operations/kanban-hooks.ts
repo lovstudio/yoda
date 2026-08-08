@@ -134,6 +134,7 @@ function runNotifyHook(ctx: HookContext, message: string): void {
     details: [`Project: ${ctx.projectId}`, `Task: ${ctx.taskId}`].join('\n'),
     kind: 'info',
     source: 'automation',
+    requiresAction: false,
     target: { projectId: ctx.projectId, taskId: ctx.taskId },
   });
   if (!Notification.isSupported()) return;
