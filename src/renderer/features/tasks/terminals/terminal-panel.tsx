@@ -7,6 +7,8 @@ import {
 import { useIsActiveTask } from '../hooks/use-is-active-task';
 import { TerminalWorkbench } from './terminal-workbench';
 import { useCreateTerminal } from './use-create-terminal';
+import { useWorkspaceFileLinks } from './use-workspace-file-links';
+import { useWorkspaceWebLinks } from './use-workspace-web-links';
 
 export const TerminalsPanel = observer(function TerminalsPanel() {
   const { projectId, taskId } = useTaskViewContext();
@@ -22,6 +24,8 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
     provisionedTask.taskView.activeBottomPanelTab === 'terminals';
   const autoFocus = isActive && isVisible && provisionedTask.taskView.focusedRegion === 'bottom';
   const handleCreate = useCreateTerminal();
+  const fileLinks = useWorkspaceFileLinks(remoteConnectionId);
+  const webLinks = useWorkspaceWebLinks();
 
   return (
     <TerminalWorkbench
@@ -32,6 +36,8 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
       visible={isVisible}
       autoFocus={autoFocus}
       remoteConnectionId={remoteConnectionId}
+      fileLinks={fileLinks}
+      webLinks={webLinks}
       onCreateTerminal={handleCreate}
       onFocus={() => provisionedTask.taskView.setFocusedRegion('bottom')}
     />

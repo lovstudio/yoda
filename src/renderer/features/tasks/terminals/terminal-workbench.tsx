@@ -10,6 +10,8 @@ import {
   getHotkeyRegistration,
 } from '@renderer/lib/hooks/useKeyboardShortcuts';
 import { useTabShortcuts } from '@renderer/lib/hooks/useTabShortcuts';
+import type { TerminalFileLinkOptions } from '@renderer/lib/pty/terminal-file-links';
+import type { TerminalWebLinkOptions } from '@renderer/lib/pty/terminal-web-links';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
@@ -18,8 +20,6 @@ import { TerminalDrawerSidebar } from './terminal-drawer-sidebar';
 import type { TerminalManagerStore } from './terminal-manager';
 import { TerminalPtyContent } from './terminal-pty-content';
 import type { TerminalTabViewStore } from './terminal-tab-view-store';
-import { useWorkspaceFileLinks } from './use-workspace-file-links';
-import { useWorkspaceWebLinks } from './use-workspace-web-links';
 
 export const TerminalWorkbench = observer(function TerminalWorkbench({
   terminalMgr,
@@ -29,6 +29,8 @@ export const TerminalWorkbench = observer(function TerminalWorkbench({
   visible,
   autoFocus,
   remoteConnectionId,
+  fileLinks,
+  webLinks,
   onCreateTerminal,
   onFocus,
 }: {
@@ -39,6 +41,8 @@ export const TerminalWorkbench = observer(function TerminalWorkbench({
   visible: boolean;
   autoFocus: boolean;
   remoteConnectionId?: string;
+  fileLinks: TerminalFileLinkOptions | null;
+  webLinks: TerminalWebLinkOptions | null;
   onCreateTerminal: () => Promise<void> | void;
   onFocus: () => void;
 }) {
@@ -64,8 +68,6 @@ export const TerminalWorkbench = observer(function TerminalWorkbench({
     conflictBehavior: 'replace',
   });
 
-  const fileLinks = useWorkspaceFileLinks(remoteConnectionId);
-  const webLinks = useWorkspaceWebLinks();
   const emptyState = (
     <EmptyState
       icon={<Terminal className="h-5 w-5 text-muted-foreground" />}

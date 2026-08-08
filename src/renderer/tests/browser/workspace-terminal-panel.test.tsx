@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   terminal: null as { data: { id: string } } | null,
+  fileLinks: { workspaceRoot: '/project', onOpen: vi.fn() },
+  workbenchProps: null as Record<string, unknown> | null,
 }));
 
 vi.mock('lucide-react', () => ({
@@ -43,7 +45,14 @@ vi.mock('@renderer/features/tasks/terminals/terminal-log-context-menu', () => ({
 }));
 
 vi.mock('@renderer/features/tasks/terminals/terminal-workbench', () => ({
-  TerminalWorkbench: () => createElement('div', { 'data-terminal-workbench': true }),
+  TerminalWorkbench: (props: Record<string, unknown>) => {
+    mocks.workbenchProps = props;
+    return createElement('div', { 'data-terminal-workbench': true });
+  },
+}));
+
+vi.mock('@renderer/features/tasks/terminals/use-workspace-file-links', () => ({
+  useDefaultWorkspaceFileLinks: () => mocks.fileLinks,
 }));
 
 vi.mock('@renderer/lib/stores/workspace-terminal-store', () => ({
@@ -69,6 +78,7 @@ describe('WorkspaceTerminalPanel', () => {
 
   beforeEach(() => {
     mocks.terminal = null;
+    mocks.workbenchProps = null;
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -88,5 +98,7 @@ describe('WorkspaceTerminalPanel', () => {
 
     expect(mocks.terminal?.data.id).toBe('terminal-2');
     expect(host.querySelector('[data-terminal-context-menu="terminal-2"]')).not.toBeNull();
+    expect(mocks.workbenchProps?.fileLinks).toBe(mocks.fileLinks);
+    expect(mocks.workbenchProps?.webLinks).toBeNull();
   });
 });

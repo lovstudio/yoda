@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { TerminalLogContextMenu } from '@renderer/features/tasks/terminals/terminal-log-context-menu';
 import { TerminalWorkbench } from '@renderer/features/tasks/terminals/terminal-workbench';
+import { useDefaultWorkspaceFileLinks } from '@renderer/features/tasks/terminals/use-workspace-file-links';
 import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 
 const ICON_BUTTON_CLASS =
@@ -18,6 +19,7 @@ export const WorkspaceTerminalPanel = observer(function WorkspaceTerminalPanel()
     : undefined;
   const project = projectStore ? asMounted(projectStore) : undefined;
   const remoteConnectionId = project?.data.type === 'ssh' ? project.data.connectionId : undefined;
+  const fileLinks = useDefaultWorkspaceFileLinks(project?.data.path, remoteConnectionId);
 
   if (!manager || !tabs) return null;
 
@@ -75,6 +77,8 @@ export const WorkspaceTerminalPanel = observer(function WorkspaceTerminalPanel()
           visible={workspaceTerminalStore.isOpen}
           autoFocus={workspaceTerminalStore.isOpen}
           remoteConnectionId={remoteConnectionId}
+          fileLinks={fileLinks}
+          webLinks={null}
           onCreateTerminal={() => workspaceTerminalStore.createTerminal()}
           onFocus={() => {}}
         />

@@ -51,3 +51,43 @@ export function useWorkspaceFileLinks(
     [provisionedTask.path, provisionedTask.taskView, projectRoot, remoteConnectionId, homeDir]
   );
 }
+
+/**
+ * Context-free links for the shell-level project/global Terminal. Unlike the
+ * task drawer, this surface outlives task routes and opens files through the
+ * shared system action instead of a task sidebar.
+ */
+export function useDefaultWorkspaceFileLinks(
+  workspaceRoot: string | undefined,
+  remoteConnectionId: string | undefined
+): TerminalFileLinkOptions | null {
+  const { data: homeDir } = useQuery({
+    queryKey: ['homeDir'],
+    queryFn: () => rpc.app.getHomeDir(),
+    staleTime: Infinity,
+    enabled: !remoteConnectionId,
+  });
+  const resolvedHomeDir = typeof homeDir === 'string' ? homeDir : undefined;
+  const resolvedWorkspaceRoot = workspaceRoot ?? resolvedHomeDir;
+
+  return useMemo<TerminalFileLinkOptions | null>(() => {
+    if (!resolvedWorkspaceRoot) return null;
+    return {
+      workspaceRoot: resolvedWorkspaceRoot,
+      homeDir: resolvedHomeDir,
+      sshConnectionId: remoteConnectionId,
+      onOpen: ({ absolutePath, line, column, isDirectory }) => {
+        if (!absolutePath) return;
+        void rpc.app.openIn(
+          buildFilePathDefaultOpenRequest({
+            absolutePath,
+            kind: isDirectory ? 'directory' : 'file',
+            sshConnectionId: remoteConnectionId,
+            line,
+            column,
+          })
+        );
+      },
+    };
+  }, [remoteConnectionId, resolvedHomeDir, resolvedWorkspaceRoot]);
+}
