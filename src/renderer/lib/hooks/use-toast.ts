@@ -202,11 +202,21 @@ function recordToast(
   options?: ExternalToast,
   action?: unknown
 ): void {
+  const toastKey = String(options?.id ?? toastId);
+  const existingNotificationId = toastNotificationIds.get(toastKey);
+  const notificationAction = toNotificationAction(action);
+  if (!notificationAction) {
+    if (existingNotificationId) {
+      workspaceNotificationStore.remove(existingNotificationId);
+      toastNotificationIds.delete(toastKey);
+    }
+    return;
+  }
+
   const titleText = nodeToText(payload.title);
   const descriptionText = nodeToText(payload.description);
   const title = titleText ?? descriptionText ?? i18n.t('workspaceRuntime.notifications.untitled');
   const details = formatToastCopyText(payload) || title;
-  const toastKey = String(options?.id ?? toastId);
   const notificationId = workspaceNotificationStore.enqueue(
     {
       title,
@@ -215,8 +225,8 @@ function recordToast(
       kind,
       source: 'toast',
     },
-    toastNotificationIds.get(toastKey),
-    toNotificationAction(action)
+    existingNotificationId,
+    notificationAction
   );
   toastNotificationIds.set(toastKey, notificationId);
 }

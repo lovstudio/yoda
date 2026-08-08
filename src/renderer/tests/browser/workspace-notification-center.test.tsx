@@ -51,8 +51,9 @@ describe('WorkspaceNotificationCenter', () => {
     workspaceNotificationStore.clear();
   });
 
-  it('opens details and lets the user delete an individual notification', async () => {
+  it('opens actionable details and removes an item after its action runs', async () => {
     const runAction = vi.fn();
+    const openTarget = vi.fn();
     workspaceNotificationStore.enqueue(
       {
         title: 'Build finished',
@@ -69,6 +70,7 @@ describe('WorkspaceNotificationCenter', () => {
       details: 'Session: SESSION_ID',
       kind: 'info',
       source: 'agent',
+      target: { projectId: 'project-1', taskId: 'task-1', conversationId: 'session-1' },
     });
 
     await act(async () => {
@@ -76,6 +78,7 @@ describe('WorkspaceNotificationCenter', () => {
         createElement(WorkspaceNotificationCenter, {
           triggerClassName: 'trigger',
           triggerLabelClassName: 'label',
+          onOpenTarget: openTarget,
         })
       );
     });
@@ -102,16 +105,6 @@ describe('WorkspaceNotificationCenter', () => {
     expect(actionButton).toBeDefined();
     await act(async () => actionButton?.click());
     expect(runAction).toHaveBeenCalledOnce();
-
-    const moreButton = document.querySelector<HTMLButtonElement>(
-      '[aria-label="More Build finished"]'
-    );
-    await act(async () => moreButton?.click());
-    const deleteButton = Array.from(
-      document.querySelectorAll<HTMLElement>('[role="menuitem"]')
-    ).find((item) => item.textContent?.trim() === 'Delete');
-    await act(async () => deleteButton?.click());
-
     expect(workspaceNotificationStore.getSnapshot().map((entry) => entry.title)).toEqual([
       'Agent needs input',
     ]);
@@ -122,5 +115,19 @@ describe('WorkspaceNotificationCenter', () => {
     await act(async () => markAllReadButton?.click());
     expect(workspaceNotificationStore.getSnapshot()[0].readAt).not.toBeNull();
     expect(host.querySelector('[aria-label="Notifications 0"]')).not.toBeNull();
+
+    const openAgent = document.querySelector<HTMLButtonElement>(
+      '[aria-label="Open Agent needs input"]'
+    );
+    await act(async () => openAgent?.click());
+    const openTargetButton = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('button')
+    ).find((button) => button.textContent?.includes('workspaceRuntime.notifications.openTarget'));
+    await act(async () => openTargetButton?.click());
+    expect(openTarget).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'session-1',
+    });
   });
 });

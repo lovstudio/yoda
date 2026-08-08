@@ -18,6 +18,7 @@ import {
   workspaceNotificationStore,
   type WorkspaceNotification,
   type WorkspaceNotificationKind,
+  type WorkspaceNotificationTarget,
 } from '@renderer/lib/stores/notification-store';
 import { Button } from '@renderer/lib/ui/button';
 import {
@@ -34,11 +35,13 @@ import { cn } from '@renderer/utils/utils';
 type WorkspaceNotificationCenterProps = {
   triggerClassName: string;
   triggerLabelClassName: string;
+  onOpenTarget: (target: WorkspaceNotificationTarget) => void;
 };
 
 export function WorkspaceNotificationCenter({
   triggerClassName,
   triggerLabelClassName,
+  onOpenTarget,
 }: WorkspaceNotificationCenterProps) {
   const { t } = useTranslation();
   const notifications = useSyncExternalStore(
@@ -92,6 +95,10 @@ export function WorkspaceNotificationCenter({
             onDelete={() => {
               workspaceNotificationStore.remove(selected.id);
               setSelectedId(null);
+            }}
+            onOpenTarget={(target) => {
+              setOpen(false);
+              onOpenTarget(target);
             }}
           />
         ) : (
@@ -230,10 +237,12 @@ function NotificationDetails({
   notification,
   onBack,
   onDelete,
+  onOpenTarget,
 }: {
   notification: WorkspaceNotification;
   onBack: () => void;
   onDelete: () => void;
+  onOpenTarget: (target: WorkspaceNotificationTarget) => void;
 }) {
   const { t } = useTranslation();
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -295,14 +304,20 @@ function NotificationDetails({
             ) : null}
           </div>
         </div>
-        {action ? (
+        {action || notification.target ? (
           <Button
             type="button"
             size="sm"
             className="mt-3 w-full"
-            onClick={(event) => workspaceNotificationStore.invokeAction(notification.id, event)}
+            onClick={(event) => {
+              if (action) {
+                workspaceNotificationStore.invokeAction(notification.id, event);
+              } else if (notification.target) {
+                onOpenTarget(notification.target);
+              }
+            }}
           >
-            {action.label}
+            {action?.label ?? t('workspaceRuntime.notifications.openTarget')}
           </Button>
         ) : null}
         <dl className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-y border-border py-3 text-[11px]">

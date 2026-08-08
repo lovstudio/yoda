@@ -1212,7 +1212,7 @@
       "always": "Always",
       "unfocused": "Only when unfocused",
       "osNotifications": "OS notifications",
-      "osNotificationsDescription": "Show system banners when agents need attention or finish (while Yoda is unfocused)."
+      "osNotificationsDescription": "Show system banners when an Agent needs your attention while Yoda is unfocused."
     },
     "tasks": {
       "workspacesEnabled": "Enable workspaces",
@@ -4722,7 +4722,7 @@
     },
     "notifications": {
       "title": "Notifications",
-      "description": "Toasts, agent alerts, and automation notifications are kept here.",
+      "description": "Items that need your confirmation or follow-up are kept here.",
       "triggerLabel": "Notifications ({{count}} unread)",
       "summary": "{{unread}} unread, {{total}} total",
       "allReadSummary": "All read, {{total}} total",
@@ -4730,8 +4730,8 @@
       "markRead": "Mark as read",
       "markUnread": "Mark as unread",
       "untitled": "Notification",
-      "empty": "No notifications",
-      "emptyDescription": "New toasts and system alerts will appear here.",
+      "empty": "Nothing needs attention",
+      "emptyDescription": "Toasts that need confirmation and Agent requests will appear here.",
       "openDetails": "Open details for notification “{{title}}”",
       "detailsTitle": "Notification details",
       "details": "Full details",
@@ -4739,6 +4739,7 @@
       "delete": "Delete notification “{{title}}”",
       "deleteAction": "Delete",
       "moreActions": "More actions for notification “{{title}}”",
+      "openTarget": "Open to handle",
       "type": "Type",
       "source": "Source",
       "time": "Time",
@@ -4760,7 +4761,6 @@
         "system": "System"
       },
       "system": {
-        "agentCompleted": "Agent finished working",
         "agentAwaitingInput": "Agent is waiting for input"
       }
     },
