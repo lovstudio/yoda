@@ -40,6 +40,7 @@ import {
   getPendingRoomMessages,
   getRoom,
   postMessage,
+  retryFailedHandoff,
   setMemberConversation,
   setMemberStatus,
   setMessageDelivery,
@@ -136,18 +137,17 @@ class RoomConductor {
     sessionRef?: string | null;
     visibility?: 'room' | 'control';
   }): Promise<TeamRouteResult> {
-    const message = await postMessage(
-      {
-        roomId: args.roomId,
-        authorMemberId: args.authorMemberId,
-        kind: 'handoff',
-        body: args.body,
-        mentions: args.mentions,
-        sessionRef: args.sessionRef ?? null,
-        visibility: args.visibility ?? 'control',
-      },
-      { route: false }
-    );
+    const handoff = {
+      roomId: args.roomId,
+      authorMemberId: args.authorMemberId,
+      body: args.body,
+      mentions: args.mentions,
+      sessionRef: args.sessionRef ?? null,
+      visibility: args.visibility ?? ('control' as const),
+    };
+    const message =
+      (await retryFailedHandoff(handoff)) ??
+      (await postMessage({ ...handoff, kind: 'handoff' }, { route: false }));
     return this.routeMessage(args.roomId, message);
   }
 
@@ -419,12 +419,6 @@ class RoomConductor {
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       await setMemberStatus(roomId, member.id, 'error', member.conversationId).catch(() => {});
-      await postMessage({
-        roomId,
-        kind: 'system',
-        body: `${member.displayName} couldn't start: ${detail}`,
-        mentions: [],
-      }).catch(() => {});
       return { ok: false, error: detail };
     }
   }

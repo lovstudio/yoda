@@ -1,7 +1,7 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RoomMember } from '@shared/team-room';
+import type { RoomMember, RoomMessage } from '@shared/team-room';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -117,5 +117,49 @@ describe('AgentRoomComposer', () => {
     expect(mocks.postLeadMessage).toHaveBeenCalledOnce();
     expect(mocks.postLeadMessage).toHaveBeenCalledWith('西');
     expect(textarea.value).toBe('');
+  });
+
+  it('在失败的可见交接内展示可复制的错误详情', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+    const message: RoomMessage = {
+      id: 'handoff-1',
+      roomId: 'room-1',
+      authorMemberId: member.id,
+      kind: 'handoff',
+      body: '交付实施方案',
+      mentions: ['implementer'],
+      sessionRef: 'planner-session',
+      verdict: null,
+      visibility: 'room',
+      deliveryStatus: 'failed',
+      deliveryError: 'Task not found',
+      createdAt: '2026-08-08T10:00:00.000Z',
+    };
+    const { MessageRow } = await import('@renderer/features/agent-room/agent-room-panel');
+
+    await act(async () => {
+      root.render(
+        createElement(MessageRow, {
+          message,
+          byId: new Map([[member.id, member]]),
+          byHandle: new Map([[member.handle, member]]),
+          onOpenMember: vi.fn(),
+          onOpenSession: vi.fn(),
+        })
+      );
+    });
+
+    expect(host.textContent).toContain('agentRoom.dispatchFailed');
+    expect(host.textContent).toContain('Task not found');
+    const copy = host.querySelector<HTMLButtonElement>(
+      'button[title="agentRoom.copyDispatchError"]'
+    );
+    expect(copy).not.toBeNull();
+    await act(async () => copy?.click());
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"dispatchId": "handoff-1"'));
   });
 });
