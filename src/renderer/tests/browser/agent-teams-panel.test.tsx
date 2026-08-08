@@ -150,12 +150,14 @@ describe('AgentTeamsMainPanel', () => {
     expect(firstList).not.toBeNull();
     expect(getComputedStyle(firstList!).overflowY).toBe('auto');
     expect(firstList!.scrollHeight).toBeGreaterThan(firstList!.clientHeight);
-    firstList!.scrollTop = 80;
-    firstList!.dispatchEvent(new Event('scroll', { bubbles: true }));
+    await act(async () => {
+      firstList!.scrollTop = 80;
+      firstList!.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
     expect(firstList!.scrollTop).toBeGreaterThan(0);
 
     await act(async () => userEvent.keyboard('{Escape}'));
-    await settle();
+    await settle(150);
     await clickUser(trigger!);
     await settle();
 
@@ -188,8 +190,8 @@ async function clickUser(element: Element): Promise<void> {
   await act(async () => userEvent.click(element));
 }
 
-async function settle(): Promise<void> {
+async function settle(delay = 0): Promise<void> {
   await act(async () => {
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    await new Promise((resolve) => window.setTimeout(resolve, delay));
   });
 }
