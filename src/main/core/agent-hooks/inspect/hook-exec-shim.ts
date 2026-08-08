@@ -60,7 +60,7 @@ export function wrapHookCommand(original: string, hookId: string, hookEvent: str
     `  printf '{"hookId":%s,"hookEvent":%s,"exitCode":%s,"output":"%s"}' ` +
       `${q(JSON.stringify(hookId))} ${q(JSON.stringify(hookEvent))} "$__yoda_rc" ` +
       `"$(printf %s "$__yoda_out" | head -c 4000 | sed 's/[\\\\"]/ /g; s/[[:cntrl:]]/ /g')" | ` +
-      `curl -sf -X POST -H "Content-Type: application/json" ` +
+      `curl --noproxy '*' -sf -X POST -H "Content-Type: application/json" ` +
       `-H "X-Yoda-Token: $YODA_HOOK_TOKEN" -H "X-Yoda-Pty-Id: $YODA_PTY_ID" ` +
       `-H "X-Yoda-Event-Type: hook-exec" -d @- "http://127.0.0.1:$YODA_HOOK_PORT/hook" >/dev/null 2>&1 || :`,
     `fi`,

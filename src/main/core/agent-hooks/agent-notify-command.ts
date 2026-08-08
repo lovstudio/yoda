@@ -36,7 +36,7 @@ function readHookEndpointSnippet(): string {
 export function makeClaudeHookCommand(eventType: string): string {
   return (
     readHookEndpointSnippet() +
-    '[ -n "$YH_PORT" ] && curl -sf -X POST ' +
+    '[ -n "$YH_PORT" ] && curl --noproxy \'*\' -sf -X POST ' +
     '-H "Content-Type: application/json" ' +
     '-H "X-Yoda-Token: $YH_TOKEN" ' +
     '-H "X-Yoda-Pty-Id: $YODA_PTY_ID" ' +
@@ -55,7 +55,7 @@ function makePosixCodexNotifyCommand(): string[] {
     'bash',
     '-c',
     readHookEndpointSnippet() +
-      '[ -n "$YH_PORT" ] && curl -sf -X POST ' +
+      '[ -n "$YH_PORT" ] && curl --noproxy \'*\' -sf -X POST ' +
       "-H 'Content-Type: application/json' " +
       '-H "X-Yoda-Token: $YH_TOKEN" ' +
       '-H "X-Yoda-Pty-Id: $YODA_PTY_ID" ' +
