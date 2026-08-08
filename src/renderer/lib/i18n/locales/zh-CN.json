@@ -1439,6 +1439,7 @@
     "fullAuto": "全自动",
     "bypass": "跳过权限（危险）",
     "codex": {
+      "planDesc": "只读分析并在执行前请求确认",
       "requestApproval": "请求批准",
       "requestApprovalDesc": "编辑外部文件和使用互联网时始终询问",
       "autoApprove": "替我审批",
@@ -3312,13 +3313,43 @@
     "anyRuntime": "任意客户端",
     "skillsCount": "{{count}} 个 skill",
     "icon": "图标",
+    "optional": "选填",
     "namePlaceholder": "例如：Spec Writer",
     "descPlaceholder": "这个 Agent 用来做什么？",
     "preferredRuntime": "首选客户端",
     "preferredRuntimeHint": "可用时优先使用，否则回退到范式默认客户端。",
+    "runtimeDefault": "跟随全局客户端",
+    "runtimeSettings": "执行设置",
+    "runtimeSettingsHint": "留空时沿用全局设置；单独配置后，仅覆盖这个 Agent。",
     "model": "模型",
     "modelPlaceholder": "客户端默认",
     "modelDefault": "默认模型",
+    "modelCandidates": "打开模型候选",
+    "modelCustom": "自定义",
+    "modelCustomHint": "输入任意模型名称以使用自定义模型",
+    "reasoningEffort": "推理深度",
+    "reasoningDefault": "跟随客户端",
+    "reasoningClientHint": "选择 Codex 后可单独设置推理深度。",
+    "accessMode": "执行权限",
+    "accessModeHint": "Yoda 会转换成所选客户端对应的运行参数。",
+    "accessModes": {
+      "inherit": {
+        "label": "跟随全局",
+        "description": "使用当前客户端的全局权限设置"
+      },
+      "plan": {
+        "label": "计划模式",
+        "description": "只分析和制定计划，不直接写入项目"
+      },
+      "write": {
+        "label": "写作模式",
+        "description": "允许在项目范围内创建和编辑文件"
+      },
+      "full-access": {
+        "label": "完全访问",
+        "description": "允许客户端使用其最高权限执行"
+      }
+    },
     "systemPrompt": "System prompt",
     "systemPromptPlaceholder": "描述这个 Agent 的角色、约束和工作方式。",
     "noSystemPrompt": "暂无 system prompt",

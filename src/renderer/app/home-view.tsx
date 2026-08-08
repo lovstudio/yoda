@@ -44,7 +44,7 @@ import {
   BUILTIN_STARTUP_TEAM_ID,
   type AgentTeam,
 } from '@shared/agent-team';
-import { agentToDraft, type Agent } from '@shared/agents';
+import { agentToDraft, resolveAgentPermissionMode, type Agent } from '@shared/agents';
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
 import { FEATURE_WORKFLOW_STAGES, hasFeatureWorkflowContract } from '@shared/feature-workflow';
 import type { Branch } from '@shared/git';
@@ -286,6 +286,14 @@ function agentSkillSelection(agent: Agent | null): SkillSelectionInput | undefin
     autoSkillKeys: agent.enabledSkillIds,
     manualSkillKeys: agent.manualSkillIds,
   });
+}
+
+function agentRuntimeSettings(agent: Agent | null, runtimeId: RuntimeId) {
+  return {
+    model: agent?.model,
+    reasoningEffort: runtimeId === 'codex' ? agent?.reasoningEffort : undefined,
+    permissionMode: agent ? resolveAgentPermissionMode(runtimeId, agent.accessMode) : undefined,
+  };
 }
 
 function buildRequirementPrompt(args: { requirement: string; systemPrompt: string }): string {
@@ -1193,7 +1201,7 @@ export const HomeComposer = observer(function HomeComposer({
             project: appProject,
             taskName,
             runtimeId: slot.provider,
-            model: slot.agent?.model,
+            ...agentRuntimeSettings(slot.agent, slot.provider),
             systemPrompt: slot.systemPrompt,
             imagePaths,
             skillSelection: agentSkillSelection(slot.agent),
@@ -1231,6 +1239,8 @@ export const HomeComposer = observer(function HomeComposer({
           initialPrompt: string | undefined;
           titlePrompt?: string;
           model?: string | null;
+          reasoningEffort?: string | null;
+          permissionMode?: string;
           skillSelection?: SkillSelectionInput;
         }) => {
           const conversationId = crypto.randomUUID();
@@ -1251,6 +1261,8 @@ export const HomeComposer = observer(function HomeComposer({
             deferInitialPrompt,
             imagePaths: sessionImagePaths,
             model: args.model,
+            reasoningEffort: args.reasoningEffort,
+            permissionMode: args.permissionMode,
             skillSelection: args.skillSelection,
           });
           return { conversationId, runtime: args.provider, promise };
@@ -1278,7 +1290,7 @@ export const HomeComposer = observer(function HomeComposer({
               systemPrompt: slot.systemPrompt,
             }),
             titlePrompt: trimmed || undefined,
-            model: slot.agent?.model,
+            ...agentRuntimeSettings(slot.agent, slot.provider),
             skillSelection: agentSkillSelection(slot.agent),
           });
           finishTaskConversationSubmit();
@@ -1311,7 +1323,7 @@ export const HomeComposer = observer(function HomeComposer({
               systemPrompt: implementerSlot.systemPrompt,
             }),
             titlePrompt: trimmed || undefined,
-            model: implementerSlot.agent?.model,
+            ...agentRuntimeSettings(implementerSlot.agent, implementerSlot.provider),
             skillSelection: agentSkillSelection(implementerSlot.agent),
           });
           finishTaskConversationSubmit();
@@ -1398,7 +1410,7 @@ export const HomeComposer = observer(function HomeComposer({
             ? buildRequirementPrompt({ requirement, systemPrompt: normalSystemPrompt })
             : requirement || undefined,
           titlePrompt: trimmed || undefined,
-          model: normalSlot.agent?.model,
+          ...agentRuntimeSettings(normalSlot.agent, normalSlot.provider),
           skillSelection: agentSkillSelection(normalSlot.agent),
         });
         finishTaskConversationSubmit();
@@ -1468,7 +1480,7 @@ export const HomeComposer = observer(function HomeComposer({
             initialPrompt,
             deferInitialPrompt,
             imagePaths: sessionImagePaths,
-            model: draftSlot.agent?.model,
+            ...agentRuntimeSettings(draftSlot.agent, draftRuntime),
             skillSelection: agentSkillSelection(draftSlot.agent),
           },
         });
@@ -1532,6 +1544,8 @@ export const HomeComposer = observer(function HomeComposer({
         strategyKind: TaskSubmitStrategyKind;
         parentTaskId?: string;
         model?: string | null;
+        reasoningEffort?: string | null;
+        permissionMode?: string;
         skillSelection?: SkillSelectionInput;
       }) => {
         const taskId = crypto.randomUUID();
@@ -1571,6 +1585,8 @@ export const HomeComposer = observer(function HomeComposer({
             deferInitialPrompt,
             imagePaths: sessionImagePaths,
             model: args.model,
+            reasoningEffort: args.reasoningEffort,
+            permissionMode: args.permissionMode,
             skillSelection: args.skillSelection,
           },
         });
@@ -1589,7 +1605,7 @@ export const HomeComposer = observer(function HomeComposer({
           }),
           titlePrompt: trimmed || undefined,
           strategyKind: 'no-worktree',
-          model: slot.agent?.model,
+          ...agentRuntimeSettings(slot.agent, slot.provider),
           skillSelection: agentSkillSelection(slot.agent),
         });
         goToTask(mounted.data.id, task.taskId);
@@ -1713,7 +1729,7 @@ export const HomeComposer = observer(function HomeComposer({
             {
               projectId: variant.projectId,
               provider: slot.provider,
-              model: slot.agent?.model,
+              ...agentRuntimeSettings(slot.agent, slot.provider),
               skillSelection: agentSkillSelection(slot.agent),
               systemPrompt: slot.systemPrompt,
               strategyKind: variant.strategyKind,
@@ -1768,7 +1784,7 @@ export const HomeComposer = observer(function HomeComposer({
           }),
           titlePrompt: trimmed || undefined,
           strategyKind: reviewSubmitKind,
-          model: implementerSlot.agent?.model,
+          ...agentRuntimeSettings(implementerSlot.agent, implementerSlot.provider),
           skillSelection: agentSkillSelection(implementerSlot.agent),
         });
         goToTask(mounted.data.id, implementation.taskId);
@@ -1874,7 +1890,7 @@ export const HomeComposer = observer(function HomeComposer({
           : requirement || undefined,
         titlePrompt: trimmed || undefined,
         strategyKind: standardSubmitKind,
-        model: normalSlot.agent?.model,
+        ...agentRuntimeSettings(normalSlot.agent, normalSlot.provider),
         skillSelection: agentSkillSelection(normalSlot.agent),
       });
       goToTask(mounted.data.id, task.taskId);

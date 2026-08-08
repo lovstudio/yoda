@@ -953,6 +953,8 @@ export const agents = sqliteTable(
       .default(sql`'[]'`),
     preferredRuntime: text('preferred_runtime_provider'), // RuntimeId | null
     model: text('model'),
+    reasoningEffort: text('reasoning_effort'),
+    accessMode: text('access_mode').notNull().default('inherit'),
     source: text('source').notNull().default('local'), // 'local' | 'imported'
     createdAt: text('created_at')
       .notNull()

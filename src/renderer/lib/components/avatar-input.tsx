@@ -38,6 +38,7 @@ export function AvatarInput({
   previewClassName,
   inputClassName,
   onInputKeyDown,
+  appearance = 'field',
 }: {
   id: string;
   name: string;
@@ -53,6 +54,7 @@ export function AvatarInput({
   previewClassName?: string;
   inputClassName?: string;
   onInputKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
+  appearance?: 'field' | 'profile';
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState(false);
@@ -77,6 +79,50 @@ export function AvatarInput({
     }
   };
 
+  const fileInput = (
+    <input
+      ref={inputRef}
+      id={appearance === 'profile' ? id : undefined}
+      type="file"
+      accept={ACCEPTED_AVATAR_TYPES}
+      className="hidden"
+      tabIndex={-1}
+      onChange={(event) => {
+        void pickFile(event.currentTarget.files?.[0]);
+        event.currentTarget.value = '';
+      }}
+    />
+  );
+
+  if (appearance === 'profile') {
+    return (
+      <div className={cn('shrink-0', className)}>
+        {fileInput}
+        <button
+          type="button"
+          title={uploadTitle}
+          aria-label={uploadTitle}
+          disabled={disabled || reading}
+          onClick={() => inputRef.current?.click()}
+          className="group relative block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <AvatarValue
+            name={name}
+            value={value}
+            className={cn('size-16 rounded-2xl text-xl', previewClassName)}
+          />
+          <span className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/0 text-white transition-colors group-hover:bg-black/35 group-focus-visible:bg-black/35">
+            {reading ? (
+              <Loader2 className="size-5 animate-spin" />
+            ) : (
+              <ImagePlus className="size-5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+            )}
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className={cn('flex min-w-0 items-center gap-2', className)}>
       <AvatarValue name={name} value={value} className={cn('size-10 text-sm', previewClassName)} />
@@ -91,17 +137,7 @@ export function AvatarInput({
           disabled={disabled || reading}
           className={cn('h-8 min-w-0 text-xs', inputClassName)}
         />
-        <input
-          ref={inputRef}
-          type="file"
-          accept={ACCEPTED_AVATAR_TYPES}
-          className="hidden"
-          tabIndex={-1}
-          onChange={(event) => {
-            void pickFile(event.currentTarget.files?.[0]);
-            event.currentTarget.value = '';
-          }}
-        />
+        {fileInput}
         <Button
           type="button"
           variant="outline"

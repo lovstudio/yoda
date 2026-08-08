@@ -17,6 +17,8 @@ export async function startAiLabBuildTask(input: {
   taskName: string;
   runtimeId: RuntimeId;
   model?: string | null;
+  reasoningEffort?: string | null;
+  permissionMode?: string;
   systemPrompt?: string;
   imagePaths?: string[];
   skillSelection?: SkillSelectionInput;
@@ -49,6 +51,8 @@ export async function startAiLabBuildTask(input: {
         initialPrompt: plan.initialPrompt,
         imagePaths: input.imagePaths,
         model: input.model,
+        reasoningEffort: input.reasoningEffort,
+        permissionMode: input.permissionMode,
         skillSelection: input.skillSelection,
       },
     })

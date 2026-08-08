@@ -4,6 +4,7 @@ import type { Agent } from '@shared/agents';
 import { getRuntime } from '@shared/runtime-registry';
 import { useSkills } from '@renderer/features/skills/components/useSkills';
 import AgentLogo from '@renderer/lib/components/agent-logo';
+import { AvatarValue } from '@renderer/lib/components/avatar-value';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { agentConfig } from '@renderer/utils/agentConfig';
 
@@ -34,9 +35,7 @@ export const AgentInfoCard: React.FC<{ agent: Agent }> = ({ agent }) => {
   return (
     <div className="w-80 max-w-[20rem] rounded-lg border border-border bg-background p-3 text-foreground shadow-md">
       <div className="mb-2 flex items-center gap-2">
-        <span className="flex size-5 shrink-0 items-center justify-center text-[15px] leading-none">
-          {agent.icon || '🤖'}
-        </span>
+        <AvatarValue name={agent.name} value={agent.icon} className="size-5 rounded-md text-xs" />
         <strong className="min-w-0 flex-1 truncate text-sm font-medium leading-none">
           {agent.name}
         </strong>

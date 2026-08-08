@@ -86,6 +86,8 @@ function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | n
     skillPolicyMode: base.skillPolicyMode,
     preferredRuntime: member.runtime,
     model: base.model,
+    reasoningEffort: null,
+    accessMode: 'inherit',
     source: 'local',
     createdAt: '',
     updatedAt: '',

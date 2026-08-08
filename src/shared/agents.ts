@@ -1,6 +1,11 @@
-import type { RuntimeId } from './runtime-registry';
+import {
+  getRuntimePermissionModes,
+  type RuntimeId,
+  type RuntimePermissionMode,
+} from './runtime-registry';
 
 export type AgentSkillPolicyMode = 'runtime-defaults' | 'allowlist';
+export type AgentAccessMode = 'inherit' | 'plan' | 'write' | 'full-access';
 
 /**
  * A user-configurable Agent: a reusable bundle of a system prompt, a set of
@@ -38,6 +43,10 @@ export interface Agent {
   preferredRuntime: RuntimeId | null;
   /** Optional model hint (e.g. 'claude-opus-4-8'); null = runtime default. */
   model: string | null;
+  /** Optional client-specific reasoning depth; null = inherit the client default. */
+  reasoningEffort: string | null;
+  /** Product-level access tier, mapped to the selected client's native permission mode. */
+  accessMode: AgentAccessMode;
   /** 'local' = authored here; 'imported' = brought in from a share/market. */
   source: AgentSource;
   createdAt: string;
@@ -57,6 +66,8 @@ export interface AgentDraft {
   skillPolicyMode: AgentSkillPolicyMode;
   preferredRuntime: RuntimeId | null;
   model: string | null;
+  reasoningEffort: string | null;
+  accessMode: AgentAccessMode;
 }
 
 export const DEFAULT_AGENT_ICON = '🤖';
@@ -65,13 +76,15 @@ export function emptyAgentDraft(): AgentDraft {
   return {
     name: '',
     description: '',
-    icon: DEFAULT_AGENT_ICON,
+    icon: '',
     systemPrompt: '',
     enabledSkillIds: [],
     manualSkillIds: [],
     skillPolicyMode: 'runtime-defaults',
     preferredRuntime: null,
     model: null,
+    reasoningEffort: null,
+    accessMode: 'inherit',
   };
 }
 
@@ -86,5 +99,45 @@ export function agentToDraft(agent: Agent): AgentDraft {
     skillPolicyMode: agent.skillPolicyMode,
     preferredRuntime: agent.preferredRuntime,
     model: agent.model,
+    reasoningEffort: agent.reasoningEffort,
+    accessMode: agent.accessMode,
   };
+}
+
+export function isAgentAccessMode(value: unknown): value is AgentAccessMode {
+  return value === 'inherit' || value === 'plan' || value === 'write' || value === 'full-access';
+}
+
+/**
+ * Convert the reusable Agent access tier into the concrete permission mode
+ * exposed by a runtime. Unsupported intermediate tiers degrade to the
+ * runtime's normal mode; full access is selected only when a danger tier is
+ * explicitly available.
+ */
+export function resolveAgentPermissionMode(
+  runtimeId: RuntimeId,
+  accessMode: AgentAccessMode
+): string | undefined {
+  if (accessMode === 'inherit') return undefined;
+  const modes = getRuntimePermissionModes(runtimeId);
+  const preferredIds: Record<Exclude<AgentAccessMode, 'inherit'>, string[]> = {
+    plan: ['plan'],
+    write: ['accept-edits', 'full-auto', 'default'],
+    'full-access': [],
+  };
+  if (accessMode === 'full-access') {
+    return modes.find((mode) => mode.danger)?.id;
+  }
+  return findPermissionMode(modes, preferredIds[accessMode])?.id ?? modes[0]?.id;
+}
+
+function findPermissionMode(
+  modes: readonly RuntimePermissionMode[],
+  preferredIds: readonly string[]
+): RuntimePermissionMode | undefined {
+  for (const id of preferredIds) {
+    const match = modes.find((mode) => mode.id === id);
+    if (match) return match;
+  }
+  return undefined;
 }

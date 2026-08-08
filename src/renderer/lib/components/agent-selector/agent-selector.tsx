@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RuntimeId } from '@shared/runtime-registry';
 import AgentLogo from '@renderer/lib/components/agent-logo';
+import { Button } from '@renderer/lib/ui/button';
 import {
   Combobox,
   ComboboxCollection,
@@ -37,6 +38,9 @@ interface AgentSelectorProps {
   autoFocus?: boolean;
   /** Agent/slot model override that will be passed to this runtime. */
   model?: string | null;
+  /** Optional action shown in the menu to restore the global client default. */
+  onClear?: () => void;
+  emptyLabel?: string;
 }
 
 export const AgentSelector: React.FC<AgentSelectorProps> = observer(
@@ -49,6 +53,8 @@ export const AgentSelector: React.FC<AgentSelectorProps> = observer(
     installable = true,
     autoFocus = false,
     model,
+    onClear,
+    emptyLabel,
   }) => {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
@@ -108,7 +114,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = observer(
             </>
           ) : (
             <span className="flex-1 truncate text-foreground-muted">
-              {t('agents.noRuntimeInstalled')}
+              {emptyLabel ?? t('agents.noRuntimeInstalled')}
             </span>
           )}
           <ChevronDown className="size-3.5 shrink-0 text-foreground-muted" />
@@ -189,6 +195,22 @@ export const AgentSelector: React.FC<AgentSelectorProps> = observer(
               </ComboboxGroup>
             )}
           </ComboboxList>
+          {onClear ? (
+            <div className="border-t border-border p-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start text-xs"
+                onClick={() => {
+                  onClear();
+                  setOpen(false);
+                }}
+              >
+                {emptyLabel ?? t('agents.noRuntimeInstalled')}
+              </Button>
+            </div>
+          ) : null}
         </ComboboxContent>
       </Combobox>
     );

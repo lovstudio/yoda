@@ -321,6 +321,12 @@ const CODEX_PERMISSION_MODES: RuntimePermissionMode[] = [
     args: ['--sandbox', 'workspace-write', '--ask-for-approval', 'untrusted'],
   },
   {
+    id: 'plan',
+    labelKey: 'permissionMode.plan',
+    descriptionKey: 'permissionMode.codex.planDesc',
+    args: ['--sandbox', 'read-only', '--ask-for-approval', 'untrusted'],
+  },
+  {
     id: 'full-auto',
     labelKey: 'permissionMode.codex.autoApprove',
     descriptionKey: 'permissionMode.codex.autoApproveDesc',
