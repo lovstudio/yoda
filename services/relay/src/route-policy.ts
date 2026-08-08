@@ -58,6 +58,10 @@ function isSessionsPrefix(segments: string[]): boolean {
   );
 }
 
+function isXhsJobsPrefix(segments: string[]): boolean {
+  return segments[0] === 'v1' && segments[1] === 'xhs' && segments[2] === 'jobs';
+}
+
 function assertAllowedUpstreamRoute(method: string, segments: string[]): boolean {
   if (method === 'GET' && segments.length === 2 && segments[0] === 'v1') {
     if (segments[1] === 'snapshot' || segments[1] === 'profile' || segments[1] === 'skills') {
@@ -86,6 +90,15 @@ function assertAllowedUpstreamRoute(method: string, segments: string[]): boolean
     segments[3] === 'skills'
   ) {
     return false;
+  }
+
+  if (isXhsJobsPrefix(segments)) {
+    if (method === 'POST' && segments.length === 3) return false;
+    if (method === 'GET' && segments.length === 4 && segments[3]) return false;
+    if (method === 'POST' && segments.length === 5 && segments[3] && segments[4] === 'confirm') {
+      return false;
+    }
+    throw new RoutePolicyError(404, 'not_found', 'Relay endpoint was not found.');
   }
 
   if (!isSessionsPrefix(segments)) {

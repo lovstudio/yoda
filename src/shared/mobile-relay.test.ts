@@ -25,6 +25,9 @@ describe('mobile relay contract', () => {
     expect(isAllowedMobileRelayRequest('GET', '/v1/skills')).toBe(true);
     expect(isAllowedMobileRelayRequest('GET', '/v1/projects/project/skills')).toBe(true);
     expect(isAllowedMobileRelayRequest('POST', '/v1/demands')).toBe(true);
+    expect(isAllowedMobileRelayRequest('POST', '/v1/xhs/jobs')).toBe(true);
+    expect(isAllowedMobileRelayRequest('GET', '/v1/xhs/jobs/job-1')).toBe(true);
+    expect(isAllowedMobileRelayRequest('POST', '/v1/xhs/jobs/job-1/confirm')).toBe(true);
     expect(
       isAllowedMobileRelayRequest(
         'GET',
@@ -40,6 +43,8 @@ describe('mobile relay contract', () => {
     expect(isAllowedMobileRelayRequest('GET', '/health')).toBe(false);
     expect(isAllowedMobileRelayRequest('POST', '/rpc')).toBe(false);
     expect(isAllowedMobileRelayRequest('DELETE', '/v1/demands')).toBe(false);
+    expect(isAllowedMobileRelayRequest('GET', '/v1/xhs/jobs')).toBe(false);
+    expect(isAllowedMobileRelayRequest('POST', '/v1/xhs/jobs/job-1/raw')).toBe(false);
     expect(isAllowedMobileRelayRequest('GET', '/v1/snapshot?debug=1')).toBe(false);
   });
 

@@ -206,6 +206,65 @@ describe('Yoda Relay server', () => {
     });
   });
 
+  it('bridges a bounded Xiaohongshu long-article job without forwarding cookies', async () => {
+    const { httpBaseUrl, wsBaseUrl } = await startRelay();
+    const host = await connectHost(wsBaseUrl);
+    const requestFrame = new Promise<Record<string, unknown>>((resolve) => {
+      host.once('message', (data) => {
+        const frame = JSON.parse(data.toString()) as Record<string, unknown>;
+        resolve(frame);
+        sendJsonResponse(
+          host,
+          String(frame.requestId),
+          JSON.stringify({
+            schemaVersion: 1,
+            jobId: 'job-1',
+            state: 'templates_ready',
+            templates: [{ id: 'clean', name: '简洁长文' }],
+          }),
+          { 'Set-Cookie': 'must-not-leak=1' },
+          202
+        );
+      });
+    });
+
+    const response = await fetch(`${httpBaseUrl}/v1/devices/${DEVICE_ID}/v1/xhs/jobs`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${MOBILE_TOKEN}`,
+        'Content-Type': 'application/json',
+        Cookie: 'must-not-forward=1',
+      },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        draftId: 'draft-1',
+        draftVersion: 'v1',
+        idempotencyKey: 'draft-1:v1:xiaohongshu',
+        mode: 'long_article',
+        title: '纯文字长文',
+        content: '正文留在任务体中，素材引用可选。',
+      }),
+    });
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      jobId: 'job-1',
+      state: 'templates_ready',
+    });
+    expect(response.headers.get('set-cookie')).toBeNull();
+    const frame = await requestFrame;
+    expect(frame).toMatchObject({
+      v: 1,
+      type: 'request.start',
+      method: 'POST',
+      path: '/v1/xhs/jobs',
+      headers: { 'content-type': 'application/json' },
+    });
+    const body = Buffer.from(String(frame.bodyBase64), 'base64').toString('utf8');
+    expect(JSON.parse(body)).toMatchObject({ mode: 'long_article' });
+    expect(body).not.toContain('must-not-forward');
+  });
+
   it.each([65_579, 160 * 1024])(
     'preserves a %i-byte response split at the 64 KiB desktop boundary',
     async (bodyBytes) => {

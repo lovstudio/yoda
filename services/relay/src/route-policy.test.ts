@@ -19,6 +19,14 @@ describe('resolveForwardableMobileRoute', () => {
     ],
     ['POST', '/v1/devices/desktop-1/v1/demands', '/v1/demands', false],
     ['POST', '/v1/devices/desktop-1/v1/attachments', '/v1/attachments', false],
+    ['POST', '/v1/devices/desktop-1/v1/xhs/jobs', '/v1/xhs/jobs', false],
+    ['GET', '/v1/devices/desktop-1/v1/xhs/jobs/job-1', '/v1/xhs/jobs/job-1', false],
+    [
+      'POST',
+      '/v1/devices/desktop-1/v1/xhs/jobs/job-1/confirm',
+      '/v1/xhs/jobs/job-1/confirm',
+      false,
+    ],
     [
       'POST',
       '/v1/devices/desktop-1/v1/attachments/123e4567-e89b-12d3-a456-426614174000/chunks',
@@ -63,6 +71,8 @@ describe('resolveForwardableMobileRoute', () => {
     ['GET', '/v1/devices/desktop-1/v1/projects/p/tasks/t/sessions/s/input'],
     ['POST', '/v1/devices/desktop-1/v1/projects/p/tasks/t/sessions/s/events'],
     ['POST', '/v1/devices/desktop-1/v1/skills'],
+    ['GET', '/v1/devices/desktop-1/v1/xhs/jobs'],
+    ['POST', '/v1/devices/desktop-1/v1/xhs/jobs/job-1/raw'],
     ['POST', '/v1/devices/desktop-1/v1/projects/p/skills'],
     ['POST', '/v1/devices/desktop-1/v1/projects/p/tasks/t/sessions/s/skills'],
     ['GET', '/v1/devices/desktop-1/v1/snapshot?admin=true'],

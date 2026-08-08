@@ -177,6 +177,9 @@ const MOBILE_RELAY_ALLOWED_PATHS = [
   /^\/v1\/skills$/,
   /^\/v1\/demands$/,
   /^\/v1\/attachments(?:\/[0-9a-f-]+\/(?:chunks|complete|discard))?$/i,
+  /^\/v1\/xhs\/jobs$/,
+  /^\/v1\/xhs\/jobs\/[^/?]+$/,
+  /^\/v1\/xhs\/jobs\/[^/?]+\/confirm$/,
   /^\/v1\/projects\/[^/?]+\/skills$/,
   /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions$/,
   /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions\/[^/?]+(?:\/input|\/events|\/skills)?$/,
@@ -186,6 +189,9 @@ export function isAllowedMobileRelayRequest(method: string, path: string): boole
   const normalizedMethod = method.toUpperCase();
   if (!['GET', 'POST'].includes(normalizedMethod)) return false;
   if (path.startsWith('/v1/attachments') && normalizedMethod !== 'POST') return false;
+  if (path === '/v1/xhs/jobs' && normalizedMethod !== 'POST') return false;
+  if (/^\/v1\/xhs\/jobs\/[^/?]+$/.test(path) && normalizedMethod !== 'GET') return false;
+  if (/^\/v1\/xhs\/jobs\/[^/?]+\/confirm$/.test(path) && normalizedMethod !== 'POST') return false;
   return MOBILE_RELAY_ALLOWED_PATHS.some((pattern) => pattern.test(path));
 }
 
