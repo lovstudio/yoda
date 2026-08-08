@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   getEnabledPromptPrinciplesText: vi.fn(),
   getProviderConfig: vi.fn(),
   getRemoteShellProfile: vi.fn(),
+  injectTuiStartupInput: vi.fn(),
   maybeAutoTrustSsh: vi.fn(),
   maybeAutoTrustCodexSsh: vi.fn(),
   noteOutput: vi.fn(),
@@ -133,6 +134,10 @@ vi.mock('./image-attachments', () => ({
   substituteImageMentions: (prompt: string | undefined) => prompt,
 }));
 
+vi.mock('./tui-startup-input', () => ({
+  injectTuiStartupInput: mocks.injectTuiStartupInput,
+}));
+
 vi.mock('./prompt-principles', () => ({
   getEnabledPromptPrinciplesText: mocks.getEnabledPromptPrinciplesText,
 }));
@@ -228,6 +233,7 @@ describe('SshConversationProvider registration lifecycle', () => {
     mocks.getEnabledPromptPrinciplesText.mockResolvedValue(undefined);
     mocks.getProviderConfig.mockResolvedValue(undefined);
     mocks.getRemoteShellProfile.mockResolvedValue({});
+    mocks.injectTuiStartupInput.mockResolvedValue(true);
     mocks.maybeAutoTrustSsh.mockResolvedValue(undefined);
     mocks.maybeAutoTrustCodexSsh.mockResolvedValue(undefined);
     mocks.resolveAvailableTmuxSessionName.mockResolvedValue(undefined);
@@ -287,6 +293,25 @@ describe('SshConversationProvider registration lifecycle', () => {
     expect(provider.getActiveSessionCount()).toBe(1);
     expect(ptySessionRegistry.get(sessionId)).toBe(pty);
     expect(pty.killCalls).toBe(0);
+  });
+
+  it('injects runtime startup input after registering the remote PTY', async () => {
+    const pty = new FakePty();
+    mocks.buildAgentCommand.mockReturnValue({
+      command: 'codex',
+      args: ['--sandbox', 'read-only', '--ask-for-approval', 'never'],
+      startupInput: '/plan Inspect the repository',
+    });
+    mocks.openSsh2Pty.mockResolvedValue({ success: true, data: pty });
+    provider = createProvider();
+
+    await provider.startSession({ ...conversation, runtimeId: 'codex', permissionMode: 'plan' });
+
+    expect(mocks.injectTuiStartupInput).toHaveBeenCalledWith({
+      pty,
+      runtimeId: 'codex',
+      input: '/plan Inspect the repository',
+    });
   });
 
   it('detaches silence tracking when stop removes the live PTY', async () => {

@@ -75,6 +75,7 @@ import {
   resolveRuntimeStateDirectory,
   resolveRuntimeTmuxEnv,
 } from './runtime-env';
+import { injectTuiStartupInput } from './tui-startup-input';
 import { prepareWindowsClaudeSettings } from './windows-claude-settings';
 
 const DEFAULT_COLS = 80;
@@ -388,7 +389,7 @@ export class LocalConversationProvider implements ConversationProvider {
               initialPrompt: effectiveIsResuming ? undefined : effectiveInitialPrompt,
             })
           : baseCommand;
-      const { command, args: baseArgs } = managedCommand;
+      const { command, args: baseArgs, startupInput } = managedCommand;
       const argsWithNotify = withCodexRuntimeNotifyArgs(conversation.runtimeId, baseArgs, port);
 
       const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
@@ -499,6 +500,12 @@ export class LocalConversationProvider implements ConversationProvider {
         }
       })();
       spawnedPty = pty;
+      const startupInputPromise = startupInput
+        ? injectTuiStartupInput({ pty, runtimeId: conversation.runtimeId, input: startupInput })
+        : undefined;
+      // Attach the readiness listener immediately so early TUI output is observed;
+      // the result is awaited after registry ownership is committed below.
+      void startupInputPromise?.catch(() => {});
 
       if (preparedSettings.cleanup) {
         this.sessionArtifactCleanups.set(sessionId, {
@@ -614,6 +621,11 @@ export class LocalConversationProvider implements ConversationProvider {
         },
         initialPrompt?.trim() || pendingImagePaths ? 'working' : 'idle'
       );
+      if (startupInputPromise) {
+        const delivered = await startupInputPromise;
+        if (!this.ownsPendingStart(sessionId, startToken)) return;
+        if (!delivered) throw new Error(`${conversation.runtimeId} exited before startup input.`);
+      }
       if (useClipboardImagePaste && pendingImagePaths) {
         void injectClipboardImagesAndPrompt({
           pty,

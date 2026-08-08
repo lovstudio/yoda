@@ -41,6 +41,9 @@ Each provider has a terminal output classifier in `src/main/core/conversations/i
 ## Provider Runtime Notes
 
 - Claude uses deterministic `--session-id` values for conversation isolation.
+- Codex Plan sessions combine the read-only/no-approval CLI policy with native TUI `/plan`.
+  `buildAgentCommand(...)` returns that mode switch as `startupInput`; local and SSH providers
+  must inject it only after the TUI is ready, before accepting later turns.
 - Codex MaaS providers point at the loopback endpoint exposed by the optional
   `lovstudio.maas-gateway` Marketplace extension. Codex receives only a local
   admission token through `experimental_bearer_token`; the upstream endpoint

@@ -7,6 +7,8 @@ import { buildClaudeSkillOverrides, buildCodexSkillConfig } from './skill-runtim
 export type AgentCommand = {
   command: string;
   args: string[];
+  /** Input injected after the interactive TUI is ready, before callers can send later turns. */
+  startupInput?: string;
 };
 
 const SHELL_SYNTAX_ERROR = 'Custom CLI commands support executable command prefixes only. ';
@@ -287,6 +289,11 @@ function formatTomlString(value: string): string {
   return JSON.stringify(value);
 }
 
+function buildNativePlanStartupInput(command: string, initialPrompt: string | undefined): string {
+  const prompt = initialPrompt?.trim();
+  return prompt ? `${command} ${prompt}` : command;
+}
+
 export function buildAgentCommand({
   runtimeId,
   providerConfig,
@@ -376,6 +383,10 @@ export function buildAgentCommand({
     permissionMode,
     providerConfig?.autoApproveFlag
   );
+  const nativePlanStartupInput =
+    runtimeId === 'codex' && permission?.id === 'plan' && providerDef?.planActivateCommand
+      ? buildNativePlanStartupInput(providerDef.planActivateCommand, initialPrompt)
+      : undefined;
   if (permission) {
     if (permission.usesAutoApproveFlag) {
       if (providerConfig?.autoApproveFlag)
@@ -424,7 +435,12 @@ export function buildAgentCommand({
     args.push('-c', `service_tier=${formatTomlString(effectiveFastMode ? 'fast' : 'default')}`);
   }
 
-  if (!isResuming && initialPrompt && !providerDef?.useKeystrokeInjection) {
+  if (
+    !isResuming &&
+    initialPrompt &&
+    !providerDef?.useKeystrokeInjection &&
+    !nativePlanStartupInput
+  ) {
     args.push(...parseArgField(providerConfig?.initialPromptFlag), initialPrompt);
   }
 
@@ -485,7 +501,11 @@ export function buildAgentCommand({
     );
   }
 
-  return { command, args: normalizedArgs };
+  return {
+    command,
+    args: normalizedArgs,
+    ...(nativePlanStartupInput ? { startupInput: nativePlanStartupInput } : {}),
+  };
 }
 
 export function buildAgentSubcommand({

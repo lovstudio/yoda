@@ -56,7 +56,7 @@ describe('buildAgentCommand', () => {
     });
   });
 
-  it('keeps Codex plan mode read-only without interrupting for approvals', () => {
+  it('starts Codex native Plan mode inside a read-only session without approvals', () => {
     const command = buildAgentCommand({
       runtimeId: 'codex',
       providerConfig: runtimeConfigDefaults.codex,
@@ -67,13 +67,34 @@ describe('buildAgentCommand', () => {
 
     expect(command).toEqual({
       command: 'codex',
+      args: ['--sandbox', 'read-only', '--ask-for-approval', 'never'],
+      startupInput: '/plan Inspect the repository and propose a plan',
+    });
+  });
+
+  it('reactivates Codex native Plan mode before a resumed session accepts input', () => {
+    const command = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig: runtimeConfigDefaults.codex,
+      permissionMode: 'plan',
+      sessionId: '019e00e5-0aba-7f30-a13e-ddf5df6cd705',
+      isResuming: true,
+      workingDirectory: '/workspace/current',
+    });
+
+    expect(command).toEqual({
+      command: 'codex',
       args: [
+        'resume',
+        '--cd',
+        '/workspace/current',
+        '019e00e5-0aba-7f30-a13e-ddf5df6cd705',
         '--sandbox',
         'read-only',
         '--ask-for-approval',
         'never',
-        'Inspect the repository and propose a plan',
       ],
+      startupInput: '/plan',
     });
   });
 
