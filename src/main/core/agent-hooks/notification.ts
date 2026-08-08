@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { BrowserWindow, Notification } from 'electron';
-import { isAttentionNotification, type AgentEvent } from '@shared/events/agentEvents';
+import { agentEventRequiresUserAction, type AgentEvent } from '@shared/events/agentEvents';
 import {
   notificationCreatedChannel,
   notificationFocusTaskChannel,
@@ -16,33 +16,14 @@ import { log } from '@main/lib/logger';
 
 function getNotificationMessage(
   event: AgentEvent
-): Pick<AppNotificationCreated, 'description' | 'kind' | 'messageKey'> | null {
-  if (event.type === 'stop') {
-    return {
-      description: 'Your agent has finished working',
-      kind: 'success',
-      messageKey: 'agentCompleted',
-    };
-  }
-  if (event.type === 'awaiting-input') {
-    return {
-      description: 'Your agent is waiting for input',
-      kind: 'info',
-      messageKey: 'agentAwaitingInput',
-    };
-  }
-  if (event.type === 'notification') {
-    const { notificationType } = event.payload;
-    if (!notificationType) return null;
-    if (isAttentionNotification(notificationType)) {
-      return {
-        description: 'Your agent is waiting for input',
-        kind: 'info',
-        messageKey: 'agentAwaitingInput',
-      };
-    }
-  }
-  return null;
+): Pick<AppNotificationCreated, 'description' | 'kind' | 'messageKey' | 'requiresAction'> | null {
+  if (!agentEventRequiresUserAction(event)) return null;
+  return {
+    description: 'Your agent is waiting for input',
+    kind: 'info',
+    messageKey: 'agentAwaitingInput',
+    requiresAction: true,
+  };
 }
 
 async function getTaskName(taskId: string | undefined): Promise<string | null> {

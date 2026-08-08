@@ -10,6 +10,7 @@ export function WorkspaceNotificationEvents() {
   useEffect(
     () =>
       events.on(notificationCreatedChannel, (notification) => {
+        if (!notification.requiresAction) return;
         const description = notification.messageKey
           ? t(`workspaceRuntime.notifications.system.${notification.messageKey}`)
           : notification.description;

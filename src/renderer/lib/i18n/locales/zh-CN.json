@@ -1212,7 +1212,7 @@
       "always": "总是",
       "unfocused": "仅当窗口未聚焦时",
       "osNotifications": "系统通知",
-      "osNotificationsDescription": "当代理需要处理或完成任务时（且 Yoda 未聚焦）显示系统横幅。"
+      "osNotificationsDescription": "当 Agent 需要你处理且 Yoda 未聚焦时显示系统横幅。"
     },
     "tasks": {
       "workspacesEnabled": "是否启用工作区",
@@ -4721,7 +4721,7 @@
     },
     "notifications": {
       "title": "通知",
-      "description": "Toast、Agent 提醒与自动化通知会统一保留在这里。",
+      "description": "需要你确认或继续处理的事项会保留在这里。",
       "triggerLabel": "通知（{{count}} 条未读）",
       "summary": "{{unread}} 条未读，共 {{total}} 条",
       "allReadSummary": "全部已读，共 {{total}} 条",
@@ -4729,8 +4729,8 @@
       "markRead": "标为已读",
       "markUnread": "标为未读",
       "untitled": "通知",
-      "empty": "暂无通知",
-      "emptyDescription": "新的 Toast 与系统提醒会出现在这里。",
+      "empty": "暂无待处理通知",
+      "emptyDescription": "需要确认的 Toast 与 Agent 请求会出现在这里。",
       "openDetails": "查看通知“{{title}}”的详情",
       "detailsTitle": "通知详情",
       "details": "完整详情",
@@ -4738,6 +4738,7 @@
       "delete": "删除通知“{{title}}”",
       "deleteAction": "删除",
       "moreActions": "通知“{{title}}”的更多操作",
+      "openTarget": "前往处理",
       "type": "类型",
       "source": "来源",
       "time": "时间",
@@ -4759,7 +4760,6 @@
         "system": "系统"
       },
       "system": {
-        "agentCompleted": "Agent 已完成工作",
         "agentAwaitingInput": "Agent 正在等待输入"
       }
     },

@@ -1,4 +1,4 @@
-export const WORKSPACE_NOTIFICATION_STORAGE_KEY = 'yoda:workspace-notifications:v1';
+export const WORKSPACE_NOTIFICATION_STORAGE_KEY = 'yoda:workspace-notifications:v2';
 export const WORKSPACE_NOTIFICATION_LIMIT = 200;
 
 export type WorkspaceNotificationKind = 'info' | 'success' | 'error' | 'loading';
@@ -143,9 +143,7 @@ export class WorkspaceNotificationStore {
     const action = this.actions.get(id);
     if (!action) return;
     action.onClick(event);
-    this.actions.delete(id);
-    this.entries = [...this.entries];
-    this.emit();
+    this.remove(id);
   }
 
   markRead(id: string): void {

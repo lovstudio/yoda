@@ -62,6 +62,13 @@ export interface AgentEvent {
   };
 }
 
+export function agentEventRequiresUserAction(event: Pick<AgentEvent, 'type' | 'payload'>): boolean {
+  return (
+    event.type === 'awaiting-input' ||
+    (event.type === 'notification' && isAttentionNotification(event.payload.notificationType))
+  );
+}
+
 export interface AgentEventEnvelope {
   event: AgentEvent;
   appFocused: boolean;

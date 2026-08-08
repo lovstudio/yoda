@@ -37,7 +37,8 @@ export type AppNotificationCreated = {
   details?: string;
   kind: 'info' | 'success' | 'error';
   source: 'agent' | 'automation' | 'system';
-  messageKey?: 'agentCompleted' | 'agentAwaitingInput';
+  requiresAction: boolean;
+  messageKey?: 'agentAwaitingInput';
   target?: {
     projectId: string;
     taskId: string;
