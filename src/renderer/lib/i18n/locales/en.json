@@ -2549,6 +2549,33 @@
     "teamName": "Name",
     "teamNamePlaceholder": "e.g. Product review team",
     "collaboration": "Collaboration",
+    "communicationMode": "Communication mode",
+    "communicationModes": {
+      "process": {
+        "label": "Process observation",
+        "description": "Observe agent processes and transcripts; full work stays in each session."
+      },
+      "message-hub": {
+        "label": "Message hub",
+        "description": "Agents hand off tasks and results through the room hub."
+      },
+      "shared-file": {
+        "label": "Shared file",
+        "description": "Agents coordinate through a shared file inside the task worktree."
+      },
+      "github": {
+        "label": "GitHub collaboration",
+        "description": "Use Issues and pull requests as the record while Yoda watches for updates."
+      }
+    },
+    "syncToRoom": "Sync work updates to room",
+    "syncToRoomHint": "When off, routing continues but the room only shows messages you send. Agent status and artifacts remain available in agent details.",
+    "sharedFilePath": "Shared file path",
+    "githubRepository": "GitHub repository",
+    "githubRepositoryPlaceholder": "Inherit project origin or enter owner/repo",
+    "githubIssue": "Issue number",
+    "githubPullRequest": "PR number",
+    "githubPollingHint": "The desktop checks Issues and PRs every minute; a remote Relay can add real-time webhooks.",
     "routingLimit": "Routing limit",
     "routingLimitHint": "Maximum agent deliveries after each human message.",
     "unlimited": "Unlimited",
@@ -2607,10 +2634,10 @@
         "lead": "Open collaboration — you direct the team:",
         "steps": [
           "@mention a teammate to delegate a task.",
-          "they work in their own session and report back.",
+          "they work in their own session, and Yoda continues according to the selected communication mode.",
           "@all to broadcast to everyone."
         ],
-        "note": "Each teammate works independently; click a message to watch its session."
+        "note": "Each teammate works independently; click an Agent to inspect status and artifacts."
       }
     },
     "viewAgent": "Agent details",
@@ -2622,9 +2649,52 @@
       "editProfile": "Edit agent",
       "saveProfile": "Save agent",
       "cancelEdit": "Cancel",
-      "updateFailed": "Failed to update agent"
+      "updateFailed": "Failed to update agent",
+      "workStatus": "Work status and artifacts",
+      "readingStatus": "Reading agent status…",
+      "process": "Process",
+      "transcript": "Transcript",
+      "sharedFile": "Shared file",
+      "notCreated": "Waiting to be created",
+      "githubIssue": "GitHub Issue",
+      "githubPullRequest": "GitHub PR",
+      "githubMonitor": "GitHub monitor",
+      "copyMonitorError": "Copy monitor error and debug details",
+      "githubMonitorStates": {
+        "disabled": "Disabled",
+        "idle": "Watching",
+        "polling": "Checking",
+        "error": "Check failed"
+      },
+      "processStates": {
+        "busy": "Working",
+        "idle": "Idle",
+        "waiting": "Waiting for input"
+      }
     },
     "settings": { "title": "Room settings" },
+    "communication": {
+      "mode": "Communication mode",
+      "modes": {
+        "process": "Process observation",
+        "message-hub": "Message hub",
+        "shared-file": "Shared file",
+        "github": "GitHub collaboration"
+      },
+      "descriptions": {
+        "process": "Yoda observes process state, hooks, and transcripts; agents hand off by ending their turn.",
+        "message-hub": "Agents send hand-off messages through the room hub.",
+        "shared-file": "Full artifacts live in a shared worktree file while the room handles routing.",
+        "github": "Issues and PRs are the record; Yoda checks them locally for updates."
+      },
+      "syncToRoom": "Sync work updates to room",
+      "syncToRoomHint": "When off, the room stays quiet while agent status, transcripts, and artifacts remain available from the right side.",
+      "sharedFile": "Shared file path",
+      "githubRepository": "GitHub repository",
+      "githubRepositoryPlaceholder": "Inherit project origin or enter owner/repo",
+      "githubIssue": "Issue number",
+      "githubPullRequest": "PR number"
+    },
     "preset": {
       "review": "Review loop",
       "feature": "Feature workflow",

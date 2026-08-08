@@ -96,7 +96,7 @@ describe('AgentTeamsMainPanel', () => {
       'profile'
     );
     expect(host.querySelector<HTMLInputElement>('#agent-team-name')?.required).toBe(true);
-    expect(host.querySelectorAll('[data-slot="select-trigger"]')).toHaveLength(2);
+    expect(host.querySelectorAll('[data-slot="select-trigger"]')).toHaveLength(3);
 
     const createAgentButton = Array.from(host.querySelectorAll('button')).find(
       (button) => button.textContent === 'agentTeams.createAgent'

@@ -1,0 +1,2 @@
+ALTER TABLE `agent_teams` ADD `communication` text DEFAULT '{"mode":"message-hub","syncToRoom":true,"sharedFilePath":".yoda/team/shared-handoff.md","githubRepository":"","githubIssueNumber":null,"githubPullRequestNumber":null}' NOT NULL;--> statement-breakpoint
+ALTER TABLE `team_rooms` ADD `communication` text DEFAULT '{"mode":"message-hub","syncToRoom":true,"sharedFilePath":".yoda/team/shared-handoff.md","githubRepository":"","githubIssueNumber":null,"githubPullRequestNumber":null}' NOT NULL;

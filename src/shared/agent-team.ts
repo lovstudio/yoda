@@ -9,6 +9,10 @@ import {
   FEATURE_QUALITY_PROMPT,
 } from './feature-workflow';
 import type { RuntimeId } from './runtime-registry';
+import {
+  DEFAULT_TEAM_COMMUNICATION_CONFIG,
+  type TeamCommunicationConfig,
+} from './team-communication';
 import { DEFAULT_ROUTING_HOP_LIMIT, type RoutingHopLimit } from './team-routing-limit';
 
 /**
@@ -53,6 +57,7 @@ export interface AgentTeam {
   /** Emoji/glyph, image URL, or data URL avatar (matches Agent.icon). */
   icon: string;
   routing: TeamRouting;
+  communication: TeamCommunicationConfig;
   /** Code-defined built-ins are not editable/deletable. */
   builtin: boolean;
   /** Max conductor routing deliveries per human prompt. null = unlimited. */
@@ -66,6 +71,7 @@ export interface AgentTeamDraft {
   name: string;
   icon: string;
   routing: TeamRouting;
+  communication: TeamCommunicationConfig;
   routingHopLimit: RoutingHopLimit;
   members: AgentTeamMember[];
 }
@@ -86,6 +92,7 @@ export const BUILTIN_TEAMS: AgentTeam[] = [
     name: 'Feature',
     icon: '🧭',
     routing: 'sequential',
+    communication: { ...DEFAULT_TEAM_COMMUNICATION_CONFIG },
     builtin: true,
     routingHopLimit: DEFAULT_ROUTING_HOP_LIMIT,
     members: [
@@ -146,6 +153,7 @@ export const BUILTIN_TEAMS: AgentTeam[] = [
     name: 'Startup',
     icon: '🏢',
     routing: 'fan-out',
+    communication: { ...DEFAULT_TEAM_COMMUNICATION_CONFIG },
     builtin: true,
     routingHopLimit: DEFAULT_ROUTING_HOP_LIMIT,
     members: [
@@ -193,6 +201,7 @@ export const BUILTIN_TEAMS: AgentTeam[] = [
     name: 'Review',
     icon: '🔍',
     routing: 'review-loop',
+    communication: { ...DEFAULT_TEAM_COMMUNICATION_CONFIG },
     builtin: true,
     routingHopLimit: DEFAULT_ROUTING_HOP_LIMIT,
     members: [

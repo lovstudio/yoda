@@ -2549,6 +2549,33 @@
     "teamName": "名称",
     "teamNamePlaceholder": "例如：产品评审组",
     "collaboration": "协作方式",
+    "communicationMode": "通信方式",
+    "communicationModes": {
+      "process": {
+        "label": "进程观察",
+        "description": "根据 Agent 进程与 Transcript 判断状态，完整产物保留在各自会话中。"
+      },
+      "message-hub": {
+        "label": "消息中枢",
+        "description": "Agent 通过房间中枢交接任务与结果。"
+      },
+      "shared-file": {
+        "label": "共享文件",
+        "description": "Agent 通过任务工作区内的共享文件持续交接。"
+      },
+      "github": {
+        "label": "GitHub 协同",
+        "description": "以 Issue 与 PR 为协作记录，并由 Yoda 监控更新。"
+      }
+    },
+    "syncToRoom": "同步工作动态到群聊",
+    "syncToRoomHint": "关闭后仍会调度 Agent，群聊仅保留你主动发送的内容；状态和产物可在 Agent 详情中查看。",
+    "sharedFilePath": "共享文件路径",
+    "githubRepository": "GitHub 仓库",
+    "githubRepositoryPlaceholder": "默认继承项目 origin，也可填写 owner/repo",
+    "githubIssue": "Issue 编号",
+    "githubPullRequest": "PR 编号",
+    "githubPollingHint": "桌面端按分钟检查 Issue 与 PR；实时 webhook 可由远程 Relay 接入。",
     "routingLimit": "路由步数上限",
     "routingLimitHint": "每次人类发言后最多投递给 Agent 的次数。",
     "unlimited": "无限",
@@ -2607,10 +2634,10 @@
         "lead": "自由协作——由你来调度：",
         "steps": [
           "@ 某个队友派活。",
-          "TA 在自己的会话里推进、完成后汇报。",
+          "TA 在自己的会话里推进，Yoda 根据所选通信方式接续下一步。",
           "@all 可广播给所有人。"
         ],
-        "note": "每位队友独立工作；点消息可查看其会话。"
+        "note": "每位队友独立工作；点击 Agent 可查看其状态与产物。"
       }
     },
     "viewAgent": "Agent 详情",
@@ -2622,9 +2649,52 @@
       "editProfile": "编辑 Agent",
       "saveProfile": "保存 Agent",
       "cancelEdit": "取消",
-      "updateFailed": "更新 Agent 失败"
+      "updateFailed": "更新 Agent 失败",
+      "workStatus": "工作状态与产物",
+      "readingStatus": "正在读取 Agent 状态…",
+      "process": "进程",
+      "transcript": "Transcript",
+      "sharedFile": "共享文件",
+      "notCreated": "等待创建",
+      "githubIssue": "GitHub Issue",
+      "githubPullRequest": "GitHub PR",
+      "githubMonitor": "GitHub 监控",
+      "copyMonitorError": "复制监控错误与调试信息",
+      "githubMonitorStates": {
+        "disabled": "未启用",
+        "idle": "监控中",
+        "polling": "检查中",
+        "error": "检查失败"
+      },
+      "processStates": {
+        "busy": "执行中",
+        "idle": "空闲",
+        "waiting": "等待输入"
+      }
     },
     "settings": { "title": "房间设置" },
+    "communication": {
+      "mode": "通信方式",
+      "modes": {
+        "process": "进程观察",
+        "message-hub": "消息中枢",
+        "shared-file": "共享文件",
+        "github": "GitHub 协同"
+      },
+      "descriptions": {
+        "process": "Yoda 观察进程、状态 Hook 与 Transcript；Agent 正常结束即可完成交接。",
+        "message-hub": "Agent 通过房间中枢发送交接消息。",
+        "shared-file": "完整产物写入任务工作区内的共享文件，房间只负责调度。",
+        "github": "Issue 与 PR 是协作记录；Yoda 在本机定期检查更新。"
+      },
+      "syncToRoom": "同步工作动态到群聊",
+      "syncToRoomHint": "关闭后群聊保持安静，Agent 状态、Transcript 与产物仍可从右侧打开。",
+      "sharedFile": "共享文件路径",
+      "githubRepository": "GitHub 仓库",
+      "githubRepositoryPlaceholder": "继承项目 origin 或填写 owner/repo",
+      "githubIssue": "Issue 编号",
+      "githubPullRequest": "PR 编号"
+    },
     "preset": {
       "review": "评审循环",
       "feature": "Feature 闭环",

@@ -2,6 +2,11 @@ import { Milestone, Send, Settings, TerminalSquare, Users } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  TEAM_COMMUNICATION_MODES,
+  type TeamCommunicationConfig,
+  type TeamCommunicationMode,
+} from '@shared/team-communication';
 import type { RoomMember, RoomMessage, RoomSnapshot } from '@shared/team-room';
 import {
   DEFAULT_ROUTING_HOP_LIMIT,
@@ -12,8 +17,18 @@ import { openFeature } from '@renderer/features/features/feature-navigation';
 import { useFeature } from '@renderer/features/features/use-features';
 import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { AvatarValue } from '@renderer/lib/components/avatar-value';
+import { Checkbox } from '@renderer/lib/ui/checkbox';
+import { Input } from '@renderer/lib/ui/input';
+import { Label } from '@renderer/lib/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/lib/ui/select';
 import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
 import {
@@ -85,7 +100,9 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
         <div className="min-w-0">
           <h2 className="truncate text-base font-semibold">{snapshot.room.name}</h2>
           <p className="text-xs text-foreground-muted">
-            {presetLabel} · {t('agentRoom.agentCount', { count: agents.length })}
+            {presetLabel} · {t(`agentRoom.communication.modes.${snapshot.room.communication.mode}`)}
+            {' · '}
+            {t('agentRoom.agentCount', { count: agents.length })}
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -190,18 +207,22 @@ const RoomSettingsPopover = observer(function RoomSettingsPopover({
 }) {
   const { t } = useTranslation();
   const [routingHopLimit, setRoutingHopLimit] = useState<RoutingHopLimit>(room.routingHopLimit);
+  const [communication, setCommunication] = useState<TeamCommunicationConfig>(room.communication);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setRoutingHopLimit(room.routingHopLimit);
-  }, [room.id, room.routingHopLimit]);
+    setCommunication(room.communication);
+  }, [room.communication, room.id, room.routingHopLimit]);
 
-  const dirty = routingHopLimit !== room.routingHopLimit;
+  const dirty =
+    routingHopLimit !== room.routingHopLimit ||
+    JSON.stringify(communication) !== JSON.stringify(room.communication);
   const save = async () => {
     if (!dirty || saving) return;
     setSaving(true);
     try {
-      await agentRoomStore.updateRoomConfig({ roomId: room.id, routingHopLimit });
+      await agentRoomStore.updateRoomConfig({ roomId: room.id, routingHopLimit, communication });
     } finally {
       setSaving(false);
     }
@@ -219,7 +240,7 @@ const RoomSettingsPopover = observer(function RoomSettingsPopover({
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-80 gap-3 border border-border bg-background p-3 text-foreground shadow-lg"
+        className="max-h-[min(42rem,calc(100vh-2rem))] w-80 gap-3 overflow-y-auto border border-border bg-background p-3 text-foreground shadow-lg"
       >
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
@@ -259,6 +280,116 @@ const RoomSettingsPopover = observer(function RoomSettingsPopover({
               {t('agentRoom.field.routingHopLimitHint')}
             </span>
           </label>
+          <div className="space-y-2">
+            <Label className="text-xs">{t('agentRoom.communication.mode')}</Label>
+            <Select
+              value={communication.mode}
+              onValueChange={(mode) =>
+                setCommunication((current) => ({
+                  ...current,
+                  mode: mode as TeamCommunicationMode,
+                }))
+              }
+            >
+              <SelectTrigger className="h-8 w-full text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TEAM_COMMUNICATION_MODES.map((mode) => (
+                  <SelectItem key={mode} value={mode}>
+                    {t(`agentRoom.communication.modes.${mode}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] leading-relaxed text-foreground-passive">
+              {t(`agentRoom.communication.descriptions.${communication.mode}`)}
+            </p>
+          </div>
+          <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-background-1 p-2.5">
+            <Checkbox
+              checked={communication.syncToRoom}
+              onCheckedChange={(checked) =>
+                setCommunication((current) => ({
+                  ...current,
+                  syncToRoom: checked === true,
+                }))
+              }
+            />
+            <span className="space-y-1">
+              <span className="block text-xs font-medium">
+                {t('agentRoom.communication.syncToRoom')}
+              </span>
+              <span className="block text-[10px] leading-relaxed text-foreground-passive">
+                {t('agentRoom.communication.syncToRoomHint')}
+              </span>
+            </span>
+          </label>
+          {communication.mode === 'shared-file' ? (
+            <div className="space-y-2">
+              <Label htmlFor="room-shared-file" className="text-xs">
+                {t('agentRoom.communication.sharedFile')}
+              </Label>
+              <Input
+                id="room-shared-file"
+                value={communication.sharedFilePath}
+                onChange={(event) =>
+                  setCommunication((current) => ({
+                    ...current,
+                    sharedFilePath: event.target.value,
+                  }))
+                }
+                className="font-mono text-xs"
+              />
+            </div>
+          ) : null}
+          {communication.mode === 'github' ? (
+            <div className="space-y-2">
+              <Label htmlFor="room-github-repository" className="text-xs">
+                {t('agentRoom.communication.githubRepository')}
+              </Label>
+              <Input
+                id="room-github-repository"
+                value={communication.githubRepository}
+                onChange={(event) =>
+                  setCommunication((current) => ({
+                    ...current,
+                    githubRepository: event.target.value,
+                  }))
+                }
+                placeholder={t('agentRoom.communication.githubRepositoryPlaceholder')}
+                className="font-mono text-xs"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  value={communication.githubIssueNumber ?? ''}
+                  onChange={(event) =>
+                    setCommunication((current) => ({
+                      ...current,
+                      githubIssueNumber: positiveIntegerOrNull(event.target.value),
+                    }))
+                  }
+                  placeholder={t('agentRoom.communication.githubIssue')}
+                  aria-label={t('agentRoom.communication.githubIssue')}
+                />
+                <Input
+                  type="number"
+                  min={1}
+                  value={communication.githubPullRequestNumber ?? ''}
+                  onChange={(event) =>
+                    setCommunication((current) => ({
+                      ...current,
+                      githubPullRequestNumber: positiveIntegerOrNull(event.target.value),
+                    }))
+                  }
+                  placeholder={t('agentRoom.communication.githubPullRequest')}
+                  aria-label={t('agentRoom.communication.githubPullRequest')}
+                />
+              </div>
+            </div>
+          ) : null}
           <button
             type="button"
             onClick={() => void save()}
@@ -272,6 +403,11 @@ const RoomSettingsPopover = observer(function RoomSettingsPopover({
     </Popover>
   );
 });
+
+function positiveIntegerOrNull(value: string): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 const TeamIntroPopover = observer(function TeamIntroPopover({
   agents,

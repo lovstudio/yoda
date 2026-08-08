@@ -1,5 +1,6 @@
 import type { RuntimeId } from './runtime-registry';
 import type { SkillSelectionInput } from './skills/types';
+import type { TeamCommunicationConfig } from './team-communication';
 import type { RoutingHopLimit } from './team-routing-limit';
 
 /** Preset that seeded a room. `review-loop` wires implementer↔reviewer routing. */
@@ -35,6 +36,7 @@ export interface TeamRoom {
   status: 'active' | 'archived';
   /** Max conductor routing deliveries per human prompt. null = unlimited. */
   routingHopLimit: RoutingHopLimit;
+  communication: TeamCommunicationConfig;
   createdAt: string;
   updatedAt: string;
 }

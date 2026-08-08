@@ -157,6 +157,23 @@ function ensureAgentExecutionSettingsCompatibility(connection: BetterSqlite3.Dat
   }
 }
 
+const TEAM_COMMUNICATION_DEFAULT =
+  '{"mode":"message-hub","syncToRoom":true,"sharedFilePath":".yoda/team/shared-handoff.md","githubRepository":"","githubIssueNumber":null,"githubPullRequestNumber":null}';
+
+function ensureTeamCommunicationCompatibility(connection: BetterSqlite3.Database): void {
+  for (const tableName of ['agent_teams', 'team_rooms']) {
+    if (
+      !tableExists(connection, tableName) ||
+      columnExists(connection, tableName, 'communication')
+    ) {
+      continue;
+    }
+    connection.exec(
+      `ALTER TABLE ${quoteIdentifier(tableName)} ADD communication text DEFAULT '${TEAM_COMMUNICATION_DEFAULT}' NOT NULL`
+    );
+  }
+}
+
 export function getBundledMigrationCount(): number {
   return migrationEntries.length;
 }
@@ -184,6 +201,8 @@ export function runBundledMigrations(connection: BetterSqlite3.Database): void {
         ensureWorkspaceSchemaCompatibility(connection);
       } else if (record.tag === '0050_stale_owl') {
         ensureAgentExecutionSettingsCompatibility(connection);
+      } else if (record.tag === '0051_massive_banshee') {
+        ensureTeamCommunicationCompatibility(connection);
       } else {
         const sqlKey = Object.keys(sqlFiles).find((k) => k.includes(record.tag));
         if (!sqlKey) throw new Error(`Missing bundled SQL for migration: ${record.tag}`);
@@ -201,4 +220,5 @@ export function runBundledMigrations(connection: BetterSqlite3.Database): void {
   })();
 
   ensureWorkspaceSchemaCompatibility(connection);
+  ensureTeamCommunicationCompatibility(connection);
 }

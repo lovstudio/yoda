@@ -241,4 +241,23 @@ describe('runBundledMigrations', () => {
       db.close();
     }
   });
+
+  it('repairs missing team communication settings after a journal-count upgrade', () => {
+    const db = new Database(':memory:');
+    try {
+      createMigrationTable(db);
+      insertAppliedMigrationRows(db, getBundledMigrationCount());
+      db.exec(`
+        CREATE TABLE agent_teams (id text PRIMARY KEY NOT NULL);
+        CREATE TABLE team_rooms (id text PRIMARY KEY NOT NULL);
+      `);
+
+      runBundledMigrations(db);
+
+      expect(columnExists(db, 'agent_teams', 'communication')).toBe(true);
+      expect(columnExists(db, 'team_rooms', 'communication')).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
 });

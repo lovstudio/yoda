@@ -11,6 +11,12 @@ import type { Agent } from '@shared/agents';
 import { BUILTIN_AGENT_PRESETS } from '@shared/builtin-agents';
 import { RUNTIMES } from '@shared/runtime-registry';
 import {
+  DEFAULT_TEAM_COMMUNICATION_CONFIG,
+  TEAM_COMMUNICATION_MODES,
+  type TeamCommunicationConfig,
+  type TeamCommunicationMode,
+} from '@shared/team-communication';
+import {
   DEFAULT_ROUTING_HOP_LIMIT,
   normalizeRoutingHopLimit,
   type RoutingHopLimit,
@@ -158,6 +164,7 @@ type Editing = {
   icon: string;
   routing: TeamRouting;
   routingHopLimit: RoutingHopLimit;
+  communication: TeamCommunicationConfig;
   members: AgentTeamMember[];
 } | null;
 
@@ -188,6 +195,7 @@ export function AgentTeamsMainPanel() {
       icon: '👥',
       routing: 'freeform',
       routingHopLimit: DEFAULT_ROUTING_HOP_LIMIT,
+      communication: { ...DEFAULT_TEAM_COMMUNICATION_CONFIG },
       members: [],
     });
   };
@@ -198,6 +206,7 @@ export function AgentTeamsMainPanel() {
       icon: team.icon,
       routing: team.routing,
       routingHopLimit: team.routingHopLimit,
+      communication: { ...team.communication },
       members: team.members.map((m) => ({ ...m })),
     });
   };
@@ -323,6 +332,9 @@ export function AgentTeamsMainPanel() {
             </div>
             <p className="mb-1 text-xs text-foreground-muted">
               {t(ROUTING_LABEL_KEYS[selected.routing])}
+            </p>
+            <p className="mb-1 text-xs text-foreground-muted">
+              {t(`agentTeams.communicationModes.${selected.communication.mode}.label`)}
             </p>
             <p className="mb-2 text-xs text-foreground-passive">
               {selected.routingHopLimit === null
@@ -506,6 +518,132 @@ function TeamEditor({
           </div>
         </div>
 
+        <div className="space-y-3 rounded-xl border border-border bg-muted/10 p-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label className="text-xs">{t('agentTeams.communicationMode')}</Label>
+              <Select
+                value={draft.communication.mode}
+                onValueChange={(mode) =>
+                  onChange({
+                    ...draft,
+                    communication: {
+                      ...draft.communication,
+                      mode: mode as TeamCommunicationMode,
+                    },
+                  })
+                }
+              >
+                <SelectTrigger
+                  className="h-9 w-full text-sm"
+                  aria-label={t('agentTeams.communicationMode')}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TEAM_COMMUNICATION_MODES.map((mode) => (
+                    <SelectItem key={mode} value={mode}>
+                      {t(`agentTeams.communicationModes.${mode}.label`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] leading-relaxed text-muted-foreground">
+                {t(`agentTeams.communicationModes.${draft.communication.mode}.description`)}
+              </p>
+            </div>
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-background/50 p-3">
+              <Checkbox
+                checked={draft.communication.syncToRoom}
+                onCheckedChange={(checked) =>
+                  onChange({
+                    ...draft,
+                    communication: { ...draft.communication, syncToRoom: checked === true },
+                  })
+                }
+              />
+              <span className="space-y-1">
+                <span className="block text-xs font-medium">{t('agentTeams.syncToRoom')}</span>
+                <span className="block text-[10px] leading-relaxed text-muted-foreground">
+                  {t('agentTeams.syncToRoomHint')}
+                </span>
+              </span>
+            </label>
+          </div>
+
+          {draft.communication.mode === 'shared-file' ? (
+            <div className="space-y-2">
+              <Label htmlFor="agent-team-shared-file" className="text-xs">
+                {t('agentTeams.sharedFilePath')}
+              </Label>
+              <Input
+                id="agent-team-shared-file"
+                value={draft.communication.sharedFilePath}
+                onChange={(event) =>
+                  onChange({
+                    ...draft,
+                    communication: {
+                      ...draft.communication,
+                      sharedFilePath: event.target.value,
+                    },
+                  })
+                }
+                className="font-mono text-xs"
+              />
+            </div>
+          ) : null}
+
+          {draft.communication.mode === 'github' ? (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-2 sm:col-span-3">
+                <Label htmlFor="agent-team-github-repository" className="text-xs">
+                  {t('agentTeams.githubRepository')}
+                </Label>
+                <Input
+                  id="agent-team-github-repository"
+                  value={draft.communication.githubRepository}
+                  onChange={(event) =>
+                    onChange({
+                      ...draft,
+                      communication: {
+                        ...draft.communication,
+                        githubRepository: event.target.value,
+                      },
+                    })
+                  }
+                  placeholder={t('agentTeams.githubRepositoryPlaceholder')}
+                  className="font-mono text-xs"
+                />
+              </div>
+              <CommunicationNumberField
+                id="agent-team-github-issue"
+                label={t('agentTeams.githubIssue')}
+                value={draft.communication.githubIssueNumber}
+                onChange={(githubIssueNumber) =>
+                  onChange({
+                    ...draft,
+                    communication: { ...draft.communication, githubIssueNumber },
+                  })
+                }
+              />
+              <CommunicationNumberField
+                id="agent-team-github-pr"
+                label={t('agentTeams.githubPullRequest')}
+                value={draft.communication.githubPullRequestNumber}
+                onChange={(githubPullRequestNumber) =>
+                  onChange({
+                    ...draft,
+                    communication: { ...draft.communication, githubPullRequestNumber },
+                  })
+                }
+              />
+              <p className="self-end pb-2 text-[10px] leading-relaxed text-muted-foreground">
+                {t('agentTeams.githubPollingHint')}
+              </p>
+            </div>
+          ) : null}
+        </div>
+
         <div className="flex flex-col gap-2">
           <div className="flex items-end justify-between gap-3">
             <div className="space-y-1">
@@ -619,6 +757,39 @@ function TeamEditor({
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CommunicationNumberField({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: number | null;
+  onChange: (value: number | null) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id} className="text-xs">
+        {label}
+      </Label>
+      <Input
+        id={id}
+        type="number"
+        min={1}
+        step={1}
+        value={value ?? ''}
+        onChange={(event) => {
+          const next = Number(event.target.value);
+          onChange(Number.isInteger(next) && next > 0 ? next : null);
+        }}
+        placeholder="#"
+        className="text-sm"
+      />
     </div>
   );
 }
