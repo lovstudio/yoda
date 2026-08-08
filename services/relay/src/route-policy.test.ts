@@ -10,6 +10,7 @@ describe('resolveForwardableMobileRoute', () => {
   it.each([
     ['GET', '/v1/devices/desktop-1/v1/snapshot', '/v1/snapshot', false],
     ['GET', '/v1/devices/desktop-1/v1/profile', '/v1/profile', false],
+    ['GET', '/v1/devices/desktop-1/v1/configuration', '/v1/configuration', false],
     ['GET', '/v1/devices/desktop-1/v1/skills', '/v1/skills', false],
     [
       'GET',
@@ -55,6 +56,12 @@ describe('resolveForwardableMobileRoute', () => {
       'POST',
       '/v1/devices/desktop-1/v1/projects/p/tasks/t/sessions/session/input',
       '/v1/projects/p/tasks/t/sessions/session/input',
+      false,
+    ],
+    [
+      'POST',
+      '/v1/devices/desktop-1/v1/projects/p/tasks/t/sessions/session/config',
+      '/v1/projects/p/tasks/t/sessions/session/config',
       false,
     ],
   ])('allows %s %s', (method, url, upstreamPath, isEventStream) => {
