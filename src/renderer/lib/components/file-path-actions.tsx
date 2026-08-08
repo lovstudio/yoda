@@ -33,6 +33,7 @@ import {
   buildFilePathOpenInRequest,
   type FilePathOpenTarget,
 } from './file-path-open';
+import { executeFilePathOpenRequest } from './file-path-operations';
 
 /**
  * Context-free file actions for any UI that references a path on disk:
@@ -496,14 +497,7 @@ function resultErrorMessage(error: unknown): string | undefined {
 
 async function openIn(args: OpenInRequest, t: (key: string) => string): Promise<void> {
   try {
-    const res = await rpc.app.openIn(args);
-    if (!res?.success) {
-      toast({
-        title: t('fileActions.openFailed'),
-        description: res?.error,
-        variant: 'destructive',
-      });
-    }
+    await executeFilePathOpenRequest(args);
   } catch (error) {
     toast({
       title: t('fileActions.openFailed'),

@@ -1,6 +1,6 @@
 import { exec } from 'node:child_process';
-import { stat, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { eq } from 'drizzle-orm';
 import { app, clipboard, dialog, nativeImage, shell } from 'electron';
@@ -60,6 +60,7 @@ import {
   buildRemoteTerminalExecArgs,
 } from '@main/utils/remoteOpenIn';
 import { sampleProcessTrees, TtlSingleFlightSampler } from './agent-process-sampler';
+import { createScreenshotFileName } from './screenshot-file-name';
 import {
   checkCommand,
   checkMacApp,
@@ -361,7 +362,7 @@ class AppService implements IInitializable, IDisposable {
     clipboard.writeText(text);
   }
 
-  clipboardWritePng(dataUrl: string): void {
+  async clipboardWritePng(dataUrl: string, suggestedName?: string): Promise<string> {
     if (
       typeof dataUrl !== 'string' ||
       !dataUrl.startsWith('data:image/png;base64,') ||
@@ -371,7 +372,12 @@ class AppService implements IInitializable, IDisposable {
     }
     const image = nativeImage.createFromDataURL(dataUrl);
     if (image.isEmpty()) throw new Error('PNG clipboard payload is empty');
+    const screenshotDirectory = join(app.getPath('temp'), 'yoda', 'screenshots');
+    await mkdir(screenshotDirectory, { recursive: true });
+    const filePath = join(screenshotDirectory, createScreenshotFileName(suggestedName));
+    await writeFile(filePath, image.toPNG());
     clipboard.writeImage(image);
+    return filePath;
   }
 
   triggerVoiceInput(args?: TriggerVoiceInputArgs): Promise<TriggerVoiceInputResult> {

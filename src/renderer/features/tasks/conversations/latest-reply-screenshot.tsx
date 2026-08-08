@@ -1,10 +1,11 @@
 import { Camera, Loader2 } from 'lucide-react';
 import { domToPng } from 'modern-screenshot';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { MobileSessionTranscriptBlock } from '@shared/mobile-api';
 import { getRuntime } from '@shared/runtime-registry';
+import { openFilePath } from '@renderer/lib/components/file-path-operations';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
@@ -32,6 +33,26 @@ export function LatestReplyScreenshotButton({
   const [payload, setPayload] = useState<ScreenshotPayload | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
 
+  const openScreenshot = useCallback(
+    async (filePath: string, reveal: boolean) => {
+      try {
+        await openFilePath({ absolutePath: filePath, kind: 'file' }, reveal ? 'reveal' : 'open');
+      } catch (error) {
+        toast({
+          title: t(
+            reveal
+              ? 'workspaceRuntime.replyScreenshotRevealFailed'
+              : 'workspaceRuntime.replyScreenshotOpenFailed'
+          ),
+          description: error instanceof Error ? error.message : String(error),
+          variant: 'destructive',
+          debugInfo: { filePath, reveal, error },
+        });
+      }
+    },
+    [t, toast]
+  );
+
   const captureLatestReply = useCallback(async () => {
     if (isCapturing) return;
     setIsCapturing(true);
@@ -57,9 +78,31 @@ export function LatestReplyScreenshotButton({
         maximumCanvasSize: 32_767,
         scale: 2,
       });
-      const copied = await rpc.app.clipboardWritePng(dataUrl);
+      const copied = await rpc.app.clipboardWritePng(dataUrl, detail.sessionTitle);
       if (!copied.success) throw new Error(copied.error);
-      toast.success(t('workspaceRuntime.replyScreenshotCopied'));
+      const fileName = copied.filePath.split(/[\\/]/).pop() ?? copied.filePath;
+      toast.success(
+        <ScreenshotToastTitle>{t('workspaceRuntime.replyScreenshotCopied')}</ScreenshotToastTitle>,
+        {
+          description: <ScreenshotToastFileName>{fileName}</ScreenshotToastFileName>,
+          action: {
+            label: (
+              <ScreenshotToastActionLabel>
+                {t('workspaceRuntime.replyScreenshotOpen')}
+              </ScreenshotToastActionLabel>
+            ),
+            onClick: () => void openScreenshot(copied.filePath, false),
+          },
+          cancel: {
+            label: (
+              <ScreenshotToastActionLabel>
+                {t('workspaceRuntime.replyScreenshotReveal')}
+              </ScreenshotToastActionLabel>
+            ),
+            onClick: () => void openScreenshot(copied.filePath, true),
+          },
+        }
+      );
     } catch (error) {
       toast({
         title: t('workspaceRuntime.replyScreenshotFailed'),
@@ -76,7 +119,7 @@ export function LatestReplyScreenshotButton({
       setPayload(null);
       setIsCapturing(false);
     }
-  }, [conversationId, isCapturing, projectId, t, taskId, toast]);
+  }, [conversationId, isCapturing, openScreenshot, projectId, t, taskId, toast]);
 
   return (
     <>
@@ -99,6 +142,18 @@ export function LatestReplyScreenshotButton({
         : null}
     </>
   );
+}
+
+function ScreenshotToastTitle({ children }: { children: ReactNode }) {
+  return <span className="font-medium">{children}</span>;
+}
+
+function ScreenshotToastFileName({ children }: { children: ReactNode }) {
+  return <span className="break-all font-mono text-[11px]">{children}</span>;
+}
+
+function ScreenshotToastActionLabel({ children }: { children: ReactNode }) {
+  return <span>{children}</span>;
 }
 
 function LatestReplyScreenshotCard({

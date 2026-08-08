@@ -30,10 +30,10 @@ export const appController = createRPCController({
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   },
-  clipboardWritePng: async (dataUrl: string) => {
+  clipboardWritePng: async (dataUrl: string, suggestedName?: string) => {
     try {
-      appService.clipboardWritePng(dataUrl);
-      return { success: true as const };
+      const filePath = await appService.clipboardWritePng(dataUrl, suggestedName);
+      return { success: true as const, filePath };
     } catch (error) {
       return {
         success: false as const,

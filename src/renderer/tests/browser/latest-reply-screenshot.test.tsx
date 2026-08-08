@@ -1,4 +1,4 @@
-import { act } from 'react';
+import { act, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   clipboardWritePng: vi.fn(),
   domToPng: vi.fn(),
   getLatestReply: vi.fn(),
+  openIn: vi.fn(),
   toast: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
@@ -34,7 +35,7 @@ vi.mock('@renderer/lib/hooks/use-toast', () => ({
 
 vi.mock('@renderer/lib/ipc', () => ({
   rpc: {
-    app: { clipboardWritePng: mocks.clipboardWritePng },
+    app: { clipboardWritePng: mocks.clipboardWritePng, openIn: mocks.openIn },
     sessionShares: { getLatestReply: mocks.getLatestReply },
   },
 }));
@@ -52,7 +53,11 @@ describe('LatestReplyScreenshotButton', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.domToPng.mockResolvedValue('data:image/png;base64,c2NyZWVuc2hvdA==');
-    mocks.clipboardWritePng.mockResolvedValue({ success: true });
+    mocks.clipboardWritePng.mockResolvedValue({
+      success: true,
+      filePath: '/tmp/yoda/screenshots/responsive-screenshot.png',
+    });
+    mocks.openIn.mockResolvedValue({ success: true });
     mocks.getLatestReply.mockResolvedValue({
       generatedAt: '2026-08-06T10:00:00.000Z',
       runtimeId: 'codex',
@@ -99,8 +104,44 @@ describe('LatestReplyScreenshotButton', () => {
     expect(card.textContent).toContain('Responsive screenshot');
     expect(card.textContent).toContain('The latest reply.');
     expect(options.scale).toBe(2);
-    expect(mocks.clipboardWritePng).toHaveBeenCalledWith('data:image/png;base64,c2NyZWVuc2hvdA==');
-    expect(mocks.toastSuccess).toHaveBeenCalledWith('workspaceRuntime.replyScreenshotCopied');
+    expect(mocks.clipboardWritePng).toHaveBeenCalledWith(
+      'data:image/png;base64,c2NyZWVuc2hvdA==',
+      'Responsive screenshot'
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledOnce();
+
+    type ToastNode = ReactElement<{ children?: ReactNode }>;
+    type ToastAction = { label: ToastNode; onClick: () => void };
+    const [message, toastOptions] = mocks.toastSuccess.mock.calls[0] as [
+      ToastNode,
+      { description: ToastNode; action: ToastAction; cancel: ToastAction },
+    ];
+    expect(isValidElement(message)).toBe(true);
+    expect(message.props.children).toBe('workspaceRuntime.replyScreenshotCopied');
+    expect(toastOptions.description.props.children).toBe('responsive-screenshot.png');
+    expect(toastOptions.action.label.props.children).toBe('workspaceRuntime.replyScreenshotOpen');
+    expect(toastOptions.cancel.label.props.children).toBe('workspaceRuntime.replyScreenshotReveal');
+
+    await act(async () => toastOptions.action.onClick());
+    await vi.waitFor(() =>
+      expect(mocks.openIn).toHaveBeenCalledWith({
+        app: 'finder',
+        isRemote: false,
+        path: '/tmp/yoda/screenshots/responsive-screenshot.png',
+        reveal: false,
+        sshConnectionId: null,
+      })
+    );
+    await act(async () => toastOptions.cancel.onClick());
+    await vi.waitFor(() =>
+      expect(mocks.openIn).toHaveBeenCalledWith({
+        app: 'finder',
+        isRemote: false,
+        path: '/tmp/yoda/screenshots/responsive-screenshot.png',
+        reveal: true,
+        sshConnectionId: null,
+      })
+    );
   });
 
   it('keeps the current turn explicit when there is no reply yet', async () => {
@@ -128,5 +169,44 @@ describe('LatestReplyScreenshotButton', () => {
 
     expect(mocks.toastError).toHaveBeenCalledWith('workspaceRuntime.replyScreenshotEmpty');
     expect(mocks.domToPng).not.toHaveBeenCalled();
+  });
+
+  it('keeps file action failures inspectable', async () => {
+    const { LatestReplyScreenshotButton } = await import(
+      '@renderer/features/tasks/conversations/latest-reply-screenshot'
+    );
+    await act(async () => {
+      root.render(
+        <LatestReplyScreenshotButton
+          projectId="project-1"
+          taskId="task-1"
+          conversationId="conversation-1"
+        />
+      );
+    });
+
+    await userEvent.click(host.querySelector('button')!);
+    await vi.waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledOnce());
+    mocks.openIn.mockResolvedValueOnce({ success: false, error: 'Screenshot file is missing' });
+    const [, toastOptions] = mocks.toastSuccess.mock.calls[0] as [
+      ReactElement,
+      { action: { onClick: () => void } },
+    ];
+
+    await act(async () => toastOptions.action.onClick());
+    await vi.waitFor(() =>
+      expect(mocks.toast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'workspaceRuntime.replyScreenshotOpenFailed',
+          description: 'Screenshot file is missing',
+          variant: 'destructive',
+          debugInfo: expect.objectContaining({
+            filePath: '/tmp/yoda/screenshots/responsive-screenshot.png',
+            reveal: false,
+            error: expect.any(Error),
+          }),
+        })
+      )
+    );
   });
 });
