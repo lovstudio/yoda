@@ -1,4 +1,12 @@
-import { Milestone, Send, Settings, TerminalSquare, Users } from 'lucide-react';
+import {
+  AlertTriangle,
+  Copy,
+  Milestone,
+  Send,
+  Settings,
+  TerminalSquare,
+  Users,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -62,6 +70,9 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
   );
   const featureQuery = useFeature(snapshot.room.projectId, snapshot.room.featureId ?? undefined);
   const feature = featureQuery.data ?? null;
+  const latestFailedDispatch = snapshot.dispatches
+    ?.filter((dispatch) => dispatch.deliveryStatus === 'failed')
+    .at(-1);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -165,6 +176,38 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
           </div>
         </div>
       </header>
+
+      {latestFailedDispatch && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-destructive/25 bg-destructive/8 px-5 py-2 text-xs text-destructive">
+          <AlertTriangle className="size-3.5 shrink-0" />
+          <span className="font-medium">{t('agentRoom.dispatchFailed')}</span>
+          <span className="min-w-0 flex-1 truncate text-foreground-muted">
+            {latestFailedDispatch.deliveryError}
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              void navigator.clipboard.writeText(
+                JSON.stringify(
+                  {
+                    roomId: snapshot.room.id,
+                    dispatchId: latestFailedDispatch.id,
+                    targets: latestFailedDispatch.mentions,
+                    error: latestFailedDispatch.deliveryError,
+                    createdAt: latestFailedDispatch.createdAt,
+                  },
+                  null,
+                  2
+                )
+              )
+            }
+            title={t('agentRoom.copyDispatchError')}
+            className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-destructive/10"
+          >
+            <Copy className="size-3.5" />
+          </button>
+        </div>
+      )}
 
       {snapshot.room.preset === 'feature-workflow' && (
         <FeatureWorkflowRail

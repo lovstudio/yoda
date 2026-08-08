@@ -878,6 +878,10 @@ export const roomMembers = sqliteTable(
     role: text('role').notNull(),
     /** Runtime the member's conversation spawns on (null for the human lead). */
     runtime: text('runtime'),
+    /** Execution profile captured from the referenced Agent at room creation. */
+    model: text('model'),
+    reasoningEffort: text('reasoning_effort'),
+    permissionMode: text('permission_mode'),
     /** Role system prompt, captured at member creation (mirrors reviewer_system_prompt). */
     systemPrompt: text('system_prompt').notNull().default(''),
     /** Skill profile captured when the member is created, so every new session is reproducible. */
@@ -917,6 +921,11 @@ export const roomMessages = sqliteTable(
     sessionRef: text('session_ref'),
     /** Optional preset verdict carried by the message: 'pass' | 'fail'. */
     verdict: text('verdict'),
+    /** 'room' is human-visible; 'control' is a durable orchestration-only signal. */
+    visibility: text('visibility').notNull().default('room'),
+    /** 'none' | 'pending' | 'delivered' | 'failed'. */
+    deliveryStatus: text('delivery_status').notNull().default('none'),
+    deliveryError: text('delivery_error'),
     createdAt: text('created_at')
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),

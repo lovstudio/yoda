@@ -264,4 +264,28 @@ describe('runBundledMigrations', () => {
       db.close();
     }
   });
+
+  it('repairs Agent Room execution profiles and durable delivery columns idempotently', () => {
+    const db = new Database(':memory:');
+    try {
+      createMigrationTable(db);
+      insertAppliedMigrationRows(db, getBundledMigrationCount());
+      db.exec(`
+        CREATE TABLE room_members (id text PRIMARY KEY NOT NULL);
+        CREATE TABLE room_messages (id text PRIMARY KEY NOT NULL);
+      `);
+
+      runBundledMigrations(db);
+      runBundledMigrations(db);
+
+      expect(columnExists(db, 'room_members', 'model')).toBe(true);
+      expect(columnExists(db, 'room_members', 'reasoning_effort')).toBe(true);
+      expect(columnExists(db, 'room_members', 'permission_mode')).toBe(true);
+      expect(columnExists(db, 'room_messages', 'visibility')).toBe(true);
+      expect(columnExists(db, 'room_messages', 'delivery_status')).toBe(true);
+      expect(columnExists(db, 'room_messages', 'delivery_error')).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
 });

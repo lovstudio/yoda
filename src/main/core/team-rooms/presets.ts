@@ -6,7 +6,7 @@ import {
   type AgentTeamMember,
   type TeamRouting,
 } from '@shared/agent-team';
-import { DEFAULT_AGENT_ICON } from '@shared/agents';
+import { DEFAULT_AGENT_ICON, resolveAgentPermissionMode } from '@shared/agents';
 import {
   FEATURE_WORKFLOW_ROOM_PRESET,
   FEATURE_WORKFLOW_STAGES,
@@ -128,6 +128,9 @@ type MemberSeedProfile = {
   systemPrompt: string;
   icon: string;
   skillSelection: SkillSelectionInput | null;
+  model: string | null;
+  reasoningEffort: string | null;
+  permissionMode: string | null;
 };
 
 /** Resolve a team member's base profile from its agentRef or inline text. */
@@ -145,6 +148,12 @@ async function resolveMemberSeedProfile(member: AgentTeamMember): Promise<Member
           autoSkillKeys: agent.enabledSkillIds,
           manualSkillKeys: agent.manualSkillIds,
         },
+        model: agent.model,
+        reasoningEffort: agent.reasoningEffort,
+        permissionMode:
+          agent.accessMode === 'inherit'
+            ? 'inherit'
+            : (resolveAgentPermissionMode(member.runtime, agent.accessMode) ?? null),
       };
     }
   }
@@ -152,6 +161,9 @@ async function resolveMemberSeedProfile(member: AgentTeamMember): Promise<Member
     systemPrompt: member.systemPrompt ?? '',
     icon: member.icon ?? DEFAULT_AGENT_ICON,
     skillSelection: null,
+    model: null,
+    reasoningEffort: null,
+    permissionMode: null,
   };
 }
 
@@ -329,6 +341,9 @@ export async function seedRoomFromTeam(args: {
       runtime: member.runtime,
       systemPrompt: joinRolePrompt(base.systemPrompt, addendum),
       skillSelection: base.skillSelection,
+      model: base.model,
+      reasoningEffort: base.reasoningEffort,
+      permissionMode: base.permissionMode,
       accent: TEAM_ACCENTS[i % TEAM_ACCENTS.length],
     });
   }

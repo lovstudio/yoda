@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   roomMemberStatusChangedChannel,
   roomMessagePostedChannel,
@@ -66,6 +66,9 @@ function mapMember(row: RoomMemberRow): RoomMember {
     icon: row.icon,
     role: row.role,
     runtime: (row.runtime as RuntimeId | null) ?? null,
+    model: row.model,
+    reasoningEffort: row.reasoningEffort,
+    permissionMode: row.permissionMode,
     systemPrompt: row.systemPrompt,
     skillSelection: row.skillSelection,
     autoApprove: row.autoApprove,
@@ -85,6 +88,9 @@ function mapMessage(row: RoomMessageRow): RoomMessage {
     mentions: row.mentions ? (JSON.parse(row.mentions) as string[]) : [],
     sessionRef: row.sessionRef,
     verdict: (row.verdict as RoomVerdict | null) ?? null,
+    visibility: row.visibility as RoomMessage['visibility'],
+    deliveryStatus: row.deliveryStatus as RoomMessage['deliveryStatus'],
+    deliveryError: row.deliveryError,
     createdAt: row.createdAt,
   };
 }
@@ -181,8 +187,12 @@ export async function getRoomForTask(
     .orderBy(desc(teamRooms.createdAt))
     .limit(1);
   if (!room) return null;
-  const [members, messages] = await Promise.all([getMembers(room.id), getMessages(room.id)]);
-  return { room: mapRoom(room), members, messages };
+  const [members, messages, dispatches] = await Promise.all([
+    getMembers(room.id),
+    getMessages(room.id),
+    getControlMessages(room.id),
+  ]);
+  return { room: mapRoom(room), members, messages, dispatches };
 }
 
 export async function getFeatureRoomForTask(
@@ -205,8 +215,12 @@ export async function getFeatureRoomForTask(
     .orderBy(desc(teamRooms.createdAt))
     .limit(1);
   if (!room) return null;
-  const [members, messages] = await Promise.all([getMembers(room.id), getMessages(room.id)]);
-  return { room: mapRoom(room), members, messages };
+  const [members, messages, dispatches] = await Promise.all([
+    getMembers(room.id),
+    getMessages(room.id),
+    getControlMessages(room.id),
+  ]);
+  return { room: mapRoom(room), members, messages, dispatches };
 }
 
 export async function archiveRoom(roomId: string): Promise<void> {
@@ -229,8 +243,12 @@ export async function getAllRooms(): Promise<TeamRoom[]> {
 export async function getRoom(roomId: string): Promise<RoomSnapshot | null> {
   const [room] = await db.select().from(teamRooms).where(eq(teamRooms.id, roomId)).limit(1);
   if (!room) return null;
-  const [members, messages] = await Promise.all([getMembers(roomId), getMessages(roomId)]);
-  return { room: mapRoom(room), members, messages };
+  const [members, messages, dispatches] = await Promise.all([
+    getMembers(roomId),
+    getMessages(roomId),
+    getControlMessages(roomId),
+  ]);
+  return { room: mapRoom(room), members, messages, dispatches };
 }
 
 export type UpdateRoomConfigParams = {
@@ -267,6 +285,9 @@ export type AddMemberParams = {
   icon?: string;
   role: string;
   runtime?: RuntimeId | null;
+  model?: string | null;
+  reasoningEffort?: string | null;
+  permissionMode?: string | null;
   systemPrompt?: string;
   skillSelection?: SkillSelectionInput | null;
   autoApprove?: boolean;
@@ -285,6 +306,9 @@ export async function addMember(params: AddMemberParams): Promise<RoomMember> {
       icon: params.icon?.trim() ?? '',
       role: params.role,
       runtime: params.runtime ?? null,
+      model: params.model?.trim() || null,
+      reasoningEffort: params.reasoningEffort?.trim() || null,
+      permissionMode: params.permissionMode?.trim() || null,
       systemPrompt: params.systemPrompt ?? '',
       skillSelection: params.skillSelection ?? null,
       autoApprove: params.autoApprove ?? false,
@@ -380,7 +404,10 @@ export type PostMessageParams = {
   mentions?: string[];
   sessionRef?: string | null;
   verdict?: RoomVerdict | null;
+  visibility?: 'room' | 'control';
 };
+
+type PostMessageOptions = { route?: boolean };
 
 let lastMessageCreatedAtMs = 0;
 
@@ -390,7 +417,10 @@ function nextMessageCreatedAt(): string {
   return new Date(lastMessageCreatedAtMs).toISOString();
 }
 
-export async function postMessage(params: PostMessageParams): Promise<RoomMessage> {
+export async function postMessage(
+  params: PostMessageParams,
+  options: PostMessageOptions = {}
+): Promise<RoomMessage> {
   const id = randomUUID();
   const mentions = params.mentions ?? parseMentions(params.body);
   const [row] = await db
@@ -404,6 +434,10 @@ export async function postMessage(params: PostMessageParams): Promise<RoomMessag
       mentions: JSON.stringify(mentions),
       sessionRef: params.sessionRef ?? null,
       verdict: params.verdict ?? null,
+      visibility: params.visibility ?? 'room',
+      deliveryStatus:
+        mentions.length > 0 && (params.kind ?? 'text') !== 'system' ? 'pending' : 'none',
+      deliveryError: null,
       createdAt: nextMessageCreatedAt(),
     })
     .returning();
@@ -415,8 +449,12 @@ export async function postMessage(params: PostMessageParams): Promise<RoomMessag
 
   const message = mapMessage(row);
   // Renderer-facing (per-room topic) + main-only hook for the routing engine.
-  events.emit(roomMessagePostedChannel, { roomId: params.roomId, message }, params.roomId);
-  teamRoomEvents._emit('room:message-posted', params.roomId, message);
+  if (message.visibility === 'room') {
+    events.emit(roomMessagePostedChannel, { roomId: params.roomId, message }, params.roomId);
+  }
+  if (options.route !== false) {
+    teamRoomEvents._emit('room:message-posted', params.roomId, message);
+  }
   return message;
 }
 
@@ -424,7 +462,38 @@ export async function getMessages(roomId: string): Promise<RoomMessage[]> {
   const rows = await db
     .select()
     .from(roomMessages)
-    .where(eq(roomMessages.roomId, roomId))
+    .where(and(eq(roomMessages.roomId, roomId), eq(roomMessages.visibility, 'room')))
     .orderBy(asc(roomMessages.createdAt), asc(roomMessages.id));
   return rows.map(mapMessage);
+}
+
+async function getControlMessages(roomId: string): Promise<RoomMessage[]> {
+  const rows = await db
+    .select()
+    .from(roomMessages)
+    .where(and(eq(roomMessages.roomId, roomId), eq(roomMessages.visibility, 'control')))
+    .orderBy(asc(roomMessages.createdAt), asc(roomMessages.id));
+  return rows.map(mapMessage);
+}
+
+export async function getPendingRoomMessages(): Promise<RoomMessage[]> {
+  const rows = await db
+    .select()
+    .from(roomMessages)
+    .where(inArray(roomMessages.deliveryStatus, ['pending']))
+    .orderBy(asc(roomMessages.createdAt), asc(roomMessages.id));
+  return rows.map(mapMessage);
+}
+
+export async function setMessageDelivery(
+  messageId: string,
+  status: 'delivered' | 'failed',
+  error?: string | null
+): Promise<void> {
+  const [row] = await db
+    .update(roomMessages)
+    .set({ deliveryStatus: status, deliveryError: error?.trim() || null })
+    .where(eq(roomMessages.id, messageId))
+    .returning({ roomId: roomMessages.roomId });
+  if (row) events.emit(teamRoomUpdatedChannel, { roomId: row.roomId }, row.roomId);
 }

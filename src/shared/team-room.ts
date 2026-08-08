@@ -53,6 +53,12 @@ export interface RoomMember {
   /** 'lead' is the human; agents use a role label like 'implementer' | 'reviewer'. */
   role: string;
   runtime: RuntimeId | null;
+  /** Model captured from the referenced Agent when the room is instantiated. */
+  model?: string | null;
+  /** Runtime-specific reasoning depth captured with the member profile. */
+  reasoningEffort?: string | null;
+  /** Concrete runtime permission mode resolved from the Agent access tier. */
+  permissionMode?: string | null;
   systemPrompt: string;
   skillSelection: SkillSelectionInput | null;
   autoApprove: boolean;
@@ -73,6 +79,11 @@ export interface RoomMessage {
   /** Conversation id of the session that produced this message. */
   sessionRef: string | null;
   verdict: RoomVerdict | null;
+  /** `control` messages are durable orchestration records hidden from the chat timeline. */
+  visibility?: 'room' | 'control';
+  /** Delivery acknowledgement for addressed messages. */
+  deliveryStatus?: 'none' | 'pending' | 'delivered' | 'failed';
+  deliveryError?: string | null;
   createdAt: string;
 }
 
@@ -81,10 +92,17 @@ export interface RoomSnapshot {
   room: TeamRoom;
   members: RoomMember[];
   messages: RoomMessage[];
+  /** Durable orchestration records, kept outside the human chat timeline. */
+  dispatches?: RoomMessage[];
 }
 
 /** The human lead's reserved handle. */
 export const LEAD_HANDLE = 'you';
+
+/** Accept both `worker` and the natural `@worker` spelling used in Agent prompts. */
+export function normalizeTeamHandle(value: string): string {
+  return value.trim().replace(/^@+/, '').toLowerCase();
+}
 
 const MENTION_RE = /@([a-z0-9][a-z0-9_-]*)/gi;
 

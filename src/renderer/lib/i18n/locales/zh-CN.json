@@ -2551,19 +2551,19 @@
     "teamName": "名称",
     "teamNamePlaceholder": "例如：产品评审组",
     "collaboration": "协作方式",
-    "communicationMode": "通信方式",
+    "communicationMode": "工作记录",
     "communicationModes": {
       "process": {
-        "label": "进程观察",
-        "description": "根据 Agent 进程与 Transcript 判断状态，完整产物保留在各自会话中。"
+        "label": "Agent 会话",
+        "description": "完整产物保留在各自会话与 Transcript 中。"
       },
       "message-hub": {
-        "label": "消息中枢",
-        "description": "Agent 通过房间中枢交接任务与结果。"
+        "label": "群聊消息",
+        "description": "工作结论同步到群聊，方便所有成员与人类查看。"
       },
       "shared-file": {
         "label": "共享文件",
-        "description": "Agent 通过任务工作区内的共享文件持续交接。"
+        "description": "完整产物写入任务工作区内的共享文件。"
       },
       "github": {
         "label": "GitHub 协同",
@@ -2571,7 +2571,7 @@
       }
     },
     "syncToRoom": "同步工作动态到群聊",
-    "syncToRoomHint": "关闭后仍会调度 Agent，群聊仅保留你主动发送的内容；状态和产物可在 Agent 详情中查看。",
+    "syncToRoomHint": "只控制工作动态是否展示在群聊，不影响 Yoda 的任务调度；状态和产物仍可在 Agent 详情中查看。",
     "sharedFilePath": "共享文件路径",
     "githubRepository": "GitHub 仓库",
     "githubRepositoryPlaceholder": "默认继承项目 origin，也可填写 owner/repo",
@@ -2599,6 +2599,8 @@
     }
   },
   "agentRoom": {
+    "dispatchFailed": "任务交接失败",
+    "copyDispatchError": "复制交接错误与调试信息",
     "rooms": "房间",
     "newRoom": "新建智能体房间",
     "noRooms": "还没有房间。新建一个，把几个智能体聚到一个聊天里。",
@@ -2637,7 +2639,7 @@
         "lead": "自由协作——由你来调度：",
         "steps": [
           "@ 某个队友派活。",
-          "TA 在自己的会话里推进，Yoda 根据所选通信方式接续下一步。",
+          "TA 在自己的会话里推进，结束后由负责人决定下一步。",
           "@all 可广播给所有人。"
         ],
         "note": "每位队友独立工作；点击 Agent 可查看其状态与产物。"
@@ -2649,6 +2651,10 @@
       "noInstructions": "无自定义指令",
       "avatar": "头像",
       "name": "名称",
+      "runtime": "客户端",
+      "model": "模型",
+      "reasoningEffort": "推理长度",
+      "permissionMode": "权限模式",
       "editProfile": "编辑 Agent",
       "saveProfile": "保存 Agent",
       "cancelEdit": "取消",
@@ -2677,21 +2683,21 @@
     },
     "settings": { "title": "房间设置" },
     "communication": {
-      "mode": "通信方式",
+      "mode": "工作记录",
       "modes": {
-        "process": "进程观察",
-        "message-hub": "消息中枢",
+        "process": "Agent 会话",
+        "message-hub": "群聊消息",
         "shared-file": "共享文件",
         "github": "GitHub 协同"
       },
       "descriptions": {
-        "process": "Yoda 观察进程、状态 Hook 与 Transcript；Agent 正常结束即可完成交接。",
-        "message-hub": "Agent 通过房间中枢发送交接消息。",
-        "shared-file": "完整产物写入任务工作区内的共享文件，房间只负责调度。",
-        "github": "Issue 与 PR 是协作记录；Yoda 在本机定期检查更新。"
+        "process": "完整产物保留在 Agent 会话与 Transcript 中。",
+        "message-hub": "工作结论同步到群聊，方便人类与其他成员查看。",
+        "shared-file": "完整产物写入任务工作区内的共享文件。",
+        "github": "Issue 与 PR 作为工作记录，Yoda 在本机定期检查更新。"
       },
       "syncToRoom": "同步工作动态到群聊",
-      "syncToRoomHint": "关闭后群聊保持安静，Agent 状态、Transcript 与产物仍可从右侧打开。",
+      "syncToRoomHint": "只控制工作动态是否展示在群聊，不影响任务调度；Agent 状态、Transcript 与产物仍可从右侧打开。",
       "sharedFile": "共享文件路径",
       "githubRepository": "GitHub 仓库",
       "githubRepositoryPlaceholder": "继承项目 origin 或填写 owner/repo",

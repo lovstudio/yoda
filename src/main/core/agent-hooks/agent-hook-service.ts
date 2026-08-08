@@ -25,17 +25,27 @@ class AgentHookService implements IInitializable, IDisposable {
         try {
           payload = JSON.parse(raw.body || '{}');
         } catch {
-          return;
+          return { status: 400, body: 'team-at: invalid JSON payload' };
         }
         const to =
           payload.to === 'all' ? 'all' : Array.isArray(payload.to) ? payload.to.map(String) : [];
         const message = typeof payload.message === 'string' ? payload.message : '';
-        if (conversationId && (to === 'all' || to.length > 0)) {
-          // Lazy import to avoid an agent-hooks ↔ team-rooms load-time cycle.
-          const { handleTeamAt } = await import('@main/core/team-rooms/conductor');
-          await handleTeamAt(conversationId, to, message);
+        if (!conversationId || (to !== 'all' && to.length === 0)) {
+          return { status: 400, body: 'team-at: missing caller or target' };
         }
-        return;
+        // Lazy import to avoid an agent-hooks ↔ team-rooms load-time cycle.
+        const { handleTeamAt } = await import('@main/core/team-rooms/conductor');
+        const result = await handleTeamAt(conversationId, to, message);
+        if (result.deliveredHandles.length === 0 || result.rejectedHandles.length > 0) {
+          return {
+            status: 409,
+            body: `team-at: ${result.error ?? 'one or more assignments were not accepted'}`,
+          };
+        }
+        return {
+          status: 200,
+          body: `team-at: delivered to ${result.deliveredHandles.map((handle) => `@${handle}`).join(', ')}`,
+        };
       }
       if (raw.type === 'team-status') {
         const conversationId = parsePtyId(raw.ptyId)?.conversationId;

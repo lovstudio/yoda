@@ -11,7 +11,13 @@ export interface RawHookRequest {
   body: string;
 }
 
-export type HookHandler = (raw: RawHookRequest) => Promise<void>;
+export interface HookResponse {
+  status?: number;
+  body?: string;
+  contentType?: string;
+}
+
+export type HookHandler = (raw: RawHookRequest) => Promise<HookResponse | void>;
 
 /**
  * Stable, well-known path where the running hook server publishes its current
@@ -63,9 +69,11 @@ export class HookServer {
           return;
         }
         handler({ ptyId, type, body })
-          .then(() => {
-            res.writeHead(200);
-            res.end();
+          .then((response) => {
+            res.writeHead(response?.status ?? 200, {
+              'Content-Type': response?.contentType ?? 'text/plain; charset=utf-8',
+            });
+            res.end(response?.body ?? '');
           })
           .catch((err) => {
             log.warn('HookServer: handler error', { error: String(err) });

@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted on 2026-08-08.
+Superseded by [ADR 0007](./0007-coordinator-led-agent-room-orchestration.md) on 2026-08-08. The
+artifact adapters remain, but they no longer define the orchestration protocol.
 
 ## Context
 

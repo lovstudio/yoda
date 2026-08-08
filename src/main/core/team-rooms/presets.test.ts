@@ -6,6 +6,8 @@ import type { RoomMember, RoomSnapshot, TeamRoom } from '@shared/team-room';
 
 const mocks = vi.hoisted(() => ({
   getTeam: vi.fn(),
+  getAgent: vi.fn(),
+  getAgentBySlug: vi.fn(),
   ensureForTask: vi.fn(),
   getFeature: vi.fn(),
   createRoom: vi.fn(),
@@ -24,7 +26,7 @@ vi.mock('@main/core/features/feature-service', () => ({
 }));
 
 vi.mock('@main/core/agents-config/agents-config-service', () => ({
-  agentsConfigService: { get: vi.fn(), getBySlug: vi.fn() },
+  agentsConfigService: { get: mocks.getAgent, getBySlug: mocks.getAgentBySlug },
 }));
 
 vi.mock('./store', () => ({
@@ -85,6 +87,8 @@ describe('Feature Team Room creation', () => {
     mocks.ensureForTask.mockResolvedValue(feature);
     mocks.getFeature.mockResolvedValue(feature);
     mocks.getFeatureRoomForTask.mockResolvedValue(null);
+    mocks.getAgent.mockResolvedValue(null);
+    mocks.getAgentBySlug.mockResolvedValue(null);
     mocks.createRoom.mockResolvedValue(room);
     let memberIndex = 0;
     mocks.addMember.mockImplementation(async (input) => {
@@ -136,6 +140,79 @@ describe('Feature Team Room creation', () => {
     expect(mocks.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.stringContaining(`Authoritative Feature: ${feature.id}`),
+      })
+    );
+  });
+
+  it('captures each referenced Agent execution profile in the room member', async () => {
+    mocks.getTeam.mockResolvedValue({
+      id: 'team-planner-implementer',
+      name: 'Planner + Implementer',
+      icon: '👥',
+      routing: 'sequential',
+      communication: { ...DEFAULT_TEAM_COMMUNICATION_CONFIG, mode: 'process', syncToRoom: false },
+      builtin: false,
+      routingHopLimit: 100,
+      members: [
+        {
+          handle: 'planner-agent',
+          displayName: 'Planner',
+          role: 'leader',
+          runtime: 'codex',
+          agentRef: 'planner-id',
+        },
+        {
+          handle: 'implementer-agent',
+          displayName: 'Implementer',
+          role: 'worker',
+          runtime: 'codex',
+          agentRef: 'implementer-id',
+        },
+      ],
+      createdAt: room.createdAt,
+      updatedAt: room.updatedAt,
+    });
+    mocks.getAgent.mockImplementation(async (id: string) => ({
+      id,
+      slug: id,
+      name: id,
+      description: '',
+      icon: '🤖',
+      systemPrompt: '',
+      enabledSkillIds: [],
+      manualSkillIds: [],
+      skillPolicyMode: 'runtime-defaults',
+      preferredRuntime: 'codex',
+      model: id === 'planner-id' ? 'gpt-5.6-sol' : 'gpt-5.6-luna',
+      reasoningEffort: id === 'planner-id' ? 'high' : 'medium',
+      accessMode: 'write',
+      source: 'local',
+      createdAt: room.createdAt,
+      updatedAt: room.updatedAt,
+    }));
+
+    const { createRoomFromTeam } = await import('./presets');
+    await createRoomFromTeam({
+      projectId: 'project-1',
+      taskId: 'task-1',
+      teamId: 'team-planner-implementer',
+      requirement: 'Plan, then implement.',
+    });
+
+    expect(mocks.addMember).toHaveBeenCalledWith(
+      expect.objectContaining({
+        handle: 'planner-agent',
+        model: 'gpt-5.6-sol',
+        reasoningEffort: 'high',
+        permissionMode: 'full-auto',
+      })
+    );
+    expect(mocks.addMember).toHaveBeenCalledWith(
+      expect.objectContaining({
+        handle: 'implementer-agent',
+        model: 'gpt-5.6-luna',
+        reasoningEffort: 'medium',
+        permissionMode: 'full-auto',
       })
     );
   });
