@@ -81,6 +81,7 @@ import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/tas
 import { accountGreetingName } from '@renderer/lib/account-display';
 import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
 import { AgentSlotSelector } from '@renderer/lib/components/agent-slot/agent-slot-selector';
+import { AvatarValue } from '@renderer/lib/components/avatar-value';
 import { ProjectBranchSelector } from '@renderer/lib/components/project-branch-selector';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { toast } from '@renderer/lib/hooks/use-toast';
@@ -2654,10 +2655,10 @@ interface RunModeOption {
   mode: HomeRunMode;
   /** Set on `team` entries — the Agent Team this entry launches. */
   teamId?: string;
-  /** Lucide icon for static entries. Mutually exclusive with `emoji`. */
+  /** Lucide icon for static entries. Mutually exclusive with `avatar`. */
   icon?: ComponentType<{ className?: string }>;
-  /** Emoji glyph for team entries (matches AgentTeam.icon). */
-  emoji?: string;
+  /** Glyph, image URL, or data URL for team entries (matches AgentTeam.icon). */
+  avatar?: string;
   /** i18n key for static entries. Mutually exclusive with `label`. */
   labelKey?: string;
   /** Literal label for team entries (the team name). */
@@ -2726,7 +2727,7 @@ function teamToRunModeOption(team: AgentTeam): RunModeOption {
     id: `team:${team.id}`,
     mode: 'team',
     teamId: team.id,
-    emoji: team.icon,
+    avatar: team.icon,
     ...(copy ? { labelKey: copy.labelKey } : { label: team.name }),
     descKey: copy?.descKey ?? 'home.modeTeamDesc',
     // Honors the original "startup is alpha" call; the review team is GA.
@@ -2866,8 +2867,12 @@ function RunModeSelector({
                 : 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15'
             )}
           >
-            {current.emoji ? (
-              <span className="shrink-0 text-sm leading-none">{current.emoji}</span>
+            {current.avatar !== undefined ? (
+              <AvatarValue
+                name={labelOf(current)}
+                value={current.avatar}
+                className="size-3.5 rounded-sm text-[10px]"
+              />
             ) : (
               CurrentIcon && <CurrentIcon className="size-3.5 shrink-0" />
             )}
@@ -2942,10 +2947,12 @@ function RunModeSelector({
                           : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
                       )}
                     >
-                      {option.emoji ? (
-                        <span className="size-4 shrink-0 text-center text-sm leading-4">
-                          {option.emoji}
-                        </span>
+                      {option.avatar !== undefined ? (
+                        <AvatarValue
+                          name={labelOf(option)}
+                          value={option.avatar}
+                          className="size-4 rounded-sm text-[10px]"
+                        />
                       ) : (
                         Icon && (
                           <Icon
@@ -2971,10 +2978,12 @@ function RunModeSelector({
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
             <div className="flex items-center gap-2">
-              {pending.emoji ? (
-                <span className="size-4 shrink-0 text-center text-sm leading-4">
-                  {pending.emoji}
-                </span>
+              {pending.avatar !== undefined ? (
+                <AvatarValue
+                  name={labelOf(pending)}
+                  value={pending.avatar}
+                  className="size-4 rounded-sm text-[10px]"
+                />
               ) : (
                 PendingIcon && <PendingIcon className="size-4 shrink-0 text-primary" />
               )}
