@@ -15,6 +15,7 @@ import { editorBufferController } from './core/editor/controller';
 import { extensionsController } from './core/extensions/controller';
 import { featurebaseController } from './core/featurebase/controller';
 import { featureController } from './core/features/controller';
+import { feishuController } from './core/feishu/controller';
 import { forgejoController } from './core/forgejo/controller';
 import { filesController } from './core/fs/controller';
 import { gitController } from './core/git/controller';
@@ -77,6 +78,7 @@ export const rpcRouter = createRPCRouter({
   update: updateController,
   pty: ptyController,
   featurebase: featurebaseController,
+  feishu: feishuController,
   features: featureController,
   forgejo: forgejoController,
   github: githubController,

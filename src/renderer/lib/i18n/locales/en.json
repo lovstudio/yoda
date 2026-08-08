@@ -814,6 +814,8 @@
       "trelloDescription": "Start work from Trello cards",
       "planeDescription": "Work on Plane work items",
       "notionDescription": "Start work from Notion database pages",
+      "feishuDescription": "Start work from Feishu tasks assigned to you",
+      "feishuCliManagedTooltip": "Authentication is managed by lark-cli",
       "litellmDescription": "Manage multiple model services with automatic routing, load balancing, and failover",
       "litellmConnectedDescription": "Gateway: {{endpoint}}",
       "litellmManagedDescription": "Yoda downloads LiteLLM and PostgreSQL, generates credentials, and connects the local gateway",
@@ -4994,6 +4996,13 @@
         "title": "Notion integration token",
         "help": "Create a Notion internal integration, then share each page or database you want Yoda to access with it.",
         "tokenPlaceholder": "ntn_…"
+      },
+      "feishu": {
+        "title": "Connect with Feishu CLI",
+        "help": "Yoda reuses the active lark-cli profile, requests only task read access, and stores no additional Feishu secrets.",
+        "startAuthorization": "Authorize in Feishu",
+        "finishAuthorization": "I finished authorizing",
+        "waiting": "The authorization page is open. Approve access, return to Yoda, then select “I finished authorizing”."
       }
     },
     "connectFailed": "Failed to connect.",
@@ -5042,6 +5051,10 @@
       "notion": {
         "title": "Connect Notion",
         "subtitle": "Browse pages from databases shared with your integration."
+      },
+      "feishu": {
+        "title": "Connect Feishu Tasks",
+        "subtitle": "Use the official lark-cli to list, search, and hydrate tasks assigned to you."
       }
     }
   },

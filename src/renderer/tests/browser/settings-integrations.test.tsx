@@ -41,6 +41,7 @@ vi.mock('@renderer/features/integrations/integrations-provider', () => ({
       trello: {},
       plane: {},
       notion: {},
+      feishu: {},
     },
     isLinearConnected: false,
     isLinearLoading: false,
@@ -75,6 +76,8 @@ vi.mock('@renderer/features/integrations/integrations-provider', () => ({
     isNotionConnected: false,
     isNotionLoading: false,
     disconnectNotion: vi.fn(),
+    isFeishuConnected: false,
+    isFeishuLoading: false,
   }),
 }));
 
@@ -133,10 +136,10 @@ describe('Settings integrations', () => {
     expect(host.textContent).toContain('Linear');
   });
 
-  it('shows the latest upstream issue integrations, including Notion', async () => {
+  it('shows the latest upstream integrations and the CLI-backed Feishu provider', async () => {
     await renderIntegrations();
 
-    for (const provider of ['asana', 'monday', 'trello', 'plane', 'notion']) {
+    for (const provider of ['asana', 'monday', 'trello', 'plane', 'notion', 'feishu']) {
       expect(host.querySelector(`[data-testid="integration-card-${provider}"]`)).not.toBeNull();
     }
   });

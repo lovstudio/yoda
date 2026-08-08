@@ -1,6 +1,8 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { rpc } from '@renderer/lib/ipc';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
@@ -15,7 +17,7 @@ import { ExternalIssueSetupForm } from './ExternalIssueSetupForm';
 import FeaturebaseSetupForm from './FeaturebaseSetupForm';
 import ForgejoSetupForm from './ForgejoSetupForm';
 import GitLabSetupForm from './GitLabSetupForm';
-import { useIntegrationsContext } from './integrations-provider';
+import { ISSUE_CONNECTION_STATUS_QUERY_KEY, useIntegrationsContext } from './integrations-provider';
 import JiraSetupForm from './JiraSetupForm';
 import LinearSetupForm from './LinearSetupForm';
 import PlainSetupForm from './PlainSetupForm';
@@ -31,7 +33,8 @@ type IntegrationType =
   | 'monday'
   | 'trello'
   | 'plane'
-  | 'notion';
+  | 'notion'
+  | 'feishu';
 
 type IntegrationSetupModalArgs = {
   integration: IntegrationType;
@@ -84,10 +87,15 @@ const descriptions: Record<IntegrationType, { titleKey: string; subtitleKey: str
     titleKey: 'integrations.setupModal.notion.title',
     subtitleKey: 'integrations.setupModal.notion.subtitle',
   },
+  feishu: {
+    titleKey: 'integrations.setupModal.feishu.title',
+    subtitleKey: 'integrations.setupModal.feishu.subtitle',
+  },
 };
 
 export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const {
     connectLinear,
     connectJira,
@@ -143,6 +151,8 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
   const [planeWorkspaceSlug, setPlaneWorkspaceSlug] = useState('');
   const [planeApiKey, setPlaneApiKey] = useState('');
   const [notionToken, setNotionToken] = useState('');
+  const [feishuAuthStarted, setFeishuAuthStarted] = useState(false);
+  const [feishuLoading, setFeishuLoading] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -157,7 +167,8 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
     (integration === 'monday' && isMondayLoading) ||
     (integration === 'trello' && isTrelloLoading) ||
     (integration === 'plane' && isPlaneLoading) ||
-    (integration === 'notion' && isNotionLoading);
+    (integration === 'notion' && isNotionLoading) ||
+    (integration === 'feishu' && feishuLoading);
 
   const canSubmit =
     (integration === 'linear' && !!linearKey.trim()) ||
@@ -171,7 +182,8 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
     (integration === 'trello' && !!(trelloKey.trim() && trelloToken.trim())) ||
     (integration === 'plane' &&
       !!(planeApiBaseUrl.trim() && planeWorkspaceSlug.trim() && planeApiKey.trim())) ||
-    (integration === 'notion' && !!notionToken.trim());
+    (integration === 'notion' && !!notionToken.trim()) ||
+    integration === 'feishu';
 
   const handleSubmit = useCallback(async () => {
     setError(null);
@@ -224,6 +236,21 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
         case 'notion':
           await connectNotion(notionToken.trim());
           break;
+        case 'feishu':
+          setFeishuLoading(true);
+          try {
+            if (!feishuAuthStarted) {
+              const { verificationUrl } = await rpc.feishu.startAuthorization();
+              await rpc.app.openExternal(verificationUrl);
+              setFeishuAuthStarted(true);
+              return;
+            }
+            await rpc.feishu.completeAuthorization();
+            await queryClient.invalidateQueries({ queryKey: ISSUE_CONNECTION_STATUS_QUERY_KEY });
+          } finally {
+            setFeishuLoading(false);
+          }
+          break;
       }
       onSuccess();
     } catch (e) {
@@ -260,6 +287,8 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
     connectTrello,
     connectPlane,
     connectNotion,
+    feishuAuthStarted,
+    queryClient,
     onSuccess,
     t,
   ]);
@@ -422,6 +451,21 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
             error={error}
           />
         )}
+        {integration === 'feishu' && (
+          <div className="grid gap-2">
+            <ExternalIssueSetupForm
+              provider="feishu"
+              fields={[]}
+              onChange={() => undefined}
+              error={error}
+            />
+            {feishuAuthStarted ? (
+              <p className="text-xs text-muted-foreground" role="status">
+                {t('integrations.setup.feishu.waiting')}
+              </p>
+            ) : null}
+          </div>
+        )}
       </DialogContentArea>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>
@@ -429,7 +473,13 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
         </Button>
         <ConfirmButton onClick={() => void handleSubmit()} disabled={!canSubmit || isLoading}>
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {t('integrations.connect')}
+          {integration === 'feishu'
+            ? t(
+                feishuAuthStarted
+                  ? 'integrations.setup.feishu.finishAuthorization'
+                  : 'integrations.setup.feishu.startAuthorization'
+              )
+            : t('integrations.connect')}
         </ConfirmButton>
       </DialogFooter>
     </>

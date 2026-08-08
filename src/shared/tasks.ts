@@ -25,7 +25,8 @@ export type Issue = {
     | 'monday'
     | 'trello'
     | 'plane'
-    | 'notion';
+    | 'notion'
+    | 'feishu';
   url: string;
   title: string;
   identifier: string;

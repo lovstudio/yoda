@@ -11,7 +11,7 @@ export type ExternalIssueSetupField = {
 };
 
 type Props = {
-  provider: 'asana' | 'monday' | 'trello' | 'plane' | 'notion';
+  provider: 'asana' | 'monday' | 'trello' | 'plane' | 'notion' | 'feishu';
   fields: ExternalIssueSetupField[];
   onChange: (id: string, value: string) => void;
   error?: string | null;

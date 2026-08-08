@@ -158,7 +158,8 @@ export type TelemetryEventProperties = {
       | 'monday'
       | 'trello'
       | 'plane'
-      | 'notion';
+      | 'notion'
+      | 'feishu';
   };
 
   open_in_external: { app: OpenInAppId | 'browser' };

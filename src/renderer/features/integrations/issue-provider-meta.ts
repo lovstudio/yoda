@@ -5,6 +5,7 @@ import gitlabLogo from '@/assets/images/GitLab.svg';
 import jiraLogo from '@/assets/images/jira.png';
 import linearLogo from '@/assets/images/Linear.svg';
 import asanaLogo from '@/assets/images/mcp/asana.svg';
+import feishuLogo from '@/assets/images/mcp/feishu.svg';
 import mondayLogo from '@/assets/images/mcp/monday.svg';
 import notionLogo from '@/assets/images/mcp/notion.svg';
 import planeLogo from '@/assets/images/mcp/plane.svg';
@@ -25,6 +26,7 @@ export const ISSUE_PROVIDER_ORDER: IssueProviderType[] = [
   'trello',
   'plane',
   'notion',
+  'feishu',
 ];
 
 export const ISSUE_PROVIDER_META: Record<
@@ -46,4 +48,5 @@ export const ISSUE_PROVIDER_META: Record<
   trello: { displayName: 'Trello', logo: trelloLogo },
   plane: { displayName: 'Plane', logo: planeLogo },
   notion: { displayName: 'Notion', logo: notionLogo },
+  feishu: { displayName: '飞书', logo: feishuLogo },
 };
