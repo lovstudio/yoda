@@ -1,4 +1,4 @@
-import { Copy, Crown, Plus, Trash2, UserPlus, Users, X } from 'lucide-react';
+import { Copy, Crown, Pencil, Plus, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -9,7 +9,6 @@ import {
 } from '@shared/agent-team';
 import type { Agent } from '@shared/agents';
 import { BUILTIN_AGENT_PRESETS } from '@shared/builtin-agents';
-import { RUNTIMES } from '@shared/runtime-registry';
 import {
   DEFAULT_TEAM_COMMUNICATION_CONFIG,
   TEAM_COMMUNICATION_MODES,
@@ -45,10 +44,20 @@ import { useAgentTeams } from './use-agent-teams';
 
 /**
  * Resolve a team member to a full Agent for the card UI — a user Agent by id,
- * a built-in preset by `builtin:*` key, or an inline-prompt fallback. The
- * member's runtime (the slot override) wins over the source Agent's preferred
- * runtime, so the card reflects what actually runs.
+ * a built-in Agent by stable slug, or an inline-prompt fallback. Referenced
+ * Agents keep their own client setting; inline roles retain the team runtime.
  */
+function findReferencedAgent(member: AgentTeamMember, agents: Agent[]): Agent | null {
+  if (!member.agentRef) return null;
+  return (
+    agents.find((agent) =>
+      member.agentRef?.startsWith('builtin:')
+        ? agent.slug === member.agentRef
+        : agent.id === member.agentRef
+    ) ?? null
+  );
+}
+
 function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | null {
   let base: Pick<
     Agent,
@@ -60,9 +69,10 @@ function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | n
     | 'manualSkillIds'
     | 'skillPolicyMode'
     | 'model'
+    | 'preferredRuntime'
   > | null = null;
   if (member.agentRef) {
-    const user = agents.find((a) => a.id === member.agentRef);
+    const user = findReferencedAgent(member, agents);
     if (user) base = user;
     else {
       const preset = BUILTIN_AGENT_PRESETS.find((p) => p.key === member.agentRef);
@@ -76,6 +86,7 @@ function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | n
           manualSkillIds: [],
           skillPolicyMode: 'runtime-defaults',
           model: null,
+          preferredRuntime: preset.preferredRuntime,
         };
     }
   }
@@ -89,6 +100,7 @@ function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | n
       manualSkillIds: [],
       skillPolicyMode: 'runtime-defaults',
       model: null,
+      preferredRuntime: member.runtime,
     };
   }
   if (!base) return null;
@@ -102,7 +114,7 @@ function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | n
     enabledSkillIds: base.enabledSkillIds,
     manualSkillIds: base.manualSkillIds,
     skillPolicyMode: base.skillPolicyMode,
-    preferredRuntime: member.runtime,
+    preferredRuntime: base.preferredRuntime,
     model: base.model,
     reasoningEffort: null,
     accessMode: 'inherit',
@@ -391,7 +403,6 @@ function TeamEditor({
   const { toast } = useToast();
   const showAgentModal = useShowModal('agentEditModal');
   const [memberPickerOpen, setMemberPickerOpen] = useState(false);
-  const runtimeOptions = RUNTIMES.filter((r) => r.terminalOnly);
   const setMembers = (members: AgentTeamMember[]) => onChange({ ...draft, members });
   const showAvatarFileError = (error: AvatarFileError) => {
     const key =
@@ -665,63 +676,75 @@ function TeamEditor({
             </p>
           </div>
           <div className="flex flex-col gap-1.5">
-            {draft.members.map((m) => (
-              <MemberCard
-                key={m.handle}
-                member={m}
-                agents={agents}
-                showRuntime={false}
-                leaderBadge={false}
-                trailing={
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setLeader(m.handle)}
-                      title={t('agentTeams.makeLeader')}
-                      aria-label={t('agentTeams.makeLeader')}
-                      className={cn(
-                        'flex size-6 items-center justify-center rounded-md border transition-colors',
-                        m.role === 'leader'
-                          ? 'border-primary bg-primary/15 text-primary'
-                          : 'border-border text-foreground-muted hover:text-foreground'
-                      )}
-                    >
-                      <Crown className="size-3.5" />
-                    </button>
-                    <Select
-                      modal={false}
-                      value={m.runtime}
-                      onValueChange={(value) =>
-                        setMembers(
-                          draft.members.map((x) =>
-                            x.handle === m.handle ? { ...x, runtime: value as typeof x.runtime } : x
-                          )
-                        )
-                      }
-                    >
-                      <SelectTrigger size="sm" className="w-28 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {runtimeOptions.map((runtime) => (
-                          <SelectItem key={runtime.id} value={runtime.id}>
-                            {runtime.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <button
-                      type="button"
-                      onClick={() => setMembers(draft.members.filter((x) => x.handle !== m.handle))}
-                      aria-label={t('common.remove')}
-                      className="flex size-6 items-center justify-center rounded-md text-foreground-muted hover:text-red-500"
-                    >
-                      <X className="size-3.5" />
-                    </button>
-                  </div>
-                }
-              />
-            ))}
+            {draft.members.map((m) => {
+              const referencedAgent = findReferencedAgent(m, agents);
+              return (
+                <MemberCard
+                  key={m.handle}
+                  member={m}
+                  agents={agents}
+                  showRuntime={false}
+                  leaderBadge={false}
+                  trailing={
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setLeader(m.handle)}
+                        title={t('agentTeams.makeLeader')}
+                        aria-label={t('agentTeams.makeLeader')}
+                        className={cn(
+                          'flex size-6 items-center justify-center rounded-md border transition-colors',
+                          m.role === 'leader'
+                            ? 'border-primary bg-primary/15 text-primary'
+                            : 'border-border text-foreground-muted hover:text-foreground'
+                        )}
+                      >
+                        <Crown className="size-3.5" />
+                      </button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        disabled={!referencedAgent}
+                        title={t('agentManager.editAgent')}
+                        onClick={() => {
+                          if (!referencedAgent) return;
+                          showAgentModal({
+                            agent: referencedAgent,
+                            onSuccess: (updatedAgent) =>
+                              setMembers(
+                                draft.members.map((member) =>
+                                  member.handle === m.handle
+                                    ? {
+                                        ...member,
+                                        displayName: updatedAgent.name,
+                                        icon: updatedAgent.icon || undefined,
+                                        runtime: updatedAgent.preferredRuntime ?? member.runtime,
+                                      }
+                                    : member
+                                )
+                              ),
+                          });
+                        }}
+                      >
+                        <Pencil className="size-3" />
+                        {t('agentManager.editAgent')}
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setMembers(draft.members.filter((x) => x.handle !== m.handle))
+                        }
+                        aria-label={t('common.remove')}
+                        className="flex size-6 items-center justify-center rounded-md text-foreground-muted hover:text-red-500"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  }
+                />
+              );
+            })}
             {draft.members.length === 0 && (
               <div className="flex flex-col items-center gap-1 py-3 text-center text-foreground-muted">
                 <Users className="size-5 opacity-50" />

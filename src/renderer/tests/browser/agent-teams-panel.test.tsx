@@ -163,6 +163,38 @@ describe('AgentTeamsMainPanel', () => {
 
     expect(document.querySelector('[data-slot="select-content"][data-open]')).not.toBeNull();
   });
+
+  it('edits the referenced agent instead of exposing a duplicate client selector', async () => {
+    const agent = fixtureAgent();
+    mocks.agents = [agent];
+    const { AgentTeamsMainPanel } = await import(
+      '@renderer/features/agent-teams/agent-teams-panel'
+    );
+    await act(async () => root.render(createElement(AgentTeamsMainPanel)));
+    await clickUser(host.querySelector('[aria-label="agentTeams.newTeam"]')!);
+
+    await clickUser(host.querySelector('[aria-label="agentTeams.addAgent"]')!);
+    await clickUser(document.querySelector('[role="option"]')!);
+
+    const editAgentButton = Array.from(host.querySelectorAll('button')).find(
+      (button) => button.textContent === 'agentManager.editAgent'
+    );
+    expect(editAgentButton).toBeDefined();
+    expect(host.querySelectorAll('[data-slot="select-trigger"]')).toHaveLength(3);
+    await clickUser(editAgentButton!);
+
+    expect(mocks.showAgentModal).toHaveBeenCalledWith(
+      expect.objectContaining({ agent: expect.objectContaining({ id: agent.id }) })
+    );
+    const [{ onSuccess }] = mocks.showAgentModal.mock.calls[0] as [
+      { onSuccess: (updatedAgent: Agent) => void },
+    ];
+    await act(async () =>
+      onSuccess({ ...agent, name: 'Updated teammate', preferredRuntime: 'claude' })
+    );
+
+    expect(host.textContent).toContain('Updated teammate');
+  });
 });
 
 function fixtureAgent(): Agent {
