@@ -5119,9 +5119,32 @@
         "keyPlaceholder": "Plane API key"
       },
       "notion": {
-        "title": "Notion integration token",
-        "help": "Create a Notion internal integration, then share each page or database you want Yoda to access with it.",
-        "tokenPlaceholder": "ntn_…"
+        "title": "Notion access token",
+        "help": "Use a personal access token to read pages you can access in the selected workspace.",
+        "personalTokenTitle": "Create a personal access token",
+        "personalTokenDescription": "Choose a workspace and enable Notion API. The token uses your existing page permissions, so pages do not need to be shared one by one.",
+        "recommended": "Recommended",
+        "openTokenPage": "Open Notion",
+        "tokenLabel": "Paste access token",
+        "tokenHint": "Notion shows the token only once. Copy it when it is created, then paste it here.",
+        "tokenPlaceholder": "ntn_…",
+        "showToken": "Show",
+        "hideToken": "Hide",
+        "storedLocally": "Encrypted on this device after verification.",
+        "internalSummary": "Already have a team internal connection?",
+        "internalDescription": "You can also paste an internal connection token. After connecting, add the pages or databases you need to that connection in Notion.",
+        "openInternalGuide": "View sharing guide",
+        "verifyAndConnect": "Verify and connect",
+        "copyError": "Copy error details",
+        "openFailed": "Could not open Notion",
+        "openFailedDescription": "Copy the error details and try again.",
+        "errors": {
+          "invalidToken": "Notion did not accept this token. Check that it was copied in full and is still active.",
+          "missingCapability": "This token does not have Notion API access. Enable that capability in the token settings and try again.",
+          "rateLimited": "Notion is receiving too many requests. Try again shortly.",
+          "unavailable": "Notion is temporarily unavailable. Try again shortly.",
+          "generic": "Something went wrong while connecting Notion. Check your network and token settings, then try again."
+        }
       },
       "feishu": {
         "title": "Connect with Feishu CLI",
@@ -5176,7 +5199,7 @@
       },
       "notion": {
         "title": "Connect Notion",
-        "subtitle": "Browse pages from databases shared with your integration."
+        "subtitle": "Use a personal access token to browse pages and databases you can access."
       },
       "feishu": {
         "title": "Connect Feishu Tasks",

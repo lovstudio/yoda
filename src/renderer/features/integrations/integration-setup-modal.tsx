@@ -20,6 +20,7 @@ import GitLabSetupForm from './GitLabSetupForm';
 import { ISSUE_CONNECTION_STATUS_QUERY_KEY, useIntegrationsContext } from './integrations-provider';
 import JiraSetupForm from './JiraSetupForm';
 import LinearSetupForm from './LinearSetupForm';
+import { NotionSetupForm } from './NotionSetupForm';
 import PlainSetupForm from './PlainSetupForm';
 
 type IntegrationType =
@@ -297,7 +298,10 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
 
   return (
     <>
-      <DialogHeader showCloseButton={false}>
+      <DialogHeader
+        className={integration === 'notion' ? 'flex-col items-start gap-1' : undefined}
+        showCloseButton={false}
+      >
         <DialogTitle>{t(titleKey)}</DialogTitle>
         <DialogDescription className="text-xs">{t(subtitleKey)}</DialogDescription>
       </DialogHeader>
@@ -436,18 +440,12 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
           />
         )}
         {integration === 'notion' && (
-          <ExternalIssueSetupForm
-            provider="notion"
-            fields={[
-              {
-                id: 'apiToken',
-                value: notionToken,
-                type: 'password',
-                placeholderKey: 'integrations.setup.notion.tokenPlaceholder',
-                autoFocus: true,
-              },
-            ]}
-            onChange={(_, value) => setNotionToken(value)}
+          <NotionSetupForm
+            token={notionToken}
+            onChange={(value) => {
+              setNotionToken(value);
+              setError(null);
+            }}
             error={error}
           />
         )}
@@ -479,7 +477,9 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
                   ? 'integrations.setup.feishu.finishAuthorization'
                   : 'integrations.setup.feishu.startAuthorization'
               )
-            : t('integrations.connect')}
+            : integration === 'notion'
+              ? t('integrations.setup.notion.verifyAndConnect')
+              : t('integrations.connect')}
         </ConfirmButton>
       </DialogFooter>
     </>

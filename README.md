@@ -169,7 +169,7 @@ Yoda 可以把 ticket、issue 和支持线程直接交给 agent。
 | [Monday.com](https://monday.com/) | API token |
 | [Trello](https://trello.com/) | API key + API token |
 | [Plane](https://plane.so/) | API base URL + workspace slug + API key |
-| [Notion](https://www.notion.so/) | Integration token |
+| [Notion](https://www.notion.so/) | Personal access token or integration token |
 | [飞书任务](https://www.feishu.cn/product/tasks) | Official `lark-cli` user authorization |
 
 <a id="architecture"></a>

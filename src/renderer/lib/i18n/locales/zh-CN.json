@@ -5119,9 +5119,32 @@
         "keyPlaceholder": "Plane API Key"
       },
       "notion": {
-        "title": "Notion 集成令牌",
-        "help": "创建 Notion 内部集成，并把需要访问的页面或数据库共享给该集成。",
-        "tokenPlaceholder": "ntn_…"
+        "title": "Notion 访问令牌",
+        "help": "使用个人访问令牌，可直接读取你在该工作区有权限访问的页面。",
+        "personalTokenTitle": "创建个人访问令牌",
+        "personalTokenDescription": "选择工作区并启用 Notion API。令牌沿用你的页面权限，无需逐页共享。",
+        "recommended": "推荐",
+        "openTokenPage": "打开 Notion",
+        "tokenLabel": "粘贴访问令牌",
+        "tokenHint": "令牌仅在创建时显示一次，请从 Notion 复制后粘贴到这里。",
+        "tokenPlaceholder": "ntn_…",
+        "showToken": "显示",
+        "hideToken": "隐藏",
+        "storedLocally": "验证通过后加密保存在此设备。",
+        "internalSummary": "已有团队内部集成？",
+        "internalDescription": "也可直接粘贴内部集成令牌；连接后，请在 Notion 中把目标页面或数据库添加到该集成。",
+        "openInternalGuide": "查看共享方法",
+        "verifyAndConnect": "验证并连接",
+        "copyError": "复制错误详情",
+        "openFailed": "打开 Notion 失败",
+        "openFailedDescription": "请复制错误详情后重试。",
+        "errors": {
+          "invalidToken": "令牌未通过 Notion 验证。请确认已完整复制，并且令牌仍然有效。",
+          "missingCapability": "该令牌未启用 Notion API 权限。请在令牌设置中启用后重试。",
+          "rateLimited": "Notion 请求过于频繁，请稍后再试。",
+          "unavailable": "Notion 服务暂时异常，请稍后再试。",
+          "generic": "连接 Notion 时出现问题。请检查网络与令牌设置后重试。"
+        }
       },
       "feishu": {
         "title": "使用飞书 CLI 连接",
@@ -5176,7 +5199,7 @@
       },
       "notion": {
         "title": "连接 Notion",
-        "subtitle": "连接后可浏览已共享数据库中的页面。"
+        "subtitle": "使用个人访问令牌，直接浏览你有权限访问的页面与数据库。"
       },
       "feishu": {
         "title": "连接飞书任务",
