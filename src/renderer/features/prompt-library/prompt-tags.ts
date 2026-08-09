@@ -1,5 +1,23 @@
 import type { Prompt } from '@shared/prompt-library';
 
+type PromptPayload = Omit<Prompt, 'tags'> & {
+  tags?: unknown;
+};
+
+/**
+ * Keep the renderer compatible with prompts returned by an older main process
+ * during upgrades or renderer hot reloads. The current wire contract includes
+ * tags, but old cached/query data can still omit the field.
+ */
+export function normalizePromptList(prompts: readonly PromptPayload[]): Prompt[] {
+  return prompts.map((prompt) => ({
+    ...prompt,
+    tags: Array.isArray(prompt.tags)
+      ? prompt.tags.filter((tag): tag is string => typeof tag === 'string')
+      : [],
+  }));
+}
+
 export function collectPromptTags(prompts: Prompt[]): string[] {
   return Array.from(new Set(prompts.flatMap((prompt) => prompt.tags))).sort((left, right) =>
     left.localeCompare(right)

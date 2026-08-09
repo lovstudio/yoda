@@ -3,6 +3,7 @@ import type { Prompt } from '@shared/prompt-library';
 import {
   collectPromptTags,
   filterPrompts,
+  normalizePromptList,
   reorderPromptIds,
   reorderPromptIdsInVisibleList,
 } from './prompt-tags';
@@ -24,6 +25,12 @@ function prompt(id: string, tags: string[], injectionEnabled = false): Prompt {
 }
 
 describe('prompt tags', () => {
+  it('backfills tags when an older prompt payload omits the field', () => {
+    const { tags: _tags, ...legacyPrompt } = prompt('legacy', ['Review']);
+
+    expect(normalizePromptList([legacyPrompt])).toEqual([prompt('legacy', [])]);
+  });
+
   it('collects unique tags in a stable display order', () => {
     expect(
       collectPromptTags([
