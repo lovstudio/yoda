@@ -212,5 +212,14 @@ describe('SidebarTaskItem long-term marker', () => {
       expect(document.body.querySelector('[data-sidebar-task-hover-preview]')).not.toBeNull();
     });
     expect(document.body.textContent).toContain('已经完成侧栏任务悬浮预览。');
+
+    await act(async () => {
+      await userEvent.unhover(row!);
+      await new Promise((resolve) => setTimeout(resolve, 260));
+    });
+
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('[data-sidebar-task-hover-preview]')).toBeNull();
+    });
   });
 });

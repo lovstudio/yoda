@@ -452,7 +452,8 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           side="right"
           align="start"
           sideOffset={8}
-          className="w-80 gap-0 overflow-hidden p-0"
+          data-yoda-surface="sidebar-task-hover-preview"
+          className="w-72 gap-0 overflow-hidden rounded-xl border border-border/70 bg-background-tertiary/95 p-0 shadow-xl backdrop-blur-xl"
         >
           <TaskSidebarHoverPreview
             task={task}
