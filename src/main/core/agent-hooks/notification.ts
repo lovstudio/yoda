@@ -78,7 +78,7 @@ export async function maybeShowNotification(event: AgentEvent, appFocused: boole
       return;
     }
 
-    const notification = new Notification({ title, body: message.description, silent: true });
+    const notification = new Notification({ title, body: message.description, silent: false });
 
     notification.on('click', () => {
       const win = getMainWindow();

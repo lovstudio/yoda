@@ -70,19 +70,36 @@ function playTaskComplete(): void {
   playTone(783.99, now + 0.36, 0.2, 'triangle', 0.12);
 }
 
+function playSoundEvent(event: SoundEvent): void {
+  switch (event) {
+    case 'needs_attention':
+      playNeedsAttention();
+      break;
+    case 'task_complete':
+      playTaskComplete();
+      break;
+  }
+}
+
 export const soundPlayer = {
   play(event: SoundEvent, appFocused?: boolean): void {
     if (!enabled) return;
     if (focusMode === 'unfocused' && appFocused) return;
     try {
-      switch (event) {
-        case 'needs_attention':
-          playNeedsAttention();
-          break;
-        case 'task_complete':
-          playTaskComplete();
-          break;
+      const ctx = getContext();
+      // Electron starts renderer AudioContexts suspended under its autoplay
+      // policy. Resume before scheduling tones so notifications still have an
+      // audible fallback when the system banner is unavailable.
+      if (ctx.state === 'suspended') {
+        void ctx
+          .resume()
+          .then(() => {
+            if (ctx.state === 'running') playSoundEvent(event);
+          })
+          .catch(() => {});
+        return;
       }
+      playSoundEvent(event);
     } catch {
       // Audio may fail if user hasn't interacted with page yet
     }
