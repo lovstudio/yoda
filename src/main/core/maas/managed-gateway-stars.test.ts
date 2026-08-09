@@ -29,7 +29,7 @@ function githubResponse(
 
 function historyResponse(
   rows = [
-    { date: '2026-02-10', stargazers: '100' },
+    { date: '2023-08-14', stargazers: '100' },
     { date: '2026-08-03', stargazers: '200' },
   ],
   status = 200
@@ -66,6 +66,27 @@ describe('MaaS managed gateway GitHub stars', () => {
         headers: expect.objectContaining({ 'User-Agent': 'Yoda' }),
       })
     );
+  });
+
+  it('requests weekly history for the last three years', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T12:00:00.000Z'));
+    try {
+      await new MaasManagedGatewayStarsService().list();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const historyUrls = mocks.fetch.mock.calls
+      .map(([url]) => String(url))
+      .filter((url) => url.startsWith('https://api.ossinsight.io/'));
+    expect(historyUrls).toHaveLength(3);
+    for (const url of historyUrls) {
+      const parsedUrl = new URL(url);
+      expect(parsedUrl.searchParams.get('per')).toBe('week');
+      expect(parsedUrl.searchParams.get('from')).toBe('2023-08-10');
+      expect(parsedUrl.searchParams.get('to')).toBe('2026-08-10');
+    }
   });
 
   it('keeps the other counts available when one repository cannot be read', async () => {
