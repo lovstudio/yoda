@@ -103,6 +103,7 @@ describe('LatestReplyScreenshotButton', () => {
     expect(card.className).toContain('w-[360px]');
     expect(card.textContent).toContain('Responsive screenshot');
     expect(card.textContent).toContain('The latest reply.');
+    expect(card.textContent).not.toContain('workspaceRuntime.replyScreenshotFooter');
     expect(options.scale).toBe(2);
     expect(mocks.clipboardWritePng).toHaveBeenCalledWith(
       'data:image/png;base64,c2NyZWVuc2hvdA==',

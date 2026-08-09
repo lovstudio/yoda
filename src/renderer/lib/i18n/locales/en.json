@@ -5046,7 +5046,6 @@
     "replyScreenshotRevealFailed": "Failed to show reply screenshot",
     "replyScreenshotEmpty": "This turn does not have a reply to capture yet",
     "replyScreenshotFailed": "Failed to create reply screenshot",
-    "replyScreenshotFooter": "Latest reply",
     "compactContext": "Compact context",
     "compactingContext": "Compacting context…",
     "compactContextStarted": "Context compaction started",

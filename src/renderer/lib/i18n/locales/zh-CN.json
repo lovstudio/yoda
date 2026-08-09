@@ -5046,7 +5046,6 @@
     "replyScreenshotRevealFailed": "显示回复截图失败",
     "replyScreenshotEmpty": "当前轮次还没有可截图的回复",
     "replyScreenshotFailed": "生成回复截图失败",
-    "replyScreenshotFooter": "最新一轮回复",
     "compactContext": "压缩上下文",
     "compactingContext": "正在压缩上下文…",
     "compactContextStarted": "已开始压缩上下文",
