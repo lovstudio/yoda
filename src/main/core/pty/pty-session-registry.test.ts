@@ -303,7 +303,8 @@ describe('PtySessionRegistry', () => {
   it('flushes output before exit and leaves no late timer behind', () => {
     const registry = new PtySessionRegistry();
     const pty = new FakePty();
-    registry.register('session', pty);
+    const onFinalExit = vi.fn();
+    registry.register('session', pty, { onFinalExit });
     pty.emitData('tail');
     pty.emitExit({ exitCode: 7 });
     vi.advanceTimersByTime(16);
@@ -312,6 +313,10 @@ describe('PtySessionRegistry', () => {
       [ptyDataChannel, { generation: 1, sequence: 1, byteLength: 4, data: 'tail' }, 'session'],
       [ptyExitChannel, { exitCode: 7 }, 'session'],
     ]);
+    expect(onFinalExit).toHaveBeenCalledWith({ exitCode: 7 });
+    expect(onFinalExit.mock.invocationCallOrder[0]).toBeGreaterThan(
+      eventMocks.emit.mock.invocationCallOrder.at(-1) ?? 0
+    );
   });
 
   it('bounds replay by UTF-8 bytes without creating broken surrogate pairs', () => {

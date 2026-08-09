@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
+import { agentSessionExitedChannel } from '@shared/events/agentEvents';
 import { ptyDataChannel, ptyExitChannel } from '@shared/events/ptyEvents';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-reconciler';
@@ -515,6 +516,15 @@ describe('LocalConversationProvider', () => {
       sessionId
     );
     expect(mocks.emitEvent).toHaveBeenCalledWith(ptyExitChannel, { exitCode: 7 }, sessionId);
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      agentSessionExitedChannel,
+      expect.objectContaining({ exitCode: 7, sessionId })
+    );
+    const eventNames = mocks.emitEvent.mock.calls.map(([event]) => event);
+    expect(eventNames.indexOf(ptyDataChannel)).toBeLessThan(eventNames.indexOf(ptyExitChannel));
+    expect(eventNames.indexOf(ptyExitChannel)).toBeLessThan(
+      eventNames.indexOf(agentSessionExitedChannel)
+    );
     expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
   });
 

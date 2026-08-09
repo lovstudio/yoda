@@ -287,9 +287,11 @@ export class SshConversationProvider implements ConversationProvider {
         );
       }
 
+      let shouldEmitAgentSessionExited = false;
       pty.onExit(({ exitCode }) => {
         this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
         if (this.sessions.get(sessionId) !== pty) return;
+        shouldEmitAgentSessionExited = true;
         this.sessions.delete(sessionId);
         this.sessionInfos.delete(sessionId);
         markRuntimeSessionExited({
@@ -304,19 +306,22 @@ export class SshConversationProvider implements ConversationProvider {
           task_id: conversation.taskId,
           conversation_id: conversation.id,
         });
-        events.emit(agentSessionExitedChannel, {
-          sessionId,
-          projectId: conversation.projectId,
-          conversationId: conversation.id,
-          taskId: conversation.taskId,
-          exitCode,
-        });
-        snapshotTaskDiffOnSessionExit(conversation.taskId);
       });
 
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       registrationAttempted = true;
       ptySessionRegistry.register(sessionId, pty, {
+        onFinalExit: (info) => {
+          if (!shouldEmitAgentSessionExited) return;
+          events.emit(agentSessionExitedChannel, {
+            sessionId,
+            projectId: conversation.projectId,
+            conversationId: conversation.id,
+            taskId: conversation.taskId,
+            exitCode: info.exitCode,
+          });
+          snapshotTaskDiffOnSessionExit(conversation.taskId);
+        },
         registrationEpoch,
         tmuxBacked: Boolean(tmuxSessionName),
       });
