@@ -345,50 +345,52 @@ export function FeatureWorkspace({ projectId, feature }: { projectId: string; fe
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
-      <div className="@container flex min-h-0 flex-1 @max-[980px]:flex-col">
-        <FeatureStageRail stage={feature.stage} />
-        <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto grid w-full max-w-3xl gap-5 px-6 py-6 @max-[720px]:px-4">
-            <FeatureBrief
-              key={[
-                feature.id,
-                feature.title,
-                feature.problem,
-                feature.outcome,
-                feature.nonGoals,
-              ].join('\0')}
-              feature={feature}
-              mutations={mutations}
-            />
-            <FeatureTasks projectId={projectId} feature={feature} mutations={mutations} />
-            <FeatureArtifacts projectId={projectId} feature={feature} mutations={mutations} />
-            <section className="border-t border-border pt-4">
-              <h3 className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-foreground">
-                <Clock3 className="size-3.5" />
-                {t('featureDelivery.events.title')}
-              </h3>
-              <ol className="grid gap-2">
-                {feature.events.slice(0, 8).map((event) => (
-                  <li
-                    key={event.id}
-                    className="grid grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-2 text-xs"
-                  >
-                    <span className="size-1.5 rounded-full bg-foreground-passive" />
-                    <span className="truncate text-foreground-muted">
-                      {t(`featureDelivery.events.types.${event.type}`)}
-                    </span>
-                    <RelativeTime
-                      value={event.createdAt}
-                      compact
-                      className="text-[10px] text-foreground-passive"
-                    />
-                  </li>
-                ))}
-              </ol>
-            </section>
-          </div>
-        </main>
-        <FeatureGate feature={feature} mutations={mutations} />
+      <div className="@container min-h-0 min-w-0 flex-1">
+        <div className="flex h-full min-h-0 min-w-0 @max-[980px]:flex-col">
+          <FeatureStageRail stage={feature.stage} />
+          <main className="min-w-0 flex-1 overflow-y-auto">
+            <div className="mx-auto grid w-full max-w-3xl gap-5 px-6 py-6 @max-[720px]:px-4">
+              <FeatureBrief
+                key={[
+                  feature.id,
+                  feature.title,
+                  feature.problem,
+                  feature.outcome,
+                  feature.nonGoals,
+                ].join('\0')}
+                feature={feature}
+                mutations={mutations}
+              />
+              <FeatureTasks projectId={projectId} feature={feature} mutations={mutations} />
+              <FeatureArtifacts projectId={projectId} feature={feature} mutations={mutations} />
+              <section className="border-t border-border pt-4">
+                <h3 className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-foreground">
+                  <Clock3 className="size-3.5" />
+                  {t('featureDelivery.events.title')}
+                </h3>
+                <ol className="grid gap-2">
+                  {feature.events.slice(0, 8).map((event) => (
+                    <li
+                      key={event.id}
+                      className="grid grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-2 text-xs"
+                    >
+                      <span className="size-1.5 rounded-full bg-foreground-passive" />
+                      <span className="truncate text-foreground-muted">
+                        {t(`featureDelivery.events.types.${event.type}`)}
+                      </span>
+                      <RelativeTime
+                        value={event.createdAt}
+                        compact
+                        className="text-[10px] text-foreground-passive"
+                      />
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            </div>
+          </main>
+          <FeatureGate feature={feature} mutations={mutations} />
+        </div>
       </div>
     </div>
   );
