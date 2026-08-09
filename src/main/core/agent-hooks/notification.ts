@@ -6,7 +6,10 @@ import {
   notificationFocusTaskChannel,
   type AppNotificationCreated,
 } from '@shared/events/appEvents';
-import { shouldShowAgentNotification } from '@shared/notification-settings';
+import {
+  getAgentNotificationKind,
+  shouldShowAgentNotification,
+} from '@shared/notification-settings';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import { getMainWindow } from '@main/app/window';
 import { appSettingsService } from '@main/core/settings/settings-service';
@@ -14,6 +17,31 @@ import { db } from '@main/db/client';
 import { tasks } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
+
+const AGENT_NOTIFICATION_DEDUPE_WINDOW_MS = 3_000;
+const recentAgentNotifications = new Map<string, number>();
+
+function suppressDuplicateAgentNotification(event: AgentEvent): boolean {
+  if (!event.source) return false;
+
+  const kind = getAgentNotificationKind(event);
+  if (!kind) return false;
+
+  const now = Date.now();
+  for (const [key, timestamp] of recentAgentNotifications) {
+    if (now - timestamp >= AGENT_NOTIFICATION_DEDUPE_WINDOW_MS) {
+      recentAgentNotifications.delete(key);
+    }
+  }
+
+  const key = `${event.conversationId}:${kind}`;
+  const previous = recentAgentNotifications.get(key);
+  if (previous !== undefined && now - previous < AGENT_NOTIFICATION_DEDUPE_WINDOW_MS) {
+    return true;
+  }
+  recentAgentNotifications.set(key, now);
+  return false;
+}
 
 function getNotificationMessage(
   event: AgentEvent
@@ -47,6 +75,7 @@ export async function maybeShowNotification(event: AgentEvent, appFocused: boole
   try {
     const message = getNotificationMessage(event);
     if (!message) return;
+    if (suppressDuplicateAgentNotification(event)) return;
 
     const runtimeName =
       getRuntime(event.runtimeId as RuntimeId)?.name ?? event.runtimeId ?? 'Agent';
