@@ -56,6 +56,7 @@ import {
   MOBILE_SESSION_EVENT_VERSION,
   type MobileSessionInvalidationReason,
 } from '@shared/mobile-session-events';
+import { resolveMobileSessionInteraction } from '@shared/mobile-session-interaction';
 import {
   INTERNAL_PROJECT_ID,
   projectDisplayName,
@@ -1568,6 +1569,12 @@ export class MobileGatewayService {
     ]);
     const tailed = tailSessionContent(output.content);
     const tailedTranscript = tailSessionTranscript(transcript);
+    const pendingInteraction = resolveMobileSessionInteraction({
+      content: tailed.content,
+      runtimeId: session.runtimeId,
+      runtimeStatus: session.runtimeStatus,
+      transcript,
+    });
 
     return {
       cwd: data.cwd,
@@ -1585,6 +1592,7 @@ export class MobileGatewayService {
         source: output.source,
         transcript: tailedTranscript.transcript,
         transcriptTruncated: tailedTranscript.truncated,
+        pendingInteraction,
       },
     };
   }

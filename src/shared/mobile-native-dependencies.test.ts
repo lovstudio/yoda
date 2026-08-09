@@ -38,9 +38,14 @@ describe('mobile native dependencies', () => {
       new URL('../../apps/mobile/src/input-media.ts', import.meta.url),
       'utf8'
     );
+    const imageEditorSource = readFileSync(
+      new URL('../../apps/mobile/src/input-image-editor.tsx', import.meta.url),
+      'utf8'
+    );
 
     expect(mobilePackage.dependencies?.['expo-image-picker']).toBeTruthy();
     expect(mobilePackage.dependencies?.['expo-image-manipulator']).toBeTruthy();
+    expect(mobilePackage.dependencies?.['react-native-view-shot']).toBeTruthy();
     expect(mobilePackage.dependencies?.['expo-localization']).toBeTruthy();
     expect(mobilePackage.dependencies?.['expo-speech-recognition']).toBe('3.1.3');
     expect(plugins).toContain('expo-image-picker');
@@ -48,6 +53,8 @@ describe('mobile native dependencies', () => {
     expect(plugins).toContain('expo-speech-recognition');
     expect(imageInputSource).toContain('selectionLimit: 0');
     expect(imageInputSource).toContain('format: SaveFormat.JPEG');
+    expect(imageEditorSource).toContain('captureRef');
+    expect(imageEditorSource).toContain('cropMobileInputImage');
     expect(voiceInputSource).toContain('contextualStrings: speechContextualStrings');
     expect(voiceInputSource).toContain("iosTaskHint: 'dictation'");
   });
