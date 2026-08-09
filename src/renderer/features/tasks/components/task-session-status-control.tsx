@@ -9,6 +9,7 @@ import { registeredTaskData, type TaskStore } from '@renderer/features/tasks/sto
 import {
   taskSessionStatusSummary,
   type TaskSessionStatusItem,
+  type TaskSessionStatusSummary,
 } from '@renderer/features/tasks/stores/task-selectors';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { rpc } from '@renderer/lib/ipc';
@@ -25,6 +26,7 @@ type TaskSessionStatusControlProps = {
   className?: string;
   align?: 'start' | 'center' | 'end';
   side?: 'top' | 'right' | 'bottom' | 'left' | 'inline-start' | 'inline-end';
+  summary?: TaskSessionStatusSummary;
 };
 
 /**
@@ -37,13 +39,14 @@ export const TaskSessionStatusControl = observer(function TaskSessionStatusContr
   className,
   align = 'end',
   side = 'bottom',
+  summary: providedSummary,
 }: TaskSessionStatusControlProps) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
   const [open, setOpen] = useState(false);
   const [interruptingIds, setInterruptingIds] = useState<Set<string>>(() => new Set());
   const taskData = registeredTaskData(task);
-  const summary = taskSessionStatusSummary(task);
+  const summary = providedSummary ?? taskSessionStatusSummary(task);
 
   if (!taskData || !summary.primaryStatus) return null;
 

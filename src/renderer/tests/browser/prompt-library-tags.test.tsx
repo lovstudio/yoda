@@ -162,6 +162,25 @@ describe('PromptLibraryPanel tags', () => {
     expect(host.textContent).toContain('Writing');
   });
 
+  it('opens the new prompt editor for an initial create action', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    const onInitialActionConsumed = vi.fn();
+    await act(async () =>
+      root.render(
+        createElement(PromptLibraryPanel, {
+          embedded: true,
+          initialAction: 'create',
+          onInitialActionConsumed,
+        })
+      )
+    );
+
+    expect(host.querySelector('form[data-slot="prompt-library-editor"]')).not.toBeNull();
+    expect(onInitialActionConsumed).toHaveBeenCalledTimes(1);
+  });
+
   it('creates a prompt with comma-separated tags', async () => {
     const { PromptLibraryPanel } = await import(
       '@renderer/features/prompt-library/prompt-library-panel'
@@ -189,9 +208,8 @@ describe('PromptLibraryPanel tags', () => {
         setFormValue(content, 'Write a concise release note.');
       }
     });
-    await act(async () =>
-      host.querySelector('form[data-slot="prompt-library-editor"]')?.requestSubmit()
-    );
+    const form = host.querySelector<HTMLFormElement>('form[data-slot="prompt-library-editor"]');
+    await act(async () => form?.requestSubmit());
 
     expect(mocks.createPrompt).toHaveBeenCalledWith(
       expect.objectContaining({

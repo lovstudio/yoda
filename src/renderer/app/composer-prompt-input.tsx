@@ -73,9 +73,9 @@ import {
   type PathCompletionItem,
 } from './path-mention-autocomplete';
 import {
+  createTokenRectMeasurer,
   fileTokenLabel,
   findTokenRanges,
-  measureTokenRects,
   snapSelectionToTokens,
   tokenAtPoint,
   tokenText,
@@ -83,6 +83,7 @@ import {
   type PromptToken,
   type PromptTokenKind,
   type TokenRect,
+  type TokenRectMeasurer,
 } from './prompt-attachment-tokens';
 
 type SkillShortcutPrefix = '/' | '$';
@@ -458,6 +459,8 @@ export function ComposerPromptInput({
   const tokenRangesRef = useRef(tokenRanges);
   tokenRangesRef.current = tokenRanges;
   const [tokenRects, setTokenRects] = useState<Map<string, TokenRect[]>>(new Map());
+  const tokenRectFrameRef = useRef<number | null>(null);
+  const tokenRectMeasurerRef = useRef<TokenRectMeasurer | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [hoveredTokenId, setHoveredTokenId] = useState<string | null>(null);
   const [tokenMenu, setTokenMenu] = useState<{
@@ -466,23 +469,52 @@ export function ComposerPromptInput({
     top: number;
   } | null>(null);
 
-  useLayoutEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    setTokenRects(measureTokenRects(textarea, tokenRanges));
-  }, [tokenRanges]);
+  const scheduleTokenRectMeasurement = useCallback(() => {
+    if (tokenRectFrameRef.current !== null) {
+      cancelAnimationFrame(tokenRectFrameRef.current);
+    }
+    tokenRectFrameRef.current = requestAnimationFrame(() => {
+      tokenRectFrameRef.current = null;
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      const ranges = findTokenRanges(textarea.value, tokensRef.current);
+      if (ranges.length === 0) {
+        tokenRectMeasurerRef.current?.dispose();
+        tokenRectMeasurerRef.current = null;
+        setTokenRects(new Map());
+        return;
+      }
+      const measurer =
+        tokenRectMeasurerRef.current ??
+        (tokenRectMeasurerRef.current = createTokenRectMeasurer(textarea));
+      setTokenRects(measurer.measure(ranges));
+    });
+  }, []);
+
+  useEffect(() => {
+    scheduleTokenRectMeasurement();
+    return () => {
+      if (tokenRectFrameRef.current === null) return;
+      cancelAnimationFrame(tokenRectFrameRef.current);
+      tokenRectFrameRef.current = null;
+    };
+  }, [scheduleTokenRectMeasurement, tokenRanges]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
-    const observer = new ResizeObserver(() => {
-      setTokenRects(
-        measureTokenRects(textarea, findTokenRanges(textarea.value, tokensRef.current))
-      );
-    });
+    const observer = new ResizeObserver(scheduleTokenRectMeasurement);
     observer.observe(textarea);
     return () => observer.disconnect();
-  }, []);
+  }, [scheduleTokenRectMeasurement]);
+
+  useEffect(
+    () => () => {
+      tokenRectMeasurerRef.current?.dispose();
+      tokenRectMeasurerRef.current = null;
+    },
+    []
+  );
 
   const hitTestToken = useCallback(
     (event: MouseEvent<HTMLTextAreaElement>): string | null => {

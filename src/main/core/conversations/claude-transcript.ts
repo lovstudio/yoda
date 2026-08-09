@@ -6,6 +6,7 @@ import type {
 import { resolveClaudeTranscriptPath } from '@main/core/session-title/claude-title-source';
 
 const MAX_TOOL_CONTENT_CHARS = 16 * 1024;
+const INTERACTIVE_TOOL_NAMES = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
 export async function loadClaudeTranscript({
   cwd,
@@ -49,7 +50,7 @@ export function parseClaudeTranscript(raw: string): MobileSessionTranscriptBlock
     }
   }
 
-  return compactIncrementalAssistantBlocks(blocks);
+  return compactIncrementalAssistantBlocks(resolveClaudeToolStatuses(blocks));
 }
 
 function extractUserBlocks(
@@ -107,10 +108,12 @@ function extractUserBlocks(
       const contentText = extractToolResultContent(block.content);
       if (!contentText) continue;
       const isError = block.is_error === true;
+      const toolCallId = nullableString(block.tool_use_id);
       out.push({
         id: transcriptId(row, baseIndex + out.length, 'tool'),
         role: 'tool',
         title: isError ? 'Tool error' : 'Tool output',
+        ...(toolCallId ? { toolCallId } : {}),
         timestamp: nullableString(row.timestamp),
         format: 'code',
         content: contentText,
@@ -178,11 +181,15 @@ function extractAssistantBlocks(
     if (block.type === 'tool_use') {
       flushText();
       const name = nullableString(block.name) ?? 'tool';
+      const toolCallId = nullableString(block.id);
+      const isInteractive = INTERACTIVE_TOOL_NAMES.has(name);
       const input = formatJsonLike(block.input);
       out.push({
         id: transcriptId(row, baseIndex + out.length, 'tool'),
         role: 'tool',
         title: `Tool · ${name}`,
+        ...(isInteractive ? { toolStatus: 'running' as const } : {}),
+        ...(isInteractive && toolCallId ? { toolCallId } : {}),
         timestamp: nullableString(row.timestamp),
         format: 'code',
         content: input ? truncate(input, MAX_TOOL_CONTENT_CHARS) : name,
@@ -193,6 +200,24 @@ function extractAssistantBlocks(
 
   flushText();
   return out;
+}
+
+function resolveClaudeToolStatuses(
+  blocks: MobileSessionTranscriptBlock[]
+): MobileSessionTranscriptBlock[] {
+  const resolvedToolCallIds = new Set(
+    blocks
+      .filter((block) => block.title === 'Tool output' && block.toolCallId)
+      .map((block) => block.toolCallId)
+  );
+
+  if (resolvedToolCallIds.size === 0) return blocks;
+
+  return blocks.map((block) =>
+    block.toolStatus === 'running' && block.toolCallId && resolvedToolCallIds.has(block.toolCallId)
+      ? { ...block, toolStatus: 'completed' as const }
+      : block
+  );
 }
 
 function extractToolResultContent(content: unknown): string | null {

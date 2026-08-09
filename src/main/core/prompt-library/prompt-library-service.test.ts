@@ -129,9 +129,30 @@ describe('PromptLibraryService flat prompt model', () => {
   it('reorders every prompt in one flat list and derives injection order from it', async () => {
     const { PromptLibraryService } = await import('./prompt-library-service');
     const service = new PromptLibraryService();
-    const first = await service.create({ title: 'First', content: 'First' });
-    const second = await service.create({ title: 'Second', content: 'Second' });
-    const third = await service.create({ title: 'Third', content: 'Third' });
+    const first = await service.create({
+      title: 'First',
+      content: 'First',
+      description: '',
+      tags: [],
+      extraInfo: '',
+      injectionEnabled: false,
+    });
+    const second = await service.create({
+      title: 'Second',
+      content: 'Second',
+      description: '',
+      tags: [],
+      extraInfo: '',
+      injectionEnabled: false,
+    });
+    const third = await service.create({
+      title: 'Third',
+      content: 'Third',
+      description: '',
+      tags: [],
+      extraInfo: '',
+      injectionEnabled: false,
+    });
 
     await service.reorderPrompts([first.id, third.id, second.id]);
 
@@ -146,19 +167,25 @@ describe('PromptLibraryService flat prompt model', () => {
     const review = await service.create({
       title: 'Review',
       content: 'Review',
+      description: '',
       tags: ['Review'],
+      extraInfo: '',
       injectionEnabled: false,
     });
     const writing = await service.create({
       title: 'Writing',
       content: 'Writing',
+      description: '',
       tags: ['Writing'],
+      extraInfo: '',
       injectionEnabled: false,
     });
     const shared = await service.create({
       title: 'Shared',
       content: 'Shared',
+      description: '',
       tags: ['Review', 'Writing'],
+      extraInfo: '',
       injectionEnabled: false,
     });
 
@@ -206,7 +233,14 @@ describe('PromptLibraryService flat prompt model', () => {
   it('restores an old snapshot as a new semantic version without rewriting history', async () => {
     const { PromptLibraryService } = await import('./prompt-library-service');
     const service = new PromptLibraryService();
-    const created = await service.create({ title: 'Review', content: 'Original' });
+    const created = await service.create({
+      title: 'Review',
+      content: 'Original',
+      description: '',
+      tags: [],
+      extraInfo: '',
+      injectionEnabled: false,
+    });
     await service.update(created.id, { content: 'Changed' });
 
     const restored = await service.restoreVersion(created.id, '1.0.0');

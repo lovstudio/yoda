@@ -10,8 +10,16 @@ describe('mobile branding', () => {
       new URL('../../apps/mobile/src/App.tsx', import.meta.url),
       'utf8'
     );
+    const iconSource = readFileSync(
+      new URL('../assets/images/yoda/yoda-mobile-icon.svg', import.meta.url),
+      'utf8'
+    );
+    const iconMarkScale = iconSource.match(
+      /<g transform="translate\([^"]+\) scale\(([\d.]+)\)">/
+    )?.[1];
 
     expect(appConfig.expo?.icon).toBe('../../src/assets/images/yoda/yoda-mobile-icon.png');
+    expect(Number(iconMarkScale)).toBeGreaterThanOrEqual(3);
     expect(appSource).toContain("from '../../../src/assets/images/yoda/yoda_logo.png'");
     expect(appSource.match(/<YodaBrandMark size=\{52\} \/>/g)).toHaveLength(1);
     expect(appSource).not.toContain('git-network-outline');

@@ -37,7 +37,16 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   incrementPromptVersion,
@@ -246,10 +255,14 @@ function SortablePromptRow({
 export function PromptLibraryPanel({
   embedded = false,
   projectId,
+  initialAction,
+  onInitialActionConsumed,
 }: {
   embedded?: boolean;
   /** Preselects the project-scoped instruction and opens the project tab. */
   projectId?: string;
+  initialAction?: 'create';
+  onInitialActionConsumed?: () => void;
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -323,13 +336,20 @@ export function PromptLibraryPanel({
     setVersionBump('patch');
   };
 
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     setSourceForm(null);
     setEditingId('new');
     setDraft(EMPTY_DRAFT);
     setVersionBump('patch');
     requestAnimationFrame(() => editorRef.current?.scrollIntoView({ behavior: 'smooth' }));
-  };
+  }, []);
+
+  useEffect(() => {
+    if (initialAction !== 'create') return;
+    setActiveScope('dynamic');
+    openCreate();
+    onInitialActionConsumed?.();
+  }, [initialAction, onInitialActionConsumed, openCreate]);
 
   const openCreateFromSource = (name: string, text: string, source: PromptSource) => {
     setSourceForm(null);

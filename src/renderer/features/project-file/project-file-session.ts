@@ -86,6 +86,11 @@ export async function getProjectFileSession(
 ): Promise<ProjectFileSession> {
   wireTabCloseDisposal();
 
+  if (!projectId) {
+    const result = await rpc.app.authorizeExternalFile(filePath);
+    if (!result.success) throw new Error(formatError(result.error));
+  }
+
   const key = sessionKey(projectId, filePath);
   const existing = sessions.get(key);
   if (existing) return existing;

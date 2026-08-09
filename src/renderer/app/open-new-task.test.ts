@@ -92,10 +92,11 @@ describe('openNewTask', () => {
   it('creates a child task with a Session when invoked inside an open task', async () => {
     await openNewTaskFromCurrentContext('project-1', 'task-1');
 
-    expect(mocks.showModal).toHaveBeenCalledWith('newSubtaskModal', {
-      projectId: 'project-1',
-      parentTaskId: 'task-1',
-      initialAction: 'create-and-run',
+    expect(mocks.showModal).toHaveBeenCalledWith('newTaskModal', {
+      parentTask: {
+        projectId: 'project-1',
+        taskId: 'task-1',
+      },
     });
     expect(mocks.getSettings).not.toHaveBeenCalled();
   });

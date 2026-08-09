@@ -83,6 +83,9 @@ vi.mock('@renderer/lib/stores/view-state-cache', () => ({
 
 vi.mock('@renderer/lib/stores/app-state', () => ({
   appState: {
+    agentRuntime: {
+      forgetTask: vi.fn(),
+    },
     history: {
       push: vi.fn(),
     },
@@ -302,6 +305,69 @@ describe('TaskManagerStore external task reconciliation', () => {
   });
 });
 
+describe('TaskManagerStore task hierarchy index', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    mocks.listeners.clear();
+    mocks.unsubscribers.length = 0;
+  });
+
+  it('indexes direct children and reacts to re-parenting', () => {
+    const manager = createManager();
+    const parent = createUnprovisionedTask(makeTask('Parent'));
+    const child = createUnprovisionedTask(makeTask('Child', 'task-1', 'task-2'));
+    const otherParent = createUnprovisionedTask(makeTask('Other parent', undefined, 'task-3'));
+
+    manager.tasks.set('task-1', parent);
+    manager.tasks.set('task-2', child);
+    manager.tasks.set('task-3', otherParent);
+
+    expect(manager.childrenByParent.get('task-1')).toEqual([child]);
+    expect(manager.childrenByParent.get('task-3')).toBeUndefined();
+
+    const childData = registeredTaskData(child);
+    if (!childData) throw new Error('Expected child task data to be registered');
+    childData.parentTaskId = 'task-3';
+
+    expect(manager.childrenByParent.get('task-1')).toBeUndefined();
+    expect(manager.childrenByParent.get('task-3')).toEqual([child]);
+    manager.dispose();
+  });
+});
+
+describe('TaskManagerStore review index', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    mocks.listeners.clear();
+    mocks.unsubscribers.length = 0;
+  });
+
+  it('returns only active registered tasks needing review', () => {
+    const manager = createManager();
+    const pending = createUnprovisionedTask(makeTask('Pending review', undefined, 'task-1'));
+    pending.data.needsReview = true;
+    const archived = createUnprovisionedTask(makeTask('Archived', undefined, 'task-2'));
+    archived.data.needsReview = true;
+    const archivedData = registeredTaskData(archived);
+    if (!archivedData) throw new Error('Expected archived task data to be registered');
+    archivedData.archivedAt = '2026-06-06T10:00:00.000Z';
+    const archiving = createUnprovisionedTask(makeTask('Archiving', undefined, 'task-3'));
+    archiving.data.needsReview = true;
+    const archivingData = registeredTaskData(archiving);
+    if (!archivingData) throw new Error('Expected archiving task data to be registered');
+    archivingData.archiveRequestedAt = '2026-06-06T10:00:00.000Z';
+
+    manager.tasks.set('task-1', pending);
+    manager.tasks.set('task-2', archived);
+    manager.tasks.set('task-3', archiving);
+
+    expect(manager.tasksNeedingReview).toEqual([pending]);
+    pending.data.needsReview = false;
+    expect(manager.tasksNeedingReview).toEqual([]);
+    manager.dispose();
+  });
+});
+
 describe('TaskManagerStore task view preload', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -357,6 +423,39 @@ describe('TaskManagerStore task view preload', () => {
     expect(mocks.provisionTask).toHaveBeenCalledTimes(1);
     expect(mocks.getConversationsForTask).not.toHaveBeenCalled();
     expect(transitionToProvisioned.mock.calls[0]?.[7]).toEqual(conversations);
+    manager.dispose();
+  });
+});
+
+describe('TaskManagerStore task view prewarm', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    mocks.listeners.clear();
+    mocks.unsubscribers.length = 0;
+  });
+
+  it('starts provisioning for an idle task from a deliberate open intent', async () => {
+    const manager = createManager();
+    manager.tasks.set('task-1', createUnprovisionedTask(makeTask('Task')));
+    const provisionTask = vi.spyOn(manager, 'provisionTask').mockResolvedValue(undefined);
+
+    await manager.prewarmTask('task-1');
+
+    expect(provisionTask).toHaveBeenCalledOnce();
+    expect(provisionTask).toHaveBeenCalledWith('task-1');
+    manager.dispose();
+  });
+
+  it('does not start background provisioning for a task already in another phase', async () => {
+    const manager = createManager();
+    const task = createUnprovisionedTask(makeTask('Task'));
+    task.phase = 'provision';
+    manager.tasks.set('task-1', task);
+    const provisionTask = vi.spyOn(manager, 'provisionTask').mockResolvedValue(undefined);
+
+    await manager.prewarmTask('task-1');
+
+    expect(provisionTask).not.toHaveBeenCalled();
     manager.dispose();
   });
 });
@@ -444,11 +543,12 @@ function makeCreateTaskParams(name: string): CreateTaskParams {
   };
 }
 
-function makeTask(name: string): Task {
+function makeTask(name: string, parentTaskId?: string, id = 'task-1'): Task {
   return {
-    id: 'task-1',
+    id,
     projectId: 'project-1',
     name,
+    parentTaskId,
     status: 'in_progress',
     sourceBranch: { type: 'local', branch: 'main' },
     createdAt: '2026-06-05T10:00:00.000Z',

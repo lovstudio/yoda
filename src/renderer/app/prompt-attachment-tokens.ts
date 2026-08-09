@@ -169,24 +169,26 @@ const MIRROR_STYLE_PROPS = [
   'tabSize',
 ] as const;
 
-/**
- * Measure where each token occurrence renders inside the textarea, via a
- * hidden mirror element replicating its text layout. Rects are relative to
- * the textarea border box with scrollTop NOT subtracted (caller adjusts).
- * A token wrapped across lines yields multiple rects.
- */
-export function measureTokenRects(
-  textarea: HTMLTextAreaElement,
-  ranges: TokenRange[]
-): Map<string, TokenRect[]> {
-  const result = new Map<string, TokenRect[]>();
-  if (ranges.length === 0) return result;
+export interface TokenRectMeasurer {
+  measure(ranges: TokenRange[]): Map<string, TokenRect[]>;
+  dispose(): void;
+}
 
+function configureMirror(mirror: HTMLDivElement, textarea: HTMLTextAreaElement): void {
   const style = window.getComputedStyle(textarea);
-  const mirror = document.createElement('div');
   for (const prop of MIRROR_STYLE_PROPS) {
     mirror.style[prop as never] = style[prop as never];
   }
+  mirror.style.width = `${textarea.clientWidth}px`;
+}
+
+/**
+ * Create a reusable hidden mirror for token geometry. Keeping one mirror per
+ * composer avoids allocating, attaching, measuring, and removing a DOM tree
+ * on every animation frame while typing or resizing the input.
+ */
+export function createTokenRectMeasurer(textarea: HTMLTextAreaElement): TokenRectMeasurer {
+  const mirror = document.createElement('div');
   mirror.style.position = 'absolute';
   mirror.style.top = '0';
   mirror.style.left = '-99999px';
@@ -194,46 +196,86 @@ export function measureTokenRects(
   mirror.style.pointerEvents = 'none';
   mirror.style.boxSizing = 'border-box';
   mirror.style.border = '0';
-  mirror.style.width = `${textarea.clientWidth}px`;
   mirror.style.whiteSpace = 'pre-wrap';
   mirror.style.overflowWrap = 'break-word';
-
-  const value = textarea.value;
-  const spans = new Map<HTMLSpanElement, string>();
-  let cursor = 0;
-  for (const range of ranges) {
-    if (range.start > cursor) {
-      mirror.appendChild(document.createTextNode(value.slice(cursor, range.start)));
-    }
-    const span = document.createElement('span');
-    span.textContent = value.slice(range.start, range.end);
-    mirror.appendChild(span);
-    spans.set(span, range.token.id);
-    cursor = range.end;
-  }
-  mirror.appendChild(document.createTextNode(value.slice(cursor)));
-
   document.body.appendChild(mirror);
-  try {
-    const origin = mirror.getBoundingClientRect();
-    for (const [span, tokenId] of spans) {
-      const rects: TokenRect[] = [];
-      for (const rect of span.getClientRects()) {
-        rects.push({
-          left: rect.left - origin.left,
-          top: rect.top - origin.top,
-          width: rect.width,
-          height: rect.height,
-        });
+
+  let styleSignature = '';
+  let width = -1;
+
+  return {
+    measure(ranges): Map<string, TokenRect[]> {
+      const result = new Map<string, TokenRect[]>();
+      if (ranges.length === 0) return result;
+
+      const style = window.getComputedStyle(textarea);
+      const nextStyleSignature = MIRROR_STYLE_PROPS.map((prop) => style[prop as never]).join(
+        '\u0000'
+      );
+      if (nextStyleSignature !== styleSignature || textarea.clientWidth !== width) {
+        configureMirror(mirror, textarea);
+        styleSignature = nextStyleSignature;
+        width = textarea.clientWidth;
       }
-      const existing = result.get(tokenId);
-      if (existing) existing.push(...rects);
-      else result.set(tokenId, rects);
-    }
+
+      mirror.replaceChildren();
+      const value = textarea.value;
+      const spans = new Map<HTMLSpanElement, string>();
+      let cursor = 0;
+      for (const range of ranges) {
+        if (range.start > cursor) {
+          mirror.appendChild(document.createTextNode(value.slice(cursor, range.start)));
+        }
+        const span = document.createElement('span');
+        span.textContent = value.slice(range.start, range.end);
+        mirror.appendChild(span);
+        spans.set(span, range.token.id);
+        cursor = range.end;
+      }
+      mirror.appendChild(document.createTextNode(value.slice(cursor)));
+
+      try {
+        const origin = mirror.getBoundingClientRect();
+        for (const [span, tokenId] of spans) {
+          const rects: TokenRect[] = [];
+          for (const rect of span.getClientRects()) {
+            rects.push({
+              left: rect.left - origin.left,
+              top: rect.top - origin.top,
+              width: rect.width,
+              height: rect.height,
+            });
+          }
+          const existing = result.get(tokenId);
+          if (existing) existing.push(...rects);
+          else result.set(tokenId, rects);
+        }
+      } finally {
+        mirror.replaceChildren();
+      }
+      return result;
+    },
+
+    dispose(): void {
+      mirror.remove();
+    },
+  };
+}
+
+/**
+ * One-shot compatibility wrapper. ComposerPromptInput uses the reusable
+ * measurer above so the mirror is retained across animation frames.
+ */
+export function measureTokenRects(
+  textarea: HTMLTextAreaElement,
+  ranges: TokenRange[]
+): Map<string, TokenRect[]> {
+  const measurer = createTokenRectMeasurer(textarea);
+  try {
+    return measurer.measure(ranges);
   } finally {
-    mirror.remove();
+    measurer.dispose();
   }
-  return result;
 }
 
 /** Hit-test a point (textarea border-box coords, scroll already added to y). */

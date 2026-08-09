@@ -1,3 +1,4 @@
+import { isAgentAccessMode, resolveAgentPermissionMode, type AgentAccessMode } from './agents';
 import type { RuntimeId } from './runtime-registry';
 
 export const MOBILE_GATEWAY_DEFAULT_PORT = 3879;
@@ -362,6 +363,7 @@ export type MobileTaskSummary = {
   activityStatus: MobileTaskActivityStatus;
   bootstrapStatus: MobileTaskBootstrapStatus;
   taskBranch?: string;
+  createdAt: string;
   updatedAt: string;
   lastInteractedAt?: string;
   needsReview: boolean;
@@ -370,6 +372,101 @@ export type MobileTaskSummary = {
   conversationCount: number;
   runtimeCounts: Record<string, number>;
 };
+
+export type MobileTaskSortMode = 'recent' | 'created';
+
+function mobileTaskActivityAt(task: MobileTaskSummary): number {
+  return parseMobileTimestamp(task.lastInteractedAt ?? task.updatedAt ?? task.createdAt);
+}
+
+function compareMobileTaskSortValues(a: number, b: number, aIndex: number, bIndex: number): number {
+  if (a !== b) {
+    if (a === Number.NEGATIVE_INFINITY) return 1;
+    if (b === Number.NEGATIVE_INFINITY) return -1;
+    return b - a;
+  }
+  return aIndex - bIndex;
+}
+
+/**
+ * Sorts mobile tasks without breaking their parent/child tree. Roots are ordered by the selected
+ * principle, then each root is followed by its recursively ordered descendants. In recent mode a
+ * root inherits the latest activity from its subtree, so a newly active child brings its parent
+ * tree into view instead of being separated from it.
+ */
+export function sortMobileTasks(
+  tasks: readonly MobileTaskSummary[],
+  mode: MobileTaskSortMode
+): MobileTaskSummary[] {
+  const taskById = new Map(tasks.map((task) => [task.id, task] as const));
+  const indexById = new Map(tasks.map((task, index) => [task.id, index] as const));
+  const childrenByParent = new Map<string, MobileTaskSummary[]>();
+  const roots: MobileTaskSummary[] = [];
+
+  for (const task of tasks) {
+    const parent = task.parentTaskId ? taskById.get(task.parentTaskId) : undefined;
+    if (parent && parent.id !== task.id && parent.projectId === task.projectId) {
+      const children = childrenByParent.get(parent.id) ?? [];
+      children.push(task);
+      childrenByParent.set(parent.id, children);
+    } else {
+      roots.push(task);
+    }
+  }
+
+  const recentActivityById = new Map<string, number>();
+  const resolveRecentActivity = (taskId: string, trail: Set<string> = new Set()): number => {
+    const cached = recentActivityById.get(taskId);
+    if (cached !== undefined) return cached;
+
+    const task = taskById.get(taskId);
+    if (!task) return Number.NEGATIVE_INFINITY;
+    const ownActivity = mobileTaskActivityAt(task);
+    if (trail.has(taskId)) return ownActivity;
+
+    trail.add(taskId);
+    let latestActivity = ownActivity;
+    for (const child of childrenByParent.get(taskId) ?? []) {
+      latestActivity = Math.max(latestActivity, resolveRecentActivity(child.id, trail));
+    }
+    trail.delete(taskId);
+    recentActivityById.set(taskId, latestActivity);
+    return latestActivity;
+  };
+
+  const taskSortValue = (task: MobileTaskSummary): number =>
+    mode === 'recent' ? resolveRecentActivity(task.id) : parseMobileTimestamp(task.createdAt);
+
+  const sortSiblings = (siblings: readonly MobileTaskSummary[]): MobileTaskSummary[] =>
+    [...siblings].sort((a, b) =>
+      compareMobileTaskSortValues(
+        taskSortValue(a),
+        taskSortValue(b),
+        indexById.get(a.id) ?? Number.MAX_SAFE_INTEGER,
+        indexById.get(b.id) ?? Number.MAX_SAFE_INTEGER
+      )
+    );
+
+  const ordered: MobileTaskSummary[] = [];
+  const visited = new Set<string>();
+  const emitSubtree = (task: MobileTaskSummary): void => {
+    if (visited.has(task.id)) return;
+    visited.add(task.id);
+    ordered.push(task);
+    for (const child of sortSiblings(childrenByParent.get(task.id) ?? [])) {
+      emitSubtree(child);
+    }
+  };
+
+  for (const root of sortSiblings(roots)) emitSubtree(root);
+  // A malformed cycle has no root. Keep those tasks visible rather than dropping them.
+  for (const task of tasks) {
+    if (!visited.has(task.id)) emitSubtree(task);
+  }
+
+  return ordered;
+}
+
 
 /** Preserves project and parent identity when creating a sibling from task detail. */
 export function resolveMobileSiblingTaskAttribution(
@@ -475,6 +572,74 @@ export type MobileProfileSnapshot = {
   };
 };
 
+export type MobileRunMode = 'normal' | 'brainstorm';
+export type MobileTaskStrategyKind = 'new-branch' | 'no-worktree';
+
+export type MobilePermissionModeOption = {
+  id: string;
+  label: string;
+  description?: string;
+  danger?: boolean;
+};
+
+export type MobileRuntimeOption = {
+  id: RuntimeId;
+  name: string;
+};
+
+/** Compact Agent profile exposed to the phone; prompts and Skill internals stay on desktop. */
+export type MobileAgentSummary = {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  preferredRuntime: RuntimeId;
+  model: string | null;
+  reasoningEffort: string | null;
+  accessMode: AgentAccessMode;
+};
+
+export type MobileSessionAgent = {
+  id: string | null;
+  name: string;
+  icon?: string;
+};
+
+export type MobileConfigurationSnapshot = {
+  generatedAt: string;
+  defaultRuntimeId: RuntimeId;
+  defaultAgentId: string | null;
+  runtimes: MobileRuntimeOption[];
+  agents: MobileAgentSummary[];
+  permissionModes: Partial<Record<RuntimeId, MobilePermissionModeOption[]>>;
+  defaultPermissionModes: Partial<Record<RuntimeId, string>>;
+};
+
+/** Resolve the permission mode shown for a new mobile session. Agent access is
+ * concrete when configured; otherwise the desktop runtime default is shared. */
+export function resolveMobilePermissionMode(
+  configuration: Pick<MobileConfigurationSnapshot, 'defaultPermissionModes'>,
+  agent: Pick<MobileAgentSummary, 'accessMode'> | null | undefined,
+  runtimeId: RuntimeId
+): string | null {
+  const accessMode = agent && isAgentAccessMode(agent.accessMode) ? agent.accessMode : 'inherit';
+  return (
+    resolveAgentPermissionMode(runtimeId, accessMode) ??
+    configuration.defaultPermissionModes[runtimeId] ??
+    null
+  );
+}
+
+export type MobileDemandConfiguration = {
+  agentId: string | null;
+  runtimeId: RuntimeId;
+  runMode: MobileRunMode;
+  strategyKind: MobileTaskStrategyKind;
+  model: string | null;
+  reasoningEffort: string | null;
+  permissionMode: string | null;
+};
+
 export type MobileCreateDemandRequest = {
   projectId?: string | null;
   /** Parent task for context-aware creation from a task detail on mobile. */
@@ -483,6 +648,12 @@ export type MobileCreateDemandRequest = {
   title?: string;
   provider?: string;
   attachmentIds?: string[];
+  agentId?: string | null;
+  runMode?: MobileRunMode;
+  strategyKind?: MobileTaskStrategyKind;
+  model?: string | null;
+  reasoningEffort?: string | null;
+  permissionMode?: string;
 };
 
 export type MobileCreateDemandResponse = {
@@ -554,6 +725,10 @@ export type MobileSessionSummary = {
   tmuxEnabled: boolean;
   sessionId: string;
   sessionTitle?: string;
+  agent?: MobileSessionAgent;
+  model: string | null;
+  reasoningEffort: string | null;
+  permissionMode: string | null;
 };
 
 export function canContinueMobileSession(
@@ -582,10 +757,40 @@ export type MobileSessionTranscriptBlock = {
   agentPhase?: MobileSessionTranscriptAgentPhase;
   /** Present for tool blocks when the transcript exposes call/result boundaries. */
   toolStatus?: MobileSessionTranscriptToolStatus;
+  /** Provider tool-call id, used to pair an interactive call with its result. */
+  toolCallId?: string;
   title?: string;
   timestamp: string | null;
   format: MobileSessionTranscriptFormat;
   content: string;
+};
+
+export type MobileSessionInteractionSource = 'claude' | 'codex' | 'terminal';
+export type MobileSessionInteractionKind = 'choice' | 'confirmation' | 'text';
+
+export type MobileSessionInteractionOption = {
+  id: string;
+  label: string;
+  value: string;
+  description?: string;
+};
+
+export type MobileSessionQuestion = {
+  id: string;
+  prompt: string;
+  header?: string;
+  multiSelect: boolean;
+  options: MobileSessionInteractionOption[];
+};
+
+/** A bounded, display-ready representation of the current AI question. */
+export type MobileSessionInteraction = {
+  id: string;
+  kind: MobileSessionInteractionKind;
+  title: string;
+  description?: string;
+  source: MobileSessionInteractionSource;
+  questions: MobileSessionQuestion[];
 };
 
 export type MobileSessionDetail = {
@@ -597,6 +802,8 @@ export type MobileSessionDetail = {
   source: MobileSessionContentSource;
   transcript: MobileSessionTranscriptBlock[];
   transcriptTruncated: boolean;
+  /** Present while the runtime is waiting for a user answer. */
+  pendingInteraction?: MobileSessionInteraction | null;
 };
 
 export type MobileSessionInputRequest = {
@@ -611,6 +818,17 @@ export type MobileSessionInputResponse = {
   ok: true;
   generatedAt: string;
   requestId?: string;
+};
+
+export type MobileSessionRuntimeConfigurationUpdate = {
+  model?: string | null;
+  reasoningEffort?: string | null;
+  permissionMode?: string;
+};
+
+export type MobileSessionRuntimeConfigurationResponse = {
+  ok: true;
+  generatedAt: string;
 };
 
 export type MobileInputAttachmentKind = 'image';

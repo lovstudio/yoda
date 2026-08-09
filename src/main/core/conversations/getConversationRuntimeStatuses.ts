@@ -186,8 +186,20 @@ async function deriveStatus(args: {
   // sessions can still be shown as running without a connected PTY. An `idle`
   // activity/rollout verdict must not erase a more specific terminal status
   // already observed by the live reducer.
+  // Codex command approvals are visible immediately in the PTY classifier,
+  // while the rollout remains `working` until the command receives an output
+  // row. Preserve the live attention state during that short reconciliation
+  // window; the rollout tailer emits forced `working` as soon as the approval
+  // result arrives.
   let derived =
-    truth === 'idle' && (memory === 'completed' || memory === 'error') ? memory : (truth ?? memory);
+    runtimeId === 'codex' &&
+    statusMonitor === 'rollout' &&
+    truth === 'working' &&
+    memory === 'awaiting-input'
+      ? memory
+      : truth === 'idle' && (memory === 'completed' || memory === 'error')
+        ? memory
+        : (truth ?? memory);
   if (isAgentSessionRunningStatus(derived)) {
     const livePty = hasLivePty(projectId, taskId, conversationId);
     if (truth === undefined) {

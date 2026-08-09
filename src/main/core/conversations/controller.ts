@@ -45,7 +45,7 @@ import { renameConversation } from './renameConversation';
 import { restartConversation } from './restartConversation';
 import { resumeConversation } from './resumeConversation';
 import { rewritePrompt } from './rewritePrompt';
-import { getProjectDeliverySummaries } from './session-summary-context';
+import { getProjectDeliverySummaries, getTaskDeliverySummaries } from './session-summary-context';
 import { getSessionSummarySnapshot } from './session-summary-snapshot';
 import { getStoredConversationSessionSource } from './stored-conversation-session-source';
 import { touchConversation } from './touchConversation';
@@ -168,6 +168,7 @@ export const conversationController = createRPCController({
   getSessionSummary,
   getSessionSummaryPreview,
   getSessionSummarySnapshot,
+  getTaskDeliverySummaries,
   getProjectDeliverySummaries,
   setManualSessionSummary,
   getConversationTranscript,

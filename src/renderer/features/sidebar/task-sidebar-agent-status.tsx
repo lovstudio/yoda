@@ -7,7 +7,10 @@ import {
   isUnregistered,
   type TaskStore,
 } from '@renderer/features/tasks/stores/task';
-import { taskSessionStatusSummary } from '@renderer/features/tasks/stores/task-selectors';
+import {
+  taskSessionStatusSummary,
+  type TaskSessionStatusSummary,
+} from '@renderer/features/tasks/stores/task-selectors';
 import { useDelayedBoolean } from '@renderer/lib/hooks/use-delay-boolean';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
@@ -23,9 +26,11 @@ import { getSortInstant } from './sidebar-store';
 export const TaskSidebarAgentStatus = observer(function TaskSidebarAgentStatus({
   task,
   needsReview = false,
+  summary,
 }: {
   task: TaskStore;
   needsReview?: boolean;
+  summary?: TaskSessionStatusSummary;
 }) {
   const { t } = useTranslation();
   const isBootstrapping =
@@ -33,7 +38,8 @@ export const TaskSidebarAgentStatus = observer(function TaskSidebarAgentStatus({
     (isUnprovisioned(task) && (task.phase === 'provision' || task.phase === 'provision-error'));
 
   const delayedIsBootstrapping = useDelayedBoolean(isBootstrapping, 500);
-  const status = taskSessionStatusSummary(task).primaryStatus;
+  const statusSummary = summary ?? taskSessionStatusSummary(task);
+  const status = statusSummary.primaryStatus;
 
   if (delayedIsBootstrapping) {
     return (
@@ -49,7 +55,7 @@ export const TaskSidebarAgentStatus = observer(function TaskSidebarAgentStatus({
   }
 
   if (status) {
-    return <TaskSessionStatusControl task={task} side="right" />;
+    return <TaskSessionStatusControl task={task} summary={statusSummary} side="right" />;
   }
 
   if (needsReview) {

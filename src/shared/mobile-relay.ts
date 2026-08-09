@@ -174,6 +174,7 @@ export function parseMobileRelayHostFrame(value: unknown): MobileRelayHostFrame 
 const MOBILE_RELAY_ALLOWED_PATHS = [
   /^\/v1\/snapshot$/,
   /^\/v1\/profile$/,
+  /^\/v1\/configuration$/,
   /^\/v1\/skills$/,
   /^\/v1\/demands$/,
   /^\/v1\/attachments(?:\/[0-9a-f-]+\/(?:chunks|complete|discard))?$/i,
@@ -182,7 +183,7 @@ const MOBILE_RELAY_ALLOWED_PATHS = [
   /^\/v1\/xhs\/jobs\/[^/?]+\/confirm$/,
   /^\/v1\/projects\/[^/?]+\/skills$/,
   /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions$/,
-  /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions\/[^/?]+(?:\/input|\/events|\/skills)?$/,
+  /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions\/[^/?]+(?:\/input|\/events|\/skills|\/config)?$/,
 ];
 
 export function isAllowedMobileRelayRequest(method: string, path: string): boolean {
