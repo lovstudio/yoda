@@ -27,7 +27,7 @@
     "ios": {
       "appleTeamId": "SR95DUC5MJ",
       "bundleIdentifier": "ai.lovstudio.yoda.mobile",
-      "buildNumber": "5",
+      "buildNumber": "6",
       "requireFullScreen": true,
       "supportsTablet": true,
       "infoPlist": {
@@ -35,11 +35,13 @@
           {
             "CFBundleTypeName": "Image",
             "CFBundleTypeRole": "Editor",
+            "LSHandlerRank": "Alternate",
             "LSItemContentTypes": ["public.image"]
           },
           {
             "CFBundleTypeName": "Text Document",
             "CFBundleTypeRole": "Editor",
+            "LSHandlerRank": "Alternate",
             "LSItemContentTypes": [
               "public.plain-text",
               "public.text",
@@ -50,6 +52,7 @@
           }
         ],
         "ITSAppUsesNonExemptEncryption": false,
+        "LSSupportsOpeningDocumentsInPlace": true,
         "NSMicrophoneUsageDescription": "Yoda Mobile uses the microphone for voice input.",
         "NSSpeechRecognitionUsageDescription": "Yoda Mobile turns speech into editable request text.",
         "NSLocalNetworkUsageDescription": "Yoda Mobile connects directly to the Yoda desktop app when both devices are on the same local network.",
