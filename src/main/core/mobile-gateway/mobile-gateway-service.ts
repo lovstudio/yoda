@@ -47,6 +47,8 @@ import {
   type MobileSessionSummary,
   type MobileSessionTranscriptBlock,
   type MobileSkillsResponse,
+  type MobileTaskActionRequest,
+  type MobileTaskActionResponse,
   type MobileTaskActivityStatus,
   type MobileTaskSessionsResponse,
   type MobileTaskStrategyKind,
@@ -108,8 +110,13 @@ import { appSettingsService } from '@main/core/settings/settings-service';
 import { skillsService } from '@main/core/skills/SkillsService';
 import { getUsageOverview } from '@main/core/stats/getUsageOverview';
 import { generateTaskName } from '@main/core/tasks/name-generation/generateTaskName';
+import { archiveTask } from '@main/core/tasks/operations/archiveTask';
 import { createTask } from '@main/core/tasks/operations/createTask';
 import { getTasks } from '@main/core/tasks/operations/getTasks';
+import { setTaskFavorite } from '@main/core/tasks/operations/setTaskFavorite';
+import { setTaskLongTerm } from '@main/core/tasks/operations/setTaskLongTerm';
+import { setTaskNeedsReview } from '@main/core/tasks/operations/setTaskNeedsReview';
+import { setTaskPinned } from '@main/core/tasks/operations/setTaskPinned';
 import { taskManager } from '@main/core/tasks/task-manager';
 import { workspaceRegistry } from '@main/core/workspaces/workspace-registry';
 import { log } from '@main/lib/logger';
@@ -719,6 +726,29 @@ function normalizeSessionInputRequest(body: unknown): MobileSessionInputRequest 
   };
 }
 
+function normalizeMobileTaskActionRequest(body: unknown): MobileTaskActionRequest {
+  if (!body || typeof body !== 'object') {
+    throw new MobileGatewayError(400, 'invalid_body', 'Request body must be an object.');
+  }
+
+  const value = body as Record<string, unknown>;
+  if (value.action === 'archive') return { action: 'archive' };
+
+  if (
+    value.action !== 'set-pinned' &&
+    value.action !== 'set-favorite' &&
+    value.action !== 'set-long-term' &&
+    value.action !== 'set-needs-review'
+  ) {
+    throw new MobileGatewayError(400, 'invalid_task_action', 'Task action is invalid.');
+  }
+  if (typeof value.value !== 'boolean') {
+    throw new MobileGatewayError(400, 'invalid_task_action', 'Task action value is invalid.');
+  }
+
+  return { action: value.action, value: value.value };
+}
+
 function normalizeMobileClientRequestId(value: unknown): string | undefined {
   if (value === undefined) return undefined;
   if (
@@ -1164,6 +1194,20 @@ export class MobileGatewayService {
       return;
     }
 
+    const isTaskActionsRoute =
+      segments[0] === 'v1' &&
+      segments[1] === 'projects' &&
+      Boolean(segments[2]) &&
+      segments[3] === 'tasks' &&
+      Boolean(segments[4]) &&
+      segments[5] === 'actions';
+
+    if (req.method === 'POST' && isTaskActionsRoute && segments.length === 6) {
+      const body = normalizeMobileTaskActionRequest(await readJsonBody(req));
+      writeJson(res, 200, await this.performTaskAction(segments[2]!, segments[4]!, body));
+      return;
+    }
+
     if (req.method === 'GET' && isTaskSessionsRoute && segments.length === 7 && segments[6]) {
       writeJson(res, 200, await this.getSessionDetail(segments[2]!, segments[4]!, segments[6]));
       return;
@@ -1449,9 +1493,46 @@ export class MobileGatewayService {
       lastInteractedAt: task.lastInteractedAt,
       needsReview: task.needsReview,
       isPinned: task.isPinned,
+      isFavorite: task.isFavorite,
       isLongTerm: task.isLongTerm,
       runtimeCounts: task.conversations,
       conversationCount: Object.values(task.conversations).reduce((sum, count) => sum + count, 0),
+    };
+  }
+
+  private async performTaskAction(
+    projectId: string,
+    taskId: string,
+    action: MobileTaskActionRequest
+  ): Promise<MobileTaskActionResponse> {
+    const task = (await getTasks(projectId)).find((candidate) => candidate.id === taskId);
+    if (!task) {
+      throw new MobileGatewayError(404, 'task_not_found', 'Task was not found.');
+    }
+
+    switch (action.action) {
+      case 'archive':
+        await archiveTask(projectId, taskId, undefined, { skipPreCommand: true });
+        break;
+      case 'set-pinned':
+        await setTaskPinned(taskId, action.value);
+        break;
+      case 'set-favorite':
+        await setTaskFavorite(taskId, action.value);
+        break;
+      case 'set-long-term':
+        await setTaskLongTerm(taskId, action.value);
+        break;
+      case 'set-needs-review':
+        await setTaskNeedsReview(taskId, action.value);
+        break;
+    }
+
+    return {
+      ok: true,
+      taskId,
+      action: action.action,
+      generatedAt: new Date().toISOString(),
     };
   }
 

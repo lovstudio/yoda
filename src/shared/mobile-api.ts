@@ -368,6 +368,7 @@ export type MobileTaskSummary = {
   lastInteractedAt?: string;
   needsReview: boolean;
   isPinned: boolean;
+  isFavorite: boolean;
   isLongTerm: boolean;
   conversationCount: number;
   runtimeCounts: Record<string, number>;
@@ -467,6 +468,23 @@ export function sortMobileTasks(
   return ordered;
 }
 
+export type MobileTaskAction =
+  | 'archive'
+  | 'set-pinned'
+  | 'set-favorite'
+  | 'set-long-term'
+  | 'set-needs-review';
+
+export type MobileTaskActionRequest =
+  | { action: 'archive' }
+  | { action: Exclude<MobileTaskAction, 'archive'>; value: boolean };
+
+export type MobileTaskActionResponse = {
+  ok: true;
+  taskId: string;
+  action: MobileTaskAction;
+  generatedAt: string;
+};
 
 /** Preserves project and parent identity when creating a sibling from task detail. */
 export function resolveMobileSiblingTaskAttribution(

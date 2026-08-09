@@ -14,6 +14,7 @@ function task(id: string, projectId = 'project-1'): MobileTaskSummary {
     updatedAt: '2026-08-01T00:00:00.000Z',
     needsReview: false,
     isPinned: false,
+    isFavorite: false,
     isLongTerm: false,
     conversationCount: 1,
     runtimeCounts: { codex: 1 },

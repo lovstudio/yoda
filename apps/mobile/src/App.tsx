@@ -13,6 +13,7 @@ import {
 } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   AppState,
   Image,
   Keyboard,
@@ -71,6 +72,7 @@ import {
   type MobileSessionSummary,
   type MobileSessionTranscriptBlock,
   type MobileSkillSummary,
+  type MobileTaskAction,
   type MobileTaskActivityStatus,
   type MobileTaskSortMode,
   type MobileTaskSummary,
@@ -102,6 +104,7 @@ import {
   fetchSkills,
   fetchSnapshot,
   fetchTaskSessions,
+  performTaskAction,
   sendSessionInput,
   updateSessionRuntimeConfiguration,
   type MobileConnection,
@@ -660,6 +663,7 @@ export function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [openingTaskId, setOpeningTaskId] = useState<string | null>(null);
+  const [taskActionBusyId, setTaskActionBusyId] = useState<string | null>(null);
   const [demandProjectId, setDemandProjectId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [demandImages, setDemandImages] = useState<MobileImageDraft[]>([]);
@@ -960,6 +964,44 @@ export function App() {
     [connection, snapshot]
   );
 
+  const executeTaskAction = useCallback(
+    async (task: MobileTaskSummary, action: MobileTaskAction, value?: boolean) => {
+      if (!connection || taskActionBusyId) return;
+
+      setTaskActionBusyId(task.id);
+      setError(null);
+      try {
+        const body = action === 'archive' ? { action } : { action, value: value === true };
+        await performTaskAction(connection, task.projectId, task.id, body);
+        await loadDashboard(true);
+      } catch (cause) {
+        setError(`任务操作失败：${errorMessage(cause)}`);
+      } finally {
+        setTaskActionBusyId(null);
+      }
+    },
+    [connection, loadDashboard, taskActionBusyId]
+  );
+
+  const handleTaskAction = useCallback(
+    (task: MobileTaskSummary, action: MobileTaskAction, value?: boolean) => {
+      if (action !== 'archive') {
+        void executeTaskAction(task, action, value);
+        return;
+      }
+
+      Alert.alert('归档任务', `归档“${task.name}”？归档后会从当前任务列表移出。`, [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '归档',
+          style: 'destructive',
+          onPress: () => void executeTaskAction(task, action),
+        },
+      ]);
+    },
+    [executeTaskAction]
+  );
+
   const handleConnect = useCallback(async () => {
     const next = {
       baseUrl: connectDraft.baseUrl.trim(),
@@ -1225,6 +1267,8 @@ export function App() {
                     visibleProjects={visibleProjects}
                     openingTaskId={openingTaskId}
                     onOpenTask={handleOpenTask}
+                    taskActionBusyId={taskActionBusyId}
+                    onTaskAction={handleTaskAction}
                     onSelectProject={(projectId) => {
                       setSelectedProjectId(projectId);
                       setSelectedTaskId(null);
@@ -1463,6 +1507,8 @@ function TasksWorkspace({
   visibleProjects,
   openingTaskId,
   onOpenTask,
+  taskActionBusyId,
+  onTaskAction,
   onSelectProject,
   onSelectScope,
 }: {
@@ -1473,6 +1519,8 @@ function TasksWorkspace({
   visibleProjects: MobileProjectSummary[];
   openingTaskId: string | null;
   onOpenTask: (taskId: string) => void;
+  taskActionBusyId: string | null;
+  onTaskAction: (task: MobileTaskSummary, action: MobileTaskAction, value?: boolean) => void;
   onSelectProject: (projectId: string) => void;
   onSelectScope: (scope: TaskScope) => void;
 }) {
@@ -1489,6 +1537,8 @@ function TasksWorkspace({
         tasks={tasks}
         title={selectedProjectId === 'all' ? taskScopeLabel(selectedScope) : '项目任务'}
         openingTaskId={openingTaskId}
+        taskActionBusyId={taskActionBusyId}
+        onTaskAction={onTaskAction}
         onOpenTask={onOpenTask}
       />
     </>
@@ -5847,12 +5897,16 @@ function TaskList({
   tasks,
   title,
   openingTaskId,
+  taskActionBusyId,
+  onTaskAction,
   onOpenTask,
 }: {
   projects: MobileProjectSummary[];
   tasks: MobileTaskSummary[];
   title: string;
   openingTaskId: string | null;
+  taskActionBusyId: string | null;
+  onTaskAction: (task: MobileTaskSummary, action: MobileTaskAction, value?: boolean) => void;
   onOpenTask: (taskId: string) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -5904,6 +5958,8 @@ function TaskList({
             projectLabel={projectName(projects, task.projectId)}
             task={task}
             isOpening={openingTaskId === task.id}
+            isActionBusy={taskActionBusyId === task.id}
+            onTaskAction={(action, value) => onTaskAction(task, action, value)}
             onPress={() => onOpenTask(task.id)}
           />
         ))
@@ -5916,64 +5972,300 @@ function TaskRow({
   depth,
   hasChildren,
   isOpening,
+  isActionBusy,
   projectLabel,
   task,
+  onTaskAction,
   onPress,
 }: {
   depth: number;
   hasChildren: boolean;
   isOpening: boolean;
+  isActionBusy: boolean;
   projectLabel: string;
   task: MobileTaskSummary;
+  onTaskAction: (action: MobileTaskAction, value?: boolean) => void;
   onPress: () => void;
 }) {
   const hierarchyLabel = depth > 0 ? '子任务' : hasChildren ? '父任务' : '任务';
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const markers = taskMarkerLabels(task);
+  return (
+    <>
+      <View
+        style={[
+          styles.taskRow,
+          depth > 0 ? styles.taskRowNested : null,
+          { marginLeft: Math.min(depth, 3) * 14 },
+        ]}
+      >
+        <Pressable
+          accessibilityLabel={`${hierarchyLabel}：${task.name}${markers.length > 0 ? `，${markers.join('、')}` : ''}，点击进入，长按查看操作`}
+          accessibilityRole="button"
+          accessibilityState={{ busy: isOpening || isActionBusy }}
+          delayLongPress={420}
+          style={({ pressed }) => [styles.taskRowContent, pressed ? styles.buttonPressed : null]}
+          testID={`mobile-task-card-two-line-v1-${task.id}`}
+          onLongPress={() => setActionsOpen(true)}
+          onPress={onPress}
+        >
+          <View style={styles.taskTopLine}>
+            {depth > 0 ? (
+              <Ionicons color={COLORS.muted} name="git-branch-outline" size={16} />
+            ) : null}
+            <View style={styles.taskNameBlock}>
+              <Text style={styles.taskName} numberOfLines={1}>
+                {task.name}
+              </Text>
+              <TaskMarkerIcons task={task} />
+            </View>
+            <View style={[styles.statusPill, { borderColor: statusColor(task.activityStatus) }]}>
+              <Text style={[styles.statusText, { color: statusColor(task.activityStatus) }]}>
+                {statusLabel(task.activityStatus)}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.taskSummaryLine}>
+            <View style={styles.taskProjectAndHierarchy}>
+              <Text style={styles.taskProject} numberOfLines={1}>
+                {projectLabel}
+              </Text>
+              {hierarchyLabel !== '任务' ? (
+                <Text style={styles.taskHierarchyLabel}>{hierarchyLabel}</Text>
+              ) : null}
+            </View>
+            <View style={styles.taskSummaryMeta}>
+              <Text style={styles.taskSummaryText} numberOfLines={1}>
+                {taskSessionCountLabel(task.conversationCount)} ·{' '}
+                {formatTimestamp(task.lastInteractedAt ?? task.updatedAt)}
+              </Text>
+              {isOpening || isActionBusy ? (
+                <ActivityIndicator color={COLORS.muted} size="small" />
+              ) : (
+                <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={16} />
+              )}
+            </View>
+          </View>
+        </Pressable>
+        <Pressable
+          accessibilityLabel={`打开${task.name}的任务操作`}
+          accessibilityRole="button"
+          accessibilityState={{ busy: isActionBusy }}
+          disabled={isActionBusy}
+          hitSlop={6}
+          style={({ pressed }) => [
+            styles.taskMoreButton,
+            pressed ? styles.buttonPressed : null,
+            isActionBusy ? styles.buttonDisabled : null,
+          ]}
+          onPress={() => setActionsOpen(true)}
+        >
+          {isActionBusy ? (
+            <ActivityIndicator color={COLORS.muted} size="small" />
+          ) : (
+            <Ionicons color={COLORS.muted} name="ellipsis-horizontal" size={20} />
+          )}
+        </Pressable>
+      </View>
+      <TaskActionsSheet
+        projectLabel={projectLabel}
+        task={task}
+        visible={actionsOpen}
+        onAction={onTaskAction}
+        onClose={() => setActionsOpen(false)}
+      />
+    </>
+  );
+}
+
+function taskMarkerLabels(task: MobileTaskSummary): string[] {
+  return [
+    task.isPinned ? '已置顶' : null,
+    task.isFavorite ? '已收藏' : null,
+    task.isLongTerm ? '长期任务' : null,
+    task.needsReview ? '待审阅' : null,
+  ].filter((label): label is string => label !== null);
+}
+
+function TaskMarkerIcons({ task }: { task: MobileTaskSummary }) {
+  const markers: Array<{
+    color: string;
+    icon: keyof typeof Ionicons.glyphMap;
+  }> = [
+    ...(task.isPinned ? [{ color: COLORS.blue, icon: 'pin' as const }] : []),
+    ...(task.isFavorite ? [{ color: COLORS.amber, icon: 'star' as const }] : []),
+    ...(task.isLongTerm ? [{ color: COLORS.charcoal, icon: 'bookmark' as const }] : []),
+    ...(task.needsReview ? [{ color: COLORS.red, icon: 'flag' as const }] : []),
+  ];
+
+  if (markers.length === 0) return null;
+  return (
+    <View accessible={false} style={styles.taskMarkerIcons}>
+      {markers.map(({ color, icon }) => (
+        <Ionicons key={icon} color={color} name={icon} size={14} />
+      ))}
+    </View>
+  );
+}
+
+function TaskActionsSheet({
+  projectLabel,
+  task,
+  visible,
+  onAction,
+  onClose,
+}: {
+  projectLabel: string;
+  task: MobileTaskSummary;
+  visible: boolean;
+  onAction: (action: MobileTaskAction, value?: boolean) => void;
+  onClose: () => void;
+}) {
+  const choose = (action: MobileTaskAction, value?: boolean) => {
+    onClose();
+    onAction(action, value);
+  };
+
+  return (
+    <Modal
+      animationType="slide"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      transparent
+      visible={visible}
+      onRequestClose={onClose}
+    >
+      <View accessibilityViewIsModal style={styles.projectPickerOverlay}>
+        <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
+        <SafeAreaView style={styles.taskActionsSheet}>
+          <View style={styles.projectPickerHandle} />
+          <View style={styles.taskActionsHeader}>
+            <View style={styles.taskActionsHeaderBody}>
+              <Text style={styles.projectPickerEyebrow}>任务操作</Text>
+              <Text numberOfLines={2} style={styles.taskActionsTitle}>
+                {task.name}
+              </Text>
+              <Text numberOfLines={1} style={styles.taskActionsMeta}>
+                {projectLabel} · {statusLabel(task.activityStatus)}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityLabel="关闭任务操作"
+              accessibilityRole="button"
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.projectPickerClose,
+                pressed ? styles.buttonPressed : null,
+              ]}
+              onPress={onClose}
+            >
+              <Ionicons color={COLORS.charcoal} name="close-outline" size={22} />
+            </Pressable>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={styles.taskActionsContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Text style={styles.taskActionsSectionLabel}>标记</Text>
+            <TaskActionOption
+              active={task.isPinned}
+              description={task.isPinned ? '从任务列表顶部移出' : '在任务列表顶部保留入口'}
+              icon={task.isPinned ? 'pin' : 'pin-outline'}
+              label={task.isPinned ? '取消置顶' : '置顶任务'}
+              onPress={() => choose('set-pinned', !task.isPinned)}
+            />
+            <TaskActionOption
+              active={task.isFavorite}
+              description={task.isFavorite ? '移出收藏标记' : '加入收藏，方便之后回看'}
+              icon={task.isFavorite ? 'star' : 'star-outline'}
+              label={task.isFavorite ? '取消收藏' : '收藏任务'}
+              onPress={() => choose('set-favorite', !task.isFavorite)}
+            />
+            <TaskActionOption
+              active={task.isLongTerm}
+              description={task.isLongTerm ? '取消长期任务标记' : '标记为需要持续关注的任务'}
+              icon={task.isLongTerm ? 'bookmark' : 'bookmark-outline'}
+              label={task.isLongTerm ? '取消长期任务标记' : '标记为长期任务'}
+              onPress={() => choose('set-long-term', !task.isLongTerm)}
+            />
+            <TaskActionOption
+              active={task.needsReview}
+              description={task.needsReview ? '移除待审阅标记' : '把任务放入待审阅筛选'}
+              icon={task.needsReview ? 'flag' : 'flag-outline'}
+              label={task.needsReview ? '取消待审阅标记' : '标记为待审阅'}
+              onPress={() => choose('set-needs-review', !task.needsReview)}
+            />
+
+            <Text style={styles.taskActionsSectionLabel}>任务生命周期</Text>
+            <TaskActionOption
+              destructive
+              description="完成当前任务并从当前列表移出"
+              icon="archive-outline"
+              label="归档任务"
+              onPress={() => choose('archive')}
+            />
+          </ScrollView>
+        </SafeAreaView>
+      </View>
+    </Modal>
+  );
+}
+
+function TaskActionOption({
+  active = false,
+  description,
+  destructive = false,
+  icon,
+  label,
+  onPress,
+}: {
+  active?: boolean;
+  description: string;
+  destructive?: boolean;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
+  const color = destructive ? COLORS.red : COLORS.charcoal;
   return (
     <Pressable
-      accessibilityLabel={`${hierarchyLabel}：${task.name}`}
+      accessibilityLabel={`${label}，${description}`}
       accessibilityRole="button"
-      accessibilityState={{ busy: isOpening }}
-      testID={`mobile-task-card-two-line-v1-${task.id}`}
+      accessibilityState={{ selected: active }}
       style={({ pressed }) => [
-        styles.taskRow,
-        depth > 0 ? styles.taskRowNested : null,
-        { marginLeft: Math.min(depth, 3) * 14 },
+        styles.taskActionOption,
+        destructive ? styles.taskActionOptionDestructive : null,
         pressed ? styles.buttonPressed : null,
       ]}
       onPress={onPress}
     >
-      <View style={styles.taskTopLine}>
-        {depth > 0 ? <Ionicons color={COLORS.muted} name="git-branch-outline" size={16} /> : null}
-        <Text style={styles.taskName} numberOfLines={1}>
-          {task.name}
+      <View
+        style={[
+          styles.taskActionOptionIcon,
+          destructive ? styles.taskActionOptionIconDestructive : null,
+        ]}
+      >
+        <Ionicons color={color} name={icon} size={20} />
+      </View>
+      <View style={styles.taskActionOptionBody}>
+        <Text
+          style={[styles.taskActionOptionLabel, destructive ? styles.taskActionDangerText : null]}
+        >
+          {label}
         </Text>
-        <View style={[styles.statusPill, { borderColor: statusColor(task.activityStatus) }]}>
-          <Text style={[styles.statusText, { color: statusColor(task.activityStatus) }]}>
-            {statusLabel(task.activityStatus)}
-          </Text>
-        </View>
+        <Text numberOfLines={2} style={styles.taskActionOptionDescription}>
+          {description}
+        </Text>
       </View>
-      <View style={styles.taskSummaryLine}>
-        <View style={styles.taskProjectAndHierarchy}>
-          <Text style={styles.taskProject} numberOfLines={1}>
-            {projectLabel}
-          </Text>
-          {hierarchyLabel !== '任务' ? (
-            <Text style={styles.taskHierarchyLabel}>{hierarchyLabel}</Text>
-          ) : null}
+      {active ? (
+        <View style={styles.taskActionCurrent}>
+          <Ionicons color={COLORS.blue} name="checkmark-circle" size={20} />
+          <Text style={styles.taskActionCurrentText}>当前</Text>
         </View>
-        <View style={styles.taskSummaryMeta}>
-          <Text style={styles.taskSummaryText} numberOfLines={1}>
-            {taskSessionCountLabel(task.conversationCount)} ·{' '}
-            {formatTimestamp(task.lastInteractedAt ?? task.updatedAt)}
-          </Text>
-          {isOpening ? (
-            <ActivityIndicator color={COLORS.muted} size="small" />
-          ) : (
-            <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={16} />
-          )}
-        </View>
-      </View>
+      ) : (
+        <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={18} />
+      )}
     </Pressable>
   );
 }
@@ -7709,17 +8001,33 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   taskRow: {
+    position: 'relative',
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: COLORS.line,
     borderRadius: 8,
     backgroundColor: COLORS.surface,
+  },
+  taskRowContent: {
+    gap: 7,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    gap: 7,
+    paddingRight: 52,
   },
   taskRowNested: {
     borderLeftWidth: 3,
     borderLeftColor: COLORS.blue,
+  },
+  taskMoreButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 17,
+    backgroundColor: COLORS.page,
   },
   projectDirectoryRow: {
     minHeight: 72,
@@ -7791,6 +8099,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 21,
   },
+  taskNameBlock: {
+    minWidth: 0,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  taskMarkerIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
   sessionName: {
     flex: 1,
     color: COLORS.ink,
@@ -7820,6 +8140,108 @@ const styles = StyleSheet.create({
   taskHierarchyLabel: {
     color: COLORS.blue,
     fontSize: 11,
+    fontWeight: '800',
+  },
+  taskActionsSheet: {
+    maxHeight: '80%',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    backgroundColor: COLORS.surface,
+    paddingTop: 9,
+  },
+  taskActionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.faint,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 12,
+  },
+  taskActionsHeaderBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 3,
+    paddingRight: 12,
+  },
+  taskActionsTitle: {
+    color: COLORS.ink,
+    fontSize: 20,
+    fontWeight: '800',
+    lineHeight: 25,
+  },
+  taskActionsMeta: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  taskActionsContent: {
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 24,
+  },
+  taskActionsSectionLabel: {
+    marginTop: 8,
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  taskActionOption: {
+    minHeight: 70,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 12,
+    backgroundColor: COLORS.page,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  taskActionOptionDestructive: {
+    borderColor: '#EBC8C3',
+    backgroundColor: '#FFF8F7',
+  },
+  taskActionOptionIcon: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: '#E8E6DC',
+  },
+  taskActionOptionIconDestructive: {
+    backgroundColor: '#FBE8E6',
+  },
+  taskActionOptionBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 3,
+  },
+  taskActionOptionLabel: {
+    color: COLORS.ink,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  taskActionDangerText: {
+    color: COLORS.red,
+  },
+  taskActionOptionDescription: {
+    color: COLORS.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  taskActionCurrent: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  taskActionCurrentText: {
+    color: COLORS.blue,
+    fontSize: 10,
     fontWeight: '800',
   },
   taskSummaryMeta: {

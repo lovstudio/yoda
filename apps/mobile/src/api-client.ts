@@ -17,6 +17,8 @@ import {
   type MobileSessionRuntimeConfigurationResponse,
   type MobileSessionRuntimeConfigurationUpdate,
   type MobileSkillsResponse,
+  type MobileTaskActionRequest,
+  type MobileTaskActionResponse,
   type MobileTaskSessionsResponse,
 } from '../../../src/shared/mobile-api';
 import { MOBILE_RELAY_BASE_URL } from '../../../src/shared/mobile-relay';
@@ -204,6 +206,22 @@ export function fetchTaskSessions(
   return request<MobileTaskSessionsResponse>(
     connection,
     `/v1/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/sessions`
+  );
+}
+
+export function performTaskAction(
+  connection: MobileConnection,
+  projectId: string,
+  taskId: string,
+  body: MobileTaskActionRequest
+): Promise<MobileTaskActionResponse> {
+  return request<MobileTaskActionResponse>(
+    connection,
+    `/v1/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/actions`,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }
   );
 }
 
