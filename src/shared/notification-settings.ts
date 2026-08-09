@@ -1,7 +1,8 @@
 import type { NotificationSettings } from './app-settings';
-import type { AgentEvent } from './events/agentEvents';
+import { agentEventRequiresUserAction, type AgentEvent } from './events/agentEvents';
 
 export type NotificationDeliveryMode = 'never' | 'unfocused' | 'always';
+export type AgentNotificationKind = 'completion' | 'permission' | 'question';
 
 export type NotificationSettingsPatch = Partial<
   Pick<
@@ -24,6 +25,7 @@ export type NotificationSettingsPatch = Partial<
 export function getNotificationDeliveryMode(
   settings: NotificationSettingsPatch | undefined
 ): NotificationDeliveryMode {
+  if (settings?.enabled === false) return 'never';
   if (settings?.sound === false) return 'never';
   return settings?.soundFocusMode ?? 'unfocused';
 }
@@ -46,13 +48,42 @@ export function areQuestionNotificationsEnabled(
   return settings.questionNotifications ?? legacySystemNotificationsEnabled(settings);
 }
 
+export function getAgentNotificationKind(
+  event: Pick<AgentEvent, 'type' | 'payload'>
+): AgentNotificationKind | null {
+  if (event.type === 'stop') return 'completion';
+  if (event.payload.notificationType === 'permission_prompt') return 'permission';
+  if (agentEventRequiresUserAction(event)) return 'question';
+  return null;
+}
+
 /** Whether an agent event may produce an OS notification for this event type. */
 export function isAgentNotificationEnabled(
   event: Pick<AgentEvent, 'type' | 'payload'>,
   settings: NotificationSettingsPatch | undefined
 ): boolean {
-  if (event.type === 'notification' && event.payload.notificationType === 'permission_prompt') {
-    return arePermissionNotificationsEnabled(settings);
+  switch (getAgentNotificationKind(event)) {
+    case 'completion':
+      return getNotificationDeliveryMode(settings) !== 'never';
+    case 'permission':
+      return arePermissionNotificationsEnabled(settings);
+    case 'question':
+      return areQuestionNotificationsEnabled(settings);
+    default:
+      return false;
   }
-  return areQuestionNotificationsEnabled(settings);
+}
+
+/** Whether an OS notification should be shown, including the focus policy. */
+export function shouldShowAgentNotification(
+  event: Pick<AgentEvent, 'type' | 'payload'>,
+  settings: NotificationSettingsPatch | undefined,
+  appFocused: boolean
+): boolean {
+  const kind = getAgentNotificationKind(event);
+  if (!kind || !isAgentNotificationEnabled(event, settings)) return false;
+  if (kind === 'completion') {
+    return getNotificationDeliveryMode(settings) === 'always' || !appFocused;
+  }
+  return !appFocused;
 }

@@ -1216,7 +1216,7 @@
       "title": "通知",
       "description": "任务完成或 Agent 需要你处理时收到提醒。",
       "turnCompletion": "任务完成通知",
-      "turnCompletionDescription": "设置任务完成时何时播放提示音。",
+      "turnCompletionDescription": "设置任务完成时何时提醒你。",
       "permissionNotifications": "启用权限通知",
       "permissionNotificationsDescription": "当 Agent 需要你确认权限时显示系统横幅。",
       "questionNotifications": "启用问题通知",
