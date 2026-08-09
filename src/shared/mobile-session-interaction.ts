@@ -130,11 +130,12 @@ function normalizeQuestion(value: unknown, index: number): MobileSessionQuestion
     .map((option, optionIndex) => normalizeOption(option, optionIndex))
     .filter((option): option is MobileSessionInteractionOption => option !== null)
     .slice(0, MAX_OPTIONS_PER_QUESTION);
+  const header = textValue(question.header);
 
   return {
     id: textValue(question.id) ?? `question-${index + 1}`,
     prompt: limitText(prompt, MAX_DESCRIPTION_CHARS),
-    ...(textValue(question.header) ? { header: limitText(textValue(question.header)!, 64) } : {}),
+    ...(header ? { header: limitText(header, 64) } : {}),
     multiSelect: question.multiSelect === true,
     options,
   };
@@ -177,7 +178,7 @@ function parseTerminalInteraction(content: string | undefined): MobileSessionInt
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     const line = lines[index];
     if (!line) continue;
-    const marker = line.match(/(?:[[(]\s*)(yes|y)\s*\/\s*(no|n)\s*(?:[\])])\s*$/iu);
+    const marker = line.match(/(?:\[\s*|\(\s*)(yes|y)\s*\/\s*(no|n)\s*(?:\]|\))\s*$/iu);
     if (!marker || marker.index === undefined) continue;
     const prompt = line
       .slice(0, marker.index)

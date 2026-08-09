@@ -190,4 +190,57 @@ describe('parseClaudeTranscript', () => {
       ['final', 'Implemented and tested.'],
     ]);
   });
+
+  it('marks an unanswered interactive tool call as running and pairs its result', () => {
+    const question = {
+      uuid: 'assistant-question',
+      timestamp: '2026-06-08T01:00:01.000Z',
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        stop_reason: 'tool_use',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'question-1',
+            name: 'AskUserQuestion',
+            input: { questions: [{ question: 'Choose one', options: ['A', 'B'] }] },
+          },
+        ],
+      },
+    };
+
+    const pending = parseClaudeTranscript(JSON.stringify(question));
+    expect(pending[0]).toMatchObject({
+      title: 'Tool · AskUserQuestion',
+      toolCallId: 'question-1',
+      toolStatus: 'running',
+    });
+
+    const resolved = parseClaudeTranscript(
+      [
+        question,
+        {
+          uuid: 'tool-result-1',
+          timestamp: '2026-06-08T01:00:02.000Z',
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'question-1',
+                content: 'A',
+              },
+            ],
+          },
+        },
+      ]
+        .map((row) => JSON.stringify(row))
+        .join('\n')
+    );
+    expect(resolved.find((block) => block.toolCallId === 'question-1')).toMatchObject({
+      toolStatus: 'completed',
+    });
+  });
 });

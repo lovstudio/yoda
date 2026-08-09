@@ -66,6 +66,7 @@ import {
   type MobileProjectSortMode,
   type MobileProjectSummary,
   type MobileSessionDetail,
+  type MobileSessionInteraction,
   type MobileSessionRuntimeConfigurationUpdate,
   type MobileSessionSummary,
   type MobileSessionTranscriptBlock,
@@ -82,6 +83,10 @@ import {
   filterMobileSessionTranscript,
   stripInternalAgentReplyMetadata,
 } from '../../../src/shared/mobile-session-display';
+import {
+  buildMobileSessionInteractionAnswer,
+  type MobileSessionInteractionSelections,
+} from '../../../src/shared/mobile-session-interaction';
 import {
   formatMobileToolTranscriptContent,
   groupAdjacentMobileToolBlocks,
@@ -3701,79 +3706,83 @@ function SessionDetailScreen({
   );
 
   const sessionCanContinue = canContinueMobileSession(detail?.session);
-  const handleSendInput = useCallback(async () => {
-    const input = sessionInput.trim();
-    if ((!input && sessionImages.length === 0) || !sessionCanContinue || sendingInputRef.current)
-      return;
+  const handleSendInput = useCallback(
+    async (inputOverride?: string) => {
+      const composerInput = inputOverride === undefined;
+      const input = (inputOverride ?? sessionInput).trim();
+      const images = composerInput ? sessionImages : [];
+      if ((!input && images.length === 0) || !sessionCanContinue || sendingInputRef.current) return;
 
-    sendingInputRef.current = true;
-    setSendingInput(true);
-    setSessionUploadProgress(null);
-    setSessionInputIssue(null);
-    const imageIds = sessionImages.map((image) => image.id);
-    let pending = pendingSessionInputRef.current;
-    if (!pending || pending.input !== input || !sameStringArray(pending.imageIds, imageIds)) {
-      pending = {
-        attachmentIds: null,
-        imageIds,
-        input,
-        requestId: createMobileSessionInputRequestId(),
-      };
-      pendingSessionInputRef.current = pending;
-    }
-    try {
-      if (pending.attachmentIds === null) {
-        pending.attachmentIds = await uploadMobileInputImages(
-          connection,
-          sessionImages,
-          setSessionUploadProgress
-        );
-      }
+      sendingInputRef.current = true;
+      setSendingInput(true);
       setSessionUploadProgress(null);
-      const response = await sendSessionInput(connection, task.projectId, task.id, sessionId, {
-        input,
-        attachmentIds: pending.attachmentIds,
-        clientRequestId: pending.requestId,
-      });
-      if (response.requestId && response.requestId !== pending.requestId) {
-        throw new Error('桌面端返回了不匹配的发送请求编号。');
+      setSessionInputIssue(null);
+      const imageIds = images.map((image) => image.id);
+      let pending = pendingSessionInputRef.current;
+      if (!pending || pending.input !== input || !sameStringArray(pending.imageIds, imageIds)) {
+        pending = {
+          attachmentIds: null,
+          imageIds,
+          input,
+          requestId: createMobileSessionInputRequestId(),
+        };
+        pendingSessionInputRef.current = pending;
       }
-      pendingSessionInputRef.current = null;
-      setSessionInput('');
-      setSessionImages([]);
-      setBottomState(true);
-      await loadDetail(true);
-      scrollToBottom(true);
-      setError(null);
-    } catch (e) {
-      const cause = errorMessage(e);
-      setSessionInputIssue({
-        message: '消息尚未确认送达，输入内容已保留。',
-        detail: [
-          cause,
-          `requestId=${pending.requestId}`,
-          `projectId=${task.projectId}`,
-          `taskId=${task.id}`,
-          `sessionId=${sessionId}`,
-        ].join('\n'),
-      });
-    } finally {
-      sendingInputRef.current = false;
-      setSessionUploadProgress(null);
-      setSendingInput(false);
-    }
-  }, [
-    connection,
-    loadDetail,
-    scrollToBottom,
-    sessionCanContinue,
-    sessionId,
-    sessionImages,
-    sessionInput,
-    setBottomState,
-    task.id,
-    task.projectId,
-  ]);
+      try {
+        if (pending.attachmentIds === null) {
+          pending.attachmentIds = await uploadMobileInputImages(
+            connection,
+            images,
+            setSessionUploadProgress
+          );
+        }
+        setSessionUploadProgress(null);
+        const response = await sendSessionInput(connection, task.projectId, task.id, sessionId, {
+          input,
+          attachmentIds: pending.attachmentIds,
+          clientRequestId: pending.requestId,
+        });
+        if (response.requestId && response.requestId !== pending.requestId) {
+          throw new Error('桌面端返回了不匹配的发送请求编号。');
+        }
+        pendingSessionInputRef.current = null;
+        setSessionInput('');
+        setSessionImages([]);
+        setBottomState(true);
+        await loadDetail(true);
+        scrollToBottom(true);
+        setError(null);
+      } catch (e) {
+        const cause = errorMessage(e);
+        setSessionInputIssue({
+          message: '消息尚未确认送达，输入内容已保留。',
+          detail: [
+            cause,
+            `requestId=${pending.requestId}`,
+            `projectId=${task.projectId}`,
+            `taskId=${task.id}`,
+            `sessionId=${sessionId}`,
+          ].join('\n'),
+        });
+      } finally {
+        sendingInputRef.current = false;
+        setSessionUploadProgress(null);
+        setSendingInput(false);
+      }
+    },
+    [
+      connection,
+      loadDetail,
+      scrollToBottom,
+      sessionCanContinue,
+      sessionId,
+      sessionImages,
+      sessionInput,
+      setBottomState,
+      task.id,
+      task.projectId,
+    ]
+  );
 
   const handleSessionInputChange = useCallback((value: string) => {
     const pending = pendingSessionInputRef.current;
@@ -3912,6 +3921,14 @@ function SessionDetailScreen({
               <Ionicons color={COLORS.surface} name="arrow-down-outline" size={17} />
             </Pressable>
           ) : null}
+          {detail?.pendingInteraction ? (
+            <SessionQuestionCard
+              key={detail.pendingInteraction.id}
+              disabled={sendingInput || !sessionCanContinue}
+              interaction={detail.pendingInteraction}
+              onSubmit={(answer) => void handleSendInput(answer)}
+            />
+          ) : null}
           {sessionInputIssue ? (
             <SessionInputFailureNotice
               detail={sessionInputIssue.detail}
@@ -3974,6 +3991,148 @@ function SessionDetailScreen({
         </View>
       </KeyboardAvoidingView>
     </SwipeBackScreen>
+  );
+}
+
+function SessionQuestionCard({
+  disabled,
+  interaction,
+  onSubmit,
+}: {
+  disabled: boolean;
+  interaction: MobileSessionInteraction;
+  onSubmit: (answer: string) => void;
+}) {
+  const [selections, setSelections] = useState<MobileSessionInteractionSelections>({});
+  const hasOptions = interaction.questions.some((question) => question.options.length > 0);
+  const allChoiceQuestionsAnswered = interaction.questions.every(
+    (question) => question.options.length === 0 || (selections[question.id]?.length ?? 0) > 0
+  );
+  const answer = useMemo(
+    () => buildMobileSessionInteractionAnswer(interaction, selections),
+    [interaction, selections]
+  );
+  const canSubmit = hasOptions && allChoiceQuestionsAnswered && answer.length > 0 && !disabled;
+
+  const handleOptionPress = useCallback(
+    (questionId: string, value: string, multiSelect: boolean) => {
+      setSelections((current) => {
+        const values = current[questionId] ?? [];
+        const nextValues = multiSelect
+          ? values.includes(value)
+            ? values.filter((item) => item !== value)
+            : [...values, value]
+          : [value];
+        return { ...current, [questionId]: nextValues };
+      });
+    },
+    []
+  );
+
+  return (
+    <View
+      accessibilityLiveRegion="polite"
+      style={styles.sessionQuestionCard}
+      testID="mobile-session-question-card-v1"
+    >
+      <View style={styles.sessionQuestionHeader}>
+        <View style={styles.sessionQuestionIcon}>
+          <Ionicons
+            color={COLORS.amber}
+            name={interaction.kind === 'confirmation' ? 'help-circle-outline' : 'list-outline'}
+            size={18}
+          />
+        </View>
+        <View style={styles.sessionQuestionHeaderBody}>
+          <Text style={styles.sessionQuestionTitle}>{interaction.title}</Text>
+          <Text style={styles.sessionQuestionHint}>选择后会立即回复当前会话</Text>
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.sessionQuestionContent}
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}
+        style={styles.sessionQuestionScroll}
+      >
+        {interaction.description ? (
+          <Text style={styles.sessionQuestionDescription}>{interaction.description}</Text>
+        ) : null}
+        {interaction.questions.map((question) => (
+          <View key={question.id} style={styles.sessionQuestionGroup}>
+            {question.header ? (
+              <Text style={styles.sessionQuestionHeaderLabel}>{question.header}</Text>
+            ) : null}
+            <Text style={styles.sessionQuestionPrompt}>{question.prompt}</Text>
+            {question.options.map((option) => {
+              const selected = (selections[question.id] ?? []).includes(option.value);
+              return (
+                <Pressable
+                  key={option.id}
+                  accessibilityLabel={`${question.prompt}：${option.label}`}
+                  accessibilityRole={question.multiSelect ? 'checkbox' : 'radio'}
+                  accessibilityState={{ checked: selected, disabled }}
+                  disabled={disabled}
+                  style={({ pressed }) => [
+                    styles.sessionQuestionOption,
+                    selected ? styles.sessionQuestionOptionSelected : null,
+                    pressed ? styles.buttonPressed : null,
+                    disabled ? styles.buttonDisabled : null,
+                  ]}
+                  testID={`mobile-session-question-option-${option.id}`}
+                  onPress={() => handleOptionPress(question.id, option.value, question.multiSelect)}
+                >
+                  <View
+                    style={[
+                      styles.sessionQuestionOptionMark,
+                      selected ? styles.sessionQuestionOptionMarkSelected : null,
+                    ]}
+                  >
+                    {selected ? (
+                      <Ionicons color={COLORS.surface} name="checkmark" size={14} />
+                    ) : null}
+                  </View>
+                  <View style={styles.sessionQuestionOptionBody}>
+                    <Text style={styles.sessionQuestionOptionLabel}>{option.label}</Text>
+                    {option.description ? (
+                      <Text style={styles.sessionQuestionOptionDescription} numberOfLines={2}>
+                        {option.description}
+                      </Text>
+                    ) : null}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
+      </ScrollView>
+
+      {hasOptions ? (
+        <View style={styles.sessionQuestionActionRow}>
+          <Text style={styles.sessionQuestionActionHint}>
+            {interaction.questions.some((question) => question.multiSelect)
+              ? '可多选'
+              : '请选择一项'}
+          </Text>
+          <Pressable
+            accessibilityLabel="发送 AI 问题的回答"
+            accessibilityRole="button"
+            disabled={!canSubmit}
+            style={({ pressed }) => [
+              styles.sessionQuestionSubmit,
+              pressed ? styles.buttonPressed : null,
+              !canSubmit ? styles.sessionQuestionSubmitDisabled : null,
+            ]}
+            testID="mobile-session-question-submit-v1"
+            onPress={() => onSubmit(answer)}
+          >
+            <Text style={styles.sessionQuestionSubmitText}>发送回答</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Text style={styles.sessionQuestionActionHint}>请在下方输入你的回答。</Text>
+      )}
+    </View>
   );
 }
 
@@ -5919,6 +6078,147 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 21,
     backgroundColor: COLORS.charcoal,
+  },
+  sessionQuestionCard: {
+    maxHeight: 290,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.line,
+    backgroundColor: '#FFFCF6',
+    paddingHorizontal: 12,
+    paddingTop: 9,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  sessionQuestionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+  sessionQuestionIcon: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: '#FFF0C7',
+  },
+  sessionQuestionHeaderBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 1,
+  },
+  sessionQuestionTitle: {
+    color: COLORS.ink,
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  sessionQuestionHint: {
+    color: COLORS.muted,
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  sessionQuestionScroll: {
+    maxHeight: 205,
+  },
+  sessionQuestionContent: {
+    gap: 10,
+    paddingBottom: 1,
+  },
+  sessionQuestionDescription: {
+    color: COLORS.muted,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  sessionQuestionGroup: {
+    gap: 6,
+  },
+  sessionQuestionHeaderLabel: {
+    color: COLORS.charcoal,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700',
+  },
+  sessionQuestionPrompt: {
+    color: COLORS.ink,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  sessionQuestionOption: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 9,
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  sessionQuestionOptionSelected: {
+    borderColor: COLORS.amber,
+    backgroundColor: '#FFF8E8',
+  },
+  sessionQuestionOptionMark: {
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 10,
+    backgroundColor: COLORS.surface,
+  },
+  sessionQuestionOptionMarkSelected: {
+    borderColor: COLORS.amber,
+    backgroundColor: COLORS.amber,
+  },
+  sessionQuestionOptionBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 1,
+  },
+  sessionQuestionOptionLabel: {
+    color: COLORS.ink,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+  },
+  sessionQuestionOptionDescription: {
+    color: COLORS.muted,
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  sessionQuestionActionRow: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  sessionQuestionActionHint: {
+    flex: 1,
+    color: COLORS.muted,
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  sessionQuestionSubmit: {
+    minHeight: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: COLORS.charcoal,
+    paddingHorizontal: 14,
+  },
+  sessionQuestionSubmitDisabled: {
+    opacity: 0.4,
+  },
+  sessionQuestionSubmitText: {
+    color: COLORS.surface,
+    fontSize: 11,
+    fontWeight: '700',
   },
   sessionInputBar: {
     borderTopWidth: 1,
