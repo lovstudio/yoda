@@ -20,7 +20,12 @@ type Toast = {
   action?: ToastAction;
   notification?: Extract<NotificationReason, 'blocking-warning' | 'subscribed-result'>;
   notificationKey?: string;
+  persistNotification?: boolean;
   debugInfo?: unknown;
+};
+
+type ToastOptions = ExternalToast & {
+  persistNotification?: boolean;
 };
 
 type ToastDisplayContent = ReactNode | (() => ReactNode);
@@ -37,23 +42,39 @@ const toastNotificationIds = new Map<string, string>();
 // only place copying the message or debug info is useful. Success, loading and
 // neutral info toasts (including ones with their own action like "Undo") stay
 // clean.
-function toast(input: Toast | ToastDisplayContent, externalOptions?: ExternalToast) {
+function toast(input: Toast | ToastDisplayContent, externalOptions?: ToastOptions) {
+  const { persistNotification: externalPersistNotification, ...sonnerOptions } =
+    externalOptions ?? {};
+  const sonnerOptionsForCall = externalOptions ? sonnerOptions : undefined;
+
   if (!isToastObject(input)) {
-    const toastId = sonnerToast(input, externalOptions);
+    const toastId = sonnerToast(input, sonnerOptionsForCall);
     recordToast(
       'info',
-      { title: input, description: externalOptions?.description },
+      { title: input, description: sonnerOptions.description },
       toastId,
-      externalOptions,
-      externalOptions?.action
+      sonnerOptions,
+      sonnerOptions.action,
+      undefined,
+      undefined,
+      externalPersistNotification
     );
     return toastId;
   }
 
-  const { title, description, variant, action, debugInfo, notificationKey } = input;
+  const {
+    title,
+    description,
+    variant,
+    action,
+    debugInfo,
+    notificationKey,
+    persistNotification: inputPersistNotification,
+  } = input;
+  const persistNotification = inputPersistNotification ?? externalPersistNotification;
   const options: ExternalToast = {
-    ...(externalOptions ?? {}),
-    description: description ?? externalOptions?.description,
+    ...sonnerOptions,
+    description: description ?? sonnerOptions.description,
   };
 
   if (action) {
@@ -70,7 +91,8 @@ function toast(input: Toast | ToastDisplayContent, externalOptions?: ExternalToa
       options,
       action ?? externalOptions?.action,
       input.notification,
-      notificationKey
+      notificationKey,
+      persistNotification
     );
     return toastId;
   }
@@ -82,47 +104,60 @@ function toast(input: Toast | ToastDisplayContent, externalOptions?: ExternalToa
     options,
     action ?? externalOptions?.action,
     input.notification,
-    notificationKey
+    notificationKey,
+    persistNotification
   );
   return toastId;
 }
 
-toast.success = (message: ToastDisplayContent, options?: ExternalToast) => {
-  const toastId = sonnerToast.success(message, options);
+toast.success = (message: ToastDisplayContent, options?: ToastOptions) => {
+  const { persistNotification, ...sonnerOptions } = options ?? {};
+  const toastId = sonnerToast.success(message, options ? sonnerOptions : undefined);
   recordToast(
     'success',
-    { title: message, description: options?.description },
+    { title: message, description: sonnerOptions.description },
     toastId,
-    options,
-    options?.action
+    sonnerOptions,
+    sonnerOptions.action,
+    undefined,
+    undefined,
+    persistNotification
   );
   return toastId;
 };
 
-toast.error = (message: ToastDisplayContent, options?: ExternalToast) => {
-  const nextOptions = withCopyAction(options, {
+toast.error = (message: ToastDisplayContent, options?: ToastOptions) => {
+  const { persistNotification, ...sonnerOptions } = options ?? {};
+  const nextOptions = withCopyAction(sonnerOptions, {
     title: message,
-    description: options?.description,
+    description: sonnerOptions.description,
   });
   const toastId = sonnerToast.error(message, nextOptions);
   recordToast(
     'error',
-    { title: message, description: options?.description },
+    { title: message, description: sonnerOptions.description },
     toastId,
     nextOptions,
-    options?.action
+    sonnerOptions.action,
+    undefined,
+    undefined,
+    persistNotification
   );
   return toastId;
 };
 
-toast.loading = (message: ToastDisplayContent, options?: ExternalToast) => {
-  const toastId = sonnerToast.loading(message, options);
+toast.loading = (message: ToastDisplayContent, options?: ToastOptions) => {
+  const { persistNotification, ...sonnerOptions } = options ?? {};
+  const toastId = sonnerToast.loading(message, options ? sonnerOptions : undefined);
   recordToast(
     'loading',
-    { title: message, description: options?.description },
+    { title: message, description: sonnerOptions.description },
     toastId,
-    options,
-    options?.action
+    sonnerOptions,
+    sonnerOptions.action,
+    undefined,
+    undefined,
+    persistNotification
   );
   return toastId;
 };
@@ -143,6 +178,7 @@ function isToastObject(value: Toast | ToastDisplayContent): value is Toast {
       'variant' in value ||
       'notification' in value ||
       'notificationKey' in value ||
+      'persistNotification' in value ||
       'debugInfo' in value)
   );
 }
@@ -214,7 +250,8 @@ function recordToast(
   options?: ExternalToast,
   action?: unknown,
   requestedReason?: Extract<NotificationReason, 'blocking-warning' | 'subscribed-result'>,
-  notificationKey?: string
+  notificationKey?: string,
+  persistNotification = true
 ): void {
   const toastKey = String(options?.id ?? toastId);
   const existingNotificationId =
@@ -232,6 +269,14 @@ function recordToast(
   const title = titleText ?? descriptionText ?? i18n.t('workspaceRuntime.notifications.untitled');
   const description = titleText ? (descriptionText ?? undefined) : undefined;
   const details = formatToastCopyText(payload) || title;
+
+  if (!persistNotification) {
+    if (existingNotificationId) {
+      workspaceNotificationStore.remove(existingNotificationId);
+      toastNotificationIds.delete(toastKey);
+    }
+    return;
+  }
 
   if (!reason) {
     if (existingNotificationId) {
