@@ -5,9 +5,9 @@ import dockIcon from '@/assets/images/yoda/icon-dock.png?asset';
 import { PRODUCT_NAME } from '@shared/app-identity';
 import { registerRPCRouter } from '@shared/ipc/rpc';
 import { deepLinkService } from './app/deep-link';
+import { externalFileOpenService } from './app/external-file-open';
 import { setupApplicationMenu } from './app/menu';
 import { registerAppScheme, setupAppProtocol } from './app/protocol';
-import { warmTaskWindowPool } from './app/task-window-pool';
 import { createMainWindow, focusExistingFullAppWindow, markAppQuitting } from './app/window';
 import { registerWindowIpc } from './app/window-ipc';
 import { yodaAccountService } from './core/account/services/yoda-account-service';
@@ -71,6 +71,7 @@ app.commandLine.appendSwitch('autoplay-policy', 'document-user-activation-requir
 
 registerAppScheme();
 deepLinkService.register();
+externalFileOpenService.register();
 
 app.setName(PRODUCT_NAME);
 
@@ -79,8 +80,12 @@ app.setPath('userData', yodaUserData);
 
 function createMainWindowWithDeepLinkReset(): BrowserWindow {
   deepLinkService.markRendererNotReady();
+  externalFileOpenService.markRendererNotReady();
   const win = createMainWindow();
-  win.webContents.on('did-start-loading', () => deepLinkService.markRendererNotReady());
+  win.webContents.on('did-start-loading', () => {
+    deepLinkService.markRendererNotReady();
+    externalFileOpenService.markRendererNotReady();
+  });
   return win;
 }
 
@@ -89,6 +94,7 @@ app.on('second-instance', (_event, argv) => {
   if (win?.isMinimized()) win.restore();
   win?.focus();
   deepLinkService.enqueueArgv(argv);
+  externalFileOpenService.enqueueArgv(argv);
 });
 
 if (!import.meta.env.DEV && !app.requestSingleInstanceLock()) {
@@ -204,6 +210,7 @@ void app.whenReady().then(async () => {
   registerWindowIpc(ipcMain);
   __bootMark('registerRPCRouter done');
   deepLinkService.start();
+  externalFileOpenService.start();
 
   setupAppProtocol(join(app.getAppPath(), 'out', 'renderer'));
   await setupApplicationMenu();
@@ -212,12 +219,7 @@ void app.whenReady().then(async () => {
   __bootMark('createMainWindow returned');
   __win.webContents.once('did-start-loading', () => __bootMark('webContents did-start-loading'));
   __win.webContents.once('dom-ready', () => __bootMark('webContents dom-ready'));
-  __win.webContents.once('did-finish-load', () => {
-    __bootMark('webContents did-finish-load');
-    // Pre-warm a hidden task window so the first tab tear-out opens instantly.
-    // Deferred so it doesn't compete with the main window's own boot.
-    setTimeout(() => warmTaskWindowPool(), 1500);
-  });
+  __win.webContents.once('did-finish-load', () => __bootMark('webContents did-finish-load'));
   // The window is shown immediately on creation; ready-to-show now only marks
   // the renderer's first paint (splash → boot screen handoff).
   __win.once('ready-to-show', () => __bootMark('window ready-to-show (first renderer paint)'));

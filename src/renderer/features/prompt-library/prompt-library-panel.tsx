@@ -36,7 +36,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   incrementPromptVersion,
@@ -322,10 +322,14 @@ function SortablePromptRow({
 export function PromptLibraryPanel({
   embedded = false,
   projectId,
+  initialAction,
+  onInitialActionConsumed,
 }: {
   embedded?: boolean;
   /** Preselects the project-scoped instruction and opens the project tab. */
   projectId?: string;
+  initialAction?: 'create';
+  onInitialActionConsumed?: () => void;
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -410,12 +414,19 @@ export function PromptLibraryPanel({
     setVersionBump('patch');
   };
 
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     setSourceForm(null);
     setEditingId('new');
     setDraft(EMPTY_DRAFT);
     setVersionBump('patch');
-  };
+  }, []);
+
+  useEffect(() => {
+    if (initialAction !== 'create') return;
+    setActiveScope('dynamic');
+    openCreate();
+    onInitialActionConsumed?.();
+  }, [initialAction, onInitialActionConsumed, openCreate]);
 
   const openCreateInGroup = (groupName: string) => {
     setSourceForm(null);

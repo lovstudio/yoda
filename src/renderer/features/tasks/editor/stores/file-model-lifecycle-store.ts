@@ -247,8 +247,25 @@ export class FileModelLifecycleStore implements Snapshottable<EditorViewSnapshot
 
     if (kind === 'image' || kind === 'pdf') {
       const result = await rpc.fs.readImage(this.projectId, this.workspaceId, filePath);
-      const imageContent = result.success ? (result.data?.dataUrl ?? '') : '';
-      runInAction(() => this.tabManager.setImageContent(filePath, imageContent));
+      if (!result.success) {
+        runInAction(() => {
+          this.tabManager.updateRenderer(filePath, () => ({
+            kind: 'file-error' as const,
+            error: formatResultError(result.error),
+          }));
+        });
+        return;
+      }
+      if (!result.data?.success) {
+        runInAction(() => {
+          this.tabManager.updateRenderer(filePath, () => ({
+            kind: 'file-error' as const,
+            error: result.data?.error ?? 'Failed to read the file from disk',
+          }));
+        });
+        return;
+      }
+      runInAction(() => this.tabManager.setImageContent(filePath, result.data?.dataUrl ?? ''));
       return;
     }
 
@@ -281,14 +298,19 @@ export class FileModelLifecycleStore implements Snapshottable<EditorViewSnapshot
         return;
       }
 
-      await modelRegistry.registerModel(
-        this.projectId,
-        this.workspaceId,
-        this.modelRootPath,
-        filePath,
-        language,
-        'git'
-      );
+      // Standalone files (including files opened from another app) have no
+      // project snapshot to compare against, so keep them out of the git
+      // model pipeline and retain the normal disk/buffer editing path.
+      if (this.projectId) {
+        await modelRegistry.registerModel(
+          this.projectId,
+          this.workspaceId,
+          this.modelRootPath,
+          filePath,
+          language,
+          'git'
+        );
+      }
       await modelRegistry.registerModel(
         this.projectId,
         this.workspaceId,

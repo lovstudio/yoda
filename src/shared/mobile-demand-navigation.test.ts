@@ -10,6 +10,7 @@ function task(id: string, projectId = 'project-1'): MobileTaskSummary {
     status: 'todo',
     activityStatus: 'todo',
     bootstrapStatus: { status: 'not-started' },
+    createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',
     needsReview: false,
     isPinned: false,

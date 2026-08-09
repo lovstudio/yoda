@@ -5,6 +5,7 @@ import {
   menuCloseTabChannel,
   menuExportSettingsChannel,
   menuImportSettingsChannel,
+  menuOpenFileChannel,
   menuOpenSettingsChannel,
   menuRedoChannel,
   menuSyncSettingsChannel,
@@ -123,6 +124,12 @@ export async function setupApplicationMenu(): Promise<void> {
     {
       label: 'File',
       submenu: [
+        {
+          label: 'Open File…',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => events.emit(menuOpenFileChannel, undefined),
+        },
+        { type: 'separator' as const },
         ...settingsTransferMenuItems(),
         { type: 'separator' as const },
         // On non-macOS, put Settings in File menu

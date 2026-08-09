@@ -61,12 +61,8 @@ export function getTaskGitStore(projectId: string, taskId: string) {
 export function taskChildren(projectId: string, taskId: string): TaskStore[] {
   const manager = getTaskManagerStore(projectId);
   if (!manager) return [];
-  const children: TaskStore[] = [];
-  for (const store of manager.tasks.values()) {
-    const data = registeredTaskData(store);
-    if (data?.parentTaskId === taskId) children.push(store);
-  }
-  return children;
+  const children = manager.childrenByParent.get(taskId);
+  return children ? [...children] : [];
 }
 
 /**

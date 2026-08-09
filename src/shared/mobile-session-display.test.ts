@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { MobileSessionTranscriptBlock } from './mobile-api';
-import { filterMobileSessionTranscript } from './mobile-session-display';
+import {
+  filterMobileSessionTranscript,
+  stripInternalAgentReplyMetadata,
+} from './mobile-session-display';
 
 const transcript: MobileSessionTranscriptBlock[] = [
   { id: 'user', role: 'user', timestamp: null, format: 'plain', content: '请开始' },
@@ -60,5 +63,28 @@ describe('filterMobileSessionTranscript', () => {
     const result = filterMobileSessionTranscript(transcript, 'verbose');
     expect(result.map((block) => block.id)).toEqual(transcript.map((block) => block.id));
     expect(result).not.toBe(transcript);
+  });
+
+  it('removes internal memory metadata from assistant replies', () => {
+    const result = filterMobileSessionTranscript(
+      [
+        {
+          ...transcript[4]!,
+          content: `已完成。\n\n<oai-mem-citation>\n内部上下文\n</oai-mem-citation>`,
+        },
+        {
+          ...transcript[5]!,
+          id: 'metadata-only',
+          content: '<oai-mem-citation>only metadata</oai-mem-citation>',
+        },
+      ],
+      'verbose'
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.content).toBe('已完成。');
+    expect(
+      stripInternalAgentReplyMetadata('正文\n\n\n<oai-mem-citation>meta</oai-mem-citation>')
+    ).toBe('正文');
   });
 });

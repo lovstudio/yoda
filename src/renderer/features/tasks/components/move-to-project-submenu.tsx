@@ -1,4 +1,4 @@
-import { FolderGit2, Search } from 'lucide-react';
+import { FolderGit2, FolderPlus, Search } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -27,6 +27,8 @@ interface MoveToProjectSubmenuProps {
   currentProjectId: string;
   /** Re-home the task under the chosen project. */
   onMove: (targetProjectId: string) => void;
+  /** Create a project and re-home the task under it. */
+  onCreateProject?: (defaultName?: string) => void;
   /** Whether to separate this move group from the preceding menu group. */
   showSeparator?: boolean;
 }
@@ -102,10 +104,12 @@ function ProjectSearchField({
 export const MoveToProjectContextSubmenu = observer(function MoveToProjectContextSubmenu({
   currentProjectId,
   onMove,
+  onCreateProject,
   showSeparator = true,
 }: MoveToProjectSubmenuProps) {
   const { t } = useTranslation();
   const { showSearch, filtered, query, setQuery } = useFilteredTargets(currentProjectId);
+  const createProjectName = query.trim();
   return (
     <>
       {showSeparator && <ContextMenuSeparator />}
@@ -117,18 +121,36 @@ export const MoveToProjectContextSubmenu = observer(function MoveToProjectContex
         <ContextMenuSubContent className={cn(showSearch && 'min-w-52')}>
           {showSearch && <ProjectSearchField value={query} onChange={setQuery} />}
           <div className="max-h-72 overflow-y-auto">
-            {filtered.length === 0 ? (
+            {filtered.length === 0 && !onCreateProject ? (
               <ContextMenuItem disabled>{t('tasks.context.moveToProjectEmpty')}</ContextMenuItem>
             ) : (
-              filtered.map((target) => (
-                <ContextMenuItem
-                  key={target.id}
-                  className="whitespace-nowrap"
-                  onClick={() => onMove(target.id)}
-                >
-                  {target.name}
-                </ContextMenuItem>
-              ))
+              <>
+                {filtered.map((target) => (
+                  <ContextMenuItem
+                    key={target.id}
+                    className="whitespace-nowrap"
+                    onClick={() => onMove(target.id)}
+                  >
+                    {target.name}
+                  </ContextMenuItem>
+                ))}
+                {onCreateProject && (
+                  <ContextMenuItem
+                    className={cn(
+                      'whitespace-nowrap',
+                      filtered.length > 0 && 'mt-1 border-t border-border pt-2'
+                    )}
+                    onClick={() => onCreateProject(createProjectName || undefined)}
+                  >
+                    <FolderPlus className="size-4" />
+                    {createProjectName
+                      ? t('tasks.context.moveToProjectCreateNamed', {
+                          name: createProjectName,
+                        })
+                      : t('tasks.context.moveToProjectCreate')}
+                  </ContextMenuItem>
+                )}
+              </>
             )}
           </div>
         </ContextMenuSubContent>
@@ -141,10 +163,12 @@ export const MoveToProjectContextSubmenu = observer(function MoveToProjectContex
 export const MoveToProjectDropdownSubmenu = observer(function MoveToProjectDropdownSubmenu({
   currentProjectId,
   onMove,
+  onCreateProject,
   showSeparator = true,
 }: MoveToProjectSubmenuProps) {
   const { t } = useTranslation();
   const { showSearch, filtered, query, setQuery } = useFilteredTargets(currentProjectId);
+  const createProjectName = query.trim();
   return (
     <>
       {showSeparator && <DropdownMenuSeparator />}
@@ -156,18 +180,36 @@ export const MoveToProjectDropdownSubmenu = observer(function MoveToProjectDropd
         <DropdownMenuSubContent className={cn(showSearch && 'min-w-52')}>
           {showSearch && <ProjectSearchField value={query} onChange={setQuery} />}
           <div className="max-h-72 overflow-y-auto">
-            {filtered.length === 0 ? (
+            {filtered.length === 0 && !onCreateProject ? (
               <DropdownMenuItem disabled>{t('tasks.context.moveToProjectEmpty')}</DropdownMenuItem>
             ) : (
-              filtered.map((target) => (
-                <DropdownMenuItem
-                  key={target.id}
-                  className="whitespace-nowrap"
-                  onClick={() => onMove(target.id)}
-                >
-                  {target.name}
-                </DropdownMenuItem>
-              ))
+              <>
+                {filtered.map((target) => (
+                  <DropdownMenuItem
+                    key={target.id}
+                    className="whitespace-nowrap"
+                    onClick={() => onMove(target.id)}
+                  >
+                    {target.name}
+                  </DropdownMenuItem>
+                ))}
+                {onCreateProject && (
+                  <DropdownMenuItem
+                    className={cn(
+                      'whitespace-nowrap',
+                      filtered.length > 0 && 'mt-1 border-t border-border pt-2'
+                    )}
+                    onClick={() => onCreateProject(createProjectName || undefined)}
+                  >
+                    <FolderPlus className="size-4" />
+                    {createProjectName
+                      ? t('tasks.context.moveToProjectCreateNamed', {
+                          name: createProjectName,
+                        })
+                      : t('tasks.context.moveToProjectCreate')}
+                  </DropdownMenuItem>
+                )}
+              </>
             )}
           </div>
         </DropdownMenuSubContent>

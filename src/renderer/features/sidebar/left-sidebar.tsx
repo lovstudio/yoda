@@ -329,7 +329,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
             {!sidebarStore.projectsCollapsed && (
               <SidebarGroupContent>
                 <SidebarMenu>
-                  <SidebarVirtualList />
+                  <SidebarVirtualList scrollElementRef={sidebarContentRef} />
                 </SidebarMenu>
               </SidebarGroupContent>
             )}

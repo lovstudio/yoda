@@ -32,6 +32,13 @@
     "openFailed": "Open failed",
     "currentLabel": "{{label}} (current)"
   },
+  "externalFileDrop": {
+    "title": "Open in Yoda",
+    "description": "Drop to preview or edit in a new file tab",
+    "failedTitle": "Failed to open file",
+    "failedDescription": "{{count}} file(s) could not be opened",
+    "noPath": "The dropped file path could not be read"
+  },
   "initialCommit": {
     "title": "Create initial commit",
     "reasonWorktreeMode": "This mode runs each agent in its own isolated worktree, which needs a base commit to branch from.",
@@ -231,7 +238,10 @@
       "matchesName": "Alias is the same as the default name; leave empty instead.",
       "submit": "Save",
       "saving": "Saving…",
-      "failed": "Failed to rename project"
+      "failed": "Failed to rename project",
+      "pathRenameTitle": "Rename the project path too?",
+      "pathRenameDescription": "The project name matches the last directory in its path. Rename the project folder to \"{{name}}\" too?",
+      "pathRenameConfirm": "Rename path too"
     },
     "moveProjectPath": {
       "menuLabel": "Move project path…",
@@ -2266,7 +2276,9 @@
       "createParent": "Add parent task (group)",
       "moveToProject": "Move to project",
       "moveToProjectEmpty": "No other projects",
-      "moveToProjectSearch": "Search projects..."
+      "moveToProjectSearch": "Search projects...",
+      "moveToProjectCreate": "Create a project and move here...",
+      "moveToProjectCreateNamed": "Create \"{{name}}\" and move here"
     },
     "moveToProject": {
       "confirmTitle": "Move task to another project?",
@@ -5041,7 +5053,6 @@
     "replyScreenshotRevealFailed": "Failed to show reply screenshot",
     "replyScreenshotEmpty": "This turn does not have a reply to capture yet",
     "replyScreenshotFailed": "Failed to create reply screenshot",
-    "replyScreenshotFooter": "Latest reply",
     "compactContext": "Compact context",
     "compactingContext": "Compacting context…",
     "compactContextStarted": "Context compaction started",

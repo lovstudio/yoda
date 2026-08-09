@@ -115,6 +115,70 @@ describe('parseCodexRunStateEvent', () => {
     });
     expect(pending.has('call_question')).toBe(false);
   });
+
+  it('resumes working after an approved shell function call produces output', () => {
+    const pending = new Set<string>();
+    const call = JSON.stringify({
+      timestamp: ts,
+      type: 'response_item',
+      payload: {
+        type: 'function_call',
+        name: 'shell',
+        arguments: JSON.stringify({ command: ['printf', 'ok'] }),
+        call_id: 'call_shell',
+      },
+    });
+    const output = JSON.stringify({
+      timestamp: ts,
+      type: 'response_item',
+      payload: {
+        type: 'function_call_output',
+        call_id: 'call_shell',
+        output: 'ok',
+      },
+    });
+
+    expect(parseCodexRunStateEvent(call, pending)).toBeNull();
+    expect(pending.has('call_shell')).toBe(true);
+    expect(parseCodexRunStateEvent(output, pending)).toEqual({
+      kind: 'turn-started',
+      at,
+      force: true,
+    });
+    expect(pending.has('call_shell')).toBe(false);
+  });
+
+  it('resumes working after a custom tool call produces output', () => {
+    const pending = new Set<string>();
+    const call = JSON.stringify({
+      timestamp: ts,
+      type: 'response_item',
+      payload: {
+        type: 'custom_tool_call',
+        name: 'exec',
+        input: 'printf ok',
+        call_id: 'call_custom_shell',
+      },
+    });
+    const output = JSON.stringify({
+      timestamp: ts,
+      type: 'response_item',
+      payload: {
+        type: 'custom_tool_call_output',
+        call_id: 'call_custom_shell',
+        output: 'ok',
+      },
+    });
+
+    expect(parseCodexRunStateEvent(call, pending)).toBeNull();
+    expect(pending.has('call_custom_shell')).toBe(true);
+    expect(parseCodexRunStateEvent(output, pending)).toEqual({
+      kind: 'turn-started',
+      at,
+      force: true,
+    });
+    expect(pending.has('call_custom_shell')).toBe(false);
+  });
 });
 
 describe('initialCodexTailEvents', () => {

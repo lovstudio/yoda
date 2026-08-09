@@ -45,6 +45,13 @@
     "openFailed": "打开失败",
     "currentLabel": "{{label}}（当前）"
   },
+  "externalFileDrop": {
+    "title": "在 Yoda 中打开",
+    "description": "松开即可在新的文件标签页中预览或编辑",
+    "failedTitle": "打开文件失败",
+    "failedDescription": "有 {{count}} 个文件未能打开",
+    "noPath": "未能读取拖入文件的路径"
+  },
   "common": {
     "ok": "确定",
     "cancel": "取消",
@@ -229,7 +236,10 @@
       "matchesName": "别名与默认名称相同，留空即可。",
       "submit": "保存",
       "saving": "保存中…",
-      "failed": "重命名项目失败"
+      "failed": "重命名项目失败",
+      "pathRenameTitle": "同时重命名项目路径？",
+      "pathRenameDescription": "项目名与路径末级目录相同。是否同时将项目文件夹重命名为「{{name}}」？",
+      "pathRenameConfirm": "同时重命名路径"
     },
     "moveProjectPath": {
       "menuLabel": "移动项目路径…",
@@ -2266,7 +2276,9 @@
       "createParent": "增设父任务（分组）",
       "moveToProject": "移动到项目",
       "moveToProjectEmpty": "没有其他项目",
-      "moveToProjectSearch": "搜索项目…"
+      "moveToProjectSearch": "搜索项目…",
+      "moveToProjectCreate": "创建项目并移动…",
+      "moveToProjectCreateNamed": "创建「{{name}}」并移动"
     },
     "moveToProject": {
       "confirmTitle": "移动任务到其他项目？",
@@ -5041,7 +5053,6 @@
     "replyScreenshotRevealFailed": "显示回复截图失败",
     "replyScreenshotEmpty": "当前轮次还没有可截图的回复",
     "replyScreenshotFailed": "生成回复截图失败",
-    "replyScreenshotFooter": "最新一轮回复",
     "compactContext": "压缩上下文",
     "compactingContext": "正在压缩上下文…",
     "compactContextStarted": "已开始压缩上下文",

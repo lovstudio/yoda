@@ -14,7 +14,6 @@ import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { modelRegistry } from '@renderer/lib/monaco/monaco-model-registry';
 import { buildMonacoModelPath } from '@renderer/lib/monaco/monacoModelPath';
 import { Button } from '@renderer/lib/ui/button';
-import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { Spinner } from '@renderer/lib/ui/spinner';
 import { cn } from '@renderer/utils/utils';
 import { ProjectFileEditor } from './project-file-editor';
@@ -37,7 +36,6 @@ function ProjectFileTitlebar() {
 const MONACO_RENDERER_KINDS = new Set(['text', 'markdown', 'markdown-source', 'svg-source']);
 
 const ProjectFileMainPanel = observer(function ProjectFileMainPanel() {
-  const { t } = useTranslation();
   const {
     params: { projectId, filePath },
   } = useParams('file');
@@ -65,7 +63,7 @@ const ProjectFileMainPanel = observer(function ProjectFileMainPanel() {
   if (!filePath) return null;
 
   if (error) {
-    return <EmptyState label={t('common.error')} description={error} />;
+    return <FileErrorRenderer file={{ path: filePath, error }} />;
   }
 
   if (!session) {
@@ -145,7 +143,7 @@ function NonTextRenderer({ file, modelRootPath }: { file: FileTabStore; modelRoo
     case 'binary':
       return <BinaryRenderer file={file} />;
     case 'file-error':
-      return <FileErrorRenderer file={file} />;
+      return <FileErrorRenderer file={{ path: file.path, error: file.renderer.error }} />;
     default:
       return null;
   }

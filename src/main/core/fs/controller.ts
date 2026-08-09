@@ -7,6 +7,12 @@ import { fsWatchEventChannel } from '@shared/events/fsEvents';
 import { createRPCController } from '@shared/ipc/rpc';
 import { err, ok } from '@shared/result';
 import { SshExecutionContext } from '@main/core/execution-context/ssh-execution-context';
+import {
+  isExternalFilePath,
+  readExternalFile,
+  readExternalImage,
+  writeExternalFile,
+} from '@main/core/fs/external-file-access';
 import { LocalFileSystem } from '@main/core/fs/impl/local-fs';
 import { SshFileSystem } from '@main/core/fs/impl/ssh-fs';
 import { getProjectById } from '@main/core/projects/operations/getProjects';
@@ -403,6 +409,14 @@ export const filesController = createRPCController({
   },
 
   readFile: async (projectId: string, workspaceId: string, filePath: string, maxBytes?: number) => {
+    if (isExternalFilePath(filePath)) {
+      try {
+        return ok(await readExternalFile(filePath, maxBytes));
+      } catch (e) {
+        return err({ type: 'fs_error' as const, message: String(e) });
+      }
+    }
+
     // Agent home escape: transcripts, user CLAUDE.md, global skills etc. live
     // under the agent CLIs' home dirs, outside any workspace jail. Allow
     // access to exactly those roots so the regular file viewer/editor can
@@ -428,6 +442,14 @@ export const filesController = createRPCController({
   },
 
   writeFile: async (projectId: string, workspaceId: string, filePath: string, content: string) => {
+    if (isExternalFilePath(filePath)) {
+      try {
+        return ok(await writeExternalFile(filePath, content));
+      } catch (e) {
+        return err({ type: 'fs_error' as const, message: String(e) });
+      }
+    }
+
     // Agent home escape — mirrors readFile so files opened from there can be
     // saved back (user CLAUDE.md, SKILL.md, settings).
     if (isAgentHomePath(filePath)) {
@@ -496,6 +518,14 @@ export const filesController = createRPCController({
   },
 
   readImage: async (projectId: string, workspaceId: string, filePath: string) => {
+    if (isExternalFilePath(filePath)) {
+      try {
+        return ok(await readExternalImage(filePath));
+      } catch (e) {
+        return err({ type: 'fs_error' as const, message: String(e) });
+      }
+    }
+
     const env = resolveWorkspace(projectId, workspaceId);
     if (!env)
       return err({ type: 'not_found' as const, entity: 'filesystem' as const, detail: undefined });

@@ -2,8 +2,10 @@ import { useEffect } from 'react';
 import type { DeepLinkTarget } from '@shared/deep-links';
 import {
   deepLinkOpenChannel,
+  externalFileOpenChannel,
   menuExportSettingsChannel,
   menuImportSettingsChannel,
+  menuOpenFileChannel,
   menuOpenSettingsChannel,
   menuRedoChannel,
   menuSyncSettingsChannel,
@@ -12,6 +14,7 @@ import {
   notificationFocusTaskChannel,
   taskWindowAssignTargetChannel,
 } from '@shared/events/appEvents';
+import { openProjectFileTab } from '@renderer/features/project-file/project-file-session';
 import {
   performActiveEditorRedo,
   performActiveEditorUndo,
@@ -126,6 +129,20 @@ export function AppMenuEvents({ onOpenSettings }: { onOpenSettings?: () => boole
   }, []);
 
   useEffect(() => {
+    return events.on(menuOpenFileChannel, () => {
+      void rpc.app.openFileDialog().then((result) => {
+        if (result.success) return;
+        toast({
+          title: '打开文件失败',
+          description: result.error,
+          variant: 'destructive',
+          debugInfo: result,
+        });
+      });
+    });
+  }, [toast]);
+
+  useEffect(() => {
     const disposers = new Set<() => void>();
 
     const launchTarget = getTaskWindowLaunchTarget();
@@ -137,6 +154,10 @@ export function AppMenuEvents({ onOpenSettings }: { onOpenSettings?: () => boole
       openTaskTarget(target, navigate, disposers)
     );
     const openDeepLinkTarget = (target: DeepLinkTarget) => {
+      if (target.filePath) {
+        openProjectFileTab(null, target.filePath);
+        return;
+      }
       if (target.appId) {
         navigate('marketplace', { section: 'apps', appId: target.appId });
         return;
@@ -147,7 +168,11 @@ export function AppMenuEvents({ onOpenSettings }: { onOpenSettings?: () => boole
       }
       openTaskTarget({ ...target, projectId: target.projectId }, navigate, disposers);
     };
+    const openExternalFile = (target: { path: string }) => {
+      openProjectFileTab(null, target.path);
+    };
     const unlistenDeepLinks = events.on(deepLinkOpenChannel, openDeepLinkTarget);
+    const unlistenExternalFiles = events.on(externalFileOpenChannel, openExternalFile);
     // A warm window navigates to its tab when the main process assigns a target.
     const unlistenAssign = events.on(taskWindowAssignTargetChannel, (target) =>
       openTaskWindowTarget(target, navigate, disposers)
@@ -162,11 +187,20 @@ export function AppMenuEvents({ onOpenSettings }: { onOpenSettings?: () => boole
         .catch((error: unknown) => {
           log.warn('AppMenuEvents: failed to consume pending deep links', { error });
         });
+      void rpc.app
+        .consumePendingExternalFiles()
+        .then((targets) => {
+          for (const target of targets) openExternalFile(target);
+        })
+        .catch((error: unknown) => {
+          log.warn('AppMenuEvents: failed to consume pending external files', { error });
+        });
     }
 
     return () => {
       unlistenNotifications();
       unlistenDeepLinks();
+      unlistenExternalFiles();
       unlistenAssign();
       disposers.forEach((dispose) => dispose());
       disposers.clear();

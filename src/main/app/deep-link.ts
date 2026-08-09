@@ -9,10 +9,11 @@ import {
   type ParsedDeepLink,
 } from '@shared/deep-links';
 import { deepLinkOpenChannel } from '@shared/events/appEvents';
-import { getMainWindow } from '@main/app/window';
+import { focusMainWindow, getMainWindow } from '@main/app/window';
 import { conversations, projects, tasks } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
+import { externalFileOpenService } from './external-file-open';
 
 const DEV_PROTOCOL_REGISTRATION_ENV = 'YODA_REGISTER_DEEP_LINKS';
 
@@ -104,9 +105,11 @@ class DeepLinkService {
       return null;
     }
 
-    const resolved = parsed.appId
-      ? await resolveAiLabAppTarget(parsed.appId)
-      : await resolveTaskTarget(parsed);
+    const resolved = parsed.filePath
+      ? resolveExternalFileTarget(parsed.filePath)
+      : parsed.appId
+        ? await resolveAiLabAppTarget(parsed.appId)
+        : await resolveTaskTarget(parsed);
     if (!resolved) {
       log.warn('deep-link: target not found', { rawUrl, parsed });
       return null;
@@ -180,16 +183,9 @@ async function resolveTaskTarget(
   return row ? { projectId: parsed.projectId, taskId: parsed.taskId } : null;
 }
 
-function focusMainWindow(): void {
-  // Must target the main full-app window, not getAllWindows()[0] — a pre-warmed
-  // (hidden, blank) task window can sit at index 0, and showing it surfaces a
-  // white screen over the main window. getMainWindow() matches the window the
-  // deep-link event is routed to in events.ts.
-  const win = getMainWindow();
-  if (!win || win.isDestroyed()) return;
-  if (win.isMinimized()) win.restore();
-  if (!win.isVisible()) win.show();
-  win.focus();
+function resolveExternalFileTarget(filePath: string): { filePath: string } | null {
+  const normalized = externalFileOpenService.authorizePath(filePath);
+  return normalized ? { filePath: normalized } : null;
 }
 
 export const deepLinkService = new DeepLinkService();

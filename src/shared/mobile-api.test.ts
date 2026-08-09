@@ -9,9 +9,11 @@ import {
   getMobileProjectActivityById,
   parseMobilePairingUrl,
   prependMobileSkillCommand,
+  resolveMobilePermissionMode,
   resolveMobileSiblingTaskAttribution,
   sortMobileProjects,
   sortMobileTaskAttributionCandidates,
+  sortMobileTasks,
   type MobileProjectSummary,
   type MobileTaskSummary,
 } from './mobile-api';
@@ -54,6 +56,26 @@ describe('mobile session continuation', () => {
     expect(canContinueMobileSession({ acceptsInput: false, resumable: true })).toBe(true);
     expect(canContinueMobileSession({ acceptsInput: false, resumable: false })).toBe(false);
     expect(canContinueMobileSession(null)).toBe(false);
+  });
+});
+
+describe('mobile execution defaults', () => {
+  const configuration = { defaultPermissionModes: { codex: 'bypass' } } as const;
+
+  it('uses the configured Agent access level before the runtime fallback', () => {
+    expect(resolveMobilePermissionMode(configuration, { accessMode: 'full-access' }, 'codex')).toBe(
+      'bypass'
+    );
+    expect(resolveMobilePermissionMode(configuration, { accessMode: 'plan' }, 'codex')).toBe(
+      'plan'
+    );
+  });
+
+  it('uses the shared runtime setting for inheriting Agents', () => {
+    expect(resolveMobilePermissionMode(configuration, { accessMode: 'inherit' }, 'codex')).toBe(
+      'bypass'
+    );
+    expect(resolveMobilePermissionMode(configuration, null, 'codex')).toBe('bypass');
   });
 });
 
@@ -260,7 +282,12 @@ describe('mobile task attribution ordering', () => {
   function task(
     id: string,
     updatedAt: string,
-    options: { isLongTerm?: boolean; isPinned?: boolean; lastInteractedAt?: string } = {}
+    options: {
+      createdAt?: string;
+      isLongTerm?: boolean;
+      isPinned?: boolean;
+      lastInteractedAt?: string;
+    } = {}
   ): MobileTaskSummary {
     return {
       id,
@@ -269,6 +296,7 @@ describe('mobile task attribution ordering', () => {
       status: 'todo',
       activityStatus: 'todo',
       bootstrapStatus: { status: 'not-started' },
+      createdAt: options.createdAt ?? updatedAt,
       updatedAt,
       lastInteractedAt: options.lastInteractedAt,
       needsReview: false,
@@ -354,5 +382,65 @@ describe('mobile task attribution ordering', () => {
       parentTaskId: null,
       parentTask: null,
     });
+  });
+});
+
+describe('mobile task list ordering', () => {
+  function task(
+    id: string,
+    createdAt: string,
+    options: { lastInteractedAt?: string; parentTaskId?: string } = {}
+  ): MobileTaskSummary {
+    return {
+      id,
+      projectId: 'project-1',
+      parentTaskId: options.parentTaskId,
+      name: id,
+      status: 'todo',
+      activityStatus: 'todo',
+      bootstrapStatus: { status: 'not-started' },
+      createdAt,
+      updatedAt: createdAt,
+      lastInteractedAt: options.lastInteractedAt,
+      needsReview: false,
+      isPinned: false,
+      isLongTerm: false,
+      conversationCount: 0,
+      runtimeCounts: {},
+    };
+  }
+
+  it('keeps a recently active child next to its parent and promotes the whole tree', () => {
+    const tasks = [
+      task('parent', '2026-08-01T00:00:00.000Z'),
+      task('other-root', '2026-08-03T00:00:00.000Z'),
+      task('child', '2026-08-02T00:00:00.000Z', {
+        lastInteractedAt: '2026-08-05T00:00:00.000Z',
+        parentTaskId: 'parent',
+      }),
+    ];
+
+    expect(sortMobileTasks(tasks, 'recent').map(({ id }) => id)).toEqual([
+      'parent',
+      'child',
+      'other-root',
+    ]);
+  });
+
+  it('orders roots by creation time while keeping each subtree contiguous', () => {
+    const tasks = [
+      task('parent', '2026-08-01T00:00:00.000Z'),
+      task('child', '2026-08-04T00:00:00.000Z', { parentTaskId: 'parent' }),
+      task('new-root', '2026-08-05T00:00:00.000Z'),
+      task('middle-root', '2026-08-03T00:00:00.000Z'),
+    ];
+
+    expect(sortMobileTasks(tasks, 'created').map(({ id }) => id)).toEqual([
+      'new-root',
+      'middle-root',
+      'parent',
+      'child',
+    ]);
+    expect(tasks.map(({ id }) => id)).toEqual(['parent', 'child', 'new-root', 'middle-root']);
   });
 });

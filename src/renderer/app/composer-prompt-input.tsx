@@ -458,6 +458,7 @@ export function ComposerPromptInput({
   const tokenRangesRef = useRef(tokenRanges);
   tokenRangesRef.current = tokenRanges;
   const [tokenRects, setTokenRects] = useState<Map<string, TokenRect[]>>(new Map());
+  const tokenRectFrameRef = useRef<number | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [hoveredTokenId, setHoveredTokenId] = useState<string | null>(null);
   const [tokenMenu, setTokenMenu] = useState<{
@@ -466,23 +467,36 @@ export function ComposerPromptInput({
     top: number;
   } | null>(null);
 
-  useLayoutEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    setTokenRects(measureTokenRects(textarea, tokenRanges));
-  }, [tokenRanges]);
-
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const observer = new ResizeObserver(() => {
+  const scheduleTokenRectMeasurement = useCallback(() => {
+    if (tokenRectFrameRef.current !== null) {
+      cancelAnimationFrame(tokenRectFrameRef.current);
+    }
+    tokenRectFrameRef.current = requestAnimationFrame(() => {
+      tokenRectFrameRef.current = null;
+      const textarea = textareaRef.current;
+      if (!textarea) return;
       setTokenRects(
         measureTokenRects(textarea, findTokenRanges(textarea.value, tokensRef.current))
       );
     });
+  }, []);
+
+  useEffect(() => {
+    scheduleTokenRectMeasurement();
+    return () => {
+      if (tokenRectFrameRef.current === null) return;
+      cancelAnimationFrame(tokenRectFrameRef.current);
+      tokenRectFrameRef.current = null;
+    };
+  }, [scheduleTokenRectMeasurement, tokenRanges]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const observer = new ResizeObserver(scheduleTokenRectMeasurement);
     observer.observe(textarea);
     return () => observer.disconnect();
-  }, []);
+  }, [scheduleTokenRectMeasurement]);
 
   const hitTestToken = useCallback(
     (event: MouseEvent<HTMLTextAreaElement>): string | null => {

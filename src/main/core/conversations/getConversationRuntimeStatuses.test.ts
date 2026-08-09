@@ -208,6 +208,18 @@ describe('getConversationRunStatus', () => {
     await expect(readCodexStatus()).resolves.toBe('awaiting-input');
   });
 
+  it('preserves live Codex approval state while rollout still reports working', async () => {
+    mocks.resolveTask.mockReturnValue(mountedTask(['conv-1']));
+    mocks.getRuntimeStatus.mockReturnValue('awaiting-input');
+    mocks.readCodexTurnVerdict.mockResolvedValue({
+      state: 'working',
+      lastStartedAt: Date.parse('2026-06-10T00:00:05.000Z'),
+    });
+
+    await expect(readCodexStatus()).resolves.toBe('awaiting-input');
+    expect(mocks.setRuntimeStatus).not.toHaveBeenCalled();
+  });
+
   it('does not downgrade a live completed status when the monitor reports idle', async () => {
     mocks.getRuntimeStatus.mockReturnValue('completed');
     mocks.resolveTask.mockReturnValue(mountedTask());

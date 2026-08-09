@@ -100,9 +100,11 @@ export function buildTheme(theme?: SessionTheme): ITerminalOptions['theme'] {
  * The terminal is created synchronously during construction and opened into
  * an off-screen container. After mount/measurement opens the flush gate,
  * connect() subscribes to the main-process ring buffer and live IPC events.
- * Successful subscriptions survive later unmounts so flow-control and sequence
- * state stays intact. While off-screen, xterm parsing is suspended and output
- * is replayed as one ordered frame when the session becomes visible again.
+ * Successful subscriptions survive later unmounts so the main-process flow
+ * control and sequence watermark stay intact. While off-screen, xterm parsing
+ * is suspended; the bounded backend watermark naturally pauses noisy sessions
+ * until the terminal is visible again. On remount, queued output is replayed as
+ * one ordered frame so intermediate TUI cursor positions stay hidden.
  *
  * DOM management is handled via mount() / unmount():
  *  - mount()   → appends ownedContainer to the visible mount target

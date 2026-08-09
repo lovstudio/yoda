@@ -224,10 +224,7 @@ describe('FrontendPty stream ordering', () => {
     expect(ipcMocks.acknowledgeOutput).not.toHaveBeenCalled();
     expect(ipcMocks.unsubscribe).not.toHaveBeenCalled();
 
-    mountTarget = document.createElement('div');
-    document.body.appendChild(mountTarget);
-    pty.mount(mountTarget, { cols: 120, rows: 32 });
-
+    const remountLease = pty.mount(mountTarget!, { cols: 120, rows: 32 });
     await vi.waitFor(() => {
       expect(pty?.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe('OFFSCREEN');
       expect(ipcMocks.acknowledgeOutput).toHaveBeenCalledWith(
@@ -237,7 +234,7 @@ describe('FrontendPty stream ordering', () => {
         1
       );
     });
-    expect(ipcMocks.unsubscribe).not.toHaveBeenCalled();
+    pty.unmount(remountLease);
   });
 
   it('replays suspended PTY batches as one hidden ordered frame', async () => {
