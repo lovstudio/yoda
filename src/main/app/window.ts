@@ -28,6 +28,7 @@ let mainWindow: BrowserWindow | null = null;
 const fullAppWindows = new Set<BrowserWindow>();
 /** Set once a real quit begins so close-to-hide yields to actual teardown. */
 let appQuitting = false;
+const MAC_TITLEBAR_HEIGHT = 40;
 
 /** Called from the shutdown path so the last window stops hiding and closes. */
 export function markAppQuitting(): void {
@@ -154,6 +155,11 @@ function createAppWindow(
     ...(process.platform === 'darwin'
       ? {
           titleBarStyle: 'hiddenInset',
+          // Keep the native overlay geometry aligned with the shared h-10
+          // renderer titlebar. Without this, macOS lays out the web contents
+          // against the hidden titlebar and the tab strip gets clipped at the
+          // top edge.
+          titleBarOverlay: { height: MAC_TITLEBAR_HEIGHT },
           // Both the main and detached windows use a 40px (h-10) title bar; a
           // ~12px traffic-light cluster centers at (40-12)/2 = 14px from the top.
           trafficLightPosition: { x: 14, y: 14 },
