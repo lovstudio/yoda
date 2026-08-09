@@ -1,5 +1,9 @@
 import { homedir } from 'node:os';
-import type { Conversation, SessionRuntimeOverrides } from '@shared/conversations';
+import {
+  mergeSessionRuntimeOverrides,
+  type Conversation,
+  type SessionRuntimeOverrides,
+} from '@shared/conversations';
 import { agentSessionExitedChannel } from '@shared/events/agentEvents';
 import type { ProjectPromptPrinciples } from '@shared/project-settings';
 import { makePtyId } from '@shared/ptyId';
@@ -362,11 +366,17 @@ export class LocalConversationProvider implements ConversationProvider {
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       const terminalThemeMode = await resolveTerminalThemeMode();
       if (!this.ownsPendingStart(sessionId, startToken)) return;
+      const effectiveRuntimeOverrides = mergeSessionRuntimeOverrides(
+        conversation.runtimeOverrides,
+        runtimeOverrides
+      );
+      const { permissionMode: runtimePermissionMode, ...runtimeCommandOverrides } =
+        effectiveRuntimeOverrides ?? {};
       const baseCommand = buildAgentCommand({
         runtimeId: conversation.runtimeId,
         providerConfig: sessionProviderConfig,
         autoApprove: conversation.autoApprove,
-        permissionMode: conversation.permissionMode,
+        permissionMode: runtimePermissionMode ?? conversation.permissionMode,
         sessionId: agentSessionId,
         isResuming: effectiveIsResuming,
         initialPrompt:
@@ -375,7 +385,7 @@ export class LocalConversationProvider implements ConversationProvider {
             : effectiveInitialPrompt,
         workingDirectory: this.taskPath,
         appendSystemPrompt,
-        ...runtimeOverrides,
+        ...runtimeCommandOverrides,
         terminalThemeMode,
         skillPolicy: conversation.skillPolicy,
         executionMode: conversation.executionMode,
@@ -518,7 +528,11 @@ export class LocalConversationProvider implements ConversationProvider {
 
       const hasAuthoritativeRunState = statusMonitor !== 'terminal';
 
-      if (statusMonitor === 'terminal') {
+      // Codex's rollout is authoritative for turn boundaries, but its
+      // command-approval prompt is rendered only in the PTY and is absent
+      // from the rollout until the user answers. Keep the narrow Codex
+      // classifier attached as a supplementary attention signal.
+      if (statusMonitor === 'terminal' || conversation.runtimeId === 'codex') {
         wireAgentClassifier({
           pty,
           runtimeId: conversation.runtimeId,
@@ -558,9 +572,11 @@ export class LocalConversationProvider implements ConversationProvider {
         );
       }
 
+      let shouldEmitAgentSessionExited = false;
       pty.onExit(({ exitCode }) => {
         this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
         if (this.sessions.get(sessionId) !== pty) return;
+        shouldEmitAgentSessionExited = true;
         void aiLogService.finish(invocationLogId, {
           status: typeof exitCode === 'number' && exitCode !== 0 ? 'failed' : 'succeeded',
           error:
@@ -582,19 +598,22 @@ export class LocalConversationProvider implements ConversationProvider {
           task_id: conversation.taskId,
           conversation_id: conversation.id,
         });
-        events.emit(agentSessionExitedChannel, {
-          sessionId,
-          projectId: conversation.projectId,
-          conversationId: conversation.id,
-          taskId: conversation.taskId,
-          exitCode,
-        });
-        snapshotTaskDiffOnSessionExit(conversation.taskId);
       });
 
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       registrationAttempted = true;
       ptySessionRegistry.register(sessionId, pty, {
+        onFinalExit: (info) => {
+          if (!shouldEmitAgentSessionExited) return;
+          events.emit(agentSessionExitedChannel, {
+            sessionId,
+            projectId: conversation.projectId,
+            conversationId: conversation.id,
+            taskId: conversation.taskId,
+            exitCode: info.exitCode,
+          });
+          snapshotTaskDiffOnSessionExit(conversation.taskId);
+        },
         registrationEpoch,
         tmuxBacked: Boolean(tmuxSessionName),
       });

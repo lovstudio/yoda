@@ -4,6 +4,7 @@ import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
 import { resolveTask } from '../projects/utils';
+import { reconcileConversationPermission } from './reconcile-conversation-permission';
 import { mapConversationRowToConversation } from './utils';
 
 const inFlightResumes = new Map<string, Promise<boolean>>();
@@ -45,7 +46,10 @@ export async function resumeConversation(
       }
 
       if (!ptySessionRegistry.isRegistrationCurrent(sessionKey, registrationEpoch)) return false;
-      const conversation = mapConversationRowToConversation(row, true);
+      const conversation = await reconcileConversationPermission(
+        mapConversationRowToConversation(row, true),
+        row.config
+      );
       await task.conversations.startSession(conversation, initialSize, true);
       return task.conversations
         .getActiveSessions()

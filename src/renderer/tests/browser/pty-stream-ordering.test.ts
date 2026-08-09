@@ -207,7 +207,7 @@ describe('FrontendPty stream ordering', () => {
     pty = null;
   });
 
-  it('keeps a completed subscription parsing and acknowledging while off-screen', async () => {
+  it('suspends xterm parsing while off-screen and resumes the queued stream on remount', async () => {
     ipcMocks.subscribe.mockResolvedValue({
       success: true,
       data: { buffer: '', generation: 1, sequence: 0 },
@@ -219,6 +219,12 @@ describe('FrontendPty stream ordering', () => {
     pty.unmount(lease);
     ipcMocks.emitData(output(1, 'OFFSCREEN'));
 
+    await Promise.resolve();
+    expect(pty.terminal.buffer.active.getLine(0)?.translateToString(true) ?? '').toBe('');
+    expect(ipcMocks.acknowledgeOutput).not.toHaveBeenCalled();
+    expect(ipcMocks.unsubscribe).not.toHaveBeenCalled();
+
+    const remountLease = pty.mount(mountTarget!, { cols: 120, rows: 32 });
     await vi.waitFor(() => {
       expect(pty?.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe('OFFSCREEN');
       expect(ipcMocks.acknowledgeOutput).toHaveBeenCalledWith(
@@ -228,7 +234,7 @@ describe('FrontendPty stream ordering', () => {
         1
       );
     });
-    expect(ipcMocks.unsubscribe).not.toHaveBeenCalled();
+    pty.unmount(remountLease);
   });
 
   it('chunks a 25 MiB snapshot and large live batch without advancing ACKs early', async () => {

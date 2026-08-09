@@ -81,6 +81,25 @@ describe('mapConversationRowToConversation', () => {
     expect(conversation.executionMode).toBe('automation');
   });
 
+  it('restores the Agent identity and runtime settings for mobile session details', () => {
+    const conversation = mapConversationRowToConversation(
+      conversationRow({
+        config: JSON.stringify({
+          agent: { id: 'agent-1', name: '架构 Agent', icon: '◎' },
+          permissionMode: 'plan',
+          runtimeOverrides: { model: 'o4-mini', reasoningEffort: 'high' },
+        }),
+      })
+    );
+
+    expect(conversation.agent).toEqual({ id: 'agent-1', name: '架构 Agent', icon: '◎' });
+    expect(conversation.permissionMode).toBe('plan');
+    expect(conversation.runtimeOverrides).toEqual({
+      model: 'o4-mini',
+      reasoningEffort: 'high',
+    });
+  });
+
   it('exposes a pending initial prompt only to task provisioning', () => {
     const row = conversationRow({
       config: JSON.stringify({

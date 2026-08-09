@@ -1,3 +1,4 @@
+import { isAgentAccessMode, resolveAgentPermissionMode, type AgentAccessMode } from './agents';
 import type { RuntimeId } from './runtime-registry';
 
 export const MOBILE_GATEWAY_DEFAULT_PORT = 3879;
@@ -475,6 +476,74 @@ export type MobileProfileSnapshot = {
   };
 };
 
+export type MobileRunMode = 'normal' | 'brainstorm';
+export type MobileTaskStrategyKind = 'new-branch' | 'no-worktree';
+
+export type MobilePermissionModeOption = {
+  id: string;
+  label: string;
+  description?: string;
+  danger?: boolean;
+};
+
+export type MobileRuntimeOption = {
+  id: RuntimeId;
+  name: string;
+};
+
+/** Compact Agent profile exposed to the phone; prompts and Skill internals stay on desktop. */
+export type MobileAgentSummary = {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  preferredRuntime: RuntimeId;
+  model: string | null;
+  reasoningEffort: string | null;
+  accessMode: AgentAccessMode;
+};
+
+export type MobileSessionAgent = {
+  id: string | null;
+  name: string;
+  icon?: string;
+};
+
+export type MobileConfigurationSnapshot = {
+  generatedAt: string;
+  defaultRuntimeId: RuntimeId;
+  defaultAgentId: string | null;
+  runtimes: MobileRuntimeOption[];
+  agents: MobileAgentSummary[];
+  permissionModes: Partial<Record<RuntimeId, MobilePermissionModeOption[]>>;
+  defaultPermissionModes: Partial<Record<RuntimeId, string>>;
+};
+
+/** Resolve the permission mode shown for a new mobile session. Agent access is
+ * concrete when configured; otherwise the desktop runtime default is shared. */
+export function resolveMobilePermissionMode(
+  configuration: Pick<MobileConfigurationSnapshot, 'defaultPermissionModes'>,
+  agent: Pick<MobileAgentSummary, 'accessMode'> | null | undefined,
+  runtimeId: RuntimeId
+): string | null {
+  const accessMode = agent && isAgentAccessMode(agent.accessMode) ? agent.accessMode : 'inherit';
+  return (
+    resolveAgentPermissionMode(runtimeId, accessMode) ??
+    configuration.defaultPermissionModes[runtimeId] ??
+    null
+  );
+}
+
+export type MobileDemandConfiguration = {
+  agentId: string | null;
+  runtimeId: RuntimeId;
+  runMode: MobileRunMode;
+  strategyKind: MobileTaskStrategyKind;
+  model: string | null;
+  reasoningEffort: string | null;
+  permissionMode: string | null;
+};
+
 export type MobileCreateDemandRequest = {
   projectId?: string | null;
   /** Parent task for context-aware creation from a task detail on mobile. */
@@ -483,6 +552,12 @@ export type MobileCreateDemandRequest = {
   title?: string;
   provider?: string;
   attachmentIds?: string[];
+  agentId?: string | null;
+  runMode?: MobileRunMode;
+  strategyKind?: MobileTaskStrategyKind;
+  model?: string | null;
+  reasoningEffort?: string | null;
+  permissionMode?: string;
 };
 
 export type MobileCreateDemandResponse = {
@@ -554,6 +629,10 @@ export type MobileSessionSummary = {
   tmuxEnabled: boolean;
   sessionId: string;
   sessionTitle?: string;
+  agent?: MobileSessionAgent;
+  model: string | null;
+  reasoningEffort: string | null;
+  permissionMode: string | null;
 };
 
 export function canContinueMobileSession(
@@ -582,10 +661,40 @@ export type MobileSessionTranscriptBlock = {
   agentPhase?: MobileSessionTranscriptAgentPhase;
   /** Present for tool blocks when the transcript exposes call/result boundaries. */
   toolStatus?: MobileSessionTranscriptToolStatus;
+  /** Provider tool-call id, used to pair an interactive call with its result. */
+  toolCallId?: string;
   title?: string;
   timestamp: string | null;
   format: MobileSessionTranscriptFormat;
   content: string;
+};
+
+export type MobileSessionInteractionSource = 'claude' | 'codex' | 'terminal';
+export type MobileSessionInteractionKind = 'choice' | 'confirmation' | 'text';
+
+export type MobileSessionInteractionOption = {
+  id: string;
+  label: string;
+  value: string;
+  description?: string;
+};
+
+export type MobileSessionQuestion = {
+  id: string;
+  prompt: string;
+  header?: string;
+  multiSelect: boolean;
+  options: MobileSessionInteractionOption[];
+};
+
+/** A bounded, display-ready representation of the current AI question. */
+export type MobileSessionInteraction = {
+  id: string;
+  kind: MobileSessionInteractionKind;
+  title: string;
+  description?: string;
+  source: MobileSessionInteractionSource;
+  questions: MobileSessionQuestion[];
 };
 
 export type MobileSessionDetail = {
@@ -597,6 +706,8 @@ export type MobileSessionDetail = {
   source: MobileSessionContentSource;
   transcript: MobileSessionTranscriptBlock[];
   transcriptTruncated: boolean;
+  /** Present while the runtime is waiting for a user answer. */
+  pendingInteraction?: MobileSessionInteraction | null;
 };
 
 export type MobileSessionInputRequest = {
@@ -611,6 +722,17 @@ export type MobileSessionInputResponse = {
   ok: true;
   generatedAt: string;
   requestId?: string;
+};
+
+export type MobileSessionRuntimeConfigurationUpdate = {
+  model?: string | null;
+  reasoningEffort?: string | null;
+  permissionMode?: string;
+};
+
+export type MobileSessionRuntimeConfigurationResponse = {
+  ok: true;
+  generatedAt: string;
 };
 
 export type MobileInputAttachmentKind = 'image';

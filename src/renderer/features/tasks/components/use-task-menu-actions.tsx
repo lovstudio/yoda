@@ -43,6 +43,7 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
   const showCreateSubtask = useShowModal('newSubtaskModal');
   const showSetParent = useShowModal('setParentTaskModal');
   const showCreateParent = useShowModal('createParentTaskModal');
+  const showCreateProject = useShowModal('expressCreateProjectModal');
   const moveTaskToProject = useMoveTaskToProject();
   const { archiveTask } = useArchiveTask(projectId);
 
@@ -198,6 +199,13 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
         : undefined,
     onMoveToProject: canMoveToProject
       ? (targetProjectId: string) => moveTaskToProject(projectId, taskId, targetProjectId)
+      : undefined,
+    onCreateProject: canMoveToProject
+      ? (defaultName?: string) =>
+          showCreateProject({
+            defaultName,
+            onSuccess: (targetProjectId) => moveTaskToProject(projectId, taskId, targetProjectId),
+          })
       : undefined,
     // Compare-group parent: route to it as primary and tile all its children
     // (the alternative candidates) side by side.

@@ -23,7 +23,11 @@ type RenameProjectModalArgs = {
   projectId: string;
 };
 
-type Props = BaseModalProps<void> & RenameProjectModalArgs;
+export type RenameProjectResult = {
+  alias: string | null;
+};
+
+type Props = BaseModalProps<RenameProjectResult> & RenameProjectModalArgs;
 
 export const RenameProjectModal = observer(function RenameProjectModal({
   projectId,
@@ -56,11 +60,9 @@ export const RenameProjectModal = observer(function RenameProjectModal({
     setIsSubmitting(true);
     setError(null);
     try {
-      await getProjectManagerStore().updateProjectAlias(
-        projectId,
-        trimmed.length > 0 ? trimmed : null
-      );
-      onSuccess();
+      const alias = trimmed.length > 0 ? trimmed : null;
+      await getProjectManagerStore().updateProjectAlias(projectId, alias);
+      onSuccess({ alias });
     } catch (e) {
       setError(e instanceof Error ? e.message : t('sidebar.renameProject.failed'));
       setIsSubmitting(false);

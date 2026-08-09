@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { Eye, Loader2, Pencil } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import {
@@ -22,6 +23,7 @@ import {
 } from '@renderer/features/tasks/task-view-context';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
+import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
@@ -33,6 +35,7 @@ import { DiffView } from './diff-view/main-panel/diff-view';
 import { EditorMainPanel } from './editor/editor-main-panel';
 import { useEditorContext } from './editor/editor-provider';
 import { MarkdownEditorPanel } from './editor/markdown-editor-panel';
+import { taskDeliverySummariesQuery } from './task-delivery-summaries-query';
 import { ActiveTaskTitlebar } from './task-titlebar';
 import { OverviewPanel } from './view/overview-panel';
 import { TaskSidebar } from './view/task-sidebar';
@@ -42,6 +45,26 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
   const { projectId, taskId } = useTaskViewContext();
   const taskStore = getTaskStore(projectId, taskId);
   const kind = useTaskViewKind();
+  const isOpening =
+    kind === 'project-mounting' ||
+    kind === 'provisioning' ||
+    kind === 'idle' ||
+    kind === 'teardown';
+  const { data: deliverySummaries } = useQuery({
+    ...taskDeliverySummariesQuery(projectId, taskId),
+    enabled: isOpening,
+  });
+  const latestDeliverySummary = deliverySummaries?.[0]?.text.trim() || null;
+
+  const renderOpeningState = (progressMessage: string) =>
+    latestDeliverySummary ? (
+      <TaskOpeningSummary summary={latestDeliverySummary} progressMessage={progressMessage} />
+    ) : (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-3">
+        <Loader2 className="h-5 w-5 animate-spin text-foreground-muted" />
+        <p className="text-xs font-mono text-foreground-muted">{progressMessage}</p>
+      </div>
+    );
 
   if (kind === 'creating' || kind === 'naming') {
     const setupRequiresBranchName = taskStore?.data.setupRequiresBranchName === true;
@@ -81,12 +104,7 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
 
   if (kind === 'project-mounting' || kind === 'provisioning') {
     const progressMessage = taskStore?.provisionProgressMessage ?? t('tasks.settingUpWorkspace');
-    return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-3">
-        <Loader2 className="h-5 w-5 animate-spin text-foreground-muted" />
-        <p className="text-xs font-mono text-foreground-muted">{progressMessage}</p>
-      </div>
-    );
+    return renderOpeningState(progressMessage);
   }
 
   if (kind === 'provision-error' || kind === 'project-error') {
@@ -95,12 +113,7 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
 
   if (kind === 'idle' || kind === 'teardown') {
     const progressMessage = taskStore?.provisionProgressMessage ?? t('tasks.settingUpWorkspace');
-    return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-3">
-        <Loader2 className="h-5 w-5 animate-spin text-foreground-muted" />
-        <p className="text-xs font-mono text-foreground-muted">{progressMessage}</p>
-      </div>
-    );
+    return renderOpeningState(progressMessage);
   }
 
   if (kind === 'teardown-error') {
@@ -124,6 +137,28 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
   }
 
   return <ReadyTaskMainPanel />;
+});
+
+const TaskOpeningSummary = observer(function TaskOpeningSummary({
+  summary,
+  progressMessage,
+}: {
+  summary: string;
+  progressMessage: string;
+}) {
+  return (
+    <div className="flex h-full w-full min-w-0 flex-col overflow-auto p-8">
+      <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-col gap-4">
+        <div className="flex items-center gap-2 text-xs font-mono text-foreground-muted">
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+          <span>{progressMessage}</span>
+        </div>
+        <div className="min-w-0 rounded-lg border border-border bg-background-secondary px-5 py-4">
+          <MarkdownRenderer content={summary} />
+        </div>
+      </div>
+    </div>
+  );
 });
 
 const TaskSetupRecovery = observer(function TaskSetupRecovery({

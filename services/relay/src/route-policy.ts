@@ -64,7 +64,12 @@ function isXhsJobsPrefix(segments: string[]): boolean {
 
 function assertAllowedUpstreamRoute(method: string, segments: string[]): boolean {
   if (method === 'GET' && segments.length === 2 && segments[0] === 'v1') {
-    if (segments[1] === 'snapshot' || segments[1] === 'profile' || segments[1] === 'skills') {
+    if (
+      segments[1] === 'snapshot' ||
+      segments[1] === 'profile' ||
+      segments[1] === 'configuration' ||
+      segments[1] === 'skills'
+    ) {
       return false;
     }
   }
@@ -113,6 +118,9 @@ function assertAllowedUpstreamRoute(method: string, segments: string[]): boolean
     return false;
   }
   if (method === 'POST' && segments.length === 8 && segments[6] && segments[7] === 'input') {
+    return false;
+  }
+  if (method === 'POST' && segments.length === 8 && segments[6] && segments[7] === 'config') {
     return false;
   }
   throw new RoutePolicyError(404, 'not_found', 'Relay endpoint was not found.');

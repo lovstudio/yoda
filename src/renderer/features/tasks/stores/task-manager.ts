@@ -1,4 +1,4 @@
-import { makeObservable, observable, reaction, runInAction, toJS } from 'mobx';
+import { computed, makeObservable, observable, reaction, runInAction, toJS } from 'mobx';
 import type { Conversation } from '@shared/conversations';
 import { conversationMovedChannel } from '@shared/events/conversationEvents';
 import { prSyncProgressChannel, prUpdatedChannel } from '@shared/events/prEvents';
@@ -210,6 +210,45 @@ export class TaskManagerStore {
    */
   archivingTaskIds = observable.set<string>();
 
+  /**
+   * Direct task-tree children indexed once per observable task-map snapshot.
+   * Sidebar rows and task menus ask this question independently, so scanning
+   * the full task map from each row turns a sidebar render into O(n²) work.
+   */
+  get childrenByParent(): ReadonlyMap<string, readonly TaskStore[]> {
+    const childrenByParent = new Map<string, TaskStore[]>();
+    for (const store of this.tasks.values()) {
+      if (!isRegistered(store)) continue;
+      const parentId = store.data.parentTaskId;
+      if (!parentId) continue;
+      const children = childrenByParent.get(parentId);
+      if (children) {
+        children.push(store);
+      } else {
+        childrenByParent.set(parentId, [store]);
+      }
+    }
+    return childrenByParent;
+  }
+
+  /**
+   * Tasks waiting for review, indexed by MobX instead of rescanned by every
+   * runtime-bar render. The computed value still updates when a task is added,
+   * archived, or its review marker changes, while unrelated task changes reuse
+   * the cached result.
+   */
+  get tasksNeedingReview(): readonly TaskStore[] {
+    const tasks: TaskStore[] = [];
+    for (const store of this.tasks.values()) {
+      if (!isRegistered(store)) continue;
+      if (store.data.archivedAt || store.data.archiveRequestedAt || !store.data.needsReview) {
+        continue;
+      }
+      tasks.push(store);
+    }
+    return tasks;
+  }
+
   constructor(
     projectId: string,
     repository: RepositoryStore,
@@ -224,6 +263,8 @@ export class TaskManagerStore {
       tasks: observable,
       taskLoadState: observable,
       archivingTaskIds: observable,
+      childrenByParent: computed,
+      tasksNeedingReview: computed,
     });
 
     this._unsubTaskStatusUpdated = events.on(
@@ -604,6 +645,24 @@ export class TaskManagerStore {
 
     this._provisionPromises.set(taskId, promise);
     return promise;
+  }
+
+  /**
+   * Warm an idle task from a deliberate sidebar intent. Provisioning is kept
+   * separate from the lightweight view snapshot preload so callers can opt
+   * into the expensive workspace work only when opening the task is likely.
+   * Errors are recorded on the task by provisionTask and deliberately stay in
+   * the background; the eventual click still owns the visible error flow.
+   */
+  async prewarmTask(taskId: string): Promise<void> {
+    const task = this.tasks.get(taskId);
+    if (!task || !isUnprovisioned(task) || task.phase !== 'idle') return;
+
+    try {
+      await this.provisionTask(taskId);
+    } catch (error) {
+      log.warn('TaskManagerStore: background task prewarm failed', { taskId, error });
+    }
   }
 
   /**

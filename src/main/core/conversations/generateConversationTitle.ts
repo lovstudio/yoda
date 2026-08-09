@@ -27,6 +27,7 @@ import { db } from '@main/db/client';
 import { conversations, projects } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
+import { LruCache } from '@main/lib/lru-cache';
 import {
   getConversationAgentSessionId,
   getConversationRuntimeStateRoot,
@@ -39,7 +40,10 @@ const MAX_TRANSCRIPT_CHARS = 6_000;
 const MAX_MESSAGE_CHARS = 1_200;
 const MAX_CONTEXT_MESSAGES = 12;
 
-const conversationNamingSnapshots = new Map<string, ConversationNamingSnapshot>();
+const MAX_CONVERSATION_NAMING_SNAPSHOTS = 64;
+const conversationNamingSnapshots = new LruCache<string, ConversationNamingSnapshot>(
+  MAX_CONVERSATION_NAMING_SNAPSHOTS
+);
 
 export type GenerateConversationTitleResult = {
   title: string;

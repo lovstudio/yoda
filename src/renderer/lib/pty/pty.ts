@@ -100,8 +100,10 @@ export function buildTheme(theme?: SessionTheme): ITerminalOptions['theme'] {
  * The terminal is created synchronously during construction and opened into
  * an off-screen container. After mount/measurement opens the flush gate,
  * connect() subscribes to the main-process ring buffer and live IPC events.
- * Successful subscriptions survive later unmounts so off-screen sessions keep
- * parsing and acknowledging output without retaining a GPU renderer.
+ * Successful subscriptions survive later unmounts so the main-process flow
+ * control and sequence watermark stay intact. While off-screen, xterm parsing
+ * is suspended; the bounded backend watermark naturally pauses noisy sessions
+ * until the terminal is visible again.
  *
  * DOM management is handled via mount() / unmount():
  *  - mount()   → appends ownedContainer to the visible mount target
@@ -159,9 +161,14 @@ export class FrontendPty {
     data: string;
     acknowledgement?: { generation: number; sequence: number };
   }> = [];
+  private suspendedWrites: Array<{
+    data: string;
+    acknowledgement?: { generation: number; sequence: number };
+  }> = [];
   private hasFlushed = false;
   private terminalWriteQueue: TerminalWriteQueueItem[] = [];
   private terminalWriteActive = false;
+  private renderingSuspended = false;
   private outputGeneration = 0;
   private lastOutputSequence = 0;
   private acknowledgedGeneration = 0;
@@ -485,6 +492,10 @@ export class FrontendPty {
     acknowledgement?: { generation: number; sequence: number }
   ): void {
     if (this.hasFlushed) {
+      if (this.renderingSuspended) {
+        this.suspendedWrites.push({ data, acknowledgement });
+        return;
+      }
       this.writeTerminalData(data, () => {
         if (acknowledgement) {
           this.acknowledgeOutput(acknowledgement.generation, acknowledgement.sequence);
@@ -502,7 +513,7 @@ export class FrontendPty {
   }
 
   private pumpTerminalWriteQueue(): void {
-    if (this.isDisposed || this.terminalWriteActive) return;
+    if (this.isDisposed || this.renderingSuspended || this.terminalWriteActive) return;
     const write = this.terminalWriteQueue[0];
     if (!write) return;
     if (write.offset >= write.data.length) {
@@ -571,6 +582,19 @@ export class FrontendPty {
     }, PTY_CONSUMER_HEARTBEAT_INTERVAL_MS);
   }
 
+  private flushSuspendedWrites(): void {
+    if (this.suspendedWrites.length === 0) return;
+    const writes = this.suspendedWrites;
+    this.suspendedWrites = [];
+    for (const write of writes) {
+      this.writeTerminalData(write.data, () => {
+        if (write.acknowledgement) {
+          this.acknowledgeOutput(write.acknowledgement.generation, write.acknowledgement.sequence);
+        }
+      });
+    }
+  }
+
   /**
    * Commit rows and columns as one canonical grid transition. The DOM renderer
    * paints directly from xterm's buffer, so there is no retained GPU frame to
@@ -618,6 +642,7 @@ export class FrontendPty {
    */
   mount(mountTarget: HTMLElement, targetDims?: { cols: number; rows: number }): number {
     const mountLease = ++this.mountGeneration;
+    this.renderingSuspended = false;
     if (
       targetDims &&
       (this.terminal.cols !== targetDims.cols || this.terminal.rows !== targetDims.rows)
@@ -626,6 +651,7 @@ export class FrontendPty {
     }
     mountTarget.appendChild(this.ownedContainer);
     this.isMounted = true;
+    this.flushSuspendedWrites();
     // Force a clean renderer repaint after reparenting in the DOM.
     const t = this.terminal;
     const savedViewportY = this.savedViewportY;
@@ -656,6 +682,7 @@ export class FrontendPty {
   unmount(mountLease?: number): void {
     if (mountLease !== undefined && mountLease !== this.mountGeneration) return;
     this.mountGeneration += 1;
+    this.renderingSuspended = true;
     this.isMounted = false;
     this.cancelPendingConnect();
     ensureXtermHost().appendChild(this.ownedContainer);
@@ -678,6 +705,8 @@ export class FrontendPty {
     this.mountGeneration += 1;
     FrontendPty.all.delete(this);
     this.isMounted = false;
+    this.renderingSuspended = true;
+    this.suspendedWrites = [];
     this.terminalWriteQueue = [];
     this.terminalWriteActive = false;
     this.offData?.();
