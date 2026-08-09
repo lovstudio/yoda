@@ -28,6 +28,10 @@ function taskKey(projectId: string, taskId: string): string {
   return `${projectId}\0${taskId}`;
 }
 
+function taskKeyFromStatusKey(statusKey: string): string {
+  return statusKey.slice(0, statusKey.lastIndexOf('\0'));
+}
+
 /** Statuses that mean "the agent wants the user's attention" (unread candidates). */
 function isAttentionStatus(status: AgentSessionRuntimeStatus): boolean {
   return status === 'awaiting-input' || status === 'completed' || status === 'error';
@@ -51,9 +55,13 @@ export class AgentRuntimeStore {
   private statuses = observable.map<string, AgentSessionRuntimeStatus>();
   /** Task ids the user has opened; cleared for a task when it re-enters an attention status. */
   private seenTaskIds = observable.set<string>();
+  /** Active/attention session keys grouped by task, avoiding a global scan per sidebar row. */
+  private statusKeysByTask = observable.map<string, Set<string>>();
   /** Per-entry ordering guard so a slow hydration response cannot beat a live event. */
   private statusRevisions = new Map<string, number>();
   private revision = 0;
+  /** Revision tombstones only need to live while one or more snapshots are in flight. */
+  private pendingHydrations = 0;
   /** Enabled only by the primary app window; warm/detached windows stay passive. */
   private projectHydrationEnabled = false;
   private off: (() => void) | null = null;
@@ -78,6 +86,11 @@ export class AgentRuntimeStore {
   dispose(): void {
     this.off?.();
     this.off = null;
+    this.projectHydrationEnabled = false;
+    this.statuses.clear();
+    this.seenTaskIds.clear();
+    this.statusKeysByTask.clear();
+    this.statusRevisions.clear();
   }
 
   private applyStatus(
@@ -89,13 +102,40 @@ export class AgentRuntimeStore {
   ): void {
     const key = `${taskKey(projectId, taskId)}\0${conversationId}`;
     runInAction(() => {
-      this.statuses.set(key, status);
-      this.statusRevisions.set(key, ++this.revision);
+      this.applyStatusInAction(key, status);
+      if (this.pendingHydrations > 0) {
+        this.statusRevisions.set(key, ++this.revision);
+      }
       // A task re-entering an attention status is "unread" again until reopened.
       if (markAttentionUnread && isAttentionStatus(status)) {
         this.seenTaskIds.delete(taskKey(projectId, taskId));
       }
     });
+  }
+
+  private applyStatusInAction(key: string, status: AgentSessionRuntimeStatus): void {
+    if (status === 'idle') {
+      this.removeStatus(key);
+      return;
+    }
+
+    const task = taskKeyFromStatusKey(key);
+    let keys = this.statusKeysByTask.get(task);
+    if (!keys) {
+      keys = observable.set<string>();
+      this.statusKeysByTask.set(task, keys);
+    }
+    this.statuses.set(key, status);
+    keys.add(key);
+  }
+
+  private removeStatus(key: string): void {
+    this.statuses.delete(key);
+    const task = taskKeyFromStatusKey(key);
+    const keys = this.statusKeysByTask.get(task);
+    if (!keys) return;
+    keys.delete(key);
+    if (keys.size === 0) this.statusKeysByTask.delete(task);
   }
 
   /** Re-scan one mounted remote project's host after its SSH context is ready. */
@@ -106,6 +146,7 @@ export class AgentRuntimeStore {
 
   private async hydrate(projectId?: string): Promise<void> {
     const baselineRevision = this.revision;
+    this.pendingHydrations += 1;
     try {
       const snapshot = await rpc.conversations.getActiveRuntimeStatuses(projectId);
       const returnedKeys = new Set(
@@ -120,20 +161,15 @@ export class AgentRuntimeStore {
           const projectKey = key.slice(0, key.indexOf('\0'));
           if (!coveredProjects.has(projectKey) || returnedKeys.has(key)) continue;
           if ((this.statusRevisions.get(key) ?? 0) > baselineRevision) continue;
-          this.statuses.delete(key);
+          this.removeStatus(key);
           this.statusRevisions.set(key, ++this.revision);
         }
 
         for (const entry of snapshot.entries) {
           const key = `${taskKey(entry.projectId, entry.taskId)}\0${entry.conversationId}`;
           if ((this.statusRevisions.get(key) ?? 0) > baselineRevision) continue;
-          this.applyStatus(
-            entry.projectId,
-            entry.taskId,
-            entry.conversationId,
-            entry.status,
-            false
-          );
+          this.applyStatusInAction(key, entry.status);
+          this.statusRevisions.set(key, ++this.revision);
         }
       });
     } catch (error) {
@@ -141,18 +177,22 @@ export class AgentRuntimeStore {
         projectId,
         error,
       });
+    } finally {
+      this.pendingHydrations -= 1;
+      if (this.pendingHydrations === 0) this.statusRevisions.clear();
     }
   }
 
   /** Aggregate status for a task, mirroring `ConversationManagerStore.taskStatus`. */
   taskStatus(projectId: string, taskId: string): AgentSessionRuntimeStatus | null {
-    const prefix = `${taskKey(projectId, taskId)}\0`;
+    const task = taskKey(projectId, taskId);
     let hasWorking = false;
     let hasAwaiting = false;
     let hasError = false;
     let hasCompleted = false;
-    for (const [key, status] of this.statuses) {
-      if (!key.startsWith(prefix)) continue;
+    for (const key of this.statusKeysByTask.get(task) ?? []) {
+      const status = this.statuses.get(key);
+      if (!status) continue;
       if (status === 'working') hasWorking = true;
       else if (status === 'awaiting-input') hasAwaiting = true;
       else if (status === 'error') hasError = true;
@@ -171,11 +211,13 @@ export class AgentRuntimeStore {
    * notification-like and disappear once the task has been consumed.
    */
   taskSessionStatuses(projectId: string, taskId: string): TaskAgentRuntimeSession[] {
-    const prefix = `${taskKey(projectId, taskId)}\0`;
-    const unread = !this.seenTaskIds.has(taskKey(projectId, taskId));
+    const task = taskKey(projectId, taskId);
+    const prefix = `${task}\0`;
+    const unread = !this.seenTaskIds.has(task);
     const sessions: TaskAgentRuntimeSession[] = [];
-    for (const [key, status] of this.statuses) {
-      if (!key.startsWith(prefix) || status === 'idle') continue;
+    for (const key of this.statusKeysByTask.get(task) ?? []) {
+      const status = this.statuses.get(key);
+      if (!status || status === 'idle') continue;
       if ((status === 'error' || status === 'completed') && !unread) continue;
       sessions.push({ conversationId: key.slice(prefix.length), status });
     }
@@ -184,10 +226,11 @@ export class AgentRuntimeStore {
 
   /** Conversation ids of this task whose sessions are currently `working`. */
   workingConversationIds(projectId: string, taskId: string): string[] {
-    const prefix = `${taskKey(projectId, taskId)}\0`;
+    const task = taskKey(projectId, taskId);
+    const prefix = `${task}\0`;
     const ids: string[] = [];
-    for (const [key, status] of this.statuses) {
-      if (status === 'working' && key.startsWith(prefix)) ids.push(key.slice(prefix.length));
+    for (const key of this.statusKeysByTask.get(task) ?? []) {
+      if (this.statuses.get(key) === 'working') ids.push(key.slice(prefix.length));
     }
     return ids;
   }

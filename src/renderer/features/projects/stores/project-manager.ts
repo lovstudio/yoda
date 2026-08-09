@@ -405,6 +405,7 @@ export class ProjectManagerStore {
     });
     try {
       await rpc.projects.deleteProject(projectId);
+      snapshot?.mountedProject?.dispose();
     } catch (err) {
       runInAction(() => {
         if (snapshot) this.projects.set(projectId, snapshot);
@@ -420,6 +421,7 @@ export class ProjectManagerStore {
     });
     try {
       await rpc.projects.archiveProject(projectId);
+      snapshot?.mountedProject?.dispose();
     } catch (err) {
       runInAction(() => {
         if (snapshot) this.projects.set(projectId, snapshot);
