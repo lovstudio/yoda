@@ -105,9 +105,11 @@ import {
 } from './connection-bootstrap';
 import { clearConnection, loadConnection, saveConnection } from './connection-storage';
 import { prepareCreatedDemandNavigation } from './demand-navigation';
+import { parseMobileExternalFileUrl, type MobileExternalFile } from './external-file-input';
+import { readMobileExternalTextFile, resolveMobileExternalFile } from './external-file-reader';
 import { DEFAULT_HOME_TAB, HOME_TABS, homeTabTitle, type HomeTab } from './home-navigation';
 import { MobileImageEditor } from './input-image-editor';
-import { pickMobileInputImages } from './input-media';
+import { importMobileInputImage, pickMobileInputImages } from './input-media';
 import {
   uploadMobileInputImages,
   type MobileImageDraft,
@@ -567,6 +569,7 @@ function inferDevGatewayConnection(urls: string[]): MobileConnection | null {
 }
 
 async function getInitialPairing(): Promise<{
+  externalFile: MobileExternalFile | null;
   pairingUrl: string | null;
   devConnection: MobileConnection | null;
 }> {
@@ -583,6 +586,7 @@ async function getInitialPairing(): Promise<{
   }
 
   return {
+    externalFile: parseMobileExternalFileUrl(initialUrl ?? ''),
     pairingUrl: explicitMobilePairingUrl(initialUrl),
     devConnection: inferDevGatewayConnection(candidates),
   };
@@ -652,6 +656,7 @@ export function App() {
   const [demandProjectId, setDemandProjectId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [demandImages, setDemandImages] = useState<MobileImageDraft[]>([]);
+  const [pendingExternalFile, setPendingExternalFile] = useState<MobileExternalFile | null>(null);
   const [loading, setLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -729,6 +734,15 @@ export function App() {
     return true;
   }, []);
 
+  const handleIncomingUrl = useCallback(
+    async (url: string) => {
+      if (await applyPairingUrl(url)) return;
+      const file = parseMobileExternalFileUrl(url);
+      if (file) setPendingExternalFile(file);
+    },
+    [applyPairingUrl]
+  );
+
   useEffect(() => {
     let active = true;
     Promise.all([loadConnection(), getInitialPairing()])
@@ -739,6 +753,7 @@ export function App() {
         } catch (e) {
           if (active) setError(errorMessage(e));
         }
+        if (initial.externalFile) setPendingExternalFile(initial.externalFile);
         const fallback = selectMobileConnectionBootstrapFallback(saved, initial.devConnection);
         if (!fallback) return;
         if (fallback.shouldPersist) await saveConnection(fallback.connection);
@@ -759,12 +774,47 @@ export function App() {
 
   useEffect(() => {
     const subscription = Linking.addEventListener('url', ({ url }) => {
-      void applyPairingUrl(url).catch((e: unknown) => {
+      void handleIncomingUrl(url).catch((e: unknown) => {
         setError(errorMessage(e));
       });
     });
     return () => subscription.remove();
-  }, [applyPairingUrl]);
+  }, [handleIncomingUrl]);
+
+  useEffect(() => {
+    if (!connection || !snapshot || !pendingExternalFile) return;
+    const file = pendingExternalFile;
+    setPendingExternalFile(null);
+
+    void (async () => {
+      try {
+        const resolvedFile = await resolveMobileExternalFile(file);
+        if (resolvedFile.kind === 'image') {
+          const image = await importMobileInputImage(resolvedFile.uri, resolvedFile.name);
+          setDemandImages((current) => [...current, image]);
+        } else if (resolvedFile.kind === 'text') {
+          const content = await readMobileExternalTextFile(resolvedFile);
+          setPrompt((current) =>
+            current ? `${current}\n\n${content}`.slice(0, MOBILE_SESSION_INPUT_MAX_CHARS) : content
+          );
+        } else {
+          throw new Error('当前支持图片和文本文件，PDF 等格式暂未接入编辑流程。');
+        }
+
+        setDemandProjectId(null);
+        setNewTaskParent(null);
+        setNewTaskParentId(null);
+        setNewTaskSiblingOf(null);
+        setSelectedTaskId(null);
+        setSelectedSessionId(null);
+        setHomeTab('tasks');
+        setNewTaskOpen(true);
+        setError(null);
+      } catch (e) {
+        setError(`打开文件失败：${errorMessage(e)}`);
+      }
+    })();
+  }, [connection, pendingExternalFile, snapshot]);
 
   const loadDashboard = useCallback(
     async (quiet = false) => {

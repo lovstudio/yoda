@@ -37,7 +37,10 @@ type MobileImageSource = {
 
 export async function encodeMobileInputImage(source: MobileImageSource): Promise<MobileImageDraft> {
   const context = ImageManipulator.manipulate(source.uri);
-  const resize = mobileInputImageResize(source.width, source.height);
+  const resize =
+    source.width > 0 && source.height > 0
+      ? mobileInputImageResize(source.width, source.height)
+      : null;
   if (resize) context.resize(resize);
 
   const rendered = await context.renderAsync();
@@ -66,6 +69,20 @@ export async function encodeMobileInputImage(source: MobileImageSource): Promise
     uri: result.uri,
     width: result.width,
   };
+}
+
+/** Encode an image handed to the app by iOS Open In or an Android document URI. */
+export async function importMobileInputImage(
+  uri: string,
+  fileName = '打开的图片'
+): Promise<MobileImageDraft> {
+  return encodeMobileInputImage({
+    height: 0,
+    id: `${mobileImageId()}-external`,
+    name: jpegName(fileName, 0),
+    uri,
+    width: 0,
+  });
 }
 
 async function mapWithConcurrency<T, U>(
