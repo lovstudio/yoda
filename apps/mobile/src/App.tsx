@@ -789,7 +789,7 @@ export function App() {
   }, [handleIncomingUrl]);
 
   useEffect(() => {
-    if (!connection || !snapshot || !pendingExternalFile) return;
+    if (!connection || !pendingExternalFile) return;
     const file = pendingExternalFile;
     setPendingExternalFile(null);
 
@@ -821,7 +821,7 @@ export function App() {
         setError(`打开文件失败：${errorMessage(e)}`);
       }
     })();
-  }, [connection, pendingExternalFile, snapshot]);
+  }, [connection, pendingExternalFile]);
 
   const loadDashboard = useCallback(
     async (quiet = false) => {
