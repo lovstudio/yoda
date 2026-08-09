@@ -27,10 +27,24 @@ function githubResponse(
   };
 }
 
+function historyResponse(
+  rows = [
+    { date: '2026-02-10', stargazers: '100' },
+    { date: '2026-08-03', stargazers: '200' },
+  ],
+  status = 200
+) {
+  return githubResponse({ data: { rows } }, status);
+}
+
 describe('MaaS managed gateway GitHub stars', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.fetch.mockResolvedValue(githubResponse({ stargazers_count: 1234 }));
+    mocks.fetch.mockImplementation(async (url: string) =>
+      url.startsWith('https://api.ossinsight.io/')
+        ? historyResponse()
+        : githubResponse({ stargazers_count: 1234 })
+    );
   });
 
   it('loads the repositories in the product order and caches the result', async () => {
@@ -41,8 +55,10 @@ describe('MaaS managed gateway GitHub stars', () => {
 
     expect(first.map((item) => item.platformId)).toEqual(['litellm', 'cliproxyapi', 'newapi']);
     expect(first.every((item) => item.starCount === 1234)).toBe(true);
+    expect(first.every((item) => item.trend?.points.at(-1)?.starCount === 1234)).toBe(true);
+    expect(first.every((item) => item.trend?.calibratedToCurrent === true)).toBe(true);
     expect(second).toEqual(first);
-    expect(mocks.fetch).toHaveBeenCalledTimes(3);
+    expect(mocks.fetch).toHaveBeenCalledTimes(6);
     expect(mocks.fetch).toHaveBeenNthCalledWith(
       1,
       'https://api.github.com/repos/BerriAI/litellm',
@@ -54,9 +70,13 @@ describe('MaaS managed gateway GitHub stars', () => {
 
   it('keeps the other counts available when one repository cannot be read', async () => {
     mocks.fetch.mockImplementation(async (url: string) =>
-      url.endsWith('/QuantumNous/new-api')
-        ? githubResponse({}, 200)
-        : githubResponse({ stargazers_count: 9876 })
+      url.includes('/QuantumNous/new-api')
+        ? url.startsWith('https://api.ossinsight.io/')
+          ? historyResponse()
+          : githubResponse({}, 200)
+        : url.startsWith('https://api.ossinsight.io/')
+          ? historyResponse()
+          : githubResponse({ stargazers_count: 9876 })
     );
 
     const result = await new MaasManagedGatewayStarsService().list();
@@ -71,11 +91,15 @@ describe('MaaS managed gateway GitHub stars', () => {
   it('supports refreshing the cached snapshot', async () => {
     const service = new MaasManagedGatewayStarsService();
     await service.list();
-    mocks.fetch.mockResolvedValue(githubResponse({ stargazers_count: 5678 }));
+    mocks.fetch.mockImplementation(async (url: string) =>
+      url.startsWith('https://api.ossinsight.io/')
+        ? historyResponse()
+        : githubResponse({ stargazers_count: 5678 })
+    );
 
     const refreshed: MaasManagedGatewayStarSnapshot[] = await service.list(true);
 
     expect(refreshed.every((item) => item.starCount === 5678)).toBe(true);
-    expect(mocks.fetch).toHaveBeenCalledTimes(6);
+    expect(mocks.fetch).toHaveBeenCalledTimes(12);
   });
 });

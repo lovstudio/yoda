@@ -72,6 +72,7 @@ import { useMaasGatewayExtension } from '../useMaasGatewayExtension';
 import { CliProxyApiManagedCard } from './CliProxyApiManagedCard';
 import { LiteLlmManagedCard } from './LiteLlmManagedCard';
 import { MaasGatewayRequirement } from './MaasGatewayRequirement';
+import { ManagedGatewayStarTrend } from './ManagedGatewayStarTrend';
 import { NewApiManagedCard } from './NewApiManagedCard';
 
 const CLOUD_PROFILE_TEMPLATE_IDS = ['zenmux', 'openrouter', 'siliconflow', 'custom'] as const;
@@ -419,6 +420,10 @@ export const MaasView: React.FC<{
             onOpenManualSettings={() => handleOpenManagedConnection('newapi')}
           />
         </div>
+        <ManagedGatewayStarTrend
+          snapshots={managedGatewayStarsQuery.data}
+          isPending={managedGatewayStarsQuery.isPending}
+        />
         {managedConnectionPlatformId && (
           <div className="grid gap-2.5" data-testid="maas-managed-connection-settings">
             <div className="flex items-center justify-between gap-3 px-0.5">

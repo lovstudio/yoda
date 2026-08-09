@@ -77,18 +77,45 @@ const mocks = vi.hoisted(() => ({
       repositoryUrl: 'https://github.com/BerriAI/litellm',
       starCount: 12_345,
       fetchedAt: '2026-08-10T00:00:00.000Z',
+      trend: {
+        points: [
+          { date: '2026-02-10', starCount: 10_000 },
+          { date: '2026-08-03', starCount: 12_345 },
+        ],
+        source: 'ossinsight',
+        calibratedToCurrent: true,
+        fetchedAt: '2026-08-10T00:00:00.000Z',
+      },
     },
     {
       platformId: 'cliproxyapi',
       repositoryUrl: 'https://github.com/router-for-me/CLIProxyAPI',
       starCount: 6_789,
       fetchedAt: '2026-08-10T00:00:00.000Z',
+      trend: {
+        points: [
+          { date: '2026-02-10', starCount: 4_321 },
+          { date: '2026-08-03', starCount: 6_789 },
+        ],
+        source: 'ossinsight',
+        calibratedToCurrent: true,
+        fetchedAt: '2026-08-10T00:00:00.000Z',
+      },
     },
     {
       platformId: 'newapi',
       repositoryUrl: 'https://github.com/QuantumNous/new-api',
       starCount: 456,
       fetchedAt: '2026-08-10T00:00:00.000Z',
+      trend: {
+        points: [
+          { date: '2026-02-10', starCount: 123 },
+          { date: '2026-08-03', starCount: 456 },
+        ],
+        source: 'ossinsight',
+        calibratedToCurrent: true,
+        fetchedAt: '2026-08-10T00:00:00.000Z',
+      },
     },
   ] as MaasManagedGatewayStarSnapshot[],
 }));
@@ -237,6 +264,8 @@ describe('MaaS platform menu', () => {
     expect(localCards?.textContent).toContain('12,345');
     expect(localCards?.textContent).toContain('6,789');
     expect(localCards?.textContent).toContain('456');
+    expect(host.querySelector('[data-testid="maas-managed-gateway-star-trend"]')).not.toBeNull();
+    expect(host.querySelectorAll('polyline[data-maas-star-trend]')).toHaveLength(3);
 
     await act(async () => addButton?.click());
 
