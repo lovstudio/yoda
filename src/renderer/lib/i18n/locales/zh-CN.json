@@ -1454,7 +1454,7 @@
     "default": "默认（先询问）",
     "plan": "计划模式",
     "acceptEdits": "自动接受编辑",
-    "fullAuto": "全自动",
+    "fullAuto": "替我审批",
     "bypass": "跳过权限（危险）",
     "cohub": {
       "fullAccess": "完整项目访问",
@@ -1465,11 +1465,11 @@
     "codex": {
       "planDesc": "原生计划模式；严格只读，全程无需人工确认",
       "requestApproval": "请求批准",
-      "requestApprovalDesc": "编辑外部文件和使用互联网时始终询问",
-      "autoApprove": "替我审批",
-      "autoApproveDesc": "仅对检测到的风险操作请求批准",
+      "requestApprovalDesc": "使用互联网或超出工作区边界前请求批准",
+      "approveForMe": "替我审批",
+      "approveForMeDesc": "将符合条件的审批请求交给自动审查，同时保留工作区边界",
       "fullAccess": "完全访问权限",
-      "fullAccessDesc": "可不受限制地访问互联网和您电脑上的任何文件",
+      "fullAccessDesc": "不受沙箱限制运行，也不再请求审批",
       "custom": "自定义（config.toml）",
       "customDesc": "使用 config.toml 中定义的权限"
     }
@@ -1507,7 +1507,7 @@
     "attachImagesAsPathsLabel": "图片以文件路径发送",
     "attachImagesAsPathsDesc": "以反引号包裹的 `@路径` 文本引用图片，避免 Agent 将路径直接转换成图片输入。",
     "permissionModeLabel": "权限模式",
-    "permissionModeDesc": "所选 agent 无需询问可执行的范围。每个 agent CLI 会套用各自对应的参数（如 Claude --permission-mode、Codex 沙箱）。Bypass 为完全无沙箱运行。",
+    "permissionModeDesc": "控制所选 agent 的沙箱范围和审批策略。每个 CLI 使用自己的官方设置；Codex 将工作区访问与审批审查分开处理。",
     "composerScopeGlobal": "全局",
     "composerScopeProject": "本项目",
     "composerScopeInheritTooltip": "继承全局默认。点击改为仅本项目覆盖。",

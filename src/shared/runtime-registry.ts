@@ -79,7 +79,7 @@ export type RuntimeDefinition = {
   /**
    * Ordered permission/run-mode tiers exposed for this CLI in the composer's
    * permission-mode selector. Set only for CLIs with richer-than-binary modes
-   * (e.g. Claude's plan/acceptEdits, Codex's full-auto). CLIs without it get a
+   * (e.g. Claude's plan/acceptEdits, Codex's approval profiles). CLIs without it get a
    * synthesized default/bypass pair derived from `autoApproveFlag` — see
    * `getRuntimePermissionModes`.
    */
@@ -319,7 +319,7 @@ const CODEX_PERMISSION_MODES: RuntimePermissionMode[] = [
     id: 'default',
     labelKey: 'permissionMode.codex.requestApproval',
     descriptionKey: 'permissionMode.codex.requestApprovalDesc',
-    args: ['--sandbox', 'workspace-write', '--ask-for-approval', 'untrusted'],
+    args: ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request'],
   },
   {
     id: 'plan',
@@ -327,11 +327,13 @@ const CODEX_PERMISSION_MODES: RuntimePermissionMode[] = [
     descriptionKey: 'permissionMode.codex.planDesc',
     args: ['--sandbox', 'read-only', '--ask-for-approval', 'never'],
   },
+  // Keep the persisted id for compatibility with existing settings. The current
+  // Codex CLI's official name and flag are "Approve for me" / --approve-for-me.
   {
     id: 'full-auto',
-    labelKey: 'permissionMode.codex.autoApprove',
-    descriptionKey: 'permissionMode.codex.autoApproveDesc',
-    args: ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request'],
+    labelKey: 'permissionMode.codex.approveForMe',
+    descriptionKey: 'permissionMode.codex.approveForMeDesc',
+    args: ['--approve-for-me'],
   },
   {
     id: 'bypass',

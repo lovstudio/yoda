@@ -4,23 +4,34 @@ import { mapMobilePermissionMode } from './mobile-permission-modes';
 
 describe('mobile permission mode labels', () => {
   it('uses user-facing labels for Codex modes instead of persisted ids', () => {
-    const modes = getRuntimePermissionModes('codex').map(mapMobilePermissionMode);
+    const modes = getRuntimePermissionModes('codex').map((mode) =>
+      mapMobilePermissionMode('codex', mode)
+    );
 
     expect(modes.map(({ id, label }) => ({ id, label }))).toEqual([
-      { id: 'default', label: '按客户端默认' },
-      { id: 'plan', label: '仅规划' },
-      { id: 'full-auto', label: '全自动' },
+      { id: 'default', label: '请求批准' },
+      { id: 'plan', label: '计划模式' },
+      { id: 'full-auto', label: '替我审批' },
       { id: 'bypass', label: '完全访问权限' },
-      { id: 'custom', label: '自定义' },
+      { id: 'custom', label: '自定义（config.toml）' },
     ]);
   });
 
   it('describes bypass as unrestricted access and keeps its danger marker', () => {
-    expect(mapMobilePermissionMode(getRuntimePermissionModes('codex')[3])).toMatchObject({
+    expect(mapMobilePermissionMode('codex', getRuntimePermissionModes('codex')[3])).toMatchObject({
       id: 'bypass',
       label: '完全访问权限',
-      description: '可访问互联网和电脑上的任何文件，不受沙箱限制',
+      description: '不受沙箱限制运行，也不再请求审批',
       danger: true,
     });
+  });
+
+  it('keeps Claude-specific permission language separate from Codex', () => {
+    expect(mapMobilePermissionMode('claude', getRuntimePermissionModes('claude')[2])).toMatchObject(
+      {
+        id: 'accept-edits',
+        label: '自动接受编辑',
+      }
+    );
   });
 });

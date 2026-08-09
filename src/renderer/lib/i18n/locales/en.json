@@ -1454,7 +1454,7 @@
     "default": "Default (ask first)",
     "plan": "Plan mode",
     "acceptEdits": "Auto-accept edits",
-    "fullAuto": "Full auto",
+    "fullAuto": "Approve for me",
     "bypass": "Bypass permissions",
     "cohub": {
       "fullAccess": "Full project access",
@@ -1464,12 +1464,12 @@
     },
     "codex": {
       "planDesc": "Native Plan mode; strictly read-only with no approval prompts",
-      "requestApproval": "Request approval",
-      "requestApprovalDesc": "Always ask before editing external files or using the internet",
-      "autoApprove": "Approve for me",
-      "autoApproveDesc": "Only request approval for detected risky operations",
+      "requestApproval": "Ask for approval",
+      "requestApprovalDesc": "Ask before using the internet or going beyond the workspace boundary",
+      "approveForMe": "Approve for me",
+      "approveForMeDesc": "Automatically review eligible approval requests while keeping workspace boundaries",
       "fullAccess": "Full access",
-      "fullAccessDesc": "Access the internet and any file on your computer without restrictions",
+      "fullAccessDesc": "Run without sandbox restrictions or approval prompts",
       "custom": "Custom (config.toml)",
       "customDesc": "Use the permissions defined in config.toml"
     }
@@ -1507,7 +1507,7 @@
     "attachImagesAsPathsLabel": "Send images as file paths",
     "attachImagesAsPathsDesc": "Reference images as backtick-wrapped `@path` text so the Agent keeps the path instead of converting it into image input.",
     "permissionModeLabel": "Permission mode",
-    "permissionModeDesc": "How much the selected agent can do without asking. Each agent CLI gets its matching flag (e.g. Claude --permission-mode, Codex sandbox). Bypass runs fully unsandboxed.",
+    "permissionModeDesc": "Controls the selected agent's sandbox and approval policy. Each CLI uses its native settings; Codex separates workspace access from approval review.",
     "composerScopeGlobal": "Global",
     "composerScopeProject": "Project",
     "composerScopeInheritTooltip": "Inheriting the global default. Click to override just for this project.",

@@ -1349,8 +1349,9 @@ export class MobileGatewayService {
     const permissionModes: MobileConfigurationSnapshot['permissionModes'] = {};
     const defaultPermissionModes: MobileConfigurationSnapshot['defaultPermissionModes'] = {};
     for (const runtimeId of RUNTIME_IDS) {
-      permissionModes[runtimeId] =
-        getRuntimePermissionModes(runtimeId).map(mapMobilePermissionMode);
+      permissionModes[runtimeId] = getRuntimePermissionModes(runtimeId).map((mode) =>
+        mapMobilePermissionMode(runtimeId, mode)
+      );
       defaultPermissionModes[runtimeId] = resolveRuntimePermissionModeId({
         selections: runtimePermissionModes,
         legacyAutoApprove: runtimeAutoApproveDefaults,
