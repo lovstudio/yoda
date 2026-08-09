@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getSettings: vi.fn(),
   isSupported: vi.fn(),
   limit: vi.fn(),
+  notificationOptions: [] as unknown[],
   on: vi.fn(),
   show: vi.fn(),
   warn: vi.fn(),
@@ -16,7 +17,9 @@ vi.mock('electron', () => {
   class MockNotification {
     static isSupported = mocks.isSupported;
 
-    constructor(public readonly options: unknown) {}
+    constructor(public readonly options: unknown) {
+      mocks.notificationOptions.push(options);
+    }
 
     on = mocks.on;
     show = mocks.show;
@@ -68,6 +71,7 @@ function makeEvent(type: AgentEvent['type'], payload: AgentEvent['payload'] = {}
 describe('maybeShowNotification', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.notificationOptions.length = 0;
     mocks.isSupported.mockReturnValue(true);
     mocks.limit.mockResolvedValue([{ name: 'Test task' }]);
     mocks.getSettings.mockResolvedValue(defaultSettings);
@@ -77,6 +81,7 @@ describe('maybeShowNotification', () => {
     await maybeShowNotification(makeEvent('stop'), false);
 
     expect(mocks.show).toHaveBeenCalledTimes(1);
+    expect(mocks.notificationOptions[0]).toMatchObject({ silent: false });
     expect(mocks.emit).toHaveBeenCalledTimes(1);
   });
 
