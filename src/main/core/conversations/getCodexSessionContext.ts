@@ -972,7 +972,7 @@ function parseCodexRolloutLines(
         });
       } else if (payload.role === 'user' && text.startsWith(CODEX_SUMMARY_PREFIX)) {
         summary = { text, timestamp };
-      } else if (payload.role === 'user' && !isCodexEnvironmentMessage(text)) {
+      } else if (payload.role === 'user' && !isCodexInternalUserMessage(text)) {
         sawRolloutUserPrompt = true;
         const promptTurnId: string | null = responseTurnId ?? currentTurnId;
         const prompt = {
@@ -1174,11 +1174,23 @@ function extractContentText(content: unknown): string | null {
   return parts.length > 0 ? parts.join('\n') : null;
 }
 
-function isCodexEnvironmentMessage(text: string): boolean {
+/**
+ * Codex serializes several harness-generated inputs as `role: "user"` response
+ * items. They are part of the model context, not messages the person sent from
+ * Yoda, so they must stay out of prompt history and readable conversation rows.
+ */
+function isCodexInternalUserMessage(text: string): boolean {
+  const trimmed = text.trimStart();
   return (
-    text.startsWith('# AGENTS.md instructions for ') ||
-    text.startsWith('<environment_context>') ||
-    text.includes('\n<environment_context>')
+    trimmed.startsWith('# AGENTS.md instructions for ') ||
+    trimmed.startsWith('<environment_context>') ||
+    trimmed.includes('\n<environment_context>') ||
+    trimmed.startsWith('<skill>') ||
+    trimmed.startsWith('<recommended_plugins>') ||
+    trimmed.startsWith('<turn_aborted>') ||
+    trimmed.startsWith('Message from ') ||
+    (trimmed.startsWith('You are "') &&
+      trimmed.includes('one member of a team working together in this worktree.'))
   );
 }
 

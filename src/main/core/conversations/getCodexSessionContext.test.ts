@@ -452,6 +452,44 @@ describe('getCodexSessionContext', () => {
     ]);
   });
 
+  it('excludes Codex harness injections from response-item prompt history', async () => {
+    writeFileSync(
+      rolloutPath,
+      [
+        codexRow('session_meta', { id: 'conversation-1', cwd }),
+        codexResponse('user', '<environment_context>\n  <cwd>/repo</cwd>\n</environment_context>'),
+        codexResponse('user', '$sgc-subtitle-gloss /path/to/movie.mkv'),
+        codexResponse('user', '<skill>\n<name>sgc-subtitle-gloss</name>\n</skill>'),
+        codexResponse('user', '<recommended_plugins>\n- Browser\n</recommended_plugins>'),
+        codexResponse('user', '<turn_aborted>'),
+        codexResponse('user', 'Message from Implementer:\nThe worker is still running.'),
+        codexResponse(
+          'user',
+          'You are "Planner", handle @planner-agent, one member of a team working together in this worktree.'
+        ),
+        codexResponse('assistant', 'I will inspect the subtitle track.', 'turn-1', 'commentary'),
+      ]
+        .map((row) => JSON.stringify(row))
+        .join('\n')
+    );
+    insertThread(statePath, rolloutPath, {
+      id: 'conversation-1',
+      cwd,
+      title: 'Thread title',
+      firstUserMessage: '$sgc-subtitle-gloss /path/to/movie.mkv',
+    });
+
+    const context = await getConfiguredCodexSessionContext(cwd, 'conversation-1');
+
+    expect(context?.prompts.map((prompt) => prompt.text)).toEqual([
+      '$sgc-subtitle-gloss /path/to/movie.mkv',
+    ]);
+    expect(context?.messages.map((message) => message.text)).toEqual([
+      '$sgc-subtitle-gloss /path/to/movie.mkv',
+      'I will inspect the subtitle track.',
+    ]);
+  });
+
   it('does not close an active turn from stale non-user response metadata', async () => {
     writeFileSync(
       rolloutPath,
