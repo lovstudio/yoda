@@ -33,7 +33,6 @@ import {
   type MobileInputAttachmentCreateRequest,
   type MobileInputAttachmentCreateResponse,
   type MobileInputAttachmentDiscardResponse,
-  type MobilePermissionModeOption,
   type MobileProfileSnapshot,
   type MobileProjectSummary,
   type MobileRunMode,
@@ -124,6 +123,7 @@ import {
   MobileInputAttachmentError,
   MobileInputAttachmentStore,
 } from './mobile-input-attachment-store';
+import { mapMobilePermissionMode } from './mobile-permission-modes';
 import {
   ensureMobileConversationInputSession,
   resolveMobileSessionAvailability,
@@ -566,24 +566,6 @@ function mapCreateTaskWarning(warning: CreateTaskWarning): string {
     case 'branch-setup-failed':
       return `Could not prepare branch "${warning.branch}": ${warning.message}`;
   }
-}
-
-const MOBILE_PERMISSION_MODE_LABELS: Record<string, string> = {
-  default: '按客户端默认',
-  plan: '仅规划',
-  acceptEdits: '自动应用编辑',
-  fullAuto: '全自动',
-  bypass: '跳过确认',
-};
-
-function mapMobilePermissionMode(
-  mode: ReturnType<typeof getRuntimePermissionModes>[number]
-): MobilePermissionModeOption {
-  return {
-    id: mode.id,
-    label: MOBILE_PERMISSION_MODE_LABELS[mode.id] ?? mode.id,
-    danger: mode.danger,
-  };
 }
 
 function normalizeNullableConfigText(
