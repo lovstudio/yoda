@@ -9,7 +9,7 @@ export function FeatureStageRail({ stage }: { stage: FeatureStageId }) {
 
   return (
     <nav
-      className="flex shrink-0 overflow-x-auto border-b border-border bg-background-secondary px-3 py-2 @min-[980px]:w-40 @min-[980px]:flex-col @min-[980px]:overflow-y-auto @min-[980px]:border-r @min-[980px]:border-b-0 @min-[980px]:px-2 @min-[980px]:py-3"
+      className="flex w-full shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-background-secondary px-3 py-2 @min-[980px]:w-40 @min-[980px]:items-stretch @min-[980px]:flex-col @min-[980px]:gap-0.5 @min-[980px]:overflow-y-auto @min-[980px]:border-r @min-[980px]:border-b-0 @min-[980px]:px-2 @min-[980px]:py-3"
       aria-label={t('featureDelivery.stagesLabel')}
     >
       {featureStageIds.map((stageId, index) => {
@@ -19,7 +19,7 @@ export function FeatureStageRail({ stage }: { stage: FeatureStageId }) {
           <div
             key={stageId}
             className={cn(
-              'relative flex min-w-28 items-center gap-2 rounded-md px-2 py-2 text-xs text-foreground-muted @min-[980px]:min-w-0',
+              'relative flex min-w-28 shrink-0 items-center gap-2 rounded-md px-2 py-2 text-xs text-foreground-muted @min-[980px]:min-w-0',
               isCurrent && 'bg-background-2 text-foreground shadow-xs'
             )}
             aria-current={isCurrent ? 'step' : undefined}
