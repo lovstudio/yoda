@@ -16,7 +16,7 @@ import {
 import { captureRef } from 'react-native-view-shot';
 import {
   clampMobileCropRect,
-  initialMobileCropRect,
+  fullMobileCropRect,
   mobileEditorPointDistance,
   moveMobileCropRect,
   resizeMobileCropRect,
@@ -311,7 +311,7 @@ export function MobileImageEditor({
 
   useEffect(() => {
     if (!open || !workingImage || canvasSize.width <= 0 || canvasSize.height <= 0) return;
-    const nextCrop = initialMobileCropRect(canvasSize.width, canvasSize.height);
+    const nextCrop = fullMobileCropRect(canvasSize.width, canvasSize.height);
     cropRef.current = nextCrop;
     setCrop(nextCrop);
     setCropDirty(false);

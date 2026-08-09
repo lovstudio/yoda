@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   clampMobileCropRect,
-  initialMobileCropRect,
+  fullMobileCropRect,
   mobileCropRectToImageRect,
   moveMobileCropRect,
   resizeMobileCropRect,
 } from '../../apps/mobile/src/input-image-editing';
 
 describe('mobile image editing geometry', () => {
-  it('starts with a visible crop selection without committing a crop', () => {
-    expect(initialMobileCropRect(300, 200)).toEqual({
-      height: 160,
-      width: 240,
-      x: 30,
-      y: 20,
+  it('starts with the complete image selected', () => {
+    expect(fullMobileCropRect(300, 200)).toEqual({
+      height: 200,
+      width: 300,
+      x: 0,
+      y: 0,
     });
   });
 
