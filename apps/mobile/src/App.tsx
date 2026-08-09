@@ -54,6 +54,7 @@ import {
   parseMobilePairingUrl,
   parseMobileTimestamp,
   prependMobileSkillCommand,
+  resolveMobilePermissionMode,
   resolveMobileSiblingTaskAttribution,
   sortMobileProjects,
   sortMobileTaskAttributionCandidates,
@@ -293,7 +294,7 @@ function createDefaultMobileDemandConfiguration(
     strategyKind: 'no-worktree',
     model: agent?.model ?? null,
     reasoningEffort: agent?.reasoningEffort ?? null,
-    permissionMode: configuration.defaultPermissionModes[runtimeId] ?? null,
+    permissionMode: resolveMobilePermissionMode(configuration, agent, runtimeId),
   };
 }
 
@@ -2141,8 +2142,11 @@ function MobileDemandSettingsSheet({
                               runtimeId,
                               model: agent.model,
                               reasoningEffort: agent.reasoningEffort,
-                              permissionMode:
-                                configuration.defaultPermissionModes[runtimeId] ?? null,
+                              permissionMode: resolveMobilePermissionMode(
+                                configuration,
+                                agent,
+                                runtimeId
+                              ),
                             });
                           }}
                         >
@@ -2275,8 +2279,11 @@ function MobileDemandSettingsSheet({
                           onPress={() =>
                             update({
                               runtimeId: runtime.id,
-                              permissionMode:
-                                configuration.defaultPermissionModes[runtime.id] ?? null,
+                              permissionMode: resolveMobilePermissionMode(
+                                configuration,
+                                selectedAgent,
+                                runtime.id
+                              ),
                             })
                           }
                         >

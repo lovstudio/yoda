@@ -9,6 +9,7 @@ import {
   getMobileProjectActivityById,
   parseMobilePairingUrl,
   prependMobileSkillCommand,
+  resolveMobilePermissionMode,
   resolveMobileSiblingTaskAttribution,
   sortMobileProjects,
   sortMobileTaskAttributionCandidates,
@@ -54,6 +55,26 @@ describe('mobile session continuation', () => {
     expect(canContinueMobileSession({ acceptsInput: false, resumable: true })).toBe(true);
     expect(canContinueMobileSession({ acceptsInput: false, resumable: false })).toBe(false);
     expect(canContinueMobileSession(null)).toBe(false);
+  });
+});
+
+describe('mobile execution defaults', () => {
+  const configuration = { defaultPermissionModes: { codex: 'bypass' } } as const;
+
+  it('uses the configured Agent access level before the runtime fallback', () => {
+    expect(resolveMobilePermissionMode(configuration, { accessMode: 'full-access' }, 'codex')).toBe(
+      'bypass'
+    );
+    expect(resolveMobilePermissionMode(configuration, { accessMode: 'plan' }, 'codex')).toBe(
+      'plan'
+    );
+  });
+
+  it('uses the shared runtime setting for inheriting Agents', () => {
+    expect(resolveMobilePermissionMode(configuration, { accessMode: 'inherit' }, 'codex')).toBe(
+      'bypass'
+    );
+    expect(resolveMobilePermissionMode(configuration, null, 'codex')).toBe('bypass');
   });
 });
 

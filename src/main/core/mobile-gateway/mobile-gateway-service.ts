@@ -65,9 +65,9 @@ import {
 import { withSystemPrompt } from '@shared/prompt-format';
 import { makePtySessionId } from '@shared/ptySessionId';
 import {
-  getDefaultPermissionModeId,
   getRuntime,
   getRuntimePermissionModes,
+  resolveRuntimePermissionModeId,
   RUNTIME_IDS,
   type RuntimeId,
 } from '@shared/runtime-registry';
@@ -1306,10 +1306,13 @@ export class MobileGatewayService {
   }
 
   private async getConfiguration(): Promise<MobileConfigurationSnapshot> {
-    const [defaultRuntimeId, configuredAgents] = await Promise.all([
-      appSettingsService.get('defaultRuntime'),
-      agentsConfigService.list(),
-    ]);
+    const [defaultRuntimeId, configuredAgents, runtimePermissionModes, runtimeAutoApproveDefaults] =
+      await Promise.all([
+        appSettingsService.get('defaultRuntime'),
+        agentsConfigService.list(),
+        appSettingsService.get('runtimePermissionModes'),
+        appSettingsService.get('runtimeAutoApproveDefaults'),
+      ]);
     const agents = configuredAgents
       .filter(isMobileSelectableAgent)
       .map((agent) => mapMobileAgent(agent, defaultRuntimeId));
@@ -1321,7 +1324,11 @@ export class MobileGatewayService {
     for (const runtimeId of RUNTIME_IDS) {
       permissionModes[runtimeId] =
         getRuntimePermissionModes(runtimeId).map(mapMobilePermissionMode);
-      defaultPermissionModes[runtimeId] = getDefaultPermissionModeId(runtimeId);
+      defaultPermissionModes[runtimeId] = resolveRuntimePermissionModeId({
+        selections: runtimePermissionModes,
+        legacyAutoApprove: runtimeAutoApproveDefaults,
+        runtimeId,
+      });
     }
 
     return {

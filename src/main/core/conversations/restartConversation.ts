@@ -9,6 +9,7 @@ import { skillsService } from '@main/core/skills/SkillsService';
 import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
 import { resolveTask } from '../projects/utils';
+import { reconcileConversationPermission } from './reconcile-conversation-permission';
 import { skillSelectionForReload } from './restart-skill-policy';
 import type { ConversationConfig } from './types';
 import { mapConversationRowToConversation } from './utils';
@@ -70,6 +71,9 @@ export async function restartConversation(
   }
 
   let conversation = mapConversationRowToConversation(row, true);
+  if (!runtimeOverrides) {
+    conversation = await reconcileConversationPermission(conversation, row.config);
+  }
   if (enableSkillKey) {
     conversation = await refreshSkillPolicy(
       conversation,

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getDefaultPermissionModeId,
   getRuntimeAccountProfile,
   getUninstallCommandForRuntime,
   getUpdateCommandForRuntime,
   getVersionHistoryUrlForRuntime,
   isValidRuntimeId,
+  resolveRuntimePermissionModeId,
   RUNTIME_IDS,
   RUNTIMES,
 } from './runtime-registry';
@@ -63,5 +65,30 @@ describe('runtime subscription usage pages', () => {
 
   it('leaves the usage page unset when no official destination is registered', () => {
     expect(getRuntimeAccountProfile('opencode').officialSubscription.usageUrl).toBeUndefined();
+  });
+});
+
+describe('runtime permission defaults', () => {
+  it('uses the persisted runtime selection for new sessions', () => {
+    expect(
+      resolveRuntimePermissionModeId({
+        runtimeId: 'codex',
+        selections: { codex: 'bypass' },
+      })
+    ).toBe('bypass');
+  });
+
+  it('maps the legacy auto-approve setting to the danger mode', () => {
+    expect(
+      resolveRuntimePermissionModeId({
+        runtimeId: 'codex',
+        legacyAutoApprove: { codex: true },
+      })
+    ).toBe('bypass');
+  });
+
+  it('keeps the runtime registry default when no setting exists', () => {
+    expect(getDefaultPermissionModeId('codex')).toBe('default');
+    expect(resolveRuntimePermissionModeId({ runtimeId: 'codex' })).toBe('default');
   });
 });

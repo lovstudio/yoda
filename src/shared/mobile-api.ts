@@ -1,3 +1,4 @@
+import { isAgentAccessMode, resolveAgentPermissionMode, type AgentAccessMode } from './agents';
 import type { RuntimeId } from './runtime-registry';
 
 export const MOBILE_GATEWAY_DEFAULT_PORT = 3879;
@@ -499,7 +500,7 @@ export type MobileAgentSummary = {
   preferredRuntime: RuntimeId;
   model: string | null;
   reasoningEffort: string | null;
-  accessMode: string;
+  accessMode: AgentAccessMode;
 };
 
 export type MobileSessionAgent = {
@@ -517,6 +518,21 @@ export type MobileConfigurationSnapshot = {
   permissionModes: Partial<Record<RuntimeId, MobilePermissionModeOption[]>>;
   defaultPermissionModes: Partial<Record<RuntimeId, string>>;
 };
+
+/** Resolve the permission mode shown for a new mobile session. Agent access is
+ * concrete when configured; otherwise the desktop runtime default is shared. */
+export function resolveMobilePermissionMode(
+  configuration: Pick<MobileConfigurationSnapshot, 'defaultPermissionModes'>,
+  agent: Pick<MobileAgentSummary, 'accessMode'> | null | undefined,
+  runtimeId: RuntimeId
+): string | null {
+  const accessMode = agent && isAgentAccessMode(agent.accessMode) ? agent.accessMode : 'inherit';
+  return (
+    resolveAgentPermissionMode(runtimeId, accessMode) ??
+    configuration.defaultPermissionModes[runtimeId] ??
+    null
+  );
+}
 
 export type MobileDemandConfiguration = {
   agentId: string | null;
