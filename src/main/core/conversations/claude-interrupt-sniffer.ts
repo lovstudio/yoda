@@ -4,16 +4,18 @@ import { agentSessionRuntimeStore } from './agent-session-runtime';
 import { markInterrupted } from './interrupt-marker';
 
 /**
- * Opportunistic Esc-interrupt detection for Claude sessions, from PTY output.
+ * Opportunistic Esc-interrupt detection for agent sessions, from PTY output.
  *
- * When the user interrupts a turn, the CC TUI immediately renders an
- * interruption prompt. Claude has used both
+ * When the user interrupts a turn, Claude Code and Codex render an interruption
+ * prompt in their TUI. Claude has used both
  * `Interrupted · What should Claude do instead?` and
- * `Conversation interrupted – tell Claude ...`. The authoritative process
- * signal is the session activity file (`~/.claude/sessions/<pid>.json`); this
- * sniffer preserves the more specific interrupted-vs-completed distinction. It
- * observes the session's rendered effect — not the user's keystrokes, which are
- * decoupled from what the session actually did.
+ * `Conversation interrupted – tell Claude ...`; Codex uses
+ * `Conversation interrupted - tell the model ...`. The authoritative process
+ * signal may arrive later (or, for a Codex turn interrupted while a tool is
+ * running, not be written to the rollout at all); this sniffer preserves the
+ * specific interrupted-vs-completed distinction. It observes the session's
+ * rendered effect — not the user's keystrokes, which are decoupled from what
+ * the session actually did.
  *
  * False-positive surface: a full-screen redraw (e.g. resize) can re-emit an
  * old "Interrupted" line while a new turn is working. Cheap to tolerate — the
@@ -22,7 +24,7 @@ import { markInterrupted } from './interrupt-marker';
  */
 const INTERRUPT_UI_PATTERNS: readonly RegExp[] = [
   /Interrupted\s*·\s*What should Claude do instead\?/i,
-  /Conversation\s+interrupted\s*[–—-]\s*(?:tell|what should)\s+Claude\b/i,
+  /Conversation\s+interrupted\s*[–—-]\s*(?:tell\s+(?:Claude|the\s+model)|what\s+should\s+Claude)\b/i,
 ];
 
 /** Keep enough stripped tail to span a marker split across output chunks. */
@@ -46,8 +48,9 @@ export function createClaudeInterruptSniffer(session: AgentSessionKey): (chunk: 
     if (!INTERRUPT_UI_PATTERNS.some((pattern) => pattern.test(tail))) return;
     lastFiredAt = Date.now();
     tail = '';
-    if (agentSessionRuntimeStore.getStatus(session) !== 'working') return;
-    log.debug('ClaudeInterruptSniffer: interrupt UI detected, clearing working', session);
+    const status = agentSessionRuntimeStore.getStatus(session);
+    if (status !== 'working' && status !== 'awaiting-input') return;
+    log.debug('AgentInterruptSniffer: interrupt UI detected, clearing running status', session);
     // Preserve the interrupt marker for other reconciliation paths.
     markInterrupted(session.conversationId);
     agentSessionRuntimeStore.dispatch(

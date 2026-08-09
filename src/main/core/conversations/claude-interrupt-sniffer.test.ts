@@ -34,7 +34,7 @@ describe('createClaudeInterruptSniffer', () => {
     mocks.getStatus.mockReturnValue('working');
   });
 
-  it('clears working for the current Conversation interrupted prompt', () => {
+  it('clears working for the current Claude interruption prompt', () => {
     const onData = createClaudeInterruptSniffer(session);
 
     onData('Conversation interrupted – tell Claude what to do differently');
@@ -47,7 +47,20 @@ describe('createClaudeInterruptSniffer', () => {
     );
   });
 
-  it('keeps recognizing the legacy prompt and markers split across PTY chunks', () => {
+  it('clears working for the current Codex interruption prompt', () => {
+    const onData = createClaudeInterruptSniffer(session);
+
+    onData('■ Conversation interrupted - tell the model what to do differently.');
+
+    expect(mocks.markInterrupted).toHaveBeenCalledWith(session.conversationId);
+    expect(mocks.dispatch).toHaveBeenCalledWith(
+      session,
+      { kind: 'turn-interrupted', at: expect.any(Number) },
+      'interrupt-sniffer'
+    );
+  });
+
+  it('keeps recognizing the Claude prompt and markers split across PTY chunks', () => {
     const onData = createClaudeInterruptSniffer(session);
 
     onData('Interrupted · What should Claude do ');
@@ -56,11 +69,20 @@ describe('createClaudeInterruptSniffer', () => {
     expect(mocks.dispatch).toHaveBeenCalledOnce();
   });
 
-  it('does not clear a session that is no longer working', () => {
+  it('clears awaiting-input when the TUI reports an interruption', () => {
+    mocks.getStatus.mockReturnValue('awaiting-input');
+    const onData = createClaudeInterruptSniffer(session);
+
+    onData('Conversation interrupted - tell Claude what to do differently.');
+
+    expect(mocks.dispatch).toHaveBeenCalledOnce();
+  });
+
+  it('does not clear a session that is already idle', () => {
     mocks.getStatus.mockReturnValue('idle');
     const onData = createClaudeInterruptSniffer(session);
 
-    onData('Conversation interrupted – tell Claude what to do differently');
+    onData('Conversation interrupted - tell the model what to do differently.');
 
     expect(mocks.markInterrupted).not.toHaveBeenCalled();
     expect(mocks.dispatch).not.toHaveBeenCalled();
