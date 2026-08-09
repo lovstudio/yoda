@@ -270,6 +270,21 @@ export class AgentRuntimeStore {
     runInAction(() => this.seenTaskIds.add(taskKey(projectId, taskId)));
   }
 
+  /** Drop acknowledgement state when a task leaves the local project graph. */
+  forgetTask(projectId: string, taskId: string): void {
+    runInAction(() => this.seenTaskIds.delete(taskKey(projectId, taskId)));
+  }
+
+  /** Drop acknowledgement state for every task removed with a project. */
+  forgetProject(projectId: string): void {
+    const prefix = `${projectId}\0`;
+    runInAction(() => {
+      for (const key of this.seenTaskIds) {
+        if (key.startsWith(prefix)) this.seenTaskIds.delete(key);
+      }
+    });
+  }
+
   get snapshot(): AgentRuntimeSnapshot {
     return { seenTaskIds: [...this.seenTaskIds] };
   }

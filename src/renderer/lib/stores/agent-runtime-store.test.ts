@@ -71,6 +71,22 @@ describe('AgentRuntimeStore task session display state', () => {
     ]);
   });
 
+  it('forgets acknowledgement state when tasks or projects leave the graph', async () => {
+    const store = new AgentRuntimeStore();
+    await store.start();
+    emitStatus('completed', 'conversation-1', 'project-1', 'task-1');
+    emitStatus('completed', 'conversation-2', 'project-1', 'task-2');
+    store.markTaskSeen('project-1', 'task-1');
+    store.markTaskSeen('project-1', 'task-2');
+
+    store.forgetTask('project-1', 'task-1');
+    expect(store.isTaskUnread('project-1', 'task-1')).toBe(true);
+    expect(store.isTaskUnread('project-1', 'task-2')).toBe(false);
+
+    store.forgetProject('project-1');
+    expect(store.isTaskUnread('project-1', 'task-2')).toBe(true);
+  });
+
   it('drops idle sessions from the active index', async () => {
     const store = new AgentRuntimeStore();
     await store.start();

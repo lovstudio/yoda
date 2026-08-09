@@ -17,6 +17,7 @@ import {
   TaskContextMenu,
 } from '@renderer/features/tasks/components/task-context-menu';
 import { useTaskMenuActions } from '@renderer/features/tasks/components/use-task-menu-actions';
+import { resolveLastTaskSessionTarget } from '@renderer/features/tasks/resolve-task-session-target';
 import { type TaskStore } from '@renderer/features/tasks/stores/task';
 import {
   asProvisioned,
@@ -108,7 +109,8 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   // Any displayed agent status pins the status slot: notifications are a
   // click target (jump to the pending session) and the working spinner keeps
   // its hover-to-interrupt affordance.
-  const hasAgentNotification = taskSessionStatusSummary(task).primaryStatus !== null;
+  const statusSummary = taskSessionStatusSummary(task);
+  const hasAgentNotification = statusSummary.primaryStatus !== null;
   const isIdle = !isBootstrapping && !hasAgentNotification;
   const appearance = resolveTaskAppearance(
     interfaceSettings?.taskAppearance ?? DEFAULT_TASK_APPEARANCE_SETTINGS,
@@ -172,25 +174,19 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const projectName =
     project?.state === 'unregistered' ? projectId : (project?.displayName ?? projectId);
 
-  const openPreferredConversationIfEmpty = () => {
-    if (!provisionedTask) return;
-    const { taskView } = provisionedTask;
-    if (taskView.tabManager.resolvedTabs.length > 0) return;
-    if (taskView.tabManager.openPreferredConversation()) {
-      taskView.setFocusedRegion('main');
-    }
-  };
-
-  const handleOpenDetails = () => {
-    const historyTabId = appState.history.lastTaskTab(projectId, taskId);
-    const historyTarget = historyTabId
-      ? provisionedTask?.taskView.tabManager.topLevelTargetForTabId(historyTabId)
+  const handleOpenTask = () => {
+    const sessionTarget = provisionedTask
+      ? resolveLastTaskSessionTarget(
+          appState.history,
+          provisionedTask.taskView.tabManager,
+          projectId,
+          taskId
+        )
       : undefined;
-    if (historyTarget && appState.appTabs.openTaskScope(projectId, taskId, historyTarget)) return;
+    if (sessionTarget && appState.appTabs.openTaskScope(projectId, taskId, sessionTarget)) return;
 
     handleProvision();
-    openPreferredConversationIfEmpty();
-    // A task without a live historical page is entering for the first time.
+    // A task without a live session target is entering for the first time.
     // Keep its route target-less so provisioning can establish the initial tab.
     navigate('task', { projectId, taskId });
   };
@@ -260,7 +256,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           pinTaskToSidePane();
           return;
         }
-        handleOpenDetails();
+        handleOpenTask();
       }}
       onDoubleClick={(e) => {
         e.stopPropagation();
@@ -428,7 +424,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               : 'flex group-hover/row:hidden'
         )}
       >
-        <TaskSidebarAgentStatus task={task} needsReview={needsReview} />
+        <TaskSidebarAgentStatus task={task} needsReview={needsReview} summary={statusSummary} />
       </div>
     </SidebarMenuRow>
   );

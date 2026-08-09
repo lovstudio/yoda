@@ -119,6 +119,7 @@ async function bootstrap() {
     } else {
       appState.sidebar.expandAllProjects();
     }
+    appState.projects.mountInitialProjects().catch(() => {});
   }
   if (isPrimaryAppWindow) {
     for (const project of appState.projects.projects.values()) {

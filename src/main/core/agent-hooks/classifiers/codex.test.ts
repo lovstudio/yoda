@@ -25,6 +25,17 @@ describe('createCodexClassifier', () => {
     });
   });
 
+  it('does not retain a confirmed prompt in the sliding buffer after reset', () => {
+    const classifier = createCodexClassifier();
+
+    expect(classifier.classify('Would you like to run the following command?')).toBeDefined();
+    classifier.reset();
+
+    expect(
+      classifier.classify('The command completed and the session is working again.')
+    ).toBeUndefined();
+  });
+
   it('does not turn ordinary Codex output into an approval state', () => {
     const classifier = createCodexClassifier();
 

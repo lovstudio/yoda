@@ -83,6 +83,9 @@ vi.mock('@renderer/lib/stores/view-state-cache', () => ({
 
 vi.mock('@renderer/lib/stores/app-state', () => ({
   appState: {
+    agentRuntime: {
+      forgetTask: vi.fn(),
+    },
     history: {
       push: vi.fn(),
     },

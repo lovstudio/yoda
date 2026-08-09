@@ -13,6 +13,7 @@ import { TaskContextMenu } from '@renderer/features/tasks/components/task-contex
 import { TaskGitDiffStats } from '@renderer/features/tasks/components/task-git-diff-stats';
 import { TaskSessionStatusControl } from '@renderer/features/tasks/components/task-session-status-control';
 import { useTaskMenuActions } from '@renderer/features/tasks/components/use-task-menu-actions';
+import { resolveLastTaskSessionTarget } from '@renderer/features/tasks/resolve-task-session-target';
 import { type TaskStore } from '@renderer/features/tasks/stores/task';
 import {
   asProvisioned,
@@ -21,6 +22,7 @@ import {
 } from '@renderer/features/tasks/stores/task-selectors';
 import { PrBadge } from '@renderer/lib/components/pr-badge';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
+import { appState } from '@renderer/lib/stores/app-state';
 import { Checkbox } from '@renderer/lib/ui/checkbox';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { cn } from '@renderer/utils/utils';
@@ -52,22 +54,28 @@ export const TaskRow = observer(function TaskRow({
   const handleProvision = () => void taskManager?.provisionTask(task.data.id);
   const preloadTaskView = () => void taskManager?.preloadTask(task.data.id);
 
-  const openPreferredConversationIfEmpty = () => {
-    if (!provisionedTask) return;
-    const { taskView } = provisionedTask;
-    if (taskView.tabManager.resolvedTabs.length > 0) return;
-    if (taskView.tabManager.openPreferredConversation()) {
-      taskView.setFocusedRegion('main');
-    }
-  };
-
-  const handleOpenDetails = () => {
+  const handleOpenTask = () => {
     if (isArchived) {
       void restoreArchivedTaskAndOpen(task.data.projectId, task.data.id, navigate);
       return;
     }
+
+    const sessionTarget = provisionedTask
+      ? resolveLastTaskSessionTarget(
+          appState.history,
+          provisionedTask.taskView.tabManager,
+          task.data.projectId,
+          task.data.id
+        )
+      : undefined;
+    if (
+      sessionTarget &&
+      appState.appTabs.openTaskScope(task.data.projectId, task.data.id, sessionTarget)
+    ) {
+      return;
+    }
+
     handleProvision();
-    openPreferredConversationIfEmpty();
     navigate('task', { projectId: task.data.projectId, taskId: task.data.id });
   };
 
@@ -75,7 +83,7 @@ export const TaskRow = observer(function TaskRow({
     if (event.target !== event.currentTarget) return;
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
-    handleOpenDetails();
+    handleOpenTask();
   };
 
   if (!menuActions) return null;
@@ -85,7 +93,7 @@ export const TaskRow = observer(function TaskRow({
       <div
         role="button"
         tabIndex={0}
-        onClick={handleOpenDetails}
+        onClick={handleOpenTask}
         onPointerEnter={preloadTaskView}
         onFocus={preloadTaskView}
         onKeyDown={handleRowKeyDown}

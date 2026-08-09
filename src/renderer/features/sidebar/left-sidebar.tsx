@@ -65,6 +65,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   const aiLabApps = useAiLabApps();
   const updateAiLabApp = useUpdateAiLabApp();
   const sidebarContentRef = React.useRef<HTMLDivElement>(null);
+  const sidebarFixedRegionRef = React.useRef<HTMLDivElement>(null);
   const lastScrolledSelectionRef = React.useRef<string | null>(null);
   const suppressedRouteScrollKeyRef = React.useRef<string | null>(null);
   const pinnedApps = (aiLabApps.data ?? []).filter((app) => app.pinned);
@@ -323,13 +324,18 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
           </SidebarMenu>
         </div>
         <SidebarContent ref={sidebarContentRef} className="flex flex-col overflow-y-auto">
-          <SidebarPinnedTaskList />
+          <div ref={sidebarFixedRegionRef} className="shrink-0">
+            <SidebarPinnedTaskList />
+          </div>
           <SidebarGroup className="mb-0 flex flex-col shrink-0">
             <ProjectsGroupLabel />
             {!sidebarStore.projectsCollapsed && (
               <SidebarGroupContent>
                 <SidebarMenu>
-                  <SidebarVirtualList scrollElementRef={sidebarContentRef} />
+                  <SidebarVirtualList
+                    scrollElementRef={sidebarContentRef}
+                    fixedRegionRef={sidebarFixedRegionRef}
+                  />
                 </SidebarMenu>
               </SidebarGroupContent>
             )}
