@@ -344,6 +344,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
           projectId={projId}
           taskId={taskId}
           isMultiAgent={teamRoomTaskKeys.has(teamRoomTaskKey(projId, taskId))}
+          disableHoverPreview
         />
       );
     }

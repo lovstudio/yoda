@@ -11,6 +11,7 @@ import {
 import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { TaskSidebarAgentStatus } from '@renderer/features/sidebar/task-sidebar-agent-status';
+import { TaskSidebarHoverPreview } from '@renderer/features/sidebar/task-sidebar-hover-preview';
 import {
   TaskActionsMenu,
   TaskContextMenu,
@@ -30,6 +31,7 @@ import {
 import { TreeGuideSlot } from '@renderer/lib/components/tree-guide-slot';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
 import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
+import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { branchColor } from '@renderer/utils/branch-color';
 import { cn } from '@renderer/utils/utils';
 import { PrBadge } from '../../lib/components/pr-badge';
@@ -54,6 +56,8 @@ interface SidebarTaskItemProps {
   treeTrail?: boolean[];
   /** True when this task is backed by an Agent Room / team workflow. */
   isMultiAgent?: boolean;
+  /** Drag overlays are visual-only and should not mount a hover preview. */
+  disableHoverPreview?: boolean;
 }
 
 /** Subtask depth is visually capped so deep trees stay readable. */
@@ -67,6 +71,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   childCount = 0,
   treeTrail,
   isMultiAgent = false,
+  disableHoverPreview = false,
 }: SidebarTaskItemProps) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
@@ -80,6 +85,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   // current view.
   const isActive = params.taskId === taskId && params.projectId === projectId;
   const [isMenuOpen, setMenuOpen] = useState(false);
+  const [isHoverPreviewOpen, setHoverPreviewOpen] = useState(false);
   const task = getTaskStore(projectId, taskId)!;
   const taskManager = getTaskManagerStore(projectId);
   const prepareTaskView = useCallback(() => {
@@ -200,229 +206,263 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     appState.sidePane.pinTaskView(projectId, taskId);
   };
 
+  const taskRow = (
+    <SidebarMenuRow
+      className={cn(
+        // Two-line row: task name on top, branch below. Height is intrinsic
+        // (min-h-8 keeps branch-less rows at the original 32px). `relative`
+        // anchors the compact branch gutter inside the pl-8 icon column.
+        'group/row relative flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1 transition-[color,background-color,opacity]',
+        taskIndentClass,
+        taskIdleOpacityClassName(appearance.idleOpacity),
+        appearance.idleOpacity < 100 &&
+          'hover:opacity-100 focus-within:opacity-100 data-[active=true]:opacity-100'
+      )}
+      data-sidebar-entity="task"
+      data-sidebar-project-id={projectId}
+      data-sidebar-task-id={taskId}
+      isActive={isActive}
+      onPointerEnter={taskPreloadIntent.schedule}
+      onPointerLeave={taskPreloadIntent.cancel}
+      onMouseDown={(e) => {
+        if (e.button !== 0 || (e.target instanceof Element && e.target.closest('button'))) return;
+        e.preventDefault();
+        taskPreloadIntent.runNow();
+      }}
+      onClick={(e) => {
+        // Alt/Option pins the task into the global side pane (landing
+        // on its session, like a normal open); a plain click navigates.
+        if (e.altKey) {
+          pinTaskToSidePane();
+          return;
+        }
+        handleOpenDetails();
+      }}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        menuActions.onRename();
+      }}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-1 self-stretch overflow-hidden">
+        {hasRootToggle && (
+          <TaskTreeToggleButton
+            collapsed={isCollapsed}
+            label={t('sidebar.toggleSubtasks')}
+            variant="root"
+            onToggle={handleToggleSubtasks}
+          />
+        )}
+        {guideTrail.length > 0 && (
+          <span className="flex shrink-0 self-stretch">
+            {guideTrail.map((continues, index) => {
+              const isElbow = index === guideTrail.length - 1;
+              // Nested parents toggle via the elbow slot itself: guide lines
+              // fade out on row hover and a chevron fades in, so the name
+              // stays aligned with leaf siblings.
+              const isToggleSlot = isElbow && hasChildren;
+              return (
+                <TreeGuideSlot
+                  key={index}
+                  continues={continues}
+                  isElbow={isElbow}
+                  fadeOnRowHover={isToggleSlot}
+                >
+                  {isToggleSlot && (
+                    <TaskTreeToggleButton
+                      collapsed={isCollapsed}
+                      label={t('sidebar.toggleSubtasks')}
+                      variant="nested"
+                      onToggle={handleToggleSubtasks}
+                    />
+                  )}
+                </TreeGuideSlot>
+              );
+            })}
+          </span>
+        )}
+        {branchDisplay === 'compact' && branchRailColor && (
+          // Worktree-based sessions get a thin left rail; in-place tasks
+          // don't. Its hue is stable per branch — identical branches share a
+          // color, distinct branches differ.
+          <span
+            aria-hidden
+            title={branchName}
+            style={{ backgroundColor: branchRailColor }}
+            className={cn(
+              'absolute inset-y-1.5 left-0.5 w-[3px] rounded-full',
+              (isBootstrapping || isArchiving) && 'opacity-40'
+            )}
+          />
+        )}
+        {showMarkerInReservedSlot && (
+          <TaskAppearanceMarker
+            marker={appearance.marker}
+            label={markerLabel}
+            className={cn(
+              'absolute left-1 top-1/2 -translate-y-1/2',
+              // The appearance marker and the root disclosure share the
+              // reserved icon slot. Opacity alone does not remove the marker
+              // from hit testing while it fades, so let pointer input reach
+              // the disclosure button underneath.
+              hasRootToggle && 'pointer-events-none transition-opacity group-hover/row:opacity-0'
+            )}
+          />
+        )}
+        {showMarkerAtCompactEdge && (
+          <TaskAppearanceMarker
+            compact
+            marker={appearance.marker}
+            label={markerLabel}
+            className="absolute left-0 top-1/2 -translate-y-1/2"
+          />
+        )}
+        <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
+          <div className="flex min-w-0 items-center gap-1">
+            <span
+              className={cn(
+                'min-w-0 truncate text-left transition-colors',
+                taskTitleStyleClassName(appearance.titleStyle),
+                (isBootstrapping || isArchiving) && 'text-foreground/40'
+              )}
+            >
+              {taskName}
+            </span>
+            {isCollapsed && (
+              <span className="shrink-0 rounded-sm bg-background-tertiary-2 px-1 text-[10px] tabular-nums text-foreground-tertiary">
+                {childCount}
+              </span>
+            )}
+            {rowVariant === 'flat' && (
+              <span className="shrink-0 truncate max-w-[8rem] rounded-sm bg-background-tertiary-2 px-1 text-[10px] uppercase tracking-wide text-foreground-tertiary">
+                {projectName}
+              </span>
+            )}
+            <RenderPrBadge task={task} />
+          </div>
+          {branchDisplay === 'full' && branchName && (
+            <div
+              className={cn(
+                'flex min-w-0 items-center gap-1 text-foreground-tertiary-passive',
+                (isBootstrapping || isArchiving) && 'opacity-40'
+              )}
+            >
+              <GitBranch className="size-3 shrink-0" />
+              <span className="min-w-0 truncate font-mono text-[10px] leading-4">{branchName}</span>
+            </div>
+          )}
+        </div>
+      </div>
+      <div
+        className={cn(
+          'items-center gap-0.5',
+          isMenuOpen || isArchiving
+            ? 'flex'
+            : hasAgentNotification
+              ? 'hidden'
+              : 'hidden group-hover/row:flex'
+        )}
+      >
+        <TaskActionsMenu
+          {...menuActions}
+          open={isMenuOpen}
+          onOpenChange={(open) => {
+            setMenuOpen(open);
+            if (open) setHoverPreviewOpen(false);
+          }}
+          trigger={
+            <SidebarItemMiniButton
+              type="button"
+              aria-label={t('sidebar.runScripts.menuLabel')}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </SidebarItemMiniButton>
+          }
+        />
+        {canQuickCreateSubtask ? (
+          <SidebarItemMiniButton
+            type="button"
+            aria-label={t('tasks.context.createSubtask')}
+            onClick={(e) => {
+              e.stopPropagation();
+              menuActions.onCreateSubtask?.();
+            }}
+          >
+            <ListPlus className="h-4 w-4" />
+          </SidebarItemMiniButton>
+        ) : (
+          <SidebarItemMiniButton
+            type="button"
+            aria-label={t('sidebar.archiveTask')}
+            disabled={isArchiving}
+            onClick={(e) => {
+              e.stopPropagation();
+              // The sidebar icon archives immediately. The overflow menu
+              // retains the optional-note and pre-archive-command flows.
+              menuActions.onArchiveQuick();
+            }}
+          >
+            <Archive className="h-4 w-4" />
+          </SidebarItemMiniButton>
+        )}
+      </div>
+      <div
+        className={cn(
+          'items-center',
+          isMenuOpen || isArchiving
+            ? 'hidden'
+            : hasAgentNotification
+              ? 'flex'
+              : 'flex group-hover/row:hidden'
+        )}
+      >
+        <TaskSidebarAgentStatus task={task} needsReview={needsReview} />
+      </div>
+    </SidebarMenuRow>
+  );
+
   return (
     <TaskContextMenu
       {...menuActions}
       // Hold the deferred reflow while the menu is open: the menu is a portal,
       // so the pointer leaving the list onto it would otherwise release the
       // pointer-based hold and let "标记为未读" reorder rows mid-interaction.
-      onOpenChange={(open) =>
-        open
-          ? sidebarStore.holdTaskReflow('task-menu')
-          : sidebarStore.releaseTaskReflow('task-menu')
-      }
+      onOpenChange={(open) => {
+        if (open) {
+          setHoverPreviewOpen(false);
+          sidebarStore.holdTaskReflow('task-menu');
+        } else {
+          sidebarStore.releaseTaskReflow('task-menu');
+        }
+      }}
     >
-      <SidebarMenuRow
-        className={cn(
-          // Two-line row: task name on top, branch below. Height is intrinsic
-          // (min-h-8 keeps branch-less rows at the original 32px). `relative`
-          // anchors the compact branch gutter inside the pl-8 icon column.
-          'group/row relative flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1 transition-[color,background-color,opacity]',
-          taskIndentClass,
-          taskIdleOpacityClassName(appearance.idleOpacity),
-          appearance.idleOpacity < 100 &&
-            'hover:opacity-100 focus-within:opacity-100 data-[active=true]:opacity-100'
-        )}
-        data-sidebar-entity="task"
-        data-sidebar-project-id={projectId}
-        data-sidebar-task-id={taskId}
-        isActive={isActive}
-        onPointerEnter={taskPreloadIntent.schedule}
-        onPointerLeave={taskPreloadIntent.cancel}
-        onMouseDown={(e) => {
-          if (e.button !== 0 || (e.target instanceof Element && e.target.closest('button'))) return;
-          e.preventDefault();
-          taskPreloadIntent.runNow();
-        }}
-        onClick={(e) => {
-          // Alt/Option pins the task into the global side pane (landing
-          // on its session, like a normal open); a plain click navigates.
-          if (e.altKey) {
-            pinTaskToSidePane();
-            return;
-          }
-          handleOpenDetails();
-        }}
-        onDoubleClick={(e) => {
-          e.stopPropagation();
-          menuActions.onRename();
-        }}
+      <Popover
+        open={isHoverPreviewOpen}
+        onOpenChange={(open) => setHoverPreviewOpen(open && !isMenuOpen)}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-1 self-stretch overflow-hidden">
-          {hasRootToggle && (
-            <TaskTreeToggleButton
-              collapsed={isCollapsed}
-              label={t('sidebar.toggleSubtasks')}
-              variant="root"
-              onToggle={handleToggleSubtasks}
-            />
-          )}
-          {guideTrail.length > 0 && (
-            <span className="flex shrink-0 self-stretch">
-              {guideTrail.map((continues, index) => {
-                const isElbow = index === guideTrail.length - 1;
-                // Nested parents toggle via the elbow slot itself: guide lines
-                // fade out on row hover and a chevron fades in, so the name
-                // stays aligned with leaf siblings.
-                const isToggleSlot = isElbow && hasChildren;
-                return (
-                  <TreeGuideSlot
-                    key={index}
-                    continues={continues}
-                    isElbow={isElbow}
-                    fadeOnRowHover={isToggleSlot}
-                  >
-                    {isToggleSlot && (
-                      <TaskTreeToggleButton
-                        collapsed={isCollapsed}
-                        label={t('sidebar.toggleSubtasks')}
-                        variant="nested"
-                        onToggle={handleToggleSubtasks}
-                      />
-                    )}
-                  </TreeGuideSlot>
-                );
-              })}
-            </span>
-          )}
-          {branchDisplay === 'compact' && branchRailColor && (
-            // Worktree-based sessions get a thin left rail; in-place tasks
-            // don't. Its hue is stable per branch — identical branches share a
-            // color, distinct branches differ.
-            <span
-              aria-hidden
-              title={branchName}
-              style={{ backgroundColor: branchRailColor }}
-              className={cn(
-                'absolute inset-y-1.5 left-0.5 w-[3px] rounded-full',
-                (isBootstrapping || isArchiving) && 'opacity-40'
-              )}
-            />
-          )}
-          {showMarkerInReservedSlot && (
-            <TaskAppearanceMarker
-              marker={appearance.marker}
-              label={markerLabel}
-              className={cn(
-                'absolute left-1 top-1/2 -translate-y-1/2',
-                // The appearance marker and the root disclosure share the
-                // reserved icon slot. Opacity alone does not remove the marker
-                // from hit testing while it fades, so let pointer input reach
-                // the disclosure button underneath.
-                hasRootToggle && 'pointer-events-none transition-opacity group-hover/row:opacity-0'
-              )}
-            />
-          )}
-          {showMarkerAtCompactEdge && (
-            <TaskAppearanceMarker
-              compact
-              marker={appearance.marker}
-              label={markerLabel}
-              className="absolute left-0 top-1/2 -translate-y-1/2"
-            />
-          )}
-          <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
-            <div className="flex min-w-0 items-center gap-1">
-              <span
-                className={cn(
-                  'min-w-0 truncate text-left transition-colors',
-                  taskTitleStyleClassName(appearance.titleStyle),
-                  (isBootstrapping || isArchiving) && 'text-foreground/40'
-                )}
-              >
-                {taskName}
-              </span>
-              {isCollapsed && (
-                <span className="shrink-0 rounded-sm bg-background-tertiary-2 px-1 text-[10px] tabular-nums text-foreground-tertiary">
-                  {childCount}
-                </span>
-              )}
-              {rowVariant === 'flat' && (
-                <span className="shrink-0 truncate max-w-[8rem] rounded-sm bg-background-tertiary-2 px-1 text-[10px] uppercase tracking-wide text-foreground-tertiary">
-                  {projectName}
-                </span>
-              )}
-              <RenderPrBadge task={task} />
-            </div>
-            {branchDisplay === 'full' && branchName && (
-              <div
-                className={cn(
-                  'flex min-w-0 items-center gap-1 text-foreground-tertiary-passive',
-                  (isBootstrapping || isArchiving) && 'opacity-40'
-                )}
-              >
-                <GitBranch className="size-3 shrink-0" />
-                <span className="min-w-0 truncate font-mono text-[10px] leading-4">
-                  {branchName}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-        <div
-          className={cn(
-            'items-center gap-0.5',
-            isMenuOpen || isArchiving
-              ? 'flex'
-              : hasAgentNotification
-                ? 'hidden'
-                : 'hidden group-hover/row:flex'
-          )}
+        <PopoverTrigger
+          openOnHover
+          nativeButton={false}
+          disabled={disableHoverPreview}
+          delay={360}
+          closeDelay={160}
+          render={taskRow}
+        />
+        <PopoverContent
+          side="right"
+          align="start"
+          sideOffset={8}
+          className="w-80 gap-0 overflow-hidden p-0"
         >
-          <TaskActionsMenu
-            {...menuActions}
-            open={isMenuOpen}
-            onOpenChange={setMenuOpen}
-            trigger={
-              <SidebarItemMiniButton
-                type="button"
-                aria-label={t('sidebar.runScripts.menuLabel')}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </SidebarItemMiniButton>
-            }
+          <TaskSidebarHoverPreview
+            task={task}
+            projectId={projectId}
+            projectName={projectName}
+            branchName={branchName}
+            isOpen={isHoverPreviewOpen}
           />
-          {canQuickCreateSubtask ? (
-            <SidebarItemMiniButton
-              type="button"
-              aria-label={t('tasks.context.createSubtask')}
-              onClick={(e) => {
-                e.stopPropagation();
-                menuActions.onCreateSubtask?.();
-              }}
-            >
-              <ListPlus className="h-4 w-4" />
-            </SidebarItemMiniButton>
-          ) : (
-            <SidebarItemMiniButton
-              type="button"
-              aria-label={t('sidebar.archiveTask')}
-              disabled={isArchiving}
-              onClick={(e) => {
-                e.stopPropagation();
-                // The sidebar icon archives immediately. The overflow menu
-                // retains the optional-note and pre-archive-command flows.
-                menuActions.onArchiveQuick();
-              }}
-            >
-              <Archive className="h-4 w-4" />
-            </SidebarItemMiniButton>
-          )}
-        </div>
-        <div
-          className={cn(
-            'items-center',
-            isMenuOpen || isArchiving
-              ? 'hidden'
-              : hasAgentNotification
-                ? 'flex'
-                : 'flex group-hover/row:hidden'
-          )}
-        >
-          <TaskSidebarAgentStatus task={task} needsReview={needsReview} />
-        </div>
-      </SidebarMenuRow>
+        </PopoverContent>
+      </Popover>
     </TaskContextMenu>
   );
 });
