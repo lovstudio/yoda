@@ -65,6 +65,7 @@ import {
   type TreeFlatRow,
   type TreeProjection,
 } from './sidebar-tree-projection';
+import { getSidebarVirtualRowOffset } from './sidebar-virtual-list-layout';
 import { SidebarTaskItem } from './task-item';
 
 export const SidebarVirtualList = observer(function SidebarVirtualList({
@@ -388,7 +389,9 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
           top: 0,
           left: 0,
           width: '100%',
-          transform: `translateY(${virtualItem.start}px)`,
+          // TanStack includes scrollMargin in virtualItem.start. The row is
+          // already inside this list container, so remove it once here.
+          transform: `translateY(${getSidebarVirtualRowOffset(virtualItem.start, scrollMargin)}px)`,
         }}
       >
         {rowContent}
