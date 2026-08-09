@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { MobileSessionTranscriptBlock } from '@shared/mobile-api';
 import { getRuntime } from '@shared/runtime-registry';
+import { getUserVisibleAgentReplyText } from '@renderer/features/tasks/session-conversation';
 import { openFilePath } from '@renderer/lib/components/file-path-operations';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
@@ -163,7 +164,6 @@ function LatestReplyScreenshotCard({
   ref: React.Ref<HTMLDivElement>;
   payload: ScreenshotPayload;
 }) {
-  const { t } = useTranslation();
   const capturedAt = new Intl.DateTimeFormat(undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -175,24 +175,25 @@ function LatestReplyScreenshotCard({
       aria-hidden
       className="pointer-events-none fixed top-0 -left-[10000px] w-[360px] overflow-hidden bg-background text-foreground"
     >
-      <header className="border-b border-border-primary/70 px-6 pt-6 pb-4">
-        <div className="flex items-center gap-2 text-[11px] font-medium tracking-[0.16em] text-foreground-passive uppercase">
-          <span className="size-1.5 rounded-full bg-primary" />
-          Yoda · {payload.runtimeName}
+      <header className="border-b border-border px-7 pt-6 pb-5">
+        <div className="flex items-center gap-2 text-[10px] font-semibold tracking-[0.22em] uppercase">
+          <span className="text-foreground">YODA</span>
+          <span className="text-primary-button-background-hover">/</span>
+          <span className="text-foreground-passive">{payload.runtimeName}</span>
         </div>
-        <h1 className="mt-3 text-[17px] leading-6 font-semibold break-words">
+        <h1 className="mt-4 text-[19px] leading-[1.3] font-semibold tracking-[-0.01em] break-words">
           {payload.sessionTitle}
         </h1>
+        <div aria-hidden className="mt-4 h-0.5 w-8 bg-primary-button-background" />
       </header>
-      <div className="px-6 py-5">
+      <div className="bg-background-1 px-7 py-6">
         <MarkdownRenderer
           annotations={false}
-          className="text-[14px] leading-6 break-words [&_li]:my-1 [&_ol]:my-3 [&_p]:my-3 [&_pre]:max-w-full [&_pre]:overflow-hidden [&_pre]:whitespace-pre-wrap [&_table]:text-[11px] [&_ul]:my-3"
-          content={payload.reply.content}
+          className="text-[14px] leading-6 break-words [&_h1]:mt-0 [&_h1]:border-0 [&_h1]:pb-0 [&_h1]:text-[19px] [&_h2]:mt-5 [&_h2]:border-0 [&_h2]:pb-0 [&_h2]:text-[16px] [&_h3]:mt-4 [&_h3]:text-[15px] [&_li::marker]:text-primary-button-background-hover [&_li]:my-2 [&_li]:leading-6 [&_ol]:my-4 [&_p]:my-4 [&_p]:leading-6 [&_pre]:max-w-full [&_pre]:overflow-hidden [&_pre]:whitespace-pre-wrap [&_table]:text-[11px] [&_ul]:my-4"
+          content={getUserVisibleAgentReplyText(payload.reply.content)}
         />
       </div>
-      <footer className="flex items-center justify-between gap-3 border-t border-border-primary/70 px-6 py-4 text-[10px] text-foreground-passive">
-        <span>{t('workspaceRuntime.replyScreenshotFooter')}</span>
+      <footer className="flex items-center justify-end border-t border-border px-7 py-4 text-[10px] text-foreground-passive">
         <time className="shrink-0 tabular-nums">{capturedAt}</time>
       </footer>
     </article>

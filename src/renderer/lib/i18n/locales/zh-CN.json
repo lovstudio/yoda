@@ -45,6 +45,13 @@
     "openFailed": "打开失败",
     "currentLabel": "{{label}}（当前）"
   },
+  "externalFileDrop": {
+    "title": "在 Yoda 中打开",
+    "description": "松开即可在新的文件标签页中预览或编辑",
+    "failedTitle": "打开文件失败",
+    "failedDescription": "有 {{count}} 个文件未能打开",
+    "noPath": "未能读取拖入文件的路径"
+  },
   "common": {
     "ok": "确定",
     "cancel": "取消",
@@ -229,7 +236,10 @@
       "matchesName": "别名与默认名称相同，留空即可。",
       "submit": "保存",
       "saving": "保存中…",
-      "failed": "重命名项目失败"
+      "failed": "重命名项目失败",
+      "pathRenameTitle": "同时重命名项目路径？",
+      "pathRenameDescription": "项目名与路径末级目录相同。是否同时将项目文件夹重命名为「{{name}}」？",
+      "pathRenameConfirm": "同时重命名路径"
     },
     "moveProjectPath": {
       "menuLabel": "移动项目路径…",
@@ -1524,6 +1534,7 @@
     "systemPromptHintCodex": "启用动态注入的提示词会写入 Codex developer_instructions；Codex 内置指令不可编辑。",
     "promptPrinciplesLabel": "动态提示词",
     "promptPrinciplesProjectHeading": "项目专属提示词",
+    "promptPrinciplesEnabledCount": "已启用 {{enabled}}/{{count}}",
     "promptPrincipleUnnamed": "未命名提示词",
     "instructionFilesLabel": "指令文件",
     "instructionFilesHint": "客户端内置 system prompt 不可编辑。全局 CLAUDE.md 充当用户级 system prompt，项目 CLAUDE.md / AGENTS.md 是项目级 prompt。点击展开查看，悬停行尾可打开编辑。",
@@ -2266,7 +2277,9 @@
       "createParent": "增设父任务（分组）",
       "moveToProject": "移动到项目",
       "moveToProjectEmpty": "没有其他项目",
-      "moveToProjectSearch": "搜索项目…"
+      "moveToProjectSearch": "搜索项目…",
+      "moveToProjectCreate": "创建项目并移动…",
+      "moveToProjectCreateNamed": "创建「{{name}}」并移动"
     },
     "moveToProject": {
       "confirmTitle": "移动任务到其他项目？",
@@ -2792,9 +2805,36 @@
     },
     "collection": {
       "title": "提示词",
-      "description": "创建可复用提示词并按分组排序；可从文件、网址或 Git 同步，也可选择在会话启动时自动注入。",
+      "description": "创建可复用提示词；标签只用于整理和查找，不会进入 AI 上下文。",
       "all": "全部提示词",
-      "allDescription": "分组可多级嵌套；拖动同级分组或组内提示词即可排序。"
+      "allDescription": "每条提示词都是独立条目，可拖动排序、按标签筛选，并直接切换是否注入。"
+    },
+    "reorder": "拖动「{{name}}」调整顺序",
+    "actions": {
+      "more": "管理「{{name}}」"
+    },
+    "filters": {
+      "search": "搜索提示词",
+      "searchPlaceholder": "搜索标题、描述、内容或标签",
+      "tags": "标签",
+      "tagListLabel": "按标签筛选",
+      "allTags": "全部标签",
+      "deleteTagAria": "删除标签「{{tag}}」",
+      "deleteTagTitle": "删除标签「{{tag}}」？",
+      "deleteTagDescription": "该标签会从 {{count}} 条提示词中移除；提示词内容、开关状态和版本历史保持不变。",
+      "deleteTagConfirm": "删除标签",
+      "tagDeleted": "已删除标签「{{tag}}」",
+      "deleteTagFailed": "删除标签失败",
+      "status": "状态",
+      "all": "全部",
+      "enabled": "已开启",
+      "disabled": "已关闭",
+      "resultCount": "显示 {{count}} 条",
+      "tagEnabledCount": "已开启 {{enabled}}/{{count}} 条",
+      "enableTag": "全部开启",
+      "disableTag": "全部关闭",
+      "clear": "清除筛选",
+      "empty": "没有符合条件的提示词。"
     },
     "new": "新建提示词",
     "empty": "还没有保存的提示词。新建一个，下次创建任务时即可复用。",
@@ -2840,6 +2880,9 @@
     "form": {
       "title": "标题",
       "titlePlaceholder": "例如：Bug 排查",
+      "tags": "标签",
+      "tagsPlaceholder": "例如：开发、审查、发布",
+      "tagsHint": "用逗号分隔多个标签；标签只供你整理提示词。",
       "description": "描述",
       "descriptionPlaceholder": "可选：简述何时使用这个提示词",
       "group": "分组",
@@ -2927,6 +2970,8 @@
     },
     "source": {
       "manual": "手动添加",
+      "more": "从其他来源添加",
+      "import": "导入提示词",
       "file": "从文件",
       "url": "从网址",
       "git": "从 Git",
@@ -5041,7 +5086,6 @@
     "replyScreenshotRevealFailed": "显示回复截图失败",
     "replyScreenshotEmpty": "当前轮次还没有可截图的回复",
     "replyScreenshotFailed": "生成回复截图失败",
-    "replyScreenshotFooter": "最新一轮回复",
     "compactContext": "压缩上下文",
     "compactingContext": "正在压缩上下文…",
     "compactContextStarted": "已开始压缩上下文",

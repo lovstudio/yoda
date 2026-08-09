@@ -126,6 +126,7 @@ describe('runBundledMigrations', () => {
           .get('existing-conversation')
       ).toEqual({ forked_from_conversation_id: null, forked_from_prompt_index: null });
       expect(columnExists(db, 'prompts', 'group_name')).toBe(true);
+      expect(columnExists(db, 'prompts', 'tags_json')).toBe(true);
       expect(columnExists(db, 'prompts', 'version')).toBe(true);
       expect(tableExists(db, 'prompt_versions')).toBe(true);
       expect(

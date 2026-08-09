@@ -29,6 +29,7 @@ import {
   type PlatformKey,
 } from '@shared/openInApps';
 import { isTaskWindowTarget, type TaskWindowTarget } from '@shared/task-window';
+import { externalFileOpenService } from '@main/app/external-file-open';
 import { setLeftSidebarMenuChecked } from '@main/app/menu';
 import {
   registerTaskWindowDock,
@@ -79,6 +80,34 @@ import {
 const FONT_CACHE_TTL_MS = 5 * 60 * 1_000;
 const IDLE_SESSION_SWEEP_INTERVAL_MS = 30_000;
 export const RESOURCE_SNAPSHOT_CACHE_TTL_MS = 4_000;
+const OPEN_FILE_EXTENSIONS = [
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'webp',
+  'bmp',
+  'ico',
+  'svg',
+  'pdf',
+  'txt',
+  'md',
+  'mdx',
+  'json',
+  'js',
+  'jsx',
+  'ts',
+  'tsx',
+  'css',
+  'scss',
+  'html',
+  'xml',
+  'yaml',
+  'yml',
+  'toml',
+  'env',
+  'log',
+];
 
 type RemoteTerminalLaunchAttempt = {
   file: string;
@@ -355,6 +384,30 @@ class AppService implements IInitializable, IDisposable {
       );
     }
     await shell.openExternal(url);
+  }
+
+  async openExternalFile(filePath: string): Promise<void> {
+    await externalFileOpenService.openFromRenderer(filePath);
+  }
+
+  async authorizeExternalFile(filePath: string): Promise<string> {
+    return externalFileOpenService.authorizeFromRenderer(filePath);
+  }
+
+  consumePendingExternalFiles() {
+    return externalFileOpenService.consumePendingTargets();
+  }
+
+  async openFileDialog(): Promise<string[]> {
+    const result = await dialog.showOpenDialog(getMainWindow()!, {
+      title: 'Open File',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Files', extensions: OPEN_FILE_EXTENSIONS }],
+    });
+    if (result.canceled) return [];
+
+    for (const filePath of result.filePaths) externalFileOpenService.open(filePath);
+    return result.filePaths;
   }
 
   clipboardWriteText(text: string): void {

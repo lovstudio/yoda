@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
 /**
- * Prompts have one canonical model. Grouping, sourced content and dynamic
- * injection are capabilities of a prompt instead of separate product nouns.
+ * Prompts have one canonical flat model. Human-facing tags, sourced content,
+ * and dynamic injection are capabilities of a prompt instead of separate
+ * product nouns.
  */
 export const promptSourceErrorCodeSchema = z.enum([
   'empty_content',
@@ -98,14 +99,22 @@ export type PromptSourceRefreshResult =
       text: string;
     };
 
-export const promptGroupNameSchema = z.string().trim().min(1).max(80);
-export type PromptGroupName = z.infer<typeof promptGroupNameSchema>;
+export const promptTagSchema = z.string().trim().min(1).max(80);
+export const promptTagsSchema = z.array(promptTagSchema).max(32);
+export type PromptTag = z.infer<typeof promptTagSchema>;
 
-export const promptGroupSchema = z.object({
-  name: promptGroupNameSchema,
-  parentName: promptGroupNameSchema.nullable(),
-});
-export type PromptGroup = z.infer<typeof promptGroupSchema>;
+/**
+ * Tags are metadata for people using the library. They are never included in
+ * the text sent to an agent; only `content` participates in injection.
+ */
+export function normalizePromptTags(tags: readonly string[]): PromptTag[] {
+  const unique = new Set<string>();
+  for (const value of tags) {
+    const tag = value.trim();
+    if (tag) unique.add(tag);
+  }
+  return promptTagsSchema.parse(Array.from(unique));
+}
 
 export const promptVersionSchema = z.string().regex(/^\d+\.\d+\.\d+$/);
 export type PromptVersionNumber = z.infer<typeof promptVersionSchema>;
@@ -129,7 +138,7 @@ export const promptSchema = z.object({
   title: z.string(),
   description: z.string(),
   content: z.string(),
-  groupName: z.string(),
+  tags: promptTagsSchema,
   extraInfo: z.string(),
   injectionEnabled: z.boolean(),
   injectionOrder: z.number().int(),
@@ -157,7 +166,7 @@ export const promptCreateInputSchema = z.object({
   title: z.string(),
   description: z.string().default(''),
   content: z.string(),
-  groupName: z.string().default(''),
+  tags: promptTagsSchema.default([]),
   extraInfo: z.string().default(''),
   injectionEnabled: z.boolean().default(false),
   source: promptSourceSchema.optional(),
@@ -169,7 +178,7 @@ export const promptUpdateInputSchema = z
     title: z.string(),
     description: z.string(),
     content: z.string(),
-    groupName: z.string(),
+    tags: promptTagsSchema,
     extraInfo: z.string(),
     injectionEnabled: z.boolean(),
     source: promptSourceSchema.nullable(),

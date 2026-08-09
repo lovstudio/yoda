@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
+import { agentSessionExitedChannel } from '@shared/events/agentEvents';
 import { ptyDataChannel, ptyExitChannel } from '@shared/events/ptyEvents';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-reconciler';
@@ -47,6 +48,7 @@ const mocks = vi.hoisted(() => ({
   stopTitle: vi.fn(),
   watchClaudeRunState: vi.fn(() => ({ stop: vi.fn() })),
   watchClaudeSessionActivity: vi.fn(() => ({ stop: vi.fn() })),
+  watchCodexRunState: vi.fn(() => ({ stop: vi.fn() })),
   wireAgentClassifier: vi.fn(),
 }));
 
@@ -120,6 +122,10 @@ vi.mock('@main/core/conversations/claude-session-activity-source', () => ({
 
 vi.mock('@main/core/conversations/claude-run-state-source', () => ({
   watchClaudeRunState: mocks.watchClaudeRunState,
+}));
+
+vi.mock('@main/core/conversations/codex-run-state-source', () => ({
+  watchCodexRunState: mocks.watchCodexRunState,
 }));
 
 // Pulls in the DB client transitively; unit tests have no Electron app.
@@ -510,6 +516,15 @@ describe('LocalConversationProvider', () => {
       sessionId
     );
     expect(mocks.emitEvent).toHaveBeenCalledWith(ptyExitChannel, { exitCode: 7 }, sessionId);
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      agentSessionExitedChannel,
+      expect.objectContaining({ exitCode: 7, sessionId })
+    );
+    const eventNames = mocks.emitEvent.mock.calls.map(([event]) => event);
+    expect(eventNames.indexOf(ptyDataChannel)).toBeLessThan(eventNames.indexOf(ptyExitChannel));
+    expect(eventNames.indexOf(ptyExitChannel)).toBeLessThan(
+      eventNames.indexOf(agentSessionExitedChannel)
+    );
     expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
   });
 
@@ -1022,6 +1037,26 @@ describe('LocalConversationProvider', () => {
     expect(mocks.watchClaudeRunState).toHaveBeenCalledOnce();
     expect(mocks.watchClaudeSessionActivity).not.toHaveBeenCalled();
     expect(mocks.wireAgentClassifier).not.toHaveBeenCalled();
+  });
+
+  it('keeps Codex approval classification alongside the rollout monitor', async () => {
+    mocks.getProviderConfig.mockResolvedValue({
+      cli: 'codex',
+      statusMonitor: 'rollout',
+      resumeFlag: 'resume',
+      resumeSessionIdArg: true,
+      initialPromptFlag: '',
+    });
+    const codexConversation: Conversation = {
+      ...conversation,
+      runtimeId: 'codex',
+    };
+    const provider = createProvider();
+
+    await provider.startSession(codexConversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    expect(mocks.watchCodexRunState).toHaveBeenCalledOnce();
+    expect(mocks.wireAgentClassifier).toHaveBeenCalledOnce();
   });
 
   it('uses hooks alone when the selected hook monitor is available', async () => {

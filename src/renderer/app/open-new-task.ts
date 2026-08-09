@@ -44,19 +44,20 @@ export async function openNewTaskFromPreference(projectId?: string): Promise<voi
 
 /**
  * Creates from the user's current location. Inside a project task, the next
- * unit of work belongs to that task, so open the child-task composer with an
- * initial Agent session as the primary action. Other surfaces retain the
- * user's normal new-task opening preference.
+ * unit of work belongs to that task, so open the shared task composer with the
+ * parent scope locked and an initial Agent session as the primary action.
+ * Other surfaces retain the user's normal new-task opening preference.
  */
 export async function openNewTaskFromCurrentContext(
   projectId?: string,
   parentTaskId?: string
 ): Promise<void> {
   if (projectId && parentTaskId && projectId !== INTERNAL_PROJECT_ID) {
-    showModal('newSubtaskModal', {
-      projectId,
-      parentTaskId,
-      initialAction: 'create-and-run',
+    showModal('newTaskModal', {
+      parentTask: {
+        projectId,
+        taskId: parentTaskId,
+      },
     });
     return;
   }

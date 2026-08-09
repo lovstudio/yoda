@@ -6,6 +6,8 @@ import { networkInterfaces } from 'node:os';
 import path from 'node:path';
 import { URL } from 'node:url';
 import { app } from 'electron';
+import { resolveAgentPermissionMode, type Agent } from '@shared/agents';
+import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
 import type { Conversation } from '@shared/conversations';
 import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import {
@@ -19,7 +21,9 @@ import {
   MOBILE_SESSION_CONTENT_MAX_CHARS,
   MOBILE_SESSION_INPUT_MAX_CHARS,
   MOBILE_SESSION_TRANSCRIPT_MAX_CHARS,
+  type MobileAgentSummary,
   type MobileApiError,
+  type MobileConfigurationSnapshot,
   type MobileCreateDemandRequest,
   type MobileCreateDemandResponse,
   type MobileDashboardSnapshot,
@@ -31,30 +35,46 @@ import {
   type MobileInputAttachmentDiscardResponse,
   type MobileProfileSnapshot,
   type MobileProjectSummary,
+  type MobileRunMode,
+  type MobileSessionAgent,
   type MobileSessionContentSource,
   type MobileSessionDetail,
   type MobileSessionInputRequest,
   type MobileSessionInputResponse,
+  type MobileSessionRuntimeConfigurationResponse,
+  type MobileSessionRuntimeConfigurationUpdate,
   type MobileSessionSummary,
   type MobileSessionTranscriptBlock,
   type MobileSkillsResponse,
+  type MobileTaskActionRequest,
+  type MobileTaskActionResponse,
   type MobileTaskActivityStatus,
   type MobileTaskSessionsResponse,
+  type MobileTaskStrategyKind,
   type MobileTaskSummary,
 } from '@shared/mobile-api';
 import {
   MOBILE_SESSION_EVENT_VERSION,
   type MobileSessionInvalidationReason,
 } from '@shared/mobile-session-events';
+import { resolveMobileSessionInteraction } from '@shared/mobile-session-interaction';
 import {
   INTERNAL_PROJECT_ID,
   projectDisplayName,
   type OpenProjectError,
   type Project,
 } from '@shared/projects';
+import { withSystemPrompt } from '@shared/prompt-format';
 import { makePtySessionId } from '@shared/ptySessionId';
-import { RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
+import {
+  getRuntime,
+  getRuntimePermissionModes,
+  resolveRuntimePermissionModeId,
+  RUNTIME_IDS,
+  type RuntimeId,
+} from '@shared/runtime-registry';
 import type { SettingsSyncStatus } from '@shared/settings-sync';
+import { normalizeSkillSelection } from '@shared/skills/selection';
 import { ensureUniqueTaskSlug, taskNameFromPrompt } from '@shared/task-name';
 import type { CreateTaskError, CreateTaskWarning, Task } from '@shared/tasks';
 import {
@@ -62,6 +82,7 @@ import {
   type SessionState,
 } from '@main/core/account/services/yoda-account-service';
 import { yodaCommerceService } from '@main/core/account/services/yoda-commerce-service';
+import { agentsConfigService } from '@main/core/agents-config/agents-config-service';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { loadClaudeTranscript } from '@main/core/conversations/claude-transcript';
 import {
@@ -70,11 +91,14 @@ import {
   loadCodexRolloutTranscriptTailForConversation,
   type CodexRolloutShareImageGroup,
 } from '@main/core/conversations/codex-rollout-terminal-history';
+import { getClaudeSessionMetadata } from '@main/core/conversations/getClaudeSessionMetadata';
+import { getCodexSessionContext } from '@main/core/conversations/getCodexSessionContext';
 import { getConversationRuntimeStatuses } from '@main/core/conversations/getConversationRuntimeStatuses';
 import { getConversationSessionInfo } from '@main/core/conversations/getConversationSessionInfo';
 import { getConversationsForTask } from '@main/core/conversations/getConversationsForTask';
 import { injectPromptUsingWriter } from '@main/core/conversations/inject-prompt';
 import { injectConversationPrompt } from '@main/core/conversations/injectConversationPrompt';
+import { restartConversation } from '@main/core/conversations/restartConversation';
 import { subscribeConversationTranscriptChanges } from '@main/core/conversations/transcript-feed';
 import { getProjectById, getProjects } from '@main/core/projects/operations/getProjects';
 import { openProject } from '@main/core/projects/operations/openProject';
@@ -85,8 +109,13 @@ import { appSettingsService } from '@main/core/settings/settings-service';
 import { skillsService } from '@main/core/skills/SkillsService';
 import { getUsageOverview } from '@main/core/stats/getUsageOverview';
 import { generateTaskName } from '@main/core/tasks/name-generation/generateTaskName';
+import { archiveTask } from '@main/core/tasks/operations/archiveTask';
 import { createTask } from '@main/core/tasks/operations/createTask';
 import { getTasks } from '@main/core/tasks/operations/getTasks';
+import { setTaskFavorite } from '@main/core/tasks/operations/setTaskFavorite';
+import { setTaskLongTerm } from '@main/core/tasks/operations/setTaskLongTerm';
+import { setTaskNeedsReview } from '@main/core/tasks/operations/setTaskNeedsReview';
+import { setTaskPinned } from '@main/core/tasks/operations/setTaskPinned';
 import { taskManager } from '@main/core/tasks/task-manager';
 import { workspaceRegistry } from '@main/core/workspaces/workspace-registry';
 import { log } from '@main/lib/logger';
@@ -94,6 +123,7 @@ import {
   MobileInputAttachmentError,
   MobileInputAttachmentStore,
 } from './mobile-input-attachment-store';
+import { mapMobilePermissionMode } from './mobile-permission-modes';
 import {
   ensureMobileConversationInputSession,
   resolveMobileSessionAvailability,
@@ -538,6 +568,39 @@ function mapCreateTaskWarning(warning: CreateTaskWarning): string {
   }
 }
 
+function normalizeNullableConfigText(
+  value: unknown,
+  field: string,
+  maxLength = 200
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== 'string') {
+    throw new MobileGatewayError(400, 'invalid_configuration', `${field} must be a string.`);
+  }
+  const normalized = value.trim();
+  if (normalized.length > maxLength) {
+    throw new MobileGatewayError(
+      413,
+      'configuration_too_large',
+      `${field} must be ${maxLength} characters or fewer.`
+    );
+  }
+  return normalized || null;
+}
+
+function normalizeMobileRunMode(value: unknown): MobileRunMode {
+  if (value === undefined || value === 'normal') return 'normal';
+  if (value === 'brainstorm') return 'brainstorm';
+  throw new MobileGatewayError(400, 'invalid_configuration', 'Unsupported mobile run mode.');
+}
+
+function normalizeMobileStrategyKind(value: unknown): MobileTaskStrategyKind {
+  if (value === undefined || value === 'no-worktree') return 'no-worktree';
+  if (value === 'new-branch') return 'new-branch';
+  throw new MobileGatewayError(400, 'invalid_configuration', 'Unsupported mobile project mode.');
+}
+
 function normalizeCreateDemandRequest(body: unknown): MobileCreateDemandRequest {
   if (!body || typeof body !== 'object') {
     throw new MobileGatewayError(400, 'invalid_body', 'Request body must be an object.');
@@ -565,7 +628,57 @@ function normalizeCreateDemandRequest(body: unknown): MobileCreateDemandRequest 
     title: typeof value.title === 'string' ? value.title.trim() || undefined : undefined,
     provider: typeof value.provider === 'string' ? value.provider.trim() || undefined : undefined,
     attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
+    agentId:
+      value.agentId === null
+        ? null
+        : typeof value.agentId === 'string'
+          ? value.agentId.trim() || null
+          : value.agentId === undefined
+            ? undefined
+            : (() => {
+                throw new MobileGatewayError(400, 'invalid_configuration', 'Agent id is invalid.');
+              })(),
+    runMode: normalizeMobileRunMode(value.runMode),
+    strategyKind: normalizeMobileStrategyKind(value.strategyKind),
+    model: normalizeNullableConfigText(value.model, 'model'),
+    reasoningEffort: normalizeNullableConfigText(value.reasoningEffort, 'reasoningEffort'),
+    permissionMode:
+      value.permissionMode === undefined
+        ? undefined
+        : typeof value.permissionMode === 'string' && value.permissionMode.trim()
+          ? value.permissionMode.trim()
+          : (() => {
+              throw new MobileGatewayError(
+                400,
+                'invalid_configuration',
+                'permissionMode is invalid.'
+              );
+            })(),
   };
+}
+
+function normalizeSessionRuntimeConfigurationRequest(
+  body: unknown
+): MobileSessionRuntimeConfigurationUpdate {
+  if (!body || typeof body !== 'object') {
+    throw new MobileGatewayError(400, 'invalid_body', 'Request body must be an object.');
+  }
+  const value = body as Record<string, unknown>;
+  const update: MobileSessionRuntimeConfigurationUpdate = {};
+  if ('model' in value) update.model = normalizeNullableConfigText(value.model, 'model');
+  if ('reasoningEffort' in value) {
+    update.reasoningEffort = normalizeNullableConfigText(value.reasoningEffort, 'reasoningEffort');
+  }
+  if ('permissionMode' in value) {
+    if (typeof value.permissionMode !== 'string' || !value.permissionMode.trim()) {
+      throw new MobileGatewayError(400, 'invalid_configuration', 'permissionMode is invalid.');
+    }
+    update.permissionMode = value.permissionMode.trim();
+  }
+  if (Object.keys(update).length === 0) {
+    throw new MobileGatewayError(400, 'invalid_configuration', 'No runtime setting was provided.');
+  }
+  return update;
 }
 
 function normalizeSessionInputRequest(body: unknown): MobileSessionInputRequest {
@@ -593,6 +706,29 @@ function normalizeSessionInputRequest(body: unknown): MobileSessionInputRequest 
     attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
     clientRequestId: normalizeMobileClientRequestId(value.clientRequestId),
   };
+}
+
+function normalizeMobileTaskActionRequest(body: unknown): MobileTaskActionRequest {
+  if (!body || typeof body !== 'object') {
+    throw new MobileGatewayError(400, 'invalid_body', 'Request body must be an object.');
+  }
+
+  const value = body as Record<string, unknown>;
+  if (value.action === 'archive') return { action: 'archive' };
+
+  if (
+    value.action !== 'set-pinned' &&
+    value.action !== 'set-favorite' &&
+    value.action !== 'set-long-term' &&
+    value.action !== 'set-needs-review'
+  ) {
+    throw new MobileGatewayError(400, 'invalid_task_action', 'Task action is invalid.');
+  }
+  if (typeof value.value !== 'boolean') {
+    throw new MobileGatewayError(400, 'invalid_task_action', 'Task action value is invalid.');
+  }
+
+  return { action: value.action, value: value.value };
 }
 
 function normalizeMobileClientRequestId(value: unknown): string | undefined {
@@ -633,6 +769,43 @@ function promptWithImageMarkers(prompt: string, imageCount: number): string {
 
 function isRuntimeId(value: string): value is RuntimeId {
   return RUNTIME_IDS.includes(value as RuntimeId);
+}
+
+const MOBILE_HIDDEN_AGENT_SLUGS = new Set([
+  'builtin:prompt-rewrite',
+  'builtin:naming',
+  'builtin:summary',
+]);
+
+function isMobileSelectableAgent(agent: Agent): boolean {
+  return !MOBILE_HIDDEN_AGENT_SLUGS.has(agent.slug);
+}
+
+function compactMobileAgentIcon(icon: string | undefined): string | undefined {
+  const normalized = icon?.trim();
+  if (!normalized || normalized.startsWith('data:') || normalized.length > 32) return undefined;
+  return normalized;
+}
+
+function mapMobileAgent(agent: Agent, fallbackRuntime: RuntimeId): MobileAgentSummary {
+  return {
+    id: agent.id,
+    name: agent.name,
+    description: agent.description || undefined,
+    icon: compactMobileAgentIcon(agent.icon),
+    preferredRuntime: agent.preferredRuntime ?? fallbackRuntime,
+    model: agent.model,
+    reasoningEffort: agent.reasoningEffort,
+    accessMode: agent.accessMode,
+  };
+}
+
+function mapSessionAgent(conversation: Conversation, runtimeName: string): MobileSessionAgent {
+  return {
+    id: conversation.agent?.id ?? null,
+    name: conversation.agent?.name ?? runtimeName,
+    icon: compactMobileAgentIcon(conversation.agent?.icon),
+  };
 }
 
 function isTaskActivityRunning(status: MobileTaskActivityStatus): boolean {
@@ -923,6 +1096,11 @@ export class MobileGatewayService {
       return;
     }
 
+    if (req.method === 'GET' && url.pathname === '/v1/configuration') {
+      writeJson(res, 200, await this.getConfiguration());
+      return;
+    }
+
     if (req.method === 'GET' && url.pathname === '/v1/skills') {
       writeJson(res, 200, await this.getSkills());
       return;
@@ -998,6 +1176,20 @@ export class MobileGatewayService {
       return;
     }
 
+    const isTaskActionsRoute =
+      segments[0] === 'v1' &&
+      segments[1] === 'projects' &&
+      Boolean(segments[2]) &&
+      segments[3] === 'tasks' &&
+      Boolean(segments[4]) &&
+      segments[5] === 'actions';
+
+    if (req.method === 'POST' && isTaskActionsRoute && segments.length === 6) {
+      const body = normalizeMobileTaskActionRequest(await readJsonBody(req));
+      writeJson(res, 200, await this.performTaskAction(segments[2]!, segments[4]!, body));
+      return;
+    }
+
     if (req.method === 'GET' && isTaskSessionsRoute && segments.length === 7 && segments[6]) {
       writeJson(res, 200, await this.getSessionDetail(segments[2]!, segments[4]!, segments[6]));
       return;
@@ -1037,6 +1229,22 @@ export class MobileGatewayService {
         res,
         200,
         await this.sendSessionInput(segments[2]!, segments[4]!, segments[6], body)
+      );
+      return;
+    }
+
+    if (
+      req.method === 'POST' &&
+      isTaskSessionsRoute &&
+      segments.length === 8 &&
+      segments[6] &&
+      segments[7] === 'config'
+    ) {
+      const body = normalizeSessionRuntimeConfigurationRequest(await readJsonBody(req));
+      writeJson(
+        res,
+        200,
+        await this.updateSessionRuntimeConfiguration(segments[2]!, segments[4]!, segments[6], body)
       );
       return;
     }
@@ -1121,6 +1329,46 @@ export class MobileGatewayService {
     return {
       runtimeId,
       skills: mobileSkillSummaries(catalog, allowedSkillKeys),
+    };
+  }
+
+  private async getConfiguration(): Promise<MobileConfigurationSnapshot> {
+    const [defaultRuntimeId, configuredAgents, runtimePermissionModes, runtimeAutoApproveDefaults] =
+      await Promise.all([
+        appSettingsService.get('defaultRuntime'),
+        agentsConfigService.list(),
+        appSettingsService.get('runtimePermissionModes'),
+        appSettingsService.get('runtimeAutoApproveDefaults'),
+      ]);
+    const agents = configuredAgents
+      .filter(isMobileSelectableAgent)
+      .map((agent) => mapMobileAgent(agent, defaultRuntimeId));
+    const defaultAgent = configuredAgents.find(
+      (agent) => agent.slug === BUILTIN_AGENT_KEYS.general && isMobileSelectableAgent(agent)
+    );
+    const permissionModes: MobileConfigurationSnapshot['permissionModes'] = {};
+    const defaultPermissionModes: MobileConfigurationSnapshot['defaultPermissionModes'] = {};
+    for (const runtimeId of RUNTIME_IDS) {
+      permissionModes[runtimeId] =
+        getRuntimePermissionModes(runtimeId).map(mapMobilePermissionMode);
+      defaultPermissionModes[runtimeId] = resolveRuntimePermissionModeId({
+        selections: runtimePermissionModes,
+        legacyAutoApprove: runtimeAutoApproveDefaults,
+        runtimeId,
+      });
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      defaultRuntimeId,
+      defaultAgentId: defaultAgent?.id ?? agents[0]?.id ?? null,
+      runtimes: RUNTIME_IDS.map((runtimeId) => ({
+        id: runtimeId,
+        name: getRuntime(runtimeId)?.name ?? runtimeId,
+      })),
+      agents,
+      permissionModes,
+      defaultPermissionModes,
     };
   }
 
@@ -1222,13 +1470,51 @@ export class MobileGatewayService {
       activityStatus,
       bootstrapStatus: taskManager.getBootstrapStatus(task.id),
       taskBranch: task.taskBranch,
+      createdAt: task.createdAt,
       updatedAt: task.updatedAt,
       lastInteractedAt: task.lastInteractedAt,
       needsReview: task.needsReview,
       isPinned: task.isPinned,
+      isFavorite: task.isFavorite,
       isLongTerm: task.isLongTerm,
       runtimeCounts: task.conversations,
       conversationCount: Object.values(task.conversations).reduce((sum, count) => sum + count, 0),
+    };
+  }
+
+  private async performTaskAction(
+    projectId: string,
+    taskId: string,
+    action: MobileTaskActionRequest
+  ): Promise<MobileTaskActionResponse> {
+    const task = (await getTasks(projectId)).find((candidate) => candidate.id === taskId);
+    if (!task) {
+      throw new MobileGatewayError(404, 'task_not_found', 'Task was not found.');
+    }
+
+    switch (action.action) {
+      case 'archive':
+        await archiveTask(projectId, taskId, undefined, { skipPreCommand: true });
+        break;
+      case 'set-pinned':
+        await setTaskPinned(taskId, action.value);
+        break;
+      case 'set-favorite':
+        await setTaskFavorite(taskId, action.value);
+        break;
+      case 'set-long-term':
+        await setTaskLongTerm(taskId, action.value);
+        break;
+      case 'set-needs-review':
+        await setTaskNeedsReview(taskId, action.value);
+        break;
+    }
+
+    return {
+      ok: true,
+      taskId,
+      action: action.action,
+      generatedAt: new Date().toISOString(),
     };
   }
 
@@ -1340,25 +1626,37 @@ export class MobileGatewayService {
     }
 
     const ptySessionId = makePtySessionId(projectId, taskId, conversationId);
-    const [output, transcript] = await Promise.all([
+    const [output, transcript, runtimeConfiguration] = await Promise.all([
       this.readConversationOutput(conversation, data.cwd, ptySessionId),
       this.readConversationTranscript(conversation, data.cwd, session.sessionId),
+      this.resolveSessionRuntimeConfiguration(conversation, data.cwd, session.sessionId),
     ]);
     const tailed = tailSessionContent(output.content);
     const tailedTranscript = tailSessionTranscript(transcript);
+    const pendingInteraction = resolveMobileSessionInteraction({
+      content: tailed.content,
+      runtimeId: session.runtimeId,
+      runtimeStatus: session.runtimeStatus,
+      transcript,
+    });
 
     return {
       cwd: data.cwd,
       conversation,
       detail: {
         generatedAt: new Date().toISOString(),
-        session,
+        session: {
+          ...session,
+          model: runtimeConfiguration.model,
+          reasoningEffort: runtimeConfiguration.reasoningEffort,
+        },
         content: tailed.content,
         contentLength: tailed.contentLength,
         truncated: tailed.truncated,
         source: output.source,
         transcript: tailedTranscript.transcript,
         transcriptTruncated: tailedTranscript.truncated,
+        pendingInteraction,
       },
     };
   }
@@ -1698,7 +1996,51 @@ export class MobileGatewayService {
       tmuxEnabled: sessionInfo?.tmuxEnabled ?? false,
       sessionId: sessionInfo?.sessionId ?? conversation.id,
       sessionTitle: sessionInfo?.sessionTitle,
+      agent: mapSessionAgent(
+        conversation,
+        getRuntime(conversation.runtimeId)?.name ?? conversation.runtimeId
+      ),
+      model: conversation.runtimeOverrides?.model ?? null,
+      reasoningEffort: conversation.runtimeOverrides?.reasoningEffort ?? null,
+      permissionMode:
+        conversation.permissionMode ?? conversation.runtimeOverrides?.permissionMode ?? null,
     };
+  }
+
+  private async resolveSessionRuntimeConfiguration(
+    conversation: Conversation,
+    cwd: string,
+    sessionId: string
+  ): Promise<{ model: string | null; reasoningEffort: string | null }> {
+    let model = conversation.runtimeOverrides?.model ?? null;
+    let reasoningEffort = conversation.runtimeOverrides?.reasoningEffort ?? null;
+    if (conversation.runtimeId === 'codex') {
+      const context = await getCodexSessionContext(
+        cwd,
+        conversation.id,
+        conversation.title,
+        conversation.createdAt,
+        { transcriptMode: 'harness', conversationLastInteractedAt: conversation.lastInteractedAt }
+      ).catch((error: unknown) => {
+        log.warn('MobileGateway: failed to load Codex runtime configuration', {
+          conversationId: conversation.id,
+          error: String(error),
+        });
+        return null;
+      });
+      model = context?.model ?? model;
+      reasoningEffort = context?.turnContexts.at(-1)?.effort ?? reasoningEffort;
+    } else if (conversation.runtimeId === 'claude') {
+      const metadata = await getClaudeSessionMetadata(cwd, sessionId).catch((error: unknown) => {
+        log.warn('MobileGateway: failed to load Claude runtime configuration', {
+          conversationId: conversation.id,
+          error: String(error),
+        });
+        return null;
+      });
+      model = metadata?.model ?? model;
+    }
+    return { model, reasoningEffort };
   }
 
   private async readConversationOutput(
@@ -1763,6 +2105,18 @@ export class MobileGatewayService {
     return transcript ?? [];
   }
 
+  private async resolveMobileAgent(agentId: string | null | undefined): Promise<Agent | null> {
+    if (agentId === null) return null;
+    const agent = agentId
+      ? await agentsConfigService.get(agentId)
+      : ((await agentsConfigService.getBySlug(BUILTIN_AGENT_KEYS.general)) ??
+        (await agentsConfigService.list()).find(isMobileSelectableAgent));
+    if (!agent || !isMobileSelectableAgent(agent)) {
+      throw new MobileGatewayError(404, 'agent_not_found', 'Selected Agent was not found.');
+    }
+    return agent;
+  }
+
   private async createDemand(
     params: MobileCreateDemandRequest
   ): Promise<MobileCreateDemandResponse> {
@@ -1777,8 +2131,38 @@ export class MobileGatewayService {
         'Image input is available for local projects only.'
       );
     }
-    const initialPrompt = promptWithImageMarkers(params.prompt, attachments.length);
-    const provider = await this.resolveProvider(params.provider);
+    const agent = await this.resolveMobileAgent(params.agentId);
+    const provider = await this.resolveProvider(
+      params.provider ?? agent?.preferredRuntime ?? undefined
+    );
+    const permissionMode =
+      params.permissionMode ??
+      (agent ? resolveAgentPermissionMode(provider, agent.accessMode) : undefined);
+    if (
+      permissionMode &&
+      !getRuntimePermissionModes(provider).some((mode) => mode.id === permissionMode)
+    ) {
+      throw new MobileGatewayError(
+        400,
+        'invalid_configuration',
+        `Unsupported permission mode for ${provider}.`
+      );
+    }
+    const model = params.model !== undefined ? params.model : agent?.model;
+    const reasoningEffort =
+      params.reasoningEffort !== undefined ? params.reasoningEffort : agent?.reasoningEffort;
+    const promptBody = promptWithImageMarkers(params.prompt, attachments.length);
+    const initialPrompt = withSystemPrompt(
+      agent?.systemPrompt ?? '',
+      params.runMode === 'brainstorm'
+        ? [
+            '请先进行方案讨论，不要直接修改文件。',
+            '先梳理目标、关键决策、实现步骤和验收方式，再等待用户确认。',
+            '',
+            promptBody,
+          ].join('\n')
+        : promptBody
+    );
     const taskId = randomUUID();
     const conversationId = randomUUID();
     const existingTaskNames = (await getTasks(projectId)).map((task) => task.name);
@@ -1787,13 +2171,24 @@ export class MobileGatewayService {
     });
     const taskName = ensureUniqueTaskSlug(generatedName, existingTaskNames);
     const sourceBranch = await this.resolveSourceBranch(project, projectId);
+    const strategy =
+      params.strategyKind === 'new-branch'
+        ? { kind: 'new-branch' as const, taskBranch: taskName }
+        : { kind: 'no-worktree' as const };
+    const skillSelection = agent
+      ? normalizeSkillSelection({
+          restriction: agent.skillPolicyMode === 'allowlist' ? 'allowlist' : undefined,
+          autoSkillKeys: agent.enabledSkillIds,
+          manualSkillKeys: agent.manualSkillIds,
+        })
+      : undefined;
 
     const result = await createTask({
       id: taskId,
       projectId,
       name: taskName,
       sourceBranch,
-      strategy: { kind: 'no-worktree' },
+      strategy,
       parentTaskId: params.parentTaskId,
       initialConversation: {
         id: conversationId,
@@ -1804,6 +2199,13 @@ export class MobileGatewayService {
         clientSource: 'mobile',
         initialPrompt,
         imagePaths: attachments.map((attachment) => attachment.filePath),
+        agent: agent
+          ? { id: agent.id, name: agent.name, icon: agent.icon || undefined }
+          : undefined,
+        model,
+        reasoningEffort,
+        permissionMode,
+        skillSelection,
       },
     });
 
@@ -1818,6 +2220,39 @@ export class MobileGatewayService {
       sessionId: conversationId,
       warning: result.data.warning ? mapCreateTaskWarning(result.data.warning) : undefined,
     };
+  }
+
+  private async updateSessionRuntimeConfiguration(
+    projectId: string,
+    taskId: string,
+    conversationId: string,
+    update: MobileSessionRuntimeConfigurationUpdate
+  ): Promise<MobileSessionRuntimeConfigurationResponse> {
+    await this.ensureProjectOpen(projectId);
+    const conversations = await getConversationsForTask(projectId, taskId);
+    const conversation = conversations.find((candidate) => candidate.id === conversationId);
+    if (!conversation) {
+      throw new MobileGatewayError(404, 'session_not_found', 'Mobile session was not found.');
+    }
+    if (
+      update.permissionMode &&
+      !getRuntimePermissionModes(conversation.runtimeId).some(
+        (mode) => mode.id === update.permissionMode
+      )
+    ) {
+      throw new MobileGatewayError(
+        400,
+        'invalid_configuration',
+        `Unsupported permission mode for ${conversation.runtimeId}.`
+      );
+    }
+
+    await restartConversation(projectId, taskId, conversationId, undefined, undefined, undefined, {
+      model: update.model,
+      reasoningEffort: update.reasoningEffort,
+      permissionMode: update.permissionMode,
+    });
+    return { ok: true, generatedAt: new Date().toISOString() };
   }
 
   private async ensureProjectOpen(projectId: string): Promise<Project> {

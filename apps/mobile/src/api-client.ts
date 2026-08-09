@@ -1,6 +1,7 @@
 import {
   MOBILE_INPUT_ATTACHMENT_MAX_BYTES,
   type MobileApiError,
+  type MobileConfigurationSnapshot,
   type MobileCreateDemandRequest,
   type MobileCreateDemandResponse,
   type MobileDashboardSnapshot,
@@ -13,7 +14,11 @@ import {
   type MobileSessionDetail,
   type MobileSessionInputRequest,
   type MobileSessionInputResponse,
+  type MobileSessionRuntimeConfigurationResponse,
+  type MobileSessionRuntimeConfigurationUpdate,
   type MobileSkillsResponse,
+  type MobileTaskActionRequest,
+  type MobileTaskActionResponse,
   type MobileTaskSessionsResponse,
 } from '../../../src/shared/mobile-api';
 import { MOBILE_RELAY_BASE_URL } from '../../../src/shared/mobile-relay';
@@ -167,6 +172,12 @@ export function fetchProfile(connection: MobileConnection): Promise<MobileProfil
   return request<MobileProfileSnapshot>(connection, '/v1/profile');
 }
 
+export function fetchConfiguration(
+  connection: MobileConnection
+): Promise<MobileConfigurationSnapshot> {
+  return request<MobileConfigurationSnapshot>(connection, '/v1/configuration');
+}
+
 export function fetchSkills(
   connection: MobileConnection,
   context: { projectId?: string; taskId?: string; sessionId?: string } = {}
@@ -195,6 +206,22 @@ export function fetchTaskSessions(
   return request<MobileTaskSessionsResponse>(
     connection,
     `/v1/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/sessions`
+  );
+}
+
+export function performTaskAction(
+  connection: MobileConnection,
+  projectId: string,
+  taskId: string,
+  body: MobileTaskActionRequest
+): Promise<MobileTaskActionResponse> {
+  return request<MobileTaskActionResponse>(
+    connection,
+    `/v1/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/actions`,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }
   );
 }
 
@@ -243,6 +270,23 @@ export function sendSessionInput(
       throw error;
     })
     .finally(() => clearTimeout(timeout));
+}
+
+export function updateSessionRuntimeConfiguration(
+  connection: MobileConnection,
+  projectId: string,
+  taskId: string,
+  sessionId: string,
+  body: MobileSessionRuntimeConfigurationUpdate
+): Promise<MobileSessionRuntimeConfigurationResponse> {
+  return request<MobileSessionRuntimeConfigurationResponse>(
+    connection,
+    `/v1/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/sessions/${encodeURIComponent(sessionId)}/config`,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }
+  );
 }
 
 export function createDemand(

@@ -58,13 +58,29 @@ function isSessionsPrefix(segments: string[]): boolean {
   );
 }
 
+function isTaskActionsPrefix(segments: string[]): boolean {
+  return (
+    segments[0] === 'v1' &&
+    segments[1] === 'projects' &&
+    Boolean(segments[2]) &&
+    segments[3] === 'tasks' &&
+    Boolean(segments[4]) &&
+    segments[5] === 'actions'
+  );
+}
+
 function isXhsJobsPrefix(segments: string[]): boolean {
   return segments[0] === 'v1' && segments[1] === 'xhs' && segments[2] === 'jobs';
 }
 
 function assertAllowedUpstreamRoute(method: string, segments: string[]): boolean {
   if (method === 'GET' && segments.length === 2 && segments[0] === 'v1') {
-    if (segments[1] === 'snapshot' || segments[1] === 'profile' || segments[1] === 'skills') {
+    if (
+      segments[1] === 'snapshot' ||
+      segments[1] === 'profile' ||
+      segments[1] === 'configuration' ||
+      segments[1] === 'skills'
+    ) {
       return false;
     }
   }
@@ -101,6 +117,11 @@ function assertAllowedUpstreamRoute(method: string, segments: string[]): boolean
     throw new RoutePolicyError(404, 'not_found', 'Relay endpoint was not found.');
   }
 
+  if (isTaskActionsPrefix(segments)) {
+    if (method === 'POST' && segments.length === 6) return false;
+    throw new RoutePolicyError(404, 'not_found', 'Relay endpoint was not found.');
+  }
+
   if (!isSessionsPrefix(segments)) {
     throw new RoutePolicyError(404, 'not_found', 'Relay endpoint was not found.');
   }
@@ -113,6 +134,9 @@ function assertAllowedUpstreamRoute(method: string, segments: string[]): boolean
     return false;
   }
   if (method === 'POST' && segments.length === 8 && segments[6] && segments[7] === 'input') {
+    return false;
+  }
+  if (method === 'POST' && segments.length === 8 && segments[6] && segments[7] === 'config') {
     return false;
   }
   throw new RoutePolicyError(404, 'not_found', 'Relay endpoint was not found.');

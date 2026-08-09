@@ -10,6 +10,7 @@ describe('resolveForwardableMobileRoute', () => {
   it.each([
     ['GET', '/v1/devices/desktop-1/v1/snapshot', '/v1/snapshot', false],
     ['GET', '/v1/devices/desktop-1/v1/profile', '/v1/profile', false],
+    ['GET', '/v1/devices/desktop-1/v1/configuration', '/v1/configuration', false],
     ['GET', '/v1/devices/desktop-1/v1/skills', '/v1/skills', false],
     [
       'GET',
@@ -18,6 +19,12 @@ describe('resolveForwardableMobileRoute', () => {
       false,
     ],
     ['POST', '/v1/devices/desktop-1/v1/demands', '/v1/demands', false],
+    [
+      'POST',
+      '/v1/devices/desktop-1/v1/projects/project/tasks/task/actions',
+      '/v1/projects/project/tasks/task/actions',
+      false,
+    ],
     ['POST', '/v1/devices/desktop-1/v1/attachments', '/v1/attachments', false],
     ['POST', '/v1/devices/desktop-1/v1/xhs/jobs', '/v1/xhs/jobs', false],
     ['GET', '/v1/devices/desktop-1/v1/xhs/jobs/job-1', '/v1/xhs/jobs/job-1', false],
@@ -57,6 +64,12 @@ describe('resolveForwardableMobileRoute', () => {
       '/v1/projects/p/tasks/t/sessions/session/input',
       false,
     ],
+    [
+      'POST',
+      '/v1/devices/desktop-1/v1/projects/p/tasks/t/sessions/session/config',
+      '/v1/projects/p/tasks/t/sessions/session/config',
+      false,
+    ],
   ])('allows %s %s', (method, url, upstreamPath, isEventStream) => {
     expect(resolveForwardableMobileRoute(request(method, url))).toEqual({
       deviceId: 'desktop-1',
@@ -72,6 +85,7 @@ describe('resolveForwardableMobileRoute', () => {
     ['POST', '/v1/devices/desktop-1/v1/projects/p/tasks/t/sessions/s/events'],
     ['POST', '/v1/devices/desktop-1/v1/skills'],
     ['GET', '/v1/devices/desktop-1/v1/xhs/jobs'],
+    ['GET', '/v1/devices/desktop-1/v1/projects/p/tasks/t/actions'],
     ['POST', '/v1/devices/desktop-1/v1/xhs/jobs/job-1/raw'],
     ['POST', '/v1/devices/desktop-1/v1/projects/p/skills'],
     ['POST', '/v1/devices/desktop-1/v1/projects/p/tasks/t/sessions/s/skills'],

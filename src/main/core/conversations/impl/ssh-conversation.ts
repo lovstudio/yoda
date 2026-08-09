@@ -1,5 +1,9 @@
 import type { AgentSessionConfig } from '@shared/agent-session';
-import type { Conversation, SessionRuntimeOverrides } from '@shared/conversations';
+import {
+  mergeSessionRuntimeOverrides,
+  type Conversation,
+  type SessionRuntimeOverrides,
+} from '@shared/conversations';
 import { agentSessionExitedChannel } from '@shared/events/agentEvents';
 import type { ProjectPromptPrinciples } from '@shared/project-settings';
 import { makePtySessionId } from '@shared/ptySessionId';
@@ -171,11 +175,17 @@ export class SshConversationProvider implements ConversationProvider {
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       const terminalThemeMode = await resolveTerminalThemeMode();
       if (!this.ownsPendingStart(sessionId, startToken)) return;
+      const effectiveRuntimeOverrides = mergeSessionRuntimeOverrides(
+        conversation.runtimeOverrides,
+        runtimeOverrides
+      );
+      const { permissionMode: runtimePermissionMode, ...runtimeCommandOverrides } =
+        effectiveRuntimeOverrides ?? {};
       const { command, args, startupInput } = buildAgentCommand({
         runtimeId: conversation.runtimeId,
         providerConfig,
         autoApprove: conversation.autoApprove,
-        permissionMode: conversation.permissionMode,
+        permissionMode: runtimePermissionMode ?? conversation.permissionMode,
         sessionId: conversation.id,
         isResuming,
         // Clipboard paste is local-only; remote sessions get @path mentions.
@@ -183,7 +193,7 @@ export class SshConversationProvider implements ConversationProvider {
           ? initialPrompt
           : substituteImageMentions(initialPrompt, imagePaths ?? []),
         appendSystemPrompt,
-        ...runtimeOverrides,
+        ...runtimeCommandOverrides,
         terminalThemeMode,
         executionMode: conversation.executionMode,
       });
@@ -277,9 +287,11 @@ export class SshConversationProvider implements ConversationProvider {
         );
       }
 
+      let shouldEmitAgentSessionExited = false;
       pty.onExit(({ exitCode }) => {
         this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
         if (this.sessions.get(sessionId) !== pty) return;
+        shouldEmitAgentSessionExited = true;
         this.sessions.delete(sessionId);
         this.sessionInfos.delete(sessionId);
         markRuntimeSessionExited({
@@ -294,19 +306,22 @@ export class SshConversationProvider implements ConversationProvider {
           task_id: conversation.taskId,
           conversation_id: conversation.id,
         });
-        events.emit(agentSessionExitedChannel, {
-          sessionId,
-          projectId: conversation.projectId,
-          conversationId: conversation.id,
-          taskId: conversation.taskId,
-          exitCode,
-        });
-        snapshotTaskDiffOnSessionExit(conversation.taskId);
       });
 
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       registrationAttempted = true;
       ptySessionRegistry.register(sessionId, pty, {
+        onFinalExit: (info) => {
+          if (!shouldEmitAgentSessionExited) return;
+          events.emit(agentSessionExitedChannel, {
+            sessionId,
+            projectId: conversation.projectId,
+            conversationId: conversation.id,
+            taskId: conversation.taskId,
+            exitCode: info.exitCode,
+          });
+          snapshotTaskDiffOnSessionExit(conversation.taskId);
+        },
         registrationEpoch,
         tmuxBacked: Boolean(tmuxSessionName),
       });

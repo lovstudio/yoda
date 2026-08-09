@@ -181,7 +181,7 @@ export const automationRuns = sqliteTable(
   })
 );
 
-/** Persisted prompt groups, including groups that do not contain prompts yet. */
+/** Legacy prompt groups retained so existing databases can be upgraded in place. */
 export const promptGroups = sqliteTable('prompt_groups', {
   name: text('name').primaryKey(),
   parentName: text('parent_name'),
@@ -191,13 +191,15 @@ export const promptGroups = sqliteTable('prompt_groups', {
     .default(sql`CURRENT_TIMESTAMP`),
 });
 
-/** Canonical user prompt store, including grouping, sources and injection. */
+/** Canonical user prompt store, including human-only tags, sources and injection. */
 export const prompts = sqliteTable('prompts', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
   description: text('description').notNull().default(''),
   content: text('content').notNull(),
+  /** Legacy grouping column. New rows keep this empty; startup migrates it to tags. */
   groupName: text('group_name').notNull().default(''),
+  tagsJson: text('tags_json').notNull().default('[]'),
   extraInfo: text('extra_info').notNull().default(''),
   injectionEnabled: integer('injection_enabled', { mode: 'boolean' }).notNull().default(false),
   injectionOrder: integer('injection_order').notNull().default(0),

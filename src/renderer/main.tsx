@@ -42,6 +42,7 @@ async function bootstrap() {
   initSoundPlayer();
   const isPrimaryAppWindow =
     !isTaskWindowLaunch && !isComparisonWindowLaunch && !isAiLabWindowLaunch;
+  const launchTarget = getTaskWindowLaunchTarget();
   if (isPrimaryAppWindow) {
     // Subscribe happens during AppState construction. Hydrate the primary shell
     // immediately, but keep warm/detached windows from duplicating the scan.
@@ -52,32 +53,37 @@ async function bootstrap() {
   // costs ~1s and a window may not even show a code/diff tab. Editor consumers
   // (useMonacoLease, StickyDiffEditor) await the pool on demand, so deferring is
   // safe and lets the window paint ~1s sooner.
-  const monacoInit = Promise.all([
-    codeEditorPool.init(0).catch((error: unknown) => {
-      log.warn('[monaco-code-pool] init failed:', error);
-    }),
-    diffEditorPool.init(0).catch((error: unknown) => {
-      log.warn('[monaco-diff-pool] init failed:', error);
-    }),
-  ]);
+  const monacoInit = isPrimaryAppWindow
+    ? Promise.all([
+        codeEditorPool.init(0).catch((error: unknown) => {
+          log.warn('[monaco-code-pool] init failed:', error);
+        }),
+        diffEditorPool.init(0).catch((error: unknown) => {
+          log.warn('[monaco-diff-pool] init failed:', error);
+        }),
+      ])
+    : Promise.resolve();
 
   const [navResult, sidebarResult, allViewState] = await Promise.all([
-    rpc.viewState.get('navigation') as Promise<NavigationSnapshot> | null,
-    rpc.viewState.get('sidebar'),
-    rpc.viewState.getAll(),
-    appState.projects.load(),
-    appState.workspaces.load(),
+    isPrimaryAppWindow
+      ? (rpc.viewState.get('navigation') as Promise<NavigationSnapshot> | null)
+      : Promise.resolve(null),
+    isPrimaryAppWindow ? rpc.viewState.get('sidebar') : Promise.resolve(null),
+    isPrimaryAppWindow ? rpc.viewState.getAll() : Promise.resolve({}),
+    isPrimaryAppWindow ? appState.projects.load() : Promise.resolve(),
+    isPrimaryAppWindow ? appState.workspaces.load() : Promise.resolve(),
   ]);
   void monacoInit;
 
-  viewStateCache.populate(allViewState as Record<string, unknown>);
+  if (isPrimaryAppWindow) {
+    viewStateCache.populate(allViewState as Record<string, unknown>);
 
-  const agentRuntimeResult = (allViewState as Record<string, unknown>)?.agentRuntime;
-  if (agentRuntimeResult) {
-    appState.agentRuntime.restoreSnapshot(agentRuntimeResult as Partial<AgentRuntimeSnapshot>);
+    const agentRuntimeResult = (allViewState as Record<string, unknown>)?.agentRuntime;
+    if (agentRuntimeResult) {
+      appState.agentRuntime.restoreSnapshot(agentRuntimeResult as Partial<AgentRuntimeSnapshot>);
+    }
   }
 
-  const launchTarget = getTaskWindowLaunchTarget();
   if (launchTarget) {
     appState.navigation.restoreSnapshot({
       currentViewId: 'task',
@@ -107,10 +113,13 @@ async function bootstrap() {
   appState.appTabs.start();
   setupAppCommandProvider();
   setupViewCommandProvider();
-  if (sidebarResult) {
-    appState.sidebar.restoreSnapshot(sidebarResult as Partial<SidebarSnapshot>);
-  } else {
-    appState.sidebar.expandAllProjects();
+  if (isPrimaryAppWindow) {
+    if (sidebarResult) {
+      appState.sidebar.restoreSnapshot(sidebarResult as Partial<SidebarSnapshot>);
+    } else {
+      appState.sidebar.expandAllProjects();
+    }
+    appState.projects.mountInitialProjects().catch(() => {});
   }
   if (isPrimaryAppWindow) {
     for (const project of appState.projects.projects.values()) {

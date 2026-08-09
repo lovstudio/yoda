@@ -2,6 +2,7 @@ import { APP_NAME_LOWER } from './app-identity';
 
 export type ParsedDeepLink = {
   appId?: string;
+  filePath?: string;
   projectId?: string;
   taskId?: string;
   conversationId?: string;
@@ -13,6 +14,7 @@ export type DeepLinkTarget = {
   id: string;
   rawUrl: string;
   appId?: string;
+  filePath?: string;
   projectId?: string;
   taskId?: string;
   conversationId?: string;
@@ -44,6 +46,12 @@ export function buildProjectDeepLink(args: { projectId: string }, scheme = APP_N
 
 export function buildAiLabAppDeepLink(args: { appId: string }, scheme = APP_NAME_LOWER): string {
   return `${scheme}://app/${encodeURIComponent(args.appId)}`;
+}
+
+export function buildFileDeepLink(args: { filePath: string }, scheme = APP_NAME_LOWER): string {
+  const url = new URL(`${scheme}://open`);
+  url.searchParams.set('path', args.filePath);
+  return url.toString();
 }
 
 export function buildTaskDeepLink(
@@ -115,6 +123,7 @@ export function parseYodaDeepLink(rawUrl: string, scheme = APP_NAME_LOWER): Pars
 function queryParams(searchParams: URLSearchParams): ParsedDeepLink {
   return compactTarget({
     appId: firstParam(searchParams, 'appId', 'app'),
+    filePath: firstParam(searchParams, 'filePath', 'path', 'file'),
     projectId: firstParam(searchParams, 'projectId', 'project'),
     taskId: firstParam(searchParams, 'taskId', 'task'),
     conversationId: firstParam(

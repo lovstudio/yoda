@@ -22,6 +22,39 @@ export const appController = createRPCController({
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   },
+  openExternalFile: async (filePath: string) => {
+    try {
+      await appService.openExternalFile(filePath);
+      return { success: true as const };
+    } catch (error) {
+      return {
+        success: false as const,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  },
+  authorizeExternalFile: async (filePath: string) => {
+    try {
+      const normalizedPath = await appService.authorizeExternalFile(filePath);
+      return { success: true as const, path: normalizedPath };
+    } catch (error) {
+      return {
+        success: false as const,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  },
+  openFileDialog: async () => {
+    try {
+      const paths = await appService.openFileDialog();
+      return { success: true as const, paths };
+    } catch (error) {
+      return {
+        success: false as const,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  },
   clipboardWriteText: async (text: string) => {
     try {
       appService.clipboardWriteText(text);
@@ -153,4 +186,5 @@ export const appController = createRPCController({
   getPlatform: () => process.platform,
   getHomeDir: () => homedir(),
   consumePendingDeepLinks: () => deepLinkService.consumePendingTargets(),
+  consumePendingExternalFiles: () => appService.consumePendingExternalFiles(),
 });

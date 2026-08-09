@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
-import { type Conversation, type CreateConversationParams } from '@shared/conversations';
+import {
+  type Conversation,
+  type CreateConversationParams,
+  type SessionRuntimeOverrides,
+} from '@shared/conversations';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { isDangerPermissionMode, resolveRuntimePermissionModeId } from '@shared/runtime-registry';
 import { normalizeSkillSelection } from '@shared/skills/selection';
@@ -104,9 +108,15 @@ export async function createConversation(params: CreateConversationParams): Prom
         )
       : undefined;
     const pendingInitialPrompt = pendingInitialPromptFromParams(params);
+    const runtimeOverrides: SessionRuntimeOverrides | undefined =
+      params.model !== undefined || params.reasoningEffort !== undefined
+        ? { model: params.model, reasoningEffort: params.reasoningEffort }
+        : undefined;
     const config =
       autoApprove === undefined &&
       permissionMode === undefined &&
+      params.agent === undefined &&
+      runtimeOverrides === undefined &&
       skillPolicy === undefined &&
       params.executionMode === undefined &&
       sessionSource === undefined &&
@@ -114,7 +124,9 @@ export async function createConversation(params: CreateConversationParams): Prom
         ? undefined
         : JSON.stringify({
             autoApprove,
+            agent: params.agent,
             permissionMode,
+            runtimeOverrides,
             skillPolicy,
             executionMode: params.executionMode,
             sessionSource,
