@@ -10,6 +10,7 @@ import type {
   MaasConnection,
   MaasGlobalBindingStatus,
   MaasInvocationFilterKind,
+  MaasManagedGatewayStarSnapshot,
   MaasPlatformId,
   MaasPlatformOfficialDescription,
   MaasRuntimeBindingStatus,
@@ -23,6 +24,7 @@ import { rpc } from '@renderer/lib/ipc';
 const PAGE_SIZE = 24;
 const REAL_USAGE_QUERY_VERSION = 'zenmux-management-statistics-v2';
 const PLATFORM_DESCRIPTION_QUERY_VERSION = 'official-page-description-v1';
+const MANAGED_GATEWAY_STARS_QUERY_VERSION = 'github-stars-v1';
 
 export const maasQueryKeys = {
   connections: ['maas', 'connections'] as const,
@@ -30,6 +32,11 @@ export const maasQueryKeys = {
     'maas',
     'platform-descriptions',
     PLATFORM_DESCRIPTION_QUERY_VERSION,
+  ] as const,
+  managedGatewayStars: [
+    'maas',
+    'managed-gateway-stars',
+    MANAGED_GATEWAY_STARS_QUERY_VERSION,
   ] as const,
   runtimeBindings: (platformId?: MaasPlatformId) =>
     ['maas', 'runtime-bindings', platformId ?? 'all'] as const,
@@ -57,6 +64,15 @@ export const maasQueryKeys = {
       refreshSequence,
     ] as const,
 };
+
+export function useMaasManagedGatewayStars() {
+  return useQuery<MaasManagedGatewayStarSnapshot[]>({
+    queryKey: maasQueryKeys.managedGatewayStars,
+    queryFn: () => rpc.maas.listManagedGatewayStars(),
+    staleTime: 30 * 60 * 1_000,
+    refetchOnWindowFocus: true,
+  });
+}
 
 function assertLiteLlmActionSucceeded(result: LiteLlmManagedActionResult): LiteLlmManagedStatus {
   if (!result.success) {

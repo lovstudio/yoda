@@ -4391,6 +4391,8 @@
     "managedGateways": {
       "title": "本地集成（开源）",
       "description": "按 GitHub Star 排序。Yoda 可快捷安装、启停并管理本地 Router，也支持连接已有服务。",
+      "githubStars": "GitHub Star：{{count}}",
+      "githubStarsLoading": "正在读取 GitHub Star…",
       "integrationDocs": "集成文档",
       "oneClickInstall": "一键安装",
       "start": "启动",
