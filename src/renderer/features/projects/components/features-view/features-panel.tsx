@@ -67,25 +67,27 @@ export function FeaturesPanel() {
   }
 
   return (
-    <div className="@container flex h-full min-h-0 min-w-0 bg-background text-foreground @max-[760px]:flex-col">
-      <FeatureList
-        features={features.data}
-        selectedId={selectedId}
-        onSelect={(nextId) => setParams({ featureId: nextId })}
-        onCreate={create}
-      />
-      {feature.isLoading ? (
-        <div className="flex min-w-0 flex-1 items-center justify-center">
-          <Loader2 className="size-4 animate-spin text-foreground-muted" />
-        </div>
-      ) : feature.data ? (
-        <FeatureWorkspace projectId={projectId} feature={feature.data} />
-      ) : (
-        <EmptyState
-          label={t('featureDelivery.notFound')}
-          description={t('featureDelivery.notFoundDescription')}
+    <div className="@container flex h-full min-h-0 min-w-0 bg-background text-foreground">
+      <div className="flex min-h-0 min-w-0 flex-1 @max-[760px]:flex-col">
+        <FeatureList
+          features={features.data}
+          selectedId={selectedId}
+          onSelect={(nextId) => setParams({ featureId: nextId })}
+          onCreate={create}
         />
-      )}
+        {feature.isLoading ? (
+          <div className="flex min-w-0 flex-1 items-center justify-center">
+            <Loader2 className="size-4 animate-spin text-foreground-muted" />
+          </div>
+        ) : feature.data ? (
+          <FeatureWorkspace projectId={projectId} feature={feature.data} />
+        ) : (
+          <EmptyState
+            label={t('featureDelivery.notFound')}
+            description={t('featureDelivery.notFoundDescription')}
+          />
+        )}
+      </div>
     </div>
   );
 }
