@@ -257,10 +257,6 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         }
         handleOpenTask();
       }}
-      onDoubleClick={(e) => {
-        e.stopPropagation();
-        menuActions.onRename();
-      }}
     >
       <div className="flex min-w-0 flex-1 items-center gap-1 self-stretch overflow-hidden">
         {hasRootToggle && (
