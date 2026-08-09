@@ -4,15 +4,24 @@ import { rpc } from '../lib/ipc';
 
 let audioCtx: AudioContext | null = null;
 let enabled = true;
-let focusMode: 'always' | 'unfocused' = 'always';
+let focusMode: 'always' | 'unfocused' = 'unfocused';
+
+export function setSoundSettings(
+  settings: Partial<Pick<NotificationSettings, 'sound' | 'soundFocusMode'>>
+): void {
+  if (settings.sound !== undefined) enabled = settings.sound;
+  if (settings.soundFocusMode !== undefined) focusMode = settings.soundFocusMode;
+}
 
 export function initSoundPlayer(): void {
   rpc.appSettings
     .getWithMeta('notifications')
     .then((meta) => {
       const value = (meta as { value: NotificationSettings }).value;
-      enabled = value.sound ?? true;
-      focusMode = value.soundFocusMode ?? 'always';
+      setSoundSettings({
+        sound: value.sound ?? true,
+        soundFocusMode: value.soundFocusMode ?? 'unfocused',
+      });
     })
     .catch(() => {});
 }

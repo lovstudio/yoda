@@ -1214,12 +1214,24 @@
     },
     "notifications": {
       "title": "通知",
-      "description": "在代理需要你处理时收到提醒。",
+      "description": "任务完成或 Agent 需要你处理时收到提醒。",
+      "turnCompletion": "任务完成通知",
+      "turnCompletionDescription": "设置任务完成时何时播放提示音。",
+      "permissionNotifications": "启用权限通知",
+      "permissionNotificationsDescription": "当 Agent 需要你确认权限时显示系统横幅。",
+      "questionNotifications": "启用问题通知",
+      "questionNotificationsDescription": "当 Agent 等待你的回答才能继续时显示系统横幅。",
+      "enabled": "开启",
+      "deliveryModes": {
+        "never": "从不",
+        "unfocused": "仅当窗口未聚焦",
+        "always": "始终"
+      },
       "sound": "声音",
       "soundDescription": "为代理事件播放音效。",
       "soundTiming": "声音时机",
       "soundTimingDescription": "何时播放声音。",
-      "always": "总是",
+      "always": "始终",
       "unfocused": "仅当窗口未聚焦时",
       "osNotifications": "系统通知",
       "osNotificationsDescription": "当 Agent 需要你处理且 Yoda 未聚焦时显示系统横幅。"

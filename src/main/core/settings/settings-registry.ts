@@ -112,7 +112,7 @@ export const SETTINGS_DEFAULTS = {
     enabled: true,
     sound: true,
     osNotifications: true,
-    soundFocusMode: 'always' as const,
+    soundFocusMode: 'unfocused' as const,
     accountUsageWarningEnabled: true,
     accountUsageWarningThreshold: 95,
   },

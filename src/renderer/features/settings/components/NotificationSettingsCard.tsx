@@ -1,5 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  arePermissionNotificationsEnabled,
+  areQuestionNotificationsEnabled,
+  getNotificationDeliveryMode,
+  type NotificationDeliveryMode,
+} from '@shared/notification-settings';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import {
   Select,
@@ -9,7 +15,7 @@ import {
   SelectValue,
 } from '@renderer/lib/ui/select';
 import { Switch } from '@renderer/lib/ui/switch';
-import { cn } from '@renderer/utils/utils';
+import { setSoundSettings } from '@renderer/utils/soundPlayer';
 import { ResetToDefaultButton } from './ResetToDefaultButton';
 import { SettingRow } from './SettingRow';
 
@@ -22,105 +28,123 @@ const NotificationSettingsCard: React.FC = () => {
     isFieldOverridden,
     resetField,
   } = useAppSettingsKey('notifications');
-  const soundFocusMode = notifications?.soundFocusMode ?? 'always';
-  const renderSoundFocusModeLabel = (value: unknown) =>
-    value === 'unfocused'
-      ? t('settings.notifications.unfocused')
-      : t('settings.notifications.always');
+  const completionMode = getNotificationDeliveryMode(notifications);
+  const permissionNotifications = arePermissionNotificationsEnabled(notifications);
+  const questionNotifications = areQuestionNotificationsEnabled(notifications);
+
+  useEffect(() => {
+    setSoundSettings({
+      sound: notifications?.sound,
+      soundFocusMode: notifications?.soundFocusMode,
+    });
+  }, [notifications?.sound, notifications?.soundFocusMode]);
+
+  const resetCompletionSettings = () => {
+    resetField('sound');
+    resetField('soundFocusMode');
+  };
+
+  const updateCompletionMode = (next: NotificationDeliveryMode) => {
+    if (next === 'never') {
+      update({ sound: false });
+      return;
+    }
+    update({ sound: true, soundFocusMode: next });
+  };
 
   return (
-    <div className="flex flex-col gap-4">
-      <SettingRow
-        title={t('settings.notifications.title')}
-        description={t('settings.notifications.description')}
-        control={
-          <>
-            <ResetToDefaultButton
-              visible={isFieldOverridden('enabled')}
-              defaultLabel="on"
-              onReset={() => resetField('enabled')}
-              disabled={loading}
-            />
-            <Switch
-              checked={notifications?.enabled ?? true}
-              disabled={loading}
-              onCheckedChange={(next) => update({ enabled: next })}
-            />
-          </>
-        }
-      />
-      <div
-        className={cn(
-          'flex flex-col gap-3',
-          !notifications?.enabled && 'pointer-events-none opacity-33'
-        )}
-      >
-        <SettingRow
-          title={t('settings.notifications.sound')}
-          description={t('settings.notifications.soundDescription')}
-          control={
-            <>
-              <ResetToDefaultButton
-                visible={isFieldOverridden('sound')}
-                defaultLabel="on"
-                onReset={() => resetField('sound')}
-                disabled={loading}
-              />
-              <Switch
-                checked={notifications?.sound ?? true}
-                disabled={loading}
-                onCheckedChange={(next) => update({ sound: next })}
-              />
-            </>
-          }
-        />
+    <div
+      data-testid="notification-settings-card"
+      className="@container overflow-hidden rounded-xl border border-border/70 bg-background"
+    >
+      <div className="flex flex-col divide-y divide-border/70">
+        <div className="px-4 py-4 @max-md:px-3 @max-md:py-3.5">
+          <SettingRow
+            title={t('settings.notifications.turnCompletion')}
+            description={t('settings.notifications.turnCompletionDescription')}
+            control={
+              <>
+                <ResetToDefaultButton
+                  visible={isFieldOverridden('sound') || isFieldOverridden('soundFocusMode')}
+                  defaultLabel={t('settings.notifications.deliveryModes.unfocused')}
+                  onReset={resetCompletionSettings}
+                  disabled={loading}
+                />
+                <Select
+                  value={completionMode}
+                  disabled={loading}
+                  onValueChange={(next) => updateCompletionMode(next as NotificationDeliveryMode)}
+                >
+                  <SelectTrigger
+                    className="w-auto min-w-0 shrink-0 gap-2 [&>span]:line-clamp-none"
+                    aria-label={t('settings.notifications.turnCompletion')}
+                  >
+                    <SelectValue>
+                      {t(`settings.notifications.deliveryModes.${completionMode}`)}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="min-w-[13rem]">
+                    <SelectItem value="never">
+                      {t('settings.notifications.deliveryModes.never')}
+                    </SelectItem>
+                    <SelectItem value="unfocused">
+                      {t('settings.notifications.deliveryModes.unfocused')}
+                    </SelectItem>
+                    <SelectItem value="always">
+                      {t('settings.notifications.deliveryModes.always')}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </>
+            }
+          />
+        </div>
 
-        <SettingRow
-          title={t('settings.notifications.soundTiming')}
-          description={t('settings.notifications.soundTimingDescription')}
-          control={
-            <>
-              <ResetToDefaultButton
-                visible={isFieldOverridden('soundFocusMode')}
-                defaultLabel="always"
-                onReset={() => resetField('soundFocusMode')}
-                disabled={loading}
-              />
-              <Select
-                value={soundFocusMode}
-                onValueChange={(next) => update({ soundFocusMode: next as 'always' | 'unfocused' })}
-              >
-                <SelectTrigger className="w-auto shrink-0 gap-2 [&>span]:line-clamp-none">
-                  <SelectValue>{renderSoundFocusModeLabel}</SelectValue>
-                </SelectTrigger>
-                <SelectContent className="min-w-max">
-                  <SelectItem value="always">{t('settings.notifications.always')}</SelectItem>
-                  <SelectItem value="unfocused">{t('settings.notifications.unfocused')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </>
-          }
-        />
+        <div className="px-4 py-4 @max-md:px-3 @max-md:py-3.5">
+          <SettingRow
+            title={t('settings.notifications.permissionNotifications')}
+            description={t('settings.notifications.permissionNotificationsDescription')}
+            control={
+              <>
+                <ResetToDefaultButton
+                  visible={isFieldOverridden('permissionNotifications')}
+                  defaultLabel={t('settings.notifications.enabled')}
+                  onReset={() => resetField('permissionNotifications')}
+                  disabled={loading}
+                />
+                <Switch
+                  checked={permissionNotifications}
+                  disabled={loading}
+                  aria-label={t('settings.notifications.permissionNotifications')}
+                  onCheckedChange={(next) => update({ permissionNotifications: next })}
+                />
+              </>
+            }
+          />
+        </div>
 
-        <SettingRow
-          title={t('settings.notifications.osNotifications')}
-          description={t('settings.notifications.osNotificationsDescription')}
-          control={
-            <>
-              <ResetToDefaultButton
-                visible={isFieldOverridden('osNotifications')}
-                defaultLabel="on"
-                onReset={() => resetField('osNotifications')}
-                disabled={loading}
-              />
-              <Switch
-                checked={notifications?.osNotifications ?? true}
-                disabled={loading}
-                onCheckedChange={(next) => update({ osNotifications: next })}
-              />
-            </>
-          }
-        />
+        <div className="px-4 py-4 @max-md:px-3 @max-md:py-3.5">
+          <SettingRow
+            title={t('settings.notifications.questionNotifications')}
+            description={t('settings.notifications.questionNotificationsDescription')}
+            control={
+              <>
+                <ResetToDefaultButton
+                  visible={isFieldOverridden('questionNotifications')}
+                  defaultLabel={t('settings.notifications.enabled')}
+                  onReset={() => resetField('questionNotifications')}
+                  disabled={loading}
+                />
+                <Switch
+                  checked={questionNotifications}
+                  disabled={loading}
+                  aria-label={t('settings.notifications.questionNotifications')}
+                  onCheckedChange={(next) => update({ questionNotifications: next })}
+                />
+              </>
+            }
+          />
+        </div>
       </div>
     </div>
   );
