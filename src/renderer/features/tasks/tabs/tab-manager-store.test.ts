@@ -81,6 +81,26 @@ describe('TabManagerStore overview tab', () => {
     expect(store.activeConversationId).toBe('conversation-1');
   });
 
+  it('resolves a conversation target even when Overview is the only open tab', () => {
+    const store = new TabManagerStore(
+      makeConversationManager([
+        makeConversation('conversation-1', '2026-05-01T00:00:00.000Z', true),
+      ]),
+      'workspace-1'
+    );
+
+    store.initializeDefault();
+    const conversationTabId = store.resolvedTabs.find((tab) => tab.kind === 'conversation')?.tabId;
+    if (!conversationTabId) throw new Error('Expected a conversation tab');
+    store.closeTab(conversationTabId);
+
+    expect(store.resolvedTabs.map((tab) => tab.kind)).toEqual(['overview']);
+    expect(store.preferredConversationTarget).toEqual({
+      kind: 'conversation',
+      conversationId: 'conversation-1',
+    });
+  });
+
   it('cannot be closed', () => {
     const store = new TabManagerStore(makeConversationManager([]), 'workspace-1');
     store.initializeDefault();
