@@ -131,6 +131,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const hasChildren = rowVariant === 'underProject' && childCount > 0;
   const isParentTask = childCount > 0;
   const canQuickCreateSubtask = isParentTask && Boolean(menuActions.onCreateSubtask);
+  const canShowHoverPreview = !disableHoverPreview && !canQuickCreateSubtask;
   const isCollapsed = hasChildren && sidebarStore.collapsedTaskIds.has(taskId);
   // Root-level parents swap pl-8 for a project-style mini-button slot (same 32px
   // name offset), so the hover-only chevron aligns with the project row's chevron
@@ -205,6 +206,29 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const pinTaskToSidePane = () => {
     appState.sidePane.pinTaskView(projectId, taskId);
   };
+
+  const archiveAction = (
+    <SidebarItemMiniButton
+      type="button"
+      aria-label={t('sidebar.archiveTask')}
+      disabled={isArchiving}
+      data-sidebar-task-hover-trigger={canShowHoverPreview || undefined}
+      onClick={(e) => {
+        e.stopPropagation();
+        // The sidebar icon archives immediately. The overflow menu
+        // retains the optional-note and pre-archive-command flows.
+        menuActions.onArchiveQuick();
+      }}
+    >
+      <Archive className="h-4 w-4" />
+    </SidebarItemMiniButton>
+  );
+
+  const archiveControl = canShowHoverPreview ? (
+    <PopoverTrigger openOnHover delay={360} closeDelay={160} render={archiveAction} />
+  ) : (
+    archiveAction
+  );
 
   const taskRow = (
     <SidebarMenuRow
@@ -355,7 +379,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
       <div
         className={cn(
           'items-center gap-0.5',
-          isMenuOpen || isArchiving
+          isMenuOpen || isArchiving || isHoverPreviewOpen
             ? 'flex'
             : hasAgentNotification
               ? 'hidden'
@@ -391,25 +415,13 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
             <ListPlus className="h-4 w-4" />
           </SidebarItemMiniButton>
         ) : (
-          <SidebarItemMiniButton
-            type="button"
-            aria-label={t('sidebar.archiveTask')}
-            disabled={isArchiving}
-            onClick={(e) => {
-              e.stopPropagation();
-              // The sidebar icon archives immediately. The overflow menu
-              // retains the optional-note and pre-archive-command flows.
-              menuActions.onArchiveQuick();
-            }}
-          >
-            <Archive className="h-4 w-4" />
-          </SidebarItemMiniButton>
+          archiveControl
         )}
       </div>
       <div
         className={cn(
           'items-center',
-          isMenuOpen || isArchiving
+          isMenuOpen || isArchiving || isHoverPreviewOpen
             ? 'hidden'
             : hasAgentNotification
               ? 'flex'
@@ -436,34 +448,36 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         }
       }}
     >
-      <Popover
-        open={isHoverPreviewOpen}
-        onOpenChange={(open) => setHoverPreviewOpen(open && !isMenuOpen)}
-      >
-        <PopoverTrigger
-          openOnHover
-          nativeButton={false}
-          disabled={disableHoverPreview}
-          delay={360}
-          closeDelay={160}
-          render={taskRow}
-        />
-        <PopoverContent
-          side="right"
-          align="start"
-          sideOffset={8}
-          data-yoda-surface="sidebar-task-hover-preview"
-          className="w-72 gap-0 overflow-hidden rounded-xl border border-border/70 bg-background-tertiary/95 p-0 shadow-xl backdrop-blur-xl"
+      {canShowHoverPreview ? (
+        <Popover
+          open={isHoverPreviewOpen}
+          onOpenChange={(open, eventDetails) => {
+            // The archive button remains a direct action. Its click should not
+            // toggle the hover preview on the way to archiving the task.
+            if (eventDetails.reason === 'trigger-press') return;
+            setHoverPreviewOpen(open && !isMenuOpen);
+          }}
         >
-          <TaskSidebarHoverPreview
-            task={task}
-            projectId={projectId}
-            projectName={projectName}
-            branchName={branchName}
-            isOpen={isHoverPreviewOpen}
-          />
-        </PopoverContent>
-      </Popover>
+          {taskRow}
+          <PopoverContent
+            side="right"
+            align="start"
+            sideOffset={8}
+            data-yoda-surface="sidebar-task-hover-preview"
+            className="w-72 gap-0 overflow-hidden rounded-xl border border-border/70 bg-background-tertiary/95 p-0 shadow-xl backdrop-blur-xl"
+          >
+            <TaskSidebarHoverPreview
+              task={task}
+              projectId={projectId}
+              projectName={projectName}
+              branchName={branchName}
+              isOpen={isHoverPreviewOpen}
+            />
+          </PopoverContent>
+        </Popover>
+      ) : (
+        taskRow
+      )}
     </TaskContextMenu>
   );
 });

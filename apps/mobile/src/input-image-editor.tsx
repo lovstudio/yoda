@@ -16,7 +16,7 @@ import {
 import { captureRef } from 'react-native-view-shot';
 import {
   clampMobileCropRect,
-  fullMobileCropRect,
+  initialMobileCropRect,
   mobileEditorPointDistance,
   moveMobileCropRect,
   resizeMobileCropRect,
@@ -75,6 +75,16 @@ function isFullCrop(crop: MobileCropRect, width: number, height: number): boolea
     Math.abs(crop.width - width) < 1 &&
     Math.abs(crop.height - height) < 1
   );
+}
+
+function getImageSize(uri: string): Promise<{ height: number; width: number }> {
+  return new Promise((resolve, reject) => {
+    Image.getSize(
+      uri,
+      (width, height) => resolve({ height, width }),
+      (error) => reject(error)
+    );
+  });
 }
 
 function AnnotationStrokeOverlay({ stroke }: { stroke: AnnotationStroke }) {
@@ -176,6 +186,52 @@ function CropOverlay({
         ]}
       />
       <View
+        pointerEvents="none"
+        style={[
+          styles.cropGridLine,
+          {
+            height: crop.height,
+            left: crop.x + crop.width / 3,
+            top: crop.y,
+          },
+        ]}
+      />
+      <View
+        pointerEvents="none"
+        style={[
+          styles.cropGridLine,
+          {
+            height: crop.height,
+            left: crop.x + (crop.width * 2) / 3,
+            top: crop.y,
+          },
+        ]}
+      />
+      <View
+        pointerEvents="none"
+        style={[
+          styles.cropGridLine,
+          {
+            height: 1,
+            left: crop.x,
+            top: crop.y + crop.height / 3,
+            width: crop.width,
+          },
+        ]}
+      />
+      <View
+        pointerEvents="none"
+        style={[
+          styles.cropGridLine,
+          {
+            height: 1,
+            left: crop.x,
+            top: crop.y + (crop.height * 2) / 3,
+            width: crop.width,
+          },
+        ]}
+      />
+      <View
         {...handleResponders['top-left'].panHandlers}
         style={[
           styles.cropHandle,
@@ -222,6 +278,7 @@ export function MobileImageEditor({
   const [workingImage, setWorkingImage] = useState<MobileImageDraft | null>(image);
   const [mode, setMode] = useState<EditorMode>('crop');
   const [crop, setCrop] = useState<MobileCropRect>({ height: 0, width: 0, x: 0, y: 0 });
+  const [cropDirty, setCropDirty] = useState(false);
   const [strokes, setStrokes] = useState<AnnotationStroke[]>([]);
   const [annotationColor, setAnnotationColor] = useState<string>(ANNOTATION_COLORS[0]);
   const [busy, setBusy] = useState(false);
@@ -248,15 +305,17 @@ export function MobileImageEditor({
     setWorkingImage(image);
     setMode('crop');
     setStrokes([]);
+    setCropDirty(false);
     setBusy(false);
   }, [image, open]);
 
   useEffect(() => {
-    if (!workingImage || canvasSize.width <= 0 || canvasSize.height <= 0) return;
-    const nextCrop = fullMobileCropRect(canvasSize.width, canvasSize.height);
+    if (!open || !workingImage || canvasSize.width <= 0 || canvasSize.height <= 0) return;
+    const nextCrop = initialMobileCropRect(canvasSize.width, canvasSize.height);
     cropRef.current = nextCrop;
     setCrop(nextCrop);
-  }, [canvasSize.height, canvasSize.width, workingImage]);
+    setCropDirty(false);
+  }, [canvasSize.height, canvasSize.width, open, workingImage]);
 
   useEffect(() => {
     cropRef.current = crop;
@@ -265,11 +324,13 @@ export function MobileImageEditor({
   const updateCrop = useCallback((nextCrop: MobileCropRect) => {
     cropRef.current = nextCrop;
     setCrop(nextCrop);
+    setCropDirty(true);
   }, []);
 
   const cropFrameResponder = useMemo(
     () =>
       PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: () => {
           cropGestureStartRef.current = cropRef.current;
@@ -294,6 +355,7 @@ export function MobileImageEditor({
   const cropHandleResponders = useMemo(() => {
     const createResponder = (handle: MobileCropHandle) =>
       PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: () => {
           cropGestureStartRef.current = cropRef.current;
@@ -331,6 +393,7 @@ export function MobileImageEditor({
   const annotationResponder = useMemo(
     () =>
       PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: (event) => {
           const point = clampPoint(event, canvasSize.width, canvasSize.height);
@@ -368,7 +431,7 @@ export function MobileImageEditor({
   const applyCrop = useCallback(async (): Promise<MobileImageDraft> => {
     const currentImage = workingImage;
     if (!currentImage) throw new Error('图片还没有准备好，请重试。');
-    if (isFullCrop(crop, canvasSize.width, canvasSize.height)) return currentImage;
+    if (!cropDirty || isFullCrop(crop, canvasSize.width, canvasSize.height)) return currentImage;
     const nextImage = await cropMobileInputImage(
       currentImage,
       clampMobileCropRect(crop, canvasSize.width, canvasSize.height),
@@ -378,7 +441,26 @@ export function MobileImageEditor({
     setWorkingImage(nextImage);
     setStrokes([]);
     return nextImage;
-  }, [canvasSize.height, canvasSize.width, crop, workingImage]);
+  }, [canvasSize.height, canvasSize.width, crop, cropDirty, workingImage]);
+
+  const captureAnnotatedImage = useCallback(async (currentImage: MobileImageDraft) => {
+    const editorCanvas = editorShotRef.current;
+    if (!editorCanvas) throw new Error('图片画布还没有准备好，请重试。');
+    const capturedUri = await captureRef(editorCanvas, {
+      format: 'jpg',
+      quality: 0.95,
+      result: 'tmpfile',
+      useRenderInContext: true,
+    });
+    const capturedSize = await getImageSize(capturedUri);
+    return encodeMobileInputImage({
+      height: capturedSize.height,
+      id: currentImage.id,
+      name: currentImage.name,
+      uri: capturedUri,
+      width: capturedSize.width,
+    });
+  }, []);
 
   const selectMode = useCallback(
     async (nextMode: EditorMode) => {
@@ -395,9 +477,24 @@ export function MobileImageEditor({
         }
         return;
       }
+      if (nextMode === 'crop' && mode === 'annotate' && strokes.length > 0) {
+        if (!workingImage) return;
+        setBusy(true);
+        try {
+          const nextImage = await captureAnnotatedImage(workingImage);
+          setWorkingImage(nextImage);
+          setStrokes([]);
+          setMode('crop');
+        } catch (error) {
+          onError(errorMessage(error));
+        } finally {
+          setBusy(false);
+        }
+        return;
+      }
       setMode(nextMode);
     },
-    [applyCrop, busy, mode, onError]
+    [applyCrop, busy, captureAnnotatedImage, mode, onError, strokes.length, workingImage]
   );
 
   const finishEditing = useCallback(async () => {
@@ -408,20 +505,7 @@ export function MobileImageEditor({
       if (mode === 'crop') {
         nextImage = await applyCrop();
       } else if (strokes.length > 0) {
-        const capturedUri = await captureRef(editorShotRef, {
-          format: 'jpg',
-          height: nextImage.height,
-          quality: 0.95,
-          result: 'tmpfile',
-          width: nextImage.width,
-        });
-        nextImage = await encodeMobileInputImage({
-          height: nextImage.height,
-          id: nextImage.id,
-          name: nextImage.name,
-          uri: capturedUri,
-          width: nextImage.width,
-        });
+        nextImage = await captureAnnotatedImage(nextImage);
       }
       onSave(nextImage);
     } catch (error) {
@@ -429,7 +513,7 @@ export function MobileImageEditor({
     } finally {
       setBusy(false);
     }
-  }, [applyCrop, busy, mode, onError, onSave, strokes.length, workingImage]);
+  }, [applyCrop, busy, captureAnnotatedImage, mode, onError, onSave, strokes.length, workingImage]);
 
   if (!open || !workingImage || canvasSize.width <= 0 || canvasSize.height <= 0) return null;
 
@@ -477,7 +561,11 @@ export function MobileImageEditor({
             collapsable={false}
             style={[styles.editorCanvas, { height: canvasSize.height, width: canvasSize.width }]}
           >
-            <Image source={{ uri: workingImage.uri }} style={StyleSheet.absoluteFill} />
+            <Image
+              resizeMode="stretch"
+              source={{ uri: workingImage.uri }}
+              style={StyleSheet.absoluteFill}
+            />
             {strokes.map((stroke, index) => (
               <AnnotationStrokeOverlay key={`${stroke.color}-${index}`} stroke={stroke} />
             ))}
@@ -569,56 +657,62 @@ export function MobileImageEditor({
               <Text style={styles.editorHint}>拖动边框或四角，保留需要给 Agent 看的区域</Text>
             </View>
           ) : (
-            <View style={styles.annotationToolRow}>
-              <View style={styles.annotationColors}>
-                {ANNOTATION_COLORS.map((color) => (
+            <>
+              <View style={styles.editorHintRow}>
+                <Ionicons color={EDITOR_COLORS.muted} name="brush-outline" size={16} />
+                <Text style={styles.editorHint}>在图片上直接涂画，完成后会合成到图片</Text>
+              </View>
+              <View style={styles.annotationToolRow}>
+                <View style={styles.annotationColors}>
+                  {ANNOTATION_COLORS.map((color) => (
+                    <Pressable
+                      key={color}
+                      accessibilityLabel={`选择${color}标注笔`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: annotationColor === color }}
+                      style={({ pressed }) => [
+                        styles.annotationColorButton,
+                        annotationColor === color ? styles.annotationColorButtonSelected : null,
+                        pressed ? styles.pressed : null,
+                      ]}
+                      onPress={() => setAnnotationColor(color)}
+                    >
+                      <View style={[styles.annotationColorDot, { backgroundColor: color }]} />
+                    </Pressable>
+                  ))}
+                </View>
+                <View style={styles.annotationActions}>
                   <Pressable
-                    key={color}
-                    accessibilityLabel={`选择${color}标注笔`}
+                    accessibilityLabel="撤销上一笔标注"
                     accessibilityRole="button"
-                    accessibilityState={{ selected: annotationColor === color }}
+                    accessibilityState={{ disabled: strokes.length === 0 }}
+                    disabled={strokes.length === 0}
                     style={({ pressed }) => [
-                      styles.annotationColorButton,
-                      annotationColor === color ? styles.annotationColorButtonSelected : null,
+                      styles.annotationAction,
                       pressed ? styles.pressed : null,
                     ]}
-                    onPress={() => setAnnotationColor(color)}
+                    onPress={() => setStrokes((current) => current.slice(0, -1))}
                   >
-                    <View style={[styles.annotationColorDot, { backgroundColor: color }]} />
+                    <Ionicons color={EDITOR_COLORS.ink} name="arrow-undo-outline" size={18} />
+                    <Text style={styles.annotationActionText}>撤销</Text>
                   </Pressable>
-                ))}
+                  <Pressable
+                    accessibilityLabel="清空全部标注"
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: strokes.length === 0 }}
+                    disabled={strokes.length === 0}
+                    style={({ pressed }) => [
+                      styles.annotationAction,
+                      pressed ? styles.pressed : null,
+                    ]}
+                    onPress={() => setStrokes([])}
+                  >
+                    <Ionicons color={EDITOR_COLORS.muted} name="trash-outline" size={17} />
+                    <Text style={styles.annotationActionText}>清空</Text>
+                  </Pressable>
+                </View>
               </View>
-              <View style={styles.annotationActions}>
-                <Pressable
-                  accessibilityLabel="撤销上一笔标注"
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: strokes.length === 0 }}
-                  disabled={strokes.length === 0}
-                  style={({ pressed }) => [
-                    styles.annotationAction,
-                    pressed ? styles.pressed : null,
-                  ]}
-                  onPress={() => setStrokes((current) => current.slice(0, -1))}
-                >
-                  <Ionicons color={EDITOR_COLORS.ink} name="arrow-undo-outline" size={18} />
-                  <Text style={styles.annotationActionText}>撤销</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityLabel="清空全部标注"
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: strokes.length === 0 }}
-                  disabled={strokes.length === 0}
-                  style={({ pressed }) => [
-                    styles.annotationAction,
-                    pressed ? styles.pressed : null,
-                  ]}
-                  onPress={() => setStrokes([])}
-                >
-                  <Ionicons color={EDITOR_COLORS.muted} name="trash-outline" size={17} />
-                  <Text style={styles.annotationActionText}>清空</Text>
-                </Pressable>
-              </View>
-            </View>
+            </>
           )}
         </View>
       </SafeAreaView>
@@ -692,7 +786,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: EDITOR_HORIZONTAL_INSET,
   },
   editorCanvas: {
-    overflow: 'hidden',
+    overflow: 'visible',
     backgroundColor: EDITOR_COLORS.canvas,
   },
   annotationGestureLayer: {
@@ -711,11 +805,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     backgroundColor: 'rgba(0, 0, 0, 0.52)',
   },
+  cropGridLine: {
+    position: 'absolute',
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
+    width: 1,
+  },
   cropFrame: {
     position: 'absolute',
+    zIndex: 1,
     borderWidth: 2,
     borderColor: EDITOR_COLORS.surface,
-    backgroundColor: 'transparent',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
   },
   cropHandle: {
     position: 'absolute',

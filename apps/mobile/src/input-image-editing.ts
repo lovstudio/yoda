@@ -20,6 +20,7 @@ export type MobileImageRect = {
 };
 
 const DEFAULT_MIN_CROP_EDGE = 48;
+const DEFAULT_CROP_INSET_RATIO = 0.1;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -32,6 +33,30 @@ export function fullMobileCropRect(canvasWidth: number, canvasHeight: number): M
     x: 0,
     y: 0,
   };
+}
+
+export function initialMobileCropRect(
+  canvasWidth: number,
+  canvasHeight: number,
+  insetRatio = DEFAULT_CROP_INSET_RATIO
+): MobileCropRect {
+  const safeWidth = Math.max(canvasWidth, 0);
+  const safeHeight = Math.max(canvasHeight, 0);
+  const safeInsetRatio = clamp(insetRatio, 0, 0.45);
+  const insetX = safeWidth * safeInsetRatio;
+  const insetY = safeHeight * safeInsetRatio;
+
+  return clampMobileCropRect(
+    {
+      height: safeHeight - insetY * 2,
+      width: safeWidth - insetX * 2,
+      x: insetX,
+      y: insetY,
+    },
+    safeWidth,
+    safeHeight,
+    1
+  );
 }
 
 export function clampMobileCropRect(
