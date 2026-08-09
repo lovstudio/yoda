@@ -1,3 +1,4 @@
+import { queryOptions } from '@tanstack/react-query';
 import type {
   ClaudeSessionPrompt,
   Conversation,
@@ -6,6 +7,7 @@ import type {
 import { rpc } from '@renderer/lib/ipc';
 
 export const SESSION_PROMPTS_REFRESH_MS = 3_000;
+export const SESSION_PROMPTS_IDLE_REFRESH_MS = 15_000;
 
 type VisibleRefreshOptions = {
   runImmediately?: boolean;
@@ -25,9 +27,61 @@ const EMPTY_SESSION_CONVERSATION: SessionConversationData = {
   messages: [],
 };
 
+export function sessionConversationQueryKey(
+  conversation: Conversation | null,
+  cwd: string,
+  sessionId?: string
+) {
+  return [
+    'sessionConversation',
+    conversation?.runtimeId ?? 'none',
+    cwd,
+    conversation?.id ?? '',
+    sessionId ?? conversation?.sessionSource?.sessionId ?? '',
+    conversation?.title ?? '',
+    conversation?.createdAt ?? '',
+  ] as const;
+}
+
+export function getSessionConversationRefreshInterval(runtimeStatus?: string): number {
+  return runtimeStatus === 'working' ? SESSION_PROMPTS_REFRESH_MS : SESSION_PROMPTS_IDLE_REFRESH_MS;
+}
+
+/** Shared React Query configuration for every prompt-history surface. */
+export function sessionConversationQueryOptions({
+  active,
+  conversation,
+  cwd,
+  runtimeStatus,
+  sessionId,
+}: {
+  active: boolean;
+  conversation: Conversation | null;
+  cwd: string;
+  runtimeStatus?: string;
+  sessionId?: string;
+}) {
+  return queryOptions({
+    queryKey: sessionConversationQueryKey(conversation, cwd, sessionId),
+    queryFn: () =>
+      conversation
+        ? resolveSessionConversation(conversation, cwd, sessionId)
+        : Promise.resolve(EMPTY_SESSION_CONVERSATION),
+    enabled: active && Boolean(conversation && cwd),
+    staleTime: getSessionConversationRefreshInterval(runtimeStatus) - 250,
+    refetchInterval:
+      active && conversation && cwd
+        ? getSessionConversationRefreshInterval(runtimeStatus)
+        : (false as const),
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
+}
+
 /**
- * Runs one non-overlapping session refresh loop while the renderer is visible.
- * Hidden windows pause transcript scans and refresh immediately when foregrounded.
+ * Runs one non-overlapping refresh loop while the renderer is visible. The
+ * branch-tree loader still uses this because it refreshes a derived lineage,
+ * while single-session surfaces use the shared React Query above.
  */
 export function startVisibleSessionRefresh(
   load: () => void | Promise<void>,
@@ -75,7 +129,7 @@ export async function resolveSessionConversation(
 ): Promise<SessionConversationData> {
   try {
     if (conversation.runtimeId === 'claude') {
-      const context = await rpc.conversations.getClaudeSessionContext(
+      const context = await rpc.conversations.getClaudeSessionConversation(
         cwd,
         sessionId || conversation.id
       );
@@ -86,7 +140,7 @@ export async function resolveSessionConversation(
     }
 
     if (conversation.runtimeId === 'codex') {
-      const context = await rpc.conversations.getCodexSessionContext(
+      const context = await rpc.conversations.getCodexSessionConversation(
         cwd,
         conversation.id,
         conversation.title,

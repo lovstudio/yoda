@@ -7,6 +7,27 @@ export interface ExecOptions {
   echo?: boolean;
 }
 
+interface ExecFailure {
+  status?: number | null;
+  stdout?: string | Buffer;
+  stderr?: string | Buffer;
+}
+
+function capturedOutput(value: unknown): string {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  if (Buffer.isBuffer(value)) {
+    return value.toString('utf8').trim();
+  }
+  return '';
+}
+
+function formatCapturedOutput(label: 'stdout' | 'stderr', value: unknown): string | null {
+  const output = capturedOutput(value);
+  return output ? `${label}:\n${output}` : null;
+}
+
 export function exec(cmd: string, opts?: ExecOptions): string {
   if (opts?.echo) {
     console.log(`$ ${cmd}`);
@@ -20,9 +41,15 @@ export function exec(cmd: string, opts?: ExecOptions): string {
   try {
     return (execSync(cmd, execOpts) as string).trim();
   } catch (error: unknown) {
-    const e = error as { stderr?: string; status?: number };
-    const stderr = typeof e.stderr === 'string' ? e.stderr.trim() : '';
-    throw new Error(`Command failed (exit ${e.status ?? '?'}): ${cmd}\n${stderr}`);
+    const failure = error as ExecFailure;
+    const output = [
+      formatCapturedOutput('stdout', failure.stdout),
+      formatCapturedOutput('stderr', failure.stderr),
+    ]
+      .filter((entry): entry is string => entry !== null)
+      .join('\n');
+    const details = output ? `\n${output}` : '';
+    throw new Error(`Command failed (exit ${failure.status ?? '?'}): ${cmd}${details}`);
   }
 }
 

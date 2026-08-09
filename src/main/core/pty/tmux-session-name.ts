@@ -15,12 +15,19 @@ const TMUX_LIST_FORMAT_SEPARATOR = '\u001f';
 // tmux renders control bytes in format output using their octal escape.
 const TMUX_LIST_OUTPUT_SEPARATOR = '\\037';
 const YODA_TMUX_SESSION_IDENTITY_OPTION = '@yoda_agent_session_id';
+const TMUX_MARKER_MISMATCH_OUTPUT = '__YODA_TMUX_MARKER_MISMATCH__';
 
 export type TmuxSessionMarker = {
   sessionName: string;
   cwd: string;
   /** Root process inside the pane, used to attribute resources to this tmux session. */
   panePid?: number;
+  /** Unix epoch milliseconds reported by tmux for the session creation time. */
+  createdAtMs?: number;
+  /** Unix epoch milliseconds reported by tmux for the latest session activity. */
+  lastActivityAtMs?: number;
+  /** Number of clients currently attached to the session. */
+  attachedClients: number;
 };
 
 function tmuxShellPrefix(): string {
@@ -157,34 +164,81 @@ export function decodeTmuxSessionName(sessionName: string): string | undefined {
  */
 export async function listTmuxSessionMarkers(ctx: IExecutionContext): Promise<TmuxSessionMarker[]> {
   try {
-    const { stdout } = await ctx.exec(
+    return await listTmuxSessionMarkersStrict(ctx);
+  } catch {
+    // No Yoda tmux server is the normal "nothing to hydrate" state.
+    return [];
+  }
+}
+
+/** List Yoda markers while preserving timeout/transport failures for GC callers. */
+export async function listTmuxSessionMarkersStrict(
+  ctx: IExecutionContext
+): Promise<TmuxSessionMarker[]> {
+  let stdout: string;
+  try {
+    ({ stdout } = await ctx.exec(
       'tmux',
       [
         ...YODA_TMUX_SERVER_ARGS,
         'list-panes',
         '-a',
         '-F',
-        `#{session_name}${TMUX_LIST_FORMAT_SEPARATOR}#{pane_current_path}${TMUX_LIST_FORMAT_SEPARATOR}#{pane_pid}`,
+        [
+          '#{session_name}',
+          '#{pane_current_path}',
+          '#{pane_pid}',
+          '#{session_created}',
+          '#{session_activity}',
+          '#{session_attached}',
+        ].join(TMUX_LIST_FORMAT_SEPARATOR),
       ],
       { timeout: TMUX_LIST_TIMEOUT_MS, maxBuffer: TMUX_LIST_MAX_BUFFER }
-    );
-    const markers = new Map<string, TmuxSessionMarker>();
-    for (const line of stdout.split('\n')) {
-      const [sessionNameValue, cwdValue, panePidValue] = line.split(TMUX_LIST_OUTPUT_SEPARATOR);
-      const sessionName = sessionNameValue?.trim();
-      if (!sessionName || !decodeTmuxSessionName(sessionName) || markers.has(sessionName)) continue;
-      const panePid = Number(panePidValue);
-      markers.set(sessionName, {
-        sessionName,
-        cwd: cwdValue?.trim() ?? '',
-        ...(Number.isSafeInteger(panePid) && panePid > 0 ? { panePid } : {}),
-      });
+    ));
+  } catch (error) {
+    const detail = [
+      error instanceof Error ? error.message : String(error),
+      typeof error === 'object' && error && 'stderr' in error ? String(error.stderr) : '',
+    ].join('\n');
+    if (
+      /no server running(?: on )?/i.test(detail) ||
+      /(?:error|failed) connecting to .*no such file or directory/i.test(detail)
+    ) {
+      return [];
     }
-    return [...markers.values()];
-  } catch {
-    // No Yoda tmux server is the normal "nothing to hydrate" state.
-    return [];
+    throw error;
   }
+  const markers = new Map<string, TmuxSessionMarker>();
+  for (const line of stdout.split('\n')) {
+    const [
+      sessionNameValue,
+      cwdValue,
+      panePidValue,
+      createdAtSecondsValue,
+      lastActivityAtSecondsValue,
+      attachedClientsValue,
+    ] = line.split(TMUX_LIST_OUTPUT_SEPARATOR);
+    const sessionName = sessionNameValue?.trim();
+    if (!sessionName || !decodeTmuxSessionName(sessionName) || markers.has(sessionName)) continue;
+    const panePid = Number(panePidValue);
+    const createdAtSeconds = Number(createdAtSecondsValue);
+    const lastActivityAtSeconds = Number(lastActivityAtSecondsValue);
+    const attachedClients = Number(attachedClientsValue);
+    markers.set(sessionName, {
+      sessionName,
+      cwd: cwdValue?.trim() ?? '',
+      ...(Number.isSafeInteger(panePid) && panePid > 0 ? { panePid } : {}),
+      ...(Number.isSafeInteger(createdAtSeconds) && createdAtSeconds > 0
+        ? { createdAtMs: createdAtSeconds * 1_000 }
+        : {}),
+      ...(Number.isSafeInteger(lastActivityAtSeconds) && lastActivityAtSeconds > 0
+        ? { lastActivityAtMs: lastActivityAtSeconds * 1_000 }
+        : {}),
+      attachedClients:
+        Number.isSafeInteger(attachedClients) && attachedClients > 0 ? attachedClients : 0,
+    });
+  }
+  return [...markers.values()];
 }
 
 export async function killTmuxSession(
@@ -193,14 +247,72 @@ export async function killTmuxSession(
   execOptions?: Pick<ExecOptions, 'signal' | 'timeout'>
 ): Promise<void> {
   try {
-    const args = [...YODA_TMUX_SERVER_ARGS, 'kill-session', '-t', sessionName];
-    await ctx.exec('tmux', args, { timeout: TMUX_KILL_TIMEOUT_MS, ...execOptions });
+    await killTmuxSessionStrict(ctx, sessionName, execOptions);
   } catch (err) {
     log.debug('killTmuxSession: tmux session not found or already dead', {
       sessionName,
       error: String(err),
     });
   }
+}
+
+/**
+ * Kill a Yoda tmux session while preserving execution failures for callers
+ * that must distinguish an idempotent miss from a failed reclamation.
+ */
+export async function killTmuxSessionStrict(
+  ctx: IExecutionContext,
+  sessionName: string,
+  execOptions?: Pick<ExecOptions, 'signal' | 'timeout'>
+): Promise<void> {
+  const args = [...YODA_TMUX_SERVER_ARGS, 'kill-session', '-t', sessionName];
+  await ctx.exec('tmux', args, { timeout: TMUX_KILL_TIMEOUT_MS, ...execOptions });
+}
+
+export type ConditionalTmuxKillResult = 'killed' | 'skipped';
+
+/**
+ * Atomically compare and kill inside the isolated local Yoda tmux server.
+ * A same-name session recreated between inventory and cleanup is a normal
+ * `skipped` result; transport/command failures remain observable to callers.
+ */
+export async function killTmuxSessionIfMarkerMatchesStrict(
+  ctx: IExecutionContext,
+  marker: TmuxSessionMarker,
+  execOptions?: Pick<ExecOptions, 'signal' | 'timeout'>
+): Promise<ConditionalTmuxKillResult> {
+  if (
+    marker.panePid === undefined ||
+    marker.createdAtMs === undefined ||
+    marker.lastActivityAtMs === undefined
+  ) {
+    return 'skipped';
+  }
+  const createdCheck = `#{==:#{session_created},${marker.createdAtMs / 1_000}}`;
+  const activityCheck = `#{==:#{session_activity},${marker.lastActivityAtMs / 1_000}}`;
+  const panePidCheck = `#{==:#{pane_pid},${marker.panePid}}`;
+  const attachedCheck = `#{==:#{session_attached},${marker.attachedClients}}`;
+  const condition = [activityCheck, panePidCheck, attachedCheck].reduce(
+    (left, right) => `#{&&:${left},${right}}`,
+    createdCheck
+  );
+  const killCommand = `kill-session -t ${JSON.stringify(marker.sessionName)}`;
+  const mismatchCommand = `display-message -p ${JSON.stringify(TMUX_MARKER_MISMATCH_OUTPUT)}`;
+  const { stdout } = await ctx.exec(
+    'tmux',
+    [
+      ...YODA_TMUX_SERVER_ARGS,
+      'if-shell',
+      '-t',
+      marker.sessionName,
+      '-F',
+      condition,
+      killCommand,
+      mismatchCommand,
+    ],
+    { timeout: TMUX_KILL_TIMEOUT_MS, ...execOptions }
+  );
+  return stdout.includes(TMUX_MARKER_MISMATCH_OUTPUT) ? 'skipped' : 'killed';
 }
 
 export async function sendLiteralToTmuxSession(

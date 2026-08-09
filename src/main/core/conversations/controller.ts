@@ -18,9 +18,13 @@ import {
 } from './generateConversationTitle';
 import { getActiveRuntimeStatuses } from './getActiveRuntimeStatuses';
 import { getArchivedConversationsForTask } from './getArchivedConversationsForTask';
-import { getClaudeSessionContext } from './getClaudeSessionContext';
+import { getClaudeSessionContext, getClaudeSessionConversation } from './getClaudeSessionContext';
 import { getClaudeSessionMetadata } from './getClaudeSessionMetadata';
-import { getCodexSessionContext } from './getCodexSessionContext';
+import {
+  getCodexSessionContext,
+  getCodexSessionConversation,
+  getCodexSessionRuntimeMetadata,
+} from './getCodexSessionContext';
 import { getCohubSessionContext } from './getCohubSessionContext';
 import { getConversationRuntimeStatuses } from './getConversationRuntimeStatuses';
 import { getConversations } from './getConversations';
@@ -41,6 +45,7 @@ import {
 } from './local-agent-session-operations';
 import { moveConversation } from './moveConversation';
 import { getProjectConversationPrompts, getProjectPromptSources } from './project-prompts';
+import { getProjectSessionSources } from './project-sessions';
 import { renameConversation } from './renameConversation';
 import { restartConversation } from './restartConversation';
 import { resumeConversation } from './resumeConversation';
@@ -62,11 +67,20 @@ const SESSION_CONTEXT_RPC_CACHE_MAX_ENTRIES = 256;
 const claudeSessionContextCache = new KeyedTtlSingleFlightCache<
   Awaited<ReturnType<typeof getClaudeSessionContext>>
 >(SESSION_CONTEXT_RPC_CACHE_TTL_MS, SESSION_CONTEXT_RPC_CACHE_MAX_ENTRIES);
+const claudeSessionConversationCache = new KeyedTtlSingleFlightCache<
+  Awaited<ReturnType<typeof getClaudeSessionConversation>>
+>(SESSION_CONTEXT_RPC_CACHE_TTL_MS, SESSION_CONTEXT_RPC_CACHE_MAX_ENTRIES);
 const claudeSessionMetadataCache = new KeyedTtlSingleFlightCache<
   Awaited<ReturnType<typeof getClaudeSessionMetadata>>
 >(SESSION_CONTEXT_RPC_CACHE_TTL_MS, SESSION_CONTEXT_RPC_CACHE_MAX_ENTRIES);
 const codexSessionContextCache = new KeyedTtlSingleFlightCache<
   Awaited<ReturnType<typeof getCodexSessionContext>>
+>(SESSION_CONTEXT_RPC_CACHE_TTL_MS, SESSION_CONTEXT_RPC_CACHE_MAX_ENTRIES);
+const codexSessionConversationCache = new KeyedTtlSingleFlightCache<
+  Awaited<ReturnType<typeof getCodexSessionConversation>>
+>(SESSION_CONTEXT_RPC_CACHE_TTL_MS, SESSION_CONTEXT_RPC_CACHE_MAX_ENTRIES);
+const codexSessionRuntimeMetadataCache = new KeyedTtlSingleFlightCache<
+  Awaited<ReturnType<typeof getCodexSessionRuntimeMetadata>>
 >(SESSION_CONTEXT_RPC_CACHE_TTL_MS, SESSION_CONTEXT_RPC_CACHE_MAX_ENTRIES);
 
 function sessionContextCacheKey(parts: ReadonlyArray<string | null | undefined>): string {
@@ -78,6 +92,19 @@ async function getConfiguredClaudeSessionContext(cwd: string, sessionId: string)
     const providerConfig = await runtimeOverrideSettings.getItem('claude');
     const source = await getStoredConversationSessionSource(sessionId);
     return getClaudeSessionContext(cwd, source?.sessionId ?? sessionId, {
+      claudeConfigDir:
+        source?.runtimeId === 'claude'
+          ? source.stateRoot
+          : resolveRuntimeStateDirectory('claude', providerConfig),
+    });
+  });
+}
+
+async function getConfiguredClaudeSessionConversation(cwd: string, sessionId: string) {
+  return claudeSessionConversationCache.get(sessionContextCacheKey([cwd, sessionId]), async () => {
+    const providerConfig = await runtimeOverrideSettings.getItem('claude');
+    const source = await getStoredConversationSessionSource(sessionId);
+    return getClaudeSessionConversation(cwd, source?.sessionId ?? sessionId, {
       claudeConfigDir:
         source?.runtimeId === 'claude'
           ? source.stateRoot
@@ -127,6 +154,60 @@ async function getConfiguredCodexSessionContext(
   );
 }
 
+async function getConfiguredCodexSessionConversation(
+  cwd: string,
+  conversationId: string,
+  conversationTitle?: string,
+  conversationCreatedAt?: string | null
+) {
+  return codexSessionConversationCache.get(
+    sessionContextCacheKey([cwd, conversationId, conversationTitle, conversationCreatedAt]),
+    async () => {
+      const providerConfig = await runtimeOverrideSettings.getItem('codex');
+      const source = await getStoredConversationSessionSource(conversationId);
+      return getCodexSessionConversation(
+        cwd,
+        source?.runtimeId === 'codex' ? source.sessionId : conversationId,
+        conversationTitle,
+        conversationCreatedAt,
+        {
+          codexHome:
+            source?.runtimeId === 'codex'
+              ? source.stateRoot
+              : resolveRuntimeStateDirectory('codex', providerConfig),
+        }
+      );
+    }
+  );
+}
+
+async function getConfiguredCodexSessionRuntimeMetadata(
+  cwd: string,
+  conversationId: string,
+  conversationTitle?: string,
+  conversationCreatedAt?: string | null
+) {
+  return codexSessionRuntimeMetadataCache.get(
+    sessionContextCacheKey([cwd, conversationId, conversationTitle, conversationCreatedAt]),
+    async () => {
+      const providerConfig = await runtimeOverrideSettings.getItem('codex');
+      const source = await getStoredConversationSessionSource(conversationId);
+      return getCodexSessionRuntimeMetadata(
+        cwd,
+        source?.runtimeId === 'codex' ? source.sessionId : conversationId,
+        conversationTitle,
+        conversationCreatedAt,
+        {
+          codexHome:
+            source?.runtimeId === 'codex'
+              ? source.stateRoot
+              : resolveRuntimeStateDirectory('codex', providerConfig),
+        }
+      );
+    }
+  );
+}
+
 export const conversationController = createRPCController({
   getConversations,
   createConversation,
@@ -151,14 +232,18 @@ export const conversationController = createRPCController({
   getConversationRuntimeStatuses,
   getProjectPromptSources,
   getProjectConversationPrompts,
+  getProjectSessionSources,
   getConversationsForTask,
   getArchivedConversationsForTask,
   touchConversation,
   getClaudeSessionMetadata: getCachedClaudeSessionMetadata,
   getClaudeSessionContext: getConfiguredClaudeSessionContext,
+  getClaudeSessionConversation: getConfiguredClaudeSessionConversation,
   getClaudeStatusline,
   setClaudeStatusline,
   getCodexSessionContext: getConfiguredCodexSessionContext,
+  getCodexSessionConversation: getConfiguredCodexSessionConversation,
+  getCodexSessionRuntimeMetadata: getConfiguredCodexSessionRuntimeMetadata,
   getCohubSessionContext,
   getInstructionFiles,
   getRuntimeInstructionFiles,

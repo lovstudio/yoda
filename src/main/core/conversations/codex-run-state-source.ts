@@ -50,6 +50,7 @@ const NEW_SESSION_THREAD_CREATE_MAX_DISTANCE_MS = 60_000;
 const REQUEST_USER_INPUT_TOOL = 'request_user_input';
 const RUN_STATE_SCAN_CHUNK_BYTES = 256 * 1024;
 const MAX_RUN_STATE_LINE_BYTES = 2 * 1024 * 1024;
+const MAX_RUN_STATE_SCAN_BYTES = 8 * 1024 * 1024;
 const RUN_STATE_LINE_MARKERS = [
   Buffer.from('"task_started"'),
   Buffer.from('"task_complete"'),
@@ -219,7 +220,7 @@ class CodexRolloutTailer implements CodexRunStateWatcher {
         this.offset = targetSize;
         this.initialized = true;
         for (const event of initialCodexTailEvents(
-          lines,
+          lines ?? [],
           this.ctx.startedAtMs,
           this.pendingToolCallIds
         )) {
@@ -533,51 +534,54 @@ export async function readCodexTurnVerdictFile(
   try {
     const { size } = await file.stat();
     const lines = await readRecentRunStateLines(file, size);
-    return classifyCodexRollout(lines.join('\n'));
+    if (!lines) return null;
+    const verdict = classifyCodexRollout(lines.join('\n'));
+    return verdict.lastStartedAt === null ? null : verdict;
   } finally {
     await file.close();
   }
 }
 
-async function readRecentRunStateLines(file: FileHandle, size: number): Promise<string[]> {
+async function readRecentRunStateLines(file: FileHandle, size: number): Promise<string[] | null> {
   const newestFirst: string[] = [];
   let position = size;
+  let scannedBytes = 0;
   let carry = Buffer.alloc(0);
-  let discardingOversizedLine = false;
+  let uncertain = false;
 
   const collect = (line: Buffer): boolean => {
-    if (
-      line.length === 0 ||
-      line.length > MAX_RUN_STATE_LINE_BYTES ||
-      !RUN_STATE_LINE_MARKERS.some((marker) => line.includes(marker))
-    ) {
+    if (line.length === 0) return false;
+    if (line.length > MAX_RUN_STATE_LINE_BYTES) {
+      uncertain = true;
       return false;
     }
+    if (!RUN_STATE_LINE_MARKERS.some((marker) => line.includes(marker))) return false;
     const text = line.toString('utf8').trim();
     if (!text) return false;
+    try {
+      JSON.parse(text);
+    } catch {
+      uncertain = true;
+      return false;
+    }
     newestFirst.push(text);
     return parseTurnEvent(text)?.kind === 'turn-started';
   };
 
   while (position > 0) {
-    const start = Math.max(0, position - RUN_STATE_SCAN_CHUNK_BYTES);
+    const remainingBudget = MAX_RUN_STATE_SCAN_BYTES - scannedBytes;
+    if (remainingBudget <= 0) return null;
+    const start = Math.max(0, position - Math.min(RUN_STATE_SCAN_CHUNK_BYTES, remainingBudget));
     const chunk = Buffer.allocUnsafe(position - start);
     const { bytesRead } = await file.read(chunk, 0, chunk.length, start);
+    if (bytesRead !== chunk.length) return null;
     position = start;
-    let data = chunk.subarray(0, bytesRead);
-
-    if (discardingOversizedLine) {
-      const separator = data.lastIndexOf(0x0a);
-      if (separator < 0) continue;
-      data = data.subarray(0, separator + 1);
-      discardingOversizedLine = false;
-    }
+    scannedBytes += bytesRead;
+    const data = chunk.subarray(0, bytesRead);
 
     const lastSeparator = data.lastIndexOf(0x0a);
     if (lastSeparator < 0 && data.length + carry.length > MAX_RUN_STATE_LINE_BYTES) {
-      carry = Buffer.alloc(0);
-      discardingOversizedLine = true;
-      continue;
+      return null;
     }
 
     const combined = carry.length > 0 ? Buffer.concat([data, carry]) : data;
@@ -592,6 +596,7 @@ async function readRecentRunStateLines(file: FileHandle, size: number): Promise<
       if (collect(combined.subarray(separator + 1, lineEnd))) {
         return newestFirst.reverse();
       }
+      if (uncertain) return null;
       lineEnd = separator;
       if (separator === firstSeparator) break;
       separator = combined.lastIndexOf(0x0a, separator - 1);
@@ -599,7 +604,8 @@ async function readRecentRunStateLines(file: FileHandle, size: number): Promise<
     carry = combined.subarray(0, firstSeparator);
   }
 
-  if (!discardingOversizedLine && carry.length > 0) collect(carry);
+  if (carry.length > 0) collect(carry);
+  if (uncertain) return null;
   return newestFirst.reverse();
 }
 

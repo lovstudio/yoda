@@ -3,6 +3,7 @@ import type { Client, ClientChannel } from 'ssh2';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SSH_EXEC_CHANNEL_OPEN_CONCURRENCY } from '@main/core/execution-context/ssh-exec-channel-limiter';
 import { SshExecutionContext } from '@main/core/execution-context/ssh-execution-context';
+import { makeTmuxSessionName } from '@main/core/pty/tmux-session-name';
 import { FALLBACK_REMOTE_SHELL_PROFILE } from '@main/core/ssh/remote-shell-profile';
 import type { SshClientProxy } from '@main/core/ssh/ssh-client-proxy';
 import { cleanupDetachedSessions, TASK_SESSION_CLEANUP_KILL_TIMEOUT_MS } from './task-manager';
@@ -42,9 +43,21 @@ class HangingSshClient {
   pendingOpens = 0;
   maxPendingOpens = 0;
 
-  readonly exec = vi.fn((_command: string, callback: ExecCallback) => {
+  constructor(private readonly markerOutput: string) {}
+
+  readonly exec = vi.fn((command: string, callback: ExecCallback) => {
     this.pendingOpens += 1;
     this.maxPendingOpens = Math.max(this.maxPendingOpens, this.pendingOpens);
+    if (command.includes('list-panes')) {
+      const stream = new FakeSshStream();
+      this.pendingOpens -= 1;
+      callback(undefined, stream as unknown as ClientChannel);
+      setTimeout(() => {
+        stream.emit('data', Buffer.from(this.markerOutput));
+        stream.emit('close', 0);
+      }, 0);
+      return;
+    }
     this.callbacks.push((error, stream) => {
       this.pendingOpens -= 1;
       callback(error, stream);
@@ -85,22 +98,35 @@ describe('fallback task cleanup over SSH', () => {
       };
     });
 
-    const client = new HangingSshClient();
+    const leafIds = [
+      ...Array.from({ length: 16 }, (_, index) => `conversation-${index}`),
+      ...Array.from({ length: 8 }, (_, index) => `terminal-${index}`),
+    ];
+    const markerOutput = leafIds
+      .map(
+        (leafId) =>
+          `${makeTmuxSessionName(`project-1:task-1:${leafId}`)}\\037/repo\\037123\\0371\\0371\\0370`
+      )
+      .join('\n');
+    const client = new HangingSshClient(markerOutput);
     const ctx = new SshExecutionContext(makeProxy(client));
     const execSpy = vi.spyOn(ctx, 'exec');
     const cleanup = cleanupDetachedSessions('project-1', 'task-1', ctx);
+    const cleanupFailure = expect(cleanup).rejects.toThrow();
 
     await flushMicrotasks();
-    expect(client.exec).toHaveBeenCalledTimes(SSH_EXEC_CHANNEL_OPEN_CONCURRENCY);
+    await vi.advanceTimersByTimeAsync(0);
+    await flushMicrotasks();
+    expect(client.exec).toHaveBeenCalledTimes(SSH_EXEC_CHANNEL_OPEN_CONCURRENCY + 1);
 
     await vi.advanceTimersByTimeAsync(TASK_SESSION_CLEANUP_KILL_TIMEOUT_MS * 4);
-    await expect(cleanup).resolves.toBeUndefined();
+    await cleanupFailure;
 
     // All 24 logical kills reach the execution context, but only the original
     // eight can be opening on the live client. Later batches expire in the
     // queue and must not accumulate or open after their public timeout.
-    expect(execSpy).toHaveBeenCalledTimes(24);
-    expect(client.exec).toHaveBeenCalledTimes(SSH_EXEC_CHANNEL_OPEN_CONCURRENCY);
+    expect(execSpy).toHaveBeenCalledTimes(26);
+    expect(client.exec).toHaveBeenCalledTimes(SSH_EXEC_CHANNEL_OPEN_CONCURRENCY + 1);
     expect(client.maxPendingOpens).toBe(SSH_EXEC_CHANNEL_OPEN_CONCURRENCY);
 
     const expiredStreams = client.callbacks.map(() => new FakeSshStream());
@@ -109,13 +135,13 @@ describe('fallback task cleanup over SSH', () => {
     });
     await flushMicrotasks();
     expect(expiredStreams.every((stream) => stream.destroy.mock.calls.length === 1)).toBe(true);
-    expect(client.exec).toHaveBeenCalledTimes(SSH_EXEC_CHANNEL_OPEN_CONCURRENCY);
+    expect(client.exec).toHaveBeenCalledTimes(SSH_EXEC_CHANNEL_OPEN_CONCURRENCY + 1);
 
     // Releasing the genuinely pending opens admits fresh work immediately;
     // none of the 16 expired queued kills are retained ahead of it.
     const followUp = ctx.exec('true');
     await flushMicrotasks();
-    expect(client.exec).toHaveBeenCalledTimes(SSH_EXEC_CHANNEL_OPEN_CONCURRENCY + 1);
+    expect(client.exec).toHaveBeenCalledTimes(SSH_EXEC_CHANNEL_OPEN_CONCURRENCY + 2);
     const followUpStream = new FakeSshStream();
     client.callbacks.at(-1)?.(undefined, followUpStream as unknown as ClientChannel);
     await flushMicrotasks();

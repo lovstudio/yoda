@@ -33,6 +33,7 @@ describe('exportTerminalLog', () => {
       live: true,
       outputBytesPerSecond: 0,
       lastOutputAt: null,
+      lastInputAt: null,
       ringBufferBytes: 32,
       ringBufferCapBytes: 1024,
       consumerCount: 1,

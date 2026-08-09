@@ -4,7 +4,10 @@ import {
   buildTmuxShellLine,
   decodeTmuxSessionName,
   killTmuxSession,
+  killTmuxSessionIfMarkerMatchesStrict,
+  killTmuxSessionStrict,
   listTmuxSessionMarkers,
+  listTmuxSessionMarkersStrict,
   makeTmuxSessionName,
   TMUX_KILL_TIMEOUT_MS,
 } from './tmux-session-name';
@@ -166,6 +169,83 @@ describe('killTmuxSession', () => {
       { timeout: 5_000 }
     );
   });
+
+  it('exposes strict kill failures to reclamation callers', async () => {
+    const error = new Error('permission denied');
+    const ctx = {
+      root: undefined,
+      supportsLocalSpawn: true,
+      exec: vi.fn().mockRejectedValue(error),
+      execStreaming: vi.fn(),
+      dispose: vi.fn(),
+    };
+
+    await expect(killTmuxSessionStrict(ctx, 'agent-session')).rejects.toBe(error);
+  });
+
+  it('atomically kills only the unchanged local Yoda tmux instance', async () => {
+    const sessionName = makeTmuxSessionName('project:task:conversation');
+    const ctx = {
+      root: undefined,
+      supportsLocalSpawn: true,
+      exec: vi.fn().mockResolvedValue({ stdout: '', stderr: '' }),
+      execStreaming: vi.fn(),
+      dispose: vi.fn(),
+    };
+
+    await expect(
+      killTmuxSessionIfMarkerMatchesStrict(ctx, {
+        sessionName,
+        cwd: '/repo',
+        panePid: 4321,
+        createdAtMs: 100_000,
+        lastActivityAtMs: 200_000,
+        attachedClients: 0,
+      })
+    ).resolves.toBe('killed');
+
+    expect(ctx.exec).toHaveBeenCalledWith(
+      'tmux',
+      [
+        '-L',
+        'yoda',
+        '-f',
+        '/dev/null',
+        'if-shell',
+        '-t',
+        sessionName,
+        '-F',
+        expect.stringContaining('#{==:#{pane_pid},4321}'),
+        expect.stringContaining('kill-session'),
+        expect.stringContaining('__YODA_TMUX_MARKER_MISMATCH__'),
+      ],
+      { timeout: TMUX_KILL_TIMEOUT_MS }
+    );
+  });
+
+  it('reports a changed marker as skipped instead of a kill failure', async () => {
+    const ctx = {
+      root: undefined,
+      supportsLocalSpawn: true,
+      exec: vi.fn().mockResolvedValue({
+        stdout: '__YODA_TMUX_MARKER_MISMATCH__\n',
+        stderr: '',
+      }),
+      execStreaming: vi.fn(),
+      dispose: vi.fn(),
+    };
+
+    await expect(
+      killTmuxSessionIfMarkerMatchesStrict(ctx, {
+        sessionName: makeTmuxSessionName('project:task:conversation'),
+        cwd: '/repo',
+        panePid: 4321,
+        createdAtMs: 100_000,
+        lastActivityAtMs: 200_000,
+        attachedClients: 0,
+      })
+    ).resolves.toBe('skipped');
+  });
 });
 
 describe('tmux session discovery', () => {
@@ -184,7 +264,7 @@ describe('tmux session discovery', () => {
       root: undefined,
       supportsLocalSpawn: true,
       exec: vi.fn().mockResolvedValue({
-        stdout: `${sessionName}\\037/repo/worktree\\0374321\n${sessionName}\\037/repo/worktree\\0374321\nforeign\\037/tmp\\03799\n`,
+        stdout: `${sessionName}\\037/repo/worktree\\0374321\\037100\\037200\\0370\n${sessionName}\\037/repo/worktree\\0374321\\037100\\037200\\0370\nforeign\\037/tmp\\03799\\037100\\037200\\0371\n`,
         stderr: '',
       }),
       execStreaming: vi.fn(),
@@ -192,7 +272,14 @@ describe('tmux session discovery', () => {
     };
 
     await expect(listTmuxSessionMarkers(ctx)).resolves.toEqual([
-      { sessionName, cwd: '/repo/worktree', panePid: 4321 },
+      {
+        sessionName,
+        cwd: '/repo/worktree',
+        panePid: 4321,
+        createdAtMs: 100_000,
+        lastActivityAtMs: 200_000,
+        attachedClients: 0,
+      },
     ]);
     expect(ctx.exec).toHaveBeenCalledWith(
       'tmux',
@@ -201,7 +288,7 @@ describe('tmux session discovery', () => {
     );
   });
 
-  it('treats a missing tmux server as an empty marker set', async () => {
+  it('treats a missing tmux server as an empty marker set for strict cleanup too', async () => {
     const ctx = {
       root: undefined,
       supportsLocalSpawn: true,
@@ -211,5 +298,19 @@ describe('tmux session discovery', () => {
     };
 
     await expect(listTmuxSessionMarkers(ctx)).resolves.toEqual([]);
+    await expect(listTmuxSessionMarkersStrict(ctx)).resolves.toEqual([]);
+  });
+
+  it('keeps transport and timeout failures observable to strict cleanup callers', async () => {
+    const ctx = {
+      root: undefined,
+      supportsLocalSpawn: true,
+      exec: vi.fn().mockRejectedValue(new Error('operation timed out')),
+      execStreaming: vi.fn(),
+      dispose: vi.fn(),
+    };
+
+    await expect(listTmuxSessionMarkers(ctx)).resolves.toEqual([]);
+    await expect(listTmuxSessionMarkersStrict(ctx)).rejects.toThrow('operation timed out');
   });
 });

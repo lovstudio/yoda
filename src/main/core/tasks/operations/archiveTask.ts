@@ -8,7 +8,7 @@ import { projectManager } from '@main/core/projects/project-manager';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { snapshotTaskDiffTotals } from '@main/core/stats/task-diff-snapshot';
 import { taskEvents } from '@main/core/tasks/task-events';
-import { taskManager } from '@main/core/tasks/task-manager';
+import { reclaimTaskRuntime } from '@main/core/tasks/task-runtime-reclamation';
 import { db } from '@main/db/client';
 import { conversations, projects, tasks } from '@main/db/schema';
 import { events } from '@main/lib/events';
@@ -131,6 +131,26 @@ async function archiveSingleTask(
     log.warn('archiveTask: diff snapshot failed', { taskId, error: String(e) });
   });
 
+  // Keep the task and its conversation/terminal leaves queryable until both
+  // the live provider and any detached tmux sessions have been reclaimed.
+  // Worktree removal is gated on this result below.
+  const runtimeReclamation = project
+    ? await reclaimTaskRuntime(projectId, taskId, project.ctx)
+    : undefined;
+  if (!project) {
+    log.warn('archiveTask: project runtime unavailable; preserving worktree', {
+      projectId,
+      taskId,
+    });
+  }
+  if (runtimeReclamation && !runtimeReclamation.confirmed) {
+    log.warn('archiveTask: runtime reclamation was not confirmed; preserving worktree', {
+      projectId,
+      taskId,
+      failures: runtimeReclamation.failures,
+    });
+  }
+
   await db
     .update(tasks)
     .set({
@@ -148,18 +168,7 @@ async function archiveSingleTask(
     has_note: Boolean(task.archiveNote),
   });
 
-  if (!project) return;
-
-  void taskManager
-    .teardownTask(taskId, 'terminate')
-    .then((teardownResult) => {
-      if (!teardownResult.success) {
-        log.warn('archiveTask: teardown failed', { taskId, error: teardownResult.error.message });
-      }
-    })
-    .catch((e: unknown) => {
-      log.warn('archiveTask: teardown failed', { taskId, error: String(e) });
-    });
+  if (!project || !runtimeReclamation?.confirmed) return;
 
   if (task.taskBranch) {
     const siblings = await db

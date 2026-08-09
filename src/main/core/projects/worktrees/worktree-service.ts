@@ -23,6 +23,7 @@ export type ServeWorktreeError =
  */
 const FETCH_TIMEOUT_MS = 20_000;
 const STALE_WORKTREE_CLEANUP_TIMEOUT_MS = 3_000;
+const WORKTREE_REMOVE_TIMEOUT_MS = 120_000;
 
 type WorktreePathApi = Pick<
   typeof path,
@@ -107,54 +108,46 @@ export class WorktreeService {
   private async removeStaleWorktreeDir(
     targetPath: string
   ): Promise<Result<void, ServeWorktreeError>> {
-    const timedOut = Symbol('stale-worktree-cleanup-timeout');
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    const removalPromise = this.host
-      .removeAbsolute(targetPath, { recursive: true })
-      .catch((error: unknown) => ({
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      }));
-    const timeoutPromise = new Promise<typeof timedOut>((resolve) => {
-      timeout = setTimeout(() => resolve(timedOut), STALE_WORKTREE_CLEANUP_TIMEOUT_MS);
-    });
-    const removal = await Promise.race([removalPromise, timeoutPromise]);
-    if (timeout) clearTimeout(timeout);
+    try {
+      const realPoolPath = await this.host.realPathAbsolute(this.worktreePoolPath);
+      const normalizedTarget = normalizePoolResidentPath(
+        this.pathApi,
+        this.worktreePoolPath,
+        targetPath
+      );
+      const relativeTarget = normalizedTarget
+        ? this.pathApi.relative(this.pathApi.normalize(this.worktreePoolPath), normalizedTarget)
+        : '';
+      if (!normalizedTarget || relativeTarget === '') {
+        throw new Error(`Refusing to remove path outside the worktree pool: ${targetPath}`);
+      }
 
-    if (removal === timedOut) {
-      void removalPromise
-        .then(async (finished) => {
-          await this.ctx.exec('git', ['worktree', 'prune']).catch(() => {});
-          if (!finished.success && (await this.host.existsAbsolute(targetPath))) {
-            log.warn('WorktreeService: stale worktree directory cleanup failed after timeout', {
-              targetPath,
-              error: finished.error,
-            });
-          }
-        })
-        .catch((error: unknown) => {
-          log.warn('WorktreeService: stale worktree directory cleanup rejected after timeout', {
-            targetPath,
-            error: String(error),
-          });
+      const expectedRealTarget = this.pathApi.join(realPoolPath, relativeTarget);
+      const realTarget = await this.host.realPathAbsolute(targetPath);
+      if (this.pathApi.relative(expectedRealTarget, realTarget) !== '') {
+        throw new Error(`Refusing to remove symlinked stale worktree path: ${targetPath}`);
+      }
+
+      // This is intentionally an empty-directory-only operation. A stale path
+      // can contain untracked user work even when Git no longer recognizes it
+      // as a worktree, so recursive deletion is never safe here.
+      if (this.ctx.supportsLocalSpawn) {
+        await fsPromises.rmdir(realTarget);
+      } else {
+        await this.ctx.exec('rmdir', [realTarget], {
+          timeout: STALE_WORKTREE_CLEANUP_TIMEOUT_MS,
         });
+      }
+    } catch (cause) {
       return err({
         type: 'worktree-setup-failed',
         cause: new Error(
-          `Timed out after ${STALE_WORKTREE_CLEANUP_TIMEOUT_MS}ms removing stale worktree directory at ${targetPath}`
+          `Refused to remove non-empty or unsafe stale worktree directory at ${targetPath}: ${cause instanceof Error ? cause.message : String(cause)}`
         ),
       });
     }
 
     await this.ctx.exec('git', ['worktree', 'prune']).catch(() => {});
-    if (!removal.success && (await this.host.existsAbsolute(targetPath))) {
-      return err({
-        type: 'worktree-setup-failed',
-        cause: new Error(
-          `Failed to remove stale worktree directory at ${targetPath}: ${removal.error ?? 'unknown error'}`
-        ),
-      });
-    }
     return ok(undefined);
   }
 
@@ -566,15 +559,81 @@ export class WorktreeService {
     await this.ctx.exec('git', ['worktree', 'move', oldPath, newPath]);
   }
 
-  async removeWorktree(worktreePath: string): Promise<void> {
-    const removal = await this.host.removeAbsolute(worktreePath, { recursive: true });
-    if (!removal.success && (await this.host.existsAbsolute(worktreePath))) {
-      log.warn('WorktreeService: failed to remove worktree directory', {
-        worktreePath,
-        error: removal.error,
+  async removeWorktree(
+    worktreePath: string,
+    options: { expectedBranch?: string } = {}
+  ): Promise<void> {
+    await this.enqueueGitOp(async () => {
+      const realPoolPath = await this.host.realPathAbsolute(this.worktreePoolPath);
+      const configuredPoolTarget = normalizePoolResidentPath(
+        this.pathApi,
+        this.worktreePoolPath,
+        worktreePath
+      );
+      const realPoolTarget = normalizePoolResidentPath(this.pathApi, realPoolPath, worktreePath);
+      const normalizedTarget = configuredPoolTarget ?? realPoolTarget;
+      const matchingPoolPath = configuredPoolTarget ? this.worktreePoolPath : realPoolPath;
+      const relativeTarget = normalizedTarget
+        ? this.pathApi.relative(this.pathApi.normalize(matchingPoolPath), normalizedTarget)
+        : '';
+      if (!normalizedTarget || relativeTarget === '') {
+        throw new Error(`Refusing to remove path outside the worktree pool: ${worktreePath}`);
+      }
+
+      const realTarget = await this.host.realPathAbsolute(normalizedTarget);
+      const residentTarget = normalizePoolResidentPath(this.pathApi, realPoolPath, realTarget);
+      if (!residentTarget || this.pathApi.relative(realPoolPath, residentTarget) === '') {
+        throw new Error(`Refusing to remove path outside the worktree pool: ${worktreePath}`);
+      }
+
+      const { stdout } = await this.ctx.exec('git', ['worktree', 'list', '--porcelain']);
+      const registeredBlock = stdout.split('\n\n').find((block) => {
+        const candidate = /^worktree (.+)$/m.exec(block)?.[1];
+        return (
+          candidate !== undefined &&
+          (this.pathApi.relative(this.pathApi.normalize(candidate), normalizedTarget) === '' ||
+            this.pathApi.relative(this.pathApi.normalize(candidate), realTarget) === '')
+        );
       });
-    }
-    await this.ctx.exec('git', ['worktree', 'prune']).catch(() => {});
+      const registeredPath = registeredBlock
+        ? /^worktree (.+)$/m.exec(registeredBlock)?.[1]
+        : undefined;
+      if (!registeredPath || !registeredBlock) {
+        throw new Error(`Refusing to remove unregistered worktree path: ${worktreePath}`);
+      }
+
+      if (
+        options.expectedBranch &&
+        !registeredBlock
+          .split('\n')
+          .some((line) => line === `branch refs/heads/${options.expectedBranch}`)
+      ) {
+        throw new Error(
+          `Refusing to remove worktree whose branch changed from ${options.expectedBranch}: ${worktreePath}`
+        );
+      }
+
+      const registeredResidentPath = normalizePoolResidentPath(
+        this.pathApi,
+        realPoolPath,
+        registeredPath
+      );
+      if (
+        !registeredResidentPath ||
+        this.pathApi.relative(realPoolPath, registeredResidentPath) === ''
+      ) {
+        throw new Error(
+          `Refusing to remove registered worktree outside the pool: ${registeredPath}`
+        );
+      }
+
+      // No --force: Git is the final authority for dirty, locked, or otherwise
+      // unsafe worktrees. Never recursively delete a registered worktree.
+      await this.ctx.exec('git', ['worktree', 'remove', registeredPath], {
+        timeout: WORKTREE_REMOVE_TIMEOUT_MS,
+      });
+      await this.ctx.exec('git', ['worktree', 'prune']).catch(() => {});
+    });
   }
 
   private taskConfigFs(targetPath: string): Pick<FileSystemProvider, 'exists' | 'read'> {

@@ -1,9 +1,16 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { getCodexSessionContext, getCodexSessionPrompts } from './getCodexSessionContext';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  getCodexSessionContext,
+  getCodexSessionConversation,
+  getCodexSessionPrompts,
+  getCodexSessionRuntimeMetadata,
+} from './getCodexSessionContext';
+import * as instructionFiles from './instruction-files';
+import * as codexSkills from './scanCodexSkills';
 
 describe('getCodexSessionContext', () => {
   const previousCodexHome = process.env.CODEX_HOME;
@@ -130,6 +137,74 @@ describe('getCodexSessionContext', () => {
     ]);
     expect(context?.memoryFiles.some((file) => file.path.endsWith('AGENTS.md'))).toBe(true);
     expect(context?.skillsListing).toContain('- local-skill: Local skill description');
+  });
+
+  it('loads live conversation and runtime metadata without scanning the Codex harness', async () => {
+    writeRollout(rolloutPath);
+    insertThread(statePath, rolloutPath, {
+      id: 'conversation-1',
+      cwd,
+      title: 'Thread title',
+      firstUserMessage: 'Fallback prompt',
+    });
+    insertDynamicTool(statePath, 'conversation-1');
+    const instructionsSpy = vi.spyOn(instructionFiles, 'getCodexInstructionFiles');
+    const skillsSpy = vi.spyOn(codexSkills, 'scanCodexSkills');
+
+    const fullContext = await getConfiguredCodexSessionContext(cwd, 'conversation-1');
+    expect(fullContext).not.toBeNull();
+    expect(instructionsSpy).toHaveBeenCalledOnce();
+    expect(skillsSpy).toHaveBeenCalledOnce();
+    instructionsSpy.mockClear();
+    skillsSpy.mockClear();
+
+    const conversation = await getCodexSessionConversation(
+      cwd,
+      'conversation-1',
+      undefined,
+      undefined,
+      { codexHome, reservedThreadIds: new Set() }
+    );
+    const metadata = await getCodexSessionRuntimeMetadata(
+      cwd,
+      'conversation-1',
+      undefined,
+      undefined,
+      { codexHome, reservedThreadIds: new Set() }
+    );
+
+    expect(conversation?.prompts.map((prompt) => prompt.text)).toEqual(['Implement Codex context']);
+    expect(conversation?.messages.at(-1)?.text).toBe('Done');
+    expect(metadata).toEqual({
+      model: 'gpt-5.5',
+      reasoningEffort: 'xhigh',
+      serviceTier: 'fast',
+    });
+    expect(instructionsSpy).not.toHaveBeenCalled();
+    expect(skillsSpy).not.toHaveBeenCalled();
+
+    appendFileSync(
+      rolloutPath,
+      `\n${JSON.stringify({
+        timestamp: '2026-06-02T11:00:05.000Z',
+        type: 'event_msg',
+        payload: { type: 'user_message', message: 'Follow-up prompt', turn_id: 'turn-2' },
+      })}`
+    );
+    const refreshed = await getCodexSessionConversation(
+      cwd,
+      'conversation-1',
+      undefined,
+      undefined,
+      { codexHome, reservedThreadIds: new Set() }
+    );
+    expect(refreshed?.prompts.map((prompt) => prompt.text)).toEqual([
+      'Implement Codex context',
+      'Follow-up prompt',
+    ]);
+
+    instructionsSpy.mockRestore();
+    skillsSpy.mockRestore();
   });
 
   it('skips oversized payload rows without losing later context', async () => {

@@ -2,7 +2,14 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getClaudeSessionContext, getClaudeSessionPrompts } from './getClaudeSessionContext';
+import {
+  getClaudeSessionContext,
+  getClaudeSessionConversation,
+  getClaudeSessionPrompts,
+} from './getClaudeSessionContext';
+import { getInstructionFiles } from './instruction-files';
+import { scanClaudeAgents } from './scanClaudeAgents';
+import { scanClaudeSkills } from './scanClaudeSkills';
 
 const mocks = vi.hoisted(() => ({
   resolveClaudeTranscriptPathFromConfigDir: vi.fn(() => ''),
@@ -21,6 +28,7 @@ describe('getClaudeSessionContext restore checkpoints', () => {
   let directory: string;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     directory = mkdtempSync(join(tmpdir(), 'yoda-claude-context-'));
     mocks.transcriptPath = join(directory, 'session.jsonl');
     mocks.resolveClaudeTranscriptPathFromConfigDir.mockImplementation(() => mocks.transcriptPath);
@@ -169,6 +177,42 @@ describe('getClaudeSessionContext restore checkpoints', () => {
       expect.objectContaining({ text: 'I will inspect the code.', phase: 'commentary' }),
       expect.objectContaining({ text: 'Implemented and tested.', phase: 'final' }),
     ]);
+  });
+
+  it('loads live conversation messages without scanning the Claude harness', async () => {
+    writeFileSync(
+      mocks.transcriptPath,
+      [
+        row('user', 'prompt-1', null, { role: 'user', content: 'Inspect the lag' }),
+        {
+          type: 'attachment',
+          uuid: 'attachment-1',
+          parentUuid: 'prompt-1',
+          attachment: { type: 'deferred_tools_delta', addedNames: ['expensive_tool'] },
+        },
+        row('assistant', 'answer-1', 'attachment-1', {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'The polling path is expensive.' }],
+          stop_reason: 'end_turn',
+        }),
+      ]
+        .map((value) => JSON.stringify(value))
+        .join('\n'),
+      'utf8'
+    );
+
+    const conversation = await getClaudeSessionConversation('/repo', 'session-1', {
+      claudeConfigDir: directory,
+    });
+
+    expect(conversation?.prompts.map((prompt) => prompt.text)).toEqual(['Inspect the lag']);
+    expect(conversation?.messages.map((message) => message.text)).toEqual([
+      'Inspect the lag',
+      'The polling path is expensive.',
+    ]);
+    expect(getInstructionFiles).not.toHaveBeenCalled();
+    expect(scanClaudeSkills).not.toHaveBeenCalled();
+    expect(scanClaudeAgents).not.toHaveBeenCalled();
   });
 });
 

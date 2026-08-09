@@ -1,7 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Archive, FileText, RotateCcw, Trash2, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { taskKind, type TaskKind } from '@shared/task-kind';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
@@ -19,6 +19,7 @@ import { Toggle } from '@renderer/lib/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { isImeComposing } from '@renderer/utils/ime';
+import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
 import type { TaskIssueLinkingState } from '../issues-view/task-issue-links';
 import { TaskRow, type ReadyTask } from './task-row';
@@ -170,6 +171,17 @@ export const TaskList = observer(function TaskList() {
   };
   const showCommandPalette = useShowModal('commandPaletteModal');
 
+  useEffect(() => {
+    if (!taskManager || taskView?.tab !== 'archived') {
+      taskManager?.unloadArchivedTasks();
+      return;
+    }
+    void taskManager.loadArchivedTasks().catch((error: unknown) => {
+      log.warn('TaskList: failed to load archived tasks', { projectId, error });
+    });
+    return () => taskManager.unloadArchivedTasks();
+  }, [projectId, taskManager, taskView?.tab]);
+
   const allTasks = taskManager
     ? Array.from(taskManager.tasks.values()).filter(
         (t): t is ReadyTask => t.state !== 'unregistered'
@@ -251,7 +263,9 @@ export const TaskList = observer(function TaskList() {
               })}
             </ToggleGroupItem>
             <ToggleGroupItem value="archived">
-              {t('projects.tasks.archivedWithCount', { count: tasksByKind.archived.length })}
+              {t('projects.tasks.archivedWithCount', {
+                count: taskManager?.taskCounts.archived ?? 0,
+              })}
             </ToggleGroupItem>
           </ToggleGroup>
           <div className="flex items-center gap-2">
@@ -295,12 +309,18 @@ export const TaskList = observer(function TaskList() {
         </div>
       </div>
 
-      <TaskVirtualList
-        tasks={filteredTasks}
-        selectedIds={taskView.selectedIds}
-        issueLinking={issueLinking}
-        onToggleSelect={(id) => taskView.toggleSelect(id)}
-      />
+      {taskView.tab === 'archived' && taskManager?.archivedTaskLoadState === 'loading' ? (
+        <EmptyState label={t('common.loading')} />
+      ) : taskView.tab === 'archived' && taskManager?.archivedTaskLoadState === 'error' ? (
+        <EmptyState label={t('common.error')} />
+      ) : (
+        <TaskVirtualList
+          tasks={filteredTasks}
+          selectedIds={taskView.selectedIds}
+          issueLinking={issueLinking}
+          onToggleSelect={(id) => taskView.toggleSelect(id)}
+        />
+      )}
 
       <SelectionBar
         count={taskView.selectedIds.size}

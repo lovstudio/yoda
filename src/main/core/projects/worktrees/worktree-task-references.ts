@@ -8,6 +8,20 @@ export type ActiveTaskBranchRow = ActiveTaskReference & {
   taskBranch: string | null;
 };
 
+export function isWorktreeReclaimable(input: {
+  branch: string | null;
+  dirty: boolean;
+  inspectionPending: boolean;
+  referencedByActiveTask: boolean;
+}): boolean {
+  return (
+    input.branch !== null &&
+    !input.dirty &&
+    !input.inspectionPending &&
+    !input.referencedByActiveTask
+  );
+}
+
 export function groupActiveTasksByBranch(
   rows: ActiveTaskBranchRow[]
 ): Map<string, Map<string, ActiveTaskReference>> {

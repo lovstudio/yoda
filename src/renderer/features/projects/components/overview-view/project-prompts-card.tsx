@@ -170,10 +170,14 @@ export const ProjectPromptsCard = observer(function ProjectPromptsCard({
   const visibleEntries = expanded ? filteredEntries : filteredEntries.slice(0, PREVIEW_LIMIT);
 
   const openSession = (entry: ProjectPromptEntry) => {
-    void openProjectSessionConversation(entry.conversation, navigate, {
-      id: entry.prompt.id,
-      index: entry.promptIndex,
-    }).catch((openError: unknown) => {
+    void openProjectSessionConversation(
+      { ...entry.conversation, taskArchivedAt: entry.taskArchivedAt },
+      navigate,
+      {
+        id: entry.prompt.id,
+        index: entry.promptIndex,
+      }
+    ).catch((openError: unknown) => {
       toast({
         title: t('projects.promptHistory.openSessionFailed'),
         description: openError instanceof Error ? openError.message : String(openError),
@@ -185,7 +189,10 @@ export const ProjectPromptsCard = observer(function ProjectPromptsCard({
 
   const executeFork = async (entry: ProjectPromptEntry) => {
     try {
-      const provisioned = await prepareProjectSessionConversation(entry.conversation);
+      const provisioned = await prepareProjectSessionConversation({
+        ...entry.conversation,
+        taskArchivedAt: entry.taskArchivedAt,
+      });
       if (!provisioned) throw new Error(t('projects.promptHistory.taskUnavailable'));
       const fork = await forkConversationAtPromptIntoNewTab(provisioned, {
         conversation: entry.conversation,

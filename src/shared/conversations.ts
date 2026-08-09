@@ -154,6 +154,13 @@ export type ProjectPromptSource = {
   taskArchivedAt: string | null;
 };
 
+/** DB-backed project session row that does not require a resident Task store. */
+export type ProjectSessionSource = {
+  conversation: Conversation;
+  taskName: string;
+  taskArchivedAt: string | null;
+};
+
 export type SessionContextRestoreTarget =
   | { kind: 'claude-message'; messageId: string }
   | { kind: 'codex-turn'; turnId: string };

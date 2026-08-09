@@ -3,7 +3,7 @@ import { MessageSquare } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Conversation, LocalAgentSession } from '@shared/conversations';
+import type { LocalAgentSession, ProjectSessionSource } from '@shared/conversations';
 import {
   conversationArchivedChannel,
   conversationMovedChannel,
@@ -11,6 +11,10 @@ import {
   conversationUnarchivedChannel,
 } from '@shared/events/conversationEvents';
 import { tabDragSource } from '@renderer/app/tab-drag';
+import {
+  projectSessionsQueryKey,
+  subscribeProjectTaskQueryInvalidation,
+} from '@renderer/features/projects/project-task-query-events';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { asProvisioned, getTaskManagerStore } from '@renderer/features/tasks/stores/task-selectors';
@@ -24,31 +28,23 @@ import { agentConfig } from '@renderer/utils/agentConfig';
 import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
 import { mergeProjectSessionItems, type ProjectSessionItem } from './project-session-items';
-import {
-  getProjectSessionTaskArchivedAt,
-  openProjectSessionConversation,
-} from './project-session-open';
-
-const projectSessionsQueryKey = (projectId: string) => ['project-sessions', projectId] as const;
+import { openProjectSessionConversation } from './project-session-open';
 
 type ProjectSessionsData = {
-  conversations: Conversation[];
+  conversationSources: ProjectSessionSource[];
   localSessions: LocalAgentSession[];
 };
 
 const ProjectSessionRow = observer(function ProjectSessionRow({
-  conversation,
+  source,
 }: {
-  conversation: Conversation;
+  source: ProjectSessionSource;
 }) {
+  const { conversation, taskName, taskArchivedAt } = source;
   const { t } = useTranslation();
   const { navigate } = useNavigate();
   const task = getTaskManagerStore(conversation.projectId)?.tasks.get(conversation.taskId);
-  const taskName =
-    task?.data.name ??
-    t('projects.sessionsView.taskFallback', { id: conversation.taskId.slice(0, 8) });
   const liveConversation = asProvisioned(task)?.conversations.conversations.get(conversation.id);
-  const taskArchivedAt = getProjectSessionTaskArchivedAt(conversation);
   const isArchived = Boolean(conversation.archivedAt || taskArchivedAt);
   const config = agentConfig[conversation.runtimeId];
   const title = conversation.title.trim() || conversation.id;
@@ -60,7 +56,7 @@ const ProjectSessionRow = observer(function ProjectSessionRow({
     '';
 
   const handleOpen = async () => {
-    await openProjectSessionConversation(conversation, navigate);
+    await openProjectSessionConversation({ ...conversation, taskArchivedAt }, navigate);
   };
 
   return (
@@ -148,7 +144,7 @@ function LocalAgentSessionRow({
       session,
       onSuccess: ({ projectId: resultProjectId, taskId, conversationId }) => {
         void openProjectSessionConversation(
-          { projectId: resultProjectId, taskId, id: conversationId },
+          { projectId: resultProjectId, taskId, id: conversationId, taskArchivedAt: null },
           navigate
         );
       },
@@ -205,13 +201,13 @@ export const ProjectSessionsPanel = observer(function ProjectSessionsPanel() {
   const { data, isLoading, error } = useQuery({
     queryKey,
     queryFn: async () => {
-      const conversations = await rpc.conversations.getConversations();
+      const conversationSources = await rpc.conversations.getProjectSessionSources(projectId);
       const localSessions =
         project?.data.type === 'local'
           ? await rpc.conversations.listLocalAgentSessions(project.data.path)
           : [];
       return {
-        conversations: conversations.filter((conversation) => conversation.projectId === projectId),
+        conversationSources,
         localSessions,
       };
     },
@@ -227,10 +223,10 @@ export const ProjectSessionsPanel = observer(function ProjectSessionsPanel() {
         current
           ? {
               ...current,
-              conversations: current.conversations.map((conversation) =>
-                conversation.id === event.conversationId
-                  ? { ...conversation, title: event.title }
-                  : conversation
+              conversationSources: current.conversationSources.map((source) =>
+                source.conversation.id === event.conversationId
+                  ? { ...source, conversation: { ...source.conversation, title: event.title } }
+                  : source
               ),
             }
           : current
@@ -251,17 +247,32 @@ export const ProjectSessionsPanel = observer(function ProjectSessionsPanel() {
       if (event.conversation.projectId !== projectId) return;
       refresh();
     });
+    const offTaskQueries = subscribeProjectTaskQueryInvalidation({
+      onProjectSessionsInvalidated: (changedProjectId) => {
+        if (changedProjectId === projectId) refresh();
+      },
+    });
 
     return () => {
       offRenamed();
       offArchived();
       offUnarchived();
       offMoved();
+      offTaskQueries();
     };
   }, [projectId, queryClient, queryKey]);
 
   const sessions = useMemo(
-    () => mergeProjectSessionItems(data?.conversations ?? [], data?.localSessions ?? []),
+    () =>
+      mergeProjectSessionItems(
+        data?.conversationSources.map((source) => source.conversation) ?? [],
+        data?.localSessions ?? []
+      ),
+    [data]
+  );
+  const sourceByConversationId = useMemo(
+    () =>
+      new Map(data?.conversationSources.map((source) => [source.conversation.id, source]) ?? []),
     [data]
   );
 
@@ -291,20 +302,24 @@ export const ProjectSessionsPanel = observer(function ProjectSessionsPanel() {
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto py-3">
             <div className="flex flex-col gap-1">
-              {sessions.map((item: ProjectSessionItem) =>
-                item.kind === 'conversation' ? (
-                  <ProjectSessionRow
-                    key={`conversation:${item.conversation.id}`}
-                    conversation={item.conversation}
-                  />
-                ) : (
+              {sessions.map((item: ProjectSessionItem) => {
+                if (item.kind === 'conversation') {
+                  const source = sourceByConversationId.get(item.conversation.id);
+                  return source ? (
+                    <ProjectSessionRow
+                      key={`conversation:${item.conversation.id}`}
+                      source={source}
+                    />
+                  ) : null;
+                }
+                return (
                   <LocalAgentSessionRow
                     key={`local:${item.session.catalogId}`}
                     projectId={projectId}
                     session={item.session}
                   />
-                )
-              )}
+                );
+              })}
             </div>
           </div>
         )}

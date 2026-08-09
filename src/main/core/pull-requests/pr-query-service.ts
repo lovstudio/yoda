@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull, like, or } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, like, or } from 'drizzle-orm';
 import { parseGitHubRepository } from '@shared/github-repository';
 import type { Label, ListPrOptions, PrFilterOptions, PullRequest } from '@shared/pull-requests';
 import { projectManager } from '@main/core/projects/project-manager';
@@ -10,6 +10,7 @@ import {
   pullRequestLabels,
   pullRequests,
   pullRequestUsers,
+  tasks,
 } from '@main/db/schema';
 import { assemblePullRequest, type PrRow } from './pr-utils';
 
@@ -18,6 +19,11 @@ export type ProjectRemoteCapability =
   | { status: 'ready'; repositoryUrl: string }
   | { status: 'no_remote' }
   | { status: 'unsupported_remote' };
+
+export type ProjectTaskPullRequests = {
+  taskId: string;
+  prs: PullRequest[];
+};
 
 async function fetchRelated(rows: PrRow[]): Promise<PullRequest[]> {
   if (rows.length === 0) return [];
@@ -166,6 +172,51 @@ export class PrQueryService {
       );
 
     return fetchRelated(rows);
+  }
+
+  /**
+   * Read the cached PR snapshot for every task in a project without probing git
+   * remotes per task. The renderer already owns the selected, normalised remote
+   * URL, so this stays a database-only batch read while preserving the same
+   * selected-remote semantics as getTaskPullRequests.
+   */
+  async getProjectTaskPullRequests(
+    projectId: string,
+    repositoryUrl: string
+  ): Promise<ProjectTaskPullRequests[]> {
+    const matches = await db
+      .select({ taskId: tasks.id, pullRequest: pullRequests })
+      .from(tasks)
+      .innerJoin(
+        pullRequests,
+        and(
+          eq(tasks.taskBranch, pullRequests.headRefName),
+          eq(pullRequests.repositoryUrl, repositoryUrl)
+        )
+      )
+      .where(and(eq(tasks.projectId, projectId), isNull(tasks.archivedAt)));
+
+    if (matches.length === 0) return [];
+
+    const prRowsByUrl = new Map<string, PrRow>();
+    const prUrlsByTask = new Map<string, string[]>();
+    for (const { taskId, pullRequest } of matches) {
+      prRowsByUrl.set(pullRequest.url, pullRequest);
+      const urls = prUrlsByTask.get(taskId) ?? [];
+      urls.push(pullRequest.url);
+      prUrlsByTask.set(taskId, urls);
+    }
+
+    const prs = await fetchRelated([...prRowsByUrl.values()]);
+    const prsByUrl = new Map(prs.map((pr) => [pr.url, pr]));
+
+    return [...prUrlsByTask].map(([taskId, urls]) => ({
+      taskId,
+      prs: urls.flatMap((url) => {
+        const pr = prsByUrl.get(url);
+        return pr ? [pr] : [];
+      }),
+    }));
   }
 
   async getFilterOptions(projectId: string): Promise<PrFilterOptions> {

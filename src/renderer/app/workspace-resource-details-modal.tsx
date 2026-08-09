@@ -36,6 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@renderer/lib/ui/dialog';
+import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { formatBytes } from '@renderer/utils/formatBytes';
 import { cn } from '@renderer/utils/utils';
 import {
@@ -118,7 +119,8 @@ export function WorkspaceResourceDetailsModal({
     staleTime: 60_000,
     refetchOnMount: 'always',
     refetchInterval: (query) =>
-      query.state.data?.pendingInspectionCount && query.state.data.pendingInspectionCount > 0
+      (query.state.data?.pendingInspectionCount ?? 0) > 0 ||
+      query.state.data?.unregisteredUnknownScanInProgress
         ? 1_000
         : false,
     refetchOnWindowFocus: false,
@@ -161,7 +163,11 @@ export function WorkspaceResourceDetailsModal({
         ) : (
           <WorktreeDetails
             storage={worktreeStorage}
-            isScanning={isScanningWorktrees || (worktreeStorage?.pendingInspectionCount ?? 0) > 0}
+            isScanning={
+              isScanningWorktrees ||
+              (worktreeStorage?.pendingInspectionCount ?? 0) > 0 ||
+              worktreeStorage?.unregisteredUnknownScanInProgress === true
+            }
             onRefresh={() => {
               forceWorktreeRefreshRef.current = true;
               void refreshWorktreeStorage();
@@ -500,6 +506,7 @@ function WorktreeDetails({
   return (
     <>
       <WorktreeSummaryStrip storage={storage} />
+      <UnregisteredWorktreeSummary storage={storage} />
       <section>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -559,6 +566,67 @@ function WorktreeDetails({
         </div>
       </section>
     </>
+  );
+}
+
+function UnregisteredWorktreeSummary({
+  storage,
+}: {
+  storage: WorktreeStorageSnapshot | undefined;
+}) {
+  const { t } = useTranslation();
+  const unknownCount = storage?.unregisteredUnknownCount ?? 0;
+  const pendingProjectCount = storage?.unregisteredUnknownInventoryPendingProjectCount ?? 0;
+  if (unknownCount === 0 && pendingProjectCount === 0) return null;
+
+  return (
+    <section
+      className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5"
+      data-testid="unregistered-worktree-summary"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs font-medium text-foreground">
+          {t('workspaceRuntime.resources.details.unregisteredUnknownTitle', {
+            count: unknownCount,
+          })}
+        </div>
+        <Badge variant="secondary">
+          {storage?.unregisteredUnknownScanInProgress
+            ? t('workspaceRuntime.resources.details.refreshing')
+            : t('workspaceRuntime.resources.details.readOnlyProtected')}
+        </Badge>
+      </div>
+      <p className="mt-1 text-[10px] leading-relaxed text-foreground-muted">
+        {t('workspaceRuntime.resources.details.unregisteredUnknownDescription')}
+      </p>
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-foreground-passive">
+        <span>
+          {t('workspaceRuntime.resources.details.unregisteredKnownSize', {
+            size: formatBytes(storage?.unregisteredUnknownBytes ?? 0),
+          })}
+        </span>
+        {(storage?.unregisteredUnknownInspectionPendingCount ?? 0) > 0 ? (
+          <span>
+            {t('workspaceRuntime.resources.details.unregisteredPending', {
+              count: storage?.unregisteredUnknownInspectionPendingCount ?? 0,
+            })}
+          </span>
+        ) : null}
+        {storage?.oldestUnregisteredUnknownAt ? (
+          <span>
+            {t('workspaceRuntime.resources.details.unregisteredOldest')}{' '}
+            <RelativeTime value={storage.oldestUnregisteredUnknownAt} />
+          </span>
+        ) : null}
+        {pendingProjectCount > 0 ? (
+          <span>
+            {t('workspaceRuntime.resources.details.unregisteredInventoryPending', {
+              count: pendingProjectCount,
+            })}
+          </span>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

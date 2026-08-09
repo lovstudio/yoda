@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActiveConversationSession } from '@main/core/conversations/types';
 import type { TaskProvider } from '@main/core/projects/project-provider';
-import { taskManager } from './task-manager';
+import { IDLE_SESSION_HIBERNATION_CONCURRENCY, taskManager } from './task-manager';
 
 const mocks = vi.hoisted(() => ({
   getDiagnostics: vi.fn(),
+  getRuntimeStatusMonitor: vi.fn(),
   getState: vi.fn(),
 }));
 
@@ -17,6 +18,12 @@ vi.mock('@main/core/conversations/agent-session-runtime', () => ({
 vi.mock('@main/core/pty/pty-session-registry', () => ({
   ptySessionRegistry: {
     getDiagnostics: mocks.getDiagnostics,
+  },
+}));
+
+vi.mock('@main/core/conversations/runtime-status-monitor-registry', () => ({
+  runtimeStatusMonitorRegistry: {
+    get: mocks.getRuntimeStatusMonitor,
   },
 }));
 
@@ -73,9 +80,9 @@ function managerWith(provider: TaskProvider['conversations']): typeof taskManage
   return taskManager;
 }
 
-function makeProvider() {
+function makeProvider(activeSessions: ActiveConversationSession[] = [session]) {
   return {
-    getActiveSessions: vi.fn(() => [session]),
+    getActiveSessions: vi.fn(() => activeSessions),
     stopSession: vi.fn().mockResolvedValue(undefined),
   } as unknown as TaskProvider['conversations'];
 }
@@ -84,6 +91,7 @@ describe('TaskManager idle agent hibernation revalidation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getDiagnostics.mockReturnValue({ consumerCount: 0 });
+    mocks.getRuntimeStatusMonitor.mockReturnValue('terminal');
   });
 
   it('does not stop a candidate that starts working before the stop phase', async () => {
@@ -111,6 +119,19 @@ describe('TaskManager idle agent hibernation revalidation', () => {
     expect(stopped).toBe(0);
   });
 
+  it('does not stop a candidate that emits output before the stop phase', async () => {
+    const provider = makeProvider();
+    mocks.getState.mockReturnValue({ status: 'completed', updatedAt: 0 });
+    mocks.getDiagnostics
+      .mockReturnValueOnce({ consumerCount: 0, lastOutputAt: 0 })
+      .mockReturnValueOnce({ consumerCount: 0, lastOutputAt: Date.now() });
+
+    const stopped = await managerWith(provider).hibernateIdleAgentSessions(60_000);
+
+    expect(provider.stopSession).not.toHaveBeenCalled();
+    expect(stopped).toBe(0);
+  });
+
   it('stops and counts a session that is still completed and unobserved', async () => {
     const provider = makeProvider();
     mocks.getState.mockReturnValue({ status: 'completed', updatedAt: 0 });
@@ -120,5 +141,98 @@ describe('TaskManager idle agent hibernation revalidation', () => {
     expect(provider.stopSession).toHaveBeenCalledOnce();
     expect(provider.stopSession).toHaveBeenCalledWith(session.conversationId);
     expect(stopped).toBe(1);
+  });
+
+  it('stops authoritative idle sessions but keeps heuristic idle sessions alive', async () => {
+    const authoritativeProvider = makeProvider();
+    mocks.getState.mockReturnValue({ status: 'idle', updatedAt: 0 });
+    mocks.getRuntimeStatusMonitor.mockReturnValue('rollout');
+
+    const authoritativeStopped =
+      await managerWith(authoritativeProvider).hibernateIdleAgentSessions(1);
+
+    expect(authoritativeProvider.stopSession).toHaveBeenCalledOnce();
+    expect(authoritativeStopped).toBe(1);
+
+    const heuristicProvider = makeProvider();
+    mocks.getRuntimeStatusMonitor.mockReturnValue('terminal');
+
+    const heuristicStopped = await managerWith(heuristicProvider).hibernateIdleAgentSessions(1);
+
+    expect(heuristicProvider.stopSession).not.toHaveBeenCalled();
+    expect(heuristicStopped).toBe(0);
+  });
+
+  it('keeps a session alive when PTY output is newer than its completed status', async () => {
+    const provider = makeProvider();
+    mocks.getState.mockReturnValue({ status: 'completed', updatedAt: 0 });
+    mocks.getDiagnostics.mockReturnValue({
+      consumerCount: 0,
+      lastOutputAt: Date.now(),
+    });
+
+    const stopped = await managerWith(provider).hibernateIdleAgentSessions(60_000);
+
+    expect(provider.stopSession).not.toHaveBeenCalled();
+    expect(stopped).toBe(0);
+  });
+
+  it('keeps a session alive when PTY input is newer than its completed status', async () => {
+    const provider = makeProvider();
+    mocks.getState.mockReturnValue({ status: 'completed', updatedAt: 0 });
+    mocks.getDiagnostics.mockReturnValue({
+      consumerCount: 0,
+      lastInputAt: Date.now(),
+    });
+
+    const stopped = await managerWith(provider).hibernateIdleAgentSessions(60_000);
+
+    expect(provider.stopSession).not.toHaveBeenCalled();
+    expect(stopped).toBe(0);
+  });
+
+  it('coalesces overlapping hibernation sweeps into one stop pass', async () => {
+    let releaseStop!: () => void;
+    const stopGate = new Promise<void>((resolve) => {
+      releaseStop = resolve;
+    });
+    const provider = makeProvider();
+    provider.stopSession = vi.fn(() => stopGate);
+    mocks.getState.mockReturnValue({ status: 'completed', updatedAt: 0 });
+
+    const first = managerWith(provider).hibernateIdleAgentSessions(1);
+    const second = managerWith(provider).hibernateIdleAgentSessions(1);
+    await vi.waitFor(() => expect(provider.stopSession).toHaveBeenCalledOnce());
+
+    expect(second).toBe(first);
+    releaseStop();
+    await Promise.all([first, second]);
+    expect(provider.stopSession).toHaveBeenCalledOnce();
+  });
+
+  it('bounds concurrent stop and revalidation work', async () => {
+    const sessions = Array.from(
+      { length: IDLE_SESSION_HIBERNATION_CONCURRENCY * 2 + 1 },
+      (_, index): ActiveConversationSession => ({
+        ...session,
+        conversationId: `conversation-${index}`,
+        sessionId: `agent:project-1:task-1:conversation-${index}`,
+      })
+    );
+    let active = 0;
+    let maxActive = 0;
+    const provider = makeProvider(sessions);
+    provider.stopSession = vi.fn(async () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise<void>((resolve) => setTimeout(resolve, 1));
+      active -= 1;
+    });
+    mocks.getState.mockReturnValue({ status: 'completed', updatedAt: 0 });
+
+    const stopped = await managerWith(provider).hibernateIdleAgentSessions(1);
+
+    expect(stopped).toBe(sessions.length);
+    expect(maxActive).toBe(IDLE_SESSION_HIBERNATION_CONCURRENCY);
   });
 });

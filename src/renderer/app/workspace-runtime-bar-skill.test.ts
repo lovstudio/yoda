@@ -15,4 +15,11 @@ describe('workspace Skill placement', () => {
     expect(source).toContain("appState.navigation.navigate('skills');");
     expect(source).not.toContain("onClick={() => appState.navigation.navigate('skills')}");
   });
+
+  it('reads Codex model details without requesting full session context', () => {
+    const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain('rpc.conversations.getCodexSessionRuntimeMetadata(');
+    expect(source).not.toContain('rpc.conversations.getCodexSessionContext(');
+  });
 });

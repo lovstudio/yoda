@@ -301,7 +301,7 @@ describe('readCodexTurnVerdictFile', () => {
     dir = undefined;
   });
 
-  it('scans past an oversized irrelevant row without loading the full rollout', async () => {
+  it('fails closed when an oversized row makes the newest turn ambiguous', async () => {
     dir = mkdtempSync(join(tmpdir(), 'yoda-codex-run-state-tail-'));
     const rolloutPath = join(dir, 'rollout.jsonl');
     writeFileSync(
@@ -316,10 +316,43 @@ describe('readCodexTurnVerdictFile', () => {
       })}\n`
     );
 
-    await expect(readCodexTurnVerdictFile(rolloutPath)).resolves.toEqual({
-      state: 'working',
-      lastStartedAt: at,
+    await expect(readCodexTurnVerdictFile(rolloutPath)).resolves.toBeNull();
+  });
+
+  it('fails closed when the newest turn boundary exceeds the total scan budget', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'yoda-codex-run-state-tail-'));
+    const rolloutPath = join(dir, 'rollout.jsonl');
+    const irrelevant = JSON.stringify({
+      type: 'response_item',
+      payload: { type: 'message', role: 'assistant', text: 'x'.repeat(1_000_000) },
     });
+    writeFileSync(
+      rolloutPath,
+      `${line({ type: 'task_started', turn_id: 't1' })}\n${Array.from(
+        { length: 9 },
+        () => irrelevant
+      ).join('\n')}\n`
+    );
+
+    await expect(readCodexTurnVerdictFile(rolloutPath)).resolves.toBeNull();
+  });
+
+  it.each([
+    ['empty', ''],
+    ['no turn evidence', JSON.stringify({ type: 'session_meta', payload: { id: 'thread' } })],
+    [
+      'a malformed newest turn row',
+      `${line({ type: 'task_started', turn_id: 'old' })}\n${line({
+        type: 'task_complete',
+        turn_id: 'old',
+      })}\n{"type":"event_msg","payload":{"type":"task_started"`,
+    ],
+  ])('fails closed for a rollout with %s', async (_label, contents) => {
+    dir = mkdtempSync(join(tmpdir(), 'yoda-codex-run-state-tail-'));
+    const rolloutPath = join(dir, 'rollout.jsonl');
+    writeFileSync(rolloutPath, contents);
+
+    await expect(readCodexTurnVerdictFile(rolloutPath)).resolves.toBeNull();
   });
 
   it('keeps request_user_input semantics within the newest turn only', async () => {
@@ -459,10 +492,12 @@ describe('resolveCodexRolloutPathForConversation', () => {
     });
     writeFileSync(
       rolloutPath,
-      `${line({ type: 'task_started', turn_id: 'active' })}\n${JSON.stringify({
-        type: 'response_item',
-        payload: { type: 'function_call_output', output: 'x'.repeat(5_000_000) },
-      })}\n`
+      `${line({ type: 'task_started', turn_id: 'active' })}\n${Array.from({ length: 5 }, () =>
+        JSON.stringify({
+          type: 'response_item',
+          payload: { type: 'function_call_output', output: 'x'.repeat(1_000_000) },
+        })
+      ).join('\n')}\n`
     );
     const events: unknown[] = [];
     const watcher = watchCodexRunState(

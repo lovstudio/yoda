@@ -2,17 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { openTokenUsageTask } from './open-token-usage-task';
 
 const mocks = vi.hoisted(() => ({
-  getTaskManagerStore: vi.fn(),
   openTaskTarget: vi.fn(),
-  restoreTask: vi.fn(),
+  prepareExplicitTaskOpen: vi.fn(),
+}));
+
+vi.mock('@renderer/app/prepare-explicit-task-open', () => ({
+  prepareExplicitTaskOpen: mocks.prepareExplicitTaskOpen,
 }));
 
 vi.mock('@renderer/app/open-task-target', () => ({
   openTaskTarget: mocks.openTaskTarget,
-}));
-
-vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
-  getTaskManagerStore: mocks.getTaskManagerStore,
 }));
 
 describe('openTokenUsageTask', () => {
@@ -20,10 +19,7 @@ describe('openTokenUsageTask', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.restoreTask.mockResolvedValue(undefined);
-    mocks.getTaskManagerStore.mockReturnValue({
-      restoreTask: mocks.restoreTask,
-    });
+    mocks.prepareExplicitTaskOpen.mockResolvedValue(undefined);
   });
 
   it('opens an active task through the shared task target flow', async () => {
@@ -32,7 +28,7 @@ describe('openTokenUsageTask', () => {
       navigate
     );
 
-    expect(mocks.restoreTask).not.toHaveBeenCalled();
+    expect(mocks.prepareExplicitTaskOpen).toHaveBeenCalledWith('project-1', 'task-1');
     expect(mocks.openTaskTarget).toHaveBeenCalledWith(
       { projectId: 'project-1', taskId: 'task-1' },
       navigate
@@ -45,12 +41,12 @@ describe('openTokenUsageTask', () => {
       navigate
     );
 
-    expect(mocks.restoreTask).toHaveBeenCalledWith('task-1');
+    expect(mocks.prepareExplicitTaskOpen).toHaveBeenCalledWith('project-1', 'task-1');
     expect(mocks.openTaskTarget).toHaveBeenCalledWith(
       { projectId: 'project-1', taskId: 'task-1' },
       navigate
     );
-    expect(mocks.restoreTask.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mocks.prepareExplicitTaskOpen.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.openTaskTarget.mock.invocationCallOrder[0]
     );
   });

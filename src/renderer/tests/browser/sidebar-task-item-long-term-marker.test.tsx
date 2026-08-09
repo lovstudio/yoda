@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   toggleTaskCollapsed: vi.fn(),
   getTaskDeliverySummaries: vi.fn(),
+  preloadTask: vi.fn(),
+  prewarmTask: vi.fn(),
+  hoverIntent: undefined as (() => void) | undefined,
 }));
 
 vi.mock('react-i18next', () => ({
@@ -68,7 +71,8 @@ vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
   asProvisioned: () => undefined,
   getTaskManagerStore: () => ({
     archivingTaskIds: new Set<string>(),
-    preloadTask: vi.fn(),
+    preloadTask: mocks.preloadTask,
+    prewarmTask: mocks.prewarmTask,
   }),
   getTaskStore: () => ({
     state: 'unregistered',
@@ -109,11 +113,14 @@ vi.mock('@renderer/lib/stores/app-state', () => ({
 }));
 
 vi.mock('@renderer/features/sidebar/use-sidebar-hover-intent', () => ({
-  useSidebarHoverIntent: () => ({
-    schedule: vi.fn(),
-    cancel: vi.fn(),
-    runNow: vi.fn(),
-  }),
+  useSidebarHoverIntent: (onIntent: () => void) => {
+    mocks.hoverIntent = onIntent;
+    return {
+      schedule: vi.fn(),
+      cancel: vi.fn(),
+      runNow: vi.fn(),
+    };
+  },
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -128,6 +135,9 @@ describe('SidebarTaskItem long-term marker', () => {
     mocks.toggleTaskCollapsed.mockClear();
     mocks.getTaskDeliverySummaries.mockReset();
     mocks.getTaskDeliverySummaries.mockResolvedValue([]);
+    mocks.preloadTask.mockReset();
+    mocks.prewarmTask.mockReset();
+    mocks.hoverIntent = undefined;
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -170,6 +180,29 @@ describe('SidebarTaskItem long-term marker', () => {
 
     expect(mocks.toggleTaskCollapsed).toHaveBeenCalledWith('task-1');
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('keeps sidebar hover intent lightweight until the task is opened', async () => {
+    const { SidebarTaskItem } = await import('@renderer/features/sidebar/task-item');
+
+    await act(async () => {
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SidebarTaskItem, {
+            projectId: 'project-1',
+            taskId: 'task-1',
+          })
+        )
+      );
+    });
+
+    mocks.hoverIntent?.();
+
+    expect(mocks.preloadTask).toHaveBeenCalledOnce();
+    expect(mocks.preloadTask).toHaveBeenCalledWith('task-1');
+    expect(mocks.prewarmTask).not.toHaveBeenCalled();
   });
 
   it('opens the preview only after hovering the archive action', async () => {

@@ -49,6 +49,7 @@ import {
   usePersistedDisclosure,
 } from '@renderer/features/tasks/components/persisted-disclosure';
 import { getTaskMenuConversation } from '@renderer/features/tasks/components/task-menu-session-info';
+import { getHarnessContextQueryTiming } from '@renderer/features/tasks/harness-context-monitoring';
 import { HooksPanel } from '@renderer/features/tasks/hooks/hooks-panel';
 import {
   useRequireProvisionedTask,
@@ -61,7 +62,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/toolti
 import { formatBytes } from '@renderer/utils/formatBytes';
 import { cn } from '@renderer/utils/utils';
 
-const CONTEXT_REFRESH_MS = 3_000;
+const STATUSLINE_REFRESH_MS = 30_000;
 
 /**
  * The harness blinds (agent runtime view), each an independently
@@ -128,6 +129,7 @@ export const HarnessSection = observer(function HarnessSection({
   // tab is a file/diff — the harness context must not vanish on tab switches.
   const conversation = getTaskMenuConversation(provisioned);
   const runtimeId = conversation?.runtimeId;
+  const sectionActive = active && provisioned.taskView.sessionPanelOpenSectionIds.includes(id);
 
   if (id === 'hooks') {
     return <HooksSection active={active} />;
@@ -142,17 +144,25 @@ export const HarnessSection = observer(function HarnessSection({
     // project root rather than the task worktree so the status bar is not owned
     // by a single task.
     return runtimeId === 'claude' ? (
-      <StatuslineSection cwd={statuslineCwd} />
+      <StatuslineSection active={sectionActive} cwd={statuslineCwd} />
     ) : (
       <HarnessPlaceholder id={id}>{t('tasks.panel.contextUnsupported')}</HarnessPlaceholder>
     );
   }
   if (runtimeId === 'claude') {
-    return <ClaudeHarnessSection id={id} cwd={provisioned.path} sessionId={conversation.id} />;
+    return (
+      <ClaudeHarnessSection
+        active={sectionActive}
+        id={id}
+        cwd={provisioned.path}
+        sessionId={conversation.id}
+      />
+    );
   }
   if (runtimeId === 'codex') {
     return (
       <CodexHarnessSection
+        active={sectionActive}
         id={id}
         cwd={provisioned.path}
         conversationId={conversation.id}
@@ -212,10 +222,12 @@ function HarnessPlaceholder({ id, children }: { id: HarnessSectionId; children: 
 type RuntimeHarnessSectionId = Exclude<HarnessSectionId, 'hooks' | 'statusline'>;
 
 function ClaudeHarnessSection({
+  active,
   id,
   cwd,
   sessionId,
 }: {
+  active: boolean;
   id: RuntimeHarnessSectionId;
   cwd: string;
   sessionId: string;
@@ -224,10 +236,8 @@ function ClaudeHarnessSection({
   const { data, isPending } = useQuery<ClaudeSessionContext | null>({
     queryKey: ['claudeSessionContext', cwd, sessionId],
     queryFn: () => rpc.conversations.getClaudeSessionContext(cwd, sessionId),
-    refetchInterval: CONTEXT_REFRESH_MS,
-    refetchIntervalInBackground: false,
+    ...getHarnessContextQueryTiming(active),
     refetchOnWindowFocus: true,
-    staleTime: 0,
   });
 
   if (!data) {
@@ -266,12 +276,14 @@ function ClaudeHarnessSection({
 }
 
 function CodexHarnessSection({
+  active,
   id,
   cwd,
   conversationId,
   conversationTitle,
   conversationCreatedAt,
 }: {
+  active: boolean;
   id: RuntimeHarnessSectionId;
   cwd: string;
   conversationId: string;
@@ -295,10 +307,8 @@ function CodexHarnessSection({
         conversationCreatedAt,
         'harness'
       ),
-    refetchInterval: CONTEXT_REFRESH_MS,
-    refetchIntervalInBackground: false,
+    ...getHarnessContextQueryTiming(active),
     refetchOnWindowFocus: true,
-    staleTime: 0,
   });
 
   if (!data) {
@@ -1098,15 +1108,16 @@ function formatCodexTool(tool: CodexDynamicTool): string {
  * (resolved across settings files in the main process) and lets the user
  * switch between candidate templates managed in Settings → Agents.
  */
-function StatuslineSection({ cwd }: { cwd: string }) {
+function StatuslineSection({ active, cwd }: { active: boolean; cwd: string }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { data } = useQuery<ClaudeStatuslineConfig>({
     queryKey: ['claudeStatusline', cwd],
     queryFn: () => rpc.conversations.getClaudeStatusline(cwd),
-    refetchInterval: CONTEXT_REFRESH_MS,
+    enabled: active,
+    refetchInterval: active ? STATUSLINE_REFRESH_MS : false,
     refetchOnWindowFocus: false,
-    staleTime: 0,
+    staleTime: STATUSLINE_REFRESH_MS - 1_000,
   });
   const { value: statuslineSettings, update: updateStatuslineSettings } =
     useAppSettingsKey('statusline');

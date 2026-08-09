@@ -1,19 +1,77 @@
-import { and, count, desc, eq, inArray, isNull } from 'drizzle-orm';
-import { type Task } from '@shared/tasks';
+import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { type ProjectTaskCounts, type Task } from '@shared/tasks';
 import { db } from '@main/db/client';
-import { conversations, tasks } from '@main/db/schema';
+import { conversations, tasks, type TaskRow } from '@main/db/schema';
 import { mapTaskRowToTask } from '../utils/utils';
 import { getIssuesForTasks } from './task-issues';
 
 export async function getTasks(projectId?: string): Promise<Task[]> {
-  const rows = projectId
-    ? await db
-        .select()
-        .from(tasks)
-        .where(and(eq(tasks.projectId, projectId)))
-        .orderBy(desc(tasks.updatedAt))
-    : await db.select().from(tasks).orderBy(desc(tasks.updatedAt));
+  return hydrateTaskRows(await selectTaskRows({ projectId }));
+}
 
+/** Renderer mount snapshot: active tasks only. Internal all-task callers keep getTasks(). */
+export async function getActiveTasks(projectId: string): Promise<Task[]> {
+  return hydrateTaskRows(await selectTaskRows({ projectId, archived: false }));
+}
+
+/** Explicit lazy archive snapshot used only while the Archived view is open. */
+export async function getArchivedTasks(projectId: string): Promise<Task[]> {
+  return hydrateTaskRows(await selectTaskRows({ projectId, archived: true }));
+}
+
+/** Project-qualified point lookup for deep links and cross-renderer task events. */
+export async function getTask(projectId: string, taskId: string): Promise<Task | null> {
+  const hydrated = await hydrateTaskRows(await selectTaskRows({ projectId, taskId }));
+  return hydrated[0] ?? null;
+}
+
+/** Affected-row batch lookup for cascaded restore events; never scans unrelated active tasks. */
+export async function getTasksByIds(projectId: string, taskIds: string[]): Promise<Task[]> {
+  const uniqueTaskIds = [...new Set(taskIds)];
+  if (uniqueTaskIds.length === 0) return [];
+  return hydrateTaskRows(await selectTaskRows({ projectId, taskIds: uniqueTaskIds }));
+}
+
+/** Project totals without materializing task rows or their observable renderer stores. */
+export async function getTaskCounts(projectId?: string): Promise<ProjectTaskCounts[]> {
+  const query = db
+    .select({
+      projectId: tasks.projectId,
+      active: sql<number>`sum(case when ${tasks.archivedAt} is null then 1 else 0 end)`,
+      archived: sql<number>`sum(case when ${tasks.archivedAt} is not null then 1 else 0 end)`,
+    })
+    .from(tasks)
+    .groupBy(tasks.projectId);
+  const rows = projectId ? await query.where(eq(tasks.projectId, projectId)) : await query;
+
+  return rows.map((row) => ({
+    projectId: row.projectId,
+    active: Number(row.active),
+    archived: Number(row.archived),
+  }));
+}
+
+async function selectTaskRows(options: {
+  projectId?: string;
+  taskId?: string;
+  taskIds?: string[];
+  archived?: boolean;
+}): Promise<TaskRow[]> {
+  const filters = [];
+  if (options.projectId) filters.push(eq(tasks.projectId, options.projectId));
+  if (options.taskId) filters.push(eq(tasks.id, options.taskId));
+  if (options.taskIds) filters.push(inArray(tasks.id, options.taskIds));
+  if (options.archived === true) filters.push(isNotNull(tasks.archivedAt));
+  if (options.archived === false) filters.push(isNull(tasks.archivedAt));
+
+  return db
+    .select()
+    .from(tasks)
+    .where(filters.length > 0 ? and(...filters) : undefined)
+    .orderBy(desc(tasks.updatedAt));
+}
+
+async function hydrateTaskRows(rows: TaskRow[]): Promise<Task[]> {
   if (rows.length === 0) return [];
 
   const taskIds = rows.map((r) => r.id);

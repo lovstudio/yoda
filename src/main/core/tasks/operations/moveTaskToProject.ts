@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { eq, sql } from 'drizzle-orm';
+import { taskMovedChannel } from '@shared/events/taskEvents';
 import type { LocalProject, SshProject } from '@shared/projects';
 import { err, ok, type Result } from '@shared/result';
 import type { MoveTaskToProjectError, Task } from '@shared/tasks';
@@ -21,6 +22,7 @@ import {
   teamRooms,
   terminals,
 } from '@main/db/schema';
+import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
 import { toStoredBranch } from '../stored-branch';
@@ -144,6 +146,11 @@ export async function moveTaskToProject(
   const [updatedRow] = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
   const updated = mapTaskRowToTask(updatedRow);
   taskEvents._emit('task:updated', updated);
+  events.emit(taskMovedChannel, {
+    taskId,
+    sourceProjectId: task.projectId,
+    targetProjectId,
+  });
   telemetryService.capture('task_moved_to_project', {
     task_id: taskId,
     from_project_id: task.projectId,

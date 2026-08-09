@@ -91,7 +91,6 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const taskManager = getTaskManagerStore(projectId);
   const prepareTaskView = useCallback(() => {
     void taskManager?.preloadTask(taskId);
-    void taskManager?.prewarmTask(taskId);
   }, [taskManager, taskId]);
   const taskPreloadIntent = useSidebarHoverIntent(prepareTaskView);
   // Shared task-entity menu wiring (same items as every other task surface).

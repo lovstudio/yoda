@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key,
+    i18n: { language: 'en' },
   }),
 }));
 
@@ -168,8 +169,16 @@ const storage: WorktreeStorageSnapshot = {
   totalBytes: 12_000_000_000,
   reclaimableBytes: 2_000_000_000,
   worktreeCount: 2,
+  registeredActiveCount: 2,
+  registeredDirtyCount: 0,
   reclaimableCount: 1,
   pendingInspectionCount: 0,
+  unregisteredUnknownCount: 2,
+  unregisteredUnknownBytes: 3_000_000_000,
+  unregisteredUnknownInspectionPendingCount: 1,
+  unregisteredUnknownInventoryPendingProjectCount: 0,
+  unregisteredUnknownScanInProgress: false,
+  oldestUnregisteredUnknownAt: '2026-06-01T10:00:00.000Z',
   items: [
     {
       projectId: 'project-1',
@@ -198,6 +207,28 @@ const storage: WorktreeStorageSnapshot = {
       inspectionPending: false,
       referencedByActiveTask: true,
       reclaimable: false,
+    },
+  ],
+  unregisteredUnknownItems: [
+    {
+      projectId: 'project-1',
+      projectName: 'Yoda',
+      path: '/tmp/yoda-worktree-unknown',
+      sizeBytes: 3_000_000_000,
+      modifiedAt: '2026-06-01T10:00:00.000Z',
+      inspectedAt: snapshot.sampledAt,
+      inspectionPending: false,
+      inspectionFailed: false,
+    },
+    {
+      projectId: 'project-2',
+      projectName: 'lovstudio-app-generator-with-a-very-long-project-name',
+      path: '/tmp/lovstudio-app-generator/.worktrees/unknown',
+      sizeBytes: null,
+      modifiedAt: null,
+      inspectedAt: null,
+      inspectionPending: true,
+      inspectionFailed: false,
     },
   ],
 };
@@ -272,6 +303,11 @@ describe('WorkspaceResourceDetailsModal', () => {
     expect(host.textContent).toContain('/tmp/yoda-worktree');
     expect(host.querySelector('[data-file-path="/tmp/yoda-worktree"]')).not.toBeNull();
     expect(host.textContent).toContain('workspaceRuntime.resources.details.cleanupAvailable');
+    expect(host.querySelector('[data-testid="unregistered-worktree-summary"]')).not.toBeNull();
+    expect(host.textContent).toContain(
+      'workspaceRuntime.resources.details.unregisteredUnknownDescription'
+    );
+    expect(host.querySelector('[data-file-path="/tmp/yoda-worktree-unknown"]')).toBeNull();
 
     const taskButton = host.querySelector<HTMLButtonElement>('[data-worktree-task-id="task-1"]');
     expect(taskButton?.textContent).toContain('Yoda');

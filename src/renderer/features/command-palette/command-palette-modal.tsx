@@ -15,10 +15,9 @@ import React, { useDeferredValue, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SearchItem } from '@shared/search';
 import { ALL_WORKSPACES_ID } from '@shared/workspaces';
-import { openTaskTarget } from '@renderer/app/open-task-target';
-import { getTaskManagerStore } from '@renderer/features/tasks/stores/task-selectors';
 import { commandRegistry } from '@renderer/lib/commands/registry';
 import { useMobxValue } from '@renderer/lib/hooks/use-mobx-value';
+import { toast } from '@renderer/lib/hooks/use-toast';
 import { APP_SHORTCUTS } from '@renderer/lib/hooks/useKeyboardShortcuts';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
@@ -28,6 +27,7 @@ import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { cn } from '@renderer/utils/utils';
 import { InfiniteGroup } from './infinite-group';
 import { LovcodeInstallBanner } from './lovcode-install-banner';
+import { openCommandPaletteSearchTarget } from './open-search-target';
 import { parseQuery, setScope, type SearchScope } from './qualifiers';
 import {
   loadRecentCommandPaletteQueries,
@@ -314,13 +314,16 @@ export function CommandPaletteModal({
   const handleNavigateToTask = (item: SearchItem) => {
     if (!item.projectId) return;
     rememberCurrentSearch();
-    // Archived tasks are surfaced in search but must be restored before the
-    // task view can mount them.
-    if (item.archived) {
-      void getTaskManagerStore(item.projectId)?.restoreTask(item.id);
-    }
-    onClose();
-    navigate('task', { projectId: item.projectId, taskId: item.id });
+    void openCommandPaletteSearchTarget(item, navigate)
+      .then(onClose)
+      .catch((error: unknown) => {
+        toast({
+          title: t('common.openFailed'),
+          description: error instanceof Error ? error.message : String(error),
+          variant: 'destructive',
+          debugInfo: error,
+        });
+      });
   };
 
   const handleNavigateToProject = (item: SearchItem) => {
@@ -332,16 +335,16 @@ export function CommandPaletteModal({
   const handleNavigateToConversation = (item: SearchItem) => {
     if (!item.projectId || !item.taskId) return;
     rememberCurrentSearch();
-    // The conversation may belong to an archived task; restore it first so the
-    // task view can mount (mirrors handleNavigateToTask).
-    if (item.taskArchived) {
-      void getTaskManagerStore(item.projectId)?.restoreTask(item.taskId);
-    }
-    onClose();
-    openTaskTarget(
-      { projectId: item.projectId, taskId: item.taskId, conversationId: item.id },
-      navigate
-    );
+    void openCommandPaletteSearchTarget(item, navigate)
+      .then(onClose)
+      .catch((error: unknown) => {
+        toast({
+          title: t('common.openFailed'),
+          description: error instanceof Error ? error.message : String(error),
+          variant: 'destructive',
+          debugInfo: error,
+        });
+      });
   };
 
   const scopeOptions: {

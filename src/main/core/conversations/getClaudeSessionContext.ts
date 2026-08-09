@@ -22,6 +22,17 @@ import { getInstructionFiles } from './instruction-files';
 import { scanClaudeAgents } from './scanClaudeAgents';
 import { scanClaudeSkills } from './scanClaudeSkills';
 
+export type ClaudeSessionConversation = {
+  prompts: ClaudeSessionPrompt[];
+  messages: SessionTranscriptMessage[];
+};
+
+type ParsedClaudeTranscript = ClaudeSessionConversation & {
+  tools: Set<string>;
+  mcpServers: Map<string, string>;
+  summary: SessionSummary | null;
+};
+
 /**
  * Aggregates everything that ends up in the LLM prompt for a Claude session:
  *   - Memory files (~/.claude/CLAUDE.md, <cwd>/CLAUDE.md, <cwd>/AGENTS.md)
@@ -46,8 +57,57 @@ export async function getClaudeSessionContext(
     return null;
   }
 
+  const parsedTranscript = parseClaudeTranscript(raw, true);
+  const { tools, mcpServers, prompts, messages, summary } = parsedTranscript;
+  const [memoryFiles, memories, skills, scannedAgents] = await Promise.all([
+    getInstructionFiles(cwd),
+    loadMemories(cwd, claudeConfigDir),
+    scanClaudeSkills(cwd),
+    scanClaudeAgents(cwd),
+  ]);
+
+  return {
+    transcriptPath,
+    memoryFiles,
+    memories,
+    tools: [...tools].sort(),
+    agents: scannedAgents,
+    mcpServers: [...mcpServers.entries()].map(([name, instructions]) => ({ name, instructions })),
+    skills,
+    skillsListing: formatSkillListing(skills),
+    prompts,
+    messages,
+    summary,
+  };
+}
+
+/**
+ * Reads only the user/assistant conversation needed by live prompt surfaces.
+ * Instruction, skill, agent, and MCP discovery intentionally stay on the full
+ * context RPC so a short polling interval cannot rescan the runtime harness.
+ */
+export async function getClaudeSessionConversation(
+  cwd: string,
+  sessionId: string,
+  options: { claudeConfigDir?: string } = {}
+): Promise<ClaudeSessionConversation | null> {
+  const claudeConfigDir =
+    options.claudeConfigDir ?? resolveRuntimeStateDirectory('claude', undefined);
+  const transcriptPath = resolveClaudeTranscriptPathFromConfigDir(cwd, sessionId, claudeConfigDir);
+  let raw: string;
+  try {
+    raw = await readFile(transcriptPath, 'utf8');
+  } catch {
+    return null;
+  }
+
+  const { prompts, messages } = parseClaudeTranscript(raw, false);
+  return { prompts, messages };
+}
+
+function parseClaudeTranscript(raw: string, collectHarness: boolean): ParsedClaudeTranscript {
   const tools = new Set<string>();
-  const transcriptAgents = new Set<string>();
+  const agents = new Set<string>();
   const mcpServers = new Map<string, string>();
   const prompts: ClaudeSessionPrompt[] = [];
   const messages: SessionTranscriptMessage[] = [];
@@ -65,7 +125,7 @@ export async function getClaudeSessionContext(
     if (rowId && !currentBranchMessageIds.has(rowId)) continue;
 
     if (parsed.type === 'attachment') {
-      collectAttachment(parsed.attachment, { tools, agents: transcriptAgents, mcpServers });
+      if (collectHarness) collectAttachment(parsed.attachment, { tools, agents, mcpServers });
       continue;
     }
 
@@ -95,27 +155,7 @@ export async function getClaudeSessionContext(
       if (message) messages.push(message);
     }
   }
-
-  const [memoryFiles, memories, skills, scannedAgents] = await Promise.all([
-    getInstructionFiles(cwd),
-    loadMemories(cwd, claudeConfigDir),
-    scanClaudeSkills(cwd),
-    scanClaudeAgents(cwd),
-  ]);
-
-  return {
-    transcriptPath,
-    memoryFiles,
-    memories,
-    tools: [...tools].sort(),
-    agents: scannedAgents,
-    mcpServers: [...mcpServers.entries()].map(([name, instructions]) => ({ name, instructions })),
-    skills,
-    skillsListing: formatSkillListing(skills),
-    prompts,
-    messages,
-    summary,
-  };
+  return { tools, mcpServers, prompts, messages, summary };
 }
 
 /** Prompt-only transcript reader for progressive project-history surfaces. */

@@ -1,12 +1,17 @@
 import type { Conversation } from '@shared/conversations';
 import { taskProvisionProgressChannel } from '@shared/events/taskEvents';
+import { makePtySessionId } from '@shared/ptySessionId';
 import type { Task } from '@shared/tasks';
 import type { Terminal } from '@shared/terminals';
 import { hydratedConversationStart } from '@main/core/conversations/pending-initial-prompt';
 import { clearPendingInitialPrompt } from '@main/core/conversations/pending-initial-prompt-store';
 import type { ConversationProvider } from '@main/core/conversations/types';
+import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
+import { SshExecutionContext } from '@main/core/execution-context/ssh-execution-context';
+import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { GitFetchService } from '@main/core/git/git-fetch-service';
 import type { GitRepositoryService } from '@main/core/git/repository-service';
+import { decodeTmuxSessionName, listTmuxSessionMarkers } from '@main/core/pty/tmux-session-name';
 import type { TerminalProvider } from '@main/core/terminals/terminal-provider';
 import type { Workspace } from '@main/core/workspaces/workspace';
 import { workspaceRegistry } from '@main/core/workspaces/workspace-registry';
@@ -24,6 +29,208 @@ import {
   type WorkspaceType,
 } from '../workspaces/workspace-factory';
 import { hydratePersistedTerminals } from './terminal-hydration';
+
+export const CONVERSATION_HYDRATION_CONCURRENCY = 4;
+export const CONVERSATION_TMUX_MARKER_CACHE_TTL_MS = 5_000;
+
+type ConversationHydrationLimiter = {
+  active: number;
+  queue: Array<() => void>;
+};
+
+const conversationHydrationLimiter: ConversationHydrationLimiter = {
+  active: 0,
+  queue: [],
+};
+
+type TmuxMarkerCacheEntry = {
+  value?: ReadonlySet<string>;
+  sampledAt?: number;
+  inFlight?: Promise<ReadonlySet<string>>;
+};
+
+const tmuxMarkerCache = new Map<string, TmuxMarkerCacheEntry>();
+
+function acquireConversationHydrationSlot(): Promise<() => void> {
+  return new Promise((resolve) => {
+    const start = () => {
+      conversationHydrationLimiter.active += 1;
+      let released = false;
+      resolve(() => {
+        if (released) return;
+        released = true;
+        conversationHydrationLimiter.active -= 1;
+        conversationHydrationLimiter.queue.shift()?.();
+      });
+    };
+
+    if (conversationHydrationLimiter.active < CONVERSATION_HYDRATION_CONCURRENCY) {
+      start();
+    } else {
+      conversationHydrationLimiter.queue.push(start);
+    }
+  });
+}
+
+async function withConversationHydrationSlot(run: () => Promise<void>): Promise<void> {
+  const release = await acquireConversationHydrationSlot();
+  try {
+    await run();
+  } finally {
+    release();
+  }
+}
+
+async function hydrateConversationBatch(
+  provider: ConversationProvider,
+  conversations: Conversation[],
+  logPrefix: string
+): Promise<void> {
+  let nextIndex = 0;
+  const hydrateNext = async (): Promise<void> => {
+    while (nextIndex < conversations.length) {
+      const conversation = conversations[nextIndex++];
+      await withConversationHydrationSlot(async () => {
+        const pending = conversation.pendingInitialPrompt;
+        const start = hydratedConversationStart(conversation);
+        try {
+          await provider.startSession(
+            conversation,
+            undefined,
+            start.isResuming,
+            start.initialPrompt,
+            undefined,
+            start.imagePaths,
+            { model: start.model, reasoningEffort: start.reasoningEffort }
+          );
+          if (pending) {
+            await clearPendingInitialPrompt(conversation.id);
+          }
+        } catch (error) {
+          log.error(`${logPrefix}: failed to hydrate conversation`, {
+            conversationId: conversation.id,
+            error: String(error),
+          });
+        }
+      });
+    }
+  };
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(CONVERSATION_HYDRATION_CONCURRENCY, conversations.length) },
+      hydrateNext
+    )
+  );
+}
+
+/**
+ * Restore only conversations that still need their first prompt delivered, or
+ * conversations whose canonical tmux pane demonstrably survived. Historical
+ * conversations without a live pane stay hibernated until explicitly opened.
+ */
+export async function hydratePersistedConversations(
+  provider: ConversationProvider,
+  conversations: Conversation[],
+  logPrefix: string,
+  liveTmuxSessionIds: Promise<ReadonlySet<string>> = Promise.resolve(new Set())
+): Promise<void> {
+  const pending = conversations.filter((conversation) => conversation.pendingInitialPrompt);
+  const pendingIds = new Set(pending.map((conversation) => conversation.id));
+
+  // A brand-new prompt must not wait for the bounded tmux marker lookup.
+  const pendingHydration = hydrateConversationBatch(provider, pending, logPrefix);
+  const reconnectHydration = liveTmuxSessionIds.then((sessionIds) =>
+    hydrateConversationBatch(
+      provider,
+      conversations.filter(
+        (conversation) =>
+          !pendingIds.has(conversation.id) &&
+          sessionIds.has(
+            makePtySessionId(conversation.projectId, conversation.taskId, conversation.id)
+          )
+      ),
+      logPrefix
+    )
+  );
+
+  await Promise.all([pendingHydration, reconnectHydration]);
+}
+
+function tmuxMarkerCacheKey(type: WorkspaceType): string {
+  return type.kind === 'ssh' ? `ssh:${type.connectionId}` : 'local';
+}
+
+async function sampleLiveTmuxSessionIds(type: WorkspaceType): Promise<ReadonlySet<string>> {
+  let ctx: IExecutionContext;
+  try {
+    ctx = type.kind === 'ssh' ? new SshExecutionContext(type.proxy) : new LocalExecutionContext();
+  } catch (error) {
+    log.warn('Failed to create execution context for tmux session hydration', {
+      error: String(error),
+    });
+    return new Set();
+  }
+
+  try {
+    const markers = await listTmuxSessionMarkers(ctx);
+    return new Set(
+      markers.flatMap((marker) => {
+        const sessionId = decodeTmuxSessionName(marker.sessionName);
+        return sessionId ? [sessionId] : [];
+      })
+    );
+  } catch (error) {
+    log.warn('Failed to list tmux sessions for conversation hydration', {
+      error: String(error),
+    });
+    return new Set();
+  } finally {
+    ctx.dispose();
+  }
+}
+
+/** Share the one bounded tmux marker query across tasks provisioned on one host. */
+export function discoverLiveTmuxSessionIds(type: WorkspaceType): Promise<ReadonlySet<string>> {
+  const now = Date.now();
+  for (const [key, entry] of tmuxMarkerCache) {
+    if (
+      !entry.inFlight &&
+      entry.sampledAt !== undefined &&
+      now - entry.sampledAt >= CONVERSATION_TMUX_MARKER_CACHE_TTL_MS
+    ) {
+      tmuxMarkerCache.delete(key);
+    }
+  }
+
+  const key = tmuxMarkerCacheKey(type);
+  const cached = tmuxMarkerCache.get(key);
+  if (cached?.inFlight) return cached.inFlight;
+  if (
+    cached?.value &&
+    cached.sampledAt !== undefined &&
+    now - cached.sampledAt < CONVERSATION_TMUX_MARKER_CACHE_TTL_MS
+  ) {
+    return Promise.resolve(cached.value);
+  }
+
+  const entry: TmuxMarkerCacheEntry = {};
+  const sample = sampleLiveTmuxSessionIds(type);
+  entry.inFlight = sample;
+  tmuxMarkerCache.set(key, entry);
+  void sample.then(
+    (value) => {
+      if (tmuxMarkerCache.get(key) !== entry) return;
+      entry.value = value;
+      entry.sampledAt = Date.now();
+      entry.inFlight = undefined;
+    },
+    () => {
+      if (tmuxMarkerCache.get(key) === entry) tmuxMarkerCache.delete(key);
+    }
+  );
+  return sample;
+}
 
 export type BuildTaskResult = {
   taskProvider: TaskProvider;
@@ -189,31 +396,19 @@ export async function buildTaskFromWorkspace(
 
   await hydratePersistedTerminals(terminalProvider, hydrate.terminals, logPrefix);
 
-  void Promise.all(
-    hydrate.conversations.map(async (conv) => {
-      const pending = conv.pendingInitialPrompt;
-      const start = hydratedConversationStart(conv);
-      try {
-        await conversationProvider.startSession(
-          conv,
-          undefined,
-          start.isResuming,
-          start.initialPrompt,
-          undefined,
-          start.imagePaths,
-          { model: start.model, reasoningEffort: start.reasoningEffort }
-        );
-        if (pending) {
-          await clearPendingInitialPrompt(conv.id);
-        }
-      } catch (e) {
-        log.error(`${logPrefix}: failed to hydrate conversation`, {
-          conversationId: conv.id,
-          error: String(e),
-        });
-      }
-    })
-  );
+  const liveTmuxSessionIds = tmuxEnabled
+    ? discoverLiveTmuxSessionIds(type)
+    : Promise.resolve<ReadonlySet<string>>(new Set());
+  void hydratePersistedConversations(
+    conversationProvider,
+    hydrate.conversations,
+    logPrefix,
+    liveTmuxSessionIds
+  ).catch((error) => {
+    log.error(`${logPrefix}: failed to hydrate persisted conversations`, {
+      error: String(error),
+    });
+  });
 
   return { taskProvider, conversationProvider, terminalProvider };
 }

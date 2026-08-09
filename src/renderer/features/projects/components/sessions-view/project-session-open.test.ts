@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
 import {
-  getProjectSessionTaskArchivedAt,
   openProjectSessionConversation,
   prepareProjectSessionConversation,
 } from './project-session-open';
 
 const mocks = vi.hoisted(() => ({
   asProvisioned: vi.fn(),
+  ensureTaskLoaded: vi.fn(),
   getTaskManagerStore: vi.fn(),
   getTaskStore: vi.fn(),
   openTaskTarget: vi.fn(),
@@ -34,6 +34,11 @@ const conversation: Conversation = {
   lastInteractedAt: '2026-07-05T02:52:10.976Z',
   isInitialConversation: true,
 };
+const activeTarget = { ...conversation, taskArchivedAt: null };
+const archivedTarget = {
+  ...conversation,
+  taskArchivedAt: '2026-07-05T04:00:00.000Z',
+};
 
 describe('project session open target', () => {
   const navigate = vi.fn();
@@ -42,19 +47,17 @@ describe('project session open target', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     restoreTask.mockResolvedValue(undefined);
+    mocks.ensureTaskLoaded.mockResolvedValue(true);
+    mocks.prepareTaskTarget.mockResolvedValue(undefined);
     mocks.getTaskManagerStore.mockReturnValue({
-      tasks: new Map(),
+      ensureTaskLoaded: mocks.ensureTaskLoaded,
       restoreTask,
+      tasks: new Map([['task-1', { state: 'unprovisioned', data: { id: 'task-1' } }]]),
     });
   });
 
   it('opens sessions from active tasks without restoring first', async () => {
-    mocks.getTaskManagerStore.mockReturnValue({
-      tasks: new Map([['task-1', { data: { id: 'task-1', name: 'Active task' } }]]),
-      restoreTask,
-    });
-
-    await openProjectSessionConversation(conversation, navigate);
+    await openProjectSessionConversation(activeTarget, navigate);
 
     expect(restoreTask).not.toHaveBeenCalled();
     expect(mocks.openTaskTarget).toHaveBeenCalledWith(
@@ -68,24 +71,11 @@ describe('project session open target', () => {
   });
 
   it('restores an archived task before opening its target session', async () => {
-    mocks.getTaskManagerStore.mockReturnValue({
-      tasks: new Map([
-        [
-          'task-1',
-          {
-            data: {
-              id: 'task-1',
-              name: 'Archived task',
-              archivedAt: '2026-07-05T04:00:00.000Z',
-            },
-          },
-        ],
-      ]),
-      restoreTask,
-    });
+    mockCanonicalTaskArchived();
+    await openProjectSessionConversation(archivedTarget, navigate);
 
-    await openProjectSessionConversation(conversation, navigate);
-
+    expect(mocks.prepareTaskTarget).toHaveBeenCalledWith('project-1');
+    expect(mocks.ensureTaskLoaded).toHaveBeenCalledWith('task-1');
     expect(restoreTask).toHaveBeenCalledWith('task-1');
     expect(mocks.openTaskTarget).toHaveBeenCalledWith(
       {
@@ -95,33 +85,35 @@ describe('project session open target', () => {
       },
       navigate
     );
+    expect(mocks.ensureTaskLoaded.mock.invocationCallOrder[0]).toBeLessThan(
+      restoreTask.mock.invocationCallOrder[0]
+    );
     expect(restoreTask.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.openTaskTarget.mock.invocationCallOrder[0]
     );
   });
 
-  it('exposes archived task state for project-session rows', () => {
-    mocks.getTaskManagerStore.mockReturnValue({
-      tasks: new Map([
-        [
-          'task-1',
-          {
-            data: {
-              id: 'task-1',
-              name: 'Archived task',
-              archivedAt: '2026-07-05T04:00:00.000Z',
-            },
-          },
-        ],
-      ]),
-      restoreTask,
-    });
+  it('fails closed when archived task metadata cannot be point-loaded', async () => {
+    mocks.ensureTaskLoaded.mockResolvedValue(false);
 
-    expect(getProjectSessionTaskArchivedAt(conversation)).toBe('2026-07-05T04:00:00.000Z');
+    await expect(openProjectSessionConversation(archivedTarget, navigate)).rejects.toThrow(
+      'Task task-1 could not be loaded'
+    );
+    expect(restoreTask).not.toHaveBeenCalled();
+    expect(mocks.openTaskTarget).not.toHaveBeenCalled();
+  });
+
+  it('uses canonical task state when session metadata is stale', async () => {
+    mockCanonicalTaskArchived();
+
+    await openProjectSessionConversation(activeTarget, navigate);
+
+    expect(restoreTask).toHaveBeenCalledWith('task-1');
+    expect(mocks.openTaskTarget).toHaveBeenCalledOnce();
   });
 
   it('forwards a prompt checkpoint when opening its session', async () => {
-    await openProjectSessionConversation(conversation, navigate, {
+    await openProjectSessionConversation(activeTarget, navigate, {
       id: 'prompt-3',
       index: 2,
     });
@@ -139,31 +131,35 @@ describe('project session open target', () => {
   });
 
   it('restores and provisions the task before a project-level prompt fork', async () => {
+    mockCanonicalTaskArchived();
     const taskStore = { data: { id: 'task-1' } };
     const provisioned = { projectId: 'project-1', taskId: 'task-1' };
+    mocks.getTaskStore.mockReturnValue(taskStore);
+    mocks.asProvisioned.mockReturnValue(provisioned);
+
+    await expect(prepareProjectSessionConversation(archivedTarget)).resolves.toBe(provisioned);
+
+    expect(mocks.ensureTaskLoaded).toHaveBeenCalledWith('task-1');
+    expect(restoreTask).toHaveBeenCalledWith('task-1');
+    expect(mocks.prepareTaskTarget).toHaveBeenCalledWith('project-1', 'task-1');
+    expect(restoreTask.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.prepareTaskTarget.mock.invocationCallOrder[1]
+    );
+  });
+
+  function mockCanonicalTaskArchived(): void {
     mocks.getTaskManagerStore.mockReturnValue({
+      ensureTaskLoaded: mocks.ensureTaskLoaded,
+      restoreTask,
       tasks: new Map([
         [
           'task-1',
           {
-            data: {
-              id: 'task-1',
-              archivedAt: '2026-07-05T04:00:00.000Z',
-            },
+            state: 'unprovisioned',
+            data: { id: 'task-1', archivedAt: '2026-07-05T04:00:00.000Z' },
           },
         ],
       ]),
-      restoreTask,
     });
-    mocks.getTaskStore.mockReturnValue(taskStore);
-    mocks.asProvisioned.mockReturnValue(provisioned);
-
-    await expect(prepareProjectSessionConversation(conversation)).resolves.toBe(provisioned);
-
-    expect(restoreTask).toHaveBeenCalledWith('task-1');
-    expect(mocks.prepareTaskTarget).toHaveBeenCalledWith('project-1', 'task-1');
-    expect(restoreTask.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.prepareTaskTarget.mock.invocationCallOrder[0]
-    );
-  });
+  }
 });

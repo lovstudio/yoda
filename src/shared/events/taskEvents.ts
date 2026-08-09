@@ -23,6 +23,24 @@ export const taskArchivedChannel = defineEvent<{
   projectId: string;
 }>('task:archived');
 
+/** One event per restore operation, including its cascaded descendants. */
+export const taskRestoredChannel = defineEvent<{
+  restoredTaskIds: string[];
+  projectId: string;
+}>('task:restored');
+
+export const taskDeletedChannel = defineEvent<{
+  taskId: string;
+  projectId: string;
+  parentTaskId?: string;
+}>('task:deleted');
+
+export const taskMovedChannel = defineEvent<{
+  taskId: string;
+  sourceProjectId: string;
+  targetProjectId: string;
+}>('task:moved');
+
 export const taskRenamedChannel = defineEvent<{
   taskId: string;
   projectId: string;

@@ -70,6 +70,7 @@ type SessionState = {
   outputRateSampleBytes: number;
   outputBytesPerSecond: number;
   lastOutputAt: number | null;
+  lastInputAt: number | null;
 };
 
 export type PtySubscriptionSnapshot = {
@@ -81,8 +82,11 @@ export type PtySubscriptionSnapshot = {
 export type PtySessionDiagnostics = {
   sessionId: string;
   live: boolean;
+  /** A create/resume operation owns a registration epoch but has not registered yet. */
+  registering?: boolean;
   outputBytesPerSecond: number;
   lastOutputAt: number | null;
+  lastInputAt: number | null;
   ringBufferBytes: number;
   ringBufferCapBytes: number;
   consumerCount: number;
@@ -329,6 +333,7 @@ export class PtySessionRegistry {
       outputRateSampleBytes: 0,
       outputBytesPerSecond: 0,
       lastOutputAt: null,
+      lastInputAt: null,
     };
     this.sessions.set(sessionId, state);
     for (const consumer of this.consumers.get(sessionId)?.values() ?? []) {
@@ -475,10 +480,13 @@ export class PtySessionRegistry {
 
   getDiagnostics(sessionId: string): PtySessionDiagnostics | null {
     const state = this.sessions.get(sessionId);
-    if (!state) return null;
+    const consumerCount = this.consumers.get(sessionId)?.size ?? 0;
+    const intent = this.registrationIntents.get(sessionId);
+    const registering = intent !== undefined && intent.expiresAt > Date.now();
+    if (!state && !registering && consumerCount === 0) return null;
     const now = Date.now();
-    const elapsedMs = now - state.outputRateSampleAt;
-    if (elapsedMs >= 250) {
+    const elapsedMs = state ? now - state.outputRateSampleAt : 0;
+    if (state && elapsedMs >= 250) {
       state.outputBytesPerSecond =
         ((state.outputBytesTotal - state.outputRateSampleBytes) * 1_000) / elapsedMs;
       state.outputRateSampleAt = now;
@@ -486,13 +494,15 @@ export class PtySessionRegistry {
     }
     return {
       sessionId,
-      live: state.live,
-      outputBytesPerSecond: Math.round(state.outputBytesPerSecond),
-      lastOutputAt: state.lastOutputAt,
-      ringBufferBytes: state.ringBuffer.sizeBytes,
+      live: state?.live ?? false,
+      registering,
+      outputBytesPerSecond: Math.round(state?.outputBytesPerSecond ?? 0),
+      lastOutputAt: state?.lastOutputAt ?? null,
+      lastInputAt: state?.lastInputAt ?? null,
+      ringBufferBytes: state?.ringBuffer.sizeBytes ?? 0,
       ringBufferCapBytes: this.ringBufferCapBytes,
-      consumerCount: this.consumers.get(sessionId)?.size ?? 0,
-      pendingOutputBytes: state.pendingByteLength + state.inflightByteLength,
+      consumerCount,
+      pendingOutputBytes: state ? state.pendingByteLength + state.inflightByteLength : 0,
     };
   }
 
@@ -827,7 +837,10 @@ export class PtySessionRegistry {
   private writeInput(state: SessionState, data: string): void {
     if (!data) return;
     const filtered = state.tmuxInputFilter?.feed(data) ?? data;
-    if (filtered) state.pty.write(filtered);
+    if (filtered) {
+      state.lastInputAt = Date.now();
+      state.pty.write(filtered);
+    }
   }
 
   private drainPendingInput(

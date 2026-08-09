@@ -10,16 +10,11 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { projectDisplayName, type LocalProject, type SshProject } from '@shared/projects';
 import type { ProjectUsage } from '@shared/stats';
-import type { ProjectStore } from '@renderer/features/projects/stores/project';
-import {
-  asMounted,
-  getProjectManagerStore,
-} from '@renderer/features/projects/stores/project-selectors';
-import { isRegistered } from '@renderer/features/tasks/stores/task';
+import { getProjectManagerStore } from '@renderer/features/projects/stores/project-selectors';
 import { useUsageOverview } from '@renderer/features/usage/useUsageOverview';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { useToast } from '@renderer/lib/hooks/use-toast';
@@ -39,6 +34,10 @@ import {
 } from '@renderer/lib/ui/dropdown-menu';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
+import {
+  PROJECT_TASK_COUNTS_QUERY_KEY,
+  subscribeProjectTaskQueryInvalidation,
+} from './project-task-query-events';
 
 const ARCHIVED_QUERY_KEY = ['archivedProjects'];
 const COLUMN_STORAGE_KEY = 'yoda:projects-overview:visible-columns';
@@ -70,14 +69,6 @@ const PROJECT_OVERVIEW_COLUMN_WIDTHS: Record<ProjectOverviewColumnId, string> = 
 
 function projectIcon(isSsh: boolean) {
   return isSsh ? FolderInput : FolderClosed;
-}
-
-function activeTaskCount(store: ProjectStore): number {
-  const mounted = asMounted(store);
-  if (!mounted) return 0;
-  return Array.from(mounted.taskManager.tasks.values()).filter(
-    (task) => isRegistered(task) && !task.data.archivedAt
-  ).length;
 }
 
 function normalizeVisibleColumns(value: unknown): ProjectOverviewColumnId[] {
@@ -126,6 +117,22 @@ const ProjectsOverview = observer(function ProjectsOverview() {
     queryKey: ARCHIVED_QUERY_KEY,
     queryFn: () => rpc.projects.getArchivedProjects(),
   });
+  const { data: taskCounts } = useQuery({
+    queryKey: PROJECT_TASK_COUNTS_QUERY_KEY,
+    queryFn: () => rpc.tasks.getTaskCounts(),
+  });
+  const activeTaskCountsByProject = new Map(
+    taskCounts?.map((counts) => [counts.projectId, counts.active]) ?? []
+  );
+  useEffect(
+    () =>
+      subscribeProjectTaskQueryInvalidation({
+        onTaskCountsInvalidated: () => {
+          void queryClient.invalidateQueries({ queryKey: PROJECT_TASK_COUNTS_QUERY_KEY });
+        },
+      }),
+    [queryClient]
+  );
   const {
     data: usageOverview,
     isLoading: isUsageLoading,
@@ -205,7 +212,7 @@ const ProjectsOverview = observer(function ProjectsOverview() {
               {active.map((store) => {
                 const data = store.data;
                 if (!data) return null;
-                const count = activeTaskCount(store);
+                const count = activeTaskCountsByProject.get(store.id);
                 return (
                   <ProjectTableRow
                     key={store.id}
@@ -259,6 +266,7 @@ const ProjectsOverview = observer(function ProjectsOverview() {
                     key={project.id}
                     project={project}
                     name={projectDisplayName(project)}
+                    activeTaskCount={activeTaskCountsByProject.get(project.id)}
                     usage={usageByProject.get(project.id)}
                     isUsageLoading={isUsageLoading}
                     isUsageError={isUsageError}

@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   ptyWrite: vi.fn(),
   getPty: vi.fn(),
   getPtyDiagnostics: vi.fn(),
+  listTmuxSessionMarkersStrict: vi.fn(),
+  killTmuxSessionStrict: vi.fn(),
   getProject: vi.fn(),
   getWorkspace: vi.fn(),
   acquireWorkspace: vi.fn(),
@@ -46,6 +48,12 @@ vi.mock('@main/core/terminals/impl/local-terminal-provider', () => ({
 
 vi.mock('@main/core/pty/pty-session-registry', () => ({
   ptySessionRegistry: { get: mocks.getPty, getDiagnostics: mocks.getPtyDiagnostics },
+}));
+
+vi.mock('@main/core/pty/tmux-session-name', () => ({
+  makeTmuxSessionName: (sessionId: string) => `tmux:${sessionId}`,
+  listTmuxSessionMarkersStrict: mocks.listTmuxSessionMarkersStrict,
+  killTmuxSessionStrict: mocks.killTmuxSessionStrict,
 }));
 
 vi.mock('@main/core/terminals/workspace-terminal-persistence', () => ({
@@ -86,6 +94,8 @@ describe('WorkspaceTerminalService', () => {
     mocks.getRuntimeConfig.mockResolvedValue({ cli: 'codex', defaultModel: 'gpt-5.6-codex' });
     mocks.getPty.mockReturnValue({ write: mocks.ptyWrite });
     mocks.getPtyDiagnostics.mockReturnValue({ tmuxBacked: true });
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([]);
+    mocks.killTmuxSessionStrict.mockResolvedValue(undefined);
     mocks.getPersistedTerminals.mockResolvedValue([]);
     mocks.persistTerminal.mockImplementation(async (terminal) => terminal);
     mocks.deletePersistedTerminal.mockResolvedValue(undefined);
@@ -307,5 +317,207 @@ describe('WorkspaceTerminalService', () => {
       })
     ).rejects.toThrow('Invalid project Terminal scope');
     expect(mocks.spawnTerminal).not.toHaveBeenCalled();
+  });
+
+  it('terminates and forgets every terminal for one project without touching global terminals', async () => {
+    const terminalProvider = {
+      spawnTerminal: mocks.spawnTerminal,
+      isTerminalDetachable: mocks.isTerminalDetachable,
+      killTerminal: mocks.killTerminal,
+      destroyAll: mocks.destroyAll,
+      detachAll: mocks.detachAll,
+    };
+    const projectContext = {};
+    mocks.getProject.mockReturnValue({ projectId: 'project-1', ctx: projectContext });
+    mocks.getWorkspace.mockReturnValue({ terminals: terminalProvider });
+    mocks.getPersistedTerminals.mockResolvedValue([
+      {
+        id: 'persisted-only',
+        projectId: 'project-1',
+        taskId: 'local:project-1:project-view',
+        name: 'Persisted',
+      },
+    ]);
+    mocks.listTmuxSessionMarkersStrict
+      .mockResolvedValueOnce([
+        {
+          sessionName: 'tmux:project-1:local:project-1:project-view:persisted-only',
+          cwd: '/repo',
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    mocks.killTmuxSessionStrict.mockRejectedValueOnce(new Error('session exited during kill'));
+    const service = new WorkspaceTerminalService();
+    await service.createTerminal({
+      id: 'terminal-1',
+      projectId: 'project-1',
+      taskId: 'local:project-1:project-view',
+      name: 'One',
+    });
+    await service.createTerminal({
+      id: 'terminal-2',
+      projectId: 'project-1',
+      taskId: 'local:project-1:project-view',
+      name: 'Two',
+    });
+    await service.createTerminal({
+      id: 'global-1',
+      projectId: GLOBAL_TERMINAL_PROJECT_ID,
+      taskId: GLOBAL_TERMINAL_SCOPE_ID,
+      name: 'Global',
+    });
+
+    await service.terminateProject('project-1');
+
+    expect(mocks.destroyAll).toHaveBeenCalledTimes(1);
+    expect(mocks.listTmuxSessionMarkersStrict).toHaveBeenCalledTimes(2);
+    expect(mocks.listTmuxSessionMarkersStrict).toHaveBeenCalledWith(projectContext);
+    expect(mocks.killTmuxSessionStrict).toHaveBeenCalledWith(
+      projectContext,
+      'tmux:project-1:local:project-1:project-view:persisted-only'
+    );
+    expect(mocks.deletePersistedTerminal).not.toHaveBeenCalled();
+    expect(mocks.releaseWorkspace).toHaveBeenCalledWith(
+      'local:project-1:project-view',
+      'terminate'
+    );
+    expect(service.getActiveSessionSummary()).toMatchObject({ running: 1 });
+  });
+
+  it('waits for an in-flight terminal creation before reclaiming the project', async () => {
+    let resolveSpawn: (() => void) | undefined;
+    mocks.spawnTerminal.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSpawn = resolve;
+        })
+    );
+    const terminalProvider = {
+      spawnTerminal: mocks.spawnTerminal,
+      isTerminalDetachable: mocks.isTerminalDetachable,
+      killTerminal: mocks.killTerminal,
+      destroyAll: mocks.destroyAll,
+      detachAll: mocks.detachAll,
+    };
+    mocks.getProject.mockReturnValue({ projectId: 'project-1', ctx: {} });
+    mocks.getWorkspace.mockReturnValue({ terminals: terminalProvider });
+    const service = new WorkspaceTerminalService();
+    const creation = service.createTerminal({
+      id: 'terminal-late',
+      projectId: 'project-1',
+      taskId: 'local:project-1:project-view',
+      name: 'Late',
+    });
+    await vi.waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1));
+
+    const termination = service.terminateProject('project-1');
+    await Promise.resolve();
+    expect(mocks.destroyAll).not.toHaveBeenCalled();
+    resolveSpawn?.();
+
+    await expect(creation).resolves.toMatchObject({ id: 'terminal-late' });
+    await expect(termination).resolves.toBeUndefined();
+    expect(mocks.destroyAll).toHaveBeenCalledTimes(1);
+    expect(mocks.deletePersistedTerminal).not.toHaveBeenCalled();
+    expect(service.getActiveSessionSummary()).toMatchObject({ running: 0 });
+  });
+
+  it('fails closed and preserves terminal identity when authoritative tmux listing fails', async () => {
+    const terminalProvider = {
+      spawnTerminal: mocks.spawnTerminal,
+      isTerminalDetachable: mocks.isTerminalDetachable,
+      killTerminal: mocks.killTerminal,
+      destroyAll: mocks.destroyAll,
+      detachAll: mocks.detachAll,
+    };
+    mocks.getProject.mockReturnValue({ projectId: 'project-1', ctx: {} });
+    mocks.getWorkspace.mockReturnValue({ terminals: terminalProvider });
+    mocks.getPersistedTerminals.mockResolvedValue([
+      {
+        id: 'terminal-cold',
+        projectId: 'project-1',
+        taskId: 'local:project-1:project-view',
+        name: 'Cold',
+      },
+    ]);
+    mocks.listTmuxSessionMarkersStrict.mockRejectedValue(new Error('SSH transport failed'));
+    const service = new WorkspaceTerminalService();
+    await service.getTerminals('project-1', 'local:project-1:project-view');
+
+    await expect(service.terminateProject('project-1')).rejects.toThrow('SSH transport failed');
+
+    expect(mocks.deletePersistedTerminal).not.toHaveBeenCalled();
+    expect(mocks.releaseWorkspace).not.toHaveBeenCalled();
+    await expect(
+      service.createTerminal({
+        id: 'terminal-blocked',
+        projectId: 'project-1',
+        taskId: 'local:project-1:project-view',
+        name: 'Blocked',
+      })
+    ).rejects.toThrow('being terminated');
+  });
+
+  it('fails closed when a cold terminal remains live after a strict kill failure', async () => {
+    const projectContext = {};
+    const sessionName = 'tmux:project-1:local:project-1:project-view:terminal-cold';
+    mocks.getProject.mockReturnValue({ projectId: 'project-1', ctx: projectContext });
+    mocks.getPersistedTerminals.mockResolvedValue([
+      {
+        id: 'terminal-cold',
+        projectId: 'project-1',
+        taskId: 'local:project-1:project-view',
+        name: 'Cold',
+      },
+    ]);
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([{ sessionName, cwd: '/repo' }]);
+    mocks.killTmuxSessionStrict.mockRejectedValue(new Error('kill transport failed'));
+    const service = new WorkspaceTerminalService();
+
+    await expect(service.terminateProject('project-1')).rejects.toThrow(
+      'Failed to terminate 1 of 1'
+    );
+
+    expect(mocks.listTmuxSessionMarkersStrict).toHaveBeenCalledTimes(2);
+    expect(mocks.killTmuxSessionStrict).toHaveBeenCalledWith(projectContext, sessionName);
+    expect(mocks.deletePersistedTerminal).not.toHaveBeenCalled();
+    expect(mocks.releaseWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('coalesces concurrent termination and stays fail-closed until cleanup is retried', async () => {
+    const terminalProvider = {
+      spawnTerminal: mocks.spawnTerminal,
+      isTerminalDetachable: mocks.isTerminalDetachable,
+      killTerminal: mocks.killTerminal,
+      destroyAll: mocks.destroyAll,
+      detachAll: mocks.detachAll,
+    };
+    mocks.getProject.mockReturnValue({ projectId: 'project-1', ctx: {} });
+    mocks.getWorkspace.mockReturnValue({ terminals: terminalProvider });
+    const service = new WorkspaceTerminalService();
+    await service.createTerminal({
+      id: 'terminal-1',
+      projectId: 'project-1',
+      taskId: 'local:project-1:project-view',
+      name: 'One',
+    });
+    mocks.destroyAll.mockRejectedValueOnce(new Error('destroy failed'));
+
+    const first = service.terminateProject('project-1');
+    const second = service.terminateProject('project-1');
+    await expect(Promise.all([first, second])).rejects.toThrow('Failed to clean up');
+    expect(mocks.destroyAll).toHaveBeenCalledTimes(1);
+    await expect(
+      service.createTerminal({
+        id: 'terminal-blocked',
+        projectId: 'project-1',
+        taskId: 'local:project-1:project-view',
+        name: 'Blocked',
+      })
+    ).rejects.toThrow('being terminated');
+
+    await expect(service.terminateProject('project-1')).resolves.toBeUndefined();
+    expect(mocks.destroyAll).toHaveBeenCalledTimes(2);
+    expect(service.getActiveSessionSummary()).toMatchObject({ running: 0 });
   });
 });

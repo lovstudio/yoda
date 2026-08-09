@@ -586,6 +586,34 @@ export function readCodexThreadRolloutPath(
   });
 }
 
+/** Read many exact thread bindings through one readonly state DB handle. */
+export function readCodexThreadRolloutPaths(
+  statePath: string,
+  threadIds: readonly string[]
+): Map<string, string> {
+  if (threadIds.length === 0) return new Map();
+  return (
+    withCodexState(statePath, (db) => {
+      const statement = db.prepare(
+        `
+          SELECT NULLIF(rollout_path, '') AS rolloutPath
+          FROM threads
+          WHERE id = ?
+          LIMIT 1
+        `
+      );
+      const paths = new Map<string, string>();
+      for (const threadId of new Set(threadIds)) {
+        const row = statement.get(threadId);
+        if (typeof row !== 'object' || row === null) continue;
+        const value = (row as Record<string, unknown>).rolloutPath;
+        if (typeof value === 'string' && value.length > 0) paths.set(threadId, value);
+      }
+      return paths;
+    }) ?? new Map()
+  );
+}
+
 export function readCodexThreadArchiveStatus(
   statePath: string,
   threadId: string

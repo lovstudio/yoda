@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   Bot,
@@ -24,7 +24,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AppAgentSessionResource } from '@shared/app-resource';
+import type { AppAgentSessionResource, TmuxReclamationSnapshot } from '@shared/app-resource';
 import type { Conversation } from '@shared/conversations';
 import { getMaasPlatformDefinition } from '@shared/maas';
 import type { ComposerDefaults } from '@shared/project-settings';
@@ -86,8 +86,8 @@ import {
 } from './workspace-resource-history';
 import { WorkspaceResourceMetric } from './workspace-resource-metric';
 import {
+  getWorkspaceResourceQueryTiming,
   WORKSPACE_RESOURCE_QUERY_KEY,
-  WORKSPACE_RESOURCE_QUERY_TIMING,
 } from './workspace-resource-monitoring';
 import { WorkspaceResourceTrend } from './workspace-resource-trend';
 import {
@@ -123,13 +123,14 @@ function agentSessionKey(
   return `${session.projectId}\0${session.taskId}\0${session.conversationId}`;
 }
 
-export function explicitConversationRuntimeId(value: unknown): RuntimeId | null {
+function explicitConversationRuntimeId(value: unknown): RuntimeId | null {
   return typeof value === 'string' && isValidRuntimeId(value) ? value : null;
 }
 
 export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { navigate } = useNavigate();
   const showDoctorModal = useShowModal('doctorModal');
   const showConfirmActionModal = useShowModal('confirmActionModal');
@@ -152,6 +153,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     | null
   >(null);
   const [isAgentPopoverOpen, setIsAgentPopoverOpen] = useState(false);
+  const [isReclaimingTmux, setIsReclaimingTmux] = useState(false);
   const [agentPanelTab, setAgentPanelTab] = useState<AgentPanelTab>('all');
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
   const [isConfigPopoverOpen, setIsConfigPopoverOpen] = useState(false);
@@ -398,10 +400,25 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           getMaasPlatformDefinition(selectedMaasPlatformId).name,
       })
     : t('workspaceRuntime.maas.title');
-  const { data: resourceSnapshot } = useQuery({
+  const { data: resourceSnapshot, refetch: refreshResourceSnapshot } = useQuery({
     queryKey: WORKSPACE_RESOURCE_QUERY_KEY,
-    queryFn: () => rpc.app.getResourceSnapshot(),
-    ...WORKSPACE_RESOURCE_QUERY_TIMING,
+    queryFn: () => rpc.app.getResourceSnapshot({ freshAgentProcesses: isAgentPopoverOpen }),
+    ...getWorkspaceResourceQueryTiming(isAgentPopoverOpen),
+  });
+  useEffect(() => {
+    if (isAgentPopoverOpen) void refreshResourceSnapshot();
+  }, [isAgentPopoverOpen, refreshResourceSnapshot]);
+  const {
+    data: tmuxReclamation,
+    isFetching: isScanningTmux,
+    refetch: refreshTmuxReclamation,
+  } = useQuery<TmuxReclamationSnapshot>({
+    queryKey: ['app', 'tmuxReclamation'],
+    queryFn: () => rpc.app.getTmuxReclamationSnapshot(),
+    enabled: isAgentPopoverOpen,
+    staleTime: 30_000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
   });
   const { data: worktreeStorage, isFetching: isFetchingWorktreeStorage } = useQuery({
     queryKey: ['projects', 'worktreeStorage'],
@@ -409,13 +426,16 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     enabled: isResourcePopoverOpen,
     staleTime: 60_000,
     refetchInterval: (query) =>
-      query.state.data?.pendingInspectionCount && query.state.data.pendingInspectionCount > 0
+      (query.state.data?.pendingInspectionCount ?? 0) > 0 ||
+      query.state.data?.unregisteredUnknownScanInProgress
         ? 1_000
         : false,
     refetchOnWindowFocus: false,
   });
   const isScanningWorktrees =
-    isFetchingWorktreeStorage || (worktreeStorage?.pendingInspectionCount ?? 0) > 0;
+    isFetchingWorktreeStorage ||
+    (worktreeStorage?.pendingInspectionCount ?? 0) > 0 ||
+    worktreeStorage?.unregisteredUnknownScanInProgress === true;
   const agentSessionByKey = new Map<string, WorkspaceAgentSession>(
     (resourceSnapshot?.agentSessions ?? []).map((session) => [agentSessionKey(session), session])
   );
@@ -488,6 +508,50 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             working: workingAgentCount,
           })
         : String(agentSessionCount);
+
+  const cleanupTmuxSessions = async () => {
+    setIsReclaimingTmux(true);
+    try {
+      const result = await rpc.app.cleanupReclaimableTmuxSessions();
+      await Promise.all([
+        refreshTmuxReclamation(),
+        queryClient.invalidateQueries({ queryKey: WORKSPACE_RESOURCE_QUERY_KEY }),
+      ]);
+      if (result.terminatedCount > 0 || result.alreadyStoppedCount > 0) {
+        toast.success(
+          t('workspaceRuntime.agents.reclamationSuccess', {
+            count: result.terminatedCount + result.alreadyStoppedCount,
+          })
+        );
+      } else {
+        toast(t('workspaceRuntime.agents.reclamationNone'));
+      }
+      if (result.failedSessionIds.length > 0 || result.skippedCount > 0) {
+        toast.error(
+          t('workspaceRuntime.agents.reclamationPartial', {
+            count: result.failedSessionIds.length + result.skippedCount,
+          })
+        );
+      }
+    } catch {
+      toast.error(t('workspaceRuntime.agents.reclamationFailed'));
+    } finally {
+      setIsReclaimingTmux(false);
+    }
+  };
+
+  const confirmTmuxCleanup = () => {
+    if (!tmuxReclamation?.reclaimableCount) return;
+    showConfirmActionModal({
+      title: t('workspaceRuntime.agents.confirmReclamationTitle'),
+      description: t('workspaceRuntime.agents.confirmReclamationDescription', {
+        count: tmuxReclamation.reclaimableCount,
+      }),
+      confirmLabel: t('workspaceRuntime.agents.reclaim'),
+      variant: 'default',
+      onSuccess: () => void cleanupTmuxSessions(),
+    });
+  };
   const resourceLatencyP95 = getWorkspaceLatencyP95(resourceSnapshot);
   const latencyTitle = resourceSnapshot?.rendererPerformance
     ? t('workspaceRuntime.resources.latencyDetails', {
@@ -1502,6 +1566,35 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               {t('workspaceRuntime.agents.pendingAcceptanceEmpty')}
             </div>
           )}
+          <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2.5">
+            <div className="min-w-0">
+              <div className="text-[11px] text-foreground-muted">
+                {isScanningTmux && !tmuxReclamation
+                  ? t('workspaceRuntime.agents.scanningBackgroundSessions')
+                  : t('workspaceRuntime.agents.backgroundSessionSummary', {
+                      count: tmuxReclamation?.sessionCount ?? 0,
+                      reclaimable: tmuxReclamation?.reclaimableCount ?? 0,
+                    })}
+              </div>
+              <div className="mt-0.5 truncate text-[10px] text-foreground-passive">
+                {t('workspaceRuntime.agents.reclamationPolicy')}
+              </div>
+            </div>
+            {tmuxReclamation?.reclaimableCount ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="shrink-0"
+                disabled={isScanningTmux || isReclaimingTmux}
+                onClick={confirmTmuxCleanup}
+              >
+                {isReclaimingTmux
+                  ? t('workspaceRuntime.agents.reclaiming')
+                  : t('workspaceRuntime.agents.reclaim')}
+              </Button>
+            ) : null}
+          </div>
         </PopoverContent>
       </Popover>
       <Popover open={isResourcePopoverOpen} onOpenChange={setIsResourcePopoverOpen}>
@@ -1787,19 +1880,17 @@ function useActiveSessionModelDetails({
     queryFn: async () => {
       if (!runtimeId || !cwd || !conversation) return null;
       if (runtimeId === 'codex') {
-        const context = await rpc.conversations.getCodexSessionContext(
+        const metadata = await rpc.conversations.getCodexSessionRuntimeMetadata(
           cwd,
           conversation.id,
           conversation.title,
-          conversation.createdAt ?? null,
-          'harness'
+          conversation.createdAt ?? null
         );
-        if (!context) return null;
-        const currentTurn = context.turnContexts.at(-1);
+        if (!metadata) return null;
         return {
-          model: context.model,
-          reasoningEffort: currentTurn?.effort ?? null,
-          fastMode: isCodexFastServiceTier(currentTurn?.serviceTier),
+          model: metadata.model,
+          reasoningEffort: metadata.reasoningEffort,
+          fastMode: isCodexFastServiceTier(metadata.serviceTier),
         };
       }
       if (runtimeId === 'claude') {

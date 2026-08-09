@@ -84,6 +84,13 @@ export type Task = {
   quickActionId?: string;
 };
 
+/** Lightweight project-level totals used without materializing Task stores. */
+export type ProjectTaskCounts = {
+  projectId: string;
+  active: number;
+  archived: number;
+};
+
 export type TaskBootstrapStatus =
   | { status: 'ready' }
   | { status: 'bootstrapping' }

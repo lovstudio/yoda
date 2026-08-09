@@ -221,8 +221,9 @@ const ConversationBlind = observer(function ConversationBlind({
   open: boolean;
   title: string;
 }) {
-  // Load prompts regardless of open state so the header count is always live.
-  const prompts = useSessionPrompts(true);
+  // A collapsed blind remains a passive observer of the shared query cache;
+  // another visible prompt surface may keep the count warm, but this one never polls.
+  const prompts = useSessionPrompts(open);
   const { value: interfaceSettings, update: updateInterfaceSettings } =
     useAppSettingsKey('interface');
   const displayLevel = interfaceSettings?.agentReplyDisplayLevel ?? 'concise';

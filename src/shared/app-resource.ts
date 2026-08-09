@@ -52,6 +52,11 @@ export type AppResourceSnapshot = {
   rendererPerformance: RendererPerformanceSample | null;
 };
 
+export type AppResourceSnapshotOptions = {
+  /** Keep external agent process trees fresh while their detail panel is visible. */
+  freshAgentProcesses?: boolean;
+};
+
 export type WorktreeStorageItem = {
   projectId: string;
   projectName: string;
@@ -67,14 +72,34 @@ export type WorktreeStorageItem = {
   reclaimable: boolean;
 };
 
+export type UnregisteredWorktreeStorageItem = {
+  projectId: string;
+  projectName: string;
+  path: string;
+  sizeBytes: number | null;
+  modifiedAt: string | null;
+  inspectedAt: string | null;
+  inspectionPending: boolean;
+  inspectionFailed: boolean;
+};
+
 export type WorktreeStorageSnapshot = {
   sampledAt: string;
   totalBytes: number;
   reclaimableBytes: number;
   worktreeCount: number;
+  registeredActiveCount: number;
+  registeredDirtyCount: number;
   reclaimableCount: number;
   pendingInspectionCount: number;
+  unregisteredUnknownCount: number;
+  unregisteredUnknownBytes: number;
+  unregisteredUnknownInspectionPendingCount: number;
+  unregisteredUnknownInventoryPendingProjectCount: number;
+  unregisteredUnknownScanInProgress: boolean;
+  oldestUnregisteredUnknownAt: string | null;
   items: WorktreeStorageItem[];
+  unregisteredUnknownItems: UnregisteredWorktreeStorageItem[];
 };
 
 export type WorktreeStorageSnapshotOptions = {
@@ -85,4 +110,50 @@ export type WorktreeCleanupResult = {
   removedCount: number;
   reclaimedBytes: number;
   failedPaths: string[];
+};
+
+export type TmuxSessionOwnerKind =
+  | 'conversation'
+  | 'task-terminal'
+  | 'workspace-terminal'
+  | 'unknown';
+
+export type TmuxReclamationBlocker =
+  | 'active-owner'
+  | 'attached-client'
+  | 'live-pty'
+  | 'renderer-consumer'
+  | 'grace-period'
+  | 'unknown-activity';
+
+export type TmuxReclamationItem = {
+  sessionId: string;
+  sessionName: string;
+  cwd: string;
+  ownerKind: TmuxSessionOwnerKind;
+  ownerId: string | null;
+  ownerState: 'active' | 'archived' | 'missing';
+  attachedClients: number;
+  rendererConsumers: number;
+  lastActivityAt: string | null;
+  reclaimable: boolean;
+  blockers: TmuxReclamationBlocker[];
+};
+
+export type TmuxReclamationSnapshot = {
+  sampledAt: string;
+  gracePeriodMs: number;
+  sessionCount: number;
+  activeOwnedCount: number;
+  archivedOwnedCount: number;
+  missingOwnerCount: number;
+  reclaimableCount: number;
+  items: TmuxReclamationItem[];
+};
+
+export type TmuxCleanupResult = {
+  terminatedCount: number;
+  alreadyStoppedCount: number;
+  skippedCount: number;
+  failedSessionIds: string[];
 };

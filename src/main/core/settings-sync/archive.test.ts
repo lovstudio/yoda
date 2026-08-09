@@ -273,4 +273,32 @@ describe('settings archive', () => {
     expect(parsed.data.runtimeConfigs).toEqual({});
     expect(parsed.data.viewState.sidebar).toEqual({ taskGroupBy: 'project' });
   });
+
+  it('falls back when a synced reply display level comes from an older schema', () => {
+    const archive = {
+      kind: 'yoda-settings',
+      version: 1,
+      appVersion: '1.0.0',
+      exportedAt: '2026-07-16T00:00:00.000Z',
+      data: {
+        appSettings: {
+          interface: {
+            taskHoverAction: 'archive',
+            autoRightSidebarBehavior: true,
+            newTaskOpenMode: 'home',
+            agentReplyDisplayLevel: 'legacy-full',
+            dockSessionHistory: false,
+            dockSessionHistoryRows: 5,
+          },
+        },
+        runtimeConfigs: {},
+        viewState: {},
+        rendererStorage: {},
+      },
+    };
+
+    const parsed = parseSettingsArchive(archive);
+
+    expect(parsed.data.appSettings.interface?.agentReplyDisplayLevel).toBe('concise');
+  });
 });

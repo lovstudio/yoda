@@ -141,26 +141,26 @@ Local DB (SQLite)
 
 ## Release Process (maintainers)
 
-Use pnpm's built-in versioning to ensure consistency:
+Prepare the release metadata without creating a tag yet:
 
 ```bash
-# For bug fixes (0.2.9 → 0.2.10)
-pnpm version patch
-
-# For new features (0.2.9 → 0.3.0)
-pnpm version minor
-
-# For breaking changes (0.2.9 → 1.0.0)
-pnpm version major
+# Keep these two versions in sync, then add a matching CHANGELOG section.
+node -p "require('./package.json').version"
+head -n 12 CHANGELOG.md
 ```
 
-This automatically:
+Run the complete repository gates before committing:
 
-1. Updates `package.json` and `pnpm-lock.yaml`
-2. Creates a git commit with the version number (e.g., `"0.2.10"`)
-3. Creates a git tag (e.g., `v0.2.10`)
+```bash
+pnpm run format
+pnpm run lint
+pnpm run typecheck
+pnpm test
+pnpm run build
+pnpm run docs:build
+```
 
-Then push the commit and tag. Production release builds are dispatched from GitHub Actions.
+Commit and push the release metadata first. Then create and push exactly one matching tag (for example, `v0.18.10`). The tag push dispatches the production release automatically; do not also dispatch the workflow manually for the same tag.
 
 ### What happens next
 
@@ -169,8 +169,9 @@ The release pipeline is split across these GitHub Actions workflows:
 **Production Release** (`.github/workflows/release-prod.yml`):
 1. Builds Linux, Windows, and macOS packages
 2. Signs Windows builds when Azure Trusted Signing secrets are configured
-3. Signs, verifies, notarizes, and staples macOS DMGs and ZIPs
-4. Uploads release artifacts to Cloudflare R2
+3. Signs, verifies, notarizes, and staples macOS DMGs
+4. Publishes the GitHub Release only after all platform jobs succeed
+5. Dispatches the China mirror as an independent post-release workflow
 
 **Linux/Nix Build** (`.github/workflows/nix-build.yml`):
 1. Computes the correct dependency hash from `pnpm-lock.yaml`

@@ -25,7 +25,6 @@ export const TasksOverviewCard = observer(function TasksOverviewCard({
       )
     : [];
   const active = allTasks.filter((t) => !t.data.archivedAt);
-  const archived = allTasks.filter((t) => Boolean(t.data.archivedAt));
   const recent = active
     .slice()
     .sort((a, b) => {
@@ -48,7 +47,10 @@ export const TasksOverviewCard = observer(function TasksOverviewCard({
             {t('projects.sessions')}
           </h2>
           <span className="text-xs text-foreground-muted">
-            {t('projects.taskCounts', { active: active.length, archived: archived.length })}
+            {t('projects.taskCounts', {
+              active: taskManager?.taskCounts.active ?? active.length,
+              archived: taskManager?.taskCounts.archived ?? 0,
+            })}
           </span>
         </div>
         <Button variant="ghost" size="sm" onClick={goToTasks}>

@@ -1,5 +1,5 @@
 import { existsSync, type Dirent } from 'node:fs';
-import { readdir } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import type {
@@ -52,6 +52,28 @@ type ParsedCodexRollout = {
   summary: SessionSummary | null;
 };
 
+export type CodexSessionConversation = {
+  prompts: ClaudeSessionPrompt[];
+  messages: SessionTranscriptMessage[];
+};
+
+export type CodexSessionRuntimeMetadata = {
+  model: string | null;
+  reasoningEffort: string | null;
+  serviceTier: string | null;
+};
+
+type CodexRolloutReadMode = 'full' | 'harness' | 'conversation' | 'runtime';
+
+type CachedLiveRollout = {
+  signature: string;
+  lastAccessedAt: number;
+  reads: Partial<Record<'conversation' | 'runtime', Promise<ParsedCodexRollout | null>>>;
+};
+
+const MAX_CACHED_LIVE_ROLLOUTS = 32;
+const liveRolloutCache = new Map<string, CachedLiveRollout>();
+
 type TurnTagged<T> = {
   value: T;
   turnId: string | null;
@@ -90,39 +112,15 @@ export async function getCodexSessionContext(
     conversationLastInteractedAt?: string | null;
   } = {}
 ): Promise<CodexSessionContext | null> {
-  const codexHome = options.codexHome ?? resolveCodexHome();
-  const statePath = resolveCodexStatePath(codexHome);
-  const rootThread =
-    resolveCodexThread({
-      statePath,
-      cwd,
-      conversationId,
-      conversationTitle,
-      conversationCreatedAt,
-      conversationLastInteractedAt: options.conversationLastInteractedAt,
-    }) ??
-    (await resolveCodexThreadFromRollouts({
-      codexHome,
-      cwd,
-      conversationId,
-      conversationTitle,
-      conversationCreatedAt,
-    }));
-  if (!rootThread) return null;
-  const reservedThreadIds =
-    options.reservedThreadIds ??
-    (await import('./codex-thread-reservations').then(({ getReservedCodexThreadIds }) =>
-      getReservedCodexThreadIds(conversationId)
-    ));
-  const currentThreadId = resolveLatestCodexThreadIdInLineage({
-    statePath,
-    rootThreadId: rootThread.id,
-    reservedThreadIds,
-  });
-  const thread =
-    currentThreadId === rootThread.id
-      ? rootThread
-      : (readCodexThreadContext(statePath, currentThreadId) ?? rootThread);
+  const resolved = await resolveCurrentCodexThread(
+    cwd,
+    conversationId,
+    conversationTitle,
+    conversationCreatedAt,
+    options
+  );
+  if (!resolved) return null;
+  const { codexHome, statePath, thread } = resolved;
 
   const [parsed, memoryFiles, dbDynamicTools, skills] = await Promise.all([
     loadRolloutContext(
@@ -171,40 +169,79 @@ export async function getCodexSessionPrompts(
   conversationCreatedAt?: string | null,
   options: { codexHome?: string; reservedThreadIds?: ReadonlySet<string> } = {}
 ): Promise<ClaudeSessionPrompt[]> {
-  const codexHome = options.codexHome ?? resolveCodexHome();
-  const statePath = resolveCodexStatePath(codexHome);
-  const rootThread =
-    resolveCodexThread({
-      statePath,
-      cwd,
-      conversationId,
-      conversationTitle,
-      conversationCreatedAt,
-    }) ??
-    (await resolveCodexThreadFromRollouts({
-      codexHome,
-      cwd,
-      conversationId,
-      conversationTitle,
-      conversationCreatedAt,
-    }));
-  if (!rootThread) return [];
-  const reservedThreadIds =
-    options.reservedThreadIds ??
-    (await import('./codex-thread-reservations').then(({ getReservedCodexThreadIds }) =>
-      getReservedCodexThreadIds(conversationId)
-    ));
-  const currentThreadId = resolveLatestCodexThreadIdInLineage({
-    statePath,
-    rootThreadId: rootThread.id,
-    reservedThreadIds,
-  });
-  const thread =
-    currentThreadId === rootThread.id
-      ? rootThread
-      : (readCodexThreadContext(statePath, currentThreadId) ?? rootThread);
-  const rollout = await loadRolloutContext(thread.rolloutPath, thread.firstUserMessage, 'full');
-  return rollout?.prompts ?? [];
+  return (
+    (
+      await getCodexSessionConversation(
+        cwd,
+        conversationId,
+        conversationTitle,
+        conversationCreatedAt,
+        options
+      )
+    )?.prompts ?? []
+  );
+}
+
+/**
+ * Reads only prompt and assistant-message rows for live conversation surfaces.
+ * Harness discovery (instructions, skills, and dynamic tools) remains exclusive
+ * to getCodexSessionContext and is never part of the polling path.
+ */
+export async function getCodexSessionConversation(
+  cwd: string,
+  conversationId: string,
+  conversationTitle?: string,
+  conversationCreatedAt?: string | null,
+  options: {
+    codexHome?: string;
+    reservedThreadIds?: ReadonlySet<string>;
+    conversationLastInteractedAt?: string | null;
+  } = {}
+): Promise<CodexSessionConversation | null> {
+  const resolved = await resolveCurrentCodexThread(
+    cwd,
+    conversationId,
+    conversationTitle,
+    conversationCreatedAt,
+    options
+  );
+  if (!resolved) return null;
+  const rollout = await loadRolloutContext(
+    resolved.thread.rolloutPath,
+    resolved.thread.firstUserMessage,
+    'conversation'
+  );
+  if (!rollout) return { prompts: [], messages: [] };
+  return { prompts: rollout.prompts, messages: rollout.messages };
+}
+
+/** Small runtime-bar payload resolved without loading the full Codex harness. */
+export async function getCodexSessionRuntimeMetadata(
+  cwd: string,
+  conversationId: string,
+  conversationTitle?: string,
+  conversationCreatedAt?: string | null,
+  options: {
+    codexHome?: string;
+    reservedThreadIds?: ReadonlySet<string>;
+    conversationLastInteractedAt?: string | null;
+  } = {}
+): Promise<CodexSessionRuntimeMetadata | null> {
+  const resolved = await resolveCurrentCodexThread(
+    cwd,
+    conversationId,
+    conversationTitle,
+    conversationCreatedAt,
+    options
+  );
+  if (!resolved) return null;
+  const rollout = await loadRolloutContext(resolved.thread.rolloutPath, null, 'runtime');
+  const currentTurn = rollout?.turnContexts.at(-1);
+  return {
+    model: currentTurn?.model ?? resolved.thread.model?.trim() ?? null,
+    reasoningEffort: currentTurn?.effort ?? null,
+    serviceTier: currentTurn?.serviceTier ?? null,
+  };
 }
 
 export async function getCodexSessionModel(
@@ -218,6 +255,31 @@ export async function getCodexSessionModel(
     conversationLastInteractedAt?: string | null;
   } = {}
 ): Promise<string | null> {
+  const resolved = await resolveCurrentCodexThread(
+    cwd,
+    conversationId,
+    conversationTitle,
+    conversationCreatedAt,
+    options
+  );
+  return resolved?.thread.model?.trim() || null;
+}
+
+function resolveCodexHome(): string {
+  return resolveRuntimeStateDirectory('codex', undefined);
+}
+
+async function resolveCurrentCodexThread(
+  cwd: string,
+  conversationId: string,
+  conversationTitle: string | undefined,
+  conversationCreatedAt: string | null | undefined,
+  options: {
+    codexHome?: string;
+    reservedThreadIds?: ReadonlySet<string>;
+    conversationLastInteractedAt?: string | null;
+  }
+): Promise<{ codexHome: string; statePath: string; thread: CodexThreadContextRow } | null> {
   const codexHome = options.codexHome ?? resolveCodexHome();
   const statePath = resolveCodexStatePath(codexHome);
   const rootThread =
@@ -247,15 +309,14 @@ export async function getCodexSessionModel(
     rootThreadId: rootThread.id,
     reservedThreadIds,
   });
-  const thread =
-    currentThreadId === rootThread.id
-      ? rootThread
-      : (readCodexThreadContext(statePath, currentThreadId) ?? rootThread);
-  return thread?.model?.trim() || null;
-}
-
-function resolveCodexHome(): string {
-  return resolveRuntimeStateDirectory('codex', undefined);
+  return {
+    codexHome,
+    statePath,
+    thread:
+      currentThreadId === rootThread.id
+        ? rootThread
+        : (readCodexThreadContext(statePath, currentThreadId) ?? rootThread),
+  };
 }
 
 async function resolveCodexThreadFromRollouts({
@@ -299,7 +360,7 @@ async function resolveCodexThreadFromRollouts({
       movedPathDistanceMs <= CODEX_CREATED_AT_MATCH_MAX_DISTANCE_MS;
     if (!sameCwd && meta.id !== conversationId && !canCheckMovedPath) continue;
 
-    const parsed = (await loadRolloutContext(rolloutPath, null)) ?? emptyRollout();
+    const parsed = (await loadRolloutContext(rolloutPath, null, 'conversation')) ?? emptyRollout();
     const firstUserMessage = parsed.prompts[0]?.text ?? null;
     const lastTurnContext = parsed.turnContexts.at(-1);
     const row: CodexThreadContextRow = {
@@ -603,9 +664,42 @@ function parseCodexThreadContextRow(row: unknown): CodexThreadContextRow | null 
 async function loadRolloutContext(
   path: string | null,
   firstUserMessage: string | null,
-  mode: 'full' | 'harness' = 'full'
+  mode: CodexRolloutReadMode = 'full'
 ): Promise<ParsedCodexRollout | null> {
   if (!path) return null;
+  if (mode === 'conversation' || mode === 'runtime') {
+    try {
+      const metadata = await stat(path);
+      const signature = `${metadata.size}:${metadata.mtimeMs}`;
+      let cached = liveRolloutCache.get(path);
+      if (!cached || cached.signature !== signature) {
+        cached = { signature, lastAccessedAt: Date.now(), reads: {} };
+        liveRolloutCache.set(path, cached);
+      } else {
+        cached.lastAccessedAt = Date.now();
+      }
+
+      const reusableConversation = mode === 'runtime' ? cached.reads.conversation : undefined;
+      if (reusableConversation) return reusableConversation;
+      const existing = cached.reads[mode];
+      if (existing) return existing;
+
+      const read = loadRolloutContextUncached(path, firstUserMessage, mode);
+      cached.reads[mode] = read;
+      trimLiveRolloutCache();
+      return read;
+    } catch {
+      return null;
+    }
+  }
+  return loadRolloutContextUncached(path, firstUserMessage, mode);
+}
+
+async function loadRolloutContextUncached(
+  path: string,
+  firstUserMessage: string | null,
+  mode: CodexRolloutReadMode
+): Promise<ParsedCodexRollout | null> {
   try {
     const relevantLines: string[] = [];
     const lines = iterateFileLines(
@@ -615,14 +709,42 @@ async function loadRolloutContext(
     for await (const line of lines) {
       if (isCodexContextLine(line, mode)) relevantLines.push(line);
     }
-    return parseCodexRolloutLines(relevantLines, mode === 'harness' ? null : firstUserMessage);
+    return parseCodexRolloutLines(
+      relevantLines,
+      mode === 'harness' || mode === 'runtime' ? null : firstUserMessage
+    );
   } catch {
     return null;
   }
 }
 
-function isCodexContextLine(line: string, mode: 'full' | 'harness'): boolean {
-  if (line.includes('"session_meta"') || line.includes('"turn_context"')) return true;
+function trimLiveRolloutCache(): void {
+  while (liveRolloutCache.size > MAX_CACHED_LIVE_ROLLOUTS) {
+    let oldestPath: string | undefined;
+    let oldestAccess = Number.POSITIVE_INFINITY;
+    for (const [path, entry] of liveRolloutCache) {
+      if (entry.lastAccessedAt < oldestAccess) {
+        oldestPath = path;
+        oldestAccess = entry.lastAccessedAt;
+      }
+    }
+    if (!oldestPath) return;
+    liveRolloutCache.delete(oldestPath);
+  }
+}
+
+function isCodexContextLine(line: string, mode: CodexRolloutReadMode): boolean {
+  if (line.includes('"turn_context"')) return true;
+  if (mode === 'runtime') {
+    return (
+      line.includes('"event_msg"') &&
+      (line.includes('"task_started"') ||
+        line.includes('"turn_started"') ||
+        line.includes('"user_message"') ||
+        line.includes('"thread_rolled_back"'))
+    );
+  }
+  if (mode !== 'conversation' && line.includes('"session_meta"')) return true;
   if (mode === 'harness') {
     return (
       line.includes('"response_item"') && line.includes('"message"') && line.includes('"developer"')

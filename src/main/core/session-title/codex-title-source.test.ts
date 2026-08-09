@@ -6,11 +6,13 @@ import {
   CodexSessionTitleSource,
   findNewCodexThreadTitle,
   findRecentCodexThreadTitle,
+  readCodexThreadRolloutPaths,
   readCodexThreadTitle,
   resolveCodexStatePath,
 } from './codex-title-source';
 
 const codexState = vi.hoisted(() => ({
+  openCount: 0,
   rows: [] as Array<{
     id: string;
     cwd: string;
@@ -26,6 +28,10 @@ const codexState = vi.hoisted(() => ({
 
 vi.mock('better-sqlite3', () => {
   class FakeDatabase {
+    constructor() {
+      codexState.openCount += 1;
+    }
+
     pragma(): void {}
 
     close(): void {}
@@ -73,6 +79,7 @@ describe('CodexSessionTitleSource helpers', () => {
   let statePath: string;
 
   beforeEach(() => {
+    codexState.openCount = 0;
     codexState.rows = [];
     dir = mkdtempSync(join(tmpdir(), 'yoda-codex-state-'));
     statePath = join(dir, 'state_5.sqlite');
@@ -307,6 +314,33 @@ describe('CodexSessionTitleSource helpers', () => {
       createdAtMs: 6_000,
       updatedAtMs: 6_000,
     });
+  });
+
+  it('reads exact rollout bindings through one readonly state DB handle', () => {
+    insertThread({
+      id: 'thread-1',
+      cwd: '/repo',
+      title: 'One',
+      updatedAtMs: 6_000,
+      rolloutPath: '/rollouts/one.jsonl',
+    });
+    insertThread({
+      id: 'thread-2',
+      cwd: '/repo',
+      title: 'Two',
+      updatedAtMs: 7_000,
+      rolloutPath: '/rollouts/two.jsonl',
+    });
+
+    expect(
+      readCodexThreadRolloutPaths(statePath, ['thread-1', 'missing', 'thread-2', 'thread-1'])
+    ).toEqual(
+      new Map([
+        ['thread-1', '/rollouts/one.jsonl'],
+        ['thread-2', '/rollouts/two.jsonl'],
+      ])
+    );
+    expect(codexState.openCount).toBe(1);
   });
 
   it('returns undefined when Codex state is missing', () => {

@@ -41,22 +41,6 @@ function makeSettings(preservePatterns: string[] = []): ProjectSettingsProvider 
 
 const originRemote = (url = 'ssh://example.com/repo.git'): Remote => ({ name: 'origin', url });
 
-function overrideRemoveAbsolute(
-  base: WorktreeHost,
-  removeAbsolute: WorktreeHost['removeAbsolute']
-): WorktreeHost {
-  return {
-    existsAbsolute: base.existsAbsolute.bind(base),
-    mkdirAbsolute: base.mkdirAbsolute.bind(base),
-    removeAbsolute,
-    realPathAbsolute: base.realPathAbsolute.bind(base),
-    globAbsolute: base.globAbsolute.bind(base),
-    readFileAbsolute: base.readFileAbsolute.bind(base),
-    copyFileAbsolute: base.copyFileAbsolute.bind(base),
-    statAbsolute: base.statAbsolute.bind(base),
-  };
-}
-
 function overrideExistsAbsolute(
   base: WorktreeHost,
   existsAbsolute: WorktreeHost['existsAbsolute']
@@ -153,15 +137,10 @@ describe('WorktreeService', () => {
       expect(await svc.getWorktree('task-b/same-leaf')).toBe(fs.realpathSync(second.data));
     });
 
-    it('uses the flattened branch path when a stale leaf directory cannot be removed', async () => {
+    it('preserves a non-empty stale leaf directory and uses the flattened branch path', async () => {
       await git(['branch', 'task/stale-leaf'], { cwd: repoDir });
       const stalePath = path.join(poolDir, 'stale-leaf');
       fs.mkdirSync(path.join(stalePath, 'node_modules', 'electron'), { recursive: true });
-      const realHost = host;
-      host = overrideRemoveAbsolute(realHost, async () => ({
-        success: false,
-        error: 'busy',
-      }));
       const svc = makeService();
 
       const result = await svc.checkoutBranchWorktree(
@@ -174,6 +153,23 @@ describe('WorktreeService', () => {
       expect(result.data).toBe(path.join(poolDir, 'task-stale-leaf'));
       expect(fs.existsSync(path.join(result.data, '.git'))).toBe(true);
       expect(fs.existsSync(stalePath)).toBe(true);
+    });
+
+    it('removes an empty stale leaf directory before reusing its path', async () => {
+      await git(['branch', 'task/empty-stale-leaf'], { cwd: repoDir });
+      const stalePath = path.join(poolDir, 'empty-stale-leaf');
+      fs.mkdirSync(stalePath);
+      const svc = makeService();
+
+      const result = await svc.checkoutBranchWorktree(
+        { type: 'local', branch: 'main' },
+        'task/empty-stale-leaf'
+      );
+
+      expect(result.success).toBe(true);
+      if (!result.success) throw new Error('expected success');
+      expect(result.data).toBe(stalePath);
+      expect(fs.existsSync(path.join(stalePath, '.git'))).toBe(true);
     });
 
     it('creates a worktree from a remote source branch when branch is not local', async () => {
@@ -503,6 +499,90 @@ describe('WorktreeService', () => {
       } finally {
         fs.rmSync(remoteDir, { recursive: true, force: true });
       }
+    });
+  });
+
+  describe('removeWorktree', () => {
+    it('removes a clean registered worktree through Git and preserves its branch', async () => {
+      await git(['branch', 'task/remove-clean'], { cwd: repoDir });
+      const svc = makeService();
+      const checkout = await svc.checkoutExistingBranch('task/remove-clean');
+      expect(checkout.success).toBe(true);
+      if (!checkout.success) throw new Error('expected success');
+      const registeredPath = fs.realpathSync(checkout.data);
+      const resolvedWorktreePath = await svc.getWorktree('task/remove-clean');
+      expect(resolvedWorktreePath).toBe(registeredPath);
+      if (!resolvedWorktreePath) throw new Error('expected registered worktree path');
+
+      await svc.removeWorktree(resolvedWorktreePath);
+
+      expect(fs.existsSync(checkout.data)).toBe(false);
+      const worktrees = await git(['worktree', 'list', '--porcelain'], { cwd: repoDir });
+      expect(worktrees.stdout).not.toContain(`worktree ${registeredPath}`);
+      const branch = await git(['rev-parse', '--verify', 'refs/heads/task/remove-clean'], {
+        cwd: repoDir,
+      });
+      expect(branch.stdout.trim()).not.toBe('');
+    });
+
+    it('refuses to remove a dirty registered worktree', async () => {
+      await git(['branch', 'task/remove-dirty'], { cwd: repoDir });
+      const svc = makeService();
+      const checkout = await svc.checkoutExistingBranch('task/remove-dirty');
+      expect(checkout.success).toBe(true);
+      if (!checkout.success) throw new Error('expected success');
+      const registeredPath = fs.realpathSync(checkout.data);
+      fs.writeFileSync(path.join(checkout.data, 'unsaved.txt'), 'keep me');
+
+      await expect(svc.removeWorktree(checkout.data)).rejects.toThrow();
+
+      expect(fs.readFileSync(path.join(checkout.data, 'unsaved.txt'), 'utf8')).toBe('keep me');
+      const worktrees = await git(['worktree', 'list', '--porcelain'], { cwd: repoDir });
+      expect(worktrees.stdout).toContain(`worktree ${registeredPath}`);
+    });
+
+    it('refuses to remove a registered worktree outside the managed pool', async () => {
+      await git(['branch', 'task/remove-external'], { cwd: repoDir });
+      const externalRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-external-remove-'));
+      const externalPath = path.join(externalRoot, 'task');
+      try {
+        await git(['worktree', 'add', externalPath, 'task/remove-external'], { cwd: repoDir });
+        const svc = makeService();
+
+        await expect(svc.removeWorktree(externalPath)).rejects.toThrow('outside the worktree pool');
+        expect(fs.existsSync(externalPath)).toBe(true);
+      } finally {
+        await git(['worktree', 'remove', externalPath, '--force'], { cwd: repoDir }).catch(
+          () => {}
+        );
+        fs.rmSync(externalRoot, { recursive: true, force: true });
+      }
+    });
+
+    it('refuses to remove an unregistered directory inside the managed pool', async () => {
+      const unregisteredPath = path.join(poolDir, 'not-a-worktree');
+      fs.mkdirSync(unregisteredPath);
+      const svc = makeService();
+
+      await expect(svc.removeWorktree(unregisteredPath)).rejects.toThrow(
+        'unregistered worktree path'
+      );
+
+      expect(fs.existsSync(unregisteredPath)).toBe(true);
+    });
+
+    it('refuses to remove a worktree when its expected branch no longer matches', async () => {
+      await git(['branch', 'task/remove-branch-race'], { cwd: repoDir });
+      const svc = makeService();
+      const checkout = await svc.checkoutExistingBranch('task/remove-branch-race');
+      expect(checkout.success).toBe(true);
+      if (!checkout.success) throw new Error('expected success');
+
+      await expect(
+        svc.removeWorktree(checkout.data, { expectedBranch: 'task/another-owner' })
+      ).rejects.toThrow('branch changed');
+
+      expect(fs.existsSync(checkout.data)).toBe(true);
     });
   });
 });

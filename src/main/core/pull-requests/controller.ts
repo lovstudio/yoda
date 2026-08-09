@@ -1,10 +1,7 @@
 import { RequestError } from '@octokit/request-error';
-import { eq } from 'drizzle-orm';
 import { createRPCController } from '@shared/ipc/rpc';
 import type { ListPrOptions, PullRequestError, PullRequestFile } from '@shared/pull-requests';
 import { err, ok } from '@shared/result';
-import { db } from '@main/db/client';
-import { tasks } from '@main/db/schema';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
 import { prQueryService } from './pr-query-service';
@@ -39,34 +36,19 @@ export const pullRequestController = createRPCController({
     }
   },
 
-  getPullRequestsForTask: async (projectId: string, taskId: string) => {
+  getPullRequestsForProjectTasks: async (projectId: string, repositoryUrl: string) => {
     try {
-      const capability = await prQueryService.getProjectRemoteInfo(projectId);
-      if (capability.status !== 'ready') {
-        return ok({ prs: [], taskBranch: null });
-      }
-
-      const [taskRow] = await db
-        .select({ taskBranch: tasks.taskBranch })
-        .from(tasks)
-        .where(eq(tasks.id, taskId))
-        .limit(1);
-
-      if (!taskRow?.taskBranch) {
-        return ok({ prs: [], taskBranch: null });
-      }
-
-      const prs = await prQueryService.getTaskPullRequests(
+      const taskPullRequests = await prQueryService.getProjectTaskPullRequests(
         projectId,
-        taskRow.taskBranch,
-        capability.repositoryUrl
+        repositoryUrl
       );
-      return ok({ prs, taskBranch: taskRow.taskBranch });
+      return ok({ taskPullRequests });
     } catch (error) {
-      log.error('Failed to get pull requests for task:', error);
+      log.error('Failed to get pull requests for project tasks:', error);
       return err<PullRequestError>({
         type: 'task_pull_requests_failed',
-        message: error instanceof Error ? error.message : 'Unable to get task pull requests',
+        message:
+          error instanceof Error ? error.message : 'Unable to get project task pull requests',
       });
     }
   },

@@ -4,7 +4,11 @@ import { describe, expect, it } from 'vitest';
 import type { AppResourceSnapshot } from '@shared/app-resource';
 import {
   getWorkspaceResourcePollInterval,
+  getWorkspaceResourceQueryPollInterval,
+  getWorkspaceResourceQueryTiming,
   WORKSPACE_RESOURCE_ACTIVE_POLL_INTERVAL_MS,
+  WORKSPACE_RESOURCE_AGENT_PANEL_POLL_INTERVAL_MS,
+  WORKSPACE_RESOURCE_AGENT_PANEL_STALE_TIME_MS,
   WORKSPACE_RESOURCE_DETAILS_QUERY_TIMING,
   WORKSPACE_RESOURCE_IDLE_POLL_INTERVAL_MS,
   WORKSPACE_RESOURCE_POLL_INTERVAL_MS,
@@ -19,6 +23,9 @@ describe('workspace resource monitoring', () => {
       refetchOnWindowFocus: true,
     });
     expect(WORKSPACE_RESOURCE_POLL_INTERVAL_MS).toBe(WORKSPACE_RESOURCE_ACTIVE_POLL_INTERVAL_MS);
+    expect(WORKSPACE_RESOURCE_ACTIVE_POLL_INTERVAL_MS).toBe(30_000);
+    expect(WORKSPACE_RESOURCE_IDLE_POLL_INTERVAL_MS).toBe(60_000);
+    expect(WORKSPACE_RESOURCE_QUERY_TIMING.staleTime).toBe(29_000);
   });
 
   it('samples quickly only while an agent is actively running', () => {
@@ -42,6 +49,21 @@ describe('workspace resource monitoring', () => {
     );
   });
 
+  it('switches to fresh sampling only while the Agent panel is visible', () => {
+    expect(getWorkspaceResourceQueryTiming(true)).toMatchObject({
+      staleTime: WORKSPACE_RESOURCE_AGENT_PANEL_STALE_TIME_MS,
+      refetchInterval: WORKSPACE_RESOURCE_AGENT_PANEL_POLL_INTERVAL_MS,
+      refetchIntervalInBackground: false,
+    });
+    expect(getWorkspaceResourceQueryTiming(false)).toMatchObject({
+      staleTime: 29_000,
+      refetchInterval: getWorkspaceResourceQueryPollInterval,
+      refetchIntervalInBackground: false,
+    });
+    expect(WORKSPACE_RESOURCE_AGENT_PANEL_POLL_INTERVAL_MS).toBe(5_000);
+    expect(WORKSPACE_RESOURCE_AGENT_PANEL_STALE_TIME_MS).toBe(4_000);
+  });
+
   it('keeps the detail observer passive so it cannot start a second polling timer', () => {
     expect(WORKSPACE_RESOURCE_DETAILS_QUERY_TIMING).toMatchObject({
       enabled: false,
@@ -62,6 +84,8 @@ describe('workspace resource monitoring', () => {
 
     expect(WORKSPACE_RESOURCE_QUERY_KEY).toEqual(['app', 'resourceSnapshot']);
     expect(runtimeBarSource).toContain('queryKey: WORKSPACE_RESOURCE_QUERY_KEY');
+    expect(runtimeBarSource).toContain('freshAgentProcesses: isAgentPopoverOpen');
+    expect(runtimeBarSource).toContain('if (isAgentPopoverOpen) void refreshResourceSnapshot()');
     expect(detailsSource).toContain('queryKey: WORKSPACE_RESOURCE_QUERY_KEY');
     expect(detailsSource).not.toContain("['app', 'resourceDetails']");
   });

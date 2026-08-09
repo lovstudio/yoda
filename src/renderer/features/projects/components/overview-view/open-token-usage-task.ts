@@ -1,6 +1,6 @@
 import type { TaskUsage } from '@shared/stats';
 import { openTaskTarget } from '@renderer/app/open-task-target';
-import { getTaskManagerStore } from '@renderer/features/tasks/stores/task-selectors';
+import { prepareExplicitTaskOpen } from '@renderer/app/prepare-explicit-task-open';
 import type { NavigateFnTyped } from '@renderer/lib/layout/navigation-provider';
 
 type TokenUsageTaskTarget = Pick<TaskUsage, 'projectId' | 'taskId' | 'archived'>;
@@ -13,8 +13,6 @@ export async function openTokenUsageTask(
   task: TokenUsageTaskTarget,
   navigate: NavigateFnTyped
 ): Promise<void> {
-  if (task.archived) {
-    await getTaskManagerStore(task.projectId)?.restoreTask(task.taskId);
-  }
+  await prepareExplicitTaskOpen(task.projectId, task.taskId);
   openTaskTarget({ projectId: task.projectId, taskId: task.taskId }, navigate);
 }

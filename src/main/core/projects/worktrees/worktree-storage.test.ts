@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseWorktreePorcelain } from './worktree-storage-parse';
-import { groupActiveTasksByBranch } from './worktree-task-references';
+import { groupActiveTasksByBranch, isWorktreeReclaimable } from './worktree-task-references';
 
 describe('parseWorktreePorcelain', () => {
   it('reads branch-backed and detached worktrees', () => {
@@ -49,5 +49,37 @@ describe('parseWorktreePorcelain', () => {
       name: 'Resource center',
     });
     expect(grouped.get('project-1')?.size).toBe(1);
+  });
+});
+
+describe('isWorktreeReclaimable', () => {
+  it('never marks a detached HEAD worktree as reclaimable', () => {
+    expect(
+      isWorktreeReclaimable({
+        branch: null,
+        dirty: false,
+        inspectionPending: false,
+        referencedByActiveTask: false,
+      })
+    ).toBe(false);
+  });
+
+  it.each([
+    { dirty: true, inspectionPending: false, referencedByActiveTask: false },
+    { dirty: false, inspectionPending: true, referencedByActiveTask: false },
+    { dirty: false, inspectionPending: false, referencedByActiveTask: true },
+  ])('fails closed while worktree safety is uncertain: %o', (state) => {
+    expect(isWorktreeReclaimable({ branch: 'yoda/task', ...state })).toBe(false);
+  });
+
+  it('allows a clean, fully inspected, unreferenced branch worktree', () => {
+    expect(
+      isWorktreeReclaimable({
+        branch: 'yoda/task',
+        dirty: false,
+        inspectionPending: false,
+        referencedByActiveTask: false,
+      })
+    ).toBe(true);
   });
 });

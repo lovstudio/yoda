@@ -8,7 +8,10 @@ import { isAiLabWindowTarget, type AiLabWindowTarget } from '@shared/ai-lab-wind
 import type {
   AppEventLoopMetrics,
   AppResourceSnapshot,
+  AppResourceSnapshotOptions,
   RendererPerformanceSample,
+  TmuxCleanupResult,
+  TmuxReclamationSnapshot,
 } from '@shared/app-resource';
 import { isComparisonWindowTarget, type ComparisonWindowTarget } from '@shared/comparison-window';
 import {
@@ -41,6 +44,10 @@ import { openTaskWindowFromPool } from '@main/app/task-window-pool';
 import { createAiLabWindow, createComparisonWindow, getMainWindow } from '@main/app/window';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
+import {
+  cleanupReclaimableTmuxSessions,
+  getTmuxReclamationSnapshot,
+} from '@main/core/pty/tmux-reclamation';
 import { decodeTmuxSessionName, listTmuxSessionMarkers } from '@main/core/pty/tmux-session-name';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { taskManager } from '@main/core/tasks/task-manager';
@@ -60,7 +67,11 @@ import {
   buildRemoteSshCommand,
   buildRemoteTerminalExecArgs,
 } from '@main/utils/remoteOpenIn';
-import { sampleProcessTrees, TtlSingleFlightSampler } from './agent-process-sampler';
+import {
+  AdaptiveProcessTreeSampler,
+  getAgentProcessSampleMaxAge,
+  TtlSingleFlightSampler,
+} from './agent-process-sampler';
 import { createScreenshotFileName } from './screenshot-file-name';
 import {
   checkCommand,
@@ -79,7 +90,9 @@ import {
 
 const FONT_CACHE_TTL_MS = 5 * 60 * 1_000;
 const IDLE_SESSION_SWEEP_INTERVAL_MS = 30_000;
-export const RESOURCE_SNAPSHOT_CACHE_TTL_MS = 4_000;
+export const RESOURCE_SNAPSHOT_CACHE_TTL_MS = 29_000;
+export const RESOURCE_SNAPSHOT_DETAIL_CACHE_TTL_MS = 4_000;
+const TMUX_MARKER_CACHE_TTL_MS = 60_000;
 const OPEN_FILE_EXTENSIONS = [
   'png',
   'jpg',
@@ -130,6 +143,13 @@ class AppService implements IInitializable, IDisposable {
   private readonly resourceSnapshotSampler = new TtlSingleFlightSampler<AppResourceSnapshot>(
     RESOURCE_SNAPSHOT_CACHE_TTL_MS
   );
+  private readonly resourceSnapshotDetailSampler = new TtlSingleFlightSampler<AppResourceSnapshot>(
+    RESOURCE_SNAPSHOT_DETAIL_CACHE_TTL_MS
+  );
+  private readonly agentProcessSampler = new AdaptiveProcessTreeSampler();
+  private readonly tmuxMarkerSampler = new TtlSingleFlightSampler<Map<string, number>>(
+    TMUX_MARKER_CACHE_TTL_MS
+  );
   private rendererPerformance: RendererPerformanceSample | null = null;
   private idleSessionSweepTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -160,6 +180,9 @@ class AppService implements IInitializable, IDisposable {
     this._unsubscribes = [];
     this.mainEventLoopHistogram.disable();
     this.resourceSnapshotSampler.clear();
+    this.resourceSnapshotDetailSampler.clear();
+    this.agentProcessSampler.clear();
+    this.tmuxMarkerSampler.clear();
     if (this.idleSessionSweepTimer) {
       clearInterval(this.idleSessionSweepTimer);
       this.idleSessionSweepTimer = null;
@@ -177,11 +200,30 @@ class AppService implements IInitializable, IDisposable {
     return this.cachedAppVersionPromise;
   }
 
-  async getResourceSnapshot(): Promise<AppResourceSnapshot> {
-    return this.resourceSnapshotSampler.sample(() => this.sampleResourceSnapshot());
+  async getResourceSnapshot(
+    options: AppResourceSnapshotOptions = {}
+  ): Promise<AppResourceSnapshot> {
+    const freshAgentProcesses = options.freshAgentProcesses === true;
+    const sampler = freshAgentProcesses
+      ? this.resourceSnapshotDetailSampler
+      : this.resourceSnapshotSampler;
+    return sampler.sample(() => this.sampleResourceSnapshot(freshAgentProcesses));
   }
 
-  private async sampleResourceSnapshot(): Promise<AppResourceSnapshot> {
+  getTmuxReclamationSnapshot(): Promise<TmuxReclamationSnapshot> {
+    return getTmuxReclamationSnapshot();
+  }
+
+  async cleanupReclaimableTmuxSessions(): Promise<TmuxCleanupResult> {
+    const result = await cleanupReclaimableTmuxSessions();
+    this.tmuxMarkerSampler.clear();
+    this.resourceSnapshotSampler.clear();
+    this.resourceSnapshotDetailSampler.clear();
+    this.agentProcessSampler.clear();
+    return result;
+  }
+
+  private async sampleResourceSnapshot(freshAgentProcesses: boolean): Promise<AppResourceSnapshot> {
     const processes = app
       .getAppMetrics()
       .map((metric) => ({
@@ -193,34 +235,30 @@ class AppService implements IInitializable, IDisposable {
       }))
       .sort((left, right) => right.memoryBytes - left.memoryBytes);
     const agentSessions = taskManager.getAgentSessions();
-    const tmuxPanePidBySessionId = new Map<string, number>();
-    if (agentSessions.some((session) => session.detachable)) {
-      const ctx = new LocalExecutionContext();
-      try {
-        const markers = await listTmuxSessionMarkers(ctx);
-        for (const marker of markers) {
-          const sessionId = decodeTmuxSessionName(marker.sessionName);
-          if (sessionId && marker.panePid !== undefined) {
-            tmuxPanePidBySessionId.set(sessionId, marker.panePid);
-          }
-        }
-      } finally {
-        ctx.dispose();
-      }
-    }
+    const agentProcessMaxAgeMs = getAgentProcessSampleMaxAge(freshAgentProcesses);
+    const tmuxPanePidBySessionId = agentSessions.some((session) => session.detachable)
+      ? await this.tmuxMarkerSampler.sample(() => this.sampleTmuxPanePids(), agentProcessMaxAgeMs)
+      : new Map<string, number>();
     const resourceRootPidBySessionId = new Map(
       agentSessions.flatMap((session) => {
         const rootPid = tmuxPanePidBySessionId.get(session.sessionId) ?? session.pid;
         return rootPid === undefined ? [] : [[session.sessionId, rootPid] as const];
       })
     );
-    const processTrees = await sampleProcessTrees(Array.from(resourceRootPidBySessionId.values()));
+    const processTrees = await this.agentProcessSampler.sample(
+      Array.from(resourceRootPidBySessionId.values()),
+      agentProcessMaxAgeMs
+    );
     const agentSessionResources = agentSessions.map((session) => {
       const diagnostics = ptySessionRegistry.getDiagnostics(session.sessionId);
       const resourceRootPid = resourceRootPidBySessionId.get(session.sessionId);
       const processTree =
         resourceRootPid === undefined ? undefined : processTrees.get(resourceRootPid);
-      const lastActivityAt = Math.max(session.statusChangedAt, diagnostics?.lastOutputAt ?? 0);
+      const lastActivityAt = Math.max(
+        session.statusChangedAt,
+        diagnostics?.lastOutputAt ?? 0,
+        diagnostics?.lastInputAt ?? 0
+      );
       return {
         projectId: session.projectId,
         taskId: session.taskId,
@@ -264,6 +302,23 @@ class AppService implements IInitializable, IDisposable {
       mainEventLoop,
       rendererPerformance: this.rendererPerformance,
     };
+  }
+
+  private async sampleTmuxPanePids(): Promise<Map<string, number>> {
+    const ctx = new LocalExecutionContext();
+    try {
+      const markers = await listTmuxSessionMarkers(ctx);
+      const panePids = new Map<string, number>();
+      for (const marker of markers) {
+        const sessionId = decodeTmuxSessionName(marker.sessionName);
+        if (sessionId && marker.panePid !== undefined) {
+          panePids.set(sessionId, marker.panePid);
+        }
+      }
+      return panePids;
+    } finally {
+      ctx.dispose();
+    }
   }
 
   reportRendererPerformance(sample: RendererPerformanceSample): void {

@@ -29,6 +29,13 @@ describe('workspace agent sessions', () => {
     expect(source).not.toContain('const tmuxSessionCount');
   });
 
+  it('keeps cold tmux reclamation explicit and confirmation-gated', () => {
+    expect(source).toContain('rpc.app.getTmuxReclamationSnapshot()');
+    expect(source).toContain('showConfirmActionModal({');
+    expect(source).toContain('rpc.app.cleanupReclaimableTmuxSessions()');
+    expect(source).toContain('tmuxReclamation?.reclaimableCount');
+  });
+
   it('uses metrics as tabs so the session and acceptance lists never render together', () => {
     expect(source).toContain(
       "type AgentPanelTab = 'all' | 'working' | 'needs-reply' | 'pending-acceptance'"

@@ -5,8 +5,11 @@ import { prSyncProgressChannel, prUpdatedChannel } from '@shared/events/prEvents
 import {
   taskArchivedChannel,
   taskCreatedChannel,
+  taskDeletedChannel,
+  taskMovedChannel,
   taskProvisionProgressChannel,
   taskRenamedChannel,
+  taskRestoredChannel,
   taskStatusUpdatedChannel,
 } from '@shared/events/taskEvents';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
@@ -16,6 +19,7 @@ import {
   type CreateTaskParams,
   type CreateTaskWarning,
   type MoveTaskToProjectError,
+  type ProjectTaskCounts,
   type Task,
   type TaskLifecycleStatus,
 } from '@shared/tasks';
@@ -186,10 +190,19 @@ export class TaskManagerStore {
   private readonly _settingsStore: ProjectSettingsStore;
   private readonly _baseRef: string;
   private _loadPromise: Promise<void> | null = null;
+  private _archivedLoadPromise: Promise<void> | null = null;
+  private _archivedLoadGeneration = 0;
+  private _taskPointLoadPromises = new Map<string, Promise<boolean>>();
+  private _taskCountsReloadPromise: Promise<void> | null = null;
+  private _taskCountsReloadRequested = false;
   private _disposed = false;
   private _teardownPromises = new Map<string, Promise<void>>();
   private _provisionPromises = new Map<string, Promise<void>>();
   private _taskViewPreloads = new Map<string, TaskViewPreloadEntry>();
+  private _prReloadPromise: Promise<void> | null = null;
+  private _prReloadRequested = false;
+  private _prUpdateRevision = 0;
+  private _tasksByBranch = new Map<string, TaskStore[]>();
 
   private _unsubPrUpdated: (() => void) | null = null;
   private _unsubPrSyncProgress: (() => void) | null = null;
@@ -198,11 +211,17 @@ export class TaskManagerStore {
   private _unsubTaskStatusUpdated: (() => void) | null = null;
   private _unsubTaskCreated: (() => void) | null = null;
   private _unsubTaskArchived: (() => void) | null = null;
+  private _unsubTaskRestored: (() => void) | null = null;
+  private _unsubTaskDeleted: (() => void) | null = null;
+  private _unsubTaskMoved: (() => void) | null = null;
   private _unsubTaskRenamed: (() => void) | null = null;
   private _disposeRepositoryReaction: (() => void) | null = null;
+  private _disposeTaskBranchIndexReaction: (() => void) | null = null;
 
   tasks = observable.map<string, TaskStore>();
   taskLoadState: 'idle' | 'loading' | 'loaded' | 'error' = 'idle';
+  archivedTaskLoadState: 'idle' | 'loading' | 'loaded' | 'error' = 'idle';
+  taskCounts: Omit<ProjectTaskCounts, 'projectId'> = { active: 0, archived: 0 };
   /**
    * Tasks whose archive flow (pre-archive commands + conversation archives) is
    * in flight. Rows observe this to render a loading state while the task is
@@ -262,10 +281,30 @@ export class TaskManagerStore {
     makeObservable(this, {
       tasks: observable,
       taskLoadState: observable,
+      archivedTaskLoadState: observable,
+      taskCounts: observable,
       archivingTaskIds: observable,
       childrenByParent: computed,
       tasksNeedingReview: computed,
     });
+
+    this._disposeTaskBranchIndexReaction = reaction(
+      () =>
+        [...this.tasks.values()].flatMap((store) => {
+          if (!isRegistered(store) || store.data.archivedAt || !store.data.taskBranch) return [];
+          return [{ branch: store.data.taskBranch, store }];
+        }),
+      (entries) => {
+        const tasksByBranch = new Map<string, TaskStore[]>();
+        for (const { branch, store } of entries) {
+          const stores = tasksByBranch.get(branch) ?? [];
+          stores.push(store);
+          tasksByBranch.set(branch, stores);
+        }
+        this._tasksByBranch = tasksByBranch;
+      },
+      { fireImmediately: true }
+    );
 
     this._unsubTaskStatusUpdated = events.on(
       taskStatusUpdatedChannel,
@@ -284,13 +323,15 @@ export class TaskManagerStore {
       taskCreatedChannel,
       ({ taskId, projectId: evtProjectId }) => {
         if (evtProjectId !== this.projectId) return;
-        void this.ensureTaskLoaded(taskId).catch((error: unknown) => {
-          log.warn('TaskManagerStore: failed to reconcile externally created task', {
-            taskId,
-            projectId: evtProjectId,
-            error,
+        void this.ensureTaskLoaded(taskId)
+          .then(() => this.refreshTaskCounts())
+          .catch((error: unknown) => {
+            log.warn('TaskManagerStore: failed to reconcile externally created task', {
+              taskId,
+              projectId: evtProjectId,
+              error,
+            });
           });
-        });
       }
     );
 
@@ -302,17 +343,79 @@ export class TaskManagerStore {
         if (evtProjectId !== this.projectId) return;
         this.setTaskArchiving(taskId, false);
         const store = this.tasks.get(taskId);
-        if (!store || !isRegistered(store)) return;
-        runInAction(() => {
-          const archivedData = {
-            ...store.data,
-            archivedAt: store.data.archivedAt ?? new Date().toISOString(),
-          };
-          // Main owns the archive teardown. Dispose an existing renderer task
-          // view and invalidate any provisioning UI immediately so neither a
-          // stale view nor a late RPC completion can revive terminal reactions.
-          store.transitionToUnprovisioned(archivedData, 'idle');
+        if (store && isRegistered(store)) this._markLoadedTaskArchived(taskId);
+        void this.refreshTaskCounts();
+      }
+    );
+
+    this._unsubTaskRestored = events.on(
+      taskRestoredChannel,
+      ({ restoredTaskIds, projectId: evtProjectId }) => {
+        if (evtProjectId !== this.projectId) return;
+        void (async () => {
+          if (restoredTaskIds.some((taskId) => !this.tasks.has(taskId))) {
+            this._mergeLoadedTasks(await rpc.tasks.getTasksByIds(this.projectId, restoredTaskIds));
+          }
+          runInAction(() => {
+            for (const taskId of restoredTaskIds) {
+              const store = this.tasks.get(taskId);
+              if (!store || !isRegistered(store)) continue;
+              store.data.archivedAt = undefined;
+              store.data.archiveRequestedAt = undefined;
+            }
+          });
+          await this.refreshTaskCounts();
+        })().catch((error: unknown) => {
+          log.warn('TaskManagerStore: failed to reconcile restored tasks', {
+            projectId: evtProjectId,
+            taskIds: restoredTaskIds,
+            error,
+          });
         });
+      }
+    );
+
+    this._unsubTaskDeleted = events.on(
+      taskDeletedChannel,
+      ({ taskId, projectId: evtProjectId, parentTaskId }) => {
+        if (evtProjectId !== this.projectId) return;
+        const removed = this.tasks.get(taskId);
+        runInAction(() => {
+          this.tasks.delete(taskId);
+          for (const store of this.tasks.values()) {
+            if (isRegistered(store) && store.data.parentTaskId === taskId) {
+              store.data.parentTaskId = parentTaskId;
+            }
+          }
+        });
+        removed?.dispose();
+        void this.refreshTaskCounts();
+      }
+    );
+
+    this._unsubTaskMoved = events.on(
+      taskMovedChannel,
+      ({ taskId, sourceProjectId, targetProjectId }) => {
+        if (sourceProjectId === this.projectId) {
+          const removed = this.tasks.get(taskId);
+          runInAction(() => {
+            this.tasks.delete(taskId);
+          });
+          removed?.dispose();
+          void this.refreshTaskCounts();
+          return;
+        }
+        if (targetProjectId !== this.projectId) return;
+        void this.ensureTaskLoaded(taskId)
+          .then(() => this.refreshTaskCounts())
+          .catch((error: unknown) => {
+            log.warn('TaskManagerStore: failed to reconcile moved task', {
+              taskId,
+              sourceProjectId,
+              targetProjectId,
+              error,
+            });
+          });
       }
     );
 
@@ -358,12 +461,13 @@ export class TaskManagerStore {
     this._unsubPrUpdated = events.on(prUpdatedChannel, ({ prs }) => {
       const repoUrl = this._repository.repositoryUrl;
       if (!repoUrl) return;
+      let appliedUpdate = false;
       for (const pr of prs) {
         if (pr.repositoryUrl !== repoUrl) continue;
-        for (const [, store] of this.tasks) {
+        appliedUpdate = true;
+        for (const store of this._tasksByBranch.get(pr.headRefName) ?? []) {
           if (!isRegistered(store)) continue;
           const task = store.data as Task;
-          if (task.taskBranch !== pr.headRefName) continue;
           runInAction(() => {
             const idx = task.prs.findIndex((p) => p.url === pr.url);
             if (idx >= 0) {
@@ -374,39 +478,95 @@ export class TaskManagerStore {
           });
         }
       }
+      if (appliedUpdate) {
+        this._prUpdateRevision += 1;
+        // If a bulk snapshot was already in flight, keep the incremental value
+        // visible and schedule one trailing snapshot against the updated DB.
+        if (this._prReloadPromise) this._prReloadRequested = true;
+      }
     });
 
     this._unsubPrSyncProgress = events.on(prSyncProgressChannel, (progress) => {
-      if (progress.status !== 'done') return;
+      // Successful single-PR syncs already carry the fully assembled PR through
+      // prUpdatedChannel, so only bulk sync completion needs a project snapshot.
+      if (progress.status !== 'done' || progress.kind === 'single') return;
       const repoUrl = this._repository.repositoryUrl;
       if (!repoUrl || progress.remoteUrl !== repoUrl) return;
-      for (const [, store] of this.tasks) {
-        if (isRegistered(store)) {
-          void this._reloadPrsForTask(store);
-        }
-      }
+      void this._requestProjectPrReload();
     });
 
     this._disposeRepositoryReaction = reaction(
       () => this._repository.repositoryUrl,
       () => {
-        for (const [, store] of this.tasks) {
-          if (isRegistered(store)) {
-            void this._reloadPrsForTask(store);
-          }
-        }
+        this._clearTaskPrs();
+        void this._requestProjectPrReload();
       }
     );
   }
 
-  private async _reloadPrsForTask(store: TaskStore): Promise<void> {
-    if (!isRegistered(store)) return;
-    const result = await rpc.pullRequests.getPullRequestsForTask(this.projectId, store.data.id);
-    if (!result.success) return;
-    const prs = result.data.prs;
+  private _clearTaskPrs(): void {
     runInAction(() => {
-      if (isRegistered(store)) {
-        (store.data as Task).prs = prs;
+      for (const store of this.tasks.values()) {
+        if (isRegistered(store) && store.data.prs.length > 0) store.data.prs = [];
+      }
+    });
+  }
+
+  private _requestProjectPrReload(): Promise<void> {
+    this._prReloadRequested = true;
+    if (this._prReloadPromise) return this._prReloadPromise;
+
+    const promise = this._drainProjectPrReloads().finally(() => {
+      if (this._prReloadPromise === promise) this._prReloadPromise = null;
+    });
+    this._prReloadPromise = promise;
+    return promise;
+  }
+
+  private async _drainProjectPrReloads(): Promise<void> {
+    while (this._prReloadRequested && !this._disposed) {
+      this._prReloadRequested = false;
+      try {
+        await this._reloadProjectPrsOnce();
+      } catch (error) {
+        log.warn('TaskManagerStore: failed to reload project task pull requests', {
+          projectId: this.projectId,
+          error,
+        });
+      }
+    }
+  }
+
+  private async _reloadProjectPrsOnce(): Promise<void> {
+    const repositoryUrl = this._repository.repositoryUrl;
+    if (!repositoryUrl) {
+      this._clearTaskPrs();
+      return;
+    }
+    const updateRevision = this._prUpdateRevision;
+
+    const result = await rpc.pullRequests.getPullRequestsForProjectTasks(
+      this.projectId,
+      repositoryUrl
+    );
+    if (
+      !result.success ||
+      this._disposed ||
+      this._repository.repositoryUrl !== repositoryUrl ||
+      this._prUpdateRevision !== updateRevision
+    ) {
+      return;
+    }
+
+    const prsByTaskId = new Map(
+      result.data.taskPullRequests.map(({ taskId, prs }) => [taskId, prs])
+    );
+    runInAction(() => {
+      for (const store of this.tasks.values()) {
+        // Archive transition clears PRs once. Do not rewrite hundreds of
+        // archived observable task objects after every background sync.
+        if (!isRegistered(store) || store.data.archivedAt) continue;
+        store.data.prs = [...(prsByTaskId.get(store.data.id) ?? [])];
       }
     });
   }
@@ -428,9 +588,11 @@ export class TaskManagerStore {
       runInAction(() => {
         this.taskLoadState = 'loading';
       });
-      this._loadPromise = rpc.tasks
-        .getTasks(this.projectId)
-        .then((tasks) => {
+      this._loadPromise = Promise.all([
+        rpc.tasks.getActiveTasks(this.projectId),
+        this.refreshTaskCounts(),
+      ])
+        .then(([tasks]) => {
           this._mergeLoadedTasks(tasks);
           runInAction(() => {
             this.taskLoadState = 'loaded';
@@ -446,6 +608,54 @@ export class TaskManagerStore {
     return this._loadPromise;
   }
 
+  loadArchivedTasks(): Promise<void> {
+    if (this._disposed) return Promise.resolve();
+    if (this.archivedTaskLoadState === 'loaded') return Promise.resolve();
+    if (this._archivedLoadPromise) return this._archivedLoadPromise;
+
+    const generation = this._archivedLoadGeneration;
+    runInAction(() => {
+      this.archivedTaskLoadState = 'loading';
+    });
+    const promise = this.loadTasks()
+      .then(() => rpc.tasks.getArchivedTasks(this.projectId))
+      .then((tasks) => {
+        if (this._disposed || generation !== this._archivedLoadGeneration) return;
+        this._mergeLoadedTasks(tasks);
+        runInAction(() => {
+          this.archivedTaskLoadState = 'loaded';
+        });
+      })
+      .catch((error) => {
+        if (!this._disposed && generation === this._archivedLoadGeneration) {
+          runInAction(() => {
+            this.archivedTaskLoadState = 'error';
+          });
+        }
+        throw error;
+      })
+      .finally(() => {
+        if (this._archivedLoadPromise === promise) this._archivedLoadPromise = null;
+      });
+    this._archivedLoadPromise = promise;
+    return promise;
+  }
+
+  unloadArchivedTasks(): void {
+    this._archivedLoadGeneration += 1;
+    this._archivedLoadPromise = null;
+    const removed: TaskStore[] = [];
+    runInAction(() => {
+      for (const [taskId, store] of this.tasks) {
+        if (!isRegistered(store) || !store.data.archivedAt) continue;
+        this.tasks.delete(taskId);
+        removed.push(store);
+      }
+      this.archivedTaskLoadState = 'idle';
+    });
+    for (const store of removed) store.dispose();
+  }
+
   /**
    * Reconciles a task inserted after the initial project load, such as a
    * session imported by another local app immediately before a deep link.
@@ -453,35 +663,69 @@ export class TaskManagerStore {
   async ensureTaskLoaded(taskId: string): Promise<boolean> {
     if (this._disposed) return false;
     if (this.tasks.has(taskId)) return true;
+    const inFlight = this._taskPointLoadPromises.get(taskId);
+    if (inFlight) return inFlight;
+
+    const promise = this._ensureTaskLoaded(taskId).finally(() => {
+      if (this._taskPointLoadPromises.get(taskId) === promise) {
+        this._taskPointLoadPromises.delete(taskId);
+      }
+    });
+    this._taskPointLoadPromises.set(taskId, promise);
+    return promise;
+  }
+
+  private async _ensureTaskLoaded(taskId: string): Promise<boolean> {
     await this.loadTasks();
     if (this._disposed) return false;
     if (this.tasks.has(taskId)) return true;
 
-    runInAction(() => {
-      this.taskLoadState = 'loading';
-    });
-    try {
-      this._mergeLoadedTasks(await rpc.tasks.getTasks(this.projectId));
-      runInAction(() => {
-        this.taskLoadState = 'loaded';
-      });
-    } catch (error) {
-      runInAction(() => {
-        this.taskLoadState = 'error';
-      });
-      throw error;
-    }
+    const task = await rpc.tasks.getTask(this.projectId, taskId);
+    if (!task || this._disposed) return false;
+    this._mergeLoadedTasks([task]);
     return this.tasks.has(taskId);
+  }
+
+  refreshTaskCounts(): Promise<void> {
+    this._taskCountsReloadRequested = true;
+    if (this._taskCountsReloadPromise) return this._taskCountsReloadPromise;
+
+    const promise = this._drainTaskCountsReloads().finally(() => {
+      if (this._taskCountsReloadPromise === promise) this._taskCountsReloadPromise = null;
+    });
+    this._taskCountsReloadPromise = promise;
+    return promise;
+  }
+
+  private async _drainTaskCountsReloads(): Promise<void> {
+    while (this._taskCountsReloadRequested && !this._disposed) {
+      this._taskCountsReloadRequested = false;
+      try {
+        const counts = await rpc.tasks.getTaskCounts(this.projectId);
+        if (this._disposed) return;
+        const projectCounts = counts.find((entry) => entry.projectId === this.projectId);
+        runInAction(() => {
+          this.taskCounts = projectCounts
+            ? { active: projectCounts.active, archived: projectCounts.archived }
+            : { active: 0, archived: 0 };
+        });
+      } catch (error) {
+        log.warn('TaskManagerStore: failed to load project task counts', {
+          projectId: this.projectId,
+          error,
+        });
+      }
+    }
   }
 
   private _mergeLoadedTasks(tasks: Task[]): void {
     if (this._disposed) return;
-    const addedTaskIds: string[] = [];
+    let addedActiveTask = false;
     runInAction(() => {
       for (const task of tasks) {
         if (!this.tasks.has(task.id)) {
           this.tasks.set(task.id, createUnprovisionedTask(task));
-          addedTaskIds.push(task.id);
+          if (!task.archivedAt) addedActiveTask = true;
         }
         // An archive in flight in the main process (requested but not
         // finished, e.g. across a renderer reload) — show the spinner;
@@ -489,11 +733,7 @@ export class TaskManagerStore {
         if (task.archiveRequestedAt && !task.archivedAt) this.archivingTaskIds.add(task.id);
       }
     });
-    const reloadPromises = addedTaskIds.flatMap((taskId) => {
-      const store = this.tasks.get(taskId);
-      return store && isRegistered(store) ? [this._reloadPrsForTask(store)] : [];
-    });
-    void Promise.all(reloadPromises);
+    if (addedActiveTask) void this._requestProjectPrReload();
   }
 
   async createTask(params: CreateTaskParams) {
@@ -651,24 +891,6 @@ export class TaskManagerStore {
       if (cached?.promise === taskViewPreload) {
         this._taskViewPreloads.delete(taskId);
       }
-    }
-  }
-
-  /**
-   * Warm an idle task from a deliberate sidebar intent. Provisioning is kept
-   * separate from the lightweight view snapshot preload so callers can opt
-   * into the expensive workspace work only when opening the task is likely.
-   * Errors are recorded on the task by provisionTask and deliberately stay in
-   * the background; the eventual click still owns the visible error flow.
-   */
-  async prewarmTask(taskId: string): Promise<void> {
-    const task = this.tasks.get(taskId);
-    if (!task || !isUnprovisioned(task) || task.phase !== 'idle') return;
-
-    try {
-      await this.provisionTask(taskId);
-    } catch (error) {
-      log.warn('TaskManagerStore: background task prewarm failed', { taskId, error });
     }
   }
 
@@ -889,9 +1111,16 @@ export class TaskManagerStore {
     if (targetManager) {
       await targetManager.loadTasks();
       runInAction(() => {
-        targetManager.tasks.set(result.data.id, createUnprovisionedTask(result.data));
+        // A cross-window task:moved event may already have point-loaded this
+        // task while the initiating RPC was in flight. Keep that canonical
+        // store instead of replacing it without disposal.
+        if (!targetManager.tasks.has(result.data.id)) {
+          targetManager.tasks.set(result.data.id, createUnprovisionedTask(result.data));
+        }
       });
+      void targetManager.refreshTaskCounts();
     }
+    void this.refreshTaskCounts();
     return null;
   }
 
@@ -918,6 +1147,26 @@ export class TaskManagerStore {
       queue.push(...(childrenByParent.get(id) ?? []));
     }
     return result;
+  }
+
+  private _markLoadedTaskArchived(taskId: string, archiveNote?: string | null): void {
+    const store = this.tasks.get(taskId);
+    if (!store || !isRegistered(store)) return;
+    const retainForArchivedView =
+      this.archivedTaskLoadState === 'loading' || this.archivedTaskLoadState === 'loaded';
+    runInAction(() => {
+      const archivedData = {
+        ...store.data,
+        prs: [],
+        archivedAt: store.data.archivedAt ?? new Date().toISOString(),
+        ...(archiveNote !== undefined ? { archiveNote: archiveNote ?? undefined } : {}),
+      };
+      // Main owns the archive teardown. Dispose an existing renderer task view
+      // immediately so a late provisioning completion cannot revive it.
+      store.transitionToUnprovisioned(archivedData, 'idle');
+      if (!retainForArchivedView) this.tasks.delete(taskId);
+    });
+    if (!retainForArchivedView) store.dispose();
   }
 
   setTaskArchiving(taskId: string, archiving: boolean): void {
@@ -970,15 +1219,10 @@ export class TaskManagerStore {
       });
       // Reconcile: the server is authoritative on the cascaded set (it may know
       // descendants this renderer hasn't loaded or had stale parents for).
-      runInAction(() => {
-        for (const id of archivedTaskIds) {
-          const store = this.tasks.get(id);
-          if (store && isRegistered(store) && !store.data.archivedAt) {
-            store.data.archivedAt = new Date().toISOString();
-            if (id === taskId) store.data.archiveNote = nextNote;
-          }
-        }
-      });
+      for (const id of archivedTaskIds) {
+        this._markLoadedTaskArchived(id, id === taskId ? (nextNote ?? null) : undefined);
+      }
+      void this.refreshTaskCounts();
       if (!options.suppressUndoToast) this.showArchiveUndoToast(taskId);
     } finally {
       for (const id of cascadeIds) this.setTaskArchiving(id, false);
@@ -1014,12 +1258,18 @@ export class TaskManagerStore {
   }
 
   async restoreTask(taskId: string): Promise<void> {
+    const loaded = await this.ensureTaskLoaded(taskId);
     const task = this.tasks.get(taskId);
-    if (!task || !isRegistered(task)) return;
+    if (!loaded || !task || !isRegistered(task)) {
+      throw new Error(`Task ${taskId} could not be loaded`);
+    }
     const archivedAt = task.data.archivedAt;
 
     try {
       const { restoredTaskIds } = await rpc.tasks.restoreTask(taskId);
+      if (restoredTaskIds.some((id) => !this.tasks.has(id))) {
+        this._mergeLoadedTasks(await rpc.tasks.getTasksByIds(this.projectId, restoredTaskIds));
+      }
       // Restore cascades over archived descendants on the server — mirror it.
       runInAction(() => {
         for (const id of restoredTaskIds) {
@@ -1032,6 +1282,9 @@ export class TaskManagerStore {
           }
         }
       });
+      // Archived tasks are intentionally excluded from project PR snapshots.
+      // Rehydrate the restored cascade before callers continue opening it.
+      await Promise.all([this._requestProjectPrReload(), this.refreshTaskCounts()]);
     } catch (e) {
       runInAction(() => {
         const current = this.tasks.get(taskId);
@@ -1062,6 +1315,7 @@ export class TaskManagerStore {
       task.dispose();
       await rpc.tasks.deleteTask(this.projectId, taskId);
       appState.agentRuntime.forgetTask(this.projectId, taskId);
+      await this.refreshTaskCounts();
     } catch (e) {
       runInAction(() => {
         this.tasks.set(taskId, task);
@@ -1079,6 +1333,12 @@ export class TaskManagerStore {
     this._unsubTaskCreated = null;
     this._unsubTaskArchived?.();
     this._unsubTaskArchived = null;
+    this._unsubTaskRestored?.();
+    this._unsubTaskRestored = null;
+    this._unsubTaskDeleted?.();
+    this._unsubTaskDeleted = null;
+    this._unsubTaskMoved?.();
+    this._unsubTaskMoved = null;
     this._unsubTaskRenamed?.();
     this._unsubTaskRenamed = null;
     this._unsubPrUpdated?.();
@@ -1091,14 +1351,26 @@ export class TaskManagerStore {
     this._unsubConversationMoved = null;
     this._disposeRepositoryReaction?.();
     this._disposeRepositoryReaction = null;
+    this._disposeTaskBranchIndexReaction?.();
+    this._disposeTaskBranchIndexReaction = null;
+    this._tasksByBranch.clear();
+    this._prReloadRequested = false;
+    this._prReloadPromise = null;
     this._taskViewPreloads.clear();
     this._loadPromise = null;
+    this._archivedLoadGeneration += 1;
+    this._archivedLoadPromise = null;
+    this._taskPointLoadPromises.clear();
+    this._taskCountsReloadRequested = false;
+    this._taskCountsReloadPromise = null;
     this._teardownPromises.clear();
     this._provisionPromises.clear();
     for (const task of this.tasks.values()) task.dispose();
     runInAction(() => {
       this.tasks.clear();
       this.archivingTaskIds.clear();
+      this.archivedTaskLoadState = 'idle';
+      this.taskCounts = { active: 0, archived: 0 };
     });
   }
 }

@@ -164,6 +164,23 @@ describe('PtySessionRegistry', () => {
     expect(pty.writes).toEqual(['first', '-second', '-live']);
   });
 
+  it('records activity only when input is delivered to the PTY', () => {
+    vi.setSystemTime(1_000);
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    registry.register('session', pty, { tmuxBacked: true });
+
+    expect(registry.getDiagnostics('session')?.lastInputAt).toBeNull();
+    registry.writeOrQueue('session', '\x1b[>0;276;0c');
+    expect(registry.getDiagnostics('session')?.lastInputAt).toBeNull();
+
+    vi.setSystemTime(2_000);
+    registry.writeOrQueue('session', 'user input');
+
+    expect(registry.getDiagnostics('session')?.lastInputAt).toBe(2_000);
+    expect(pty.writes).toEqual(['user input']);
+  });
+
   it('filters duplicate xterm identification replies only for tmux-backed sessions', () => {
     const registry = new PtySessionRegistry();
     const tmuxPty = new FakePty();
@@ -215,6 +232,32 @@ describe('PtySessionRegistry', () => {
     expect(nextEpoch).toBeGreaterThan(epoch);
     expect(registry.isRegistrationCurrent('session', epoch)).toBe(false);
     expect(registry.isRegistrationCurrent('session', nextEpoch)).toBe(true);
+  });
+
+  it('exposes an in-flight registration before a live PTY exists', () => {
+    const registry = new PtySessionRegistry();
+
+    registry.beginRegistration('session');
+
+    expect(registry.getDiagnostics('session')).toMatchObject({
+      sessionId: 'session',
+      live: false,
+      registering: true,
+      consumerCount: 0,
+    });
+  });
+
+  it('exposes listener-first consumers before a live PTY exists', () => {
+    const registry = new PtySessionRegistry();
+
+    registry.subscribe('session', 'consumer');
+
+    expect(registry.getDiagnostics('session')).toMatchObject({
+      sessionId: 'session',
+      live: false,
+      registering: false,
+      consumerCount: 1,
+    });
   });
 
   it('expires input instead of replaying stale keystrokes into a later process', () => {

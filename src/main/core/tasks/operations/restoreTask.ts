@@ -6,15 +6,16 @@ import { mapTaskRowToTask } from '@main/core/tasks/utils/utils';
 import { db } from '@main/db/client';
 import { conversations, tasks } from '@main/db/schema';
 import { log } from '@main/lib/logger';
+import { emitTaskRestoredEvents } from '../task-restored-events';
 import { getDescendantTaskIds } from './task-hierarchy';
 
 export async function restoreTask(id: string): Promise<RestoreTaskResult> {
   // Cascade: restore the task plus all archived descendants. Ancestors are
   // left untouched — the sidebar promotes orphaned subtrees at display time.
   const descendantIds = await getDescendantTaskIds(id);
-  const restoredTaskIds: string[] = [];
+  const restoredTasks: Array<{ id: string; projectId: string }> = [];
 
-  await restoreSingleTask(id, restoredTaskIds);
+  await restoreSingleTask(id, restoredTasks);
 
   if (descendantIds.length > 0) {
     const archivedDescendants = await db
@@ -25,14 +26,19 @@ export async function restoreTask(id: string): Promise<RestoreTaskResult> {
     // descendantIds is parents-before-children — restore top-down.
     for (const descendantId of descendantIds) {
       if (!archivedIds.has(descendantId)) continue;
-      await restoreSingleTask(descendantId, restoredTaskIds);
+      await restoreSingleTask(descendantId, restoredTasks);
     }
   }
 
+  const restoredTaskIds = restoredTasks.map((task) => task.id);
+  emitTaskRestoredEvents(restoredTasks);
   return { restoredTaskIds };
 }
 
-async function restoreSingleTask(id: string, restoredTaskIds: string[]): Promise<void> {
+async function restoreSingleTask(
+  id: string,
+  restoredTasks: Array<{ id: string; projectId: string }>
+): Promise<void> {
   const [updatedRow] = await db
     .update(tasks)
     .set({
@@ -47,7 +53,7 @@ async function restoreSingleTask(id: string, restoredTaskIds: string[]): Promise
 
   if (!updatedRow) return;
 
-  restoredTaskIds.push(updatedRow.id);
+  restoredTasks.push({ id: updatedRow.id, projectId: updatedRow.projectId });
   taskEvents._emit('task:updated', mapTaskRowToTask(updatedRow));
 
   // Symmetric to archiveTask, which cascade-archives every live conversation:

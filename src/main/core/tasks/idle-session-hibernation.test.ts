@@ -4,7 +4,8 @@ import { shouldHibernateIdleSession } from './idle-session-hibernation';
 const base = {
   detachable: true,
   status: 'completed' as const,
-  statusChangedAt: 0,
+  idleStatusIsAuthoritative: false,
+  lastActivityAt: 0,
   now: 5 * 60_000,
   timeoutMs: 5 * 60_000,
   rendererConsumers: 0,
@@ -19,5 +20,24 @@ describe('shouldHibernateIdleSession', () => {
     expect(shouldHibernateIdleSession({ ...base, rendererConsumers: 1 })).toBe(false);
     expect(shouldHibernateIdleSession({ ...base, status: 'idle' })).toBe(false);
     expect(shouldHibernateIdleSession({ ...base, status: 'awaiting-input' })).toBe(false);
+  });
+
+  it('hibernates authoritative idle sessions after the configured timeout', () => {
+    expect(
+      shouldHibernateIdleSession({
+        ...base,
+        status: 'idle',
+        idleStatusIsAuthoritative: true,
+      })
+    ).toBe(true);
+  });
+
+  it('uses the latest status or PTY activity instead of stale status alone', () => {
+    expect(
+      shouldHibernateIdleSession({
+        ...base,
+        lastActivityAt: base.now - base.timeoutMs + 1,
+      })
+    ).toBe(false);
   });
 });

@@ -7,10 +7,15 @@ import { err, ok, type Result } from '@shared/result';
 import type { Task, TaskBootstrapStatus } from '@shared/tasks';
 import type { Terminal } from '@shared/terminals';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
+import { runtimeStatusMonitorRegistry } from '@main/core/conversations/runtime-status-monitor-registry';
 import type { ActiveConversationSession } from '@main/core/conversations/types';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
-import { killTmuxSession, makeTmuxSessionName } from '@main/core/pty/tmux-session-name';
+import {
+  killTmuxSessionStrict,
+  listTmuxSessionMarkersStrict,
+  makeTmuxSessionName,
+} from '@main/core/pty/tmux-session-name';
 import { getTaskSessionLeafIdPages } from '@main/core/tasks/session-targets';
 import { taskEvents } from '@main/core/tasks/task-events';
 import { provisionBYOITask } from '@main/core/workspaces/byoi/provision-byoi-task';
@@ -210,15 +215,27 @@ type LateProvisionGate = {
 
 export const TASK_SESSION_CLEANUP_CONCURRENCY = 8;
 export const TASK_SESSION_CLEANUP_KILL_TIMEOUT_MS = 5_000;
+export const IDLE_SESSION_HIBERNATION_CONCURRENCY = 4;
+
+const AUTHORITATIVE_IDLE_STATUS_MONITORS = new Set(['activity', 'transcript', 'rollout']);
+
+function idleStatusIsAuthoritative(conversationId: string): boolean {
+  const monitor = runtimeStatusMonitorRegistry.get(conversationId);
+  return monitor !== undefined && AUTHORITATIVE_IDLE_STATUS_MONITORS.has(monitor);
+}
 
 export async function cleanupDetachedSessions(
   projectId: string,
   taskId: string,
-  ctx: IExecutionContext
+  ctx: IExecutionContext,
+  options: { liveTmuxSessionNames?: Set<string> } = {}
 ): Promise<void> {
+  const liveTmuxSessionNames = new Set(
+    options.liveTmuxSessionNames ??
+      (await listTmuxSessionMarkersStrict(ctx)).map((marker) => marker.sessionName)
+  );
   let attempted = 0;
-  let failed = 0;
-  const failureSamples: string[] = [];
+  const killFailures: Array<{ sessionName: string; error: unknown }> = [];
 
   for await (const page of getTaskSessionLeafIdPages(projectId, taskId)) {
     const leafIds = [...page.conversationIds, ...page.terminalIds];
@@ -228,29 +245,45 @@ export async function cleanupDetachedSessions(
       Array.from({ length: workerCount }, async () => {
         while (nextIndex < leafIds.length) {
           const leafId = leafIds[nextIndex++];
-          attempted += 1;
           const sessionId = makePtySessionId(projectId, taskId, leafId);
+          const sessionName = makeTmuxSessionName(sessionId);
+          if (!liveTmuxSessionNames.has(sessionName)) continue;
+          liveTmuxSessionNames.delete(sessionName);
+          attempted += 1;
           try {
-            await killTmuxSession(ctx, makeTmuxSessionName(sessionId), {
+            await killTmuxSessionStrict(ctx, sessionName, {
               timeout: TASK_SESSION_CLEANUP_KILL_TIMEOUT_MS,
             });
           } catch (error: unknown) {
-            failed += 1;
-            if (failureSamples.length < 5) failureSamples.push(String(error));
+            killFailures.push({ sessionName, error });
           }
         }
       })
     );
   }
 
-  if (failed > 0) {
+  if (killFailures.length > 0) {
+    // A pane can exit naturally between the initial list and kill. Reconcile
+    // every failed kill with one fresh authoritative list so an idempotent miss
+    // succeeds while transport failures and sessions that remain alive fail closed.
+    const remainingSessionNames = new Set(
+      (await listTmuxSessionMarkersStrict(ctx)).map((marker) => marker.sessionName)
+    );
+    const unresolvedFailures = killFailures.filter(({ sessionName }) =>
+      remainingSessionNames.has(sessionName)
+    );
+    if (unresolvedFailures.length === 0) return;
+
     log.warn('TaskManager: fallback session cleanup completed with failures', {
       projectId,
       taskId,
       attempted,
-      failed,
-      failureSamples,
+      failed: unresolvedFailures.length,
+      failureSamples: unresolvedFailures.slice(0, 5).map(({ error }) => String(error)),
     });
+    throw new Error(
+      `TaskManager: failed to terminate ${unresolvedFailures.length} of ${attempted} detached tmux sessions`
+    );
   }
 }
 
@@ -270,6 +303,7 @@ export class TaskManager {
   });
   private readonly _tasksByProject = new Map<string, Set<string>>();
   private readonly _lateProvisionGates = new Map<string, LateProvisionGate>();
+  private _idleSessionHibernation: Promise<number> | null = null;
 
   readonly hooks: Hookable<TaskManagerHooks> = this._hooks;
 
@@ -425,8 +459,26 @@ export class TaskManager {
     return sessions;
   }
 
-  async hibernateIdleAgentSessions(timeoutMs: number): Promise<number> {
-    if (timeoutMs <= 0) return 0;
+  hibernateIdleAgentSessions(timeoutMs: number): Promise<number> {
+    if (timeoutMs <= 0) return Promise.resolve(0);
+    if (this._idleSessionHibernation) return this._idleSessionHibernation;
+
+    // Defer the scan by one microtask so the single-flight handle is published
+    // before provider callbacks can synchronously re-enter this method.
+    const hibernation = Promise.resolve().then(() =>
+      this.runIdleAgentSessionHibernation(timeoutMs)
+    );
+    this._idleSessionHibernation = hibernation;
+    const clear = () => {
+      if (this._idleSessionHibernation === hibernation) {
+        this._idleSessionHibernation = null;
+      }
+    };
+    void hibernation.then(clear, clear);
+    return hibernation;
+  }
+
+  private async runIdleAgentSessionHibernation(timeoutMs: number): Promise<number> {
     const now = Date.now();
     const candidates: Array<{
       provider: TaskProvider['conversations'];
@@ -442,7 +494,12 @@ export class TaskManager {
           !shouldHibernateIdleSession({
             detachable: session.detachable,
             status: state.status,
-            statusChangedAt: state.updatedAt,
+            idleStatusIsAuthoritative: idleStatusIsAuthoritative(session.conversationId),
+            lastActivityAt: Math.max(
+              state.updatedAt,
+              diagnostics.lastOutputAt ?? 0,
+              diagnostics.lastInputAt ?? 0
+            ),
             now,
             timeoutMs,
             rendererConsumers: diagnostics.consumerCount,
@@ -457,35 +514,57 @@ export class TaskManager {
         });
       }
     }
-    const results = await Promise.allSettled(
-      candidates.map(async ({ provider, conversationId, sessionId }) => {
-        // The candidate scan and stop run in separate turns of the event loop.
-        // Revalidate immediately before invoking stopSession so a newly opened
-        // renderer or a new agent turn cannot be killed by an old snapshot.
-        const current = provider
-          .getActiveSessions()
-          .find((session) => session.sessionId === sessionId);
-        if (!current) return false;
-        const state = agentSessionRuntimeStore.getState(current);
-        const diagnostics = ptySessionRegistry.getDiagnostics(sessionId);
-        if (
-          !diagnostics ||
-          !shouldHibernateIdleSession({
-            detachable: current.detachable,
-            status: state.status,
-            statusChangedAt: state.updatedAt,
-            now: Date.now(),
-            timeoutMs,
-            rendererConsumers: diagnostics.consumerCount,
-          })
-        ) {
-          return false;
+    let nextCandidateIndex = 0;
+    let stopped = 0;
+    const hibernateNext = async (): Promise<void> => {
+      while (nextCandidateIndex < candidates.length) {
+        const { provider, conversationId, sessionId } = candidates[nextCandidateIndex++];
+        try {
+          // The candidate scan and stop run in separate turns of the event loop.
+          // Revalidate immediately before invoking stopSession so a newly opened
+          // renderer or a new agent turn cannot be killed by an old snapshot.
+          const current = provider
+            .getActiveSessions()
+            .find((session) => session.sessionId === sessionId);
+          if (!current) continue;
+          const state = agentSessionRuntimeStore.getState(current);
+          const diagnostics = ptySessionRegistry.getDiagnostics(sessionId);
+          if (
+            !diagnostics ||
+            !shouldHibernateIdleSession({
+              detachable: current.detachable,
+              status: state.status,
+              idleStatusIsAuthoritative: idleStatusIsAuthoritative(current.conversationId),
+              lastActivityAt: Math.max(
+                state.updatedAt,
+                diagnostics.lastOutputAt ?? 0,
+                diagnostics.lastInputAt ?? 0
+              ),
+              now: Date.now(),
+              timeoutMs,
+              rendererConsumers: diagnostics.consumerCount,
+            })
+          ) {
+            continue;
+          }
+          await provider.stopSession(conversationId);
+          stopped += 1;
+        } catch (error) {
+          log.warn('TaskManager: failed to hibernate idle agent session', {
+            conversationId,
+            sessionId,
+            error: String(error),
+          });
         }
-        await provider.stopSession(conversationId);
-        return true;
-      })
+      }
+    };
+    await Promise.allSettled(
+      Array.from(
+        { length: Math.min(IDLE_SESSION_HIBERNATION_CONCURRENCY, candidates.length) },
+        hibernateNext
+      )
     );
-    return results.filter((result) => result.status === 'fulfilled' && result.value).length;
+    return stopped;
   }
 
   getActiveAgentSessionSummary(): ActiveAgentSessionSummary {

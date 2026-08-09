@@ -291,4 +291,111 @@ describe('WorkspaceRegistry', () => {
     expect(onDetach).toHaveBeenCalledTimes(1);
     expect(onDestroy).not.toHaveBeenCalled();
   });
+
+  it('force releases every project workspace regardless of ref count', async () => {
+    const registry = new WorkspaceRegistry();
+    const projectWorkspace = makeWorkspace('branch:main');
+    const otherWorkspace = makeWorkspace('branch:other');
+    const onDestroy = vi.fn(async () => {});
+
+    await registry.acquire('branch:main', 'project-1', async () => ({
+      workspace: projectWorkspace.workspace,
+      onDestroy,
+    }));
+    await registry.acquire('branch:main', 'project-1', async () => ({
+      workspace: projectWorkspace.workspace,
+    }));
+    await registry.acquire('branch:other', 'project-2', async () => ({
+      workspace: otherWorkspace.workspace,
+    }));
+
+    await registry.releaseAllForProject('project-1', 'terminate');
+
+    expect(onDestroy).toHaveBeenCalledTimes(1);
+    expect(projectWorkspace.dispose).toHaveBeenCalledTimes(1);
+    expect(registry.get('branch:main')).toBeUndefined();
+    expect(registry.refCount('branch:main')).toBe(0);
+    expect(registry.get('branch:other')).toBe(otherWorkspace.workspace);
+  });
+
+  it('waits for an in-flight acquisition and terminates it instead of leaking it', async () => {
+    const registry = new WorkspaceRegistry();
+    const { workspace, dispose } = makeWorkspace('branch:main');
+    const onDestroy = vi.fn(async () => {});
+    let resolveFactory:
+      | ((value: { workspace: Workspace; onDestroy: typeof onDestroy }) => void)
+      | undefined;
+    const acquisition = registry.acquire(
+      'branch:main',
+      'project-1',
+      () =>
+        new Promise((resolve) => {
+          resolveFactory = resolve;
+        })
+    );
+
+    const release = registry.releaseAllForProject('project-1', 'terminate');
+    resolveFactory?.({ workspace, onDestroy });
+
+    await expect(acquisition).rejects.toThrow('disposed while being acquired');
+    await expect(release).resolves.toBeUndefined();
+    expect(onDestroy).toHaveBeenCalledTimes(1);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(registry.get('branch:main')).toBeUndefined();
+  });
+
+  it('bounds project-wide workspace disposal concurrency', async () => {
+    const registry = new WorkspaceRegistry();
+    let active = 0;
+    let maxActive = 0;
+
+    for (let index = 0; index < 12; index += 1) {
+      const { workspace } = makeWorkspace(`branch:${index}`);
+      await registry.acquire(`branch:${index}`, 'project-1', async () => ({
+        workspace,
+        onDestroy: async () => {
+          active += 1;
+          maxActive = Math.max(maxActive, active);
+          await Promise.resolve();
+          active -= 1;
+        },
+      }));
+    }
+
+    await registry.releaseAllForProject('project-1', 'terminate');
+
+    expect(maxActive).toBe(4);
+  });
+
+  it('keeps a project blocked after cleanup failure and allows an explicit retry', async () => {
+    const registry = new WorkspaceRegistry();
+    const first = makeWorkspace('branch:main');
+    const replacement = makeWorkspace('branch:replacement');
+    const onDestroy = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error('terminal cleanup failed'))
+      .mockResolvedValue(undefined);
+
+    await registry.acquire('branch:main', 'project-1', async () => ({
+      workspace: first.workspace,
+      onDestroy,
+    }));
+
+    await expect(registry.releaseAllForProject('project-1', 'terminate')).rejects.toThrow(
+      'Failed to dispose'
+    );
+    await expect(
+      registry.acquire('branch:replacement', 'project-1', async () => ({
+        workspace: replacement.workspace,
+      }))
+    ).rejects.toThrow('being disposed');
+
+    await expect(registry.releaseAllForProject('project-1', 'terminate')).resolves.toBeUndefined();
+    await expect(
+      registry.acquire('branch:replacement', 'project-1', async () => ({
+        workspace: replacement.workspace,
+      }))
+    ).resolves.toBe(replacement.workspace);
+    expect(onDestroy).toHaveBeenCalledTimes(2);
+  });
 });

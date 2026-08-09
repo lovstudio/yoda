@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import {
   Copy,
   Info,
@@ -52,8 +53,7 @@ import { useConversationPromptRestore } from '@renderer/features/tasks/conversat
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import { SessionConversationList } from '@renderer/features/tasks/session-conversation-list';
 import {
-  resolveSessionConversation,
-  startVisibleSessionRefresh,
+  sessionConversationQueryOptions,
   type SessionConversationData,
 } from '@renderer/features/tasks/session-prompts';
 import {
@@ -448,43 +448,21 @@ export function useSessionPrompts(active: boolean): {
 } {
   const provisionedTask = useRequireProvisionedTask();
   const conversation = getTaskMenuConversation(provisionedTask);
-  const sessionStatus = conversation
-    ? provisionedTask.conversations.conversations.get(conversation.id)?.session.status
+  const runtimeStatus = conversation
+    ? provisionedTask.conversations.conversations.get(conversation.id)?.status
     : undefined;
-  const [conversationData, setConversationData] = useState<SessionConversationData | undefined>();
-  const [isLoading, setIsLoading] = useState(false);
+  const conversationQuery = useQuery(
+    sessionConversationQueryOptions({
+      active,
+      conversation: conversation ?? null,
+      cwd: provisionedTask.path,
+      runtimeStatus,
+    })
+  );
+  const conversationData: SessionConversationData | undefined = conversationQuery.data;
   const showSessionPrompts = useShowModal('sessionPromptsModal');
   const { restoringPrompt, requestRestorePrompt: requestConversationPromptRestore } =
     useConversationPromptRestore();
-
-  useEffect(() => {
-    // Reset on conversation switch so a stale preview never flashes.
-    setConversationData(undefined); // eslint-disable-line react-hooks/set-state-in-effect
-  }, [conversation?.id]);
-
-  useEffect(() => {
-    if (!active || !conversation) return;
-    let cancelled = false;
-    setIsLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
-    const load = () =>
-      resolveSessionConversation(conversation, provisionedTask.path)
-        .then((next) => {
-          if (!cancelled) setConversationData(next);
-        })
-        .catch(() => {
-          if (!cancelled) setConversationData({ prompts: [], messages: [] });
-        })
-        .finally(() => {
-          if (!cancelled) setIsLoading(false);
-        });
-    // Poll while open so the header count stays live as prompts stream in
-    // mid-reply, not just on each session-status transition.
-    const stopRefresh = startVisibleSessionRefresh(load);
-    return () => {
-      cancelled = true;
-      stopRefresh();
-    };
-  }, [active, conversation, provisionedTask.path, sessionStatus]);
 
   const requestRestorePrompt = useCallback(
     (prompt: ClaudeSessionPrompt, index: number) => {
@@ -519,7 +497,7 @@ export function useSessionPrompts(active: boolean): {
   return {
     prompts: conversationData?.prompts ?? [],
     messages: conversationData?.messages ?? [],
-    isLoading: isLoading && conversationData === undefined,
+    isLoading: conversationQuery.isFetching && conversationData === undefined,
     hasPrompts: (conversationData?.prompts.length ?? 0) > 0,
     hasConversation: Boolean(conversation),
     restoringPromptId,

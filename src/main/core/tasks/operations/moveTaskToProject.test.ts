@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { taskMovedChannel } from '@shared/events/taskEvents';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import { LocalFileSystem } from '@main/core/fs/impl/local-fs';
@@ -10,6 +11,7 @@ import { moveTaskToProject } from './moveTaskToProject';
 const mocks = vi.hoisted(() => ({
   getProjectMock: vi.fn(),
   openProjectMock: vi.fn(),
+  rendererEventMock: vi.fn(),
   getProjectByIdMock: vi.fn(),
   teardownTaskMock: vi.fn(),
   selectMock: vi.fn(),
@@ -45,6 +47,12 @@ vi.mock('@main/db/client', () => ({
 vi.mock('@main/core/tasks/task-events', () => ({
   taskEvents: {
     _emit: mocks.taskUpdatedEmitMock,
+  },
+}));
+
+vi.mock('@main/lib/events', () => ({
+  events: {
+    emit: mocks.rendererEventMock,
   },
 }));
 
@@ -203,5 +211,10 @@ describe('moveTaskToProject', () => {
       'refs/heads/task/ssh-support:feature.txt',
     ]);
     expect(migratedContent).toBe('migrated over ssh-like transport\n');
+    expect(mocks.rendererEventMock).toHaveBeenCalledWith(taskMovedChannel, {
+      taskId: 'task-1',
+      sourceProjectId: 'source-project',
+      targetProjectId: 'target-project',
+    });
   });
 });

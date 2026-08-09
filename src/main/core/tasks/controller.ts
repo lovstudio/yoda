@@ -9,7 +9,14 @@ import { createTask, retryTaskSetup } from './operations/createTask';
 import { deleteTask } from './operations/deleteTask';
 import { generateTaskCommitMessage } from './operations/generateTaskCommitMessage';
 import { getTaskPreview } from './operations/getTaskPreview';
-import { getTasks } from './operations/getTasks';
+import {
+  getActiveTasks,
+  getArchivedTasks,
+  getTask,
+  getTaskCounts,
+  getTasks,
+  getTasksByIds,
+} from './operations/getTasks';
 import { getWorkspaceSettings } from './operations/getWorkspaceSettings';
 import { mergeTaskBranch } from './operations/mergeTaskBranch';
 import { moveTaskStatus } from './operations/moveTaskStatus';
@@ -32,6 +39,11 @@ export const taskController = createRPCController({
   createTask,
   retryTaskSetup,
   getTasks,
+  getActiveTasks,
+  getArchivedTasks,
+  getTask,
+  getTasksByIds,
+  getTaskCounts,
   getTaskPreview,
   deleteTask,
   generateTaskName,
