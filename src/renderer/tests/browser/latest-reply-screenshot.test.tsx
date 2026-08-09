@@ -68,7 +68,8 @@ describe('LatestReplyScreenshotButton', () => {
         agentPhase: 'final',
         timestamp: '2026-08-06T09:59:00.000Z',
         format: 'markdown',
-        content: '## Done\n\nThe latest reply.',
+        content:
+          '## Done\n\nThe latest reply.\n\n<oai-mem-citation>internal metadata</oai-mem-citation>',
       },
     });
     host = document.createElement('div');
@@ -103,6 +104,8 @@ describe('LatestReplyScreenshotButton', () => {
     expect(card.className).toContain('w-[360px]');
     expect(card.textContent).toContain('Responsive screenshot');
     expect(card.textContent).toContain('The latest reply.');
+    expect(card.textContent).not.toContain('internal metadata');
+    expect(card.textContent).not.toContain('<oai-mem-citation>');
     expect(card.textContent).not.toContain('workspaceRuntime.replyScreenshotFooter');
     expect(options.scale).toBe(2);
     expect(mocks.clipboardWritePng).toHaveBeenCalledWith(
