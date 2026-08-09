@@ -22,11 +22,12 @@ interface BaseModeData {
   path: string;
 }
 
-// Opening every registered project at once creates a burst of repository
-// watchers, task hydration, and MobX notifications in the renderer. Keep the
-// same eventual behavior while making startup work yield between a small
-// number of projects.
+// Keep startup bounded twice: only a small, useful working set is mounted up
+// front, and that set itself is opened with limited concurrency. Project
+// metadata remains available for the sidebar without paying the cost of a
+// repository watcher and task hydration for every registered project.
 const INITIAL_PROJECT_MOUNT_CONCURRENCY = 4;
+const INITIAL_PROJECT_MOUNT_LIMIT = 8;
 
 export interface PickModeData extends BaseModeData {
   mode: 'pick';
@@ -81,17 +82,78 @@ export class ProjectManagerStore {
 
   private async _doLoad(): Promise<void> {
     const rawProjects = await rpc.projects.getProjects();
-    const toMount: string[] = [];
     runInAction(() => {
       for (const p of rawProjects) {
         if (this.projects.has(p.id)) continue;
         this.projects.set(p.id, createUnmountedProject(p, 'idle'));
-        toMount.push(p.id);
       }
     });
+  }
+
+  /**
+   * Mount the small working set needed by the restored primary window.
+   * Detached windows call ensureProjectLoaded/mountProject for their explicit
+   * target instead, so inactive projects stay as cheap metadata records.
+   */
+  async mountInitialProjects(): Promise<void> {
+    const currentProjectIds = this.currentNavigationProjectIds();
+    const candidates = new Set<string>(currentProjectIds);
+    const eligible = Array.from(this.projects.values()).filter((project) => {
+      if (project.state === 'unregistered' || !project.data || project.data.isInternal) {
+        return false;
+      }
+      return appState.workspaces.matchesActive(project.data.workspaceId);
+    });
+
+    for (const projectId of appState.sidebar.pinnedProjectIds) {
+      const project = this.projects.get(projectId);
+      if (project && eligible.includes(project)) candidates.add(projectId);
+    }
+
+    eligible
+      .sort((a, b) => {
+        const aInstant =
+          appState.sidebar.projectActivityById[a.data!.id] ??
+          a.data!.updatedAt ??
+          a.data!.createdAt ??
+          '';
+        const bInstant =
+          appState.sidebar.projectActivityById[b.data!.id] ??
+          b.data!.updatedAt ??
+          b.data!.createdAt ??
+          '';
+        if (aInstant !== bInstant) return bInstant.localeCompare(aInstant);
+        return a.data!.id.localeCompare(b.data!.id);
+      })
+      .forEach((project) => candidates.add(project.data!.id));
+
+    for (const projectId of appState.sidebar.projectOrder) candidates.add(projectId);
+
+    const toMount = [...candidates]
+      .filter((projectId) => {
+        const project = this.projects.get(projectId);
+        if (!project || project.state === 'unregistered' || !project.data) return false;
+        if (currentProjectIds.includes(projectId)) return true;
+        return (
+          !project.data.isInternal && appState.workspaces.matchesActive(project.data.workspaceId)
+        );
+      })
+      .slice(0, INITIAL_PROJECT_MOUNT_LIMIT);
+
     await mountProjectsWithConcurrency(toMount, INITIAL_PROJECT_MOUNT_CONCURRENCY, (projectId) =>
       this.mountProject(projectId)
     );
+  }
+
+  private currentNavigationProjectIds(): string[] {
+    const ids: string[] = [];
+    for (const viewId of ['task', 'project'] as const) {
+      const params = appState.navigation.viewParamsStore[viewId] as
+        | { projectId?: string }
+        | undefined;
+      if (params?.projectId && !ids.includes(params.projectId)) ids.push(params.projectId);
+    }
+    return ids;
   }
 
   /**
@@ -405,6 +467,7 @@ export class ProjectManagerStore {
     });
     try {
       await rpc.projects.deleteProject(projectId);
+      appState.agentRuntime.forgetProject(projectId);
       snapshot?.mountedProject?.dispose();
     } catch (err) {
       runInAction(() => {
@@ -421,6 +484,7 @@ export class ProjectManagerStore {
     });
     try {
       await rpc.projects.archiveProject(projectId);
+      appState.agentRuntime.forgetProject(projectId);
       snapshot?.mountedProject?.dispose();
     } catch (err) {
       runInAction(() => {

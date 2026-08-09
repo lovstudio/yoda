@@ -44,6 +44,9 @@ export class UpdateStore {
   currentVersion = '';
   availableVersion: string | undefined = undefined;
   private manualCheckToastId: string | number | undefined = undefined;
+  private started = false;
+  private startGeneration = 0;
+  private readonly eventDisposers: Array<() => void> = [];
 
   constructor() {
     makeObservable(this, {
@@ -72,77 +75,109 @@ export class UpdateStore {
   }
 
   start(): void {
+    if (this.started) return;
+    this.started = true;
+    const generation = ++this.startGeneration;
+
     void rpc.app.getAppVersion().then((v) => {
+      if (!this.started || generation !== this.startGeneration) return;
       runInAction(() => {
         this.currentVersion = v;
       });
     });
 
-    events.on(updateCheckingEvent, () => {
-      runInAction(() => {
-        this.state = { status: 'checking' };
-      });
-    });
+    this.eventDisposers.push(
+      events.on(updateCheckingEvent, () => {
+        runInAction(() => {
+          this.state = { status: 'checking' };
+        });
+      })
+    );
 
-    events.on(updateAvailableEvent, (d) => {
-      runInAction(() => {
-        this.availableVersion = d.version;
-        this.state = { status: 'available', info: { version: d.version } };
-      });
-      if (this.manualCheckToastId === undefined) {
-        this._maybeToastAvailable(d.version);
-      }
-    });
+    this.eventDisposers.push(
+      events.on(updateAvailableEvent, (d) => {
+        runInAction(() => {
+          this.availableVersion = d.version;
+          this.state = { status: 'available', info: { version: d.version } };
+        });
+        if (this.manualCheckToastId === undefined) {
+          this._maybeToastAvailable(d.version);
+        }
+      })
+    );
 
-    events.on(updateNotAvailableEvent, () => {
-      runInAction(() => {
-        this.state = { status: 'not-available' };
-      });
-    });
+    this.eventDisposers.push(
+      events.on(updateNotAvailableEvent, () => {
+        runInAction(() => {
+          this.state = { status: 'not-available' };
+        });
+      })
+    );
 
-    events.on(updateDownloadingEvent, (_d) => {
-      runInAction(() => {
-        this.state = { status: 'downloading', progress: { percent: 0 } };
-      });
-    });
+    this.eventDisposers.push(
+      events.on(updateDownloadingEvent, (_d) => {
+        runInAction(() => {
+          this.state = { status: 'downloading', progress: { percent: 0 } };
+        });
+      })
+    );
 
-    events.on(updateProgressEvent, (d) => {
-      runInAction(() => {
-        this.state = {
-          status: 'downloading',
-          progress: {
-            percent: d.percent,
-            transferred: d.transferred,
-            total: d.total,
-            bytesPerSecond: d.bytesPerSecond,
-          },
-        };
-      });
-    });
+    this.eventDisposers.push(
+      events.on(updateProgressEvent, (d) => {
+        runInAction(() => {
+          this.state = {
+            status: 'downloading',
+            progress: {
+              percent: d.percent,
+              transferred: d.transferred,
+              total: d.total,
+              bytesPerSecond: d.bytesPerSecond,
+            },
+          };
+        });
+      })
+    );
 
-    events.on(updateDownloadedEvent, () => {
-      runInAction(() => {
-        this.state = { status: 'downloaded' };
-      });
-    });
+    this.eventDisposers.push(
+      events.on(updateDownloadedEvent, () => {
+        runInAction(() => {
+          this.state = { status: 'downloaded' };
+        });
+      })
+    );
 
-    events.on(updateInstallingEvent, () => {
-      runInAction(() => {
-        this.state = { status: 'installing' };
-      });
-    });
+    this.eventDisposers.push(
+      events.on(updateInstallingEvent, () => {
+        runInAction(() => {
+          this.state = { status: 'installing' };
+        });
+      })
+    );
 
-    events.on(updateErrorEvent, (d) => {
-      runInAction(() => {
-        this.state = { status: 'error', message: d.message };
-      });
-    });
+    this.eventDisposers.push(
+      events.on(updateErrorEvent, (d) => {
+        runInAction(() => {
+          this.state = { status: 'error', message: d.message };
+        });
+      })
+    );
 
-    events.on(menuCheckForUpdatesChannel, () => {
-      void this.check({ notify: true });
-    });
+    this.eventDisposers.push(
+      events.on(menuCheckForUpdatesChannel, () => {
+        void this.check({ notify: true });
+      })
+    );
 
-    rpc.update.check().catch(() => {});
+    void Promise.resolve()
+      .then(() => rpc.update.check())
+      .catch(() => {});
+  }
+
+  dispose(): void {
+    if (!this.started && this.eventDisposers.length === 0) return;
+    this.started = false;
+    this.startGeneration++;
+    for (const dispose of this.eventDisposers.splice(0)) dispose();
   }
 
   async check(options: CheckOptions = {}): Promise<void> {

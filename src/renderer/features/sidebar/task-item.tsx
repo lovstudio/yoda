@@ -108,7 +108,8 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   // Any displayed agent status pins the status slot: notifications are a
   // click target (jump to the pending session) and the working spinner keeps
   // its hover-to-interrupt affordance.
-  const hasAgentNotification = taskSessionStatusSummary(task).primaryStatus !== null;
+  const statusSummary = taskSessionStatusSummary(task);
+  const hasAgentNotification = statusSummary.primaryStatus !== null;
   const isIdle = !isBootstrapping && !hasAgentNotification;
   const appearance = resolveTaskAppearance(
     interfaceSettings?.taskAppearance ?? DEFAULT_TASK_APPEARANCE_SETTINGS,
@@ -428,7 +429,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               : 'flex group-hover/row:hidden'
         )}
       >
-        <TaskSidebarAgentStatus task={task} needsReview={needsReview} />
+        <TaskSidebarAgentStatus task={task} needsReview={needsReview} summary={statusSummary} />
       </div>
     </SidebarMenuRow>
   );

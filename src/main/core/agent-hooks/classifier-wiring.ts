@@ -10,7 +10,10 @@ import { createClassifier } from './classifiers';
 import { stripAnsi, type ClassificationResult } from './classifiers/base';
 import { maybeShowNotification } from './notification';
 
-const IDLE_THRESHOLD_MS = 2500;
+// Approval prompts are already fully rendered when the PTY goes quiet. Keep
+// the fallback status responsive without waiting several seconds after the
+// final prompt line.
+const IDLE_THRESHOLD_MS = 400;
 const COOLDOWN_MS = 10_000;
 const EDGE_RESET_THRESHOLD = 20;
 
@@ -86,6 +89,7 @@ export function wireAgentClassifier({
 
   pty.onExit(() => {
     if (idleTimer) clearTimeout(idleTimer);
+    classifier.reset();
   });
 
   pty.onData((chunk) => {
@@ -97,8 +101,9 @@ export function wireAgentClassifier({
 
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
+      let result: ClassificationResult = undefined;
       try {
-        const result = classifier.classify('');
+        result = classifier.classify('');
         if (!guard.shouldEmit(result)) return;
 
         const event: AgentEvent = {
@@ -122,6 +127,11 @@ export function wireAgentClassifier({
         events.emit(agentEventChannel, { event, appFocused });
       } catch (err) {
         log.warn('wireAgentClassifier: idle check failed', { error: String(err) });
+      } finally {
+        // A confirmed prompt must not remain in the sliding buffer. Otherwise
+        // the next idle tick can classify the same old TUI text again after
+        // the user has already continued the session.
+        if (result) classifier.reset();
       }
     }, IDLE_THRESHOLD_MS);
   });
