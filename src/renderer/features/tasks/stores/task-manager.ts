@@ -1233,6 +1233,7 @@ export class TaskManagerStore {
   private showArchiveUndoToast(taskId: string): void {
     const toastId = toast.success(i18n.t('sidebar.taskArchived'), {
       duration: 6000,
+      persistNotification: false,
       action: {
         label: i18n.t('common.undo'),
         onClick: () => {
