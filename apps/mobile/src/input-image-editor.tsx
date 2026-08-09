@@ -483,7 +483,18 @@ export function MobileImageEditor({
             ))}
             {mode === 'crop' ? (
               <>
-                <View {...cropFrameResponder.panHandlers} style={[styles.cropFrame, crop]} />
+                <View
+                  {...cropFrameResponder.panHandlers}
+                  style={[
+                    styles.cropFrame,
+                    {
+                      height: crop.height,
+                      left: crop.x,
+                      top: crop.y,
+                      width: crop.width,
+                    },
+                  ]}
+                />
                 <CropOverlay
                   crop={crop}
                   handleResponders={cropHandleResponders}
