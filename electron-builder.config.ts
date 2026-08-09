@@ -25,6 +25,38 @@ const winSigning =
 const macSigning =
   process.env.YODA_DISABLE_MAC_SIGNING === '1' ? { identity: null as unknown as string } : {};
 
+const imageFileTypes = [
+  ['png', 'image/png'],
+  ['jpg', 'image/jpeg'],
+  ['jpeg', 'image/jpeg'],
+  ['gif', 'image/gif'],
+  ['webp', 'image/webp'],
+  ['bmp', 'image/bmp'],
+  ['ico', 'image/vnd.microsoft.icon'],
+] as const;
+
+const documentFileTypes = [
+  ['svg', 'image/svg+xml'],
+  ['pdf', 'application/pdf'],
+  ['txt', 'text/plain'],
+  ['md', 'text/markdown'],
+  ['mdx', 'text/markdown'],
+  ['json', 'application/json'],
+  ['js', 'text/javascript'],
+  ['jsx', 'text/javascript'],
+  ['ts', 'text/x-typescript'],
+  ['tsx', 'text/x-typescript'],
+  ['css', 'text/css'],
+  ['scss', 'text/x-scss'],
+  ['html', 'text/html'],
+  ['xml', 'application/xml'],
+  ['yaml', 'application/yaml'],
+  ['yml', 'application/yaml'],
+  ['toml', 'application/toml'],
+  ['env', 'text/plain'],
+  ['log', 'text/plain'],
+] as const;
+
 const config: Configuration = {
   appId: APP_ID,
   productName: PRODUCT_NAME,
@@ -32,38 +64,20 @@ const config: Configuration = {
   artifactName: `${ARTIFACT_PREFIX}-\${arch}.\${ext}`,
   protocols: [{ name: PRODUCT_NAME, schemes: [APP_NAME_LOWER] }],
   fileAssociations: [
-    {
-      ext: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico'],
+    ...imageFileTypes.map(([ext, mimeType]) => ({
+      ext,
+      mimeType,
       name: 'Image',
       description: 'Image file',
       role: 'Editor',
-    },
-    {
-      ext: [
-        'svg',
-        'pdf',
-        'txt',
-        'md',
-        'mdx',
-        'json',
-        'js',
-        'jsx',
-        'ts',
-        'tsx',
-        'css',
-        'scss',
-        'html',
-        'xml',
-        'yaml',
-        'yml',
-        'toml',
-        'env',
-        'log',
-      ],
+    })),
+    ...documentFileTypes.map(([ext, mimeType]) => ({
+      ext,
+      mimeType,
       name: 'Document',
       description: 'Text or document file',
       role: 'Editor',
-    },
+    })),
   ],
   publish: [
     {

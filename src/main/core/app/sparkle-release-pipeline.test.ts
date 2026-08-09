@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import electronBuilderConfig from '../../../../electron-builder.config';
 
 const generator = readFileSync('scripts/release/generate-sparkle-appcast.ts', 'utf8');
 const sparkleSmoke = readFileSync('scripts/release/smoke-sparkle-delta.ts', 'utf8');
@@ -15,6 +16,27 @@ const macVerification = readFileSync('scripts/release/verify-mac.ts', 'utf8');
 const macNotarization = readFileSync('scripts/release/notarize-mac.ts', 'utf8');
 
 describe('Sparkle release pipeline', () => {
+  it('uses AppImage-safe single-extension file associations with Linux MIME types', () => {
+    const configuredAssociations = electronBuilderConfig.fileAssociations;
+    const fileAssociations = Array.isArray(configuredAssociations)
+      ? configuredAssociations
+      : configuredAssociations
+        ? [configuredAssociations]
+        : [];
+
+    expect(fileAssociations.length).toBeGreaterThan(0);
+    expect(fileAssociations.every(({ ext }) => typeof ext === 'string')).toBe(true);
+    expect(fileAssociations.every(({ mimeType }) => typeof mimeType === 'string')).toBe(true);
+    expect(
+      Object.fromEntries(fileAssociations.map(({ ext, mimeType }) => [ext, mimeType]))
+    ).toMatchObject({
+      png: 'image/png',
+      pdf: 'application/pdf',
+      md: 'text/markdown',
+      ts: 'text/x-typescript',
+    });
+  });
+
   it('requires signing and retains enough history for skipped releases', () => {
     expect(generator).toContain("fail('SPARKLE_ED_PRIVATE_KEY is required");
     expect(generator).toContain("'--maximum-deltas'");
