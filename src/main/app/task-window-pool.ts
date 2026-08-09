@@ -1,4 +1,4 @@
-import type { BrowserWindow } from 'electron';
+import { app, type BrowserWindow } from 'electron';
 import { taskWindowAssignTargetChannel } from '@shared/events/appEvents';
 import type { TaskWindowBounds, TaskWindowTarget } from '@shared/task-window';
 import { log } from '@main/lib/logger';
@@ -13,13 +13,59 @@ function poolLog(msg: string): void {
 // boot (~900ms saved). After a claim we immediately warm a replacement.
 let warmWindow: BrowserWindow | null = null;
 let warming = false;
+let warmExpiryTimer: ReturnType<typeof setTimeout> | null = null;
+
+const WARM_WINDOW_TTL_MS = 60_000;
+const WARM_WINDOW_MEMORY_LIMIT_KB = 1_500_000;
+
+function clearWarmExpiry(): void {
+  if (warmExpiryTimer === null) return;
+  clearTimeout(warmExpiryTimer);
+  warmExpiryTimer = null;
+}
+
+function releaseWarmWindow(win: BrowserWindow): void {
+  if (warmWindow !== win) return;
+  warmWindow = null;
+  clearWarmExpiry();
+}
+
+function canWarmWindow(): boolean {
+  try {
+    const workingSetSize = app
+      .getAppMetrics()
+      .reduce((total, metric) => total + metric.memory.workingSetSize, 0);
+    if (workingSetSize >= WARM_WINDOW_MEMORY_LIMIT_KB) {
+      poolLog(`warm() skipped, app memory pressure=${workingSetSize}KB`);
+      return false;
+    }
+  } catch (error) {
+    // App metrics can be unavailable during early startup. A failed probe
+    // should not prevent the on-demand pool from recovering.
+    poolLog(`warm() memory probe unavailable: ${String(error)}`);
+  }
+  return true;
+}
+
+function expireWarmWindow(win: BrowserWindow): void {
+  warmExpiryTimer = setTimeout(() => {
+    warmExpiryTimer = null;
+    if (warmWindow !== win) return;
+    releaseWarmWindow(win);
+    poolLog(`warm window id=${win.id} expired`);
+    if (!win.isDestroyed()) win.close();
+  }, WARM_WINDOW_TTL_MS);
+  warmExpiryTimer.unref?.();
+}
 
 export function warmTaskWindowPool(): void {
   if (warmWindow && !warmWindow.isDestroyed()) {
     poolLog('warm() skipped, already have a warm window');
     return;
   }
+  if (warmWindow) releaseWarmWindow(warmWindow);
   if (warming) return;
+  if (!canWarmWindow()) return;
   warming = true;
   try {
     const win = createWarmTaskWindow();
@@ -28,8 +74,9 @@ export function warmTaskWindowPool(): void {
     win.webContents.once('did-finish-load', () =>
       poolLog(`warm window id=${win.id} did-finish-load (ready to claim)`)
     );
+    expireWarmWindow(win);
     win.once('closed', () => {
-      if (warmWindow === win) warmWindow = null;
+      releaseWarmWindow(win);
     });
   } catch (error) {
     log.warn('TaskWindowPool: failed to warm a task window', { error });
@@ -66,13 +113,14 @@ function takeWarmWindow(): BrowserWindow | null {
   }
   if (win.isDestroyed()) {
     poolLog('takeWarm -> destroyed');
+    releaseWarmWindow(win);
     return null;
   }
   if (win.webContents.isLoading()) {
     poolLog('takeWarm -> still loading');
     return null;
   }
-  warmWindow = null;
+  releaseWarmWindow(win);
   return win;
 }
 

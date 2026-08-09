@@ -851,6 +851,7 @@ export class TaskManagerStore {
     const result = await rpc.tasks.moveTaskToProject(taskId, targetProjectId);
     if (!result.success) return result.error;
 
+    appState.agentRuntime.forgetTask(this.projectId, taskId);
     const store = this.tasks.get(taskId);
     runInAction(() => {
       this.tasks.delete(taskId);
@@ -1035,6 +1036,7 @@ export class TaskManagerStore {
     try {
       task.dispose();
       await rpc.tasks.deleteTask(this.projectId, taskId);
+      appState.agentRuntime.forgetTask(this.projectId, taskId);
     } catch (e) {
       runInAction(() => {
         this.tasks.set(taskId, task);

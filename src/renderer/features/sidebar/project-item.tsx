@@ -99,6 +99,9 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
 
   const handleOpenDetails = useCallback(() => {
     prefetchRepository();
+    getProjectManagerStore()
+      .mountProject(projectId)
+      .catch(() => {});
     navigate('project', { projectId });
   }, [navigate, prefetchRepository, projectId]);
 
@@ -116,7 +119,13 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   }, [navigate, prefetchRepository, projectId]);
 
   const handleToggleExpanded = useCallback(() => {
+    const willExpand = !sidebarStore.expandedProjectIds.has(projectId);
     sidebarStore.toggleProjectExpanded(projectId);
+    if (willExpand) {
+      getProjectManagerStore()
+        .mountProject(projectId)
+        .catch(() => {});
+    }
   }, [projectId]);
 
   const handleRowKeyDown = useCallback(

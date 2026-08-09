@@ -70,8 +70,10 @@ import { SidebarTaskItem } from './task-item';
 
 export const SidebarVirtualList = observer(function SidebarVirtualList({
   scrollElementRef,
+  fixedRegionRef,
 }: {
   scrollElementRef: RefObject<HTMLDivElement | null>;
+  fixedRegionRef: RefObject<HTMLDivElement | null>;
 }) {
   const { t } = useTranslation();
   const rows = sidebarStore.sidebarRows;
@@ -153,8 +155,9 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     const observer = new ResizeObserver(updateScrollMargin);
     observer.observe(list);
     observer.observe(scrollElement);
+    if (fixedRegionRef.current) observer.observe(fixedRegionRef.current);
     return () => observer.disconnect();
-  }, [scrollElementRef]);
+  }, [fixedRegionRef, scrollElementRef]);
 
   // Keep the DnD surface complete while a drag is active, but only mount the
   // viewport plus a small overscan window during normal interaction. The
