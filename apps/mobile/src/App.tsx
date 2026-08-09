@@ -4786,6 +4786,21 @@ function SessionRuntimeStatus({
       accessibilityLiveRegion="polite"
       style={styles.sessionRunStatus}
     >
+      <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
+        style={styles.sessionRunProject}
+        testID="session-header-project"
+      >
+        {projectLabel}
+      </Text>
+      <Text
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={styles.sessionRunStatusSeparator}
+      >
+        ·
+      </Text>
       {presentation.animated ? (
         <ActivityIndicator color={presentation.color} size={10} />
       ) : (
@@ -5827,6 +5842,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
     gap: 5,
+  },
+  sessionRunProject: {
+    minWidth: 0,
+    maxWidth: '58%',
+    flexShrink: 1,
+    color: COLORS.muted,
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  sessionRunStatusSeparator: {
+    flexShrink: 0,
+    color: COLORS.line,
+    fontSize: 10,
+    lineHeight: 13,
   },
   sessionRunStatusDot: {
     width: 5,

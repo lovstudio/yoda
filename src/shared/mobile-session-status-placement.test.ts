@@ -20,6 +20,9 @@ describe('mobile session runtime status placement', () => {
     );
     expect(navigationBar).not.toContain('Session ·');
     expect(navigationBar).not.toContain('styles.sessionNavEyebrow');
+    expect(navigationBar).toContain('projectLabel={projectLabel}');
+    expect(source).toContain('style={styles.sessionRunProject}');
+    expect(source).toContain('testID="session-header-project"');
     expect(inputComposer).not.toContain('<SessionRuntimeStatus');
     expect(inputComposer).toContain('styles.sessionInputCount');
   });
