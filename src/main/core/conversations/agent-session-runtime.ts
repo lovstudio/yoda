@@ -6,11 +6,13 @@ import {
   type RunStateEvent,
 } from '@shared/events/agent-run-state';
 import {
+  agentEventChannel,
   agentSessionStatusChangedChannel,
   isAgentSessionRunningStatus,
   type AgentEvent,
   type AgentSessionRuntimeStatus,
 } from '@shared/events/agentEvents';
+import { isAppFocused, maybeShowNotification } from '@main/core/agent-hooks/notification';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { clearInterruptMarker } from './interrupt-marker';
@@ -120,6 +122,38 @@ const AUTHORITATIVE_RUN_STATE_SOURCES = new Set([
   'claude-session-activity',
 ]);
 
+function notificationEventForRuntimeState(
+  session: AgentSessionKey,
+  state: RunState,
+  at: number
+): AgentEvent | null {
+  if (state.status === 'completed') {
+    return {
+      type: 'stop',
+      source: 'runtime',
+      ...session,
+      timestamp: at,
+      payload: {},
+    };
+  }
+
+  const pendingAction = state.pendingAction;
+  if (state.status !== 'awaiting-input' || !pendingAction) return null;
+
+  return {
+    type:
+      pendingAction.notificationType === 'permission_prompt' ? 'notification' : 'awaiting-input',
+    source: 'runtime',
+    ...session,
+    timestamp: at,
+    payload: {
+      notificationType: pendingAction.notificationType,
+      title: pendingAction.toolName,
+      message: pendingAction.actionDescription,
+    },
+  };
+}
+
 class AgentSessionRuntimeStore {
   private entries = new Map<string, Entry>();
   private listeners = new Map<string, Set<RuntimeStateListener>>();
@@ -199,6 +233,18 @@ class AgentSessionRuntimeStore {
           status: next.status,
           pendingAction: next.pendingAction,
         });
+      }
+      if (
+        AUTHORITATIVE_RUN_STATE_SOURCES.has(source) &&
+        ((statusChanged && next.status === 'completed') ||
+          (next.status === 'awaiting-input' && (statusChanged || pendingActionChanged)))
+      ) {
+        const notificationEvent = notificationEventForRuntimeState(session, next, event.at);
+        if (notificationEvent) {
+          const appFocused = isAppFocused();
+          void maybeShowNotification(notificationEvent, appFocused);
+          events.emit(agentEventChannel, { event: notificationEvent, appFocused });
+        }
       }
       this.notifyListeners(session, next);
     }

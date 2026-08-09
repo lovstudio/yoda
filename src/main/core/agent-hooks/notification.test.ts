@@ -103,4 +103,11 @@ describe('maybeShowNotification', () => {
 
     expect(mocks.show).not.toHaveBeenCalled();
   });
+
+  it('deduplicates authoritative runtime notifications with a late hook echo', async () => {
+    await maybeShowNotification({ ...makeEvent('stop'), source: 'runtime' }, false);
+    await maybeShowNotification({ ...makeEvent('stop'), source: 'hook' }, false);
+
+    expect(mocks.show).toHaveBeenCalledTimes(1);
+  });
 });
