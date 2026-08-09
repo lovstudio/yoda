@@ -528,7 +528,11 @@ export class LocalConversationProvider implements ConversationProvider {
 
       const hasAuthoritativeRunState = statusMonitor !== 'terminal';
 
-      if (statusMonitor === 'terminal') {
+      // Codex's rollout is authoritative for turn boundaries, but its
+      // command-approval prompt is rendered only in the PTY and is absent
+      // from the rollout until the user answers. Keep the narrow Codex
+      // classifier attached as a supplementary attention signal.
+      if (statusMonitor === 'terminal' || conversation.runtimeId === 'codex') {
         wireAgentClassifier({
           pty,
           runtimeId: conversation.runtimeId,
