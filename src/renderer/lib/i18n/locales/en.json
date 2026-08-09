@@ -1214,7 +1214,19 @@
     },
     "notifications": {
       "title": "Notifications",
-      "description": "Get notified when agents need your attention.",
+      "description": "Get notified when a task finishes or an Agent needs your attention.",
+      "turnCompletion": "Turn completion notifications",
+      "turnCompletionDescription": "Set when to play a sound after a task finishes.",
+      "permissionNotifications": "Enable permission notifications",
+      "permissionNotificationsDescription": "Show a system banner when an Agent needs permission.",
+      "questionNotifications": "Enable question notifications",
+      "questionNotificationsDescription": "Show a system banner when an Agent is waiting for your answer.",
+      "enabled": "On",
+      "deliveryModes": {
+        "never": "Never",
+        "unfocused": "Only when unfocused",
+        "always": "Always"
+      },
       "sound": "Sound",
       "soundDescription": "Play audio cues for agent events.",
       "soundTiming": "Sound timing",

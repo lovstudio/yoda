@@ -6,6 +6,7 @@ import {
   notificationFocusTaskChannel,
   type AppNotificationCreated,
 } from '@shared/events/appEvents';
+import { isAgentNotificationEnabled } from '@shared/notification-settings';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import { getMainWindow } from '@main/app/window';
 import { appSettingsService } from '@main/core/settings/settings-service';
@@ -66,8 +67,10 @@ export async function maybeShowNotification(event: AgentEvent, appFocused: boole
         .join('\n'),
     });
 
-    const { enabled, osNotifications } = await appSettingsService.get('notifications');
-    if (!enabled || !osNotifications || appFocused || !Notification.isSupported()) return;
+    const settings = await appSettingsService.get('notifications');
+    if (!isAgentNotificationEnabled(event, settings) || appFocused || !Notification.isSupported()) {
+      return;
+    }
 
     const notification = new Notification({ title, body: message.description, silent: true });
 
