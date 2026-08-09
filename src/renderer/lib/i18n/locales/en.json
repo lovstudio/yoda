@@ -4391,6 +4391,8 @@
     "managedGateways": {
       "title": "Local integrations (open source)",
       "description": "Ordered by GitHub stars. Yoda can install, start, stop, and manage a local router, or connect an existing service.",
+      "githubStars": "GitHub stars: {{count}}",
+      "githubStarsLoading": "Loading GitHub stars…",
       "integrationDocs": "Integration docs",
       "oneClickInstall": "Install",
       "start": "Start",
