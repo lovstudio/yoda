@@ -55,6 +55,17 @@ describe('NavigationHistoryStore', () => {
     expect(history.lastTaskTab('project-1', 'task-2')).toBe('session-b');
   });
 
+  it('can skip non-session task pages when resolving a task-row target', () => {
+    const history = new NavigationHistoryStore();
+    history.push(tab('project-1', 'task-1', 'session-a'));
+    history.push(tab('project-1', 'task-1', 'overview'));
+    history.push(tab('project-1', 'task-1', 'file-a'));
+
+    expect(
+      history.lastTaskTab('project-1', 'task-1', (tabId) => tabId.startsWith('session-'))
+    ).toBe('session-a');
+  });
+
   it('does not append when the visible current page already matches the target', () => {
     const history = new NavigationHistoryStore();
 
