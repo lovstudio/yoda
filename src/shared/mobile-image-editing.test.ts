@@ -1,12 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
   clampMobileCropRect,
+  initialMobileCropRect,
   mobileCropRectToImageRect,
   moveMobileCropRect,
   resizeMobileCropRect,
 } from '../../apps/mobile/src/input-image-editing';
 
 describe('mobile image editing geometry', () => {
+  it('starts with a visible crop selection without committing a crop', () => {
+    expect(initialMobileCropRect(300, 200)).toEqual({
+      height: 160,
+      width: 240,
+      x: 30,
+      y: 20,
+    });
+  });
+
   it('keeps a moved crop rectangle inside the displayed image', () => {
     expect(
       moveMobileCropRect({ height: 80, width: 120, x: 20, y: 30 }, 200, -100, 300, 200)
