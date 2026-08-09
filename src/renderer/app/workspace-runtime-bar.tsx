@@ -1245,6 +1245,13 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               onInputPromptLanguageChange={inputPromptLanguageField.setValue}
               onNamingLanguageChange={namingLanguageField.setValue}
               onSummaryLanguageChange={summaryLanguageField.setValue}
+              onCreatePrompt={() => {
+                setIsConfigPopoverOpen(false);
+                appState.navigation.navigate('library', {
+                  section: 'prompts',
+                  createPrompt: true,
+                });
+              }}
               onManagePrompts={() => {
                 setIsConfigPopoverOpen(false);
                 appState.navigation.navigate('library', { section: 'prompts' });

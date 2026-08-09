@@ -192,6 +192,25 @@ describe('PromptLibraryPanel groups', () => {
     expect(host.textContent).toContain('build-first');
   });
 
+  it('opens the new prompt editor for an initial create action', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    const onInitialActionConsumed = vi.fn();
+    await act(async () =>
+      root.render(
+        createElement(PromptLibraryPanel, {
+          embedded: true,
+          initialAction: 'create',
+          onInitialActionConsumed,
+        })
+      )
+    );
+
+    expect(host.querySelector('form[data-slot="prompt-library-editor"]')).not.toBeNull();
+    expect(onInitialActionConsumed).toHaveBeenCalledTimes(1);
+  });
+
   it('offers existing groups while allowing a new group name', async () => {
     const { PromptLibraryPanel } = await import(
       '@renderer/features/prompt-library/prompt-library-panel'

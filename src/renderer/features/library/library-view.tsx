@@ -56,23 +56,44 @@ const SECTIONS: {
 const LibrarySectionContext = createContext<{
   section: LibrarySection;
   onSectionChange: (section: LibrarySection) => void;
-}>({ section: 'prompts', onSectionChange: () => {} });
+  createPrompt: boolean;
+  onCreatePromptConsumed: () => void;
+}>({
+  section: 'prompts',
+  onSectionChange: () => {},
+  createPrompt: false,
+  onCreatePromptConsumed: () => {},
+});
 
 export function LibraryViewWrapper({
   children,
   section = 'prompts',
+  createPrompt = false,
 }: {
   children: ReactNode;
   section?: LibrarySection;
+  createPrompt?: boolean;
 }) {
-  const { setParams } = useParams('library');
+  const { params, setParams } = useParams('library');
   const resolvedSection = isLibrarySection(section) ? section : 'prompts';
+  const shouldCreatePrompt = createPrompt || params.createPrompt === true;
   const onSectionChange = useCallback(
     (next: LibrarySection) => setParams({ section: next }),
     [setParams]
   );
+  const onCreatePromptConsumed = useCallback(
+    () => setParams({ createPrompt: undefined }),
+    [setParams]
+  );
   return (
-    <LibrarySectionContext.Provider value={{ section: resolvedSection, onSectionChange }}>
+    <LibrarySectionContext.Provider
+      value={{
+        section: resolvedSection,
+        onSectionChange,
+        createPrompt: shouldCreatePrompt,
+        onCreatePromptConsumed,
+      }}
+    >
       {children}
     </LibrarySectionContext.Provider>
   );
@@ -90,10 +111,23 @@ export function LibraryTitlebar() {
   return <Titlebar />;
 }
 
-function LibrarySectionContent({ section }: { section: LibrarySection }) {
+function LibrarySectionContent({
+  section,
+  createPrompt,
+  onCreatePromptConsumed,
+}: {
+  section: LibrarySection;
+  createPrompt: boolean;
+  onCreatePromptConsumed: () => void;
+}) {
   switch (section) {
     case 'prompts':
-      return <PromptLibraryPanel />;
+      return (
+        <PromptLibraryPanel
+          initialAction={createPrompt ? 'create' : undefined}
+          onInitialActionConsumed={onCreatePromptConsumed}
+        />
+      );
     case 'agents':
       return <AgentManagerMainPanel />;
     case 'agentTeams':
@@ -154,7 +188,7 @@ export function LibraryPaneHeaderSlot() {
 
 export function LibraryMainPanel() {
   const { t } = useTranslation();
-  const { section, onSectionChange } = useLibrarySection();
+  const { section, onSectionChange, createPrompt, onCreatePromptConsumed } = useLibrarySection();
   // In the side pane the chip-strip row hosts the picker — don't double it.
   const isPinHosted = useIsPinHosted();
   return (
@@ -193,7 +227,11 @@ export function LibraryMainPanel() {
           </div>
         )}
         <div className="min-h-0 flex-1 overflow-hidden">
-          <LibrarySectionContent section={section} />
+          <LibrarySectionContent
+            section={section}
+            createPrompt={createPrompt}
+            onCreatePromptConsumed={onCreatePromptConsumed}
+          />
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { ArrowUpRight, Bot, Folder, LibraryBig, SlidersHorizontal } from 'lucide-react';
+import { ArrowUpRight, Bot, Folder, LibraryBig, Plus, SlidersHorizontal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -45,6 +45,7 @@ export interface ComposerSettingsContentProps {
   onInputPromptLanguageChange: (value: TaskOutputLanguage) => void;
   onNamingLanguageChange: (value: TaskOutputLanguage) => void;
   onSummaryLanguageChange: (value: TaskOutputLanguage) => void;
+  onCreatePrompt?: () => void;
   onManagePrompts?: () => void;
   footer?: ReactNode;
 }
@@ -65,6 +66,7 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
   onInputPromptLanguageChange,
   onNamingLanguageChange,
   onSummaryLanguageChange,
+  onCreatePrompt,
   onManagePrompts,
   footer,
 }: ComposerSettingsContentProps) {
@@ -99,6 +101,13 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
       return;
     }
     appState.navigation.navigate('library', { section: 'prompts' });
+  };
+  const createPrompt = () => {
+    if (onCreatePrompt) {
+      onCreatePrompt();
+      return;
+    }
+    appState.navigation.navigate('library', { section: 'prompts', createPrompt: true });
   };
 
   return (
@@ -178,23 +187,40 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
           }
           action={
             <TooltipProvider delay={150}>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      className="-mr-1"
-                      aria-label={t('home.openPromptLibrary')}
-                      onClick={managePrompts}
-                    >
-                      <ArrowUpRight className="size-3" />
-                    </Button>
-                  }
-                />
-                <TooltipContent>{t('home.openPromptLibrary')}</TooltipContent>
-              </Tooltip>
+              <div className="-mr-1 flex items-center gap-0.5">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={t('promptLibrary.new')}
+                        onClick={createPrompt}
+                      >
+                        <Plus className="size-3" />
+                      </Button>
+                    }
+                  />
+                  <TooltipContent>{t('promptLibrary.new')}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={t('home.openPromptLibrary')}
+                        onClick={managePrompts}
+                      >
+                        <ArrowUpRight className="size-3" />
+                      </Button>
+                    }
+                  />
+                  <TooltipContent>{t('home.openPromptLibrary')}</TooltipContent>
+                </Tooltip>
+              </div>
             </TooltipProvider>
           }
         >
