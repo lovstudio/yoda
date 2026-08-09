@@ -103,12 +103,22 @@ export class NavigationHistoryStore {
   /**
    * Finds the most recently visited internal page for a task on the current
    * history branch. Entries after the cursor are forward-history and must not
-   * affect a new sidebar navigation.
+   * affect a new sidebar navigation. A matcher lets callers distinguish a
+   * conversation session from task pages such as Overview or a file.
    */
-  lastTaskTab(projectId: string, taskId: string): string | undefined {
+  lastTaskTab(
+    projectId: string,
+    taskId: string,
+    matches: (tabId: string) => boolean = () => true
+  ): string | undefined {
     for (let i = this.index; i >= 0; i--) {
       const entry = this.entries[i];
-      if (entry?.kind === 'tab' && entry.projectId === projectId && entry.taskId === taskId) {
+      if (
+        entry?.kind === 'tab' &&
+        entry.projectId === projectId &&
+        entry.taskId === taskId &&
+        matches(entry.tabId)
+      ) {
         return entry.tabId;
       }
     }
