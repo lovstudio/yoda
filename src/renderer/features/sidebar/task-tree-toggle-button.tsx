@@ -19,8 +19,7 @@ export function TaskTreeToggleButton({
   const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     // A rapid double click emits two click events followed by dblclick. Treat
-    // that sequence as one disclosure gesture instead of toggling twice and
-    // then bubbling into the task row's rename action.
+    // that sequence as one disclosure gesture instead of toggling twice.
     if (event.detail > 1) return;
     onToggle();
   };
