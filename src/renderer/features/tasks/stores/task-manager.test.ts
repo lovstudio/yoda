@@ -425,6 +425,41 @@ describe('TaskManagerStore task view preload', () => {
     expect(transitionToProvisioned.mock.calls[0]?.[7]).toEqual(conversations);
     manager.dispose();
   });
+
+  it('shares one provisioning run before project mounting finishes', async () => {
+    const manager = createManager();
+    const store = createUnprovisionedTask(makeTask('Task'));
+    vi.spyOn(store, 'transitionToProvisioned').mockImplementation(() => {});
+    manager.tasks.set('task-1', store);
+
+    let resolveMount!: () => void;
+    mocks.mountProject.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveMount = resolve;
+      })
+    );
+    mocks.getTasks.mockResolvedValue([]);
+    mocks.viewStateGet.mockResolvedValue(undefined);
+    mocks.provisionTask.mockResolvedValue({
+      path: '/repo/task-1',
+      workspaceId: 'workspace-1',
+      sshConnectionId: undefined,
+      conversations: [],
+    });
+
+    const first = manager.provisionTask('task-1');
+    const second = manager.provisionTask('task-1');
+
+    expect(second).toBe(first);
+    expect(mocks.mountProject).toHaveBeenCalledOnce();
+    expect(mocks.provisionTask).not.toHaveBeenCalled();
+
+    resolveMount();
+    await Promise.all([first, second]);
+
+    expect(mocks.provisionTask).toHaveBeenCalledOnce();
+    manager.dispose();
+  });
 });
 
 describe('TaskManagerStore task view prewarm', () => {

@@ -591,12 +591,22 @@ export class TaskManagerStore {
     }
   }
 
-  async provisionTask(taskId: string): Promise<void> {
-    await getProjectManagerStore().mountProject(this.projectId);
-    await this.loadTasks();
-
+  provisionTask(taskId: string): Promise<void> {
     const inFlight = this._provisionPromises.get(taskId);
     if (inFlight) return inFlight;
+
+    const promise = this._provisionTask(taskId).finally(() => {
+      if (this._provisionPromises.get(taskId) === promise) {
+        this._provisionPromises.delete(taskId);
+      }
+    });
+    this._provisionPromises.set(taskId, promise);
+    return promise;
+  }
+
+  private async _provisionTask(taskId: string): Promise<void> {
+    await getProjectManagerStore().mountProject(this.projectId);
+    await this.loadTasks();
 
     const task = this.tasks.get(taskId);
     if (!task || !isUnprovisioned(task)) return;
@@ -606,45 +616,42 @@ export class TaskManagerStore {
     });
 
     const taskViewPreload = this._getTaskViewPreload(taskId);
-    const promise = Promise.all([rpc.tasks.provisionTask(taskId), taskViewPreload])
-      .then(([result, preload]) => {
-        runInAction(() => {
-          const current = this.tasks.get(taskId);
-          if (current && isUnprovisioned(current) && !current.data.archivedAt) {
-            current.transitionToProvisioned(
-              { ...current.data },
-              result.path,
-              result.workspaceId,
-              this._settingsStore,
-              this._baseRef,
-              preload.savedSnapshot,
-              result.sshConnectionId ?? undefined,
-              result.conversations
-            );
-            current.activate();
-          }
-        });
-      })
-      .catch((err: unknown) => {
-        runInAction(() => {
-          const current = this.tasks.get(taskId);
-          if (current && isUnprovisioned(current) && !current.data.archivedAt) {
-            current.phase = 'provision-error';
-            current.errorMessage = err instanceof Error ? err.message : String(err);
-          }
-        });
-        throw err;
-      })
-      .finally(() => {
-        this._provisionPromises.delete(taskId);
-        const cached = this._taskViewPreloads.get(taskId);
-        if (cached?.promise === taskViewPreload) {
-          this._taskViewPreloads.delete(taskId);
+    try {
+      const [result, preload] = await Promise.all([
+        rpc.tasks.provisionTask(taskId),
+        taskViewPreload,
+      ]);
+      runInAction(() => {
+        const current = this.tasks.get(taskId);
+        if (current && isUnprovisioned(current) && !current.data.archivedAt) {
+          current.transitionToProvisioned(
+            { ...current.data },
+            result.path,
+            result.workspaceId,
+            this._settingsStore,
+            this._baseRef,
+            preload.savedSnapshot,
+            result.sshConnectionId ?? undefined,
+            result.conversations
+          );
+          current.activate();
         }
       });
-
-    this._provisionPromises.set(taskId, promise);
-    return promise;
+    } catch (err: unknown) {
+      runInAction(() => {
+        const current = this.tasks.get(taskId);
+        if (current && isUnprovisioned(current) && !current.data.archivedAt) {
+          current.phase = 'provision-error';
+          current.errorMessage = err instanceof Error ? err.message : String(err);
+        }
+      });
+      throw err;
+    } finally {
+      const cached = this._taskViewPreloads.get(taskId);
+      if (cached?.promise === taskViewPreload) {
+        this._taskViewPreloads.delete(taskId);
+      }
+    }
   }
 
   /**
