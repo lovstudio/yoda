@@ -41,6 +41,7 @@ function createSchema(sqlite: Database.Database): void {
       description TEXT DEFAULT '' NOT NULL,
       content TEXT NOT NULL,
       group_name TEXT DEFAULT '' NOT NULL,
+      tags_json TEXT DEFAULT '[]' NOT NULL,
       extra_info TEXT DEFAULT '' NOT NULL,
       injection_enabled INTEGER DEFAULT false NOT NULL,
       injection_order INTEGER DEFAULT 0 NOT NULL,
@@ -66,7 +67,7 @@ function createSchema(sqlite: Database.Database): void {
   `);
 }
 
-describe('PromptLibraryService groups', () => {
+describe('PromptLibraryService flat prompt model', () => {
   let sqlite: Database.Database;
 
   beforeEach(() => {
@@ -84,59 +85,128 @@ describe('PromptLibraryService groups', () => {
     state.db = null;
   });
 
-  it('persists an empty named group', async () => {
+  it('creates a prompt with normalized human-only tags and a version snapshot', async () => {
     const { PromptLibraryService } = await import('./prompt-library-service');
     const service = new PromptLibraryService();
 
-    expect(await service.createGroup(' Research ')).toBe('Research');
-    expect(await service.listGroups()).toEqual([{ name: 'Research', parentName: null }]);
-  });
-
-  it('starts at v1.0.0 and creates immutable semantic versions for authored changes', async () => {
-    const { PromptLibraryService } = await import('./prompt-library-service');
-    const service = new PromptLibraryService();
     const created = await service.create({
       title: 'Review',
       content: 'Review this change.',
+      tags: [' Review ', 'Writing', 'Review'],
       description: '',
-      groupName: '',
       extraInfo: '',
       injectionEnabled: false,
     });
 
-    expect(created.version).toBe('1.0.0');
+    expect(created.tags).toEqual(['Review', 'Writing']);
     expect(await service.listVersions(created.id)).toEqual([
       expect.objectContaining({ version: '1.0.0', content: 'Review this change.' }),
     ]);
-
-    await service.update(created.id, { content: 'Review behavior and tests.' });
-    await service.update(created.id, {
-      description: 'Use before merging.',
-      versionBump: 'minor',
-    });
-    await service.update(created.id, { injectionEnabled: true, groupName: 'Review' });
-
-    expect((await service.list()).find((prompt) => prompt.id === created.id)?.version).toBe(
-      '1.1.0'
-    );
-    expect((await service.listVersions(created.id)).map((version) => version.version)).toEqual([
-      '1.1.0',
-      '1.0.1',
-      '1.0.0',
-    ]);
   });
 
-  it('restores an old snapshot as a new version without rewriting history', async () => {
+  it('updates tags without creating a content version', async () => {
     const { PromptLibraryService } = await import('./prompt-library-service');
     const service = new PromptLibraryService();
     const created = await service.create({
       title: 'Review',
       content: 'Original',
+      tags: ['Review'],
       description: '',
-      groupName: '',
       extraInfo: '',
       injectionEnabled: false,
     });
+
+    await service.update(created.id, { tags: ['Writing'], injectionEnabled: true });
+
+    expect(await service.list()).toEqual([
+      expect.objectContaining({ id: created.id, tags: ['Writing'], injectionEnabled: true }),
+    ]);
+    expect((await service.listVersions(created.id)).map((version) => version.version)).toEqual([
+      '1.0.0',
+    ]);
+  });
+
+  it('reorders every prompt in one flat list and derives injection order from it', async () => {
+    const { PromptLibraryService } = await import('./prompt-library-service');
+    const service = new PromptLibraryService();
+    const first = await service.create({ title: 'First', content: 'First' });
+    const second = await service.create({ title: 'Second', content: 'Second' });
+    const third = await service.create({ title: 'Third', content: 'Third' });
+
+    await service.reorderPrompts([first.id, third.id, second.id]);
+
+    const ordered = await service.list();
+    expect(ordered.map((prompt) => prompt.id)).toEqual([first.id, third.id, second.id]);
+    expect(ordered.map((prompt) => prompt.injectionOrder)).toEqual([0, 1, 2]);
+  });
+
+  it('toggles every prompt carrying a tag in one operation', async () => {
+    const { PromptLibraryService } = await import('./prompt-library-service');
+    const service = new PromptLibraryService();
+    const review = await service.create({
+      title: 'Review',
+      content: 'Review',
+      tags: ['Review'],
+      injectionEnabled: false,
+    });
+    const writing = await service.create({
+      title: 'Writing',
+      content: 'Writing',
+      tags: ['Writing'],
+      injectionEnabled: false,
+    });
+    const shared = await service.create({
+      title: 'Shared',
+      content: 'Shared',
+      tags: ['Review', 'Writing'],
+      injectionEnabled: false,
+    });
+
+    await service.setTagInjectionEnabled(' Review ', true);
+
+    expect((await service.list()).map((prompt) => [prompt.id, prompt.injectionEnabled])).toEqual([
+      [shared.id, true],
+      [writing.id, false],
+      [review.id, true],
+    ]);
+  });
+
+  it('converts legacy nested groups into tags during initialization and clears the old relation', async () => {
+    sqlite
+      .prepare(
+        `INSERT INTO prompt_groups (name, parent_name, sort_order) VALUES
+          ('Engineering', NULL, 0),
+          ('Frontend', 'Engineering', 0),
+          ('React', 'Frontend', 0)`
+      )
+      .run();
+    sqlite
+      .prepare(
+        `INSERT INTO prompts
+          (id, title, content, group_name, tags_json, sort_order, created_at, updated_at)
+         VALUES ('existing', 'Existing prompt', 'Content', 'React', '["Useful"]', 0, ?, ?)`
+      )
+      .run('2026-07-27T00:00:00.000Z', '2026-07-27T00:00:00.000Z');
+    const { PromptLibraryService } = await import('./prompt-library-service');
+    const service = new PromptLibraryService();
+
+    await service.initialize();
+
+    expect(await service.list()).toEqual([
+      expect.objectContaining({
+        id: 'existing',
+        tags: ['Useful', 'Engineering', 'Frontend', 'React'],
+      }),
+    ]);
+    expect(sqlite.prepare('SELECT group_name FROM prompts WHERE id = ?').get('existing')).toEqual({
+      group_name: '',
+    });
+  });
+
+  it('restores an old snapshot as a new semantic version without rewriting history', async () => {
+    const { PromptLibraryService } = await import('./prompt-library-service');
+    const service = new PromptLibraryService();
+    const created = await service.create({ title: 'Review', content: 'Original' });
     await service.update(created.id, { content: 'Changed' });
 
     const restored = await service.restoreVersion(created.id, '1.0.0');
@@ -147,263 +217,5 @@ describe('PromptLibraryService groups', () => {
       '1.0.1',
       '1.0.0',
     ]);
-  });
-
-  it('renames a group while preserving its order and moving every prompt', async () => {
-    const { PromptLibraryService } = await import('./prompt-library-service');
-    const service = new PromptLibraryService();
-    const build = await service.create({
-      title: 'Build',
-      description: '',
-      content: 'Build',
-      groupName: 'Build',
-      extraInfo: '',
-      injectionEnabled: true,
-    });
-    await service.create({
-      title: 'Review',
-      description: '',
-      content: 'Review',
-      groupName: 'Review',
-      extraInfo: '',
-      injectionEnabled: true,
-    });
-
-    expect(await service.renameGroup(' Build ', ' Delivery ')).toBe('Delivery');
-
-    expect(await service.listGroups()).toEqual([
-      { name: 'Delivery', parentName: null },
-      { name: 'Review', parentName: null },
-    ]);
-    expect(await service.list()).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: build.id, groupName: 'Delivery' })])
-    );
-  });
-
-  it('renames an empty group and rejects a duplicate name', async () => {
-    const { PromptLibraryService } = await import('./prompt-library-service');
-    const service = new PromptLibraryService();
-    await service.createGroup('Research');
-    await service.createGroup('Writing');
-
-    expect(await service.renameGroup('Research', 'Discovery')).toBe('Discovery');
-    await expect(service.renameGroup('Discovery', 'Writing')).rejects.toThrow(
-      'Prompt group already exists'
-    );
-    expect(await service.listGroups()).toEqual([
-      { name: 'Discovery', parentName: null },
-      { name: 'Writing', parentName: null },
-    ]);
-  });
-
-  it('reorders named groups and keeps ungrouped prompts after them', async () => {
-    const { PromptLibraryService } = await import('./prompt-library-service');
-    const service = new PromptLibraryService();
-    const build = await service.create({
-      title: 'Build',
-      description: '',
-      content: 'Build',
-      groupName: 'Build',
-      extraInfo: '',
-      injectionEnabled: true,
-    });
-    const review = await service.create({
-      title: 'Review',
-      description: '',
-      content: 'Review',
-      groupName: 'Review',
-      extraInfo: '',
-      injectionEnabled: true,
-    });
-    const ungrouped = await service.create({
-      title: 'General',
-      description: '',
-      content: 'General',
-      groupName: '',
-      extraInfo: '',
-      injectionEnabled: true,
-    });
-
-    await service.reorderGroups(null, ['Review', 'Build']);
-
-    expect(await service.listGroups()).toEqual([
-      { name: 'Review', parentName: null },
-      { name: 'Build', parentName: null },
-    ]);
-    expect(
-      (await service.list())
-        .slice()
-        .sort((left, right) => left.injectionOrder - right.injectionOrder)
-        .map((prompt) => prompt.id)
-    ).toEqual([review.id, build.id, ungrouped.id]);
-  });
-
-  it('reorders prompts only inside the selected group and syncs injection order', async () => {
-    const { PromptLibraryService } = await import('./prompt-library-service');
-    const service = new PromptLibraryService();
-    const first = await service.create({
-      title: 'First',
-      description: '',
-      content: 'First',
-      groupName: 'Review',
-      extraInfo: '',
-      injectionEnabled: true,
-    });
-    const second = await service.create({
-      title: 'Second',
-      description: '',
-      content: 'Second',
-      groupName: 'Review',
-      extraInfo: '',
-      injectionEnabled: true,
-    });
-
-    await service.reorderPrompts('Review', [first.id, second.id]);
-
-    const ordered = await service.list();
-    expect(ordered.map((prompt) => prompt.id)).toEqual([first.id, second.id]);
-    expect(ordered.map((prompt) => prompt.injectionOrder)).toEqual([0, 1]);
-  });
-
-  it('persists groups introduced by prompt creation and movement', async () => {
-    const { PromptLibraryService } = await import('./prompt-library-service');
-    const service = new PromptLibraryService();
-    const created = await service.create({
-      title: 'Build',
-      description: '',
-      content: 'Build the project.',
-      groupName: 'Development',
-      extraInfo: '',
-      injectionEnabled: false,
-    });
-
-    await service.update(created.id, { groupName: 'Review' });
-
-    expect(await service.listGroups()).toEqual([
-      { name: 'Development', parentName: null },
-      { name: 'Review', parentName: null },
-    ]);
-    expect(await service.list()).toEqual([
-      expect.objectContaining({ id: created.id, groupName: 'Review' }),
-    ]);
-  });
-
-  it('backfills groups from existing prompt rows during initialization', async () => {
-    sqlite
-      .prepare(
-        `INSERT INTO prompts
-          (id, title, content, group_name, created_at, updated_at)
-         VALUES ('existing', 'Existing prompt', 'Content', 'Imported', ?, ?)`
-      )
-      .run('2026-07-27T00:00:00.000Z', '2026-07-27T00:00:00.000Z');
-    const { PromptLibraryService } = await import('./prompt-library-service');
-    const service = new PromptLibraryService();
-
-    await service.initialize();
-
-    expect(await service.listGroups()).toEqual([{ name: 'Imported', parentName: null }]);
-  });
-
-  it('creates nested groups, moves them, and rejects cycles', async () => {
-    const { PromptLibraryService } = await import('./prompt-library-service');
-    const service = new PromptLibraryService();
-    await service.createGroup('Engineering');
-    await service.createGroup('Frontend', 'Engineering');
-    await service.createGroup('React', 'Frontend');
-
-    expect(await service.listGroups()).toEqual([
-      { name: 'Engineering', parentName: null },
-      { name: 'Frontend', parentName: 'Engineering' },
-      { name: 'React', parentName: 'Frontend' },
-    ]);
-    await service.renameGroup('Frontend', 'Web');
-    expect(await service.listGroups()).toEqual([
-      { name: 'Engineering', parentName: null },
-      { name: 'Web', parentName: 'Engineering' },
-      { name: 'React', parentName: 'Web' },
-    ]);
-    await expect(service.moveGroup('Engineering', 'React')).rejects.toThrow('cycle');
-
-    await service.moveGroup('React', null);
-    expect(await service.listGroups()).toEqual([
-      { name: 'Engineering', parentName: null },
-      { name: 'Web', parentName: 'Engineering' },
-      { name: 'React', parentName: null },
-    ]);
-  });
-
-  it('deletes a group, ungroups its prompts, and lifts direct children', async () => {
-    const { PromptLibraryService } = await import('./prompt-library-service');
-    const service = new PromptLibraryService();
-    await service.createGroup('Engineering');
-    await service.createGroup('Frontend', 'Engineering');
-    const prompt = await service.create({
-      title: 'Build',
-      description: '',
-      content: 'Build',
-      groupName: 'Engineering',
-      extraInfo: '',
-      injectionEnabled: true,
-    });
-
-    await service.removeGroup('Engineering');
-
-    expect(await service.listGroups()).toEqual([{ name: 'Frontend', parentName: null }]);
-    expect(await service.list()).toEqual([
-      expect.objectContaining({ id: prompt.id, groupName: '' }),
-    ]);
-  });
-
-  it('toggles a whole group without changing the visible prompt order', async () => {
-    const { PromptLibraryService } = await import('./prompt-library-service');
-    const service = new PromptLibraryService();
-    const biography = await service.create({
-      title: 'Biography',
-      description: '',
-      content: 'Biography',
-      groupName: 'Brand',
-      extraInfo: '',
-      injectionEnabled: true,
-    });
-    const assets = await service.create({
-      title: 'Assets',
-      description: '',
-      content: 'Assets',
-      groupName: 'Brand',
-      extraInfo: '',
-      injectionEnabled: false,
-    });
-    const language = await service.create({
-      title: 'Language',
-      description: '',
-      content: 'Language',
-      groupName: 'General',
-      extraInfo: '',
-      injectionEnabled: true,
-    });
-    state.emit.mockReset();
-
-    await service.setGroupInjectionEnabled(' Brand ', true);
-
-    const enabled = (await service.list()).filter((prompt) => prompt.injectionEnabled);
-    expect(enabled.map((prompt) => prompt.id)).toEqual(
-      expect.arrayContaining([biography.id, assets.id, language.id])
-    );
-    expect(
-      enabled
-        .slice()
-        .sort((left, right) => left.injectionOrder - right.injectionOrder)
-        .map((prompt) => prompt.id)
-    ).toEqual([assets.id, biography.id, language.id]);
-    expect(state.emit).toHaveBeenCalledTimes(1);
-
-    state.emit.mockReset();
-    await service.setGroupInjectionEnabled('Brand', false);
-    expect(
-      (await service.list())
-        .filter((prompt) => prompt.groupName === 'Brand')
-        .every((prompt) => !prompt.injectionEnabled)
-    ).toBe(true);
-    expect(state.emit).toHaveBeenCalledTimes(1);
   });
 });

@@ -16,7 +16,7 @@ function prompt(id: string, content: string, enabled: boolean, order: number): P
     title: id,
     description: '',
     content,
-    groupName: '',
+    tags: [],
     extraInfo: '',
     injectionEnabled: enabled,
     injectionOrder: order,

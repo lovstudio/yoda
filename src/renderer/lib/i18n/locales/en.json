@@ -1524,6 +1524,7 @@
     "systemPromptHintCodex": "Dynamically injected prompts are written to Codex developer_instructions; Codex's built-in instructions are not editable.",
     "promptPrinciplesLabel": "Dynamic prompts",
     "promptPrinciplesProjectHeading": "Project-only prompts",
+    "promptPrinciplesEnabledCount": "{{enabled}}/{{count}} enabled",
     "promptPrincipleUnnamed": "Untitled prompt",
     "instructionFilesLabel": "Instruction files",
     "instructionFilesHint": "The client's built-in system prompt is not editable. The global CLAUDE.md acts as your user-level system prompt; the project's CLAUDE.md / AGENTS.md are the project-level prompts. Click to expand, hover a row to open and edit.",
@@ -2792,9 +2793,29 @@
     },
     "collection": {
       "title": "Prompts",
-      "description": "Create reusable prompts, sort them into groups, sync from files, URLs, or Git, and optionally inject them when a session starts.",
+      "description": "Create reusable prompts; tags help you organize and find them, but never enter the AI context.",
       "all": "All prompts",
-      "allDescription": "Nest groups to any depth, then drag sibling groups or prompts within a group to reorder them."
+      "allDescription": "Every prompt is an independent entry. Drag to reorder, filter by tag, and toggle injection directly."
+    },
+    "reorder": "Drag {{name}} to reorder",
+    "actions": {
+      "more": "Manage {{name}}"
+    },
+    "filters": {
+      "search": "Search prompts",
+      "searchPlaceholder": "Search title, description, content, or tags",
+      "tags": "Tags",
+      "allTags": "All tags",
+      "status": "Status",
+      "all": "All",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "resultCount": "Showing {{count}}",
+      "tagEnabledCount": "{{enabled}}/{{count}} enabled",
+      "enableTag": "Enable all",
+      "disableTag": "Disable all",
+      "clear": "Clear filters",
+      "empty": "No prompts match these filters."
     },
     "new": "New prompt",
     "empty": "No saved prompts yet. Create one to reuse it when composing a task.",
@@ -2840,6 +2861,9 @@
     "form": {
       "title": "Title",
       "titlePlaceholder": "e.g. Bug triage",
+      "tags": "Tags",
+      "tagsPlaceholder": "e.g. development, review, release",
+      "tagsHint": "Separate multiple tags with commas. Tags are for organizing prompts only.",
       "description": "Description",
       "descriptionPlaceholder": "Optional short note about when to use this prompt",
       "group": "Group",
@@ -2927,6 +2951,8 @@
     },
     "source": {
       "manual": "Add manually",
+      "more": "Add from another source",
+      "import": "Import prompt",
       "file": "From file",
       "url": "From URL",
       "git": "From Git",

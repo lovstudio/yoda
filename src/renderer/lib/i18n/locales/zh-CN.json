@@ -1524,6 +1524,7 @@
     "systemPromptHintCodex": "启用动态注入的提示词会写入 Codex developer_instructions；Codex 内置指令不可编辑。",
     "promptPrinciplesLabel": "动态提示词",
     "promptPrinciplesProjectHeading": "项目专属提示词",
+    "promptPrinciplesEnabledCount": "已启用 {{enabled}}/{{count}}",
     "promptPrincipleUnnamed": "未命名提示词",
     "instructionFilesLabel": "指令文件",
     "instructionFilesHint": "客户端内置 system prompt 不可编辑。全局 CLAUDE.md 充当用户级 system prompt，项目 CLAUDE.md / AGENTS.md 是项目级 prompt。点击展开查看，悬停行尾可打开编辑。",
@@ -2792,9 +2793,29 @@
     },
     "collection": {
       "title": "提示词",
-      "description": "创建可复用提示词并按分组排序；可从文件、网址或 Git 同步，也可选择在会话启动时自动注入。",
+      "description": "创建可复用提示词；标签只用于整理和查找，不会进入 AI 上下文。",
       "all": "全部提示词",
-      "allDescription": "分组可多级嵌套；拖动同级分组或组内提示词即可排序。"
+      "allDescription": "每条提示词都是独立条目，可拖动排序、按标签筛选，并直接切换是否注入。"
+    },
+    "reorder": "拖动「{{name}}」调整顺序",
+    "actions": {
+      "more": "管理「{{name}}」"
+    },
+    "filters": {
+      "search": "搜索提示词",
+      "searchPlaceholder": "搜索标题、描述、内容或标签",
+      "tags": "标签",
+      "allTags": "全部标签",
+      "status": "状态",
+      "all": "全部",
+      "enabled": "已开启",
+      "disabled": "已关闭",
+      "resultCount": "显示 {{count}} 条",
+      "tagEnabledCount": "已开启 {{enabled}}/{{count}} 条",
+      "enableTag": "全部开启",
+      "disableTag": "全部关闭",
+      "clear": "清除筛选",
+      "empty": "没有符合条件的提示词。"
     },
     "new": "新建提示词",
     "empty": "还没有保存的提示词。新建一个，下次创建任务时即可复用。",
@@ -2840,6 +2861,9 @@
     "form": {
       "title": "标题",
       "titlePlaceholder": "例如：Bug 排查",
+      "tags": "标签",
+      "tagsPlaceholder": "例如：开发、审查、发布",
+      "tagsHint": "用逗号分隔多个标签；标签只供你整理提示词。",
       "description": "描述",
       "descriptionPlaceholder": "可选：简述何时使用这个提示词",
       "group": "分组",
@@ -2927,6 +2951,8 @@
     },
     "source": {
       "manual": "手动添加",
+      "more": "从其他来源添加",
+      "import": "导入提示词",
       "file": "从文件",
       "url": "从网址",
       "git": "从 Git",

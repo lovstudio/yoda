@@ -329,7 +329,7 @@ function CompactProjectPromptControls({
           {t('home.promptPrinciplesProjectHeading')}
         </span>
         <span className="text-[11px] tabular-nums text-foreground-passive">
-          {t('promptLibrary.groups.enabledCount', {
+          {t('home.promptPrinciplesEnabledCount', {
             enabled: enabledCount,
             count: items.length,
           })}
