@@ -59,7 +59,11 @@ const kanbanView = {
   MainPanel: deferredExport(kanbanModule, 'KanbanMainPanel'),
 };
 
-type LibraryViewParams = { children: ReactNode; section?: LibrarySection };
+type LibraryViewParams = {
+  children: ReactNode;
+  section?: LibrarySection;
+  createPrompt?: boolean;
+};
 const libraryModule = () => import('@renderer/features/library/library-view');
 const libraryView = {
   WrapView: deferredExport<LibraryViewParams>(libraryModule, 'LibraryViewWrapper'),
