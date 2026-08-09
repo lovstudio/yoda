@@ -76,7 +76,10 @@ import {
   canonicalizeMobileRelayPairing,
   parseMobileRelayPairingUrl,
 } from '../../../src/shared/mobile-relay';
-import { filterMobileSessionTranscript } from '../../../src/shared/mobile-session-display';
+import {
+  filterMobileSessionTranscript,
+  stripInternalAgentReplyMetadata,
+} from '../../../src/shared/mobile-session-display';
 import {
   formatMobileToolTranscriptContent,
   groupAdjacentMobileToolBlocks,
@@ -3734,7 +3737,7 @@ function SessionDetailScreen({
 
   const session = detail?.session;
   const taskProject = projects.find((project) => project.id === task.projectId);
-  const output = detail?.content.trimEnd() ?? '';
+  const output = stripInternalAgentReplyMetadata(detail?.content.trimEnd() ?? '');
   const latestTranscriptBlockId = detail?.transcript[detail.transcript.length - 1]?.id;
 
   useEffect(() => {
@@ -5483,7 +5486,10 @@ function MarkdownInline({
           return (
             <Text
               key={index}
+              accessibilityRole="link"
+              accessibilityLabel={token.text}
               style={[styles.inlineLink, inverted ? styles.inlineLinkInverted : null]}
+              onPress={() => openMarkdownLink(token.url)}
             >
               {token.text}
             </Text>
@@ -5493,6 +5499,16 @@ function MarkdownInline({
       })}
     </Text>
   );
+}
+
+function openMarkdownLink(value: string): void {
+  try {
+    const url = new URL(value.trim());
+    if (!['http:', 'https:', 'mailto:', 'tel:'].includes(url.protocol)) return;
+    void Linking.openURL(url.toString()).catch(() => undefined);
+  } catch {
+    // Ignore malformed model output instead of interrupting the transcript surface.
+  }
 }
 
 function CodeText({ language, value }: { language?: string; value: string }) {
@@ -7678,6 +7694,7 @@ const styles = StyleSheet.create({
   inlineLink: {
     color: COLORS.blue,
     fontWeight: '700',
+    textDecorationLine: 'underline',
   },
   inlineLinkInverted: {
     color: '#D8E6FF',
