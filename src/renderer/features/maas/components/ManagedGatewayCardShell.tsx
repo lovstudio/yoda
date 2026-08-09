@@ -1,4 +1,4 @@
-import { Loader2, Star } from 'lucide-react';
+import { CircleAlert, Loader2, Star } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
@@ -18,12 +18,13 @@ function formatStarCount(starCount: number): string {
 
 function ManagedGatewayStarCount({ starCount }: { starCount?: number | null }) {
   const { t } = useTranslation();
-  if (starCount === null) return null;
-
   const isLoading = starCount === undefined;
+  const isUnavailable = starCount === null;
   const label = isLoading
     ? t('maas.managedGateways.githubStarsLoading')
-    : t('maas.managedGateways.githubStars', { count: formatStarCount(starCount) });
+    : isUnavailable
+      ? t('maas.managedGateways.githubStarsUnavailable')
+      : t('maas.managedGateways.githubStars', { count: formatStarCount(starCount) });
 
   return (
     <Tooltip>
@@ -37,10 +38,12 @@ function ManagedGatewayStarCount({ starCount }: { starCount?: number | null }) {
           >
             {isLoading ? (
               <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+            ) : isUnavailable ? (
+              <CircleAlert className="size-3 text-amber-500" aria-hidden="true" />
             ) : (
               <Star className="size-3 fill-amber-400 text-amber-500" aria-hidden="true" />
             )}
-            <span>{isLoading ? '…' : formatStarCount(starCount)}</span>
+            <span>{isLoading ? '…' : isUnavailable ? '—' : formatStarCount(starCount)}</span>
           </span>
         }
       />
