@@ -2,8 +2,10 @@ import { AlertTriangle, FolderOpen } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { basenameFromAnyPath } from '@shared/path-name';
 import { MAX_PROJECT_ALIAS_LENGTH, projectDisplayName, type Project } from '@shared/projects';
 import { RemoteDirectorySelector } from '@renderer/features/projects/components/add-project-modal/remote-directory-selector';
+import { replaceProjectPathLeaf } from '@renderer/features/projects/project-path';
 import {
   getProjectManagerStore,
   getProjectStore,
@@ -39,7 +41,7 @@ export const MoveProjectPathModal = observer(function MoveProjectPathModal({
   const data = project?.data;
   const currentName = project?.displayName ?? '';
   const currentPath = data?.path ?? '';
-  const shouldSyncPathWithName = useRef(pathLeaf(currentPath) === currentName);
+  const shouldSyncPathWithName = useRef(basenameFromAnyPath(currentPath) === currentName);
 
   const [name, setName] = useState(currentName);
   const [path, setPath] = useState(currentPath);
@@ -67,7 +69,7 @@ export const MoveProjectPathModal = observer(function MoveProjectPathModal({
     setError(null);
     setConflictProject(null);
     if (shouldSyncPathWithName.current) {
-      setPath((current) => replacePathLeaf(current, nextName.trim()));
+      setPath((current) => replaceProjectPathLeaf(current, nextName.trim()));
     }
   };
 
@@ -228,17 +230,3 @@ export const MoveProjectPathModal = observer(function MoveProjectPathModal({
     </>
   );
 });
-
-function pathLeaf(path: string): string {
-  const normalized = path.replace(/[\\/]+$/, '');
-  const slashIndex = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
-  return slashIndex >= 0 ? normalized.slice(slashIndex + 1) : normalized;
-}
-
-function replacePathLeaf(path: string, leaf: string): string {
-  if (!leaf) return path;
-  const normalized = path.replace(/[\\/]+$/, '');
-  const slashIndex = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
-  if (slashIndex < 0) return leaf;
-  return `${normalized.slice(0, slashIndex + 1)}${leaf}`;
-}

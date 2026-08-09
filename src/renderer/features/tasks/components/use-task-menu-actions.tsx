@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { buildTaskDeepLink } from '@shared/deep-links';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
+import { openNewTaskFromCurrentContext } from '@renderer/app/open-new-task';
 import {
   getProjectStore,
   getRepositoryStore,
@@ -42,6 +43,7 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
   const showCreateSubtask = useShowModal('newSubtaskModal');
   const showSetParent = useShowModal('setParentTaskModal');
   const showCreateParent = useShowModal('createParentTaskModal');
+  const showCreateProject = useShowModal('expressCreateProjectModal');
   const moveTaskToProject = useMoveTaskToProject();
   const { archiveTask } = useArchiveTask(projectId);
 
@@ -178,12 +180,7 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
         : undefined,
     onCreateSubtaskAndRun:
       projectId !== INTERNAL_PROJECT_ID && task.state !== 'unregistered'
-        ? () =>
-            showCreateSubtask({
-              projectId,
-              parentTaskId: taskId,
-              initialAction: 'create-and-run',
-            })
+        ? () => void openNewTaskFromCurrentContext(projectId, taskId)
         : undefined,
     onSetParent:
       projectId !== INTERNAL_PROJECT_ID && task.state !== 'unregistered'
@@ -202,6 +199,13 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
         : undefined,
     onMoveToProject: canMoveToProject
       ? (targetProjectId: string) => moveTaskToProject(projectId, taskId, targetProjectId)
+      : undefined,
+    onCreateProject: canMoveToProject
+      ? (defaultName?: string) =>
+          showCreateProject({
+            defaultName,
+            onSuccess: (targetProjectId) => moveTaskToProject(projectId, taskId, targetProjectId),
+          })
       : undefined,
     // Compare-group parent: route to it as primary and tile all its children
     // (the alternative candidates) side by side.

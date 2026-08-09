@@ -10,20 +10,10 @@ import { promptSourceService } from './prompt-source-service';
 export const promptLibraryController = createRPCController({
   list: () => promptLibraryService.list(),
   listVersions: (id: string) => promptLibraryService.listVersions(id),
-  listGroups: () => promptLibraryService.listGroups(),
-  createGroup: (name: string, parentName?: string | null) =>
-    promptLibraryService.createGroup(name, parentName),
-  renameGroup: (currentName: string, nextName: string) =>
-    promptLibraryService.renameGroup(currentName, nextName),
-  moveGroup: (name: string, parentName: string | null) =>
-    promptLibraryService.moveGroup(name, parentName),
-  deleteGroup: (name: string) => promptLibraryService.removeGroup(name),
-  reorderGroups: (parentName: string | null, names: string[]) =>
-    promptLibraryService.reorderGroups(parentName, names),
-  reorderPrompts: (groupName: string, ids: string[]) =>
-    promptLibraryService.reorderPrompts(groupName, ids),
-  setGroupInjectionEnabled: (groupName: string, enabled: boolean) =>
-    promptLibraryService.setGroupInjectionEnabled(groupName, enabled),
+  reorderPrompts: (ids: string[]) => promptLibraryService.reorderPrompts(ids),
+  setTagInjectionEnabled: (tag: string, enabled: boolean) =>
+    promptLibraryService.setTagInjectionEnabled(tag, enabled),
+  removeTag: (tag: string) => promptLibraryService.removeTag(tag),
   create: async (input: PromptCreateInput) => {
     const prompt = await promptLibraryService.create(input);
     await promptSourceService.reconcile();

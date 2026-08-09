@@ -1,10 +1,13 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { userEvent } from 'vitest/browser';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   toggleTaskCollapsed: vi.fn(),
+  getTaskDeliverySummaries: vi.fn(),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -36,11 +39,28 @@ vi.mock('@renderer/features/tasks/components/task-context-menu', () => ({
   TaskActionsMenu: () => null,
 }));
 
+vi.mock('@renderer/lib/ipc', () => ({
+  rpc: {
+    conversations: {
+      getTaskDeliverySummaries: mocks.getTaskDeliverySummaries,
+    },
+  },
+  events: {
+    on: vi.fn(),
+    off: vi.fn(),
+    emit: vi.fn(),
+  },
+}));
+
+vi.mock('@renderer/lib/ui/markdown-renderer', () => ({
+  MarkdownRenderer: ({ content }: { content: string }) =>
+    createElement('div', { 'data-testid': 'task-hover-summary' }, content),
+}));
+
 vi.mock('@renderer/features/tasks/components/use-task-menu-actions', () => ({
   useTaskMenuActions: () => ({
     onRename: vi.fn(),
     onArchiveQuick: vi.fn(),
-    onCreateSubtask: vi.fn(),
   }),
 }));
 
@@ -53,10 +73,13 @@ vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
   getTaskStore: () => ({
     state: 'unregistered',
     data: {
+      id: 'task-1',
       name: 'Long-term task',
+      status: 'todo',
       isLongTerm: true,
       needsReview: false,
     },
+    conversationStats: {},
   }),
   taskSessionStatusSummary: () => ({ primaryStatus: null }),
 }));
@@ -98,10 +121,14 @@ vi.mock('@renderer/features/sidebar/use-sidebar-hover-intent', () => ({
 describe('SidebarTaskItem long-term marker', () => {
   let host: HTMLDivElement;
   let root: Root;
+  let queryClient: QueryClient;
 
   beforeEach(() => {
     mocks.navigate.mockClear();
     mocks.toggleTaskCollapsed.mockClear();
+    mocks.getTaskDeliverySummaries.mockReset();
+    mocks.getTaskDeliverySummaries.mockResolvedValue([]);
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -117,11 +144,15 @@ describe('SidebarTaskItem long-term marker', () => {
 
     await act(async () => {
       root.render(
-        createElement(SidebarTaskItem, {
-          projectId: 'project-1',
-          taskId: 'task-1',
-          childCount: 1,
-        })
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SidebarTaskItem, {
+            projectId: 'project-1',
+            taskId: 'task-1',
+            childCount: 1,
+          })
+        )
       );
     });
 
@@ -139,5 +170,71 @@ describe('SidebarTaskItem long-term marker', () => {
 
     expect(mocks.toggleTaskCollapsed).toHaveBeenCalledWith('task-1');
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('opens the preview only after hovering the archive action', async () => {
+    mocks.getTaskDeliverySummaries.mockResolvedValue([
+      {
+        conversationId: 'conversation-1',
+        taskId: 'task-1',
+        taskName: 'Long-term task',
+        conversationTitle: 'Implement hover preview',
+        text: '已经完成侧栏任务悬浮预览。',
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+
+    const { SidebarTaskItem } = await import('@renderer/features/sidebar/task-item');
+
+    await act(async () => {
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SidebarTaskItem, {
+            projectId: 'project-1',
+            taskId: 'task-1',
+          })
+        )
+      );
+    });
+
+    const row = host.querySelector<HTMLElement>('[data-sidebar-task-id="task-1"]');
+    expect(row).not.toBeNull();
+
+    await act(async () => {
+      await userEvent.hover(row!);
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    });
+
+    expect(document.body.querySelector('[data-sidebar-task-hover-preview]')).toBeNull();
+
+    const archiveButton = host.querySelector<HTMLButtonElement>(
+      '[data-sidebar-task-hover-trigger="true"]'
+    );
+    expect(archiveButton).not.toBeNull();
+
+    await vi.waitFor(() => {
+      expect(archiveButton?.offsetParent).not.toBeNull();
+    });
+
+    await act(async () => {
+      await userEvent.hover(archiveButton!);
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    });
+
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('[data-sidebar-task-hover-preview]')).not.toBeNull();
+    });
+    expect(document.body.textContent).toContain('已经完成侧栏任务悬浮预览。');
+
+    await act(async () => {
+      await userEvent.unhover(archiveButton!);
+      await new Promise((resolve) => setTimeout(resolve, 260));
+    });
+
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('[data-sidebar-task-hover-preview]')).toBeNull();
+    });
   });
 });

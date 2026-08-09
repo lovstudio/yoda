@@ -174,6 +174,7 @@ export function parseMobileRelayHostFrame(value: unknown): MobileRelayHostFrame 
 const MOBILE_RELAY_ALLOWED_PATHS = [
   /^\/v1\/snapshot$/,
   /^\/v1\/profile$/,
+  /^\/v1\/configuration$/,
   /^\/v1\/skills$/,
   /^\/v1\/demands$/,
   /^\/v1\/attachments(?:\/[0-9a-f-]+\/(?:chunks|complete|discard))?$/i,
@@ -182,7 +183,8 @@ const MOBILE_RELAY_ALLOWED_PATHS = [
   /^\/v1\/xhs\/jobs\/[^/?]+\/confirm$/,
   /^\/v1\/projects\/[^/?]+\/skills$/,
   /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions$/,
-  /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions\/[^/?]+(?:\/input|\/events|\/skills)?$/,
+  /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions\/[^/?]+(?:\/input|\/events|\/skills|\/config)?$/,
+  /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/actions$/,
 ];
 
 export function isAllowedMobileRelayRequest(method: string, path: string): boolean {
@@ -192,6 +194,12 @@ export function isAllowedMobileRelayRequest(method: string, path: string): boole
   if (path === '/v1/xhs/jobs' && normalizedMethod !== 'POST') return false;
   if (/^\/v1\/xhs\/jobs\/[^/?]+$/.test(path) && normalizedMethod !== 'GET') return false;
   if (/^\/v1\/xhs\/jobs\/[^/?]+\/confirm$/.test(path) && normalizedMethod !== 'POST') return false;
+  if (
+    /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/actions$/.test(path) &&
+    normalizedMethod !== 'POST'
+  ) {
+    return false;
+  }
   return MOBILE_RELAY_ALLOWED_PATHS.some((pattern) => pattern.test(path));
 }
 

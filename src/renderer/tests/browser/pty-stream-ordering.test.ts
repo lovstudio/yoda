@@ -207,7 +207,7 @@ describe('FrontendPty stream ordering', () => {
     pty = null;
   });
 
-  it('keeps a completed subscription parsing and acknowledging while off-screen', async () => {
+  it('suspends xterm parsing while off-screen and resumes the queued stream on remount', async () => {
     ipcMocks.subscribe.mockResolvedValue({
       success: true,
       data: { buffer: '', generation: 1, sequence: 0 },
@@ -219,6 +219,12 @@ describe('FrontendPty stream ordering', () => {
     pty.unmount(lease);
     ipcMocks.emitData(output(1, 'OFFSCREEN'));
 
+    await Promise.resolve();
+    expect(pty.terminal.buffer.active.getLine(0)?.translateToString(true) ?? '').toBe('');
+    expect(ipcMocks.acknowledgeOutput).not.toHaveBeenCalled();
+    expect(ipcMocks.unsubscribe).not.toHaveBeenCalled();
+
+    const remountLease = pty.mount(mountTarget!, { cols: 120, rows: 32 });
     await vi.waitFor(() => {
       expect(pty?.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe('OFFSCREEN');
       expect(ipcMocks.acknowledgeOutput).toHaveBeenCalledWith(
@@ -228,7 +234,55 @@ describe('FrontendPty stream ordering', () => {
         1
       );
     });
-    expect(ipcMocks.unsubscribe).not.toHaveBeenCalled();
+    pty.unmount(remountLease);
+  });
+
+  it('replays suspended PTY batches as one hidden ordered frame', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: { buffer: '', generation: 1, sequence: 0 },
+    });
+    pty = new FrontendPty('suspended-frame-session');
+    const lease = mountAndOpenFlushGate(pty);
+    await pty.connect();
+    pty.unmount(lease);
+
+    const frameParts = [
+      '\u001b[2J\u001b[HWaiting for ',
+      '\u001b[?25hbackground terminal',
+      '\r\n└ pnpm test',
+    ];
+    frameParts.forEach((data, index) => ipcMocks.emitData(output(index + 1, data)));
+
+    const writes: Array<{ data: string; callback?: () => void }> = [];
+    const writeSpy = vi.spyOn(pty.terminal, 'write').mockImplementation((data, callback) => {
+      writes.push({
+        data: typeof data === 'string' ? data : new TextDecoder().decode(data),
+        callback,
+      });
+    });
+
+    mountTarget = document.createElement('div');
+    document.body.appendChild(mountTarget);
+    pty.mount(mountTarget, { cols: 120, rows: 32 });
+
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.data).toBe(frameParts.join(''));
+    expect(ipcMocks.acknowledgeOutput).not.toHaveBeenCalled();
+
+    writes[0]?.callback?.();
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+    expect(writes).toHaveLength(2);
+    expect(writes[1]?.data).toBe('');
+
+    writes[1]?.callback?.();
+    await vi.waitFor(() => {
+      expect(pty?.ownedContainer.style.visibility).toBe('');
+      expect(ipcMocks.acknowledgeOutput).toHaveBeenCalledTimes(3);
+    });
+    expect(ipcMocks.acknowledgeOutput.mock.calls.map((call) => call[3])).toEqual([1, 2, 3]);
+    writeSpy.mockRestore();
   });
 
   it('chunks a 25 MiB snapshot and large live batch without advancing ACKs early', async () => {

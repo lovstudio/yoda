@@ -36,9 +36,12 @@ export const ComparisonWindow = observer(function ComparisonWindow({
   // SelfContainedTaskPane can resolve its task store and provision it.
   useEffect(() => {
     const projectIds = [...new Set(target.panes.map((pane) => pane.projectId))];
-    for (const id of projectIds) {
-      void appState.projects.mountProject(id).catch(() => {});
-    }
+    void Promise.all(
+      projectIds.map(async (id) => {
+        const loaded = await appState.projects.ensureProjectLoaded(id);
+        if (loaded) await appState.projects.mountProject(id);
+      })
+    ).catch(() => {});
   }, [target]);
 
   return (

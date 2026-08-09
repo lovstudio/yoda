@@ -14,6 +14,7 @@ import { buildProjectDeepLink } from '@shared/deep-links';
 import type { QuickAction } from '@shared/project-settings';
 import { ensureUniqueTaskSlug } from '@shared/task-name';
 import { openNewTask, resolveNewTaskOpenMode } from '@renderer/app/open-new-task';
+import { getProjectPathForNameRename } from '@renderer/features/projects/project-path';
 import {
   getRunningProjectQuickActionTarget,
   openProjectQuickActionTarget,
@@ -82,6 +83,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   const showRenameProject = useShowModal('renameProjectModal');
   const showMoveProjectPath = useShowModal('moveProjectPathModal');
   const showConfirmRemoveProject = useShowModal('confirmActionModal');
+  const showConfirmRenamePath = useShowModal('confirmActionModal');
   const [isMenuOpen, setMenuOpen] = useState(false);
 
   const project = getProjectStore(projectId);
@@ -97,6 +99,9 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
 
   const handleOpenDetails = useCallback(() => {
     prefetchRepository();
+    getProjectManagerStore()
+      .mountProject(projectId)
+      .catch(() => {});
     navigate('project', { projectId });
   }, [navigate, prefetchRepository, projectId]);
 
@@ -114,7 +119,13 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   }, [navigate, prefetchRepository, projectId]);
 
   const handleToggleExpanded = useCallback(() => {
+    const willExpand = !sidebarStore.expandedProjectIds.has(projectId);
     sidebarStore.toggleProjectExpanded(projectId);
+    if (willExpand) {
+      getProjectManagerStore()
+        .mountProject(projectId)
+        .catch(() => {});
+    }
   }, [projectId]);
 
   const handleRowKeyDown = useCallback(
@@ -304,6 +315,42 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     await createTaskAndRun();
   }, [createTaskAndRun, expressMode, projectId]);
 
+  const handleRename = useCallback(() => {
+    const currentProject = getProjectStore(projectId);
+    if (!currentProject?.data || currentProject.state === 'unregistered') return;
+
+    const currentName = currentProject.displayName;
+    const currentPath = currentProject.data.path;
+    showRenameProject({
+      projectId,
+      onSuccess: ({ alias }) => {
+        if (!alias) return;
+        const nextPath = getProjectPathForNameRename(currentName, currentPath, alias);
+        if (!nextPath) return;
+
+        showConfirmRenamePath({
+          title: t('sidebar.renameProject.pathRenameTitle'),
+          description: t('sidebar.renameProject.pathRenameDescription', {
+            name: alias,
+          }),
+          confirmLabel: t('sidebar.renameProject.pathRenameConfirm'),
+          variant: 'default',
+          onSuccess: () => {
+            void getProjectManagerStore()
+              .moveProjectPath(projectId, { name: alias, path: nextPath })
+              .catch((error: unknown) => {
+                toast({
+                  title: t('sidebar.moveProjectPath.failed'),
+                  description: error instanceof Error ? error.message : String(error),
+                  variant: 'destructive',
+                });
+              });
+          },
+        });
+      },
+    });
+  }, [projectId, showConfirmRenamePath, showRenameProject, t]);
+
   if (!project) return null;
 
   const sshConnectionId = project.data?.type === 'ssh' ? project.data.connectionId : null;
@@ -430,7 +477,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
         ? (action: QuickAction) => handleNavigateQuickAction(action)
         : undefined,
     onMenuOpen: projectMenuDataIntent.runNow,
-    onRename: project.state === 'unregistered' ? undefined : () => showRenameProject({ projectId }),
+    onRename: project.state === 'unregistered' ? undefined : handleRename,
     onMovePath:
       project.state === 'unregistered' ? undefined : () => showMoveProjectPath({ projectId }),
     canArchiveProject: project.state !== 'unregistered',

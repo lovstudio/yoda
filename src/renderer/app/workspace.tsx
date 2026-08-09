@@ -1,7 +1,10 @@
+import { FilePlus2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import { AppSidePane } from '@renderer/app/app-side-pane';
 import { moveDraggedTabToStrip } from '@renderer/app/open-task-target';
 import { useTabDropZone } from '@renderer/app/tab-drag';
+import { useExternalFileDrop } from '@renderer/app/use-external-file-drop';
 import { WorkspaceNotificationEvents } from '@renderer/app/workspace-notification-events';
 import { WorkspaceRuntimeBar } from '@renderer/app/workspace-runtime-bar';
 import { WorkspaceTerminalPanel } from '@renderer/app/workspace-terminal-panel';
@@ -122,15 +125,30 @@ const WorkspaceViewContent = observer(function WorkspaceViewContent({
       (payload.kind === 'task-entity' && payload.from !== 'strip') || payload.kind === 'shell-pin',
     onDrop: moveDraggedTabToStrip,
   });
+  const { t } = useTranslation();
+  const externalFileDrop = useExternalFileDrop();
 
   return (
     <div
       ref={dropRef}
       className={cn(
-        'h-full min-h-0 overflow-hidden',
+        'relative h-full min-h-0 overflow-hidden',
         isOver && 'ring-2 ring-inset ring-border-primary'
       )}
+      onDragEnter={externalFileDrop.onDragEnter}
+      onDragLeave={externalFileDrop.onDragLeave}
+      onDragOver={externalFileDrop.onDragOver}
+      onDrop={externalFileDrop.onDrop}
     >
+      {externalFileDrop.isDragOver ? (
+        <div className="pointer-events-none absolute inset-3 z-30 flex items-center justify-center rounded-lg border border-dashed border-primary/70 bg-background/80 shadow-lg backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <FilePlus2 className="size-7 text-primary" />
+            <p className="text-sm font-medium text-foreground">{t('externalFileDrop.title')}</p>
+            <p className="text-xs text-foreground-muted">{t('externalFileDrop.description')}</p>
+          </div>
+        </div>
+      ) : null}
       <WorkspaceContentLayout
         titlebarSlot={<TitlebarSlot />}
         mainPanel={isTiled ? <TiledTaskGrid primary={<MainPanel />} /> : <MainPanel />}

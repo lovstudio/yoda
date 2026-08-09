@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LocalProject } from '@shared/projects';
+import { createUnmountedProject } from './project';
 import { ProjectManagerStore } from './project-manager';
 
 const mocks = vi.hoisted(() => ({
+  archiveProject: vi.fn(),
+  deleteProject: vi.fn(),
   ensureProjectExpanded: vi.fn(),
+  getProjects: vi.fn(),
   getProject: vi.fn(),
+  openProject: vi.fn(),
   prependProjectOrder: vi.fn(),
 }));
 
@@ -14,7 +19,11 @@ vi.mock('@renderer/lib/ipc', () => ({
   },
   rpc: {
     projects: {
+      archiveProject: mocks.archiveProject,
+      deleteProject: mocks.deleteProject,
+      getProjects: mocks.getProjects,
       getProject: mocks.getProject,
+      openProject: mocks.openProject,
     },
   },
 }));
@@ -29,10 +38,16 @@ vi.mock('@renderer/lib/stores/app-state', () => ({
       ensureProjectExpanded: mocks.ensureProjectExpanded,
       prependProjectOrder: mocks.prependProjectOrder,
       projectOrder: [],
+      pinnedProjectIds: new Set<string>(),
+      projectActivityById: {},
       setProjectOrder: vi.fn(),
+    },
+    agentRuntime: {
+      forgetProject: vi.fn(),
     },
     workspaces: {
       activeWorkspace: null,
+      matchesActive: vi.fn(() => true),
     },
   },
 }));
@@ -71,6 +86,30 @@ describe('ProjectManagerStore external project reconciliation', () => {
     expect(mocks.ensureProjectExpanded).toHaveBeenCalledWith(project.id);
   });
 
+  it('loads project metadata without mounting every project', async () => {
+    const manager = new ProjectManagerStore();
+    const project = makeProject();
+    mocks.getProjects.mockResolvedValue([project]);
+
+    await manager.load();
+
+    expect(manager.projects.get(project.id)?.phase).toBe('idle');
+    expect(mocks.openProject).not.toHaveBeenCalled();
+  });
+
+  it('mounts only a bounded initial working set', async () => {
+    const manager = new ProjectManagerStore();
+    for (let index = 0; index < 12; index += 1) {
+      const project = makeProject(`project-${index}`);
+      manager.projects.set(project.id, createUnmountedProject(project, 'idle'));
+    }
+    const mountProject = vi.spyOn(manager, 'mountProject').mockResolvedValue(undefined);
+
+    await manager.mountInitialProjects();
+
+    expect(mountProject).toHaveBeenCalledTimes(8);
+  });
+
   it('uses project data already returned by path inspection', async () => {
     const manager = new ProjectManagerStore();
     const project = makeProject();
@@ -96,10 +135,46 @@ describe('ProjectManagerStore external project reconciliation', () => {
   });
 });
 
-function makeProject(): LocalProject {
+describe('ProjectManagerStore mounted project cleanup', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('disposes mounted resources after a project is deleted', async () => {
+    const manager = new ProjectManagerStore();
+    const dispose = vi.fn();
+    const store = {
+      mountedProject: { dispose },
+    } as never;
+    manager.projects.set('project-1', store);
+    mocks.deleteProject.mockResolvedValue(undefined);
+
+    await manager.deleteProject('project-1');
+
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(manager.projects.has('project-1')).toBe(false);
+  });
+
+  it('keeps mounted resources alive when archiving fails so rollback remains usable', async () => {
+    const manager = new ProjectManagerStore();
+    const dispose = vi.fn();
+    const store = {
+      mountedProject: { dispose },
+    } as never;
+    manager.projects.set('project-1', store);
+    mocks.archiveProject.mockRejectedValue(new Error('archive failed'));
+
+    await expect(manager.archiveProject('project-1')).rejects.toThrow('archive failed');
+
+    expect(dispose).not.toHaveBeenCalled();
+    expect(manager.projects.get('project-1')).toBeDefined();
+  });
+});
+
+function makeProject(id = 'external-project'): LocalProject {
   return {
     type: 'local',
-    id: 'external-project',
+    id,
     name: 'External project',
     alias: null,
     path: '/tmp/external-project',

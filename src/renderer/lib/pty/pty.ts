@@ -100,8 +100,11 @@ export function buildTheme(theme?: SessionTheme): ITerminalOptions['theme'] {
  * The terminal is created synchronously during construction and opened into
  * an off-screen container. After mount/measurement opens the flush gate,
  * connect() subscribes to the main-process ring buffer and live IPC events.
- * Successful subscriptions survive later unmounts so off-screen sessions keep
- * parsing and acknowledging output without retaining a GPU renderer.
+ * Successful subscriptions survive later unmounts so the main-process flow
+ * control and sequence watermark stay intact. While off-screen, xterm parsing
+ * is suspended; the bounded backend watermark naturally pauses noisy sessions
+ * until the terminal is visible again. On remount, queued output is replayed as
+ * one ordered frame so intermediate TUI cursor positions stay hidden.
  *
  * DOM management is handled via mount() / unmount():
  *  - mount()   → appends ownedContainer to the visible mount target
@@ -159,9 +162,18 @@ export class FrontendPty {
     data: string;
     acknowledgement?: { generation: number; sequence: number };
   }> = [];
+  /** PTY batches received while this terminal is off-screen. */
+  private suspendedWrites: Array<{
+    data: string;
+    acknowledgement?: { generation: number; sequence: number };
+  }> = [];
   private hasFlushed = false;
   private terminalWriteQueue: TerminalWriteQueueItem[] = [];
   private terminalWriteActive = false;
+  /** Prevent hidden sessions from spending renderer time parsing every batch. */
+  private renderingSuspended = false;
+  /** Token protecting a newer mount from an older replay completion callback. */
+  private replayToken = 0;
   private outputGeneration = 0;
   private lastOutputSequence = 0;
   private acknowledgedGeneration = 0;
@@ -485,6 +497,10 @@ export class FrontendPty {
     acknowledgement?: { generation: number; sequence: number }
   ): void {
     if (this.hasFlushed) {
+      if (this.renderingSuspended) {
+        this.suspendedWrites.push({ data, acknowledgement });
+        return;
+      }
       this.writeTerminalData(data, () => {
         if (acknowledgement) {
           this.acknowledgeOutput(acknowledgement.generation, acknowledgement.sequence);
@@ -502,13 +518,25 @@ export class FrontendPty {
   }
 
   private pumpTerminalWriteQueue(): void {
-    if (this.isDisposed || this.terminalWriteActive) return;
+    if (this.isDisposed || this.renderingSuspended || this.terminalWriteActive) return;
     const write = this.terminalWriteQueue[0];
     if (!write) return;
     if (write.offset >= write.data.length) {
       this.terminalWriteQueue.shift();
-      write.onWritten?.();
-      this.pumpTerminalWriteQueue();
+      // Empty writes are used as ordered completion sentinels when an
+      // off-screen replay must stay hidden until xterm has drained its parser.
+      if (write.data.length === 0) {
+        this.terminalWriteActive = true;
+        this.terminal.write('', () => {
+          if (this.isDisposed) return;
+          this.terminalWriteActive = false;
+          write.onWritten?.();
+          this.pumpTerminalWriteQueue();
+        });
+      } else {
+        write.onWritten?.();
+        this.pumpTerminalWriteQueue();
+      }
       return;
     }
 
@@ -572,6 +600,38 @@ export class FrontendPty {
   }
 
   /**
+   * Resume an off-screen session as one ordered replay. Keeping the terminal
+   * hidden until the sentinel write completes prevents a TUI's intermediate
+   * cursor positions from flashing through while the backlog is parsed.
+   */
+  private flushSuspendedWrites(token: number): void {
+    const writes = this.suspendedWrites;
+    this.suspendedWrites = [];
+
+    if (writes.length > 0) {
+      const data = writes.map((write) => write.data).join('');
+      this.writeTerminalData(data, () => {
+        for (const write of writes) {
+          if (write.acknowledgement) {
+            this.acknowledgeOutput(
+              write.acknowledgement.generation,
+              write.acknowledgement.sequence
+            );
+          }
+        }
+      });
+    }
+
+    // A zero-length queue item acts as a completion sentinel even when an
+    // earlier visible write was still active when the terminal was unmounted.
+    this.writeTerminalData('', () => {
+      if (token !== this.replayToken || !this.isMounted || this.renderingSuspended) return;
+      this.ownedContainer.style.visibility = '';
+      this.redrawViewportFromBuffer();
+    });
+  }
+
+  /**
    * Commit rows and columns as one canonical grid transition. The DOM renderer
    * paints directly from xterm's buffer, so there is no retained GPU frame to
    * freeze, stretch, or reveal later. A full refresh makes the new grid the only
@@ -618,6 +678,12 @@ export class FrontendPty {
    */
   mount(mountTarget: HTMLElement, targetDims?: { cols: number; rows: number }): number {
     const mountLease = ++this.mountGeneration;
+    this.renderingSuspended = false;
+    const hasReplayBacklog = this.suspendedWrites.length > 0 || this.terminalWriteQueue.length > 0;
+    const replayToken = ++this.replayToken;
+    if (hasReplayBacklog) {
+      this.ownedContainer.style.visibility = 'hidden';
+    }
     if (
       targetDims &&
       (this.terminal.cols !== targetDims.cols || this.terminal.rows !== targetDims.rows)
@@ -626,6 +692,9 @@ export class FrontendPty {
     }
     mountTarget.appendChild(this.ownedContainer);
     this.isMounted = true;
+    if (hasReplayBacklog) {
+      this.flushSuspendedWrites(replayToken);
+    }
     // Force a clean renderer repaint after reparenting in the DOM.
     const t = this.terminal;
     const savedViewportY = this.savedViewportY;
@@ -656,6 +725,9 @@ export class FrontendPty {
   unmount(mountLease?: number): void {
     if (mountLease !== undefined && mountLease !== this.mountGeneration) return;
     this.mountGeneration += 1;
+    this.replayToken += 1;
+    this.ownedContainer.style.visibility = '';
+    this.renderingSuspended = true;
     this.isMounted = false;
     this.cancelPendingConnect();
     ensureXtermHost().appendChild(this.ownedContainer);
@@ -678,6 +750,9 @@ export class FrontendPty {
     this.mountGeneration += 1;
     FrontendPty.all.delete(this);
     this.isMounted = false;
+    this.replayToken += 1;
+    this.renderingSuspended = true;
+    this.suspendedWrites = [];
     this.terminalWriteQueue = [];
     this.terminalWriteActive = false;
     this.offData?.();

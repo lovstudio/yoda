@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getDefaultPermissionModeId,
   getRuntimeAccountProfile,
+  getRuntimePermissionModes,
   getUninstallCommandForRuntime,
   getUpdateCommandForRuntime,
   getVersionHistoryUrlForRuntime,
   isValidRuntimeId,
+  resolveRuntimePermissionModeId,
   RUNTIME_IDS,
   RUNTIMES,
 } from './runtime-registry';
@@ -63,5 +66,49 @@ describe('runtime subscription usage pages', () => {
 
   it('leaves the usage page unset when no official destination is registered', () => {
     expect(getRuntimeAccountProfile('opencode').officialSubscription.usageUrl).toBeUndefined();
+  });
+});
+
+describe('runtime permission defaults', () => {
+  it('uses Codex official approval and sandbox flags', () => {
+    const modes = new Map(getRuntimePermissionModes('codex').map((mode) => [mode.id, mode]));
+
+    expect(modes.get('default')?.args).toEqual([
+      '--sandbox',
+      'workspace-write',
+      '--ask-for-approval',
+      'on-request',
+    ]);
+    expect(modes.get('plan')?.args).toEqual([
+      '--sandbox',
+      'read-only',
+      '--ask-for-approval',
+      'never',
+    ]);
+    expect(modes.get('full-auto')?.args).toEqual(['--approve-for-me']);
+    expect(modes.get('bypass')?.args).toEqual(['--dangerously-bypass-approvals-and-sandbox']);
+  });
+
+  it('uses the persisted runtime selection for new sessions', () => {
+    expect(
+      resolveRuntimePermissionModeId({
+        runtimeId: 'codex',
+        selections: { codex: 'bypass' },
+      })
+    ).toBe('bypass');
+  });
+
+  it('maps the legacy auto-approve setting to the danger mode', () => {
+    expect(
+      resolveRuntimePermissionModeId({
+        runtimeId: 'codex',
+        legacyAutoApprove: { codex: true },
+      })
+    ).toBe('bypass');
+  });
+
+  it('keeps the runtime registry default when no setting exists', () => {
+    expect(getDefaultPermissionModeId('codex')).toBe('default');
+    expect(resolveRuntimePermissionModeId({ runtimeId: 'codex' })).toBe('default');
   });
 });

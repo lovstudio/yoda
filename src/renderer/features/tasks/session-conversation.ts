@@ -51,7 +51,7 @@ export function buildSessionConversationItems(
 
     const visibleMessage =
       message.role === 'assistant'
-        ? { ...message, text: visibleAgentReplyText(message.text) }
+        ? { ...message, text: getUserVisibleAgentReplyText(message.text) }
         : message;
     if (!visibleMessage.text) return;
 
@@ -88,7 +88,7 @@ export function buildSessionConversationItems(
   return items;
 }
 
-function visibleAgentReplyText(text: string): string {
+export function getUserVisibleAgentReplyText(text: string): string {
   return text.replace(/<oai-mem-citation>[\s\S]*?<\/oai-mem-citation>/gi, '').trim();
 }
 

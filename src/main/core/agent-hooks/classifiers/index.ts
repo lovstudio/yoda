@@ -6,6 +6,7 @@ import type { ProviderClassifier } from './base';
 import { createCharmClassifier } from './charm';
 import { createClineClassifier } from './cline';
 import { createCodebuffClassifier } from './codebuff';
+import { createCodexClassifier } from './codex';
 import { createContinueClassifier } from './continue';
 import { createCopilotClassifier } from './copilot';
 import { createCursorClassifier } from './cursor';
@@ -37,6 +38,7 @@ const classifierFactories: Partial<Record<RuntimeId, () => ProviderClassifier>> 
   codebuff: createCodebuffClassifier,
   continue: createContinueClassifier,
   copilot: createCopilotClassifier,
+  codex: createCodexClassifier,
   cursor: createCursorClassifier,
   devin: createDevinClassifier,
   droid: createDroidClassifier,

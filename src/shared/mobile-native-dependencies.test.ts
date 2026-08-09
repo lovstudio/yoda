@@ -28,8 +28,18 @@ describe('mobile native dependencies', () => {
     ) as { dependencies?: Record<string, string> };
     const mobileConfig = JSON.parse(
       readFileSync(new URL('../../apps/mobile/app.json', import.meta.url), 'utf8')
-    ) as { expo?: { plugins?: unknown[] } };
+    ) as {
+      expo?: {
+        android?: { intentFilters?: unknown[] };
+        ios?: { infoPlist?: { CFBundleDocumentTypes?: unknown } };
+        plugins?: unknown[];
+      };
+    };
     const plugins = JSON.stringify(mobileConfig.expo?.plugins ?? []);
+    const documentTypes = JSON.stringify(
+      mobileConfig.expo?.ios?.infoPlist?.CFBundleDocumentTypes ?? []
+    );
+    const intentFilters = JSON.stringify(mobileConfig.expo?.android?.intentFilters ?? []);
     const voiceInputSource = readFileSync(
       new URL('../../apps/mobile/src/voice-input.ts', import.meta.url),
       'utf8'
@@ -38,16 +48,29 @@ describe('mobile native dependencies', () => {
       new URL('../../apps/mobile/src/input-media.ts', import.meta.url),
       'utf8'
     );
+    const imageEditorSource = readFileSync(
+      new URL('../../apps/mobile/src/input-image-editor.tsx', import.meta.url),
+      'utf8'
+    );
 
     expect(mobilePackage.dependencies?.['expo-image-picker']).toBeTruthy();
     expect(mobilePackage.dependencies?.['expo-image-manipulator']).toBeTruthy();
+    expect(mobilePackage.dependencies?.['expo-file-system']).toBeTruthy();
+    expect(mobilePackage.dependencies?.['react-native-view-shot']).toBeTruthy();
     expect(mobilePackage.dependencies?.['expo-localization']).toBeTruthy();
     expect(mobilePackage.dependencies?.['expo-speech-recognition']).toBe('3.1.3');
     expect(plugins).toContain('expo-image-picker');
     expect(plugins).toContain('expo-localization');
     expect(plugins).toContain('expo-speech-recognition');
+    expect(documentTypes).toContain('public.image');
+    expect(documentTypes).toContain('public.text');
+    expect(intentFilters).toContain('image/*');
+    expect(intentFilters).toContain('text/*');
+    expect(intentFilters).toContain('application/json');
     expect(imageInputSource).toContain('selectionLimit: 0');
     expect(imageInputSource).toContain('format: SaveFormat.JPEG');
+    expect(imageEditorSource).toContain('captureRef');
+    expect(imageEditorSource).toContain('cropMobileInputImage');
     expect(voiceInputSource).toContain('contextualStrings: speechContextualStrings');
     expect(voiceInputSource).toContain("iosTaskHint: 'dictation'");
   });

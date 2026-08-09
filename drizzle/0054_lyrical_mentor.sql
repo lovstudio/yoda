@@ -1,0 +1,1 @@
+ALTER TABLE `prompts` ADD `tags_json` text DEFAULT '[]' NOT NULL;

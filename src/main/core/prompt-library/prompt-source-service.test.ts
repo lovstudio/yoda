@@ -36,7 +36,7 @@ function prompt(overrides: Partial<Prompt> = {}): Prompt {
     title: 'Custom title',
     description: '',
     content: 'Old content',
-    groupName: '',
+    tags: [],
     extraInfo: '',
     injectionEnabled: true,
     injectionOrder: 0,

@@ -54,8 +54,11 @@ const RUN_STATE_LINE_MARKERS = [
   Buffer.from('"task_started"'),
   Buffer.from('"task_complete"'),
   Buffer.from('"turn_aborted"'),
+  Buffer.from('"function_call"'),
+  Buffer.from('"custom_tool_call"'),
   Buffer.from('"request_user_input"'),
   Buffer.from('"function_call_output"'),
+  Buffer.from('"custom_tool_call_output"'),
 ];
 
 export interface CodexRunStateContext {
@@ -94,7 +97,7 @@ class CodexRolloutTailer implements CodexRunStateWatcher {
   private pendingRead = false;
   private initialized = false;
   private stopped = false;
-  private readonly pendingRequestUserInputCallIds = new Set<string>();
+  private readonly pendingToolCallIds = new Set<string>();
 
   constructor(
     private readonly ctx: CodexRunStateContext,
@@ -218,7 +221,7 @@ class CodexRolloutTailer implements CodexRunStateWatcher {
         for (const event of initialCodexTailEvents(
           lines,
           this.ctx.startedAtMs,
-          this.pendingRequestUserInputCallIds
+          this.pendingToolCallIds
         )) {
           this.dispatch(event);
         }
@@ -267,7 +270,7 @@ class CodexRolloutTailer implements CodexRunStateWatcher {
 
   private handleLine(line: string): void {
     if (this.stopped) return;
-    const event = parseCodexRunStateEvent(line, this.pendingRequestUserInputCallIds);
+    const event = parseCodexRunStateEvent(line, this.pendingToolCallIds);
     if (!event) return;
     this.dispatch(event);
   }
@@ -287,11 +290,11 @@ class CodexRolloutTailer implements CodexRunStateWatcher {
 export function initialCodexTailEvents(
   lines: Iterable<string>,
   watcherStartedAtMs: number,
-  pendingRequestUserInputCallIds = new Set<string>()
+  pendingFunctionCallIds = new Set<string>()
 ): RunStateEvent[] {
   const accumulator = createInitialTailAccumulator();
   for (const line of lines) {
-    accumulateInitialTail(accumulator, line, watcherStartedAtMs, pendingRequestUserInputCallIds);
+    accumulateInitialTail(accumulator, line, watcherStartedAtMs, pendingFunctionCallIds);
   }
   return finishInitialTail(accumulator);
 }
@@ -309,9 +312,9 @@ function accumulateInitialTail(
   accumulator: InitialTailAccumulator,
   line: string,
   watcherStartedAtMs: number,
-  pendingRequestUserInputCallIds: Set<string>
+  pendingFunctionCallIds: Set<string>
 ): void {
-  const event = parseCodexRunStateEvent(line, pendingRequestUserInputCallIds);
+  const event = parseCodexRunStateEvent(line, pendingFunctionCallIds);
   if (!event) return;
   accumulator.state = reduceRunState(accumulator.state, event);
   if (event.at >= watcherStartedAtMs) accumulator.freshEvents.push(event);
@@ -406,13 +409,13 @@ export function parseTurnEvent(line: string): RunStateEvent | null {
 
 /**
  * Parse any rollout line that can change live run-state. Turn-boundary events
- * are persisted as `event_msg` rows. Codex request_user_input pending is not:
- * the app-server request is deliberately excluded from rollout, so the closest
- * durable signal is the Response API `function_call` plus its later output.
+ * are persisted as `event_msg` rows. The interactive approval itself is not a
+ * separate rollout event, so the closest durable signal is the tool call
+ * (`function_call` or `custom_tool_call`) plus its later output.
  */
 export function parseCodexRunStateEvent(
   line: string,
-  pendingRequestUserInputCallIds = new Set<string>()
+  pendingToolCallIds = new Set<string>()
 ): RunStateEvent | null {
   let parsed: unknown;
   try {
@@ -431,7 +434,7 @@ export function parseCodexRunStateEvent(
       event?.kind === 'turn-interrupted' ||
       event?.kind === 'turn-failed'
     ) {
-      pendingRequestUserInputCallIds.clear();
+      pendingToolCallIds.clear();
     }
     return event;
   }
@@ -442,26 +445,28 @@ export function parseCodexRunStateEvent(
   const p = payload as Record<string, unknown>;
 
   if (
-    p.type === 'function_call' &&
-    p.name === REQUEST_USER_INPUT_TOOL &&
+    (p.type === 'function_call' || p.type === 'custom_tool_call') &&
     typeof p.call_id === 'string'
   ) {
-    pendingRequestUserInputCallIds.add(p.call_id);
-    return {
-      kind: 'awaiting-input',
-      at,
-      pendingAction: {
-        notificationType: 'elicitation_dialog',
-        toolName: REQUEST_USER_INPUT_TOOL,
-        actionDescription: summarizeRequestUserInputArguments(p.arguments),
-      },
-    };
+    pendingToolCallIds.add(p.call_id);
+    if (p.name === REQUEST_USER_INPUT_TOOL) {
+      return {
+        kind: 'awaiting-input',
+        at,
+        pendingAction: {
+          notificationType: 'elicitation_dialog',
+          toolName: REQUEST_USER_INPUT_TOOL,
+          actionDescription: summarizeRequestUserInputArguments(p.arguments),
+        },
+      };
+    }
+    return null;
   }
 
   if (
-    p.type === 'function_call_output' &&
+    (p.type === 'function_call_output' || p.type === 'custom_tool_call_output') &&
     typeof p.call_id === 'string' &&
-    pendingRequestUserInputCallIds.delete(p.call_id)
+    pendingToolCallIds.delete(p.call_id)
   ) {
     return { kind: 'turn-started', at, force: true };
   }
@@ -601,11 +606,11 @@ async function readRecentRunStateLines(file: FileHandle, size: number): Promise<
 export function classifyCodexRollout(raw: string): CodexTurnVerdict {
   let state = initialRunState();
   let lastStartedAt: number | null = null;
-  const pendingRequestUserInputCallIds = new Set<string>();
+  const pendingToolCallIds = new Set<string>();
   for (const line of iterateLines(raw)) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    const event = parseCodexRunStateEvent(trimmed, pendingRequestUserInputCallIds);
+    const event = parseCodexRunStateEvent(trimmed, pendingToolCallIds);
     if (event) {
       if (event.kind === 'turn-started') lastStartedAt = event.at;
       state = reduceRunState(state, event);

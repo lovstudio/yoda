@@ -51,7 +51,11 @@ vi.mock('@renderer/lib/ipc', () => ({
   events: {
     on: vi.fn((event: { name: string }, handler: (data: unknown) => void) => {
       mocks.eventHandlers.set(event.name, handler);
-      return () => {};
+      return () => {
+        if (mocks.eventHandlers.get(event.name) === handler) {
+          mocks.eventHandlers.delete(event.name);
+        }
+      };
     }),
   },
   rpc: {
@@ -113,6 +117,22 @@ describe('UpdateStore', () => {
       status: 'error',
       message: 'Update checks are only available in packaged builds.',
     });
+  });
+
+  it('starts listeners and the background check only once, and disposes them', async () => {
+    const store = new UpdateStore();
+
+    store.start();
+    store.start();
+    await flushAsync();
+
+    expect(mocks.rpcAppVersion).toHaveBeenCalledOnce();
+    expect(mocks.rpcUpdateCheck).toHaveBeenCalledOnce();
+    expect(mocks.eventHandlers.size).toBe(9);
+
+    store.dispose();
+
+    expect(mocks.eventHandlers.size).toBe(0);
   });
 
   it('reports up-to-date after a successful manual check with no available update', async () => {

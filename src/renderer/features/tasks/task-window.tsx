@@ -8,7 +8,7 @@ import {
   taskWindowReturnedToTabChannel,
 } from '@shared/events/appEvents';
 import type { TaskWindowTabTarget, TaskWindowTarget } from '@shared/task-window';
-import { openProvisionedTaskTab } from '@renderer/app/open-task-target';
+import { openProvisionedTaskTab, prepareTaskTarget } from '@renderer/app/open-task-target';
 import { CommandShortcutBinder } from '@renderer/lib/commands/command-shortcut-binder';
 import { ErrorBoundary } from '@renderer/lib/components/error-boundary';
 import { MonacoKeyboardBridge } from '@renderer/lib/components/monaco-keyboard-bridge';
@@ -44,6 +44,17 @@ export const TaskTabWindow = observer(function TaskTabWindow() {
   }, []);
 
   const target = getTaskWindowLaunchTarget();
+
+  useEffect(() => {
+    if (!target) return;
+    void prepareTaskTarget(target.projectId, target.taskId).catch((error: unknown) => {
+      log.warn('TaskTabWindow: failed to prepare target project', {
+        projectId: target.projectId,
+        taskId: target.taskId,
+        error,
+      });
+    });
+  }, [target]);
 
   // Parked warm window: shell + providers are mounted, just nothing to show yet.
   if (!target) {

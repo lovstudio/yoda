@@ -1,5 +1,6 @@
 import { Loader2, TriangleAlert, Unplug } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -17,6 +18,21 @@ export const ProjectMainPanel = observer(function ProjectMainPanel() {
   const {
     params: { projectId },
   } = useParams('project');
+  useEffect(() => {
+    let disposed = false;
+    const projectManager = getProjectManagerStore();
+    void projectManager
+      .ensureProjectLoaded(projectId)
+      .then((loaded) => {
+        if (!disposed && loaded) return projectManager.mountProject(projectId);
+        return undefined;
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+    };
+  }, [projectId]);
+
   const store = getProjectStore(projectId);
   const kind = projectViewKind(store);
 

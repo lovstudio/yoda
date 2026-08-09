@@ -22,7 +22,10 @@ describe('shared composer settings surfaces', () => {
     expect(content).toContain('<PermissionModeSelect');
     expect(content).toContain('<AutoTrustWorktreesControl compact');
     expect(content).toContain("t('home.enabledPromptCount'");
+    expect(content).toContain("t('promptLibrary.new')");
     expect(content).toContain("t('home.openPromptLibrary')");
+    expect(content).toContain('createPrompt: true');
+    expect(content).toContain('<Plus');
     expect(content).toContain('<ArrowUpRight');
     expect(content).not.toContain('<ArrowRight');
     expect(content).toContain('size="icon-xs"');

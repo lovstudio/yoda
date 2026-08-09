@@ -32,6 +32,13 @@
     "openFailed": "Open failed",
     "currentLabel": "{{label}} (current)"
   },
+  "externalFileDrop": {
+    "title": "Open in Yoda",
+    "description": "Drop to preview or edit in a new file tab",
+    "failedTitle": "Failed to open file",
+    "failedDescription": "{{count}} file(s) could not be opened",
+    "noPath": "The dropped file path could not be read"
+  },
   "initialCommit": {
     "title": "Create initial commit",
     "reasonWorktreeMode": "This mode runs each agent in its own isolated worktree, which needs a base commit to branch from.",
@@ -231,7 +238,10 @@
       "matchesName": "Alias is the same as the default name; leave empty instead.",
       "submit": "Save",
       "saving": "Saving…",
-      "failed": "Failed to rename project"
+      "failed": "Failed to rename project",
+      "pathRenameTitle": "Rename the project path too?",
+      "pathRenameDescription": "The project name matches the last directory in its path. Rename the project folder to \"{{name}}\" too?",
+      "pathRenameConfirm": "Rename path too"
     },
     "moveProjectPath": {
       "menuLabel": "Move project path…",
@@ -1444,7 +1454,7 @@
     "default": "Default (ask first)",
     "plan": "Plan mode",
     "acceptEdits": "Auto-accept edits",
-    "fullAuto": "Full auto",
+    "fullAuto": "Approve for me",
     "bypass": "Bypass permissions",
     "cohub": {
       "fullAccess": "Full project access",
@@ -1454,12 +1464,12 @@
     },
     "codex": {
       "planDesc": "Native Plan mode; strictly read-only with no approval prompts",
-      "requestApproval": "Request approval",
-      "requestApprovalDesc": "Always ask before editing external files or using the internet",
-      "autoApprove": "Approve for me",
-      "autoApproveDesc": "Only request approval for detected risky operations",
+      "requestApproval": "Ask for approval",
+      "requestApprovalDesc": "Ask before using the internet or going beyond the workspace boundary",
+      "approveForMe": "Approve for me",
+      "approveForMeDesc": "Automatically review eligible approval requests while keeping workspace boundaries",
       "fullAccess": "Full access",
-      "fullAccessDesc": "Access the internet and any file on your computer without restrictions",
+      "fullAccessDesc": "Run without sandbox restrictions or approval prompts",
       "custom": "Custom (config.toml)",
       "customDesc": "Use the permissions defined in config.toml"
     }
@@ -1497,7 +1507,7 @@
     "attachImagesAsPathsLabel": "Send images as file paths",
     "attachImagesAsPathsDesc": "Reference images as backtick-wrapped `@path` text so the Agent keeps the path instead of converting it into image input.",
     "permissionModeLabel": "Permission mode",
-    "permissionModeDesc": "How much the selected agent can do without asking. Each agent CLI gets its matching flag (e.g. Claude --permission-mode, Codex sandbox). Bypass runs fully unsandboxed.",
+    "permissionModeDesc": "Controls the selected agent's sandbox and approval policy. Each CLI uses its native settings; Codex separates workspace access from approval review.",
     "composerScopeGlobal": "Global",
     "composerScopeProject": "Project",
     "composerScopeInheritTooltip": "Inheriting the global default. Click to override just for this project.",
@@ -1524,6 +1534,7 @@
     "systemPromptHintCodex": "Dynamically injected prompts are written to Codex developer_instructions; Codex's built-in instructions are not editable.",
     "promptPrinciplesLabel": "Dynamic prompts",
     "promptPrinciplesProjectHeading": "Project-only prompts",
+    "promptPrinciplesEnabledCount": "{{enabled}}/{{count}} enabled",
     "promptPrincipleUnnamed": "Untitled prompt",
     "instructionFilesLabel": "Instruction files",
     "instructionFilesHint": "The client's built-in system prompt is not editable. The global CLAUDE.md acts as your user-level system prompt; the project's CLAUDE.md / AGENTS.md are the project-level prompts. Click to expand, hover a row to open and edit.",
@@ -2266,7 +2277,9 @@
       "createParent": "Add parent task (group)",
       "moveToProject": "Move to project",
       "moveToProjectEmpty": "No other projects",
-      "moveToProjectSearch": "Search projects..."
+      "moveToProjectSearch": "Search projects...",
+      "moveToProjectCreate": "Create a project and move here...",
+      "moveToProjectCreateNamed": "Create \"{{name}}\" and move here"
     },
     "moveToProject": {
       "confirmTitle": "Move task to another project?",
@@ -2792,9 +2805,36 @@
     },
     "collection": {
       "title": "Prompts",
-      "description": "Create reusable prompts, sort them into groups, sync from files, URLs, or Git, and optionally inject them when a session starts.",
+      "description": "Create reusable prompts; tags help you organize and find them, but never enter the AI context.",
       "all": "All prompts",
-      "allDescription": "Nest groups to any depth, then drag sibling groups or prompts within a group to reorder them."
+      "allDescription": "Every prompt is an independent entry. Drag to reorder, filter by tag, and toggle injection directly."
+    },
+    "reorder": "Drag {{name}} to reorder",
+    "actions": {
+      "more": "Manage {{name}}"
+    },
+    "filters": {
+      "search": "Search prompts",
+      "searchPlaceholder": "Search title, description, content, or tags",
+      "tags": "Tags",
+      "tagListLabel": "Filter by tag",
+      "allTags": "All tags",
+      "deleteTagAria": "Delete tag {{tag}}",
+      "deleteTagTitle": "Delete tag {{tag}}?",
+      "deleteTagDescription": "This removes the tag from {{count}} prompts. Prompt content, injection state, and version history stay unchanged.",
+      "deleteTagConfirm": "Delete tag",
+      "tagDeleted": "Deleted tag {{tag}}",
+      "deleteTagFailed": "Failed to delete tag",
+      "status": "Status",
+      "all": "All",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "resultCount": "Showing {{count}}",
+      "tagEnabledCount": "{{enabled}}/{{count}} enabled",
+      "enableTag": "Enable all",
+      "disableTag": "Disable all",
+      "clear": "Clear filters",
+      "empty": "No prompts match these filters."
     },
     "new": "New prompt",
     "empty": "No saved prompts yet. Create one to reuse it when composing a task.",
@@ -2840,6 +2880,9 @@
     "form": {
       "title": "Title",
       "titlePlaceholder": "e.g. Bug triage",
+      "tags": "Tags",
+      "tagsPlaceholder": "e.g. development, review, release",
+      "tagsHint": "Separate multiple tags with commas. Tags are for organizing prompts only.",
       "description": "Description",
       "descriptionPlaceholder": "Optional short note about when to use this prompt",
       "group": "Group",
@@ -2927,6 +2970,8 @@
     },
     "source": {
       "manual": "Add manually",
+      "more": "Add from another source",
+      "import": "Import prompt",
       "file": "From file",
       "url": "From URL",
       "git": "From Git",
@@ -5041,7 +5086,6 @@
     "replyScreenshotRevealFailed": "Failed to show reply screenshot",
     "replyScreenshotEmpty": "This turn does not have a reply to capture yet",
     "replyScreenshotFailed": "Failed to create reply screenshot",
-    "replyScreenshotFooter": "Latest reply",
     "compactContext": "Compact context",
     "compactingContext": "Compacting context…",
     "compactContextStarted": "Context compaction started",

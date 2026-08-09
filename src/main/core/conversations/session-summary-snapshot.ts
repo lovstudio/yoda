@@ -3,6 +3,7 @@ import { sessionSummarySnapshotUpdatedChannel } from '@shared/events/sessionSumm
 import type { TaskNamingContextSnapshot, TaskNamingStatus } from '@shared/task-naming';
 import { estimateTokens } from '@main/core/tasks/name-generation/task-naming-service';
 import { events } from '@main/lib/events';
+import { LruCache } from '@main/lib/lru-cache';
 import type { ResolvedSummaryRuntime } from './generateSessionSummary';
 import type { SummaryDraft } from './session-summary-prompt';
 
@@ -12,7 +13,10 @@ import type { SummaryDraft } from './session-summary-prompt';
  * `global` scope is tracked — `recent` regenerates every turn and would spam
  * the channel with snapshots nobody inspects.
  */
-const sessionSummarySnapshots = new Map<string, SessionSummarySnapshot>();
+const MAX_SESSION_SUMMARY_SNAPSHOTS = 64;
+const sessionSummarySnapshots = new LruCache<string, SessionSummarySnapshot>(
+  MAX_SESSION_SUMMARY_SNAPSHOTS
+);
 
 export type SessionSummarySnapshotInput = {
   conversationId: string;

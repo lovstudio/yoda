@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   incrementPromptVersion,
+  normalizePromptTags,
   promptCreateInputSchema,
   promptSourceSchema,
   promptUpdateInputSchema,
 } from './prompt-library';
 
 describe('prompt library schemas', () => {
-  it('keeps existing create callers compatible by defaulting to no group', () => {
+  it('keeps existing create callers compatible by defaulting to no tags', () => {
     expect(
       promptCreateInputSchema.parse({
         title: 'Review',
@@ -15,16 +16,23 @@ describe('prompt library schemas', () => {
       })
     ).toMatchObject({
       description: '',
-      groupName: '',
+      tags: [],
       extraInfo: '',
       injectionEnabled: false,
     });
   });
 
-  it('accepts moving an existing prompt to a group', () => {
-    expect(promptUpdateInputSchema.parse({ groupName: 'Review' })).toEqual({
-      groupName: 'Review',
+  it('accepts human-only tags without changing prompt content', () => {
+    expect(promptUpdateInputSchema.parse({ tags: [' Review ', 'Writing', 'Review'] })).toEqual({
+      tags: ['Review', 'Writing', 'Review'],
     });
+  });
+
+  it('normalizes duplicate and whitespace-only tags for storage', () => {
+    expect(normalizePromptTags([' Review ', '', 'Review', ' Writing '])).toEqual([
+      'Review',
+      'Writing',
+    ]);
   });
 
   it('increments semantic prompt versions by patch, minor, or major', () => {

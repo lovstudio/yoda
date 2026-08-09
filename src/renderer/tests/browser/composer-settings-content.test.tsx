@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
       title: 'Detailed global prompt',
       description: '',
       content: 'Prompt content',
-      groupName: 'Writing',
+      tags: ['Writing'],
       extraInfo: '',
       injectionEnabled: true,
       injectionOrder: 0,
@@ -28,7 +28,7 @@ const mocks = vi.hoisted(() => ({
       title: 'Another detailed prompt',
       description: '',
       content: 'Prompt content',
-      groupName: 'Writing',
+      tags: ['Writing'],
       extraInfo: '',
       injectionEnabled: false,
       injectionOrder: 1,
@@ -158,6 +158,7 @@ describe('ComposerSettingsContent', () => {
     expect(promptHeader?.textContent).toContain('(2)');
     expect(promptHeader?.querySelector('[aria-label="2 enabled"]')).not.toBeNull();
     expect(promptHeader?.querySelector('[aria-label="Manage prompts in Library"]')).not.toBeNull();
+    expect(promptHeader?.querySelector('[aria-label="promptLibrary.new"]')).not.toBeNull();
     expect(host.textContent).not.toContain('home.promptConfigurationDescription');
     expect(host.textContent).toContain('Detailed global prompt');
     expect(host.textContent).toContain('Detailed project prompt');
@@ -190,5 +191,15 @@ describe('ComposerSettingsContent', () => {
     await act(async () => libraryButton?.click());
 
     expect(mocks.navigate).toHaveBeenCalledWith('library', { section: 'prompts' });
+
+    const createPromptButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="promptLibrary.new"]'
+    );
+    await act(async () => createPromptButton?.click());
+
+    expect(mocks.navigate).toHaveBeenCalledWith('library', {
+      section: 'prompts',
+      createPrompt: true,
+    });
   });
 });

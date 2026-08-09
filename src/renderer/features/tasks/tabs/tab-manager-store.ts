@@ -273,6 +273,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       activeConversation: computed,
       activeConversationId: computed,
       activeTopLevelTarget: computed,
+      preferredConversationTarget: computed,
       activeFileEntry: computed,
       activeFilePath: computed,
       activeDiffEntry: computed,
@@ -439,6 +440,12 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     const tabId = this.resolvedActiveTabId;
     const target = tabId ? this.topLevelTargetForTabId(tabId) : undefined;
     return target?.kind === 'overview' ? null : (target ?? null);
+  }
+
+  /** The most recently interacted conversation, expressed as a route target. */
+  get preferredConversationTarget(): Extract<TaskWindowTabTarget, { kind: 'conversation' }> | null {
+    const conversationId = this._preferredConversationId();
+    return conversationId ? { kind: 'conversation', conversationId } : null;
   }
 
   /** Converts a persisted task-history tab id into its routable page target. */

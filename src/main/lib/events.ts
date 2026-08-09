@@ -4,6 +4,7 @@ import { getMainWindow } from '@main/app/window';
 
 const mainWindowEventNames = new Set([
   'deep-link:open',
+  'external-file:open',
   'notification:created',
   'notification:focus-task',
   'app:quit-agent-sessions-requested',
@@ -14,6 +15,7 @@ const mainWindowEventNames = new Set([
 const focusedWindowEventNames = new Set([
   'menu:check-for-updates',
   'menu:close-tab',
+  'menu:open-file',
   'menu:open-settings',
   'menu:import-settings',
   'menu:export-settings',

@@ -1,6 +1,7 @@
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { MOBILE_INPUT_ATTACHMENT_MAX_BYTES } from '../../../src/shared/mobile-api';
+import { mobileCropRectToImageRect, type MobileCropRect } from './input-image-editing';
 import {
   MOBILE_INPUT_IMAGE_JPEG_QUALITY,
   MOBILE_INPUT_IMAGE_PROCESSING_CONCURRENCY,
@@ -20,6 +21,68 @@ function jpegName(fileName: string | null | undefined, index: number): string {
     .replace(/[\r\n\0]/g, ' ')
     .trim();
   return `${stem || `mobile-image-${index + 1}`}.jpg`;
+}
+
+function mobileImageId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+type MobileImageSource = {
+  id: string;
+  name: string;
+  uri: string;
+  width: number;
+  height: number;
+};
+
+export async function encodeMobileInputImage(source: MobileImageSource): Promise<MobileImageDraft> {
+  const context = ImageManipulator.manipulate(source.uri);
+  const resize =
+    source.width > 0 && source.height > 0
+      ? mobileInputImageResize(source.width, source.height)
+      : null;
+  if (resize) context.resize(resize);
+
+  const rendered = await context.renderAsync();
+  const result = await rendered.saveAsync({
+    base64: true,
+    compress: MOBILE_INPUT_IMAGE_JPEG_QUALITY,
+    format: SaveFormat.JPEG,
+  });
+  const base64 = result.base64;
+  if (!base64) throw new Error('The selected image could not be compressed for upload.');
+
+  const sizeBytes = base64ByteLength(base64);
+  if (sizeBytes > MOBILE_INPUT_ATTACHMENT_MAX_BYTES) {
+    throw new Error(
+      `${source.name} is larger than ${Math.floor(MOBILE_INPUT_ATTACHMENT_MAX_BYTES / 1024 / 1024)} MB after compression.`
+    );
+  }
+
+  return {
+    id: source.id,
+    base64,
+    height: result.height,
+    mimeType: 'image/jpeg',
+    name: source.name,
+    sizeBytes,
+    uri: result.uri,
+    width: result.width,
+  };
+}
+
+/** Encode an image handed to the app by iOS Open In or an Android document URI. */
+export async function importMobileInputImage(
+  uri: string,
+  fileName = '打开的图片'
+): Promise<MobileImageDraft> {
+  return encodeMobileInputImage({
+    height: 0,
+    id: `${mobileImageId()}-external`,
+    name: jpegName(fileName, 0),
+    uri,
+    width: 0,
+  });
 }
 
 async function mapWithConcurrency<T, U>(
@@ -48,32 +111,49 @@ async function prepareMobileInputImage(
   asset: ImagePicker.ImagePickerAsset,
   index: number
 ): Promise<MobileImageDraft> {
-  const context = ImageManipulator.manipulate(asset.uri);
-  const resize = mobileInputImageResize(asset.width, asset.height);
-  if (resize) context.resize(resize);
+  return encodeMobileInputImage({
+    height: asset.height,
+    id: `${mobileImageId()}-${index}`,
+    name: jpegName(asset.fileName, index),
+    uri: asset.uri,
+    width: asset.width,
+  });
+}
 
+export async function cropMobileInputImage(
+  image: MobileImageDraft,
+  crop: MobileCropRect,
+  canvasWidth: number,
+  canvasHeight: number
+): Promise<MobileImageDraft> {
+  const cropRect = mobileCropRectToImageRect(
+    crop,
+    canvasWidth,
+    canvasHeight,
+    image.width,
+    image.height
+  );
+  const context = ImageManipulator.manipulate(image.uri);
+  context.crop(cropRect);
   const rendered = await context.renderAsync();
   const result = await rendered.saveAsync({
     base64: true,
     compress: MOBILE_INPUT_IMAGE_JPEG_QUALITY,
     format: SaveFormat.JPEG,
   });
-  const base64 = result.base64;
-  if (!base64) throw new Error('The selected image could not be compressed for upload.');
+  if (!result.base64) throw new Error('裁切后的图片暂时无法保存，请重试。');
 
-  const sizeBytes = base64ByteLength(base64);
+  const sizeBytes = base64ByteLength(result.base64);
   if (sizeBytes > MOBILE_INPUT_ATTACHMENT_MAX_BYTES) {
     throw new Error(
-      `${asset.fileName || 'This image'} is larger than ${Math.floor(MOBILE_INPUT_ATTACHMENT_MAX_BYTES / 1024 / 1024)} MB after compression.`
+      `${image.name} 裁切后仍超过 ${Math.floor(MOBILE_INPUT_ATTACHMENT_MAX_BYTES / 1024 / 1024)} MB。`
     );
   }
 
   return {
-    id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
-    base64,
+    ...image,
+    base64: result.base64,
     height: result.height,
-    mimeType: 'image/jpeg',
-    name: jpegName(asset.fileName, index),
     sizeBytes,
     uri: result.uri,
     width: result.width,

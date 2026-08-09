@@ -52,7 +52,7 @@ describe('buildAgentCommand', () => {
 
     expect(command).toEqual({
       command: 'codex',
-      args: ['--sandbox', 'workspace-write', '--ask-for-approval', 'untrusted', 'Fix the issue'],
+      args: ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request', 'Fix the issue'],
     });
   });
 
@@ -98,7 +98,7 @@ describe('buildAgentCommand', () => {
     });
   });
 
-  it('maps Codex approve-for-me mode to on-request approvals', () => {
+  it('maps Codex approve-for-me mode to the official flag', () => {
     const command = buildAgentCommand({
       runtimeId: 'codex',
       providerConfig: runtimeConfigDefaults.codex,
@@ -109,7 +109,7 @@ describe('buildAgentCommand', () => {
 
     expect(command).toEqual({
       command: 'codex',
-      args: ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request', 'Fix the issue'],
+      args: ['--approve-for-me', 'Fix the issue'],
     });
   });
 
