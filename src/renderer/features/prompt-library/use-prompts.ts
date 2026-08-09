@@ -111,6 +111,16 @@ export function useSetTagInjectionEnabled() {
   });
 }
 
+export function useRemovePromptTag() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (tag: string) => rpc.promptLibrary.removeTag(tag),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: promptsQueryKey });
+    },
+  });
+}
+
 export function useRefreshPromptSource() {
   const queryClient = useQueryClient();
   return useMutation({

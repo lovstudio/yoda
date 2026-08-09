@@ -198,6 +198,37 @@ describe('PromptLibraryService flat prompt model', () => {
     ]);
   });
 
+  it('removes a tag from every matching prompt without creating content versions', async () => {
+    const { PromptLibraryService } = await import('./prompt-library-service');
+    const service = new PromptLibraryService();
+    const review = await service.create({
+      title: 'Review',
+      content: 'Review',
+      description: '',
+      tags: ['Review', 'Writing'],
+      extraInfo: '',
+      injectionEnabled: false,
+    });
+    const writing = await service.create({
+      title: 'Writing',
+      content: 'Writing',
+      description: '',
+      tags: ['Writing'],
+      extraInfo: '',
+      injectionEnabled: false,
+    });
+
+    await service.removeTag(' Review ');
+
+    expect((await service.list()).map((prompt) => [prompt.id, prompt.tags])).toEqual([
+      [writing.id, ['Writing']],
+      [review.id, ['Writing']],
+    ]);
+    expect((await service.listVersions(review.id)).map((version) => version.version)).toEqual([
+      '1.0.0',
+    ]);
+  });
+
   it('converts legacy nested groups into tags during initialization and clears the old relation', async () => {
     sqlite
       .prepare(

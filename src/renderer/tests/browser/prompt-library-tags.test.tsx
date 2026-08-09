@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   refreshPrompt: vi.fn(),
   restorePromptVersion: vi.fn(),
   reorderPrompts: vi.fn(),
+  removePromptTag: vi.fn(),
   setTagInjectionEnabled: vi.fn(),
   showConfirm: vi.fn(),
 }));
@@ -33,6 +34,7 @@ vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
   useUpdatePrompt: () => ({ mutate: mocks.updatePrompt, isPending: false }),
   useDeletePrompt: () => ({ mutate: mocks.deletePrompt, isPending: false }),
   useReorderPrompts: () => ({ mutate: mocks.reorderPrompts, isPending: false }),
+  useRemovePromptTag: () => ({ mutate: mocks.removePromptTag, isPending: false }),
   useSetTagInjectionEnabled: () => ({ mutate: mocks.setTagInjectionEnabled, isPending: false }),
   useRefreshPromptSource: () => ({ mutate: mocks.refreshPrompt, isPending: false }),
   usePromptVersions: () => ({ data: mocks.promptVersions, isLoading: false }),
@@ -158,6 +160,7 @@ describe('PromptLibraryPanel tags', () => {
 
     expect(host.querySelectorAll('[data-slot="prompt-library-row"]')).toHaveLength(3);
     expect(host.querySelectorAll('[data-slot="prompt-group"]')).toHaveLength(0);
+    expect(host.querySelectorAll('[data-slot="prompt-tag-badge"]')).toHaveLength(3);
     expect(host.textContent).toContain('Review');
     expect(host.textContent).toContain('Writing');
   });
@@ -221,20 +224,17 @@ describe('PromptLibraryPanel tags', () => {
     );
   });
 
-  it('filters by tag and enables all prompts carrying that tag', async () => {
+  it('filters by a tag badge and enables all prompts carrying that tag', async () => {
     const { PromptLibraryPanel } = await import(
       '@renderer/features/prompt-library/prompt-library-panel'
     );
     await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
 
-    const tagFilter = host.querySelector<HTMLButtonElement>(
-      'button[aria-label="promptLibrary.filters.tags"]'
+    const reviewBadge = host.querySelector<HTMLElement>(
+      '[data-slot="prompt-tag-badge"][data-tag="Review"]'
     );
-    await act(async () => tagFilter?.click());
-    const reviewOption = Array.from(
-      document.body.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-radio-item"]')
-    ).find((item) => item.textContent?.includes('Review'));
-    await act(async () => reviewOption?.click());
+    const reviewFilter = reviewBadge?.querySelector<HTMLButtonElement>('button');
+    await act(async () => reviewFilter?.click());
 
     expect(
       Array.from(host.querySelectorAll('[data-slot="prompt-library-row"]')).map(
@@ -247,6 +247,36 @@ describe('PromptLibraryPanel tags', () => {
     );
     await act(async () => enableAll?.click());
     expect(mocks.setTagInjectionEnabled).toHaveBeenCalledWith({ tag: 'Review', enabled: true });
+  });
+
+  it('confirms before removing a tag from every matching prompt', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    const reviewBadge = host.querySelector<HTMLElement>(
+      '[data-slot="prompt-tag-badge"][data-tag="Review"]'
+    );
+    const deleteButton = reviewBadge?.querySelectorAll<HTMLButtonElement>('button')[1];
+    await act(async () => deleteButton?.click());
+
+    expect(mocks.showConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'promptLibrary.filters.deleteTagTitle',
+        description: 'promptLibrary.filters.deleteTagDescription',
+        confirmLabel: 'promptLibrary.filters.deleteTagConfirm',
+      })
+    );
+
+    const confirmation = mocks.showConfirm.mock.calls[0]?.[0] as {
+      onSuccess?: () => void;
+    };
+    await act(async () => confirmation.onSuccess?.());
+    expect(mocks.removePromptTag).toHaveBeenCalledWith(
+      'Review',
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
+    );
   });
 
   it('keyboard-reorders the complete flat list', async () => {

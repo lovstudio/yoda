@@ -13,6 +13,7 @@ export const promptLibraryController = createRPCController({
   reorderPrompts: (ids: string[]) => promptLibraryService.reorderPrompts(ids),
   setTagInjectionEnabled: (tag: string, enabled: boolean) =>
     promptLibraryService.setTagInjectionEnabled(tag, enabled),
+  removeTag: (tag: string) => promptLibraryService.removeTag(tag),
   create: async (input: PromptCreateInput) => {
     const prompt = await promptLibraryService.create(input);
     await promptSourceService.reconcile();

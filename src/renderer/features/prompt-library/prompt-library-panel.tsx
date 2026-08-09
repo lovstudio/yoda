@@ -98,6 +98,7 @@ import {
   useDeletePrompt,
   usePrompts,
   useRefreshPromptSource,
+  useRemovePromptTag,
   useReorderPrompts,
   useSetTagInjectionEnabled,
   useUpdatePrompt,
@@ -273,6 +274,7 @@ export function PromptLibraryPanel({
   const deletePrompt = useDeletePrompt();
   const reorderPrompts = useReorderPrompts();
   const setTagInjectionEnabled = useSetTagInjectionEnabled();
+  const removePromptTag = useRemovePromptTag();
   const refreshSource = useRefreshPromptSource();
   const sortingSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -478,6 +480,29 @@ export function PromptLibraryPanel({
   const handleTagBulkToggle = (enabled: boolean) => {
     if (!selectedTag) return;
     setTagInjectionEnabled.mutate({ tag: selectedTag, enabled });
+  };
+
+  const handleRemoveTag = (tag: string) => {
+    const promptCount = items.filter((prompt) => prompt.tags.includes(tag)).length;
+    showConfirm({
+      title: t('promptLibrary.filters.deleteTagTitle', { tag }),
+      description: t('promptLibrary.filters.deleteTagDescription', { tag, count: promptCount }),
+      confirmLabel: t('promptLibrary.filters.deleteTagConfirm'),
+      onSuccess: () => {
+        removePromptTag.mutate(tag, {
+          onSuccess: () => {
+            if (selectedTag === tag) setSelectedTag(null);
+            toast({ title: t('promptLibrary.filters.tagDeleted', { tag }) });
+          },
+          onError: (error) =>
+            toast({
+              title: t('promptLibrary.filters.deleteTagFailed'),
+              description: error instanceof Error ? error.message : String(error),
+              variant: 'destructive',
+            }),
+        });
+      },
+    });
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -995,41 +1020,6 @@ export function PromptLibraryPanel({
                           type="button"
                           variant="outline"
                           size="sm"
-                          aria-label={t('promptLibrary.filters.tags')}
-                        >
-                          <Tag className="size-3.5" />
-                          {selectedTag ?? t('promptLibrary.filters.allTags')}
-                        </Button>
-                      }
-                    />
-                    <DropdownMenuContent align="start" className="w-56">
-                      <DropdownMenuGroup>
-                        <DropdownMenuLabel>{t('promptLibrary.filters.tags')}</DropdownMenuLabel>
-                        <DropdownMenuRadioGroup
-                          value={selectedTag ?? '__all__'}
-                          onValueChange={(value) =>
-                            setSelectedTag(value === '__all__' ? null : value)
-                          }
-                        >
-                          <DropdownMenuRadioItem value="__all__">
-                            {t('promptLibrary.filters.allTags')}
-                          </DropdownMenuRadioItem>
-                          {tagOptions.map((tag) => (
-                            <DropdownMenuRadioItem key={tag} value={tag}>
-                              <span className="truncate">{tag}</span>
-                            </DropdownMenuRadioItem>
-                          ))}
-                        </DropdownMenuRadioGroup>
-                      </DropdownMenuGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
                           aria-label={t('promptLibrary.filters.status')}
                         >
                           <ListFilter className="size-3.5" />
@@ -1056,17 +1046,53 @@ export function PromptLibraryPanel({
                   </DropdownMenu>
                 </div>
 
+                {tagOptions.length > 0 ? (
+                  <div
+                    data-slot="prompt-tag-badges"
+                    className="flex flex-wrap items-center gap-1.5"
+                  >
+                    <span className="mr-1 inline-flex items-center gap-1 text-xs text-foreground-muted">
+                      <Tag className="size-3.5" />
+                      {t('promptLibrary.filters.tagListLabel')}
+                    </span>
+                    {tagOptions.map((tag) => (
+                      <Badge
+                        key={tag}
+                        data-slot="prompt-tag-badge"
+                        data-tag={tag}
+                        variant={selectedTag === tag ? 'secondary' : 'outline'}
+                        className={cn('p-0', removePromptTag.isPending && 'opacity-60')}
+                      >
+                        <button
+                          type="button"
+                          aria-pressed={selectedTag === tag}
+                          onClick={() =>
+                            setSelectedTag((current) => (current === tag ? null : tag))
+                          }
+                          className="max-w-40 truncate px-2 py-1 text-left outline-none hover:bg-background-1 focus-visible:bg-background-1"
+                        >
+                          {tag}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={t('promptLibrary.filters.deleteTagAria', { tag })}
+                          title={t('promptLibrary.filters.deleteTagAria', { tag })}
+                          disabled={removePromptTag.isPending}
+                          onClick={() => handleRemoveTag(tag)}
+                          className="flex size-5 items-center justify-center border-l border-current/15 text-foreground-muted outline-none transition-colors hover:text-destructive focus-visible:bg-background-1"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
+
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-foreground-muted">
                   <div className="flex flex-wrap items-center gap-2">
                     <span>
                       {t('promptLibrary.filters.resultCount', { count: visibleItems.length })}
                     </span>
-                    {selectedTag ? (
-                      <Badge variant="secondary">
-                        <Tag />
-                        {selectedTag}
-                      </Badge>
-                    ) : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {selectedTag ? (

@@ -352,6 +352,32 @@ export class PromptLibraryService {
     events.emit(promptsUpdatedChannel, undefined);
   }
 
+  async removeTag(tag: string): Promise<void> {
+    const normalizedTag = promptTagSchema.parse(tag);
+    const rows = await db.select({ id: prompts.id, tagsJson: prompts.tagsJson }).from(prompts);
+    const updates = rows
+      .map((row) => {
+        const tags = parseTags(row.tagsJson);
+        if (!tags.includes(normalizedTag)) return null;
+        return {
+          id: row.id,
+          tagsJson: JSON.stringify(tags.filter((value) => value !== normalizedTag)),
+        };
+      })
+      .filter((update): update is { id: string; tagsJson: string } => update !== null);
+
+    if (updates.length === 0) return;
+    db.transaction((tx) => {
+      for (const update of updates) {
+        tx.update(prompts)
+          .set({ tagsJson: update.tagsJson })
+          .where(eq(prompts.id, update.id))
+          .run();
+      }
+    });
+    events.emit(promptsUpdatedChannel, undefined);
+  }
+
   async reorderPrompts(ids: string[]): Promise<void> {
     const uniqueIds = [...new Set(ids)];
     if (uniqueIds.length !== ids.length) {
