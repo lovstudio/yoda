@@ -503,7 +503,6 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
                   <OptionalLabel>{t('agentManager.accessMode')}</OptionalLabel>
                 </Label>
                 <Select
-                  modal={false}
                   value={draft.accessMode}
                   onValueChange={(value) => set('accessMode', value as AgentAccessMode)}
                 >
