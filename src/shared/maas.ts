@@ -38,11 +38,24 @@ export const MAAS_MANAGED_GATEWAY_REPOSITORIES: Record<
   },
 };
 
+export type MaasManagedGatewayStarTrendPoint = {
+  date: string;
+  starCount: number;
+};
+
+export type MaasManagedGatewayStarTrend = {
+  points: MaasManagedGatewayStarTrendPoint[];
+  source: 'ossinsight';
+  calibratedToCurrent: boolean;
+  fetchedAt: string;
+};
+
 export type MaasManagedGatewayStarSnapshot = {
   platformId: MaasManagedGatewayId;
   repositoryUrl: string;
   starCount: number | null;
   fetchedAt: string | null;
+  trend: MaasManagedGatewayStarTrend | null;
 };
 
 export type MaasPlatformTemplateId = (typeof MAAS_PLATFORM_IDS)[number];

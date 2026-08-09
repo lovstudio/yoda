@@ -24,7 +24,7 @@ import { rpc } from '@renderer/lib/ipc';
 const PAGE_SIZE = 24;
 const REAL_USAGE_QUERY_VERSION = 'zenmux-management-statistics-v2';
 const PLATFORM_DESCRIPTION_QUERY_VERSION = 'official-page-description-v1';
-const MANAGED_GATEWAY_STARS_QUERY_VERSION = 'github-stars-v1';
+const MANAGED_GATEWAY_STARS_QUERY_VERSION = 'github-stars-v2';
 
 export const maasQueryKeys = {
   connections: ['maas', 'connections'] as const,
