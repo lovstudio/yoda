@@ -163,7 +163,6 @@ function LatestReplyScreenshotCard({
   ref: React.Ref<HTMLDivElement>;
   payload: ScreenshotPayload;
 }) {
-  const { t } = useTranslation();
   const capturedAt = new Intl.DateTimeFormat(undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -191,8 +190,7 @@ function LatestReplyScreenshotCard({
           content={payload.reply.content}
         />
       </div>
-      <footer className="flex items-center justify-between gap-3 border-t border-border-primary/70 px-6 py-4 text-[10px] text-foreground-passive">
-        <span>{t('workspaceRuntime.replyScreenshotFooter')}</span>
+      <footer className="flex items-center justify-end border-t border-border-primary/70 px-6 py-4 text-[10px] text-foreground-passive">
         <time className="shrink-0 tabular-nums">{capturedAt}</time>
       </footer>
     </article>
