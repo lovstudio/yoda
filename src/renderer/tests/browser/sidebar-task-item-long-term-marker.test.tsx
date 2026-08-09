@@ -61,7 +61,6 @@ vi.mock('@renderer/features/tasks/components/use-task-menu-actions', () => ({
   useTaskMenuActions: () => ({
     onRename: vi.fn(),
     onArchiveQuick: vi.fn(),
-    onCreateSubtask: vi.fn(),
   }),
 }));
 
@@ -173,7 +172,7 @@ describe('SidebarTaskItem long-term marker', () => {
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
-  it('opens a compact recent-progress preview after hover intent', async () => {
+  it('opens the preview only after hovering the archive action', async () => {
     mocks.getTaskDeliverySummaries.mockResolvedValue([
       {
         conversationId: 'conversation-1',
@@ -208,13 +207,29 @@ describe('SidebarTaskItem long-term marker', () => {
       await new Promise((resolve) => setTimeout(resolve, 450));
     });
 
+    expect(document.body.querySelector('[data-sidebar-task-hover-preview]')).toBeNull();
+
+    const archiveButton = host.querySelector<HTMLButtonElement>(
+      '[data-sidebar-task-hover-trigger="true"]'
+    );
+    expect(archiveButton).not.toBeNull();
+
+    await vi.waitFor(() => {
+      expect(archiveButton?.offsetParent).not.toBeNull();
+    });
+
+    await act(async () => {
+      await userEvent.hover(archiveButton!);
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    });
+
     await vi.waitFor(() => {
       expect(document.body.querySelector('[data-sidebar-task-hover-preview]')).not.toBeNull();
     });
     expect(document.body.textContent).toContain('已经完成侧栏任务悬浮预览。');
 
     await act(async () => {
-      await userEvent.unhover(row!);
+      await userEvent.unhover(archiveButton!);
       await new Promise((resolve) => setTimeout(resolve, 260));
     });
 
