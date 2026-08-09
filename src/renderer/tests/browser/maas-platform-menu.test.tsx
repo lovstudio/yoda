@@ -79,7 +79,7 @@ const mocks = vi.hoisted(() => ({
       fetchedAt: '2026-08-10T00:00:00.000Z',
       trend: {
         points: [
-          { date: '2026-02-10', starCount: 10_000 },
+          { date: '2023-08-14', starCount: 10_000 },
           { date: '2026-08-03', starCount: 12_345 },
         ],
         source: 'ossinsight',
@@ -94,7 +94,7 @@ const mocks = vi.hoisted(() => ({
       fetchedAt: '2026-08-10T00:00:00.000Z',
       trend: {
         points: [
-          { date: '2026-02-10', starCount: 4_321 },
+          { date: '2023-08-14', starCount: 4_321 },
           { date: '2026-08-03', starCount: 6_789 },
         ],
         source: 'ossinsight',
@@ -109,7 +109,7 @@ const mocks = vi.hoisted(() => ({
       fetchedAt: '2026-08-10T00:00:00.000Z',
       trend: {
         points: [
-          { date: '2026-02-10', starCount: 123 },
+          { date: '2023-08-14', starCount: 123 },
           { date: '2026-08-03', starCount: 456 },
         ],
         source: 'ossinsight',

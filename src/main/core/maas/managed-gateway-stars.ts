@@ -32,9 +32,9 @@ function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function sixMonthsAgo(date: Date): Date {
+function threeYearsAgo(date: Date): Date {
   const result = new Date(date);
-  result.setUTCMonth(result.getUTCMonth() - 6);
+  result.setUTCFullYear(result.getUTCFullYear() - 3);
   return result;
 }
 
@@ -167,7 +167,7 @@ export class MaasManagedGatewayStarsService {
   ): Promise<MaasManagedGatewayStarTrendPoint[] | null> {
     try {
       const today = new Date();
-      const from = formatDate(sixMonthsAgo(today));
+      const from = formatDate(threeYearsAgo(today));
       const to = formatDate(today);
       const response = await net.fetch(
         `${OSS_INSIGHT_HISTORY_URL}/${repository}/stargazers/history/?per=week&from=${from}&to=${to}`,
