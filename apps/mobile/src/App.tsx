@@ -4256,7 +4256,20 @@ function InputMediaControls({
         >
           {images.map((image) => (
             <View key={image.id} style={styles.inputImagePreview}>
-              <Image source={{ uri: image.uri }} style={styles.inputImage} />
+              <Pressable
+                accessibilityHint="点击后进入图片编辑器"
+                accessibilityLabel={`打开 ${image.name} 的图片编辑器`}
+                accessibilityRole="button"
+                accessibilityState={{ disabled }}
+                disabled={disabled}
+                style={({ pressed }) => [
+                  styles.inputImageEditTarget,
+                  pressed ? styles.buttonPressed : null,
+                ]}
+                onPress={() => openImageEditor(image)}
+              >
+                <Image source={{ uri: image.uri }} style={styles.inputImage} />
+              </Pressable>
               <Pressable
                 accessibilityLabel={`编辑 ${image.name}`}
                 accessibilityRole="button"
@@ -5901,6 +5914,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.page,
   },
   inputImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  inputImageEditTarget: {
     width: '100%',
     height: '100%',
     borderRadius: 8,
