@@ -424,6 +424,39 @@ describe('TaskManagerStore task view preload', () => {
   });
 });
 
+describe('TaskManagerStore task view prewarm', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    mocks.listeners.clear();
+    mocks.unsubscribers.length = 0;
+  });
+
+  it('starts provisioning for an idle task from a deliberate open intent', async () => {
+    const manager = createManager();
+    manager.tasks.set('task-1', createUnprovisionedTask(makeTask('Task')));
+    const provisionTask = vi.spyOn(manager, 'provisionTask').mockResolvedValue(undefined);
+
+    await manager.prewarmTask('task-1');
+
+    expect(provisionTask).toHaveBeenCalledOnce();
+    expect(provisionTask).toHaveBeenCalledWith('task-1');
+    manager.dispose();
+  });
+
+  it('does not start background provisioning for a task already in another phase', async () => {
+    const manager = createManager();
+    const task = createUnprovisionedTask(makeTask('Task'));
+    task.phase = 'provision';
+    manager.tasks.set('task-1', task);
+    const provisionTask = vi.spyOn(manager, 'provisionTask').mockResolvedValue(undefined);
+
+    await manager.prewarmTask('task-1');
+
+    expect(provisionTask).not.toHaveBeenCalled();
+    manager.dispose();
+  });
+});
+
 describe('TaskManagerStore disposal', () => {
   afterEach(() => {
     vi.clearAllMocks();

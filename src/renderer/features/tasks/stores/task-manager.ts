@@ -648,6 +648,24 @@ export class TaskManagerStore {
   }
 
   /**
+   * Warm an idle task from a deliberate sidebar intent. Provisioning is kept
+   * separate from the lightweight view snapshot preload so callers can opt
+   * into the expensive workspace work only when opening the task is likely.
+   * Errors are recorded on the task by provisionTask and deliberately stay in
+   * the background; the eventual click still owns the visible error flow.
+   */
+  async prewarmTask(taskId: string): Promise<void> {
+    const task = this.tasks.get(taskId);
+    if (!task || !isUnprovisioned(task) || task.phase !== 'idle') return;
+
+    try {
+      await this.provisionTask(taskId);
+    } catch (error) {
+      log.warn('TaskManagerStore: background task prewarm failed', { taskId, error });
+    }
+  }
+
+  /**
    * Preload the lightweight renderer data needed to materialize a task view.
    * Sidebar hover can safely call this without provisioning a workspace or
    * resuming agent/terminal processes; the next real open reuses the result.

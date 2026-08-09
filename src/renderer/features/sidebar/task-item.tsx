@@ -82,10 +82,11 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const [isMenuOpen, setMenuOpen] = useState(false);
   const task = getTaskStore(projectId, taskId)!;
   const taskManager = getTaskManagerStore(projectId);
-  const preloadTaskView = useCallback(() => {
+  const prepareTaskView = useCallback(() => {
     void taskManager?.preloadTask(taskId);
+    void taskManager?.prewarmTask(taskId);
   }, [taskManager, taskId]);
-  const taskPreloadIntent = useSidebarHoverIntent(preloadTaskView);
+  const taskPreloadIntent = useSidebarHoverIntent(prepareTaskView);
   // Shared task-entity menu wiring (same items as every other task surface).
   const menuActions = useTaskMenuActions(projectId, taskId);
   // Driven by the store so any archive entry point (sidebar, tabs, modal)
@@ -229,6 +230,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         onPointerEnter={taskPreloadIntent.schedule}
         onPointerLeave={taskPreloadIntent.cancel}
         onMouseDown={(e) => {
+          if (e.button !== 0 || (e.target instanceof Element && e.target.closest('button'))) return;
           e.preventDefault();
           taskPreloadIntent.runNow();
         }}
