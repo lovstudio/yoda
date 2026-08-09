@@ -3,6 +3,8 @@ import type { LocalProject } from '@shared/projects';
 import { ProjectManagerStore } from './project-manager';
 
 const mocks = vi.hoisted(() => ({
+  archiveProject: vi.fn(),
+  deleteProject: vi.fn(),
   ensureProjectExpanded: vi.fn(),
   getProject: vi.fn(),
   prependProjectOrder: vi.fn(),
@@ -14,6 +16,8 @@ vi.mock('@renderer/lib/ipc', () => ({
   },
   rpc: {
     projects: {
+      archiveProject: mocks.archiveProject,
+      deleteProject: mocks.deleteProject,
       getProject: mocks.getProject,
     },
   },
@@ -93,6 +97,42 @@ describe('ProjectManagerStore external project reconciliation', () => {
     expect(loaded).toBe(true);
     expect(mocks.getProject).not.toHaveBeenCalled();
     expect(mocks.ensureProjectExpanded).toHaveBeenCalledWith(project.id);
+  });
+});
+
+describe('ProjectManagerStore mounted project cleanup', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('disposes mounted resources after a project is deleted', async () => {
+    const manager = new ProjectManagerStore();
+    const dispose = vi.fn();
+    const store = {
+      mountedProject: { dispose },
+    } as never;
+    manager.projects.set('project-1', store);
+    mocks.deleteProject.mockResolvedValue(undefined);
+
+    await manager.deleteProject('project-1');
+
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(manager.projects.has('project-1')).toBe(false);
+  });
+
+  it('keeps mounted resources alive when archiving fails so rollback remains usable', async () => {
+    const manager = new ProjectManagerStore();
+    const dispose = vi.fn();
+    const store = {
+      mountedProject: { dispose },
+    } as never;
+    manager.projects.set('project-1', store);
+    mocks.archiveProject.mockRejectedValue(new Error('archive failed'));
+
+    await expect(manager.archiveProject('project-1')).rejects.toThrow('archive failed');
+
+    expect(dispose).not.toHaveBeenCalled();
+    expect(manager.projects.get('project-1')).toBeDefined();
   });
 });
 

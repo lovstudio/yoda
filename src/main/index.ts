@@ -7,7 +7,6 @@ import { registerRPCRouter } from '@shared/ipc/rpc';
 import { deepLinkService } from './app/deep-link';
 import { setupApplicationMenu } from './app/menu';
 import { registerAppScheme, setupAppProtocol } from './app/protocol';
-import { warmTaskWindowPool } from './app/task-window-pool';
 import { createMainWindow, focusExistingFullAppWindow, markAppQuitting } from './app/window';
 import { registerWindowIpc } from './app/window-ipc';
 import { yodaAccountService } from './core/account/services/yoda-account-service';
@@ -212,12 +211,7 @@ void app.whenReady().then(async () => {
   __bootMark('createMainWindow returned');
   __win.webContents.once('did-start-loading', () => __bootMark('webContents did-start-loading'));
   __win.webContents.once('dom-ready', () => __bootMark('webContents dom-ready'));
-  __win.webContents.once('did-finish-load', () => {
-    __bootMark('webContents did-finish-load');
-    // Pre-warm a hidden task window so the first tab tear-out opens instantly.
-    // Deferred so it doesn't compete with the main window's own boot.
-    setTimeout(() => warmTaskWindowPool(), 1500);
-  });
+  __win.webContents.once('did-finish-load', () => __bootMark('webContents did-finish-load'));
   // The window is shown immediately on creation; ready-to-show now only marks
   // the renderer's first paint (splash → boot screen handoff).
   __win.once('ready-to-show', () => __bootMark('window ready-to-show (first renderer paint)'));

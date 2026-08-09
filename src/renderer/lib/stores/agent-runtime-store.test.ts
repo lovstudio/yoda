@@ -71,6 +71,18 @@ describe('AgentRuntimeStore task session display state', () => {
     ]);
   });
 
+  it('drops idle sessions from the active index', async () => {
+    const store = new AgentRuntimeStore();
+    await store.start();
+    emitStatus('working', 'conversation-1');
+
+    emitStatus('idle', 'conversation-1');
+
+    expect(store.taskStatus('project-1', 'task-1')).toBeNull();
+    expect(store.taskSessionStatuses('project-1', 'task-1')).toEqual([]);
+    expect(store.workingConversationIds('project-1', 'task-1')).toEqual([]);
+  });
+
   it('exposes routing identities for every globally running session', async () => {
     const store = new AgentRuntimeStore();
     await store.start();
