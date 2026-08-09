@@ -133,9 +133,10 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     projectParams.projectId
   );
 
-  // The projects list follows pinned tasks inside the same scroll container.
-  // Tell the virtualizer where its own content begins, otherwise a scrolled
-  // pinned section would make the first project rows appear at the wrong range.
+  // Pinned tasks render above this list inside the same scroll root. The
+  // virtualizer's coordinates are relative to the scroll root, so keep the
+  // pinned region height in scrollMargin and refresh it when that region
+  // changes (for example, when a pinned group expands).
   useLayoutEffect(() => {
     const list = listContainerRef.current;
     const scrollElement = scrollElementRef.current;
@@ -182,8 +183,8 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     measureElement: (element) => element.getBoundingClientRect().height,
   });
   const virtualItems = virtualizer.getVirtualItems();
-  // Virtualizer state changes on every scroll frame. These scans only depend on
-  // the row model, so keep them out of that frame-level render path.
+  // Virtualizer state changes on every scroll frame. This scan only depends on
+  // the row model, so keep it out of that frame-level render path.
   const activeRowIndex = useMemo(
     () =>
       activeSidebarDndId
