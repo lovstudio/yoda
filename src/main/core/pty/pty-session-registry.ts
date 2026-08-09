@@ -64,6 +64,7 @@ type SessionState = {
   resumeRetryTimer: ReturnType<typeof setTimeout> | null;
   resumeRetryAttempt: number;
   pendingExit: { info: PtyExitInfo; preserveBuffer: boolean } | null;
+  readonly onFinalExit: ((info: PtyExitInfo) => void) | undefined;
   outputBytesTotal: number;
   outputRateSampleAt: number;
   outputRateSampleBytes: number;
@@ -287,6 +288,7 @@ export class PtySessionRegistry {
     sessionId: string,
     pty: Pty,
     options?: {
+      onFinalExit?: (info: PtyExitInfo) => void;
       preserveBufferOnExit?: boolean;
       registrationEpoch?: number;
       tmuxBacked?: boolean;
@@ -321,6 +323,7 @@ export class PtySessionRegistry {
       resumeRetryTimer: null,
       resumeRetryAttempt: 0,
       pendingExit: null,
+      onFinalExit: options?.onFinalExit,
       outputBytesTotal: 0,
       outputRateSampleAt: Date.now(),
       outputRateSampleBytes: 0,
@@ -663,6 +666,11 @@ export class PtySessionRegistry {
     if (!pendingExit || this.sessions.get(sessionId) !== state) return;
     state.pendingExit = null;
     events.emit(ptyExitChannel, pendingExit.info, sessionId);
+    try {
+      state.onFinalExit?.(pendingExit.info);
+    } catch (error) {
+      log.warn('PTY final-exit callback failed', { error, sessionId });
+    }
     this.endRegistrationThroughEpoch(sessionId, state.registrationEpoch);
     if (pendingExit.preserveBuffer) {
       this.cleanupLiveState(sessionId, { deleteState: false, deleteBuffer: false });
