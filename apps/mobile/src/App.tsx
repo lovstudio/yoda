@@ -3909,14 +3909,14 @@ function SessionDetailScreen({
             {error ? <Notice message={error} tone="error" /> : null}
             {loading && !detail ? <ActivityIndicator color={COLORS.charcoal} /> : null}
 
+            <TaskContextCard
+              expanded={taskInfoExpanded}
+              projectLabel={taskProject?.displayName ?? projectName(projects, task.projectId)}
+              task={task}
+              onToggle={() => setTaskInfoExpanded((current) => !current)}
+            />
             {detail ? (
               <>
-                <TaskContextCard
-                  expanded={taskInfoExpanded}
-                  projectLabel={taskProject?.displayName ?? projectName(projects, task.projectId)}
-                  task={task}
-                  onToggle={() => setTaskInfoExpanded((current) => !current)}
-                />
                 <View style={styles.summaryPanel}>
                   <DetailItem
                     label="Agent"
