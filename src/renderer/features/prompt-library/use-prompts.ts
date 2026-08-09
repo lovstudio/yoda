@@ -8,6 +8,7 @@ import type {
   PromptVersionBump,
 } from '@shared/prompt-library';
 import { events, rpc } from '@renderer/lib/ipc';
+import { normalizePromptList } from './prompt-tags';
 
 export const promptsQueryKey = ['prompts'] as const;
 export const promptVersionsQueryKey = (id: string) => ['promptVersions', id] as const;
@@ -24,6 +25,7 @@ export function usePrompts() {
   return useQuery({
     queryKey: promptsQueryKey,
     queryFn: () => rpc.promptLibrary.list(),
+    select: normalizePromptList,
   });
 }
 
