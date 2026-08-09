@@ -4,6 +4,7 @@ import {
   taskArchivedChannel,
   taskCreatedChannel,
   taskRenamedChannel,
+  taskStatusUpdatedChannel,
 } from '@shared/events/taskEvents';
 import type { CreateTaskParams, Task } from '@shared/tasks';
 import type { ProjectSettingsStore } from '@renderer/features/projects/stores/project-settings-store';
@@ -157,6 +158,25 @@ describe('TaskManagerStore task rename events', () => {
     expect(task?.state).toBe('unprovisioned');
     expect(task?.data.name).toBe('User title');
     expect(task?.data.isUserNamed).toBe(true);
+    manager.dispose();
+  });
+});
+
+describe('TaskManagerStore task status events', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    mocks.listeners.clear();
+    mocks.unsubscribers.length = 0;
+  });
+
+  it('applies status updates to registered tasks that are not provisioned', () => {
+    const manager = createManager();
+    const task = createUnprovisionedTask(makeTask('Background task'));
+    manager.tasks.set('task-1', task);
+
+    emitTaskStatusUpdated('review');
+
+    expect(task.data.status).toBe('review');
     manager.dispose();
   });
 });
@@ -566,6 +586,12 @@ function emitTaskCreated(): void {
   const listener = mocks.listeners.get(taskCreatedChannel.name);
   expect(listener).toBeDefined();
   listener?.({ taskId: 'task-1', projectId: 'project-1' });
+}
+
+function emitTaskStatusUpdated(status: Task['status']): void {
+  const listener = mocks.listeners.get(taskStatusUpdatedChannel.name);
+  expect(listener).toBeDefined();
+  listener?.({ taskId: 'task-1', projectId: 'project-1', status });
 }
 
 function makeCreateTaskParams(name: string): CreateTaskParams {
