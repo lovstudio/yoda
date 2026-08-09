@@ -123,7 +123,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
       : [];
   const hasChildren = rowVariant === 'underProject' && childCount > 0;
   const isParentTask = childCount > 0;
-  const canQuickCreateSubtask = isParentTask && Boolean(menuActions.onCreateSubtask);
+  const canQuickCreateSubtask = isParentTask && Boolean(menuActions.onCreateSubtaskAndRun);
   const isCollapsed = hasChildren && sidebarStore.collapsedTaskIds.has(taskId);
   // Root-level parents swap pl-8 for a project-style mini-button slot (same 32px
   // name offset), so the hover-only chevron aligns with the project row's chevron
@@ -384,10 +384,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           {canQuickCreateSubtask ? (
             <SidebarItemMiniButton
               type="button"
-              aria-label={t('tasks.context.createSubtask')}
+              aria-label={t('tasks.context.createSubtaskAndRun')}
               onClick={(e) => {
                 e.stopPropagation();
-                menuActions.onCreateSubtask?.();
+                menuActions.onCreateSubtaskAndRun?.();
               }}
             >
               <ListPlus className="h-4 w-4" />

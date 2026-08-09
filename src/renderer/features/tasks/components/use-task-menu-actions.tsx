@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { buildTaskDeepLink } from '@shared/deep-links';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
+import { openNewTaskFromCurrentContext } from '@renderer/app/open-new-task';
 import {
   getProjectStore,
   getRepositoryStore,
@@ -178,12 +179,7 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
         : undefined,
     onCreateSubtaskAndRun:
       projectId !== INTERNAL_PROJECT_ID && task.state !== 'unregistered'
-        ? () =>
-            showCreateSubtask({
-              projectId,
-              parentTaskId: taskId,
-              initialAction: 'create-and-run',
-            })
+        ? () => void openNewTaskFromCurrentContext(projectId, taskId)
         : undefined,
     onSetParent:
       projectId !== INTERNAL_PROJECT_ID && task.state !== 'unregistered'
