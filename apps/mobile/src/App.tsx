@@ -58,6 +58,7 @@ import {
   resolveMobileSiblingTaskAttribution,
   sortMobileProjects,
   sortMobileTaskAttributionCandidates,
+  sortMobileTasks,
   type MobileConfigurationSnapshot,
   type MobileDashboardSnapshot,
   type MobileDemandConfiguration,
@@ -70,6 +71,7 @@ import {
   type MobileSessionTranscriptBlock,
   type MobileSkillSummary,
   type MobileTaskActivityStatus,
+  type MobileTaskSortMode,
   type MobileTaskSummary,
 } from '../../../src/shared/mobile-api';
 import {
@@ -2143,6 +2145,11 @@ const MOBILE_PROJECT_SORT_OPTIONS: readonly MobileDropdownOption[] = [
   { value: 'recent', label: '最近活动', description: '优先显示最近有变化的项目' },
   { value: 'name', label: '名称', description: '按项目名称排序' },
   { value: 'open', label: '已打开', description: '优先显示当前已打开的项目' },
+];
+
+const MOBILE_TASK_SORT_OPTIONS: readonly MobileDropdownOption[] = [
+  { value: 'recent', label: '最近更新', description: '最近有互动或状态变化的任务在前' },
+  { value: 'created', label: '创建顺序', description: '按创建时间排列，后创建的任务在前' },
 ];
 
 const MOBILE_REASONING_EFFORT_OPTIONS: readonly MobileDropdownOption[] = [
@@ -5646,6 +5653,36 @@ function RawSessionOutput({ output }: { output: string }) {
   );
 }
 
+type MobileTaskListEntry = {
+  task: MobileTaskSummary;
+  depth: number;
+  hasChildren: boolean;
+};
+
+function buildMobileTaskListEntries(tasks: readonly MobileTaskSummary[]): MobileTaskListEntry[] {
+  const taskById = new Map(tasks.map((task) => [task.id, task] as const));
+  const childIds = new Set<string>();
+
+  for (const task of tasks) {
+    const parent = task.parentTaskId ? taskById.get(task.parentTaskId) : undefined;
+    if (parent && parent.projectId === task.projectId) childIds.add(parent.id);
+  }
+
+  return tasks.map((task) => {
+    let depth = 0;
+    let current = task;
+    const visited = new Set<string>();
+    while (current.parentTaskId && !visited.has(current.id)) {
+      visited.add(current.id);
+      const parent = taskById.get(current.parentTaskId);
+      if (!parent || parent.projectId !== task.projectId) break;
+      depth += 1;
+      current = parent;
+    }
+    return { task, depth, hasChildren: childIds.has(task.id) };
+  });
+}
+
 function TaskList({
   projects,
   tasks,
@@ -5660,7 +5697,11 @@ function TaskList({
   onOpenTask: (taskId: string) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const visibleTasks = useMemo(() => filterMobileTasks(tasks, searchQuery), [searchQuery, tasks]);
+  const [sortMode, setSortMode] = useState<MobileTaskSortMode>('recent');
+  const visibleTasks = useMemo(() => {
+    const matchingTasks = filterMobileTasks(tasks, searchQuery);
+    return buildMobileTaskListEntries(sortMobileTasks(matchingTasks, sortMode));
+  }, [searchQuery, sortMode, tasks]);
   const trimmedQuery = searchQuery.trim();
 
   return (
@@ -5675,6 +5716,15 @@ function TaskList({
         value={searchQuery}
         onChangeText={setSearchQuery}
       />
+      <View style={styles.taskListSort}>
+        <MobileDropdownMenu
+          accessibilityLabel={`任务排序，当前${MOBILE_TASK_SORT_OPTIONS.find((option) => option.value === sortMode)?.label ?? '最近更新'}`}
+          label="任务排序"
+          options={MOBILE_TASK_SORT_OPTIONS}
+          value={sortMode}
+          onChange={(value) => setSortMode(value as MobileTaskSortMode)}
+        />
+      </View>
       {visibleTasks.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons
@@ -5687,9 +5737,11 @@ function TaskList({
           </Text>
         </View>
       ) : (
-        visibleTasks.map((task) => (
+        visibleTasks.map(({ depth, hasChildren, task }) => (
           <TaskRow
             key={task.id}
+            depth={depth}
+            hasChildren={hasChildren}
             projectLabel={projectName(projects, task.projectId)}
             task={task}
             isOpening={openingTaskId === task.id}
@@ -5702,26 +5754,37 @@ function TaskList({
 }
 
 function TaskRow({
+  depth,
+  hasChildren,
   isOpening,
   projectLabel,
   task,
   onPress,
 }: {
+  depth: number;
+  hasChildren: boolean;
   isOpening: boolean;
   projectLabel: string;
   task: MobileTaskSummary;
   onPress: () => void;
 }) {
+  const hierarchyLabel = depth > 0 ? '子任务' : hasChildren ? '父任务' : '任务';
   return (
     <Pressable
-      accessibilityLabel={`Open task ${task.name}`}
+      accessibilityLabel={`${hierarchyLabel}：${task.name}`}
       accessibilityRole="button"
       accessibilityState={{ busy: isOpening }}
       testID={`mobile-task-card-two-line-v1-${task.id}`}
-      style={({ pressed }) => [styles.taskRow, pressed ? styles.buttonPressed : null]}
+      style={({ pressed }) => [
+        styles.taskRow,
+        depth > 0 ? styles.taskRowNested : null,
+        { marginLeft: Math.min(depth, 3) * 14 },
+        pressed ? styles.buttonPressed : null,
+      ]}
       onPress={onPress}
     >
       <View style={styles.taskTopLine}>
+        {depth > 0 ? <Ionicons color={COLORS.muted} name="git-branch-outline" size={16} /> : null}
         <Text style={styles.taskName} numberOfLines={1}>
           {task.name}
         </Text>
@@ -5732,9 +5795,14 @@ function TaskRow({
         </View>
       </View>
       <View style={styles.taskSummaryLine}>
-        <Text style={styles.taskProject} numberOfLines={1}>
-          {projectLabel}
-        </Text>
+        <View style={styles.taskProjectAndHierarchy}>
+          <Text style={styles.taskProject} numberOfLines={1}>
+            {projectLabel}
+          </Text>
+          {hierarchyLabel !== '任务' ? (
+            <Text style={styles.taskHierarchyLabel}>{hierarchyLabel}</Text>
+          ) : null}
+        </View>
         <View style={styles.taskSummaryMeta}>
           <Text style={styles.taskSummaryText} numberOfLines={1}>
             {taskSessionCountLabel(task.conversationCount)} ·{' '}
@@ -6890,6 +6958,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  taskListSort: {
+    marginTop: 8,
+    marginBottom: 2,
+  },
   newTaskOverlay: {
     flex: 1,
     justifyContent: 'center',
@@ -7345,6 +7417,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 7,
   },
+  taskRowNested: {
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.blue,
+  },
   projectDirectoryRow: {
     minHeight: 72,
     flexDirection: 'row',
@@ -7433,6 +7509,18 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 12,
     fontWeight: '700',
+  },
+  taskProjectAndHierarchy: {
+    minWidth: 0,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  taskHierarchyLabel: {
+    color: COLORS.blue,
+    fontSize: 11,
+    fontWeight: '800',
   },
   taskSummaryMeta: {
     flexDirection: 'row',

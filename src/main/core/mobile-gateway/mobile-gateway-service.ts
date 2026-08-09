@@ -1444,6 +1444,7 @@ export class MobileGatewayService {
       activityStatus,
       bootstrapStatus: taskManager.getBootstrapStatus(task.id),
       taskBranch: task.taskBranch,
+      createdAt: task.createdAt,
       updatedAt: task.updatedAt,
       lastInteractedAt: task.lastInteractedAt,
       needsReview: task.needsReview,
