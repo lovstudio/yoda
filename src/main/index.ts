@@ -5,6 +5,7 @@ import dockIcon from '@/assets/images/yoda/icon-dock.png?asset';
 import { PRODUCT_NAME } from '@shared/app-identity';
 import { registerRPCRouter } from '@shared/ipc/rpc';
 import { deepLinkService } from './app/deep-link';
+import { externalFileOpenService } from './app/external-file-open';
 import { setupApplicationMenu } from './app/menu';
 import { registerAppScheme, setupAppProtocol } from './app/protocol';
 import { createMainWindow, focusExistingFullAppWindow, markAppQuitting } from './app/window';
@@ -70,6 +71,7 @@ app.commandLine.appendSwitch('autoplay-policy', 'document-user-activation-requir
 
 registerAppScheme();
 deepLinkService.register();
+externalFileOpenService.register();
 
 app.setName(PRODUCT_NAME);
 
@@ -78,8 +80,12 @@ app.setPath('userData', yodaUserData);
 
 function createMainWindowWithDeepLinkReset(): BrowserWindow {
   deepLinkService.markRendererNotReady();
+  externalFileOpenService.markRendererNotReady();
   const win = createMainWindow();
-  win.webContents.on('did-start-loading', () => deepLinkService.markRendererNotReady());
+  win.webContents.on('did-start-loading', () => {
+    deepLinkService.markRendererNotReady();
+    externalFileOpenService.markRendererNotReady();
+  });
   return win;
 }
 
@@ -88,6 +94,7 @@ app.on('second-instance', (_event, argv) => {
   if (win?.isMinimized()) win.restore();
   win?.focus();
   deepLinkService.enqueueArgv(argv);
+  externalFileOpenService.enqueueArgv(argv);
 });
 
 if (!import.meta.env.DEV && !app.requestSingleInstanceLock()) {
@@ -203,6 +210,7 @@ void app.whenReady().then(async () => {
   registerWindowIpc(ipcMain);
   __bootMark('registerRPCRouter done');
   deepLinkService.start();
+  externalFileOpenService.start();
 
   setupAppProtocol(join(app.getAppPath(), 'out', 'renderer'));
   await setupApplicationMenu();

@@ -4,7 +4,7 @@ import path from 'node:path';
 
 const DEV_PRODUCT_NAME = 'Yoda';
 const DEV_BUNDLE_ID = 'ai.lovstudio.yoda.dev';
-const DEV_BUNDLE_CACHE_VERSION = '4';
+const DEV_BUNDLE_CACHE_VERSION = '5';
 const SOURCE_APP_NAME = 'Electron.app';
 const SOURCE_EXECUTABLE_NAME = 'Electron';
 const DEV_APP_NAME = 'Yoda.app';
@@ -51,6 +51,7 @@ export function prepareDevElectronBundle(repoRoot: string): string | undefined {
     name: DEV_PRODUCT_NAME,
     scheme: DEV_PROTOCOL_SCHEME,
   });
+  patchBundleDocumentTypes(devBundlePath);
   installDevBundleIcon(repoRoot, devBundlePath);
   writeFileSync(markerPath, markerValue);
   // 原地替换 icns 后 iconservices 仍会按 bundle 缓存旧图标，touch 让缓存失效
@@ -127,5 +128,63 @@ function patchBundleUrlScheme(bundlePath: string, args: { name: string; scheme: 
     `Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string ${args.scheme}`,
   ]) {
     spawnSync('/usr/libexec/PlistBuddy', ['-c', command, plist], { stdio: 'ignore' });
+  }
+}
+
+function patchBundleDocumentTypes(bundlePath: string): void {
+  const plist = path.join(bundlePath, 'Contents', 'Info.plist');
+  if (!existsSync(plist)) return;
+
+  spawnSync('/usr/libexec/PlistBuddy', ['-c', 'Delete :CFBundleDocumentTypes', plist], {
+    stdio: 'ignore',
+  });
+  for (const command of [
+    'Add :CFBundleDocumentTypes array',
+    'Add :CFBundleDocumentTypes:0 dict',
+    `Add :CFBundleDocumentTypes:0:CFBundleTypeName string ${DEV_PRODUCT_NAME} Document`,
+    'Add :CFBundleDocumentTypes:0:CFBundleTypeRole string Editor',
+    'Add :CFBundleDocumentTypes:0:CFBundleTypeExtensions array',
+  ]) {
+    spawnSync('/usr/libexec/PlistBuddy', ['-c', command, plist], { stdio: 'ignore' });
+  }
+
+  const extensions = [
+    'png',
+    'jpg',
+    'jpeg',
+    'gif',
+    'webp',
+    'bmp',
+    'ico',
+    'svg',
+    'pdf',
+    'txt',
+    'md',
+    'mdx',
+    'json',
+    'js',
+    'jsx',
+    'ts',
+    'tsx',
+    'css',
+    'scss',
+    'html',
+    'xml',
+    'yaml',
+    'yml',
+    'toml',
+    'env',
+    'log',
+  ];
+  for (const [index, extension] of extensions.entries()) {
+    spawnSync(
+      '/usr/libexec/PlistBuddy',
+      [
+        '-c',
+        `Add :CFBundleDocumentTypes:0:CFBundleTypeExtensions:${index} string ${extension}`,
+        plist,
+      ],
+      { stdio: 'ignore' }
+    );
   }
 }

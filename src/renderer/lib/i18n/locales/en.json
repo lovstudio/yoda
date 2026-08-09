@@ -32,6 +32,13 @@
     "openFailed": "Open failed",
     "currentLabel": "{{label}} (current)"
   },
+  "externalFileDrop": {
+    "title": "Open in Yoda",
+    "description": "Drop to preview or edit in a new file tab",
+    "failedTitle": "Failed to open file",
+    "failedDescription": "{{count}} file(s) could not be opened",
+    "noPath": "The dropped file path could not be read"
+  },
   "initialCommit": {
     "title": "Create initial commit",
     "reasonWorktreeMode": "This mode runs each agent in its own isolated worktree, which needs a base commit to branch from.",

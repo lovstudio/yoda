@@ -289,6 +289,14 @@ export function getMainWindow(): BrowserWindow | null {
   return mainWindow;
 }
 
+export function focusMainWindow(): void {
+  const win = getMainWindow();
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
+  win.focus();
+}
+
 /**
  * macOS dock click: surface a live full-app window if one exists, ignoring
  * hidden background windows (the pre-warmed task window). Returns false when

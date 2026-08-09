@@ -12,6 +12,7 @@ export const appPasteChannel = defineEvent<void>('app:paste');
 
 // Menu events (main → renderer, no payload)
 export const menuOpenSettingsChannel = defineEvent<void>('menu:open-settings');
+export const menuOpenFileChannel = defineEvent<void>('menu:open-file');
 export const menuCheckForUpdatesChannel = defineEvent<void>('menu:check-for-updates');
 export const menuUndoChannel = defineEvent<void>('menu:undo');
 export const menuRedoChannel = defineEvent<void>('menu:redo');
@@ -66,6 +67,13 @@ export const notificationCreatedChannel =
   defineEvent<AppNotificationCreated>('notification:created');
 
 export const deepLinkOpenChannel = defineEvent<DeepLinkTarget>('deep-link:open');
+
+export type ExternalFileOpenTarget = {
+  id: string;
+  path: string;
+};
+
+export const externalFileOpenChannel = defineEvent<ExternalFileOpenTarget>('external-file:open');
 
 export type TaskWindowReturnPayload = {
   sourceWindowId: number;

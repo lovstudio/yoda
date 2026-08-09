@@ -169,4 +169,4 @@ export type FileRendererData =
   | { kind: 'pdf' }
   | { kind: 'binary' }
   | { kind: 'too-large' }
-  | { kind: 'file-error' };
+  | { kind: 'file-error'; error?: string };

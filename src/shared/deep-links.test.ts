@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildAiLabAppDeepLink,
+  buildFileDeepLink,
   buildProjectDeepLink,
   buildSessionDeepLink,
   buildTaskDeepLink,
@@ -67,6 +68,12 @@ describe('deep links', () => {
     expect(parseYodaDeepLink('yoda://app/app%20%2F%20%E6%B5%8B%E8%AF%95')).toEqual({
       appId: 'app / 测试',
     });
+  });
+
+  it('builds file links that round-trip through the parser', () => {
+    const link = buildFileDeepLink({ filePath: '/tmp/design draft.png' });
+    expect(link).toBe('yoda://open?path=%2Ftmp%2Fdesign+draft.png');
+    expect(parseYodaDeepLink(link)).toEqual({ filePath: '/tmp/design draft.png' });
   });
 
   it('builds session links', () => {

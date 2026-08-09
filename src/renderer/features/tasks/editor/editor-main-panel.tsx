@@ -42,7 +42,7 @@ export function OtherFileRenderer({ file }: OtherFileRendererProps) {
     case 'binary':
       return <BinaryRenderer file={file} />;
     case 'file-error':
-      return <FileErrorRenderer file={file} />;
+      return <FileErrorRenderer file={{ path: file.path, error: file.renderer.error }} />;
     default:
       return null;
   }

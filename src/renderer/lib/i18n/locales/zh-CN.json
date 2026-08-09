@@ -45,6 +45,13 @@
     "openFailed": "打开失败",
     "currentLabel": "{{label}}（当前）"
   },
+  "externalFileDrop": {
+    "title": "在 Yoda 中打开",
+    "description": "松开即可在新的文件标签页中预览或编辑",
+    "failedTitle": "打开文件失败",
+    "failedDescription": "有 {{count}} 个文件未能打开",
+    "noPath": "未能读取拖入文件的路径"
+  },
   "common": {
     "ok": "确定",
     "cancel": "取消",
