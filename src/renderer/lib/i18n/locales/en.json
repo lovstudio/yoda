@@ -1216,7 +1216,7 @@
       "title": "Notifications",
       "description": "Get notified when a task finishes or an Agent needs your attention.",
       "turnCompletion": "Turn completion notifications",
-      "turnCompletionDescription": "Set when to play a sound after a task finishes.",
+      "turnCompletionDescription": "Set when to alert you that a task has finished.",
       "permissionNotifications": "Enable permission notifications",
       "permissionNotificationsDescription": "Show a system banner when an Agent needs permission.",
       "questionNotifications": "Enable question notifications",

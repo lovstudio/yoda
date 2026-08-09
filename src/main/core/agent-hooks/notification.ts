@@ -6,7 +6,7 @@ import {
   notificationFocusTaskChannel,
   type AppNotificationCreated,
 } from '@shared/events/appEvents';
-import { isAgentNotificationEnabled } from '@shared/notification-settings';
+import { shouldShowAgentNotification } from '@shared/notification-settings';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import { getMainWindow } from '@main/app/window';
 import { appSettingsService } from '@main/core/settings/settings-service';
@@ -18,6 +18,12 @@ import { log } from '@main/lib/logger';
 function getNotificationMessage(
   event: AgentEvent
 ): Pick<AppNotificationCreated, 'description' | 'kind' | 'messageKey' | 'reason'> | null {
+  if (event.type === 'stop') {
+    return {
+      description: 'Your agent finished',
+      kind: 'success',
+    };
+  }
   if (!agentEventRequiresUserAction(event)) return null;
   return {
     description: 'Your agent is waiting for input',
@@ -68,7 +74,7 @@ export async function maybeShowNotification(event: AgentEvent, appFocused: boole
     });
 
     const settings = await appSettingsService.get('notifications');
-    if (!isAgentNotificationEnabled(event, settings) || appFocused || !Notification.isSupported()) {
+    if (!shouldShowAgentNotification(event, settings, appFocused) || !Notification.isSupported()) {
       return;
     }
 
