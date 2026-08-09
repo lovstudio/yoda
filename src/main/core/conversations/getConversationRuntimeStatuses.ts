@@ -170,8 +170,12 @@ async function deriveStatus(args: {
         ? { cwd, startedAtMs, threadId, statePath }
         : { threadId, statePath }
     ).catch(() => null);
-    if (verdict?.state === 'working' || verdict?.state === 'awaiting-input') truth = verdict.state;
-    else if (verdict?.state === 'error') truth = 'error';
+    if (verdict?.state === 'working' || verdict?.state === 'awaiting-input') {
+      truth = verdict.state;
+      if (isInterruptedSinceLastPrompt(conversationId, verdict.lastStartedAt)) {
+        truth = 'idle';
+      }
+    } else if (verdict?.state === 'error') truth = 'error';
     else if (verdict?.state === 'idle') truth = 'idle';
   }
 

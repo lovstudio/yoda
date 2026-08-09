@@ -164,6 +164,10 @@ class AgentSessionRuntimeStore {
    * transitions and exactly one place to debug them.
    */
   dispatch(session: AgentSessionKey, event: RunStateEvent, source: string): RunState {
+    // A deterministic new turn is the first durable signal after an interrupt
+    // marker. Clear it here so Codex/Claude truth sources can resume working
+    // even when the prompt-submit hook was missed.
+    if (event.kind === 'turn-started') clearInterruptMarker(session.conversationId);
     const key = keyFor(session);
     const previousEntry = this.entries.get(key);
     const prev = previousEntry?.state ?? initialRunState();

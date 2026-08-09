@@ -186,7 +186,7 @@ describe('getConversationRunStatus', () => {
     );
   });
 
-  it('trusts Codex rollout working verdicts instead of Claude interrupt markers', async () => {
+  it('honors an interrupt marker for Codex rollout working verdicts', async () => {
     mocks.resolveTask.mockReturnValue(mountedTask(['conv-1']));
     mocks.readCodexTurnVerdict.mockResolvedValue({
       state: 'working',
@@ -194,8 +194,11 @@ describe('getConversationRunStatus', () => {
     });
     mocks.isInterruptedSinceLastPrompt.mockReturnValue(true);
 
-    await expect(readCodexStatus()).resolves.toBe('working');
-    expect(mocks.isInterruptedSinceLastPrompt).not.toHaveBeenCalled();
+    await expect(readCodexStatus()).resolves.toBe('idle');
+    expect(mocks.isInterruptedSinceLastPrompt).toHaveBeenCalledWith(
+      'conv-1',
+      Date.parse('2026-06-10T00:00:05.000Z')
+    );
   });
 
   it('surfaces Codex request_user_input as awaiting-input for active sessions', async () => {

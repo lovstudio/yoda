@@ -561,8 +561,8 @@ export class LocalConversationProvider implements ConversationProvider {
       this.silenceReconcilerDetachers.set(sessionId, detachSilenceReconciler);
       detachSilenceReconcilerForRollback = detachSilenceReconciler;
       pty.onData(() => agentSilenceReconciler.noteOutput(sessionId));
-      if (conversation.runtimeId === 'claude') {
-        // Sub-second Esc-interrupt detection from the TUI's "Interrupted" line.
+      if (conversation.runtimeId === 'claude' || conversation.runtimeId === 'codex') {
+        // Sub-second Esc-interrupt detection from the TUI's interruption line.
         pty.onData(
           createClaudeInterruptSniffer({
             projectId: conversation.projectId,
