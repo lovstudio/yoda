@@ -661,10 +661,40 @@ export type MobileSessionTranscriptBlock = {
   agentPhase?: MobileSessionTranscriptAgentPhase;
   /** Present for tool blocks when the transcript exposes call/result boundaries. */
   toolStatus?: MobileSessionTranscriptToolStatus;
+  /** Provider tool-call id, used to pair an interactive call with its result. */
+  toolCallId?: string;
   title?: string;
   timestamp: string | null;
   format: MobileSessionTranscriptFormat;
   content: string;
+};
+
+export type MobileSessionInteractionSource = 'claude' | 'codex' | 'terminal';
+export type MobileSessionInteractionKind = 'choice' | 'confirmation' | 'text';
+
+export type MobileSessionInteractionOption = {
+  id: string;
+  label: string;
+  value: string;
+  description?: string;
+};
+
+export type MobileSessionQuestion = {
+  id: string;
+  prompt: string;
+  header?: string;
+  multiSelect: boolean;
+  options: MobileSessionInteractionOption[];
+};
+
+/** A bounded, display-ready representation of the current AI question. */
+export type MobileSessionInteraction = {
+  id: string;
+  kind: MobileSessionInteractionKind;
+  title: string;
+  description?: string;
+  source: MobileSessionInteractionSource;
+  questions: MobileSessionQuestion[];
 };
 
 export type MobileSessionDetail = {
@@ -676,6 +706,8 @@ export type MobileSessionDetail = {
   source: MobileSessionContentSource;
   transcript: MobileSessionTranscriptBlock[];
   transcriptTruncated: boolean;
+  /** Present while the runtime is waiting for a user answer. */
+  pendingInteraction?: MobileSessionInteraction | null;
 };
 
 export type MobileSessionInputRequest = {

@@ -21,6 +21,7 @@ import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
 import { observer } from 'mobx-react-lite';
 import {
   Fragment,
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -64,6 +65,7 @@ import {
   type TreeFlatRow,
   type TreeProjection,
 } from './sidebar-tree-projection';
+import { getSidebarVirtualRowOffset } from './sidebar-virtual-list-layout';
 import { SidebarTaskItem } from './task-item';
 
 export const SidebarVirtualList = observer(function SidebarVirtualList({
@@ -161,6 +163,9 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
   const virtualizer = useVirtualizer({
     count: renderRows.length,
     getScrollElement: () => scrollElementRef.current,
+    // Scroll updates should yield to typing and pointer input instead of
+    // forcing a synchronous React commit for every native scroll event.
+    useFlushSync: false,
     estimateSize: () => 32,
     gap: 2,
     overscan: 8,
@@ -174,16 +179,22 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     measureElement: (element) => element.getBoundingClientRect().height,
   });
   const virtualItems = virtualizer.getVirtualItems();
-  const activeRowIndex = activeSidebarDndId
-    ? renderRows.findIndex((row) => isSidebarRow(row) && rowToDndId(row) === activeSidebarDndId)
-    : -1;
+  // Virtualizer state changes on every scroll frame. These scans only depend on
+  // the row model, so keep them out of that frame-level render path.
+  const activeRowIndex = useMemo(
+    () =>
+      activeSidebarDndId
+        ? renderRows.findIndex((row) => isSidebarRow(row) && rowToDndId(row) === activeSidebarDndId)
+        : -1,
+    [activeSidebarDndId, renderRows]
+  );
 
   useEffect(() => {
     if (activeId || activeRowIndex < 0) return;
     virtualizer.scrollToIndex(activeRowIndex, { align: 'auto' });
   }, [activeId, activeRowIndex, activeSidebarDndId, virtualizer]);
 
-  const allDndIds = renderRows.filter(isSidebarRow).map(rowToDndId);
+  const allDndIds = useMemo(() => renderRows.filter(isSidebarRow).map(rowToDndId), [renderRows]);
 
   // Deferred reflow: keep needsReview demotion frozen while the pointer is
   // inside the list, so marking a task (or auto-clear on open) doesn't reorder
@@ -229,20 +240,23 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     taskParams.taskId,
   ]);
 
-  function toggleTaskGroupExpanded(groupId: string) {
-    setExpandedTaskGroupIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupId)) {
-        if (activeSidebarDndId) {
-          autoExpandedActiveIdRef.current = activeSidebarDndId;
+  const toggleTaskGroupExpanded = useCallback(
+    (groupId: string) => {
+      setExpandedTaskGroupIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(groupId)) {
+          if (activeSidebarDndId) {
+            autoExpandedActiveIdRef.current = activeSidebarDndId;
+          }
+          next.delete(groupId);
+        } else {
+          next.add(groupId);
         }
-        next.delete(groupId);
-      } else {
-        next.add(groupId);
-      }
-      return next;
-    });
-  }
+        return next;
+      });
+    },
+    [activeSidebarDndId]
+  );
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(String(event.active.id));
@@ -353,74 +367,17 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
 
   const renderRow = (row: SidebarRenderableRow, virtualItem?: VirtualItem) => {
     const rowKey = sidebarRenderableRowKey(row);
-    const rowContent = (() => {
-      if (row.kind === 'task-group-toggle') {
-        return (
-          <div className="min-w-0 overflow-hidden">
-            <SidebarTaskGroupToggle
-              expanded={row.expanded}
-              hiddenCount={row.hiddenCount}
-              rowVariant={row.rowVariant}
-              onToggle={() => toggleTaskGroupExpanded(row.groupId)}
-            />
-          </div>
-        );
-      }
-      const dndId = rowToDndId(row);
-      if (row.kind === 'group') {
-        return (
-          <div data-sidebar-row={dndId} className="min-w-0 overflow-hidden">
-            <SidebarGroupHeader group={row.group} />
-          </div>
-        );
-      }
-      if (row.kind === 'project') {
-        const isDropTarget = dropTargetProjectId === row.projectId;
-        if (!dndEnabled) {
-          return (
-            <div data-sidebar-row={dndId} className="min-w-0 overflow-hidden">
-              <SidebarProjectItem projectId={row.projectId} isDropTarget={isDropTarget} />
-            </div>
-          );
-        }
-        return (
-          <SortableRow dndId={dndId}>
-            <SidebarProjectItem projectId={row.projectId} isDropTarget={isDropTarget} />
-          </SortableRow>
-        );
-      }
-
-      // While dragging, the in-list ghost row previews the projected depth so
-      // the user sees where the task would nest on drop.
-      const isDragGhost = activeId === dndId && taskProjection !== null;
-      const taskNode = (
-        <SidebarTaskItem
-          projectId={row.projectId}
-          taskId={row.taskId}
-          rowVariant={row.showProjectTag ? 'flat' : 'underProject'}
-          depth={isDragGhost ? taskProjection.depth : row.depth}
-          childCount={row.childCount}
-          treeTrail={isDragGhost ? undefined : row.treeTrail}
-          isMultiAgent={teamRoomTaskKeys.has(teamRoomTaskKey(row.projectId, row.taskId))}
-        />
-      );
-      if (!dndEnabled) {
-        return (
-          <ConversationTaskDropRow
-            projectId={row.projectId}
-            taskId={row.taskId}
-            data-sidebar-row={dndId}
-          >
-            {taskNode}
-          </ConversationTaskDropRow>
-        );
-      }
-      return (
-        <SortableRow dndId={dndId} projectId={row.projectId} taskId={row.taskId}>
-          {taskNode}
-        </SortableRow>
-      );
-    })();
+    const rowContent = (
+      <SidebarRowContent
+        row={row}
+        dndEnabled={dndEnabled}
+        dropTargetProjectId={dropTargetProjectId}
+        activeId={activeId}
+        taskProjection={taskProjection}
+        teamRoomTaskKeys={teamRoomTaskKeys}
+        onToggleTaskGroup={toggleTaskGroupExpanded}
+      />
+    );
 
     if (!virtualItem) return <Fragment key={rowKey}>{rowContent}</Fragment>;
     return (
@@ -433,7 +390,9 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
           top: 0,
           left: 0,
           width: '100%',
-          transform: `translateY(${virtualItem.start}px)`,
+          // TanStack includes scrollMargin in virtualItem.start. The row is
+          // already inside this list container, so remove it once here.
+          transform: `translateY(${getSidebarVirtualRowOffset(virtualItem.start, scrollMargin)}px)`,
         }}
       >
         {rowContent}
@@ -505,6 +464,98 @@ function sidebarRenderableRowKey(row: SidebarRenderableRow): string {
   if (row.kind === 'task-group-toggle') return `toggle:${row.groupId}`;
   return rowToDndId(row);
 }
+
+type SidebarRowContentProps = {
+  row: SidebarRenderableRow;
+  dndEnabled: boolean;
+  dropTargetProjectId: string | null;
+  activeId: string | null;
+  taskProjection: TreeProjection | null;
+  teamRoomTaskKeys: ReadonlySet<string>;
+  onToggleTaskGroup: (groupId: string) => void;
+};
+
+// The virtualizer re-renders its parent on every scroll frame. Keep the row's
+// DnD/drop-zone hooks and task element reconciliation out of that frame when
+// the row model and interaction state are unchanged.
+const SidebarRowContent = memo(function SidebarRowContent({
+  row,
+  dndEnabled,
+  dropTargetProjectId,
+  activeId,
+  taskProjection,
+  teamRoomTaskKeys,
+  onToggleTaskGroup,
+}: SidebarRowContentProps) {
+  if (row.kind === 'task-group-toggle') {
+    return (
+      <div className="min-w-0 overflow-hidden">
+        <SidebarTaskGroupToggle
+          expanded={row.expanded}
+          hiddenCount={row.hiddenCount}
+          rowVariant={row.rowVariant}
+          onToggle={() => onToggleTaskGroup(row.groupId)}
+        />
+      </div>
+    );
+  }
+
+  const dndId = rowToDndId(row);
+  if (row.kind === 'group') {
+    return (
+      <div data-sidebar-row={dndId} className="min-w-0 overflow-hidden">
+        <SidebarGroupHeader group={row.group} />
+      </div>
+    );
+  }
+
+  if (row.kind === 'project') {
+    const isDropTarget = dropTargetProjectId === row.projectId;
+    if (!dndEnabled) {
+      return (
+        <div data-sidebar-row={dndId} className="min-w-0 overflow-hidden">
+          <SidebarProjectItem projectId={row.projectId} isDropTarget={isDropTarget} />
+        </div>
+      );
+    }
+    return (
+      <SortableRow dndId={dndId}>
+        <SidebarProjectItem projectId={row.projectId} isDropTarget={isDropTarget} />
+      </SortableRow>
+    );
+  }
+
+  // While dragging, the in-list ghost row previews the projected depth so the
+  // user sees where the task would nest on drop.
+  const isDragGhost = activeId === dndId && taskProjection !== null;
+  const taskNode = (
+    <SidebarTaskItem
+      projectId={row.projectId}
+      taskId={row.taskId}
+      rowVariant={row.showProjectTag ? 'flat' : 'underProject'}
+      depth={isDragGhost ? taskProjection.depth : row.depth}
+      childCount={row.childCount}
+      treeTrail={isDragGhost ? undefined : row.treeTrail}
+      isMultiAgent={teamRoomTaskKeys.has(teamRoomTaskKey(row.projectId, row.taskId))}
+    />
+  );
+  if (!dndEnabled) {
+    return (
+      <ConversationTaskDropRow
+        projectId={row.projectId}
+        taskId={row.taskId}
+        data-sidebar-row={dndId}
+      >
+        {taskNode}
+      </ConversationTaskDropRow>
+    );
+  }
+  return (
+    <SortableRow dndId={dndId} projectId={row.projectId} taskId={row.taskId}>
+      {taskNode}
+    </SortableRow>
+  );
+});
 
 /**
  * Drop the descendant subtree of the dragged task (rows immediately following

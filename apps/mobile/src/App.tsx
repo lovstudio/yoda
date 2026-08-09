@@ -103,6 +103,7 @@ import {
 import { clearConnection, loadConnection, saveConnection } from './connection-storage';
 import { prepareCreatedDemandNavigation } from './demand-navigation';
 import { DEFAULT_HOME_TAB, HOME_TABS, homeTabTitle, type HomeTab } from './home-navigation';
+import { MobileImageEditor } from './input-image-editor';
 import { pickMobileInputImages } from './input-media';
 import {
   uploadMobileInputImages,
@@ -117,6 +118,7 @@ import {
   type SessionOutputMode,
 } from './session-display-preferences';
 import { subscribeSessionEvents } from './session-event-stream';
+import { resolveMobileTaskEntry } from './task-navigation';
 import { startMobileVoiceInput, type MobileVoiceInputSession } from './voice-input';
 
 const COLORS = {
@@ -643,6 +645,7 @@ export function App() {
   const [taskScope, setTaskScope] = useState<TaskScope>('all');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [openingTaskId, setOpeningTaskId] = useState<string | null>(null);
   const [demandProjectId, setDemandProjectId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [demandImages, setDemandImages] = useState<MobileImageDraft[]>([]);
@@ -654,6 +657,7 @@ export function App() {
   const [demandUploadProgress, setDemandUploadProgress] =
     useState<MobileInputUploadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const openTaskRequestRef = useRef(0);
 
   const applyPairingUrl = useCallback(async (url: string | null) => {
     if (!url) return false;
@@ -870,6 +874,31 @@ export function App() {
     setSelectedTaskId(null);
     setSelectedSessionId(null);
   }, [selectedTask, selectedTaskId]);
+
+  const handleOpenTask = useCallback(
+    async (taskId: string) => {
+      const task = snapshot?.tasks.find((candidate) => candidate.id === taskId);
+      if (!connection || !task) return;
+
+      const requestId = openTaskRequestRef.current + 1;
+      openTaskRequestRef.current = requestId;
+      setOpeningTaskId(taskId);
+      try {
+        const response = await fetchTaskSessions(connection, task.projectId, task.id);
+        if (requestId !== openTaskRequestRef.current) return;
+        const entry = resolveMobileTaskEntry(response.sessions);
+        setSelectedTaskId(task.id);
+        setSelectedSessionId(entry.kind === 'session' ? entry.sessionId : null);
+      } catch {
+        if (requestId !== openTaskRequestRef.current) return;
+        setSelectedTaskId(task.id);
+        setSelectedSessionId(null);
+      } finally {
+        if (requestId === openTaskRequestRef.current) setOpeningTaskId(null);
+      }
+    },
+    [connection, snapshot]
+  );
 
   const handleConnect = useCallback(async () => {
     const next = {
@@ -1104,6 +1133,7 @@ export function App() {
           <ScrollView
             style={styles.homeScroll}
             contentContainerStyle={styles.homeScrollContent}
+            keyboardShouldPersistTaps="handled"
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -1133,7 +1163,8 @@ export function App() {
                     selectedScope={taskScope}
                     tasks={filteredTasks}
                     visibleProjects={visibleProjects}
-                    onOpenTask={setSelectedTaskId}
+                    openingTaskId={openingTaskId}
+                    onOpenTask={handleOpenTask}
                     onSelectProject={(projectId) => {
                       setSelectedProjectId(projectId);
                       setSelectedTaskId(null);
@@ -1370,6 +1401,7 @@ function TasksWorkspace({
   selectedScope,
   tasks,
   visibleProjects,
+  openingTaskId,
   onOpenTask,
   onSelectProject,
   onSelectScope,
@@ -1379,6 +1411,7 @@ function TasksWorkspace({
   selectedScope: TaskScope;
   tasks: MobileTaskSummary[];
   visibleProjects: MobileProjectSummary[];
+  openingTaskId: string | null;
   onOpenTask: (taskId: string) => void;
   onSelectProject: (projectId: string) => void;
   onSelectScope: (scope: TaskScope) => void;
@@ -1395,6 +1428,7 @@ function TasksWorkspace({
         projects={projects}
         tasks={tasks}
         title={selectedProjectId === 'all' ? taskScopeLabel(selectedScope) : '项目任务'}
+        openingTaskId={openingTaskId}
         onOpenTask={onOpenTask}
       />
     </>
@@ -2045,6 +2079,177 @@ function DemandComposer({
   );
 }
 
+type MobileDropdownOption = {
+  value: string;
+  label: string;
+  description?: string;
+  icon?: string;
+};
+
+const MOBILE_PROJECT_SORT_OPTIONS: readonly MobileDropdownOption[] = [
+  { value: 'recent', label: '最近活动', description: '优先显示最近有变化的项目' },
+  { value: 'name', label: '名称', description: '按项目名称排序' },
+  { value: 'open', label: '已打开', description: '优先显示当前已打开的项目' },
+];
+
+const MOBILE_REASONING_EFFORT_OPTIONS: readonly MobileDropdownOption[] = [
+  { value: 'none', label: '无', description: '不额外增加推理预算 · none' },
+  { value: 'minimal', label: '极低', description: '快速完成简单任务 · minimal' },
+  { value: 'low', label: '低', description: '轻量分析 · low' },
+  { value: 'medium', label: '中', description: '平衡速度与分析深度 · medium' },
+  { value: 'high', label: '高', description: '更充分地分析复杂任务 · high' },
+  { value: 'xhigh', label: '极高', description: '优先分析深度 · xhigh' },
+  { value: 'max', label: '最大', description: '使用客户端允许的最大深度 · max' },
+  { value: 'ultra', label: '超高', description: '使用 ultra 推理档位 · ultra' },
+];
+
+function mobileReasoningEffortOptions(current: string | null): MobileDropdownOption[] {
+  const currentValue = current?.trim() || null;
+  if (
+    !currentValue ||
+    currentValue === 'inherit' ||
+    MOBILE_REASONING_EFFORT_OPTIONS.some((option) => option.value === currentValue)
+  ) {
+    return [
+      {
+        value: 'inherit',
+        label: '客户端默认',
+        description: '使用当前客户端的默认推理深度',
+      },
+      ...MOBILE_REASONING_EFFORT_OPTIONS,
+    ];
+  }
+  return [
+    {
+      value: 'inherit',
+      label: '客户端默认',
+      description: '使用当前客户端的默认推理深度',
+    },
+    { value: currentValue, label: currentValue, description: '当前已保存的自定义值' },
+    ...MOBILE_REASONING_EFFORT_OPTIONS,
+  ];
+}
+
+function MobileDropdownMenu({
+  accessibilityLabel,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  accessibilityLabel?: string;
+  label: string;
+  onChange: (value: string) => void;
+  options: readonly MobileDropdownOption[];
+  value: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.value === value);
+
+  return (
+    <>
+      <Pressable
+        accessibilityLabel={accessibilityLabel ?? `${label}，当前${selected?.label ?? '未选择'}`}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        style={({ pressed }) => [
+          styles.mobileDropdownTrigger,
+          pressed ? styles.buttonPressed : null,
+        ]}
+        onPress={() => {
+          Keyboard.dismiss();
+          setOpen(true);
+        }}
+      >
+        <View style={styles.mobileDropdownTriggerBody}>
+          <Text style={styles.mobileDropdownLabel}>{label}</Text>
+          <Text numberOfLines={1} style={styles.mobileDropdownValue}>
+            {selected?.label ?? '未选择'}
+          </Text>
+        </View>
+        <Ionicons color={COLORS.muted} name="chevron-down-outline" size={18} />
+      </Pressable>
+
+      <Modal
+        animationType="fade"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        transparent
+        visible={open}
+        onRequestClose={() => setOpen(false)}
+      >
+        <View accessibilityViewIsModal style={styles.mobileDropdownOverlay}>
+          <Pressable
+            accessible={false}
+            style={StyleSheet.absoluteFill}
+            onPress={() => setOpen(false)}
+          />
+          <SafeAreaView style={styles.mobileDropdownSheet}>
+            <View style={styles.projectPickerHandle} />
+            <View style={styles.mobileDropdownHeader}>
+              <Text style={styles.mobileDropdownTitle}>{label}</Text>
+              <Pressable
+                accessibilityLabel={`关闭${label}菜单`}
+                accessibilityRole="button"
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.mobileDropdownClose,
+                  pressed ? styles.buttonPressed : null,
+                ]}
+                onPress={() => setOpen(false)}
+              >
+                <Ionicons color={COLORS.charcoal} name="close-outline" size={20} />
+              </Pressable>
+            </View>
+            <ScrollView
+              contentContainerStyle={styles.mobileDropdownContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {options.map((option) => {
+                const selectedOption = option.value === value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    accessibilityLabel={`选择${label} ${option.label}`}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selectedOption }}
+                    style={({ pressed }) => [
+                      styles.mobileDropdownOption,
+                      selectedOption ? styles.mobileDropdownOptionSelected : null,
+                      pressed ? styles.buttonPressed : null,
+                    ]}
+                    onPress={() => {
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                  >
+                    {option.icon ? (
+                      <Text style={styles.mobileDropdownOptionIcon}>{option.icon}</Text>
+                    ) : null}
+                    <View style={styles.mobileDropdownOptionBody}>
+                      <Text style={styles.mobileDropdownOptionLabel}>{option.label}</Text>
+                      {option.description ? (
+                        <Text numberOfLines={2} style={styles.mobileDropdownOptionDescription}>
+                          {option.description}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Ionicons
+                      color={selectedOption ? COLORS.blue : COLORS.line}
+                      name={selectedOption ? 'checkmark-circle' : 'ellipse-outline'}
+                      size={20}
+                    />
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </SafeAreaView>
+        </View>
+      </Modal>
+    </>
+  );
+}
+
 function MobileDemandSettingsSheet({
   configuration,
   configurationError,
@@ -2119,187 +2324,106 @@ function MobileDemandSettingsSheet({
                 </Text>
 
                 <View style={styles.mobileSettingsGroup}>
-                  <Text style={styles.mobileSettingsGroupTitle}>Agent</Text>
-                  <View style={styles.mobileSettingsOptionList}>
-                    {configuration.agents.map((agent) => {
-                      const selected = agent.id === value.agentId;
-                      return (
-                        <Pressable
-                          key={agent.id}
-                          accessibilityLabel={`选择 Agent ${agent.name}`}
-                          accessibilityRole="radio"
-                          accessibilityState={{ checked: selected }}
-                          style={({ pressed }) => [
-                            styles.mobileSettingsOption,
-                            selected ? styles.mobileSettingsOptionSelected : null,
-                            pressed ? styles.buttonPressed : null,
-                          ]}
-                          onPress={() => {
-                            const runtimeId = agent.preferredRuntime;
-                            onChange({
-                              ...value,
-                              agentId: agent.id,
-                              runtimeId,
-                              model: agent.model,
-                              reasoningEffort: agent.reasoningEffort,
-                              permissionMode: resolveMobilePermissionMode(
-                                configuration,
-                                agent,
-                                runtimeId
-                              ),
-                            });
-                          }}
-                        >
-                          <Text style={styles.mobileSettingsOptionIcon}>{agent.icon || '◎'}</Text>
-                          <View style={styles.mobileSettingsOptionBody}>
-                            <Text style={styles.mobileSettingsOptionLabel}>{agent.name}</Text>
-                            <Text style={styles.mobileSettingsOptionDescription} numberOfLines={2}>
-                              {agent.description ||
-                                mobileRuntimeName(configuration, agent.preferredRuntime)}
-                            </Text>
-                          </View>
-                          <Ionicons
-                            color={selected ? COLORS.blue : COLORS.line}
-                            name={selected ? 'checkmark-circle' : 'ellipse-outline'}
-                            size={21}
-                          />
-                        </Pressable>
+                  <MobileDropdownMenu
+                    accessibilityLabel={`选择 Agent，当前${selectedAgent?.name ?? '未选择'}`}
+                    label="Agent"
+                    options={configuration.agents.map((agent) => ({
+                      value: agent.id,
+                      label: agent.name,
+                      description:
+                        agent.description ||
+                        mobileRuntimeName(configuration, agent.preferredRuntime),
+                      icon: agent.icon || '◎',
+                    }))}
+                    value={value.agentId}
+                    onChange={(agentId) => {
+                      const agent = configuration.agents.find(
+                        (candidate) => candidate.id === agentId
                       );
-                    })}
-                  </View>
-                  {selectedAgent ? (
-                    <Text style={styles.mobileSettingsFootnote}>
-                      当前 Agent：{selectedAgent.name}
-                    </Text>
-                  ) : null}
+                      if (!agent) return;
+                      const runtimeId = agent.preferredRuntime;
+                      onChange({
+                        ...value,
+                        agentId: agent.id,
+                        runtimeId,
+                        model: agent.model,
+                        reasoningEffort: agent.reasoningEffort,
+                        permissionMode: resolveMobilePermissionMode(
+                          configuration,
+                          agent,
+                          runtimeId
+                        ),
+                      });
+                    }}
+                  />
                 </View>
 
                 <View style={styles.mobileSettingsGroup}>
-                  <Text style={styles.mobileSettingsGroupTitle}>开发模式</Text>
-                  <View style={styles.mobileSettingsSegmentedControl}>
-                    {(
-                      [
-                        { label: '普通开发', value: 'normal' as const },
-                        { label: '方案讨论', value: 'brainstorm' as const },
-                      ] as const
-                    ).map((option) => {
-                      const selected = value.runMode === option.value;
-                      return (
-                        <Pressable
-                          key={option.value}
-                          accessibilityRole="radio"
-                          accessibilityState={{ checked: selected }}
-                          style={({ pressed }) => [
-                            styles.mobileSettingsSegment,
-                            selected ? styles.mobileSettingsSegmentSelected : null,
-                            pressed ? styles.buttonPressed : null,
-                          ]}
-                          onPress={() => update({ runMode: option.value })}
-                        >
-                          <Text
-                            style={[
-                              styles.mobileSettingsSegmentText,
-                              selected ? styles.mobileSettingsSegmentTextSelected : null,
-                            ]}
-                          >
-                            {option.label}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                  <Text style={styles.mobileSettingsFootnote}>
-                    方案讨论会先整理目标、步骤和验收方式。
-                  </Text>
+                  <MobileDropdownMenu
+                    label="开发模式"
+                    options={[
+                      {
+                        value: 'normal',
+                        label: '普通开发',
+                        description: '直接进入实现与验证流程',
+                      },
+                      {
+                        value: 'brainstorm',
+                        label: '方案讨论',
+                        description: '先整理目标、步骤和验收方式',
+                      },
+                    ]}
+                    value={value.runMode}
+                    onChange={(runMode) =>
+                      update({ runMode: runMode as MobileDemandConfiguration['runMode'] })
+                    }
+                  />
                 </View>
 
                 <View style={styles.mobileSettingsGroup}>
-                  <Text style={styles.mobileSettingsGroupTitle}>开发方式</Text>
-                  <View style={styles.mobileSettingsOptionList}>
-                    {(
-                      [
-                        {
-                          label: '当前项目',
-                          description: '直接在当前工作目录中继续',
-                          value: 'no-worktree' as const,
-                        },
-                        {
-                          label: '新建分支',
-                          description: '从当前分支创建独立工作分支',
-                          value: 'new-branch' as const,
-                        },
-                      ] as const
-                    ).map((option) => {
-                      const selected = value.strategyKind === option.value;
-                      return (
-                        <Pressable
-                          key={option.value}
-                          accessibilityRole="radio"
-                          accessibilityState={{ checked: selected }}
-                          style={({ pressed }) => [
-                            styles.mobileSettingsOption,
-                            selected ? styles.mobileSettingsOptionSelected : null,
-                            pressed ? styles.buttonPressed : null,
-                          ]}
-                          onPress={() => update({ strategyKind: option.value })}
-                        >
-                          <View style={styles.mobileSettingsOptionBody}>
-                            <Text style={styles.mobileSettingsOptionLabel}>{option.label}</Text>
-                            <Text style={styles.mobileSettingsOptionDescription}>
-                              {option.description}
-                            </Text>
-                          </View>
-                          <Ionicons
-                            color={selected ? COLORS.blue : COLORS.line}
-                            name={selected ? 'checkmark-circle' : 'ellipse-outline'}
-                            size={21}
-                          />
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                  <MobileDropdownMenu
+                    label="开发方式"
+                    options={[
+                      {
+                        value: 'no-worktree',
+                        label: '当前项目',
+                        description: '直接在当前工作目录中继续',
+                      },
+                      {
+                        value: 'new-branch',
+                        label: '新建分支',
+                        description: '从当前分支创建独立工作分支',
+                      },
+                    ]}
+                    value={value.strategyKind}
+                    onChange={(strategyKind) =>
+                      update({
+                        strategyKind: strategyKind as MobileDemandConfiguration['strategyKind'],
+                      })
+                    }
+                  />
                 </View>
 
                 <View style={styles.mobileSettingsGroup}>
-                  <Text style={styles.mobileSettingsGroupTitle}>Agent 客户端</Text>
-                  <View style={styles.mobileSettingsOptionList}>
-                    {configuration.runtimes.map((runtime) => {
-                      const selected = value.runtimeId === runtime.id;
-                      return (
-                        <Pressable
-                          key={runtime.id}
-                          accessibilityLabel={`选择 Agent 客户端 ${runtime.name}`}
-                          accessibilityRole="radio"
-                          accessibilityState={{ checked: selected }}
-                          style={({ pressed }) => [
-                            styles.mobileSettingsOption,
-                            selected ? styles.mobileSettingsOptionSelected : null,
-                            pressed ? styles.buttonPressed : null,
-                          ]}
-                          onPress={() =>
-                            update({
-                              runtimeId: runtime.id,
-                              permissionMode: resolveMobilePermissionMode(
-                                configuration,
-                                selectedAgent,
-                                runtime.id
-                              ),
-                            })
-                          }
-                        >
-                          <View style={styles.mobileSettingsOptionBody}>
-                            <Text style={styles.mobileSettingsOptionLabel}>{runtime.name}</Text>
-                            <Text style={styles.mobileSettingsOptionDescription}>{runtime.id}</Text>
-                          </View>
-                          <Ionicons
-                            color={selected ? COLORS.blue : COLORS.line}
-                            name={selected ? 'checkmark-circle' : 'ellipse-outline'}
-                            size={21}
-                          />
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                  <MobileDropdownMenu
+                    label="Agent 客户端"
+                    options={configuration.runtimes.map((runtime) => ({
+                      value: runtime.id,
+                      label: runtime.name,
+                      description: runtime.id,
+                    }))}
+                    value={value.runtimeId}
+                    onChange={(runtimeId) =>
+                      update({
+                        runtimeId: runtimeId as MobileDemandConfiguration['runtimeId'],
+                        permissionMode: resolveMobilePermissionMode(
+                          configuration,
+                          selectedAgent,
+                          runtimeId as MobileDemandConfiguration['runtimeId']
+                        ),
+                      })
+                    }
+                  />
                 </View>
 
                 <View style={styles.mobileSettingsGroup}>
@@ -2316,54 +2440,36 @@ function MobileDemandSettingsSheet({
                 </View>
 
                 <View style={styles.mobileSettingsGroup}>
-                  <Text style={styles.mobileSettingsGroupTitle}>推理深度</Text>
-                  <TextInput
-                    autoCapitalize="none"
-                    placeholder="例如 medium / high"
-                    placeholderTextColor={COLORS.muted}
-                    style={styles.mobileSettingsTextInput}
-                    value={value.reasoningEffort ?? ''}
-                    onChangeText={(reasoningEffort) =>
-                      update({ reasoningEffort: reasoningEffort.trim() || null })
+                  <MobileDropdownMenu
+                    label="推理深度"
+                    options={mobileReasoningEffortOptions(value.reasoningEffort)}
+                    value={value.reasoningEffort ?? 'inherit'}
+                    onChange={(reasoningEffort) =>
+                      update({
+                        reasoningEffort: reasoningEffort === 'inherit' ? null : reasoningEffort,
+                      })
                     }
                   />
                   <Text style={styles.mobileSettingsFootnote}>
-                    仅在客户端支持时生效；留空时使用默认深度。
+                    仅在客户端支持时生效；选择客户端默认时使用默认深度。
                   </Text>
                 </View>
 
                 <View style={styles.mobileSettingsGroup}>
-                  <Text style={styles.mobileSettingsGroupTitle}>权限模式</Text>
-                  <View style={styles.mobileSettingsOptionList}>
-                    {permissionModes.map((mode) => {
-                      const selected = value.permissionMode === mode.id;
-                      return (
-                        <Pressable
-                          key={mode.id}
-                          accessibilityRole="radio"
-                          accessibilityState={{ checked: selected }}
-                          style={({ pressed }) => [
-                            styles.mobileSettingsOption,
-                            selected ? styles.mobileSettingsOptionSelected : null,
-                            pressed ? styles.buttonPressed : null,
-                          ]}
-                          onPress={() => update({ permissionMode: mode.id })}
-                        >
-                          <View style={styles.mobileSettingsOptionBody}>
-                            <Text style={styles.mobileSettingsOptionLabel}>{mode.label}</Text>
-                            <Text style={styles.mobileSettingsOptionDescription}>
-                              {mode.danger ? '执行时减少确认步骤' : '保留客户端的常规确认流程'}
-                            </Text>
-                          </View>
-                          <Ionicons
-                            color={selected ? COLORS.blue : COLORS.line}
-                            name={selected ? 'checkmark-circle' : 'ellipse-outline'}
-                            size={21}
-                          />
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                  {permissionModes.length > 0 ? (
+                    <MobileDropdownMenu
+                      label="权限模式"
+                      options={permissionModes.map((mode) => ({
+                        value: mode.id,
+                        label: mode.label,
+                        description:
+                          mode.description ||
+                          (mode.danger ? '执行时减少确认步骤' : '保留客户端的常规确认流程'),
+                      }))}
+                      value={value.permissionMode}
+                      onChange={(permissionMode) => update({ permissionMode })}
+                    />
+                  ) : null}
                 </View>
 
                 <Pressable
@@ -2551,24 +2657,12 @@ function TaskAttributionPickerSheet({
             </View>
           ) : (
             <View style={styles.projectPickerSort}>
-              <Text style={styles.projectPickerSortLabel}>项目排序</Text>
-              <View accessibilityRole="radiogroup" style={styles.projectPickerSortOptions}>
-                <DemandProjectSortOption
-                  active={sortMode === 'recent'}
-                  label="最近"
-                  onPress={() => setSortMode('recent')}
-                />
-                <DemandProjectSortOption
-                  active={sortMode === 'name'}
-                  label="名称"
-                  onPress={() => setSortMode('name')}
-                />
-                <DemandProjectSortOption
-                  active={sortMode === 'open'}
-                  label="已打开"
-                  onPress={() => setSortMode('open')}
-                />
-              </View>
+              <MobileDropdownMenu
+                label="项目排序"
+                options={MOBILE_PROJECT_SORT_OPTIONS}
+                value={sortMode}
+                onChange={(mode) => setSortMode(mode as MobileProjectSortMode)}
+              />
             </View>
           )}
 
@@ -2776,24 +2870,12 @@ function ProjectPickerSheet({
             onChangeText={setSearchQuery}
           />
           <View style={styles.projectPickerSort}>
-            <Text style={styles.projectPickerSortLabel}>项目排序</Text>
-            <View accessibilityRole="radiogroup" style={styles.projectPickerSortOptions}>
-              <DemandProjectSortOption
-                active={sortMode === 'recent'}
-                label="最近"
-                onPress={() => setSortMode('recent')}
-              />
-              <DemandProjectSortOption
-                active={sortMode === 'name'}
-                label="名称"
-                onPress={() => setSortMode('name')}
-              />
-              <DemandProjectSortOption
-                active={sortMode === 'open'}
-                label="已打开"
-                onPress={() => setSortMode('open')}
-              />
-            </View>
+            <MobileDropdownMenu
+              label="项目排序"
+              options={MOBILE_PROJECT_SORT_OPTIONS}
+              value={sortMode}
+              onChange={(mode) => setSortMode(mode as MobileProjectSortMode)}
+            />
           </View>
           <ScrollView
             accessibilityRole="radiogroup"
@@ -2831,16 +2913,23 @@ function ProjectPickerSheet({
 }
 
 function ProjectPickerSearchInput({
+  compact = false,
   placeholder,
   value,
   onChangeText,
 }: {
+  compact?: boolean;
   placeholder: string;
   value: string;
   onChangeText: (value: string) => void;
 }) {
   return (
-    <View style={styles.projectPickerSearchArea}>
+    <View
+      style={[
+        styles.projectPickerSearchArea,
+        compact ? styles.projectPickerSearchAreaCompact : null,
+      ]}
+    >
       <View style={styles.projectPickerSearchField}>
         <Ionicons color={COLORS.muted} name="search-outline" size={18} />
         <TextInput
@@ -2882,39 +2971,6 @@ function ProjectPickerEmptyResult({ query, type }: { query: string; type: '项�
       <Ionicons color={COLORS.muted} name="search-outline" size={22} />
       <Text style={styles.emptyText}>{`没有匹配“${trimmedQuery}”的${type}`}</Text>
     </View>
-  );
-}
-
-function DemandProjectSortOption({
-  active,
-  label,
-  onPress,
-}: {
-  active: boolean;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityLabel={`Sort projects by ${label.toLowerCase()}`}
-      accessibilityRole="radio"
-      accessibilityState={{ checked: active }}
-      style={({ pressed }) => [
-        styles.projectPickerSortOption,
-        active ? styles.projectPickerSortOptionActive : null,
-        pressed ? styles.buttonPressed : null,
-      ]}
-      onPress={onPress}
-    >
-      <Text
-        style={[
-          styles.projectPickerSortOptionText,
-          active ? styles.projectPickerSortOptionTextActive : null,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -2998,6 +3054,72 @@ function ScreenHeader({
   );
 }
 
+function taskSessionCountLabel(count: number): string {
+  return `${count} ${count === 1 ? 'session' : 'sessions'}`;
+}
+
+function TaskContextCard({
+  expanded,
+  projectLabel,
+  task,
+  onToggle,
+}: {
+  expanded: boolean;
+  projectLabel: string;
+  task: MobileTaskSummary;
+  onToggle: () => void;
+}) {
+  const activityColor = statusColor(task.activityStatus);
+  return (
+    <View style={styles.taskContextCard}>
+      <Pressable
+        accessibilityLabel={expanded ? '收起任务信息' : '展开任务信息'}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        style={({ pressed }) => [styles.taskContextHeader, pressed ? styles.buttonPressed : null]}
+        onPress={onToggle}
+      >
+        <View style={styles.taskContextIcon}>
+          <Ionicons color={COLORS.charcoal} name="layers-outline" size={19} />
+        </View>
+        <View style={styles.taskContextBody}>
+          <Text style={styles.taskContextKicker}>任务信息</Text>
+          <Text style={styles.taskContextTitle} numberOfLines={2}>
+            {task.name}
+          </Text>
+          <Text style={styles.taskContextMeta} numberOfLines={1}>
+            {projectLabel} · {taskSessionCountLabel(task.conversationCount)}
+          </Text>
+        </View>
+        <View style={styles.taskContextTrailing}>
+          <View style={[styles.statusPill, { borderColor: activityColor }]}>
+            <Text style={[styles.statusText, { color: activityColor }]}>
+              {statusLabel(task.activityStatus)}
+            </Text>
+          </View>
+          <Ionicons
+            color={COLORS.muted}
+            name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+            size={18}
+          />
+        </View>
+      </Pressable>
+      {expanded ? (
+        <View style={styles.taskContextDetails}>
+          <DetailItem label="状态" value={statusLabel(task.status)} />
+          <DetailItem label="项目" value={projectLabel} />
+          <DetailItem label="分支" value={task.taskBranch ?? 'No branch'} />
+          <DetailItem
+            label="Providers"
+            value={Object.keys(task.runtimeCounts).join(', ') || 'None'}
+          />
+          <DetailItem label="Updated" value={formatTimestamp(task.updatedAt)} />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function TaskSessionsScreen({
   connection,
   projects,
@@ -3019,6 +3141,7 @@ function TaskSessionsScreen({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [taskInfoExpanded, setTaskInfoExpanded] = useState(true);
 
   const loadSessions = useCallback(
     async (quiet = false) => {
@@ -3078,15 +3201,12 @@ function TaskSessionsScreen({
 
         {error ? <Notice message={error} tone="error" /> : null}
 
-        <View style={styles.summaryPanel}>
-          <DetailItem label="Status" value={statusLabel(task.status)} />
-          <DetailItem label="Branch" value={task.taskBranch ?? 'No branch'} />
-          <DetailItem
-            label="Providers"
-            value={Object.keys(task.runtimeCounts).join(', ') || 'None'}
-          />
-          <DetailItem label="Updated" value={formatTimestamp(task.updatedAt)} />
-        </View>
+        <TaskContextCard
+          expanded={taskInfoExpanded}
+          projectLabel={projectName(projects, task.projectId)}
+          task={task}
+          onToggle={() => setTaskInfoExpanded((current) => !current)}
+        />
 
         <TaskCreationActions
           taskName={task.name}
@@ -3288,6 +3408,7 @@ function SessionDetailScreen({
   const [runtimeModelDraft, setRuntimeModelDraft] = useState('');
   const [runtimeReasoningDraft, setRuntimeReasoningDraft] = useState('');
   const [runtimePermissionDraft, setRuntimePermissionDraft] = useState('');
+  const [taskInfoExpanded, setTaskInfoExpanded] = useState(true);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [sessionInput, setSessionInput] = useState('');
   const [sessionImages, setSessionImages] = useState<MobileImageDraft[]>([]);
@@ -3671,6 +3792,12 @@ function SessionDetailScreen({
 
             {detail ? (
               <>
+                <TaskContextCard
+                  expanded={taskInfoExpanded}
+                  projectLabel={taskProject?.displayName ?? projectName(projects, task.projectId)}
+                  task={task}
+                  onToggle={() => setTaskInfoExpanded((current) => !current)}
+                />
                 <View style={styles.summaryPanel}>
                   <DetailItem
                     label="Agent"
@@ -3904,7 +4031,14 @@ function InputMediaControls({
   onError: (message: string) => void;
   onImagesChange: (images: MobileImageDraft[]) => void;
 }) {
+  type ImageEditorState = {
+    image: MobileImageDraft;
+    remaining: MobileImageDraft[];
+    targetId: string | null;
+  };
+
   const [pickingImages, setPickingImages] = useState(false);
+  const [imageEditor, setImageEditor] = useState<ImageEditorState | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [skills, setSkills] = useState<MobileSkillSummary[]>([]);
@@ -3941,21 +4075,60 @@ function InputMediaControls({
     []
   );
 
+  const openImageEditor = useCallback(
+    (
+      image: MobileImageDraft,
+      remaining: MobileImageDraft[] = [],
+      targetId: string | null = image.id
+    ) => {
+      Keyboard.dismiss();
+      setToolsOpen(false);
+      setImageEditor({ image, remaining, targetId });
+    },
+    []
+  );
+
   const handlePickImages = useCallback(async () => {
     if (disabled || pickingImages || !imagesEnabled) return;
     setPickingImages(true);
     try {
       const picked = await pickMobileInputImages();
       if (picked.length > 0) {
-        onImagesChange([...images, ...picked]);
         setToolsOpen(false);
+        const [first, ...remaining] = picked;
+        if (first) openImageEditor(first, remaining, null);
       }
     } catch (error) {
       onError(errorMessage(error));
     } finally {
       setPickingImages(false);
     }
-  }, [disabled, images, imagesEnabled, onError, onImagesChange, pickingImages]);
+  }, [disabled, imagesEnabled, onError, openImageEditor, pickingImages]);
+
+  const handleImageEditorSave = useCallback(
+    (editedImage: MobileImageDraft) => {
+      if (!imageEditor) return;
+      if (imageEditor.targetId) {
+        onImagesChange(
+          images.map((image) => (image.id === imageEditor.targetId ? editedImage : image))
+        );
+      } else {
+        onImagesChange([...images, editedImage]);
+      }
+
+      const [nextImage, ...remaining] = imageEditor.remaining;
+      setImageEditor(nextImage ? { image: nextImage, remaining, targetId: null } : null);
+    },
+    [imageEditor, images, onImagesChange]
+  );
+
+  const handleImageEditorCancel = useCallback(() => {
+    if (!imageEditor) return;
+    if (!imageEditor.targetId) {
+      onImagesChange([...images, imageEditor.image, ...imageEditor.remaining]);
+    }
+    setImageEditor(null);
+  }, [imageEditor, images, onImagesChange]);
 
   const loadSkills = useCallback(async () => {
     setSkillsLoading(true);
@@ -4082,7 +4255,20 @@ function InputMediaControls({
             <View key={image.id} style={styles.inputImagePreview}>
               <Image source={{ uri: image.uri }} style={styles.inputImage} />
               <Pressable
-                accessibilityLabel={`Remove ${image.name}`}
+                accessibilityLabel={`编辑 ${image.name}`}
+                accessibilityRole="button"
+                disabled={disabled}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.inputImageEdit,
+                  pressed ? styles.buttonPressed : null,
+                ]}
+                onPress={() => openImageEditor(image)}
+              >
+                <Ionicons color={COLORS.surface} name="pencil-outline" size={13} />
+              </Pressable>
+              <Pressable
+                accessibilityLabel={`移除 ${image.name}`}
                 accessibilityRole="button"
                 disabled={disabled}
                 hitSlop={8}
@@ -4208,7 +4394,7 @@ function InputMediaControls({
       {toolsOpen ? (
         <View style={styles.inputToolsTray}>
           <Pressable
-            accessibilityLabel="Attach images"
+            accessibilityLabel="选择图片"
             accessibilityRole="button"
             accessibilityState={{ disabled: disabled || !imagesEnabled }}
             disabled={disabled || !imagesEnabled || pickingImages}
@@ -4256,6 +4442,13 @@ function InputMediaControls({
         onClose={() => setSkillPickerOpen(false)}
         onRetry={() => void loadSkills()}
         onSelect={selectSkill}
+      />
+      <MobileImageEditor
+        image={imageEditor?.image ?? null}
+        open={imageEditor !== null}
+        onCancel={handleImageEditorCancel}
+        onError={onError}
+        onSave={handleImageEditorSave}
       />
     </View>
   );
@@ -4758,48 +4951,26 @@ function SessionDisplaySettingsSheet({
                 value={model}
                 onChangeText={onModelChange}
               />
-              <Text style={styles.mobileSettingsFieldLabel}>推理深度</Text>
-              <TextInput
-                autoCapitalize="none"
-                placeholder="例如 medium / high"
-                placeholderTextColor={COLORS.muted}
-                style={styles.mobileSettingsTextInput}
-                value={reasoningEffort}
-                onChangeText={onReasoningEffortChange}
+              <MobileDropdownMenu
+                label="推理深度"
+                options={mobileReasoningEffortOptions(reasoningEffort)}
+                value={reasoningEffort || 'inherit'}
+                onChange={(effort) => onReasoningEffortChange(effort === 'inherit' ? '' : effort)}
               />
               {permissionModes.length > 0 ? (
                 <>
-                  <Text style={styles.mobileSettingsFieldLabel}>权限模式</Text>
-                  <View style={styles.mobileSettingsOptionList}>
-                    {permissionModes.map((mode) => {
-                      const selected = permissionMode === mode.id;
-                      return (
-                        <Pressable
-                          key={mode.id}
-                          accessibilityRole="radio"
-                          accessibilityState={{ checked: selected }}
-                          style={({ pressed }) => [
-                            styles.mobileSettingsOption,
-                            selected ? styles.mobileSettingsOptionSelected : null,
-                            pressed ? styles.buttonPressed : null,
-                          ]}
-                          onPress={() => onPermissionModeChange(mode.id)}
-                        >
-                          <View style={styles.mobileSettingsOptionBody}>
-                            <Text style={styles.mobileSettingsOptionLabel}>{mode.label}</Text>
-                            <Text style={styles.mobileSettingsOptionDescription}>
-                              {mode.danger ? '执行时减少确认步骤' : '保留客户端的常规确认流程'}
-                            </Text>
-                          </View>
-                          <Ionicons
-                            color={selected ? COLORS.blue : COLORS.line}
-                            name={selected ? 'checkmark-circle' : 'ellipse-outline'}
-                            size={21}
-                          />
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                  <MobileDropdownMenu
+                    label="权限模式"
+                    options={permissionModes.map((mode) => ({
+                      value: mode.id,
+                      label: mode.label,
+                      description:
+                        mode.description ||
+                        (mode.danger ? '执行时减少确认步骤' : '保留客户端的常规确认流程'),
+                    }))}
+                    value={permissionMode}
+                    onChange={onPermissionModeChange}
+                  />
                 </>
               ) : null}
               <Pressable
@@ -4835,7 +5006,15 @@ function SessionDisplaySettingsSheet({
                   选择适合阅读的排版，或查看原始记录。
                 </Text>
               </View>
-              <OutputModeToggle mode={outputMode} onChange={onOutputModeChange} />
+              <MobileDropdownMenu
+                label="显示模式"
+                options={[
+                  { label: '阅读', value: 'rendered', description: '使用适合阅读的排版' },
+                  { label: '原始记录', value: 'raw', description: '查看完整原始输出' },
+                ]}
+                value={outputMode}
+                onChange={(mode) => onOutputModeChange(mode as SessionOutputMode)}
+              />
             </View>
             <View style={styles.sessionDisplaySettingsGroup}>
               <View style={styles.sessionDisplaySettingsHeading}>
@@ -4844,81 +5023,21 @@ function SessionDisplaySettingsSheet({
                   控制会话里保留多少过程信息；原始记录始终完整显示。
                 </Text>
               </View>
-              <View accessibilityRole="radiogroup" style={styles.sessionDisplayLevelList}>
-                {AGENT_REPLY_DISPLAY_LEVELS.map((level) => {
-                  const selected = displayLevel === level;
-                  const copy = AGENT_REPLY_DISPLAY_COPY[level];
-                  return (
-                    <Pressable
-                      key={level}
-                      accessibilityLabel={`${copy.label}，${copy.description}`}
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked: selected }}
-                      style={({ pressed }) => [
-                        styles.sessionDisplayLevelOption,
-                        selected ? styles.sessionDisplayLevelOptionSelected : null,
-                        pressed ? styles.buttonPressed : null,
-                      ]}
-                      onPress={() => onDisplayLevelChange(level)}
-                    >
-                      <View style={styles.sessionDisplayLevelOptionBody}>
-                        <Text style={styles.sessionDisplayLevelOptionLabel}>{copy.label}</Text>
-                        <Text style={styles.sessionDisplayLevelOptionDescription}>
-                          {copy.description}
-                        </Text>
-                      </View>
-                      <Ionicons
-                        color={selected ? COLORS.charcoal : COLORS.line}
-                        name={selected ? 'checkmark-circle' : 'ellipse-outline'}
-                        size={21}
-                      />
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <MobileDropdownMenu
+                label="对话详细度"
+                options={AGENT_REPLY_DISPLAY_LEVELS.map((level) => ({
+                  value: level,
+                  label: AGENT_REPLY_DISPLAY_COPY[level].label,
+                  description: AGENT_REPLY_DISPLAY_COPY[level].description,
+                }))}
+                value={displayLevel}
+                onChange={(level) => onDisplayLevelChange(level as AgentReplyDisplayLevel)}
+              />
             </View>
           </ScrollView>
         </SafeAreaView>
       </View>
     </Modal>
-  );
-}
-
-function OutputModeToggle({
-  mode,
-  onChange,
-}: {
-  mode: SessionOutputMode;
-  onChange: (mode: SessionOutputMode) => void;
-}) {
-  const options: Array<{ label: string; value: SessionOutputMode }> = [
-    { label: '阅读', value: 'rendered' },
-    { label: '原始记录', value: 'raw' },
-  ];
-
-  return (
-    <View accessibilityRole="radiogroup" style={styles.outputModeControl}>
-      {options.map((option) => {
-        const active = option.value === mode;
-        return (
-          <Pressable
-            key={option.value}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: active }}
-            style={({ pressed }) => [
-              styles.outputModeButton,
-              active ? styles.outputModeButtonActive : null,
-              pressed ? styles.buttonPressed : null,
-            ]}
-            onPress={() => onChange(option.value)}
-          >
-            <Text style={[styles.outputModeText, active ? styles.outputModeTextActive : null]}>
-              {option.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
   );
 }
 
@@ -5437,30 +5556,49 @@ function TaskList({
   projects,
   tasks,
   title,
+  openingTaskId,
   onOpenTask,
 }: {
   projects: MobileProjectSummary[];
   tasks: MobileTaskSummary[];
   title: string;
+  openingTaskId: string | null;
   onOpenTask: (taskId: string) => void;
 }) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const visibleTasks = useMemo(() => filterMobileTasks(tasks, searchQuery), [searchQuery, tasks]);
+  const trimmedQuery = searchQuery.trim();
+
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>{title}</Text>
-        <Text style={styles.sectionMeta}>{tasks.length}</Text>
+        <Text style={styles.sectionMeta}>{visibleTasks.length}</Text>
       </View>
-      {tasks.length === 0 ? (
+      <ProjectPickerSearchInput
+        compact
+        placeholder="搜索任务"
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+      />
+      {visibleTasks.length === 0 ? (
         <View style={styles.emptyState}>
-          <Ionicons color={COLORS.muted} name="file-tray-outline" size={22} />
-          <Text style={styles.emptyText}>No active tasks.</Text>
+          <Ionicons
+            color={COLORS.muted}
+            name={trimmedQuery ? 'search-outline' : 'file-tray-outline'}
+            size={22}
+          />
+          <Text style={styles.emptyText}>
+            {trimmedQuery ? `没有匹配“${trimmedQuery}”的任务` : '当前筛选下没有任务。'}
+          </Text>
         </View>
       ) : (
-        tasks.map((task) => (
+        visibleTasks.map((task) => (
           <TaskRow
             key={task.id}
             projectLabel={projectName(projects, task.projectId)}
             task={task}
+            isOpening={openingTaskId === task.id}
             onPress={() => onOpenTask(task.id)}
           />
         ))
@@ -5470,20 +5608,21 @@ function TaskList({
 }
 
 function TaskRow({
+  isOpening,
   projectLabel,
   task,
   onPress,
 }: {
+  isOpening: boolean;
   projectLabel: string;
   task: MobileTaskSummary;
   onPress: () => void;
 }) {
-  const sessionCountLabel = `${task.conversationCount} ${task.conversationCount === 1 ? 'session' : 'sessions'}`;
-
   return (
     <Pressable
       accessibilityLabel={`Open task ${task.name}`}
       accessibilityRole="button"
+      accessibilityState={{ busy: isOpening }}
       testID={`mobile-task-card-two-line-v1-${task.id}`}
       style={({ pressed }) => [styles.taskRow, pressed ? styles.buttonPressed : null]}
       onPress={onPress}
@@ -5504,9 +5643,14 @@ function TaskRow({
         </Text>
         <View style={styles.taskSummaryMeta}>
           <Text style={styles.taskSummaryText} numberOfLines={1}>
-            {sessionCountLabel} · {formatTimestamp(task.lastInteractedAt ?? task.updatedAt)}
+            {taskSessionCountLabel(task.conversationCount)} ·{' '}
+            {formatTimestamp(task.lastInteractedAt ?? task.updatedAt)}
           </Text>
-          <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={16} />
+          {isOpening ? (
+            <ActivityIndicator color={COLORS.muted} size="small" />
+          ) : (
+            <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={16} />
+          )}
         </View>
       </View>
     </Pressable>
@@ -5726,6 +5870,19 @@ const styles = StyleSheet.create({
     borderColor: COLORS.surface,
     borderRadius: 12,
     backgroundColor: COLORS.charcoal,
+  },
+  inputImageEdit: {
+    position: 'absolute',
+    top: -7,
+    left: -7,
+    width: 23,
+    height: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.surface,
+    borderRadius: 12,
+    backgroundColor: COLORS.blue,
   },
   inputMediaContextRow: {
     minHeight: 58,
@@ -6473,6 +6630,62 @@ const styles = StyleSheet.create({
   section: {
     gap: 12,
   },
+  taskContextCard: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+  },
+  taskContextHeader: {
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 13,
+  },
+  taskContextIcon: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#EFEEE7',
+  },
+  taskContextBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+  },
+  taskContextKicker: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  taskContextTitle: {
+    color: COLORS.ink,
+    fontSize: 16,
+    fontWeight: '800',
+    lineHeight: 21,
+  },
+  taskContextMeta: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  taskContextTrailing: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  taskContextDetails: {
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.faint,
+    paddingHorizontal: 13,
+    paddingTop: 10,
+    paddingBottom: 13,
+  },
   summaryPanel: {
     gap: 8,
     borderWidth: 1,
@@ -6663,80 +6876,114 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
   },
-  mobileSettingsOptionList: {
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 10,
-    backgroundColor: COLORS.surface,
-  },
-  mobileSettingsOption: {
-    minHeight: 58,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.faint,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  mobileSettingsOptionSelected: {
-    backgroundColor: '#F2F0E9',
-  },
-  mobileSettingsOptionIcon: {
-    width: 28,
-    color: COLORS.ink,
-    fontSize: 20,
-    textAlign: 'center',
-  },
-  mobileSettingsOptionBody: {
-    minWidth: 0,
-    flex: 1,
-    gap: 2,
-  },
-  mobileSettingsOptionLabel: {
-    color: COLORS.ink,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  mobileSettingsOptionDescription: {
-    color: COLORS.muted,
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: '600',
-  },
   mobileSettingsFootnote: {
     color: COLORS.muted,
     fontSize: 11,
     lineHeight: 15,
     fontWeight: '600',
   },
-  mobileSettingsSegmentedControl: {
+  mobileDropdownTrigger: {
+    minHeight: 54,
     flexDirection: 'row',
-    gap: 6,
+    alignItems: 'center',
+    gap: 12,
     borderWidth: 1,
     borderColor: COLORS.line,
     borderRadius: 10,
-    backgroundColor: '#EFEEE7',
-    padding: 3,
-  },
-  mobileSettingsSegment: {
-    minHeight: 38,
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 7,
-  },
-  mobileSettingsSegmentSelected: {
     backgroundColor: COLORS.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  mobileSettingsSegmentText: {
+  mobileDropdownTriggerBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+  },
+  mobileDropdownLabel: {
     color: COLORS.muted,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
   },
-  mobileSettingsSegmentTextSelected: {
+  mobileDropdownValue: {
     color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  mobileDropdownOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(23, 23, 23, 0.42)',
+  },
+  mobileDropdownSheet: {
+    maxHeight: '68%',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    backgroundColor: COLORS.surface,
+    paddingTop: 9,
+  },
+  mobileDropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.faint,
+    paddingHorizontal: 18,
+    paddingTop: 13,
+    paddingBottom: 11,
+  },
+  mobileDropdownTitle: {
+    color: COLORS.ink,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  mobileDropdownClose: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 17,
+    backgroundColor: COLORS.page,
+  },
+  mobileDropdownContent: {
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  mobileDropdownOption: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  mobileDropdownOptionSelected: {
+    backgroundColor: '#F2F0E9',
+  },
+  mobileDropdownOptionIcon: {
+    width: 28,
+    color: COLORS.ink,
+    fontSize: 19,
+    textAlign: 'center',
+  },
+  mobileDropdownOptionBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+  },
+  mobileDropdownOptionLabel: {
+    color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  mobileDropdownOptionDescription: {
+    color: COLORS.muted,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
   },
   mobileSettingsFieldLabel: {
     color: COLORS.muted,
@@ -6818,42 +7065,6 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     fontWeight: '600',
   },
-  sessionDisplayLevelList: {
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 10,
-    backgroundColor: COLORS.surface,
-  },
-  sessionDisplayLevelOption: {
-    minHeight: 58,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.faint,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  sessionDisplayLevelOptionSelected: {
-    backgroundColor: '#F2F0E9',
-  },
-  sessionDisplayLevelOptionBody: {
-    minWidth: 0,
-    flex: 1,
-    gap: 2,
-  },
-  sessionDisplayLevelOptionLabel: {
-    color: COLORS.ink,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  sessionDisplayLevelOptionDescription: {
-    color: COLORS.muted,
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: '600',
-  },
   projectPickerHandle: {
     width: 42,
     height: 4,
@@ -6907,6 +7118,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 10,
   },
+  projectPickerSearchAreaCompact: {
+    borderTopWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
   projectPickerSearchField: {
     minHeight: 42,
     flexDirection: 'row',
@@ -6933,44 +7149,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   projectPickerSort: {
-    gap: 7,
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: COLORS.faint,
     paddingHorizontal: 18,
     paddingVertical: 11,
-  },
-  projectPickerSortLabel: {
-    color: COLORS.muted,
-    fontSize: 11,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  projectPickerSortOptions: {
-    flexDirection: 'row',
-    gap: 3,
-    borderRadius: 8,
-    backgroundColor: COLORS.page,
-    padding: 3,
-  },
-  projectPickerSortOption: {
-    minHeight: 32,
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-  },
-  projectPickerSortOptionActive: {
-    backgroundColor: COLORS.charcoal,
-  },
-  projectPickerSortOptionText: {
-    color: COLORS.muted,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  projectPickerSortOptionTextActive: {
-    color: COLORS.surface,
   },
   projectPickerList: {
     paddingHorizontal: 12,
@@ -7523,32 +7706,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  outputModeControl: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 8,
-    backgroundColor: '#EFEEE7',
-    padding: 3,
-  },
-  outputModeButton: {
-    minHeight: 36,
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 6,
-  },
-  outputModeButtonActive: {
-    backgroundColor: COLORS.surface,
-  },
-  outputModeText: {
-    color: COLORS.muted,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  outputModeTextActive: {
-    color: COLORS.ink,
   },
   readableOutput: {
     gap: 10,
