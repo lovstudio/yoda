@@ -3821,40 +3821,40 @@ function SessionNavigationBar({
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.sessionNavActionButton,
-            pressed ? styles.buttonPressed : null,
+            styles.sessionNavBackButton,
+            pressed ? styles.sessionNavActionButtonPressed : null,
           ]}
           onPress={onBack}
         >
-          <Ionicons color={COLORS.charcoal} name="chevron-back-outline" size={22} />
+          <Ionicons color={COLORS.charcoal} name="chevron-back-outline" size={24} />
         </Pressable>
         <View style={styles.sessionNavTitleBlock}>
-          <Text style={styles.sessionNavEyebrow} numberOfLines={1}>
-            Session · {projectLabel}
-          </Text>
           <Text style={styles.sessionNavTitle} numberOfLines={1}>
             {title}
           </Text>
+          <SessionRuntimeStatus
+            acceptsInput={acceptsInput}
+            live={live}
+            projectLabel={projectLabel}
+            resumable={resumable}
+            runtimeStatus={runtimeStatus}
+            sending={sending}
+            uploadProgress={uploadProgress}
+          />
         </View>
         <Pressable
           accessibilityLabel="设置会话显示"
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.sessionNavActionButton,
-            pressed ? styles.buttonPressed : null,
+            styles.sessionNavSettingsButton,
+            pressed ? styles.sessionNavActionButtonPressed : null,
           ]}
           onPress={onOpenSettings}
         >
-          <Ionicons color={COLORS.charcoal} name="settings-outline" size={20} />
+          <Ionicons color={COLORS.charcoal} name="settings-outline" size={19} />
         </Pressable>
       </View>
-      <SessionRuntimeStatus
-        acceptsInput={acceptsInput}
-        live={live}
-        resumable={resumable}
-        runtimeStatus={runtimeStatus}
-        sending={sending}
-        uploadProgress={uploadProgress}
-      />
     </View>
   );
 }
@@ -4544,6 +4544,7 @@ function SessionInputFailureNotice({
 function SessionRuntimeStatus({
   acceptsInput,
   live,
+  projectLabel,
   resumable,
   runtimeStatus,
   sending,
@@ -4551,6 +4552,7 @@ function SessionRuntimeStatus({
 }: {
   acceptsInput: boolean;
   live: boolean;
+  projectLabel: string;
   resumable: boolean;
   runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
   sending: boolean;
@@ -4559,25 +4561,23 @@ function SessionRuntimeStatus({
   const presentation = sending
     ? {
         animated: true,
-        backgroundColor: '#EFF4FF',
         color: COLORS.blue,
-        icon: 'cloud-upload-outline' as const,
-        label: uploadProgress ? 'Uploading' : 'Sending',
+        label: uploadProgress ? '上传中' : '发送中',
       }
     : sessionRuntimePresentation(runtimeStatus);
   const detail = uploadProgress
     ? mobileInputUploadProgressText(uploadProgress)
     : sending
-      ? 'Resuming and sending…'
+      ? '正在恢复会话并发送'
       : acceptsInput
         ? runtimeStatus === 'completed'
-          ? 'Ready for a follow-up.'
-          : 'Live input is available.'
+          ? '可以继续对话'
+          : '可以实时输入'
         : resumable
-          ? 'Send a follow-up to resume.'
+          ? '发送消息后恢复会话'
           : live
-            ? 'Connected, input unavailable.'
-            : 'Session offline.';
+            ? '已连接，当前不可输入'
+            : '会话已离线';
   const visibleDetail = uploadProgress
     ? mobileInputUploadProgressText(uploadProgress)
     : sending
@@ -4586,17 +4586,15 @@ function SessionRuntimeStatus({
 
   return (
     <View
-      accessibilityLabel={`${presentation.label}. ${detail}`}
+      accessibilityLabel={`${presentation.label}。${detail}。项目：${projectLabel}`}
       accessibilityLiveRegion="polite"
       style={styles.sessionRunStatus}
     >
-      <View style={styles.sessionRunStatusIcon}>
-        {presentation.animated ? (
-          <ActivityIndicator color={presentation.color} size={12} />
-        ) : (
-          <Ionicons color={presentation.color} name={presentation.icon} size={13} />
-        )}
-      </View>
+      {presentation.animated ? (
+        <ActivityIndicator color={presentation.color} size={10} />
+      ) : (
+        <View style={[styles.sessionRunStatusDot, { backgroundColor: presentation.color }]} />
+      )}
       <Text style={[styles.sessionRunStatusLabel, { color: presentation.color }]} numberOfLines={1}>
         {presentation.label}
         {visibleDetail ? ` · ${visibleDetail}` : ''}
@@ -4607,59 +4605,45 @@ function SessionRuntimeStatus({
 
 function sessionRuntimePresentation(status: MobileSessionSummary['runtimeStatus'] | null): {
   animated: boolean;
-  backgroundColor: string;
   color: string;
-  icon: keyof typeof Ionicons.glyphMap;
   label: string;
 } {
   switch (status) {
     case 'working':
       return {
         animated: true,
-        backgroundColor: '#EEF3FF',
         color: COLORS.blue,
-        icon: 'sync-outline',
-        label: 'Running',
+        label: '进行中',
       };
     case 'awaiting-input':
       return {
         animated: false,
-        backgroundColor: '#FFF7E6',
         color: COLORS.amber,
-        icon: 'alert-circle-outline',
-        label: 'Waiting for input',
+        label: '等待输入',
       };
     case 'completed':
       return {
         animated: false,
-        backgroundColor: '#EAF7F2',
         color: COLORS.green,
-        icon: 'checkmark-circle-outline',
-        label: 'Completed',
+        label: '已完成',
       };
     case 'error':
       return {
         animated: false,
-        backgroundColor: '#FFF0EE',
         color: COLORS.red,
-        icon: 'close-circle-outline',
-        label: 'Run failed',
+        label: '执行失败',
       };
     case 'idle':
       return {
         animated: false,
-        backgroundColor: '#F1F0EA',
         color: COLORS.muted,
-        icon: 'pause-circle-outline',
-        label: 'Idle',
+        label: '已暂停',
       };
     case null:
       return {
         animated: false,
-        backgroundColor: '#F1F0EA',
         color: COLORS.muted,
-        icon: 'ellipsis-horizontal-circle-outline',
-        label: 'Loading status',
+        label: '状态同步中',
       };
   }
 }
@@ -5573,46 +5557,51 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sessionNavBar: {
-    minHeight: 74,
-    gap: 5,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.line,
+    minHeight: 64,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.faint,
     backgroundColor: COLORS.surface,
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
   },
   sessionNavPrimaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  sessionNavActionButton: {
-    width: 42,
-    height: 42,
+    minHeight: 50,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 8,
-    backgroundColor: COLORS.page,
+    position: 'relative',
+    paddingHorizontal: 48,
+  },
+  sessionNavActionButton: {
+    position: 'absolute',
+    top: 3,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+  },
+  sessionNavBackButton: {
+    left: 0,
+  },
+  sessionNavSettingsButton: {
+    right: 0,
+  },
+  sessionNavActionButtonPressed: {
+    backgroundColor: COLORS.faint,
   },
   sessionNavTitleBlock: {
     minWidth: 0,
-    flex: 1,
-    gap: 2,
-  },
-  sessionNavEyebrow: {
-    color: COLORS.muted,
-    fontSize: 11,
-    fontWeight: '800',
-    textTransform: 'uppercase',
+    width: '100%',
+    alignItems: 'center',
+    gap: 1,
   },
   sessionNavTitle: {
     color: COLORS.ink,
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '800',
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    textAlign: 'center',
   },
   scrollToBottomButton: {
     position: 'absolute',
@@ -5671,27 +5660,27 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
   },
   sessionRunStatus: {
-    maxWidth: '100%',
-    minHeight: 14,
+    maxWidth: '92%',
+    minHeight: 13,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
     flexShrink: 0,
-    gap: 4,
-    paddingHorizontal: 8,
+    gap: 5,
   },
-  sessionRunStatusIcon: {
-    width: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+  sessionRunStatusDot: {
+    width: 5,
+    height: 5,
+    flexShrink: 0,
+    borderRadius: 3,
   },
   sessionRunStatusLabel: {
     minWidth: 0,
     flexShrink: 1,
     fontSize: 10,
     lineHeight: 13,
-    fontWeight: '700',
+    fontWeight: '600',
+    letterSpacing: 0.05,
     textAlign: 'center',
   },
   sessionInputCount: {
