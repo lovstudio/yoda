@@ -32,6 +32,7 @@ import type {
   CodexSessionContext,
   ContextSkill,
 } from '@shared/conversations';
+import { isPromptBoundToScope } from '@shared/prompt-library';
 import {
   asMounted,
   getProjectSettingsStore,
@@ -491,6 +492,7 @@ function PersonaSection({
         ...(libraryPrompts ?? [])
           .filter(
             (prompt) =>
+              isPromptBoundToScope(prompt, 'project', provisioned.projectId) &&
               (projectPrompts?.globalOverrides?.[prompt.id] ?? prompt.injectionEnabled) &&
               prompt.content.trim().length > 0
           )

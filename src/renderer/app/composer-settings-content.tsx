@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ProjectPromptPrinciples, TaskOutputLanguage } from '@shared/project-settings';
+import { isPromptBoundToScope } from '@shared/prompt-library';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import {
   effectiveGlobalEnabled,
@@ -74,6 +75,7 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
   const { data: promptLibraryItems } = usePrompts();
   const updateLibraryPrompt = useUpdatePrompt();
   const promptPrinciples = (promptLibraryItems ?? [])
+    .filter((prompt) => isPromptBoundToScope(prompt, projectId ? 'project' : 'user', projectId))
     .slice()
     .sort((left, right) => left.injectionOrder - right.injectionOrder);
   const projectSettingsStore = projectId ? getProjectSettingsStore(projectId) : undefined;

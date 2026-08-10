@@ -1,7 +1,8 @@
-import type { Prompt } from '@shared/prompt-library';
+import { promptBindingsSchema, type Prompt, type PromptBindings } from '@shared/prompt-library';
 
-type PromptPayload = Omit<Prompt, 'tags'> & {
+type PromptPayload = Omit<Prompt, 'tags' | 'bindings'> & {
   tags?: unknown;
+  bindings?: unknown;
 };
 
 /**
@@ -15,7 +16,13 @@ export function normalizePromptList(prompts: readonly PromptPayload[]): Prompt[]
     tags: Array.isArray(prompt.tags)
       ? prompt.tags.filter((tag): tag is string => typeof tag === 'string')
       : [],
+    bindings: normalizePromptBindings(prompt.bindings),
   }));
+}
+
+function normalizePromptBindings(value: unknown): PromptBindings {
+  const parsed = promptBindingsSchema.safeParse(value);
+  return parsed.success ? parsed.data : { global: true, projectIds: [] };
 }
 
 export function collectPromptTags(prompts: Prompt[]): string[] {

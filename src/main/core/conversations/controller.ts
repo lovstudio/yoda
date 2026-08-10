@@ -7,6 +7,8 @@ import { createConversation } from './createConversation';
 import { deleteConversation } from './deleteConversation';
 import {
   getEditableRuntimeInstructionFiles,
+  listRuntimeInstructionFileVersions,
+  restoreRuntimeInstructionFileVersion,
   saveEditableRuntimeInstructionFile,
 } from './editable-instruction-files';
 import { forkConversation } from './forkConversation';
@@ -248,6 +250,8 @@ export const conversationController = createRPCController({
   getInstructionFiles,
   getRuntimeInstructionFiles,
   getEditableRuntimeInstructionFiles,
+  listRuntimeInstructionFileVersions,
+  restoreRuntimeInstructionFileVersion,
   saveEditableRuntimeInstructionFile,
   getConversationSessionInfo,
   getSessionSummary,

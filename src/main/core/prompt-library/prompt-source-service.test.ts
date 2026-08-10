@@ -40,6 +40,7 @@ function prompt(overrides: Partial<Prompt> = {}): Prompt {
     extraInfo: '',
     injectionEnabled: true,
     injectionOrder: 0,
+    bindings: { global: true, projectIds: [] },
     version: '1.0.0',
     createdAt: '2026-07-27T00:00:00.000Z',
     updatedAt: '2026-07-27T00:00:00.000Z',

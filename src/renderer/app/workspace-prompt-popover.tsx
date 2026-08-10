@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ProjectPromptPrinciples, PromptPrinciple } from '@shared/project-settings';
-import type { Prompt } from '@shared/prompt-library';
+import { isPromptBoundToScope, type Prompt } from '@shared/prompt-library';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import {
   effectiveGlobalEnabled,
@@ -233,8 +233,12 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
   }, [projectId, projectSettings?.promptPrinciples]);
 
   const orderedPrompts = useMemo(
-    () => prompts.slice().sort((left, right) => left.injectionOrder - right.injectionOrder),
-    [prompts]
+    () =>
+      prompts
+        .filter((prompt) => isPromptBoundToScope(prompt, scope, projectId))
+        .slice()
+        .sort((left, right) => left.injectionOrder - right.injectionOrder),
+    [projectId, prompts, scope]
   );
 
   const enabledGlobalCount = orderedPrompts.filter((prompt) =>
@@ -282,20 +286,6 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
   };
 
   const handleAddPrompt = (title: string, content: string, onSuccess: () => void) => {
-    if (scope === 'project') {
-      saveProjectItems([
-        ...projectItems,
-        {
-          id: crypto.randomUUID(),
-          name: title,
-          text: content,
-          enabled: true,
-        },
-      ]);
-      onSuccess();
-      return;
-    }
-
     createPrompt.mutate(
       {
         title,
@@ -304,6 +294,10 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
         tags: [],
         extraInfo: '',
         injectionEnabled: true,
+        bindings:
+          scope === 'project'
+            ? { global: false, projectIds: projectId ? [projectId] : [] }
+            : { global: true, projectIds: [] },
       },
       {
         onSuccess,
@@ -430,7 +424,7 @@ function DynamicPromptAddForm({
           onClick={() => setOpen(true)}
         >
           <Plus className="size-3.5" />
-          {scope === 'project' ? t('promptLibrary.project.add') : t('promptLibrary.new')}
+          {t('promptLibrary.new')}
         </Button>
       ) : (
         <form

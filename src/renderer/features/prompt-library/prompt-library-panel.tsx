@@ -48,12 +48,14 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { projectDisplayName, type Project } from '@shared/projects';
 import {
   incrementPromptVersion,
   normalizePromptTags,
   PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES,
   PROMPT_SOURCE_DEFAULT_TIMEOUT_SECONDS,
   type Prompt,
+  type PromptBindings,
   type PromptCreateInput,
   type PromptSource,
   type PromptSourceError,
@@ -65,6 +67,7 @@ import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
+import { Checkbox } from '@renderer/lib/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -111,6 +114,7 @@ type PromptDraft = {
   tags: string;
   extraInfo: string;
   injectionEnabled: boolean;
+  bindings: PromptBindings;
   source?: PromptSource;
 };
 
@@ -135,6 +139,7 @@ const EMPTY_DRAFT: PromptDraft = {
   tags: '',
   extraInfo: '',
   injectionEnabled: false,
+  bindings: { global: true, projectIds: [] },
 };
 
 const DEFAULT_REFRESH = String(PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES);
@@ -148,6 +153,10 @@ function draftFromEntry(entry: Prompt): PromptDraft {
     tags: entry.tags.join(', '),
     extraInfo: entry.extraInfo,
     injectionEnabled: entry.injectionEnabled,
+    bindings: {
+      global: entry.bindings.global,
+      projectIds: [...entry.bindings.projectIds],
+    },
     source: entry.source,
   };
 }
@@ -164,6 +173,10 @@ function draftToCreateInput(draft: PromptDraft): PromptCreateInput {
     tags: parseTagsText(draft.tags),
     extraInfo: draft.extraInfo.trim(),
     injectionEnabled: draft.injectionEnabled,
+    bindings: {
+      global: draft.bindings.global,
+      projectIds: [...new Set(draft.bindings.projectIds)],
+    },
     source: draft.source,
   };
 }
@@ -197,6 +210,84 @@ function isExternalUrl(value: string): boolean {
     return false;
   }
 }
+
+const PromptBindingEditor = function PromptBindingEditor({
+  bindings,
+  onChange,
+}: {
+  bindings: PromptBindings;
+  onChange: (bindings: PromptBindings) => void;
+}) {
+  const { t } = useTranslation();
+  const [availableProjects, setAvailableProjects] = useState<Project[]>([]);
+  useEffect(() => {
+    let active = true;
+    void rpc.projects
+      .getProjects()
+      .then((projects) => {
+        if (active) setAvailableProjects(projects);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  const projects = availableProjects
+    .filter((project) => !project.isInternal)
+    .map((project) => ({ id: project.id, name: projectDisplayName(project) }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  return (
+    <div className="grid gap-2 rounded-md border border-border bg-background px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">{t('promptLibrary.binding.title')}</p>
+          <p className="mt-0.5 text-xs text-foreground-muted">{t('promptLibrary.binding.hint')}</p>
+        </div>
+        <Switch
+          checked={bindings.global}
+          onCheckedChange={(global) => onChange({ ...bindings, global })}
+          aria-label={t('promptLibrary.binding.global')}
+        />
+      </div>
+      <div className="grid gap-1.5 border-t border-border pt-2">
+        <span className="text-[11px] font-medium text-foreground-muted">
+          {t('promptLibrary.binding.projects')}
+        </span>
+        {projects.length === 0 ? (
+          <span className="text-xs text-foreground-passive">
+            {t('promptLibrary.binding.noProjects')}
+          </span>
+        ) : (
+          <div className="grid max-h-28 gap-1 overflow-y-auto pr-1">
+            {projects.map((project) => {
+              const checked = bindings.projectIds.includes(project.id);
+              return (
+                <label
+                  key={project.id}
+                  className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-foreground hover:bg-background-1"
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(nextChecked) =>
+                      onChange({
+                        ...bindings,
+                        projectIds: nextChecked
+                          ? [...new Set([...bindings.projectIds, project.id])]
+                          : bindings.projectIds.filter((id) => id !== project.id),
+                      })
+                    }
+                  />
+                  <span className="min-w-0 truncate">{project.name}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 function SortablePromptRow({
   entry,
@@ -931,6 +1022,10 @@ export function PromptLibraryPanel({
                           }
                         />
                       </div>
+                      <PromptBindingEditor
+                        bindings={draft.bindings}
+                        onChange={(bindings) => setDraft((current) => ({ ...current, bindings }))}
+                      />
                       {editingEntry ? (
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2.5">
                           <div>
@@ -1200,6 +1295,15 @@ export function PromptLibraryPanel({
                                               {t(`promptLibrary.source.type.${entry.source.type}`)}
                                             </span>
                                           ) : null}
+                                          <span className="shrink-0 rounded bg-background-1 px-1.5 py-0.5 text-[10px] text-foreground-muted">
+                                            {entry.bindings.global
+                                              ? t('promptLibrary.binding.globalShort')
+                                              : entry.bindings.projectIds.length > 0
+                                                ? t('promptLibrary.binding.projectsShort', {
+                                                    count: entry.bindings.projectIds.length,
+                                                  })
+                                                : t('promptLibrary.binding.unboundShort')}
+                                          </span>
                                         </span>
                                         {entry.description ? (
                                           <span className="mt-0.5 block truncate text-xs text-foreground-muted">
