@@ -1692,6 +1692,8 @@
       "sessionExited": "代理进程已退出。",
       "startingTitle": "Agent 正在启动",
       "startingDescription": "消息已提交，终端准备完成后会在这里继续显示。",
+      "startingErrorTitle": "Agent 启动遇到问题",
+      "startingErrorDescription": "终端准备没有完成，请重试；如果仍然失败，请复制调试信息。",
       "sessionStopped": "会话已停止",
       "continueConversation": "继续会话",
       "continuingConversation": "正在继续…"

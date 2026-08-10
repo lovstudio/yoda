@@ -1692,6 +1692,8 @@
       "sessionExited": "The agent process exited.",
       "startingTitle": "Starting agent",
       "startingDescription": "Your message was submitted. Output will continue here as soon as the terminal is ready.",
+      "startingErrorTitle": "Agent startup needs attention",
+      "startingErrorDescription": "The terminal did not finish preparing. Retry, or copy debug info if it happens again.",
       "sessionStopped": "Session stopped",
       "continueConversation": "Continue",
       "continuingConversation": "Continuing…"
