@@ -93,6 +93,8 @@ describe('buildAgentCommand', () => {
         'read-only',
         '--ask-for-approval',
         'never',
+        '-c',
+        'tui.terminal_resize_reflow_max_rows=0',
       ],
       startupInput: '/plan',
     });
@@ -174,7 +176,14 @@ describe('buildAgentCommand', () => {
 
     expect(command).toEqual({
       command: 'codex',
-      args: ['--disable', 'goals', 'resume', '019e00e5-0aba-7f30-a13e-ddf5df6cd705'],
+      args: [
+        '--disable',
+        'goals',
+        'resume',
+        '019e00e5-0aba-7f30-a13e-ddf5df6cd705',
+        '-c',
+        'tui.terminal_resize_reflow_max_rows=0',
+      ],
     });
   });
 
@@ -188,8 +197,33 @@ describe('buildAgentCommand', () => {
 
     expect(command).toEqual({
       command: 'codex',
-      args: ['resume', '019e00e5-0aba-7f30-a13e-ddf5df6cd705'],
+      args: [
+        'resume',
+        '019e00e5-0aba-7f30-a13e-ddf5df6cd705',
+        '-c',
+        'tui.terminal_resize_reflow_max_rows=0',
+      ],
     });
+  });
+
+  it('overrides Codex resume row caps so embedded terminal history stays complete', () => {
+    const command = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig: {
+        ...runtimeConfigDefaults.codex,
+        defaultArgs: ['-c', 'tui.terminal_resize_reflow_max_rows=1000'],
+        extraArgs: '--config=tui.terminal_resize_reflow_max_rows=2000',
+      },
+      sessionId: '019e00e5-0aba-7f30-a13e-ddf5df6cd705',
+      isResuming: true,
+    });
+
+    expect(command.args).toEqual([
+      '-c',
+      'tui.terminal_resize_reflow_max_rows=0',
+      'resume',
+      '019e00e5-0aba-7f30-a13e-ddf5df6cd705',
+    ]);
   });
 
   it('pins Codex resume to the current working directory when provided', () => {
@@ -203,7 +237,14 @@ describe('buildAgentCommand', () => {
 
     expect(command).toEqual({
       command: 'codex',
-      args: ['resume', '--cd', '/workspace/current', '019e00e5-0aba-7f30-a13e-ddf5df6cd705'],
+      args: [
+        'resume',
+        '--cd',
+        '/workspace/current',
+        '019e00e5-0aba-7f30-a13e-ddf5df6cd705',
+        '-c',
+        'tui.terminal_resize_reflow_max_rows=0',
+      ],
     });
   });
 
@@ -430,7 +471,12 @@ describe('buildAgentCommand', () => {
       fastMode: false,
     });
 
-    expect(inherited.args).toEqual(['resume', 'conv-1']);
+    expect(inherited.args).toEqual([
+      'resume',
+      'conv-1',
+      '-c',
+      'tui.terminal_resize_reflow_max_rows=0',
+    ]);
     expect(overridden.args).toEqual([
       'resume',
       'conv-1',
@@ -438,6 +484,8 @@ describe('buildAgentCommand', () => {
       'model_reasoning_effort="high"',
       '-c',
       'service_tier="default"',
+      '-c',
+      'tui.terminal_resize_reflow_max_rows=0',
     ]);
   });
 

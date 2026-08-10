@@ -13,6 +13,7 @@ export type AgentCommand = {
 
 const SHELL_SYNTAX_ERROR = 'Custom CLI commands support executable command prefixes only. ';
 const UNAVAILABLE_SKILL_WARNING_PREFIX = 'Configured skill is unavailable:';
+const CODEX_TUI_REFLOW_MAX_ROWS_CONFIG_KEY = 'tui.terminal_resize_reflow_max_rows';
 
 const SHELL_BUILTINS = new Set(['.', 'source', 'eval', 'exec', 'cd', 'alias', 'export']);
 
@@ -139,6 +140,18 @@ export function normalizeCodexConfigArgs(
   configKey: string,
   preferredValue: string
 ): string[] {
+  return normalizeCodexConfigArgsWithFormattedValue(
+    args,
+    configKey,
+    formatTomlString(preferredValue)
+  );
+}
+
+function normalizeCodexConfigArgsWithFormattedValue(
+  args: readonly string[],
+  configKey: string,
+  formattedValue: string
+): string[] {
   const cleanedArgs: string[] = [];
   let insertionIndex: number | undefined;
   for (let index = 0; index < args.length; ) {
@@ -155,7 +168,7 @@ export function normalizeCodexConfigArgs(
     insertionIndex ?? cleanedArgs.length,
     0,
     '-c',
-    `${configKey}=${formatTomlString(preferredValue)}`
+    `${configKey}=${formattedValue}`
   );
   return cleanedArgs;
 }
@@ -498,6 +511,17 @@ export function buildAgentCommand({
       normalizedArgs,
       'service_tier',
       effectiveFastMode ? 'fast' : 'default'
+    );
+  }
+  if (runtimeId === 'codex' && isResuming) {
+    // Codex identifies Yoda's tmux-backed xterm as an unknown terminal and
+    // otherwise caps initial history replay at 1,000 rendered rows. Yoda's
+    // terminal owns the real (user-configurable) scrollback limit, so disable
+    // Codex's second cap to avoid stopping a resumed conversation mid-turn.
+    normalizedArgs = normalizeCodexConfigArgsWithFormattedValue(
+      normalizedArgs,
+      CODEX_TUI_REFLOW_MAX_ROWS_CONFIG_KEY,
+      '0'
     );
   }
 
