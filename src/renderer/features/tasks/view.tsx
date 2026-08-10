@@ -1,6 +1,6 @@
 import { reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, type ReactNode } from 'react';
 import { agentSessionExitedChannel } from '@shared/events/agentEvents';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import type { TaskWindowTabTarget } from '@shared/task-window';
@@ -97,7 +97,7 @@ const TopLevelTabSync = observer(function TopLevelTabSync({
   const target: TaskWindowTabTarget | null = isRoutedTask ? (params.tab ?? null) : null;
   const targetKey = target ? JSON.stringify(target) : null;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const bridge = {
       applying: null as { key: string; token: symbol } | null,
       open: (tab: TaskWindowTabTarget) => openTaskTopTab(projectId, taskId, tab),
@@ -108,7 +108,11 @@ const TopLevelTabSync = observer(function TopLevelTabSync({
     };
   }, [tabManager, projectId, taskId]);
 
-  useEffect(() => {
+  // The first task frame must already point at the task's internal target.
+  // A passive effect runs after the browser may have painted the overview or
+  // conversation list, which creates a visible intermediate frame on cold
+  // task entry. Layout timing keeps this handoff inside the same paint.
+  useLayoutEffect(() => {
     if (!isRoutedTask) return;
 
     // One owner resolves the route intent. An explicit route always wins and
@@ -121,7 +125,9 @@ const TopLevelTabSync = observer(function TopLevelTabSync({
       openTaskTopTab(
         projectId,
         taskId,
-        pending ?? tabManager.activeTopLevelTarget ?? { kind: 'overview' }
+        pending ??
+          tabManager.activeTopLevelTarget ??
+          tabManager.preferredConversationTarget ?? { kind: 'overview' }
       );
       return;
     }
