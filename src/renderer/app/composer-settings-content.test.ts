@@ -49,13 +49,19 @@ describe('shared composer settings surfaces', () => {
       new URL('./workspace-runtime-bar.tsx', import.meta.url),
       'utf8'
     );
-    const configIndex = runtimeBar.indexOf("aria-label={t('workspaceRuntime.config.title')}");
+    const configDefinitionIndex = runtimeBar.indexOf(
+      "aria-label={t('workspaceRuntime.config.title')}"
+    );
+    const runtimeEntry = runtimeBar.indexOf('<Popover open={isRuntimePopoverOpen}');
+    const configRenderIndex = runtimeBar.indexOf('{renderConfigPopover()}');
     const promptIndex = runtimeBar.indexOf('<WorkspacePromptPopover');
     const agentsIndex = runtimeBar.indexOf("aria-label={t('workspaceRuntime.agents.triggerLabel'");
 
-    expect(configIndex).toBeGreaterThan(0);
-    expect(promptIndex).toBeGreaterThan(configIndex);
-    expect(agentsIndex).toBeGreaterThan(configIndex);
+    expect(configDefinitionIndex).toBeGreaterThan(0);
+    expect(runtimeEntry).toBeGreaterThan(0);
+    expect(runtimeEntry).toBeLessThan(configRenderIndex);
+    expect(configRenderIndex).toBeLessThan(promptIndex);
+    expect(agentsIndex).toBeGreaterThan(configRenderIndex);
   });
 
   it('applies the image-path setting to the active conversation TUI paste boundary', () => {

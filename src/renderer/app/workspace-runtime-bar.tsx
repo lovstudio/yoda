@@ -825,52 +825,54 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     });
   };
 
+  const renderConfigPopover = () => (
+    <Popover open={isConfigPopoverOpen} onOpenChange={setIsConfigPopoverOpen}>
+      <PopoverTrigger
+        aria-label={t('workspaceRuntime.config.title')}
+        className={cn(
+          RUNTIME_BAR_ACTION_CLASS,
+          isConfigPopoverOpen && 'bg-background-2 text-foreground'
+        )}
+        title={t('workspaceRuntime.config.title')}
+      >
+        <Settings2 className="size-3.5" />
+        <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>{t('workspaceRuntime.config.title')}</span>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="top"
+        sideOffset={8}
+        className="max-h-[min(32rem,calc(100vh-3rem))] w-96 gap-0 overflow-y-auto border border-border bg-background p-0 text-foreground shadow-lg"
+      >
+        <div className="border-b border-border p-3">
+          <div className="text-sm font-medium">{t('workspaceRuntime.config.title')}</div>
+          <div className="mt-0.5 text-xs text-foreground-passive">
+            {t('workspaceRuntime.config.description')}
+          </div>
+        </div>
+        <div className="p-3">
+          <ComposerSettingsContent
+            runtimeId={configRuntimeId}
+            attachImagesAsPaths={attachImagesField.value}
+            inputPromptLanguage={inputPromptLanguageField.value}
+            namingLanguage={namingLanguageField.value}
+            summaryLanguage={summaryLanguageField.value}
+            onAttachImagesAsPathsChange={attachImagesField.setValue}
+            onInputPromptLanguageChange={inputPromptLanguageField.setValue}
+            onNamingLanguageChange={namingLanguageField.setValue}
+            onSummaryLanguageChange={summaryLanguageField.setValue}
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+
   return (
     <footer
       data-yoda-surface="workspace-runtime-bar"
       className="@container flex h-7 min-w-0 shrink-0 items-center gap-1 overflow-hidden whitespace-nowrap border-t border-border bg-background-secondary px-2 text-[11px] text-foreground-muted @min-[1441px]:gap-2"
     >
-      <Popover open={isConfigPopoverOpen} onOpenChange={setIsConfigPopoverOpen}>
-        <PopoverTrigger
-          aria-label={t('workspaceRuntime.config.title')}
-          className={cn(
-            RUNTIME_BAR_ACTION_CLASS,
-            isConfigPopoverOpen && 'bg-background-2 text-foreground'
-          )}
-          title={t('workspaceRuntime.config.title')}
-        >
-          <Settings2 className="size-3.5" />
-          <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>
-            {t('workspaceRuntime.config.title')}
-          </span>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          side="top"
-          sideOffset={8}
-          className="max-h-[min(32rem,calc(100vh-3rem))] w-96 gap-0 overflow-y-auto border border-border bg-background p-0 text-foreground shadow-lg"
-        >
-          <div className="border-b border-border p-3">
-            <div className="text-sm font-medium">{t('workspaceRuntime.config.title')}</div>
-            <div className="mt-0.5 text-xs text-foreground-passive">
-              {t('workspaceRuntime.config.description')}
-            </div>
-          </div>
-          <div className="p-3">
-            <ComposerSettingsContent
-              runtimeId={configRuntimeId}
-              attachImagesAsPaths={attachImagesField.value}
-              inputPromptLanguage={inputPromptLanguageField.value}
-              namingLanguage={namingLanguageField.value}
-              summaryLanguage={summaryLanguageField.value}
-              onAttachImagesAsPathsChange={attachImagesField.setValue}
-              onInputPromptLanguageChange={inputPromptLanguageField.setValue}
-              onNamingLanguageChange={namingLanguageField.setValue}
-              onSummaryLanguageChange={summaryLanguageField.setValue}
-            />
-          </div>
-        </PopoverContent>
-      </Popover>
+      {!runtimeId ? renderConfigPopover() : null}
       {runtimeId ? (
         <div className="flex min-w-0 items-center gap-0.5 overflow-hidden @min-[1121px]:gap-1.5">
           <Popover open={isRuntimePopoverOpen} onOpenChange={setIsRuntimePopoverOpen}>
@@ -942,6 +944,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               />
             </PopoverContent>
           </Popover>
+          {renderConfigPopover()}
           <WorkspacePromptPopover
             runtimeId={runtimeId}
             projectId={activeProjectId}
