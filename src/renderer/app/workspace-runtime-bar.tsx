@@ -46,7 +46,7 @@ import {
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { SkillQuickSearchPopover } from '@renderer/features/skills/components/SkillQuickSearchPopover';
-import { skillsCatalogQueryOptions } from '@renderer/features/skills/skills-query';
+import { skillsQuickCatalogQueryOptions } from '@renderer/features/skills/skills-query';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { LatestReplyScreenshotButton } from '@renderer/features/tasks/conversations/latest-reply-screenshot';
@@ -227,6 +227,10 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const runtimeId = explicitConversationRuntimeId(
     provisionedTask?.taskView.tabManager.activeConversation?.data.runtimeId
   );
+  useEffect(() => {
+    if (!runtimeId) return;
+    void queryClient.prefetchQuery(skillsQuickCatalogQueryOptions);
+  }, [queryClient, runtimeId]);
   const configRuntimeId =
     runtimeId ??
     composerDefaults?.runtimeId ??
@@ -765,7 +769,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   };
 
   const prefetchSkillsCatalog = useCallback(() => {
-    void queryClient.prefetchQuery(skillsCatalogQueryOptions);
+    void queryClient.prefetchQuery(skillsQuickCatalogQueryOptions);
   }, [queryClient]);
 
   const handleSkillInstalled = (skill: { key: string; displayName: string }) => {
