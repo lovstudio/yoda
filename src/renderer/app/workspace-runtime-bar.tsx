@@ -79,6 +79,7 @@ import {
 import { startRendererPerformanceReporter } from './renderer-performance-reporter';
 import { rankWorkspaceAgentSessions } from './workspace-agent-sessions';
 import { WorkspaceNotificationCenter } from './workspace-notification-center';
+import { WorkspacePromptPopover } from './workspace-prompt-popover';
 import type { WorkspaceResourceDetailKind } from './workspace-resource-details-modal';
 import {
   getWorkspaceLatencyP95,
@@ -900,6 +901,13 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               />
             </PopoverContent>
           </Popover>
+          <WorkspacePromptPopover
+            runtimeId={runtimeId}
+            projectId={activeProjectId}
+            triggerClassName={RUNTIME_BAR_ACTION_CLASS}
+            triggerLabelClassName={RUNTIME_BAR_ACTION_LABEL_CLASS}
+            onOpenLibrary={() => appState.navigation.navigate('library', { section: 'prompts' })}
+          />
           {sessionContext && contextPercent != null ? (
             <>
               <span aria-hidden className="@max-[1120px]:hidden">
