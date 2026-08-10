@@ -50,6 +50,7 @@ export class SshConversationProvider implements ConversationProvider {
   private knownSessionIds = new Set<string>();
   private readonly pendingStarts = new Map<string, { token: symbol; completion: Promise<void> }>();
   private readonly projectId: string;
+  private readonly sidebarWorkspaceId?: string | null;
   readonly taskPath: string;
   private readonly taskId: string;
   private readonly taskEnvVars: Record<string, string>;
@@ -67,6 +68,7 @@ export class SshConversationProvider implements ConversationProvider {
 
   constructor({
     projectId,
+    sidebarWorkspaceId,
     taskPath,
     taskId,
     taskEnvVars = {},
@@ -78,6 +80,7 @@ export class SshConversationProvider implements ConversationProvider {
     resolveProjectPromptPrinciples,
   }: {
     projectId: string;
+    sidebarWorkspaceId?: string | null;
     taskPath: string;
     taskId: string;
     taskEnvVars?: Record<string, string>;
@@ -89,6 +92,7 @@ export class SshConversationProvider implements ConversationProvider {
     resolveProjectPromptPrinciples?: () => Promise<ProjectPromptPrinciples | undefined>;
   }) {
     this.projectId = projectId;
+    this.sidebarWorkspaceId = sidebarWorkspaceId;
     this.taskPath = taskPath;
     this.taskId = taskId;
     this.taskEnvVars = taskEnvVars;
@@ -169,10 +173,10 @@ export class SshConversationProvider implements ConversationProvider {
         });
       }
       const appendSystemPrompt = withExecutionModeInstructions(
-        await getEnabledPromptPrinciplesText(
-          await this.resolveProjectPromptPrinciples?.(),
-          this.projectId
-        ),
+        await getEnabledPromptPrinciplesText(await this.resolveProjectPromptPrinciples?.(), {
+          projectId: this.projectId,
+          workspaceId: this.sidebarWorkspaceId,
+        }),
         conversation.executionMode
       );
       if (!this.ownsPendingStart(sessionId, startToken)) return;

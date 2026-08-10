@@ -49,12 +49,12 @@ function parseTags(value: string | null): string[] {
 }
 
 function parseBindings(value: string | null): PromptBindings {
-  if (!value) return { global: true, projectIds: [] };
+  if (!value) return promptBindingsSchema.parse({});
   try {
     const parsed = promptBindingsSchema.safeParse(JSON.parse(value));
-    return parsed.success ? parsed.data : { global: true, projectIds: [] };
+    return parsed.success ? parsed.data : promptBindingsSchema.parse({});
   } catch {
-    return { global: true, projectIds: [] };
+    return promptBindingsSchema.parse({});
   }
 }
 
@@ -205,7 +205,7 @@ export class PromptLibraryService {
             extraInfo: '',
             injectionEnabled: item.enabled,
             injectionOrder: (nextInjectionOrder ?? 0) + index,
-            bindingsJson: JSON.stringify({ global: true, projectIds: [] }),
+            bindingsJson: JSON.stringify({ global: true, workspaceIds: [], projectIds: [] }),
             sortOrder: (nextSortOrder ?? 0) + index,
             version: '1.0.0',
             sourceJson: item.source ? JSON.stringify(item.source) : null,

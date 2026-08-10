@@ -32,7 +32,7 @@ import type {
   CodexSessionContext,
   ContextSkill,
 } from '@shared/conversations';
-import { isPromptBoundToScope } from '@shared/prompt-library';
+import { isPromptAvailableForTarget } from '@shared/prompt-library';
 import {
   asMounted,
   getProjectSettingsStore,
@@ -487,12 +487,16 @@ function PersonaSection({
   const provisioned = useRequireProvisionedTask();
   const { data: libraryPrompts } = usePrompts();
   const projectPrompts = getProjectSettingsStore(provisioned.projectId)?.settings?.promptPrinciples;
+  const projectWorkspaceId = getProjectStore(provisioned.projectId)?.data?.workspaceId;
   const principles = showPromptPrinciples
     ? [
         ...(libraryPrompts ?? [])
           .filter(
             (prompt) =>
-              isPromptBoundToScope(prompt, 'project', provisioned.projectId) &&
+              isPromptAvailableForTarget(prompt, {
+                projectId: provisioned.projectId,
+                workspaceId: projectWorkspaceId,
+              }) &&
               (projectPrompts?.globalOverrides?.[prompt.id] ?? prompt.injectionEnabled) &&
               prompt.content.trim().length > 0
           )

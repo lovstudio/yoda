@@ -22,7 +22,7 @@ export function normalizePromptList(prompts: readonly PromptPayload[]): Prompt[]
 
 function normalizePromptBindings(value: unknown): PromptBindings {
   const parsed = promptBindingsSchema.safeParse(value);
-  return parsed.success ? parsed.data : { global: true, projectIds: [] };
+  return parsed.success ? parsed.data : promptBindingsSchema.parse({});
 }
 
 export function collectPromptTags(prompts: Prompt[]): string[] {

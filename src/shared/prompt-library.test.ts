@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   incrementPromptVersion,
+  isPromptAvailableForTarget,
+  isPromptBoundToScope,
   normalizePromptTags,
   promptCreateInputSchema,
   promptSourceSchema,
@@ -19,7 +21,7 @@ describe('prompt library schemas', () => {
       tags: [],
       extraInfo: '',
       injectionEnabled: false,
-      bindings: { global: true, projectIds: [] },
+      bindings: { global: true, workspaceIds: [], projectIds: [] },
     });
   });
 
@@ -56,5 +58,30 @@ describe('prompt library schemas', () => {
       type: 'git',
       filePath: 'review/code-review.md',
     });
+  });
+
+  it('keeps configuration tabs separate from runtime availability', () => {
+    const global = { bindings: { global: true, workspaceIds: [], projectIds: [] } };
+    const project = { bindings: { global: false, workspaceIds: [], projectIds: ['project-1'] } };
+    const organization = {
+      bindings: { global: false, workspaceIds: ['workspace-1'], projectIds: [] },
+    };
+
+    expect(isPromptBoundToScope(global, 'user')).toBe(true);
+    expect(isPromptBoundToScope(global, 'project', 'project-1')).toBe(false);
+    expect(isPromptBoundToScope(project, 'project', 'project-1')).toBe(true);
+    expect(isPromptBoundToScope(organization, 'project', { workspaceId: 'workspace-1' })).toBe(
+      true
+    );
+    expect(
+      isPromptAvailableForTarget(global, { projectId: 'project-1', workspaceId: 'workspace-1' })
+    ).toBe(true);
+    expect(
+      isPromptAvailableForTarget(organization, {
+        projectId: 'project-1',
+        workspaceId: 'workspace-1',
+      })
+    ).toBe(true);
+    expect(isPromptAvailableForTarget(project, { projectId: 'project-2' })).toBe(false);
   });
 });

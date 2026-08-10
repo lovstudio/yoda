@@ -204,7 +204,9 @@ export const prompts = sqliteTable('prompts', {
   injectionEnabled: integer('injection_enabled', { mode: 'boolean' }).notNull().default(false),
   injectionOrder: integer('injection_order').notNull().default(0),
   /** JSON encoded PromptBindings; legacy rows default to global injection. */
-  bindingsJson: text('bindings_json').notNull().default('{"global":true,"projectIds":[]}'),
+  bindingsJson: text('bindings_json')
+    .notNull()
+    .default('{"global":true,"workspaceIds":[],"projectIds":[]}'),
   version: text('version').notNull().default('1.0.0'),
   sourceJson: text('source_json'),
   sortOrder: integer('sort_order').notNull().default(0),
