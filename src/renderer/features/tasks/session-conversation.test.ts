@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ClaudeSessionPrompt, SessionTranscriptMessage } from '@shared/conversations';
-import { buildSessionConversationItems } from './session-conversation';
+import {
+  buildSessionConversationItems,
+  buildSessionConversationPreviewItems,
+} from './session-conversation';
 
 const prompts: ClaudeSessionPrompt[] = [
   {
@@ -142,5 +145,25 @@ internal metadata
     );
 
     expect(items.filter((item) => item.message.role === 'assistant')).toHaveLength(2);
+  });
+});
+
+describe('buildSessionConversationPreviewItems', () => {
+  it('keeps the beginning and end while reporting the hidden middle', () => {
+    const items = Array.from({ length: 8 }, (_, index) => ({
+      key: String(index),
+      message: {
+        id: String(index),
+        role: 'user' as const,
+        text: String(index),
+        timestamp: null,
+      },
+    }));
+
+    expect(
+      buildSessionConversationPreviewItems(items).map((item) =>
+        item.type === 'truncated' ? `hidden:${item.hiddenCount}` : item.item.message.text
+      )
+    ).toEqual(['0', '1', '2', 'hidden:2', '5', '6', '7']);
   });
 });

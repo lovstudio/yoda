@@ -1868,6 +1868,8 @@
       "viewAllPrompts": "查看全部",
       "truncatedPrompts": "已截断 {{count}} 条 prompt",
       "truncatedPrompts_plural": "已截断 {{count}} 条 prompt",
+      "truncatedMessages": "中间还有 {{count}} 条对话",
+      "truncatedMessages_plural": "中间还有 {{count}} 条对话",
       "promptsModalTitle": "用户 prompts",
       "conversationModalTitle": "对话",
       "showAgentReplies": "显示 AI 回复",

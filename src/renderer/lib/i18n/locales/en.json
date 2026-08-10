@@ -1868,6 +1868,8 @@
       "viewAllPrompts": "View all",
       "truncatedPrompts": "{{count}} truncated prompt",
       "truncatedPrompts_plural": "{{count}} truncated prompts",
+      "truncatedMessages": "{{count}} conversation item in the middle",
+      "truncatedMessages_plural": "{{count}} conversation items in the middle",
       "promptsModalTitle": "User prompts",
       "conversationModalTitle": "Conversation",
       "showAgentReplies": "Show AI replies",

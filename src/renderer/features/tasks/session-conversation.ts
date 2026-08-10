@@ -8,6 +8,16 @@ export type SessionConversationItem = {
   promptIndex?: number;
 };
 
+export type SessionConversationPreviewItem =
+  | {
+      type: 'message';
+      item: SessionConversationItem;
+    }
+  | {
+      type: 'truncated';
+      hiddenCount: number;
+    };
+
 /**
  * Builds the readable conversation for the selected level. User-only mode
  * stays prompt-backed so restore checkpoints remain available.
@@ -99,4 +109,29 @@ function findMatchingPrompt(
   if (!prompt) return undefined;
   usedPromptIndexes.add(promptIndex);
   return { prompt, index: promptIndex };
+}
+
+export function buildSessionConversationPreviewItems(
+  items: SessionConversationItem[],
+  headCount = 3,
+  tailCount = headCount
+): SessionConversationPreviewItem[] {
+  const safeHeadCount = Math.max(0, headCount);
+  const safeTailCount = Math.max(0, tailCount);
+  const visibleLimit = safeHeadCount + safeTailCount;
+  if (items.length <= visibleLimit) {
+    return items.map((item) => ({ type: 'message', item }));
+  }
+
+  return [
+    ...items.slice(0, safeHeadCount).map((item) => ({ type: 'message' as const, item })),
+    {
+      type: 'truncated',
+      hiddenCount: items.length - visibleLimit,
+    },
+    ...items.slice(items.length - safeTailCount).map((item) => ({
+      type: 'message' as const,
+      item,
+    })),
+  ];
 }
