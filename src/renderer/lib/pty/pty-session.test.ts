@@ -7,12 +7,14 @@ const mocks = vi.hoisted(() => ({
     connect: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
   }>,
+  getTerminalSettings: vi.fn(async () => ({})),
+  throwOnConstruct: false,
 }));
 
 vi.mock('@renderer/lib/ipc', () => ({
   rpc: {
     appSettings: {
-      get: vi.fn(async () => ({})),
+      get: mocks.getTerminalSettings,
     },
   },
 }));
@@ -24,6 +26,7 @@ vi.mock('@renderer/lib/pty/pty', () => ({
     lastSentDims = null;
 
     constructor() {
+      if (mocks.throwOnConstruct) throw new Error('xterm preparation failed');
       mocks.instances.push(this);
     }
 
@@ -35,6 +38,8 @@ describe('PtySession connection lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.instances.length = 0;
+    mocks.getTerminalSettings.mockResolvedValue({});
+    mocks.throwOnConstruct = false;
   });
 
   it('does not connect merely because status is observed', async () => {
@@ -92,5 +97,21 @@ describe('PtySession connection lifecycle', () => {
     expect(mocks.instances).toHaveLength(1);
     expect(mocks.instances[0].connect).not.toHaveBeenCalled();
     expect(session.status).toBe('ready');
+  });
+
+  it('surfaces frontend preparation failures and allows a retry', async () => {
+    const session = new PtySession('failed-preparation');
+    mocks.throwOnConstruct = true;
+
+    await expect(session.connect()).rejects.toThrow('xterm preparation failed');
+    expect(session.status).toBe('disconnected');
+    expect(session.pty).toBeNull();
+    expect(session.connectionError).toContain('xterm preparation failed');
+
+    mocks.throwOnConstruct = false;
+    await session.connect();
+
+    expect(session.status).toBe('ready');
+    expect(session.connectionError).toBeNull();
   });
 });

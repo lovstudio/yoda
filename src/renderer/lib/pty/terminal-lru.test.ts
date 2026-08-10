@@ -25,4 +25,18 @@ describe('selectTerminalLruEvictions', () => {
       )
     ).toEqual(['hidden']);
   });
+
+  it('keeps a renderer that is still connecting', () => {
+    expect(
+      selectTerminalLruEvictions(
+        [
+          { sessionId: 'old', mounted: false },
+          { sessionId: 'connecting', mounted: false, connecting: true },
+          { sessionId: 'current', mounted: false },
+        ],
+        1,
+        'current'
+      )
+    ).toEqual(['old']);
+  });
 });
