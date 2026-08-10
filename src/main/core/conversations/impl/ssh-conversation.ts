@@ -169,7 +169,10 @@ export class SshConversationProvider implements ConversationProvider {
         });
       }
       const appendSystemPrompt = withExecutionModeInstructions(
-        await getEnabledPromptPrinciplesText(await this.resolveProjectPromptPrinciples?.()),
+        await getEnabledPromptPrinciplesText(
+          await this.resolveProjectPromptPrinciples?.(),
+          this.projectId
+        ),
         conversation.executionMode
       );
       if (!this.ownsPendingStart(sessionId, startToken)) return;

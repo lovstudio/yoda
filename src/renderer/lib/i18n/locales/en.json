@@ -2893,6 +2893,16 @@
       "extraInfo": "Extra information",
       "extraInfoPlaceholder": "Optional notes, reference URL, or extension entry point"
     },
+    "binding": {
+      "title": "Injection scope",
+      "hint": "Available globally or for selected projects",
+      "global": "Global (user-level)",
+      "projects": "Projects",
+      "noProjects": "No projects available",
+      "globalShort": "Global",
+      "projectsShort": "{{count}} projects",
+      "unboundShort": "Unbound"
+    },
     "versions": {
       "title": "Version history",
       "current": "Current v{{version}}",
@@ -2922,8 +2932,8 @@
       "title": "User-level instructions",
       "description": "Standard user-level instructions read by {{runtime}} across all projects.",
       "noEnabledAgents": "No enabled Agent CLI with supported standard instruction files is available.",
-      "userPromptDescription": "These are the standard user-level instruction paths for {{runtime}}. Expand a missing file to create it.",
-      "codexFileDescription": "Codex reads AGENTS.md by default. An AGENTS.override.md in the same directory temporarily replaces it.",
+      "userPromptDescription": "These are the standard user-level instruction files for {{runtime}}. Expand a file to edit it directly.",
+      "codexFileDescription": "Codex reads AGENTS.md by default. Edit the original file directly here.",
       "noInstructionFiles": "This Agent CLI has no editable standard instruction file.",
       "existingFile": "Existing file",
       "activeFile": "Active",
@@ -2936,7 +2946,16 @@
       "createFile": "Create file",
       "fileSaved": "Instruction file saved",
       "fileSaveFailed": "Failed to save instruction file",
-      "fileLoadFailed": "Failed to load instruction files: {{detail}}"
+      "fileLoadFailed": "Failed to load instruction files: {{detail}}",
+      "versionHistory": "Versions",
+      "versionLabel": "v{{version}}",
+      "versionEmpty": "No saved versions yet",
+      "restoreVersion": "Restore",
+      "restoreVersionTitle": "Restore v{{version}}?",
+      "restoreVersionDescription": "The file will return to this version and create a new history entry.",
+      "restoreVersionAction": "Restore",
+      "versionRestored": "Restored v{{version}}",
+      "versionRestoreFailed": "Failed to restore the instruction file version"
     },
     "project": {
       "title": "Project-level instructions and prompts",

@@ -19,6 +19,7 @@ describe('prompt library schemas', () => {
       tags: [],
       extraInfo: '',
       injectionEnabled: false,
+      bindings: { global: true, projectIds: [] },
     });
   });
 

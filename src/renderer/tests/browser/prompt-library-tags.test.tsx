@@ -89,8 +89,10 @@ vi.mock('@renderer/lib/hooks/use-toast', () => ({
 }));
 
 vi.mock('@renderer/lib/ipc', () => ({
+  events: { on: vi.fn(() => vi.fn()) },
   rpc: {
     app: { openExternal: vi.fn() },
+    projects: { getProjects: vi.fn(async () => []) },
     promptLibrary: {
       loadGit: vi.fn(),
       loadUrl: vi.fn(),
@@ -100,6 +102,14 @@ vi.mock('@renderer/lib/ipc', () => ({
 }));
 
 vi.mock('@renderer/lib/modal/modal-provider', () => ({
+  showModal: vi.fn(),
+  useModalContext: () => ({
+    closeModal: vi.fn(),
+    showModal: vi.fn(),
+    transitionModal: vi.fn(),
+    hasActiveCloseGuard: false,
+    setCloseGuard: vi.fn(),
+  }),
   useShowModal: () => mocks.showConfirm,
 }));
 
@@ -113,6 +123,7 @@ function prompt(id: string, tags: string[], injectionEnabled = false): Prompt {
     extraInfo: '',
     injectionEnabled,
     injectionOrder: 0,
+    bindings: { global: true, projectIds: [] },
     version: '1.0.0',
     createdAt: '2026-07-27T00:00:00.000Z',
     updatedAt: '2026-07-27T00:00:00.000Z',

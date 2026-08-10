@@ -20,6 +20,7 @@ function prompt(id: string, content: string, enabled: boolean, order: number): P
     extraInfo: '',
     injectionEnabled: enabled,
     injectionOrder: order,
+    bindings: { global: true, projectIds: [] },
     version: '1.0.0',
     createdAt: '2026-07-27T00:00:00.000Z',
     updatedAt: '2026-07-27T00:00:00.000Z',
@@ -41,10 +42,31 @@ describe('dynamic prompt injection', () => {
 
   it('applies project overrides and appends project-only prompts', async () => {
     await expect(
-      getEnabledPromptPrinciplesText({
-        globalOverrides: { first: false, disabled: true },
-        items: [{ id: 'local', name: 'Local', text: 'Local prompt', enabled: true }],
-      })
+      getEnabledPromptPrinciplesText(
+        {
+          globalOverrides: { first: false, disabled: true },
+          items: [{ id: 'local', name: 'Local', text: 'Local prompt', enabled: true }],
+        },
+        'project-1'
+      )
     ).resolves.toBe('Project enabled\n\nLater\n\nLocal prompt');
+  });
+
+  it('only injects prompts bound to the current project', async () => {
+    mocks.list.mockResolvedValue([
+      { ...prompt('global', 'Global', true, 0), bindings: { global: true, projectIds: [] } },
+      {
+        ...prompt('project', 'Project', true, 1),
+        bindings: { global: false, projectIds: ['project-1'] },
+      },
+      {
+        ...prompt('other', 'Other', true, 2),
+        bindings: { global: false, projectIds: ['project-2'] },
+      },
+    ]);
+
+    await expect(getEnabledPromptPrinciplesText(undefined, 'project-1')).resolves.toBe(
+      'Global\n\nProject'
+    );
   });
 });

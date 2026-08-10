@@ -2,6 +2,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import type { PromptPrinciple } from '@shared/project-settings';
+import { isPromptBoundToScope } from '@shared/prompt-library';
 import {
   effectiveGlobalEnabled,
   setGlobalOverride,
@@ -18,17 +19,20 @@ import { Textarea } from '@renderer/lib/ui/textarea';
 import type { FormState, FormUpdate } from '../project-settings-form-model';
 
 type PromptPrinciplesSectionProps = {
+  projectId: string;
   form: FormState;
   update: FormUpdate;
 };
 
 export const PromptPrinciplesSection = observer(function PromptPrinciplesSection({
+  projectId,
   form,
   update,
 }: PromptPrinciplesSectionProps) {
   const { t } = useTranslation();
   const { data: prompts } = usePrompts();
   const globalItems = (prompts ?? [])
+    .filter((prompt) => isPromptBoundToScope(prompt, 'project', projectId))
     .slice()
     .sort((left, right) => left.injectionOrder - right.injectionOrder);
   const project = form.promptPrinciples;

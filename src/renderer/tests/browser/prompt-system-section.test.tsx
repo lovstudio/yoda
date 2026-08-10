@@ -16,7 +16,9 @@ const mocks = vi.hoisted(() => ({
   getDependencies: vi.fn(),
   getFiles: vi.fn(),
   getRuntimeSettings: vi.fn(),
+  listFileVersions: vi.fn(),
   saveFile: vi.fn(),
+  showConfirm: vi.fn(),
 }));
 
 vi.mock('react-i18next', async (importOriginal) => ({
@@ -34,6 +36,10 @@ vi.mock('@renderer/lib/hooks/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
 
+vi.mock('@renderer/lib/modal/modal-provider', () => ({
+  useShowModal: () => mocks.showConfirm,
+}));
+
 vi.mock('@renderer/lib/ipc', () => ({
   rpc: {
     dependencies: {
@@ -43,6 +49,8 @@ vi.mock('@renderer/lib/ipc', () => ({
     runtimeSettings: { getAll: mocks.getRuntimeSettings },
     conversations: {
       getEditableRuntimeInstructionFiles: mocks.getFiles,
+      listRuntimeInstructionFileVersions: mocks.listFileVersions,
+      restoreRuntimeInstructionFileVersion: vi.fn(),
       saveEditableRuntimeInstructionFile: mocks.saveFile,
     },
   },
@@ -122,6 +130,19 @@ describe('prompt instruction sections', () => {
       grok: { id: 'grok', category: 'agent', status: 'available' },
     });
     mocks.getRuntimeSettings.mockResolvedValue({});
+    mocks.listFileVersions.mockResolvedValue([
+      {
+        id: 'version-1',
+        runtimeId: 'codex',
+        projectId: null,
+        scope: 'user',
+        kind: 'global-codex-agents',
+        path: '/fixture/.codex/AGENTS.md',
+        version: 1,
+        content: 'Codex user prompt',
+        createdAt: '2026-07-29T00:00:00.000Z',
+      },
+    ]);
     mocks.getFiles.mockImplementation(async ({ runtimeId }: { runtimeId: RuntimeId }) =>
       userFiles(runtimeId)
     );
@@ -180,7 +201,7 @@ describe('prompt instruction sections', () => {
     expect(runtimeSelector?.closest('[data-slot="user-instruction-section"]')).toBeNull();
     expect(host.querySelector('[data-slot="agent-system-prompt"]')).toBeNull();
     expect(host.querySelectorAll('[data-slot="runtime-instruction-file"]')).toHaveLength(1);
-    expect(host.textContent).toContain('promptLibrary.system.addTemporaryOverride');
+    expect(host.textContent).not.toContain('promptLibrary.system.addTemporaryOverride');
     expect(host.querySelector('textarea')).toBeNull();
 
     const regularAgentsRow = Array.from(
@@ -209,44 +230,18 @@ describe('prompt instruction sections', () => {
     });
   });
 
-  it('keeps a missing Codex override behind a temporary override action', async () => {
+  it('hides a missing Codex override and keeps the original file as the edit target', async () => {
     await renderSection();
 
     await act(async () => {
-      await vi.waitFor(() =>
-        expect(host.textContent).toContain('promptLibrary.system.addTemporaryOverride')
-      );
+      await vi.waitFor(() => expect(host.textContent).toContain('/fixture/.codex/AGENTS.md'));
     });
 
-    const addOverrideButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
-      (button) => button.textContent?.includes('promptLibrary.system.addTemporaryOverride')
-    );
-    await act(async () => addOverrideButton?.click());
-
-    expect(host.querySelectorAll('[data-slot="runtime-instruction-file"]')).toHaveLength(2);
-    const textarea = host.querySelector<HTMLTextAreaElement>(
-      'textarea[aria-label="promptLibrary.system.filePromptLabel"]'
-    );
-    expect(textarea).not.toBeNull();
-    await act(async () => {
-      if (textarea) setTextareaValue(textarea, 'Temporary Codex override');
-    });
-
-    const createButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
-      (button) =>
-        button.textContent?.includes('promptLibrary.system.createFile') && !button.disabled
-    );
-    await act(async () => createButton?.click());
-
-    expect(mocks.saveFile).toHaveBeenCalledWith({
-      runtimeId: 'codex',
-      projectId: null,
-      path: '/fixture/.codex/AGENTS.override.md',
-      content: 'Temporary Codex override',
-    });
+    expect(host.querySelectorAll('[data-slot="runtime-instruction-file"]')).toHaveLength(1);
+    expect(host.textContent).not.toContain('promptLibrary.system.addTemporaryOverride');
   });
 
-  it('marks an existing Codex override as active and its base file as overridden', async () => {
+  it('keeps the original file visible when a Codex override already exists', async () => {
     mocks.getFiles.mockResolvedValue([
       {
         kind: 'global-codex-agents',
@@ -269,13 +264,12 @@ describe('prompt instruction sections', () => {
     await renderSection();
 
     await act(async () => {
-      await vi.waitFor(() =>
-        expect(host.textContent).toContain('promptLibrary.system.activeOverride')
-      );
+      await vi.waitFor(() => expect(host.textContent).toContain('/fixture/.codex/AGENTS.md'));
     });
-    expect(host.textContent).toContain('promptLibrary.system.overriddenFile');
+    expect(host.textContent).not.toContain('promptLibrary.system.activeOverride');
+    expect(host.textContent).not.toContain('promptLibrary.system.overriddenFile');
     expect(host.textContent).not.toContain('promptLibrary.system.addTemporaryOverride');
-    expect(host.querySelectorAll('[data-slot="runtime-instruction-file"]')).toHaveLength(2);
+    expect(host.querySelectorAll('[data-slot="runtime-instruction-file"]')).toHaveLength(1);
   });
 
   it('switches to the standard Claude user instruction path without Agent cards', async () => {
@@ -293,6 +287,30 @@ describe('prompt instruction sections', () => {
       await vi.waitFor(() => expect(host.textContent).toContain('/fixture/.claude/CLAUDE.md'));
     });
     expect(host.querySelector('[data-slot="agent-system-prompt"]')).toBeNull();
+  });
+
+  it('opens file version history from the compact header', async () => {
+    await renderSection();
+    await act(async () => {
+      await vi.waitFor(() => expect(host.textContent).toContain('/fixture/.codex/AGENTS.md'));
+    });
+
+    const historyButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="promptLibrary.system.versionHistory"]'
+    );
+    expect(historyButton).not.toBeNull();
+    await act(async () => historyButton?.click());
+
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(document.body.textContent).toContain('promptLibrary.system.versionLabel')
+      );
+    });
+    expect(mocks.listFileVersions).toHaveBeenCalledWith({
+      runtimeId: 'codex',
+      projectId: null,
+      path: '/fixture/.codex/AGENTS.md',
+    });
   });
 
   it('shows RPC failures explicitly instead of claiming that no instruction file exists', async () => {

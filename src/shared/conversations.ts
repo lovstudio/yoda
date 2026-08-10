@@ -210,6 +210,27 @@ export type EditableRuntimeInstructionFilesRequest = {
   projectId?: string | null;
 };
 
+export type RuntimeInstructionFileVersion = {
+  id: string;
+  runtimeId: RuntimeId;
+  projectId: string | null;
+  scope: EditableRuntimeInstructionFile['scope'];
+  kind: RuntimeInstructionFile['kind'];
+  path: string;
+  version: number;
+  content: string;
+  createdAt: string;
+};
+
+export type ListRuntimeInstructionFileVersionsRequest = EditableRuntimeInstructionFilesRequest & {
+  path: string;
+};
+
+export type RestoreRuntimeInstructionFileVersionRequest =
+  ListRuntimeInstructionFileVersionsRequest & {
+    version: number;
+  };
+
 export type SaveEditableRuntimeInstructionFileRequest = EditableRuntimeInstructionFilesRequest & {
   path: string;
   content: string;

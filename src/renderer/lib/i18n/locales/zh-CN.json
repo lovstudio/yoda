@@ -2893,6 +2893,16 @@
       "extraInfo": "额外信息",
       "extraInfoPlaceholder": "可选：补充说明、参考网址或扩展入口"
     },
+    "binding": {
+      "title": "注入范围",
+      "hint": "全局或指定项目可见",
+      "global": "全局（用户级）",
+      "projects": "项目",
+      "noProjects": "暂无可选项目",
+      "globalShort": "全局",
+      "projectsShort": "项目 {{count}} 个",
+      "unboundShort": "未绑定"
+    },
     "versions": {
       "title": "版本历史",
       "current": "当前 v{{version}}",
@@ -2922,8 +2932,8 @@
       "title": "用户级指令",
       "description": "{{runtime}} 在所有项目中读取的标准用户级指令。",
       "noEnabledAgents": "当前没有已启用且支持标准指令文件的 Agent CLI。",
-      "userPromptDescription": "以下是 {{runtime}} 的标准用户级指令路径；文件不存在时，展开对应行即可创建。",
-      "codexFileDescription": "Codex 默认读取 AGENTS.md；同目录存在 AGENTS.override.md 时，后者会临时替代前者。",
+      "userPromptDescription": "以下是 {{runtime}} 的标准用户级指令文件，展开即可直接编辑。",
+      "codexFileDescription": "Codex 默认读取 AGENTS.md；这里直接编辑原文件。",
       "noInstructionFiles": "这个 Agent CLI 没有可编辑的标准指令文件。",
       "existingFile": "已存在",
       "activeFile": "当前生效",
@@ -2936,7 +2946,16 @@
       "createFile": "创建文件",
       "fileSaved": "指令文件已保存",
       "fileSaveFailed": "保存指令文件失败",
-      "fileLoadFailed": "读取指令文件失败：{{detail}}"
+      "fileLoadFailed": "读取指令文件失败：{{detail}}",
+      "versionHistory": "版本",
+      "versionLabel": "v{{version}}",
+      "versionEmpty": "还没有保存版本",
+      "restoreVersion": "恢复",
+      "restoreVersionTitle": "恢复 v{{version}}？",
+      "restoreVersionDescription": "文件会恢复到这个版本，并新增一条历史记录。",
+      "restoreVersionAction": "恢复",
+      "versionRestored": "已恢复 v{{version}}",
+      "versionRestoreFailed": "恢复指令文件版本失败"
     },
     "project": {
       "title": "项目级指令与提示词",

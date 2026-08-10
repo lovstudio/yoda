@@ -133,6 +133,13 @@ export function incrementPromptVersion(
   return `${major}.${minor}.${patch + 1}`;
 }
 
+/** Where a prompt is allowed to participate in runtime injection. */
+export const promptBindingsSchema = z.object({
+  global: z.boolean().default(true),
+  projectIds: z.array(z.string().min(1)).max(128).default([]),
+});
+export type PromptBindings = z.infer<typeof promptBindingsSchema>;
+
 export const promptSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -142,12 +149,27 @@ export const promptSchema = z.object({
   extraInfo: z.string(),
   injectionEnabled: z.boolean(),
   injectionOrder: z.number().int(),
+  bindings: promptBindingsSchema,
   version: promptVersionSchema,
   source: promptSourceSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 export type Prompt = z.infer<typeof promptSchema>;
+
+export type PromptInjectionScope = 'user' | 'project';
+
+/** A global prompt applies to every project; project bindings are opt-in. */
+export function isPromptBoundToScope(
+  prompt: Pick<Prompt, 'bindings'>,
+  scope: PromptInjectionScope,
+  projectId?: string | null
+): boolean {
+  if (scope === 'user') return prompt.bindings.global;
+  return (
+    prompt.bindings.global || Boolean(projectId && prompt.bindings.projectIds.includes(projectId))
+  );
+}
 
 export const promptVersionSnapshotSchema = z.object({
   id: z.string(),
@@ -169,9 +191,10 @@ export const promptCreateInputSchema = z.object({
   tags: promptTagsSchema.default([]),
   extraInfo: z.string().default(''),
   injectionEnabled: z.boolean().default(false),
+  bindings: promptBindingsSchema.default({ global: true, projectIds: [] }),
   source: promptSourceSchema.optional(),
 });
-export type PromptCreateInput = z.infer<typeof promptCreateInputSchema>;
+export type PromptCreateInput = z.input<typeof promptCreateInputSchema>;
 
 export const promptUpdateInputSchema = z
   .object({
@@ -181,8 +204,9 @@ export const promptUpdateInputSchema = z
     tags: promptTagsSchema,
     extraInfo: z.string(),
     injectionEnabled: z.boolean(),
+    bindings: promptBindingsSchema,
     source: promptSourceSchema.nullable(),
     versionBump: promptVersionBumpSchema,
   })
   .partial();
-export type PromptUpdateInput = z.infer<typeof promptUpdateInputSchema>;
+export type PromptUpdateInput = z.input<typeof promptUpdateInputSchema>;
