@@ -1,0 +1,33 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+
+describe('Workspace runtime bar prompt group', () => {
+  const runtimeBarSource = readFileSync(
+    new URL('./workspace-runtime-bar.tsx', import.meta.url),
+    'utf8'
+  );
+  const promptPopoverSource = readFileSync(
+    new URL('./workspace-prompt-popover.tsx', import.meta.url),
+    'utf8'
+  );
+
+  it('places the current Agent prompt entry immediately before context usage', () => {
+    const promptEntry = runtimeBarSource.indexOf('<WorkspacePromptPopover');
+    const contextEntry = runtimeBarSource.indexOf('{sessionContext && contextPercent != null ? (');
+
+    expect(promptEntry).toBeGreaterThan(-1);
+    expect(promptEntry).toBeLessThan(contextEntry);
+    expect(runtimeBarSource).toContain('runtimeId={runtimeId}');
+    expect(runtimeBarSource).toContain('projectId={activeProjectId}');
+  });
+
+  it('keeps user, project, and enterprise tabs while reusing atomic injection controls', () => {
+    expect(promptPopoverSource).toContain('value="user"');
+    expect(promptPopoverSource).toContain('value="project"');
+    expect(promptPopoverSource).toContain('value="enterprise"');
+    expect(promptPopoverSource).toContain('<UserInstructionSection');
+    expect(promptPopoverSource).toContain('<ProjectPromptSection');
+    expect(promptPopoverSource).toContain('<PromptInjectionControls');
+    expect(promptPopoverSource).toContain('setGlobalOverride');
+  });
+});
