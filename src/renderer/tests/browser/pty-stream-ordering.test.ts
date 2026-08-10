@@ -172,6 +172,44 @@ describe('FrontendPty stream ordering', () => {
     });
   });
 
+  it('rebases a late interrupted Codex generation onto the complete rollout history', async () => {
+    ipcMocks.subscribe
+      .mockResolvedValueOnce({
+        success: true,
+        data: { buffer: 'PROMPTS-1-TO-8', generation: 0, sequence: 0 },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { buffer: 'PROMPTS-1-TO-8', generation: 1, sequence: 3 },
+      });
+
+    pty = new FrontendPty('late-interruption-session');
+    mountAndOpenFlushGate(pty);
+    await pty.connect();
+    const consumerId = ipcMocks.subscribe.mock.calls[0]?.[1];
+
+    ipcMocks.emitData(output(1, 'STALE-PROMPT-6'));
+    ipcMocks.emitData(output(2, '\x1b[38;5;1m■ Conversation inter'));
+    ipcMocks.emitData(
+      output(3, 'rupted - tell the model what to do differently. Something went wrong?\x1b[39m')
+    );
+
+    await vi.waitFor(() => {
+      expect(ipcMocks.subscribe).toHaveBeenCalledTimes(2);
+      expect(ipcMocks.subscribe).toHaveBeenLastCalledWith('late-interruption-session', consumerId);
+      const rendered = pty?.terminal.buffer.active.getLine(0)?.translateToString(true);
+      expect(rendered).toBe('PROMPTS-1-TO-8');
+    });
+    await vi.waitFor(() => {
+      expect(ipcMocks.acknowledgeOutput).toHaveBeenCalledWith(
+        'late-interruption-session',
+        consumerId,
+        1,
+        3
+      );
+    });
+  });
+
   it('cancels a pending first subscription on unmount and discards its snapshot', async () => {
     const pendingSubscribe = deferred<{
       success: true;

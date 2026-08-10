@@ -1,5 +1,6 @@
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { Terminal, type ITerminalOptions } from '@xterm/xterm';
+import { isInterruptedCodexTerminalOutput } from '@shared/codex-terminal-interruption';
 import {
   PTY_CONSUMER_HEARTBEAT_INTERVAL_MS,
   ptyDataChannel,
@@ -55,6 +56,9 @@ type TerminalWriteQueueItem = {
   readonly onWritten?: () => void;
   offset: number;
 };
+
+const INTERRUPTION_DETECTION_TAIL_CHARS = 4 * 1024;
+const RESET_TERMINAL_SEQUENCE = '\x1bc';
 
 export const DEFAULT_TERMINAL_FONT_FAMILY = [
   'Menlo',
@@ -178,6 +182,12 @@ export class FrontendPty {
   private lastOutputSequence = 0;
   private acknowledgedGeneration = 0;
   private acknowledgedSequence = 0;
+  /** Tail used to recognize a Codex interruption marker split across IPC batches. */
+  private interruptionOutputTail = '';
+  /** At most one history refresh is attempted for each backend generation. */
+  private interruptionReplayGeneration = 0;
+  private interruptionReplayPromise: Promise<void> | null = null;
+  private interruptionReplayEvents: PtyDataEvent[] = [];
   private consumerHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private consumerHeartbeatInFlight = false;
   private isDisposed = false;
@@ -440,6 +450,7 @@ export class FrontendPty {
     this.lastOutputSequence = snapshot.sequence;
     this.acknowledgedGeneration = snapshot.generation;
     this.acknowledgedSequence = 0;
+    this.interruptionOutputTail = snapshot.buffer.slice(-INTERRUPTION_DETECTION_TAIL_CHARS);
     this.startConsumerHeartbeat();
     if (snapshot.buffer) {
       this.writeOrBuffer(snapshot.buffer, {
@@ -476,20 +487,90 @@ export class FrontendPty {
   }
 
   private acceptOutputEvent(event: PtyDataEvent): void {
+    if (this.interruptionReplayPromise) {
+      this.interruptionReplayEvents.push(event);
+      return;
+    }
     if (event.generation < this.outputGeneration) return;
+    if (event.generation === this.outputGeneration && event.sequence <= this.lastOutputSequence) {
+      return;
+    }
+
+    const nextInterruptionTail = (
+      event.generation === this.outputGeneration ? this.interruptionOutputTail : ''
+    )
+      .concat(event.data)
+      .slice(-INTERRUPTION_DETECTION_TAIL_CHARS);
+    this.interruptionOutputTail = nextInterruptionTail;
+    if (
+      event.generation > this.interruptionReplayGeneration &&
+      isInterruptedCodexTerminalOutput(nextInterruptionTail)
+    ) {
+      this.interruptionReplayGeneration = event.generation;
+      this.interruptionReplayEvents.push(event);
+      this.startInterruptedHistoryReplay();
+      return;
+    }
+
     if (event.generation > this.outputGeneration) {
       this.outputGeneration = event.generation;
       this.lastOutputSequence = 0;
       this.acknowledgedGeneration = event.generation;
       this.acknowledgedSequence = 0;
     }
-    if (event.sequence <= this.lastOutputSequence) return;
 
     this.lastOutputSequence = event.sequence;
     this.writeOrBuffer(event.data, {
       generation: event.generation,
       sequence: event.sequence,
     });
+  }
+
+  /**
+   * A resumed Codex process can publish its stale interruption screen after a
+   * cold rollout snapshot has already rendered. Re-subscribe with the existing
+   * consumer so the main process can atomically exchange that screen for the
+   * current rollout and return a watermark covering every queued startup byte.
+   */
+  private startInterruptedHistoryReplay(): void {
+    const consumerId = this.connectedConsumerId;
+    if (!consumerId || this.interruptionReplayPromise || this.isDisposed) return;
+
+    const replay = this.refreshInterruptedHistory(consumerId);
+    this.interruptionReplayPromise = replay;
+    void replay.finally(() => {
+      if (this.interruptionReplayPromise !== replay) return;
+      this.interruptionReplayPromise = null;
+      const pendingEvents = this.interruptionReplayEvents;
+      this.interruptionReplayEvents = [];
+      for (const event of pendingEvents) this.acceptOutputEvent(event);
+    });
+  }
+
+  private async refreshInterruptedHistory(consumerId: string): Promise<void> {
+    try {
+      const result = await rpc.pty.subscribe(this.sessionId, consumerId);
+      if (this.isDisposed || this.connectedConsumerId !== consumerId) return;
+
+      const snapshot = result.data;
+      this.outputGeneration = snapshot.generation;
+      this.lastOutputSequence = snapshot.sequence;
+      this.acknowledgedGeneration = snapshot.generation;
+      this.acknowledgedSequence = 0;
+      this.interruptionOutputTail = snapshot.buffer.slice(-INTERRUPTION_DETECTION_TAIL_CHARS);
+
+      // RIS is parsed in-order after any already queued stale bytes, clearing
+      // their screen and scrollback before the authoritative history is drawn.
+      this.writeOrBuffer(`${RESET_TERMINAL_SEQUENCE}${snapshot.buffer}`, {
+        generation: snapshot.generation,
+        sequence: snapshot.sequence,
+      });
+    } catch (error) {
+      log.warn('FrontendPty: failed to replay interrupted Codex history', {
+        sessionId: this.sessionId,
+        error,
+      });
+    }
   }
 
   private writeOrBuffer(

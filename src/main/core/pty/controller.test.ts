@@ -148,8 +148,8 @@ describe('ptyController.subscribe history handoff', () => {
     const pty = new FakePty();
     ptySessionRegistry.register(sessionId, pty);
     pty.emitData(
-      'Conversation interrupted - tell the model what to do differently.\n' +
-        'MCP startup interrupted.\n'
+      '\x1b[38;5;1m■ Conversation interrupted - tell the model what to do differently. ' +
+        'Something went wrong? Hit `/feedback` to report the issue.\x1b[39m\n'
     );
 
     await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
@@ -161,6 +161,38 @@ describe('ptyController.subscribe history handoff', () => {
       },
     });
     expect(mocks.loadHistory).toHaveBeenCalledOnce();
+
+    ptySessionRegistry.unregister(sessionId);
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
+  });
+
+  it('replays history when the same interrupted terminal repaints during history loading', async () => {
+    const sessionId = 'project-repaint:task-repaint:conversation-repaint';
+    const consumerId = 'consumer-repaint';
+    const history = deferred<string>();
+    const historyStarted = deferred<void>();
+    mocks.loadHistory.mockImplementation(() => {
+      historyStarted.resolve();
+      return history.promise;
+    });
+
+    const pty = new FakePty();
+    ptySessionRegistry.register(sessionId, pty);
+    pty.emitData('Conversation interrupted - tell the model what to do differently.\n');
+
+    const resultPromise = ptyController.subscribe(sessionId, consumerId);
+    await historyStarted.promise;
+    pty.emitData('\x1b[2KConversation interrupted - tell the model what to do differently.\n');
+    history.resolve('current rollout with all eight prompts');
+
+    await expect(resultPromise).resolves.toEqual({
+      success: true,
+      data: {
+        buffer: 'current rollout with all eight prompts',
+        generation: 1,
+        sequence: 1,
+      },
+    });
 
     ptySessionRegistry.unregister(sessionId);
     ptySessionRegistry.unsubscribe(sessionId, consumerId);
@@ -214,6 +246,40 @@ describe('ptyController.subscribe history handoff', () => {
       },
     });
     expect(mocks.emit.mock.calls.filter(([channel]) => channel === ptyDataChannel)).toHaveLength(1);
+
+    ptySessionRegistry.unregister(sessionId);
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
+  });
+
+  it('replays history when an interrupted Codex PTY registers during history loading', async () => {
+    const sessionId = 'project-raced:task-raced:conversation-raced';
+    const consumerId = 'consumer-raced';
+    const history = deferred<string>();
+    const historyStarted = deferred<void>();
+    mocks.loadHistory.mockImplementation(() => {
+      historyStarted.resolve();
+      return history.promise;
+    });
+
+    const resultPromise = ptyController.subscribe(sessionId, consumerId);
+    await historyStarted.promise;
+
+    const pty = new FakePty();
+    ptySessionRegistry.register(sessionId, pty);
+    pty.emitData(
+      'Conversation interrupted - tell the model what to do differently.\n' +
+        'MCP startup interrupted.\n'
+    );
+    history.resolve('current rollout with prompt 7 and prompt 8');
+
+    await expect(resultPromise).resolves.toEqual({
+      success: true,
+      data: {
+        buffer: 'current rollout with prompt 7 and prompt 8',
+        generation: 1,
+        sequence: 1,
+      },
+    });
 
     ptySessionRegistry.unregister(sessionId);
     ptySessionRegistry.unsubscribe(sessionId, consumerId);

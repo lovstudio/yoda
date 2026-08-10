@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import { and, eq } from 'drizzle-orm';
+import { isInterruptedCodexTerminalOutput } from '@shared/codex-terminal-interruption';
 import { createRPCController } from '@shared/ipc/rpc';
 import { parsePtySessionId } from '@shared/ptySessionId';
 import { err, ok } from '@shared/result';
@@ -56,18 +57,19 @@ export const ptyController = createRPCController({
    */
   subscribe: async (sessionId: string, consumerId: string) => {
     const initialSnapshot = ptySessionRegistry.subscribe(sessionId, consumerId);
-    if (initialSnapshot.buffer && isInterruptedCodexTerminal(initialSnapshot.buffer)) {
+    if (initialSnapshot.buffer && isInterruptedCodexTerminalOutput(initialSnapshot.buffer)) {
       const historicalBuffer = await loadHistoricalConversationBuffer(sessionId);
       const latestSnapshot = ptySessionRegistry.subscribe(sessionId, consumerId);
 
-      // The rollout is a stable replay surface only while the same live PTY
-      // generation is still at the interrupted screen. If it produced output,
-      // restarted, or exited while history was loading, the live watermark
-      // remains authoritative and the renderer receives that latest snapshot.
+      // The rollout is a stable replay surface while the same live PTY
+      // generation remains at the interrupted screen. A TUI repaint may
+      // advance sequence without changing that state; a restart, exit, or
+      // transition away from the interruption screen keeps live output
+      // authoritative.
       if (
         historicalBuffer &&
         latestSnapshot.generation === initialSnapshot.generation &&
-        latestSnapshot.sequence === initialSnapshot.sequence &&
+        isInterruptedCodexTerminalOutput(latestSnapshot.buffer) &&
         ptySessionRegistry.get(sessionId)
       ) {
         return ok({
@@ -87,6 +89,18 @@ export const ptyController = createRPCController({
     // over stale history. Its listener was installed before the first call, so
     // live events remain queued and the returned watermark can deduplicate them.
     const latestSnapshot = ptySessionRegistry.subscribe(sessionId, consumerId);
+    if (
+      historicalBuffer &&
+      latestSnapshot.buffer &&
+      isInterruptedCodexTerminalOutput(latestSnapshot.buffer) &&
+      ptySessionRegistry.get(sessionId)
+    ) {
+      return ok({
+        buffer: historicalBuffer,
+        generation: latestSnapshot.generation,
+        sequence: latestSnapshot.sequence,
+      });
+    }
     if (
       latestSnapshot.generation !== initialSnapshot.generation ||
       latestSnapshot.sequence !== initialSnapshot.sequence ||
@@ -184,10 +198,6 @@ export const ptyController = createRPCController({
     }
   },
 });
-
-function isInterruptedCodexTerminal(buffer: string): boolean {
-  return /conversation interrupted[\s\S]{0,180}tell the model what to do differently/i.test(buffer);
-}
 
 async function loadHistoricalConversationBuffer(sessionId: string): Promise<string> {
   const parsed = parsePtySessionId(sessionId);
