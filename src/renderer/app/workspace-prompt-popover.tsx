@@ -1,21 +1,25 @@
 import {
   ArrowUpRight,
   Building2,
+  ChevronRight,
   FolderCog,
   LockKeyhole,
+  Plus,
   Sparkles,
+  Trash2,
   UserRound,
   type LucideIcon,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ProjectPromptPrinciples } from '@shared/project-settings';
+import type { ProjectPromptPrinciples, PromptPrinciple } from '@shared/project-settings';
 import type { Prompt } from '@shared/prompt-library';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import {
   effectiveGlobalEnabled,
   setGlobalOverride,
+  setProjectItems,
 } from '@renderer/features/projects/project-prompt-principles';
 import {
   asMounted,
@@ -23,12 +27,20 @@ import {
   getProjectStore,
 } from '@renderer/features/projects/stores/project-selectors';
 import { PromptInjectionControls } from '@renderer/features/prompt-library/prompt-injection-controls';
-import { usePrompts, useUpdatePrompt } from '@renderer/features/prompt-library/use-prompts';
+import { PromptInstructionFilesEditor } from '@renderer/features/prompt-library/prompt-system-section';
+import {
+  useCreatePrompt,
+  usePrompts,
+  useUpdatePrompt,
+} from '@renderer/features/prompt-library/use-prompts';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
+import { Input } from '@renderer/lib/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
+import { Switch } from '@renderer/lib/ui/switch';
 import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab } from '@renderer/lib/ui/tabs';
+import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
 
 type PromptScope = 'user' | 'project' | 'enterprise';
@@ -143,6 +155,7 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
                 title={t('workspaceRuntime.prompt.userTab')}
                 description={t('workspaceRuntime.prompt.userScopeDescription')}
               />
+              <PromptInstructionScopeSection runtimeId={runtimeId} scope="user" />
               <PromptInjectionScopeSection runtimeId={runtimeId} scope="user" />
             </TabsPanel>
 
@@ -159,6 +172,11 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
                     ? t('workspaceRuntime.prompt.currentProject')
                     : t('workspaceRuntime.prompt.projectNotSelected')
                 }
+              />
+              <PromptInstructionScopeSection
+                runtimeId={runtimeId}
+                scope="project"
+                projectId={projectId}
               />
               <PromptInjectionScopeSection
                 runtimeId={runtimeId}
@@ -215,6 +233,44 @@ function PromptScopeSummary({
   );
 }
 
+function PromptInstructionScopeSection({
+  runtimeId,
+  scope,
+  projectId,
+}: {
+  runtimeId: RuntimeId;
+  scope: 'user' | 'project';
+  projectId?: string;
+}) {
+  const { t } = useTranslation();
+  const runtimeName = getRuntime(runtimeId)?.name ?? runtimeId;
+  const title =
+    scope === 'user'
+      ? t('promptLibrary.system.title')
+      : t('promptLibrary.project.instructionFiles', { runtime: runtimeName });
+
+  return (
+    <section data-slot={`workspace-prompt-${scope}-files`} className="mt-3">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <h3 className="text-[11px] font-medium text-foreground">{title}</h3>
+      </div>
+      {scope === 'project' && !projectId ? (
+        <p className="rounded-lg border border-dashed border-border px-3 py-2.5 text-xs text-foreground-muted">
+          {t('workspaceRuntime.prompt.projectRequired')}
+        </p>
+      ) : (
+        <PromptInstructionFilesEditor
+          runtimeId={runtimeId}
+          projectId={scope === 'project' ? projectId : null}
+          scope={scope}
+          compact
+          initiallyExpanded
+        />
+      )}
+    </section>
+  );
+}
+
 const PromptInjectionScopeSection = observer(function PromptInjectionScopeSection({
   runtimeId,
   scope,
@@ -227,12 +283,17 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
   const { t } = useTranslation();
   const { toast } = useToast();
   const { data: prompts = [], isLoading } = usePrompts();
+  const createPrompt = useCreatePrompt();
   const updatePrompt = useUpdatePrompt();
   const mountedProject =
     scope === 'project' && projectId ? asMounted(getProjectStore(projectId)) : undefined;
   const projectSettingsStore =
     scope === 'project' && projectId ? getProjectSettingsStore(projectId) : undefined;
   const projectSettings = projectSettingsStore?.settings;
+  const [projectPromptPrinciples, setProjectPromptPrinciples] = useState<
+    ProjectPromptPrinciples | undefined
+  >();
+  const projectItems = projectPromptPrinciples?.items ?? [];
   const saveQueue = useRef(Promise.resolve());
 
   useEffect(() => {
@@ -241,18 +302,27 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
     if (projectSettings === null) void projectSettingsStore.pageData.load();
   }, [mountedProject, projectId, projectSettings, projectSettingsStore, scope]);
 
+  useEffect(() => {
+    setProjectPromptPrinciples(projectSettings?.promptPrinciples);
+  }, [projectId, projectSettings?.promptPrinciples]);
+
   const orderedPrompts = useMemo(
     () => prompts.slice().sort((left, right) => left.injectionOrder - right.injectionOrder),
     [prompts]
   );
 
-  const enabledCount = orderedPrompts.filter((prompt) =>
+  const enabledGlobalCount = orderedPrompts.filter((prompt) =>
     scope === 'project'
-      ? effectiveGlobalEnabled(projectSettings?.promptPrinciples, prompt)
+      ? effectiveGlobalEnabled(projectPromptPrinciples, prompt)
       : prompt.injectionEnabled
   ).length;
+  const enabledCount =
+    enabledGlobalCount +
+    (scope === 'project' ? projectItems.filter((item) => item.enabled).length : 0);
+  const promptCount = orderedPrompts.length + (scope === 'project' ? projectItems.length : 0);
 
   const saveProjectPromptPrinciples = (next: ProjectPromptPrinciples | undefined) => {
+    setProjectPromptPrinciples(next);
     if (!projectSettingsStore) return;
     saveQueue.current = saveQueue.current.then(async () => {
       const currentSettings = projectSettingsStore.settings;
@@ -271,15 +341,62 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
     });
   };
 
+  const saveProjectItems = (items: PromptPrinciple[]) => {
+    if (!projectSettingsStore?.settings) return;
+    saveProjectPromptPrinciples(setProjectItems(projectPromptPrinciples, items));
+  };
+
   const handlePromptEnabledChange = (prompt: Prompt, enabled: boolean) => {
     if (scope === 'project') {
       if (!projectSettingsStore?.settings) return;
-      saveProjectPromptPrinciples(
-        setGlobalOverride(projectSettingsStore.settings.promptPrinciples, prompt, enabled)
-      );
+      saveProjectPromptPrinciples(setGlobalOverride(projectPromptPrinciples, prompt, enabled));
       return;
     }
     updatePrompt.mutate({ id: prompt.id, patch: { injectionEnabled: enabled } });
+  };
+
+  const handleAddPrompt = (title: string, content: string, onSuccess: () => void) => {
+    if (scope === 'project') {
+      saveProjectItems([
+        ...projectItems,
+        {
+          id: crypto.randomUUID(),
+          name: title,
+          text: content,
+          enabled: true,
+        },
+      ]);
+      onSuccess();
+      return;
+    }
+
+    createPrompt.mutate(
+      {
+        title,
+        description: '',
+        content,
+        tags: [],
+        extraInfo: '',
+        injectionEnabled: true,
+      },
+      {
+        onSuccess,
+        onError: (error) =>
+          toast({
+            title: t('promptLibrary.saveFailed'),
+            description: error instanceof Error ? error.message : String(error),
+            variant: 'destructive',
+          }),
+      }
+    );
+  };
+
+  const handleProjectItemPatch = (id: string, patch: Partial<PromptPrinciple>) => {
+    saveProjectItems(projectItems.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  };
+
+  const handleProjectItemRemove = (id: string) => {
+    saveProjectItems(projectItems.filter((item) => item.id !== id));
   };
 
   const title =
@@ -292,6 +409,7 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
       : t('workspaceRuntime.prompt.userInjectionDescription');
   const supportsInjection = runtimeSupportsPromptInjection(runtimeId);
   const projectReady = scope !== 'project' || Boolean(projectId && projectSettings);
+  const mutationPending = updatePrompt.isPending || createPrompt.isPending;
 
   return (
     <section
@@ -307,7 +425,7 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
           <span className="shrink-0 rounded bg-background-1 px-1.5 py-0.5 text-[10px] tabular-nums text-foreground-passive">
             {t('workspaceRuntime.prompt.enabledCount', {
               enabled: enabledCount,
-              count: orderedPrompts.length,
+              count: promptCount,
             })}
           </span>
         ) : null}
@@ -332,26 +450,223 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
           {t('common.loading')}
         </p>
       ) : (
-        <PromptInjectionControls
-          variant="compact"
-          prompts={orderedPrompts}
-          isPromptEnabled={(prompt) =>
-            scope === 'project'
-              ? effectiveGlobalEnabled(projectSettings?.promptPrinciples, prompt)
-              : prompt.injectionEnabled
-          }
-          onPromptEnabledChange={handlePromptEnabledChange}
-          disabled={updatePrompt.isPending}
-          empty={
-            <p className="border-t border-border/60 px-3 py-3 text-xs text-foreground-muted">
-              {t('promptLibrary.injection.empty')}
-            </p>
-          }
-        />
+        <>
+          <PromptInjectionControls
+            variant="compact"
+            prompts={orderedPrompts}
+            isPromptEnabled={(prompt) =>
+              scope === 'project'
+                ? effectiveGlobalEnabled(projectPromptPrinciples, prompt)
+                : prompt.injectionEnabled
+            }
+            onPromptEnabledChange={handlePromptEnabledChange}
+            disabled={mutationPending}
+            empty={
+              <p className="border-t border-border/60 px-3 py-3 text-xs text-foreground-muted">
+                {t('promptLibrary.injection.empty')}
+              </p>
+            }
+          />
+          {scope === 'project' ? (
+            <ProjectDynamicPromptList
+              items={projectItems}
+              onPatchItem={handleProjectItemPatch}
+              onRemoveItem={handleProjectItemRemove}
+            />
+          ) : null}
+          <DynamicPromptAddForm
+            scope={scope}
+            onSubmit={handleAddPrompt}
+            pending={mutationPending}
+          />
+        </>
       )}
     </section>
   );
 });
+
+function DynamicPromptAddForm({
+  scope,
+  onSubmit,
+  pending,
+}: {
+  scope: 'user' | 'project';
+  onSubmit: (title: string, content: string, onSuccess: () => void) => void;
+  pending: boolean;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const canSubmit = title.trim().length > 0 && content.trim().length > 0;
+
+  const reset = () => {
+    setTitle('');
+    setContent('');
+    setOpen(false);
+  };
+
+  return (
+    <div className="border-t border-border/60 px-3 py-2">
+      {!open ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="text-foreground-muted"
+          onClick={() => setOpen(true)}
+        >
+          <Plus className="size-3.5" />
+          {scope === 'project' ? t('promptLibrary.project.add') : t('promptLibrary.new')}
+        </Button>
+      ) : (
+        <form
+          className="grid gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!canSubmit || pending) return;
+            onSubmit(title.trim(), content.trim(), reset);
+          }}
+        >
+          <Input
+            autoFocus
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder={
+              scope === 'project'
+                ? t('promptLibrary.project.namePlaceholder')
+                : t('promptLibrary.form.titlePlaceholder')
+            }
+            className="h-7 text-xs"
+          />
+          <Textarea
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+            placeholder={
+              scope === 'project'
+                ? t('promptLibrary.project.contentPlaceholder')
+                : t('promptLibrary.form.contentPlaceholder')
+            }
+            className="min-h-14 resize-y px-2 py-1.5 text-[11px] leading-4"
+          />
+          <div className="flex justify-end gap-1.5">
+            <Button type="button" variant="ghost" size="xs" onClick={reset}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" size="xs" disabled={!canSubmit || pending}>
+              {pending ? t('common.saving') : t('common.save')}
+            </Button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function ProjectDynamicPromptList({
+  items,
+  onPatchItem,
+  onRemoveItem,
+}: {
+  items: PromptPrinciple[];
+  onPatchItem: (id: string, patch: Partial<PromptPrinciple>) => void;
+  onRemoveItem: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [expandedItemIds, setExpandedItemIds] = useState<Set<string>>(() => new Set());
+
+  const toggleItem = (id: string) => {
+    setExpandedItemIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  return (
+    <div className="border-t border-border/60 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-[11px] font-medium text-foreground">
+          {t('promptLibrary.project.localPrompts')}
+        </h4>
+        <span className="text-[10px] tabular-nums text-foreground-passive">{items.length}</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="mt-1.5 text-[11px] leading-4 text-foreground-muted">
+          {t('promptLibrary.project.empty')}
+        </p>
+      ) : (
+        <div className="mt-1.5 overflow-hidden rounded-md border border-border/60 bg-background">
+          {items.map((item) => {
+            const expanded = expandedItemIds.has(item.id);
+            const name = item.name || t('promptLibrary.project.untitled');
+            return (
+              <div key={item.id} className="border-t border-border/60 first:border-t-0">
+                <div className="flex min-w-0 items-center">
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left outline-none hover:bg-background-1 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
+                    aria-expanded={expanded}
+                    onClick={() => toggleItem(item.id)}
+                  >
+                    <ChevronRight
+                      className={cn(
+                        'size-3.5 shrink-0 text-foreground-muted transition-transform',
+                        expanded && 'rotate-90'
+                      )}
+                    />
+                    <span className="min-w-0 truncate text-[11px] font-medium text-foreground">
+                      {name}
+                    </span>
+                  </button>
+                  <Switch
+                    size="sm"
+                    checked={item.enabled}
+                    onCheckedChange={(enabled) => onPatchItem(item.id, { enabled })}
+                    aria-label={t('promptLibrary.project.toggle', { name })}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="mx-1"
+                    aria-label={t('promptLibrary.project.remove')}
+                    onClick={() => onRemoveItem(item.id)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+                {expanded ? (
+                  <div className="grid gap-2 border-t border-border/60 bg-background-secondary px-2 py-2">
+                    <Input
+                      className="h-7 text-xs"
+                      defaultValue={item.name}
+                      placeholder={t('promptLibrary.project.namePlaceholder')}
+                      onBlur={(event) => {
+                        const nextName = event.target.value.trim();
+                        if (nextName !== item.name) onPatchItem(item.id, { name: nextName });
+                      }}
+                    />
+                    <Textarea
+                      className="min-h-14 resize-y px-2 py-1.5 font-mono text-[11px] leading-4"
+                      defaultValue={item.text}
+                      placeholder={t('promptLibrary.project.contentPlaceholder')}
+                      onBlur={(event) => {
+                        const text = event.target.value;
+                        if (text !== item.text) onPatchItem(item.id, { text });
+                      }}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function EnterprisePromptSection({ runtimeId }: { runtimeId: RuntimeId }) {
   const { t } = useTranslation();
