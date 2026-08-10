@@ -3,14 +3,17 @@ import { observer } from 'mobx-react-lite';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ProjectPromptPrinciples, TaskOutputLanguage } from '@shared/project-settings';
-import { isPromptBoundToScope } from '@shared/prompt-library';
+import { isPromptAvailableForTarget } from '@shared/prompt-library';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import {
   effectiveGlobalEnabled,
   setGlobalOverride,
   setProjectItems,
 } from '@renderer/features/projects/project-prompt-principles';
-import { getProjectSettingsStore } from '@renderer/features/projects/stores/project-selectors';
+import {
+  getProjectSettingsStore,
+  getProjectStore,
+} from '@renderer/features/projects/stores/project-selectors';
 import { PromptInjectionControls } from '@renderer/features/prompt-library/prompt-injection-controls';
 import { usePrompts, useUpdatePrompt } from '@renderer/features/prompt-library/use-prompts';
 import { AutoTrustWorktreesControl } from '@renderer/features/tasks/components/auto-trust-worktrees-control';
@@ -74,8 +77,14 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
   const { t } = useTranslation();
   const { data: promptLibraryItems } = usePrompts();
   const updateLibraryPrompt = useUpdatePrompt();
+  const projectStore = projectId ? getProjectStore(projectId) : undefined;
   const promptPrinciples = (promptLibraryItems ?? [])
-    .filter((prompt) => isPromptBoundToScope(prompt, projectId ? 'project' : 'user', projectId))
+    .filter((prompt) =>
+      isPromptAvailableForTarget(prompt, {
+        projectId,
+        workspaceId: projectStore?.data?.workspaceId,
+      })
+    )
     .slice()
     .sort((left, right) => left.injectionOrder - right.injectionOrder);
   const projectSettingsStore = projectId ? getProjectSettingsStore(projectId) : undefined;

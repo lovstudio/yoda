@@ -59,6 +59,7 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
   const runtimeName = runtime?.name ?? runtimeId;
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState<PromptScope>('user');
+  const projectWorkspaceId = projectId ? getProjectStore(projectId)?.data?.workspaceId : undefined;
 
   const handleOpenLibrary = useCallback(() => {
     setOpen(false);
@@ -151,6 +152,7 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
                 runtimeId={runtimeId}
                 scope="project"
                 projectId={projectId}
+                workspaceId={projectWorkspaceId}
               />
             </TabsPanel>
 
@@ -180,6 +182,9 @@ function PromptInstructionScopeSection({
 
   return (
     <section data-slot={`workspace-prompt-${scope}-files`} className="mt-1">
+      <h3 className="mb-1 px-1 text-xs font-medium text-foreground">
+        {t('workspaceRuntime.prompt.fixedTitle')}
+      </h3>
       {scope === 'project' && !projectId ? (
         <p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-foreground-muted">
           {t('workspaceRuntime.prompt.projectRequired')}
@@ -201,10 +206,12 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
   runtimeId,
   scope,
   projectId,
+  workspaceId,
 }: {
   runtimeId: RuntimeId;
   scope: 'user' | 'project';
   projectId?: string;
+  workspaceId?: string | null;
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -235,10 +242,16 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
   const orderedPrompts = useMemo(
     () =>
       prompts
-        .filter((prompt) => isPromptBoundToScope(prompt, scope, projectId))
+        .filter((prompt) =>
+          isPromptBoundToScope(
+            prompt,
+            scope,
+            scope === 'project' ? { projectId, workspaceId } : undefined
+          )
+        )
         .slice()
         .sort((left, right) => left.injectionOrder - right.injectionOrder),
-    [projectId, prompts, scope]
+    [projectId, prompts, scope, workspaceId]
   );
 
   const enabledGlobalCount = orderedPrompts.filter((prompt) =>
@@ -296,8 +309,12 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
         injectionEnabled: true,
         bindings:
           scope === 'project'
-            ? { global: false, projectIds: projectId ? [projectId] : [] }
-            : { global: true, projectIds: [] },
+            ? {
+                global: false,
+                workspaceIds: workspaceId ? [workspaceId] : [],
+                projectIds: projectId ? [projectId] : [],
+              }
+            : { global: true, workspaceIds: [], projectIds: [] },
       },
       {
         onSuccess,
@@ -329,7 +346,9 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
       className="mt-3 overflow-hidden rounded-lg border border-border bg-background-secondary"
     >
       <div className="flex items-center justify-between gap-3 px-3 py-2">
-        <h3 className="text-xs font-medium text-foreground">{t('promptLibrary.tabs.dynamic')}</h3>
+        <h3 className="text-xs font-medium text-foreground">
+          {t('workspaceRuntime.prompt.dynamicTitle')}
+        </h3>
         {supportsInjection && projectReady ? (
           <span className="shrink-0 rounded bg-background-1 px-1.5 py-0.5 text-[10px] tabular-nums text-foreground-passive">
             {t('workspaceRuntime.prompt.enabledCount', {

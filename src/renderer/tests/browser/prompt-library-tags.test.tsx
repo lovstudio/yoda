@@ -93,6 +93,7 @@ vi.mock('@renderer/lib/ipc', () => ({
   rpc: {
     app: { openExternal: vi.fn() },
     projects: { getProjects: vi.fn(async () => []) },
+    workspaces: { listWorkspaces: vi.fn(async () => []) },
     promptLibrary: {
       loadGit: vi.fn(),
       loadUrl: vi.fn(),
@@ -123,7 +124,7 @@ function prompt(id: string, tags: string[], injectionEnabled = false): Prompt {
     extraInfo: '',
     injectionEnabled,
     injectionOrder: 0,
-    bindings: { global: true, projectIds: [] },
+    bindings: { global: true, workspaceIds: [], projectIds: [] },
     version: '1.0.0',
     createdAt: '2026-07-27T00:00:00.000Z',
     updatedAt: '2026-07-27T00:00:00.000Z',

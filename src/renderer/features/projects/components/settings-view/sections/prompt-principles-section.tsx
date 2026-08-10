@@ -8,6 +8,7 @@ import {
   setGlobalOverride,
   setProjectItems,
 } from '@renderer/features/projects/project-prompt-principles';
+import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { PromptInjectionControls } from '@renderer/features/prompt-library/prompt-injection-controls';
 import { usePrompts } from '@renderer/features/prompt-library/use-prompts';
 import { Button } from '@renderer/lib/ui/button';
@@ -31,8 +32,14 @@ export const PromptPrinciplesSection = observer(function PromptPrinciplesSection
 }: PromptPrinciplesSectionProps) {
   const { t } = useTranslation();
   const { data: prompts } = usePrompts();
+  const projectWorkspaceId = getProjectStore(projectId)?.data?.workspaceId;
   const globalItems = (prompts ?? [])
-    .filter((prompt) => isPromptBoundToScope(prompt, 'project', projectId))
+    .filter((prompt) =>
+      isPromptBoundToScope(prompt, 'project', {
+        projectId,
+        workspaceId: projectWorkspaceId,
+      })
+    )
     .slice()
     .sort((left, right) => left.injectionOrder - right.injectionOrder);
   const project = form.promptPrinciples;

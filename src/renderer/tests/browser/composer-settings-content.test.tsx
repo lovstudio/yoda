@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
       extraInfo: '',
       injectionEnabled: true,
       injectionOrder: 0,
-      bindings: { global: true, projectIds: [] },
+      bindings: { global: true, workspaceIds: [], projectIds: [] },
       version: '1.0.0',
       createdAt: '2026-07-31T00:00:00.000Z',
       updatedAt: '2026-07-31T00:00:00.000Z',
@@ -33,7 +33,7 @@ const mocks = vi.hoisted(() => ({
       extraInfo: '',
       injectionEnabled: false,
       injectionOrder: 1,
-      bindings: { global: true, projectIds: [] },
+      bindings: { global: true, workspaceIds: [], projectIds: [] },
       version: '1.0.0',
       createdAt: '2026-07-31T00:00:00.000Z',
       updatedAt: '2026-07-31T00:00:00.000Z',
@@ -78,6 +78,7 @@ vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
 
 vi.mock('@renderer/features/projects/stores/project-selectors', () => ({
   getProjectSettingsStore: () => mocks.settingsStore,
+  getProjectStore: () => undefined,
 }));
 
 vi.mock('@renderer/features/tasks/components/permission-mode-select', async () => {
