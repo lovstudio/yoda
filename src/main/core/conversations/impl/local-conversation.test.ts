@@ -635,14 +635,7 @@ describe('LocalConversationProvider', () => {
       })
     );
     expect(spawned).toHaveLength(2);
-    expect(spawned[1].options.args).toEqual([
-      'resume',
-      '--cd',
-      '/workspace',
-      'codex-thread-1',
-      '-c',
-      'tui.terminal_resize_reflow_max_rows=0',
-    ]);
+    expect(spawned[1].options.args).toEqual(['resume', '--cd', '/workspace', 'codex-thread-1']);
   });
 
   it('starts a fresh Codex session when the persisted thread is missing', async () => {
@@ -767,14 +760,7 @@ describe('LocalConversationProvider', () => {
         providerVars: { CODEX_HOME: '/state/codex-account-a' },
       })
     );
-    expect(spawned[0].options.args).toEqual([
-      'resume',
-      '--cd',
-      '/workspace',
-      'native-thread-1',
-      '-c',
-      'tui.terminal_resize_reflow_max_rows=0',
-    ]);
+    expect(spawned[0].options.args).toEqual(['resume', '--cd', '/workspace', 'native-thread-1']);
   });
 
   it('binds a surviving tmux session to the current Codex fork instead of its imported root', async () => {
@@ -805,8 +791,6 @@ describe('LocalConversationProvider', () => {
       '--cd',
       '/workspace',
       'current-fork-thread',
-      '-c',
-      'tui.terminal_resize_reflow_max_rows=0',
     ]);
     expect(mocks.resolveLocalPtySpawn).toHaveBeenCalledWith(
       expect.objectContaining({
