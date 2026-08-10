@@ -77,8 +77,6 @@ export type PtySubscriptionSnapshot = {
   buffer: string;
   generation: number;
   sequence: number;
-  replayedFromHistory?: boolean;
-  interruptionOutputTail?: string;
 };
 
 export type PtySessionDiagnostics = {

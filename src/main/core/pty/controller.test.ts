@@ -140,64 +140,28 @@ describe('ptyController.subscribe history handoff', () => {
     mockConversationLookup();
   });
 
-  it('replays the current Codex rollout over a live interrupted terminal snapshot', async () => {
+  it('keeps an interrupted live Codex terminal snapshot as the source of truth', async () => {
     const sessionId = 'project-interrupted:task-interrupted:conversation-interrupted';
     const consumerId = 'consumer-interrupted';
     mocks.loadHistory.mockResolvedValue('current rollout with prompt 7 and prompt 8');
 
     const pty = new FakePty();
     ptySessionRegistry.register(sessionId, pty);
-    pty.emitData(
+    const liveTerminalBuffer =
       '\x1b[38;5;1m■ Conversation interrupted - tell the model what to do differently. ' +
-        'Something went wrong? Hit `/feedback` to report the issue.\x1b[39m\n' +
-        ' '.repeat(20 * 1024)
-    );
+      'Something went wrong? Hit `/feedback` to report the issue.\x1b[39m\n' +
+      '\x1b[2K› Improve documentation in @filename';
+    pty.emitData(liveTerminalBuffer);
 
     await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
       success: true,
       data: {
-        buffer: 'current rollout with prompt 7 and prompt 8',
+        buffer: liveTerminalBuffer,
         generation: 1,
         sequence: 0,
-        replayedFromHistory: true,
-        interruptionOutputTail: expect.stringContaining('Conversation interrupted'),
       },
     });
-    expect(mocks.loadHistory).toHaveBeenCalledOnce();
-
-    ptySessionRegistry.unregister(sessionId);
-    ptySessionRegistry.unsubscribe(sessionId, consumerId);
-  });
-
-  it('replays history when the same interrupted terminal repaints during history loading', async () => {
-    const sessionId = 'project-repaint:task-repaint:conversation-repaint';
-    const consumerId = 'consumer-repaint';
-    const history = deferred<string>();
-    const historyStarted = deferred<void>();
-    mocks.loadHistory.mockImplementation(() => {
-      historyStarted.resolve();
-      return history.promise;
-    });
-
-    const pty = new FakePty();
-    ptySessionRegistry.register(sessionId, pty);
-    pty.emitData('Conversation interrupted - tell the model what to do differently.\n');
-
-    const resultPromise = ptyController.subscribe(sessionId, consumerId);
-    await historyStarted.promise;
-    pty.emitData('\x1b[2KConversation interrupted - tell the model what to do differently.\n');
-    history.resolve('current rollout with all eight prompts');
-
-    await expect(resultPromise).resolves.toEqual({
-      success: true,
-      data: {
-        buffer: 'current rollout with all eight prompts',
-        generation: 1,
-        sequence: 1,
-        replayedFromHistory: true,
-        interruptionOutputTail: expect.stringContaining('Conversation interrupted'),
-      },
-    });
+    expect(mocks.loadHistory).not.toHaveBeenCalled();
 
     ptySessionRegistry.unregister(sessionId);
     ptySessionRegistry.unsubscribe(sessionId, consumerId);
@@ -214,34 +178,6 @@ describe('ptyController.subscribe history handoff', () => {
       success: true,
       data: {
         buffer: 'Codex is ready for the next prompt.\n',
-        generation: 1,
-        sequence: 0,
-      },
-    });
-    expect(mocks.loadHistory).not.toHaveBeenCalled();
-
-    ptySessionRegistry.unregister(sessionId);
-    ptySessionRegistry.unsubscribe(sessionId, consumerId);
-  });
-
-  it('does not treat an older interruption retained outside the current screen tail as current', async () => {
-    const sessionId = 'project-old-interrupt:task-old-interrupt:conversation-old-interrupt';
-    const consumerId = 'consumer-old-interrupt';
-    const pty = new FakePty();
-    ptySessionRegistry.register(sessionId, pty);
-    pty.emitData(
-      'Conversation interrupted - tell the model what to do differently.\n' +
-        'x'.repeat(70 * 1024) +
-        '\nCodex is handling a newer turn.\n'
-    );
-
-    await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
-      success: true,
-      data: {
-        buffer:
-          'Conversation interrupted - tell the model what to do differently.\n' +
-          'x'.repeat(70 * 1024) +
-          '\nCodex is handling a newer turn.\n',
         generation: 1,
         sequence: 0,
       },
@@ -284,7 +220,7 @@ describe('ptyController.subscribe history handoff', () => {
     ptySessionRegistry.unsubscribe(sessionId, consumerId);
   });
 
-  it('replays history when an interrupted Codex PTY registers during history loading', async () => {
+  it('returns an interrupted live Codex PTY that registers during history loading', async () => {
     const sessionId = 'project-raced:task-raced:conversation-raced';
     const consumerId = 'consumer-raced';
     const history = deferred<string>();
@@ -299,20 +235,18 @@ describe('ptyController.subscribe history handoff', () => {
 
     const pty = new FakePty();
     ptySessionRegistry.register(sessionId, pty);
-    pty.emitData(
+    const liveTerminalBuffer =
       'Conversation interrupted - tell the model what to do differently.\n' +
-        'MCP startup interrupted.\n'
-    );
+      '\x1b[2K› Improve documentation in @filename';
+    pty.emitData(liveTerminalBuffer);
     history.resolve('current rollout with prompt 7 and prompt 8');
 
     await expect(resultPromise).resolves.toEqual({
       success: true,
       data: {
-        buffer: 'current rollout with prompt 7 and prompt 8',
+        buffer: liveTerminalBuffer,
         generation: 1,
         sequence: 1,
-        replayedFromHistory: true,
-        interruptionOutputTail: expect.stringContaining('Conversation interrupted'),
       },
     });
 

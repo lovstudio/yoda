@@ -172,91 +172,29 @@ describe('FrontendPty stream ordering', () => {
     });
   });
 
-  it('rebases a late interrupted Codex generation onto the complete rollout history', async () => {
-    ipcMocks.subscribe
-      .mockResolvedValueOnce({
-        success: true,
-        data: { buffer: 'PROMPTS-1-TO-8', generation: 0, sequence: 0 },
-      })
-      .mockResolvedValueOnce({
-        success: true,
-        data: {
-          buffer: 'PROMPTS-1-TO-8',
-          generation: 1,
-          sequence: 3,
-          replayedFromHistory: true,
-          interruptionOutputTail:
-            'Conversation interrupted - tell the model what to do differently.',
-        },
-      });
-
-    pty = new FrontendPty('late-interruption-session');
-    mountAndOpenFlushGate(pty);
-    await pty.connect();
-    const consumerId = ipcMocks.subscribe.mock.calls[0]?.[1];
-
-    ipcMocks.emitData(output(1, 'STALE-PROMPT-6'));
-    ipcMocks.emitData(output(2, '\x1b[38;5;1m■ Conversation inter'));
-    ipcMocks.emitData(
-      output(
-        3,
-        'rupted - tell the model what to do differently. Something went wrong?\x1b[39m' +
-          ' '.repeat(20 * 1024)
-      )
-    );
-
-    await vi.waitFor(() => {
-      expect(ipcMocks.subscribe).toHaveBeenCalledTimes(2);
-      expect(ipcMocks.subscribe).toHaveBeenLastCalledWith('late-interruption-session', consumerId);
-      const rendered = pty?.terminal.buffer.active.getLine(0)?.translateToString(true);
-      expect(rendered).toBe('PROMPTS-1-TO-8');
-    });
-    ipcMocks.emitData(output(4, '\x1b[2KSTALE-INTERRUPTION-REPAINT'));
-    await vi.waitFor(() => {
-      expect(pty?.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe(
-        'PROMPTS-1-TO-8'
-      );
-      expect(ipcMocks.acknowledgeOutput).toHaveBeenCalledWith(
-        'late-interruption-session',
-        consumerId,
-        1,
-        4
-      );
-    });
-    await vi.waitFor(() => {
-      expect(ipcMocks.acknowledgeOutput).toHaveBeenCalledWith(
-        'late-interruption-session',
-        consumerId,
-        1,
-        3
-      );
-    });
-  });
-
-  it('holds stale repaint after the first snapshot already contains replayed history', async () => {
+  it('keeps the live Codex TUI authoritative after an interruption screen', async () => {
     ipcMocks.subscribe.mockResolvedValue({
       success: true,
       data: {
-        buffer: 'PROMPTS-1-TO-8',
+        buffer: 'Conversation interrupted - tell the model what to do differently.',
         generation: 1,
         sequence: 3,
-        replayedFromHistory: true,
-        interruptionOutputTail: 'Conversation interrupted - tell the model what to do differently.',
       },
     });
 
-    pty = new FrontendPty('initial-history-session');
+    pty = new FrontendPty('live-interruption-session');
     mountAndOpenFlushGate(pty);
     await pty.connect();
 
-    ipcMocks.emitData(output(4, '\x1b[2KSTALE-INTERRUPTION-REPAINT'));
+    ipcMocks.emitData(output(4, '\x1b[2J\x1b[HNORMAL-CODEX-TUI'));
 
     await vi.waitFor(() => {
       expect(pty?.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe(
-        'PROMPTS-1-TO-8'
+        'NORMAL-CODEX-TUI'
       );
+      expect(ipcMocks.subscribe).toHaveBeenCalledOnce();
       expect(ipcMocks.acknowledgeOutput).toHaveBeenCalledWith(
-        'initial-history-session',
+        'live-interruption-session',
         expect.any(String),
         1,
         4

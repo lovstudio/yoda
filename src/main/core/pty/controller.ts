@@ -1,10 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import { and, eq } from 'drizzle-orm';
-import {
-  CODEX_INTERRUPTION_SCAN_TAIL_CHARS,
-  isInterruptedCodexTerminalOutput,
-} from '@shared/codex-terminal-interruption';
 import { createRPCController } from '@shared/ipc/rpc';
 import { parsePtySessionId } from '@shared/ptySessionId';
 import { err, ok } from '@shared/result';
@@ -60,32 +56,9 @@ export const ptyController = createRPCController({
    */
   subscribe: async (sessionId: string, consumerId: string) => {
     const initialSnapshot = ptySessionRegistry.subscribe(sessionId, consumerId);
-    if (initialSnapshot.buffer && isInterruptedCodexTerminalOutput(initialSnapshot.buffer)) {
-      const historicalBuffer = await loadHistoricalConversationBuffer(sessionId);
-      const latestSnapshot = ptySessionRegistry.subscribe(sessionId, consumerId);
-
-      // The rollout is a stable replay surface while the same live PTY
-      // generation remains at the interrupted screen. A TUI repaint may
-      // advance sequence without changing that state; a restart, exit, or
-      // transition away from the interruption screen keeps live output
-      // authoritative.
-      if (
-        historicalBuffer &&
-        latestSnapshot.generation === initialSnapshot.generation &&
-        isInterruptedCodexTerminalOutput(latestSnapshot.buffer) &&
-        ptySessionRegistry.get(sessionId)
-      ) {
-        return ok({
-          buffer: historicalBuffer,
-          generation: latestSnapshot.generation,
-          sequence: latestSnapshot.sequence,
-          replayedFromHistory: true,
-          interruptionOutputTail: latestSnapshot.buffer.slice(-CODEX_INTERRUPTION_SCAN_TAIL_CHARS),
-        });
-      }
-
-      return ok(latestSnapshot);
-    }
+    // A live snapshot is terminal protocol, not transcript text. It remains the
+    // only source that can reconstruct the CLI's cursor, colors, and input UI;
+    // rollout history is a fallback only while no backend PTY exists.
     if (initialSnapshot.buffer || ptySessionRegistry.get(sessionId)) return ok(initialSnapshot);
 
     const historicalBuffer = await loadHistoricalConversationBuffer(sessionId);
@@ -94,20 +67,6 @@ export const ptyController = createRPCController({
     // over stale history. Its listener was installed before the first call, so
     // live events remain queued and the returned watermark can deduplicate them.
     const latestSnapshot = ptySessionRegistry.subscribe(sessionId, consumerId);
-    if (
-      historicalBuffer &&
-      latestSnapshot.buffer &&
-      isInterruptedCodexTerminalOutput(latestSnapshot.buffer) &&
-      ptySessionRegistry.get(sessionId)
-    ) {
-      return ok({
-        buffer: historicalBuffer,
-        generation: latestSnapshot.generation,
-        sequence: latestSnapshot.sequence,
-        replayedFromHistory: true,
-        interruptionOutputTail: latestSnapshot.buffer.slice(-CODEX_INTERRUPTION_SCAN_TAIL_CHARS),
-      });
-    }
     if (
       latestSnapshot.generation !== initialSnapshot.generation ||
       latestSnapshot.sequence !== initialSnapshot.sequence ||
@@ -120,8 +79,6 @@ export const ptyController = createRPCController({
       buffer: historicalBuffer,
       generation: latestSnapshot.generation,
       sequence: latestSnapshot.sequence,
-      replayedFromHistory: Boolean(historicalBuffer),
-      interruptionOutputTail: undefined,
     });
   },
 
