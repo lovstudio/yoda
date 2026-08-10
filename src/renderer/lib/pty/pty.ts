@@ -188,6 +188,8 @@ export class FrontendPty {
   private interruptionOutputTail = '';
   /** At most one history refresh is attempted for each backend generation. */
   private interruptionReplayGeneration = 0;
+  /** Ignore stale repaint batches after an authoritative history replay. */
+  private interruptedHistoryGeneration = 0;
   private interruptionReplayPromise: Promise<void> | null = null;
   private interruptionReplayEvents: PtyDataEvent[] = [];
   private consumerHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -452,7 +454,10 @@ export class FrontendPty {
     this.lastOutputSequence = snapshot.sequence;
     this.acknowledgedGeneration = snapshot.generation;
     this.acknowledgedSequence = 0;
-    this.interruptionOutputTail = snapshot.buffer.slice(-CODEX_INTERRUPTION_SCAN_TAIL_CHARS);
+    this.interruptedHistoryGeneration = snapshot.replayedFromHistory ? snapshot.generation : 0;
+    this.interruptionOutputTail = (snapshot.interruptionOutputTail ?? snapshot.buffer).slice(
+      -CODEX_INTERRUPTION_SCAN_TAIL_CHARS
+    );
     this.startConsumerHeartbeat();
     if (snapshot.buffer) {
       this.writeOrBuffer(snapshot.buffer, {
@@ -504,10 +509,16 @@ export class FrontendPty {
       .concat(event.data)
       .slice(-CODEX_INTERRUPTION_SCAN_TAIL_CHARS);
     this.interruptionOutputTail = nextInterruptionTail;
-    if (
-      event.generation > this.interruptionReplayGeneration &&
-      isInterruptedCodexTerminalOutput(nextInterruptionTail)
-    ) {
+    const remainsInterrupted = isInterruptedCodexTerminalOutput(nextInterruptionTail);
+    if (this.interruptedHistoryGeneration === event.generation) {
+      if (remainsInterrupted) {
+        this.lastOutputSequence = event.sequence;
+        this.acknowledgeOutput(event.generation, event.sequence);
+        return;
+      }
+      this.interruptedHistoryGeneration = 0;
+    }
+    if (event.generation > this.interruptionReplayGeneration && remainsInterrupted) {
       this.interruptionReplayGeneration = event.generation;
       this.interruptionReplayEvents.push(event);
       this.startInterruptedHistoryReplay();
@@ -550,6 +561,7 @@ export class FrontendPty {
   }
 
   private async refreshInterruptedHistory(consumerId: string): Promise<void> {
+    const interruptionTailAtReplayStart = this.interruptionOutputTail;
     try {
       const result = await rpc.pty.subscribe(this.sessionId, consumerId);
       if (this.isDisposed || this.connectedConsumerId !== consumerId) return;
@@ -559,7 +571,11 @@ export class FrontendPty {
       this.lastOutputSequence = snapshot.sequence;
       this.acknowledgedGeneration = snapshot.generation;
       this.acknowledgedSequence = 0;
-      this.interruptionOutputTail = snapshot.buffer.slice(-CODEX_INTERRUPTION_SCAN_TAIL_CHARS);
+      // The snapshot watermark can already include the event that triggered
+      // this replay. Keep its marker for the queued-event drain below so the
+      // next stale repaint remains suppressible after sequence deduplication.
+      this.interruptionOutputTail = interruptionTailAtReplayStart;
+      this.interruptedHistoryGeneration = snapshot.replayedFromHistory ? snapshot.generation : 0;
 
       // RIS is parsed in-order after any already queued stale bytes, clearing
       // their screen and scrollback before the authoritative history is drawn.
