@@ -286,6 +286,44 @@ describe('ptyController.subscribe history handoff', () => {
 
     ptySessionRegistry.unsubscribe(sessionId, consumerId);
   });
+
+  it('does not mix history into a PTY that is already being restored', async () => {
+    const sessionId = 'project-restoring:task-restoring:conversation-restoring';
+    const consumerId = 'consumer-restoring';
+    const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    mocks.loadHistory.mockResolvedValue('stale transcript fallback');
+
+    await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
+      success: true,
+      data: {
+        buffer: '',
+        generation: 0,
+        sequence: 0,
+      },
+    });
+    expect(mocks.loadHistory).not.toHaveBeenCalled();
+
+    ptySessionRegistry.cancelRegistration(sessionId, registrationEpoch);
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
+  });
+
+  it('marks a historical fallback so a later PTY generation can replace it', async () => {
+    const sessionId = 'project-history:task-history:conversation-history';
+    const consumerId = 'consumer-history';
+    mocks.loadHistory.mockResolvedValue('historical terminal text');
+
+    await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
+      success: true,
+      data: {
+        buffer: 'historical terminal text',
+        generation: 0,
+        sequence: 0,
+        replayedFromHistory: true,
+      },
+    });
+
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
+  });
 });
 
 describe('ptyController.sendInput registration gate', () => {

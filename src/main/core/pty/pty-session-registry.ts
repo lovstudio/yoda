@@ -77,6 +77,8 @@ export type PtySubscriptionSnapshot = {
   buffer: string;
   generation: number;
   sequence: number;
+  /** The buffer came from transcript history and must be replaced by a live generation. */
+  replayedFromHistory?: boolean;
 };
 
 export type PtySessionDiagnostics = {
