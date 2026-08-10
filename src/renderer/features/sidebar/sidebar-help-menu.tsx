@@ -41,7 +41,7 @@ export const SidebarHelpMenu = observer(function SidebarHelpMenu() {
             type="button"
             aria-label={t('sidebar.help')}
             title={t('sidebar.help')}
-            className="flex size-6 shrink-0 items-center justify-center rounded-md text-foreground-tertiary-passive transition-colors hover:bg-background-tertiary-1/55 hover:text-foreground-tertiary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-foreground-tertiary-passive transition-colors data-popup-open:bg-background-tertiary-1/55 data-popup-open:text-foreground-tertiary hover:bg-background-tertiary-1/55 hover:text-foreground-tertiary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
         }
       >

@@ -691,31 +691,46 @@
 
 .ydream [data-slot='dialog-content'],
 .ydream [data-slot='popover-content'],
-.ydream [data-slot='select-content'],
-.ydream [data-slot='dropdown-menu-content'],
-.ydream [data-slot='dropdown-menu-sub-content'] {
-  border: 1px solid color-mix(in srgb, var(--primary-button-background) 18%, var(--border));
-  border-radius: 14px;
+.ydream [data-slot='select-content'] {
+  border-color: color-mix(in srgb, var(--primary-button-background) 18%, var(--border));
   background-color: color-mix(in srgb, var(--background-quaternary) 94%, transparent);
   box-shadow: 0 18px 48px color-mix(in srgb, var(--background) 60%, transparent);
   backdrop-filter: blur(22px) saturate(118%);
+}
+
+.ydream [data-slot='dropdown-menu-content'],
+.ydream [data-slot='dropdown-menu-sub-content'] {
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 14px;
+  background-color: color-mix(in srgb, var(--background-quaternary) 86%, transparent);
+  box-shadow:
+    0 16px 36px color-mix(in srgb, var(--foreground) 13%, transparent),
+    inset 0 1px color-mix(in srgb, var(--foreground-inverse) 48%, transparent);
+  backdrop-filter: blur(24px) saturate(112%);
 }
 
 .ydream [data-slot='dropdown-menu-item'],
 .ydream [data-slot='dropdown-menu-sub-trigger'] {
   border-radius: 10px;
   color: var(--foreground);
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
 .ydream [data-slot='dropdown-menu-item']:is(:focus-visible, [data-highlighted]),
 .ydream [data-slot='dropdown-menu-sub-trigger']:is(:focus-visible, [data-popup-open]) {
-  background: color-mix(in srgb, var(--primary-button-background) 11%, transparent);
+  background: color-mix(in srgb, var(--primary-button-background) 8%, transparent);
   color: var(--foreground);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-button-background) 10%, transparent);
 }
 
 .ydream [data-slot='dropdown-menu-separator'] {
-  background: color-mix(in srgb, var(--primary-button-background) 14%, var(--border));
+  background: color-mix(in srgb, var(--border) 62%, transparent);
+}
+
+.ydream [data-slot='dropdown-menu-trigger'][data-popup-open] {
+  background: color-mix(in srgb, var(--primary-button-background) 8%, transparent);
+  color: var(--foreground-tertiary);
 }
 
 .ydream [data-yoda-surface='sidebar-task-hover-preview'] {
