@@ -161,6 +161,9 @@ function requireTerminalIdentity(params: CreateTerminalParams): void {
   if (!params.name.trim() || params.name.length > MAX_NAME_CHARS) {
     throw new Error('Invalid workspace terminal name.');
   }
+  if (params.command !== undefined && !params.command.trim()) {
+    throw new Error('Workspace terminal command is empty.');
+  }
 }
 
 function parseTrustedCommand(command: string): { command: string; args: string[] } {
@@ -295,6 +298,8 @@ export class WorkspaceTerminalService {
       const existing = this.records.get(params.id);
       if (existing) return existing.terminal;
 
+      const command = params.command?.trim();
+
       const provider = await this.resolveProvider(params.projectId, params.taskId);
       let terminal: Terminal = {
         id: params.id,
@@ -302,13 +307,25 @@ export class WorkspaceTerminalService {
         taskId: params.taskId,
         name: params.name.trim(),
       };
-      const persisted = this.isPersistedProjectScope(params.projectId, params.taskId);
+      const persisted =
+        params.persist ?? this.isPersistedProjectScope(params.projectId, params.taskId);
       if (persisted) {
         terminal = await persistWorkspaceTerminal(terminal);
       }
       this.records.set(terminal.id, { terminal, provider });
       try {
-        await provider.spawnTerminal(terminal, params.initialSize);
+        if (command) {
+          await provider.spawnLifecycleScript({
+            terminal,
+            command,
+            initialSize: params.initialSize,
+            respawnOnExit: false,
+            preserveBufferOnExit: true,
+            watchDevServer: true,
+          });
+        } else {
+          await provider.spawnTerminal(terminal, params.initialSize);
+        }
         return terminal;
       } catch (error) {
         this.records.delete(terminal.id);

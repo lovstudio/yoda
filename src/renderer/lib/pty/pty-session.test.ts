@@ -7,9 +7,14 @@ const mocks = vi.hoisted(() => ({
     connect: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
   }>,
+  onExit: vi.fn(),
+  exitListeners: new Map<string, () => void>(),
 }));
 
 vi.mock('@renderer/lib/ipc', () => ({
+  events: {
+    on: mocks.onExit,
+  },
   rpc: {
     appSettings: {
       get: vi.fn(async () => ({})),
@@ -35,6 +40,12 @@ describe('PtySession connection lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.instances.length = 0;
+    mocks.exitListeners.clear();
+    mocks.onExit.mockImplementation((_event, callback, topic) => {
+      if (!topic) return () => {};
+      mocks.exitListeners.set(topic, callback);
+      return () => mocks.exitListeners.delete(topic);
+    });
   });
 
   it('does not connect merely because status is observed', async () => {
@@ -92,5 +103,16 @@ describe('PtySession connection lifecycle', () => {
     expect(mocks.instances).toHaveLength(1);
     expect(mocks.instances[0].connect).not.toHaveBeenCalled();
     expect(session.status).toBe('ready');
+  });
+
+  it('tracks command process exit without waiting for a terminal surface to mount', () => {
+    const session = new PtySession('one-shot', { execution: 'command' });
+
+    expect(session.hasExited).toBe(false);
+    mocks.exitListeners.get('one-shot')?.();
+    expect(session.hasExited).toBe(true);
+
+    session.dispose();
+    expect(mocks.exitListeners.has('one-shot')).toBe(false);
   });
 });

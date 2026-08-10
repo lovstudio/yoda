@@ -1,16 +1,23 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { AppSettings } from '@shared/app-settings';
+import { ptyExitChannel } from '@shared/events/ptyEvents';
 import {
   DEFAULT_HOT_TERMINAL_LIMIT,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
   MAX_HOT_TERMINAL_LIMIT,
   MIN_HOT_TERMINAL_LIMIT,
 } from '@shared/terminal-settings';
-import { rpc } from '@renderer/lib/ipc';
+import { events, rpc } from '@renderer/lib/ipc';
 import { FrontendPty } from '@renderer/lib/pty/pty';
 import { selectTerminalLruEvictions } from './terminal-lru';
 
 export type PtySessionStatus = 'disconnected' | 'connecting' | 'ready';
+export type PtySessionExecution = 'interactive' | 'command';
+
+export type PtySessionOptions = {
+  deferConnection?: boolean;
+  execution?: PtySessionExecution;
+};
 
 export class PtySession {
   private static hotLimit = DEFAULT_HOT_TERMINAL_LIMIT;
@@ -18,20 +25,38 @@ export class PtySession {
 
   pty: FrontendPty | null = null;
   status: PtySessionStatus = 'disconnected';
+  hasExited = false;
   private connectionEnabled: boolean;
   private connectionRequested = false;
   private connectPromise: Promise<void> | null = null;
+  private readonly disposeExitListener: (() => void) | null;
 
   constructor(
     readonly sessionId: string,
-    options?: { deferConnection?: boolean }
+    readonly options: PtySessionOptions = {}
   ) {
-    this.connectionEnabled = !(options?.deferConnection ?? false);
-    makeAutoObservable<this, 'connectionEnabled' | 'connectionRequested' | 'connectPromise'>(this, {
+    this.connectionEnabled = !(options.deferConnection ?? false);
+    this.disposeExitListener =
+      options.execution === 'command'
+        ? events.on(
+            ptyExitChannel,
+            () => {
+              runInAction(() => {
+                this.hasExited = true;
+              });
+            },
+            sessionId
+          )
+        : null;
+    makeAutoObservable<
+      this,
+      'connectionEnabled' | 'connectionRequested' | 'connectPromise' | 'disposeExitListener'
+    >(this, {
       pty: false,
       connectionEnabled: false,
       connectionRequested: false,
       connectPromise: false,
+      disposeExitListener: false,
     });
   }
 
@@ -112,6 +137,7 @@ export class PtySession {
   dispose() {
     this.connectionRequested = false;
     this.connectPromise = null;
+    this.disposeExitListener?.();
     this.pty?.dispose();
     PtySession.hotSessions = PtySession.hotSessions.filter((session) => session !== this);
     runInAction(() => {
