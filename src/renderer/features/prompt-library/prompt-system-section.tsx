@@ -80,12 +80,14 @@ export function PromptInstructionFileEditor({
   statusLabel,
   statusMuted = false,
   initiallyExpanded = false,
+  compact = false,
 }: {
   file: EditableRuntimeInstructionFile;
   request: EditableRuntimeInstructionFilesRequest;
   statusLabel: string;
   statusMuted?: boolean;
   initiallyExpanded?: boolean;
+  compact?: boolean;
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -124,19 +126,30 @@ export function PromptInstructionFileEditor({
         <button
           type="button"
           data-slot="runtime-instruction-file-toggle"
-          className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left outline-none hover:bg-background-1 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
+          className={cn(
+            'flex min-w-0 flex-1 items-center text-left outline-none hover:bg-background-1 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border',
+            compact ? 'gap-1.5 px-2 py-1.5' : 'gap-2 px-3 py-2.5'
+          )}
           aria-expanded={expanded}
           onClick={() => setExpanded((current) => !current)}
         >
           <ChevronRight
             className={cn(
-              'size-4 shrink-0 text-foreground-muted transition-transform',
+              'shrink-0 text-foreground-muted transition-transform',
+              compact ? 'size-3.5' : 'size-4',
               expanded && 'rotate-90'
             )}
           />
-          <FileIcon filename={filename} size={16} className="shrink-0" />
+          <FileIcon filename={filename} size={compact ? 14 : 16} className="shrink-0" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-foreground">{filename}</span>
+            <span
+              className={cn(
+                'block truncate font-medium text-foreground',
+                compact ? 'text-xs' : 'text-sm'
+              )}
+            >
+              {filename}
+            </span>
             <span
               className="block truncate font-mono text-[10px] text-foreground-passive"
               title={file.path}
@@ -145,36 +158,47 @@ export function PromptInstructionFileEditor({
             </span>
           </span>
         </button>
-        <Badge variant={statusMuted ? 'outline' : 'secondary'} className="mr-2 shrink-0">
+        <Badge
+          variant={statusMuted ? 'outline' : 'secondary'}
+          className={cn('mr-2 shrink-0', compact && 'px-1.5 py-0 text-[9px]')}
+        >
           {statusLabel}
         </Badge>
         {file.exists ? (
-          <span className="mr-2 shrink-0">
+          <span className={cn('shrink-0', compact ? 'mr-1' : 'mr-2')}>
             <GlobalFileActionsDropdown absolutePath={file.path} />
           </span>
         ) : null}
       </div>
 
       {expanded ? (
-        <div className="border-t border-border bg-background px-3 py-3">
+        <div
+          className={cn(
+            'border-t border-border bg-background',
+            compact ? 'px-2 py-2' : 'px-3 py-3'
+          )}
+        >
           <Textarea
             value={content}
             onChange={(event) => setContent(event.target.value)}
             placeholder={t('promptLibrary.system.filePromptPlaceholder')}
-            className="min-h-28 resize-y font-mono text-xs leading-relaxed"
+            className={cn(
+              'resize-y font-mono leading-relaxed',
+              compact ? 'min-h-20 px-2 py-1.5 text-[11px]' : 'min-h-28 text-xs'
+            )}
             aria-label={t('promptLibrary.system.filePromptLabel', { name: filename })}
           />
           <div className="mt-2 flex justify-end">
             <Button
               type="button"
-              size="sm"
+              size={compact ? 'xs' : 'sm'}
               disabled={!changed || save.isPending}
               onClick={() => save.mutate()}
             >
               {save.isPending ? (
-                <Loader2 className="size-4 animate-spin" />
+                <Loader2 className={cn('animate-spin', compact ? 'size-3.5' : 'size-4')} />
               ) : (
-                <Save className="size-4" />
+                <Save className={cn(compact ? 'size-3.5' : 'size-4')} />
               )}
               {file.exists ? t('common.save') : t('promptLibrary.system.createFile')}
             </Button>
@@ -189,10 +213,14 @@ export function PromptInstructionFilesEditor({
   runtimeId,
   projectId,
   scope,
+  compact = false,
+  initiallyExpanded = false,
 }: {
   runtimeId: RuntimeId;
   projectId?: string | null;
   scope: EditableRuntimeInstructionFile['scope'];
+  compact?: boolean;
+  initiallyExpanded?: boolean;
 }) {
   const { t } = useTranslation();
   const request = useMemo(
@@ -280,7 +308,10 @@ export function PromptInstructionFilesEditor({
               request={request}
               statusLabel={statusLabel}
               statusMuted={isOverriddenBase || !file.exists}
-              initiallyExpanded={isOverride && showMissingOverride && !file.exists}
+              compact={compact}
+              initiallyExpanded={
+                initiallyExpanded || (isOverride && showMissingOverride && !file.exists)
+              }
             />
           );
         })}

@@ -29,7 +29,21 @@ describe('Workspace runtime bar prompt group', () => {
     expect(promptPopoverSource).toContain('h-[min(54vh,26rem)]');
     expect(promptPopoverSource).toContain('w-[min(22rem,calc(100vw-1rem))]');
     expect(promptPopoverSource).toContain('h-full min-h-0 overflow-y-auto');
+    expect(promptPopoverSource).toContain('<PromptInstructionFilesEditor');
+    expect(promptPopoverSource).toContain('initiallyExpanded');
+    expect(promptPopoverSource).toContain('compact');
     expect(promptPopoverSource).toContain('<PromptInjectionControls');
     expect(promptPopoverSource).toContain('setGlobalOverride');
+    expect(promptPopoverSource).toContain('<DynamicPromptAddForm');
+    expect(promptPopoverSource).toContain('useCreatePrompt');
+
+    const fileSection = promptPopoverSource.indexOf(
+      'data-slot={`workspace-prompt-${scope}-files`}'
+    );
+    const dynamicSection = promptPopoverSource.indexOf(
+      'data-slot={`workspace-prompt-${scope}-injection`}'
+    );
+    expect(fileSection).toBeGreaterThan(-1);
+    expect(dynamicSection).toBeGreaterThan(fileSection);
   });
 });
