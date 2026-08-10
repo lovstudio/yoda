@@ -46,6 +46,7 @@ import {
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { SkillQuickSearchPopover } from '@renderer/features/skills/components/SkillQuickSearchPopover';
+import { skillsCatalogQueryOptions } from '@renderer/features/skills/skills-query';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { LatestReplyScreenshotButton } from '@renderer/features/tasks/conversations/latest-reply-screenshot';
@@ -763,6 +764,10 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     updateInterfaceSettings({ dockSessionHistory: !sessionHistoryDocked });
   };
 
+  const prefetchSkillsCatalog = useCallback(() => {
+    void queryClient.prefetchQuery(skillsCatalogQueryOptions);
+  }, [queryClient]);
+
   const handleSkillInstalled = (skill: { key: string; displayName: string }) => {
     setIsSkillPopoverOpen(false);
     if (!provisionedTask || !activeConversation || connectionId) return;
@@ -963,6 +968,8 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                 isSkillPopoverOpen && 'bg-background-2 text-foreground'
               )}
               title={t('workspaceRuntime.skill')}
+              onFocus={prefetchSkillsCatalog}
+              onPointerEnter={prefetchSkillsCatalog}
             >
               <Blocks className="size-3.5" />
               <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>{t('workspaceRuntime.skill')}</span>

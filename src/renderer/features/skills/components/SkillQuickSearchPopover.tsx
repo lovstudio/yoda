@@ -17,7 +17,7 @@ import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { cn } from '@renderer/utils/utils';
 import { filterInstalledSkills, hasInstalledRuntimeName } from '../skill-quick-search';
-import { fetchSkillsCatalog, skillsCatalogQueryKey } from '../skills-query';
+import { skillsCatalogQueryOptions } from '../skills-query';
 import SkillIconRenderer from './SkillIconRenderer';
 
 interface SkillQuickSearchPopoverProps {
@@ -40,10 +40,7 @@ export function SkillQuickSearchPopover({
   const [query, setQuery] = useState('');
   const [externalSearch, setExternalSearch] = useState<ExternalSearchState | null>(null);
   const normalizedQuery = query.trim();
-  const { data: catalog, isPending: isLoading } = useQuery({
-    queryKey: skillsCatalogQueryKey,
-    queryFn: fetchSkillsCatalog,
-  });
+  const { data: catalog, isPending: isLoading } = useQuery(skillsCatalogQueryOptions);
   const localResults = useMemo(
     () => filterInstalledSkills(catalog?.skills ?? [], normalizedQuery),
     [catalog?.skills, normalizedQuery]

@@ -189,4 +189,33 @@ describe('SkillQuickSearchPopover', () => {
     });
     expect(mocks.onInstalled).toHaveBeenCalledWith(installedExternalSkill);
   });
+
+  it('reuses the catalog when the picker is reopened', async () => {
+    const { SkillQuickSearchPopover } = await import(
+      '@renderer/features/skills/components/SkillQuickSearchPopover'
+    );
+    const renderPicker = async () =>
+      act(async () =>
+        root.render(
+          createElement(
+            QueryClientProvider,
+            { client: queryClient },
+            createElement(SkillQuickSearchPopover, {
+              onInstalled: mocks.onInstalled,
+              onManageSkills: mocks.onManageSkills,
+            })
+          )
+        )
+      );
+
+    await renderPicker();
+    await settle();
+    expect(mocks.getCatalog).toHaveBeenCalledOnce();
+
+    await act(async () => root.render(null));
+    await renderPicker();
+    await settle();
+
+    expect(mocks.getCatalog).toHaveBeenCalledOnce();
+  });
 });
