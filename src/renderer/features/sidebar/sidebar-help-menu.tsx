@@ -22,7 +22,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
@@ -49,7 +48,7 @@ export const SidebarHelpMenu = observer(function SidebarHelpMenu() {
         <CircleHelp className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="end" sideOffset={8} className="w-60">
-        <DropdownMenuLabel className="flex items-center gap-2 px-2 py-2">
+        <div className="flex items-center gap-2 px-2 py-2">
           <img src={yodaIcon} alt="" className="size-6 shrink-0 rounded-md" />
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium text-foreground">
@@ -59,7 +58,7 @@ export const SidebarHelpMenu = observer(function SidebarHelpMenu() {
               {t('settings.update.currentVersion')} {versionLabel}
             </span>
           </span>
-        </DropdownMenuLabel>
+        </div>
         <DropdownMenuSeparator />
         {update.hasUpdate ? (
           <DropdownMenuItem onClick={() => navigate('settings', { tab: 'general' })}>
