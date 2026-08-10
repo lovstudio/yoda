@@ -6,6 +6,8 @@ import {
   Globe,
   MessageSquareShare,
   RefreshCw,
+  Settings,
+  Smartphone,
   type LucideIcon,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
@@ -81,6 +83,23 @@ export const SidebarProductMenu = observer(function SidebarProductMenu() {
             </button>
           ) : null}
         </div>
+        <div className="mb-1 border-t border-border" />
+        <ProductMenuItem
+          icon={Smartphone}
+          label={t('sidebar.mobile')}
+          onClick={() => {
+            setOpen(false);
+            navigate('mobile');
+          }}
+        />
+        <ProductMenuItem
+          icon={Settings}
+          label={t('sidebar.settings')}
+          onClick={() => {
+            setOpen(false);
+            navigate('settings');
+          }}
+        />
         <div className="mb-1 border-t border-border" />
         <ProductMenuItem
           icon={Globe}
