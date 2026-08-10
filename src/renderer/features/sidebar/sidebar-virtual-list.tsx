@@ -88,6 +88,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
   const [taskProjection, setTaskProjection] = useState<TreeProjection | null>(null);
+  const previousRowCountRef = useRef<number | null>(null);
   // Project a task is hovering over for a cross-project move (null = none).
   const [dropTargetProjectId, setDropTargetProjectId] = useState<string | null>(null);
   const [expandedTaskGroupIds, setExpandedTaskGroupIds] = useState<Set<string>>(() => new Set());
@@ -183,6 +184,18 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     measureElement: (element) => element.getBoundingClientRect().height,
   });
   const virtualItems = virtualizer.getVirtualItems();
+
+  // A task can arrive after the project row has already been measured. The
+  // row model and the virtualizer cache then change in separate turns; clear
+  // the cached measurements during layout so the new child enters the first
+  // committed viewport instead of waiting for another sidebar interaction.
+  useLayoutEffect(() => {
+    const previousRowCount = previousRowCountRef.current;
+    previousRowCountRef.current = renderRows.length;
+    if (previousRowCount === null || previousRowCount === renderRows.length) return;
+    virtualizer.measure();
+  }, [renderRows.length, virtualizer]);
+
   // Virtualizer state changes on every scroll frame. This scan only depends on
   // the row model, so keep it out of that frame-level render path.
   const activeRowIndex = useMemo(
