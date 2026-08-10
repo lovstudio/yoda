@@ -3002,6 +3002,7 @@
       "enable": "Dynamic injection",
       "enableHint": "Append this prompt automatically when a session starts",
       "disable": "Disable dynamic injection",
+      "editPrompt": "Edit {{name}}",
       "reorder": "Drag {{name}} to change its injection order",
       "toggle": "Toggle dynamic injection for {{name}}",
       "badge": "Injected",

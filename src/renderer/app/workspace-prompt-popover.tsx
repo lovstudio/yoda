@@ -386,6 +386,16 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
                 : prompt.injectionEnabled
             }
             onPromptEnabledChange={handlePromptEnabledChange}
+            onPromptEdit={(prompt, draft) =>
+              updatePrompt.mutateAsync({
+                id: prompt.id,
+                patch: {
+                  title: draft.title,
+                  content: draft.content,
+                  versionBump: 'patch',
+                },
+              })
+            }
             disabled={mutationPending}
             empty={
               <p className="border-t border-border/60 px-3 py-3 text-xs text-foreground-muted">
@@ -395,7 +405,7 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
           />
           {scope === 'project' ? (
             <ProjectDynamicPromptList
-              items={projectItems}
+              items={projectItems.filter((item) => item.enabled)}
               onPatchItem={handleProjectItemPatch}
               onRemoveItem={handleProjectItemRemove}
             />

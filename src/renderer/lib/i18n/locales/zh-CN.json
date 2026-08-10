@@ -3002,6 +3002,7 @@
       "enable": "动态注入",
       "enableHint": "会话启动时自动追加这条提示词",
       "disable": "关闭动态注入",
+      "editPrompt": "编辑「{{name}}」",
       "reorder": "拖动「{{name}}」调整注入顺序",
       "toggle": "切换「{{name}}」的动态注入",
       "badge": "动态注入",
