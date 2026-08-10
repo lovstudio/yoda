@@ -32,8 +32,8 @@ describe('Workspace runtime bar prompt group', () => {
     expect(promptPopoverSource).not.toContain('<PromptScopeSummary');
     expect(promptPopoverSource).not.toContain('workspaceRuntime.prompt.description');
     expect(promptPopoverSource).toContain("t('workspaceRuntime.prompt.dynamicTitle')");
-    expect(promptPopoverSource).toContain('h-[min(54vh,26rem)]');
-    expect(promptPopoverSource).toContain('w-[min(22rem,calc(100vw-1rem))]');
+    expect(promptPopoverSource).toContain('h-[min(80vh,35rem)]');
+    expect(promptPopoverSource).toContain('w-[min(26rem,calc(100vw-1rem))]');
     expect(promptPopoverSource).toContain('h-full min-h-0 overflow-y-auto');
     expect(promptPopoverSource).toContain('<PromptInstructionFilesEditor');
     expect(promptPopoverSource).toContain('initiallyExpanded');

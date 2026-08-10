@@ -90,7 +90,7 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
           align="start"
           side="top"
           sideOffset={8}
-          className="flex h-[min(54vh,26rem)] max-h-[calc(100vh-1rem)] min-h-0 w-[min(22rem,calc(100vw-1rem))] flex-col gap-0 overflow-hidden border border-border bg-background p-0 text-foreground shadow-lg"
+          className="flex h-[min(80vh,35rem)] max-h-[calc(100vh-1rem)] min-h-0 w-[min(26rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] flex-col gap-0 overflow-hidden border border-border bg-background p-0 text-foreground shadow-lg"
         >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-2.5">
             <div className="flex min-w-0 items-center gap-2">
