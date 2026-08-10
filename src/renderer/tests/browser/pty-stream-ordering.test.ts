@@ -191,7 +191,11 @@ describe('FrontendPty stream ordering', () => {
     ipcMocks.emitData(output(1, 'STALE-PROMPT-6'));
     ipcMocks.emitData(output(2, '\x1b[38;5;1m■ Conversation inter'));
     ipcMocks.emitData(
-      output(3, 'rupted - tell the model what to do differently. Something went wrong?\x1b[39m')
+      output(
+        3,
+        'rupted - tell the model what to do differently. Something went wrong?\x1b[39m' +
+          ' '.repeat(20 * 1024)
+      )
     );
 
     await vi.waitFor(() => {

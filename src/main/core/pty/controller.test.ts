@@ -149,7 +149,8 @@ describe('ptyController.subscribe history handoff', () => {
     ptySessionRegistry.register(sessionId, pty);
     pty.emitData(
       '\x1b[38;5;1m■ Conversation interrupted - tell the model what to do differently. ' +
-        'Something went wrong? Hit `/feedback` to report the issue.\x1b[39m\n'
+        'Something went wrong? Hit `/feedback` to report the issue.\x1b[39m\n' +
+        ' '.repeat(20 * 1024)
     );
 
     await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
@@ -209,6 +210,34 @@ describe('ptyController.subscribe history handoff', () => {
       success: true,
       data: {
         buffer: 'Codex is ready for the next prompt.\n',
+        generation: 1,
+        sequence: 0,
+      },
+    });
+    expect(mocks.loadHistory).not.toHaveBeenCalled();
+
+    ptySessionRegistry.unregister(sessionId);
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
+  });
+
+  it('does not treat an older interruption retained outside the current screen tail as current', async () => {
+    const sessionId = 'project-old-interrupt:task-old-interrupt:conversation-old-interrupt';
+    const consumerId = 'consumer-old-interrupt';
+    const pty = new FakePty();
+    ptySessionRegistry.register(sessionId, pty);
+    pty.emitData(
+      'Conversation interrupted - tell the model what to do differently.\n' +
+        'x'.repeat(70 * 1024) +
+        '\nCodex is handling a newer turn.\n'
+    );
+
+    await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
+      success: true,
+      data: {
+        buffer:
+          'Conversation interrupted - tell the model what to do differently.\n' +
+          'x'.repeat(70 * 1024) +
+          '\nCodex is handling a newer turn.\n',
         generation: 1,
         sequence: 0,
       },

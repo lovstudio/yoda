@@ -1,6 +1,9 @@
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { Terminal, type ITerminalOptions } from '@xterm/xterm';
-import { isInterruptedCodexTerminalOutput } from '@shared/codex-terminal-interruption';
+import {
+  CODEX_INTERRUPTION_SCAN_TAIL_CHARS,
+  isInterruptedCodexTerminalOutput,
+} from '@shared/codex-terminal-interruption';
 import {
   PTY_CONSUMER_HEARTBEAT_INTERVAL_MS,
   ptyDataChannel,
@@ -57,7 +60,6 @@ type TerminalWriteQueueItem = {
   offset: number;
 };
 
-const INTERRUPTION_DETECTION_TAIL_CHARS = 4 * 1024;
 const RESET_TERMINAL_SEQUENCE = '\x1bc';
 
 export const DEFAULT_TERMINAL_FONT_FAMILY = [
@@ -450,7 +452,7 @@ export class FrontendPty {
     this.lastOutputSequence = snapshot.sequence;
     this.acknowledgedGeneration = snapshot.generation;
     this.acknowledgedSequence = 0;
-    this.interruptionOutputTail = snapshot.buffer.slice(-INTERRUPTION_DETECTION_TAIL_CHARS);
+    this.interruptionOutputTail = snapshot.buffer.slice(-CODEX_INTERRUPTION_SCAN_TAIL_CHARS);
     this.startConsumerHeartbeat();
     if (snapshot.buffer) {
       this.writeOrBuffer(snapshot.buffer, {
@@ -500,7 +502,7 @@ export class FrontendPty {
       event.generation === this.outputGeneration ? this.interruptionOutputTail : ''
     )
       .concat(event.data)
-      .slice(-INTERRUPTION_DETECTION_TAIL_CHARS);
+      .slice(-CODEX_INTERRUPTION_SCAN_TAIL_CHARS);
     this.interruptionOutputTail = nextInterruptionTail;
     if (
       event.generation > this.interruptionReplayGeneration &&
@@ -557,7 +559,7 @@ export class FrontendPty {
       this.lastOutputSequence = snapshot.sequence;
       this.acknowledgedGeneration = snapshot.generation;
       this.acknowledgedSequence = 0;
-      this.interruptionOutputTail = snapshot.buffer.slice(-INTERRUPTION_DETECTION_TAIL_CHARS);
+      this.interruptionOutputTail = snapshot.buffer.slice(-CODEX_INTERRUPTION_SCAN_TAIL_CHARS);
 
       // RIS is parsed in-order after any already queued stale bytes, clearing
       // their screen and scrollback before the authoritative history is drawn.
