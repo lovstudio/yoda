@@ -59,7 +59,7 @@ export function SidebarAccountAnchor() {
               type="button"
               aria-label={t('sidebar.manageLovStudioAccount')}
               title={t('sidebar.manageLovStudioAccount')}
-              className="group/account flex min-w-0 flex-1 items-center gap-1.5 rounded-xl bg-background-tertiary-1/30 px-1 py-0.5 text-left backdrop-blur-sm transition-colors hover:bg-background-tertiary-1/55 hover:text-foreground-tertiary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="group/account flex min-w-0 flex-1 items-center gap-1.5 rounded-xl bg-background-tertiary-1/30 px-1 py-0.5 text-left backdrop-blur-sm transition-colors data-popup-open:bg-background-tertiary-1/55 data-popup-open:text-foreground-tertiary hover:bg-background-tertiary-1/55 hover:text-foreground-tertiary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
           }
         >
@@ -68,12 +68,7 @@ export function SidebarAccountAnchor() {
             {displayName}
           </span>
         </DropdownMenuTrigger>
-        <DropdownMenuContent
-          side="top"
-          align="start"
-          sideOffset={8}
-          className="w-64 rounded-xl border-border/40 bg-background-quaternary/85 p-1.5 backdrop-blur-lg"
-        >
+        <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-64">
           <div className="flex items-center gap-2 px-2 py-2">
             <AccountAvatar user={user} size="md" />
             <span className="min-w-0 truncate text-sm font-medium text-foreground">
