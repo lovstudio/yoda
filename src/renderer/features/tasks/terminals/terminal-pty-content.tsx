@@ -48,6 +48,7 @@ export const TerminalPtyContent = observer(function TerminalPtyContent({
   const activeSessionId = activeSession?.sessionId ?? null;
   const activePty = activeSession?.status === 'ready' ? activeSession.pty : null;
   const isPtyReady = Boolean(activeSessionId && activePty);
+  const sessionStatus = activeSession?.status;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
@@ -59,8 +60,8 @@ export const TerminalPtyContent = observer(function TerminalPtyContent({
   // backend-ready gate opens.
   useEffect(() => {
     if (!active || !activeSession) return;
-    void activeSession.connect();
-  }, [active, activeSession]);
+    void activeSession.connect().catch(() => {});
+  }, [active, activeSession, sessionStatus]);
 
   const {
     isSearchOpen,
@@ -90,7 +91,6 @@ export const TerminalPtyContent = observer(function TerminalPtyContent({
   }, [autoFocus, activeSessionId]);
 
   // Fire when the session transitions to 'ready'.
-  const sessionStatus = activeSession?.status;
   useEffect(() => {
     if (sessionStatus === 'ready' && focusPendingRef.current) {
       focusPendingRef.current = false;

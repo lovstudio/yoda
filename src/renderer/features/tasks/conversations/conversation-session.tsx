@@ -97,7 +97,7 @@ export const ConversationSession = observer(function ConversationSession({
   useEffect(() => {
     if (!isVisible || !session) return;
     void session.connect().catch(() => {});
-  }, [isVisible, session]);
+  }, [isVisible, session, sessionStatus]);
 
   const {
     isSearchOpen,

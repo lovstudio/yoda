@@ -140,8 +140,8 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
   // for the visible pin, making this the surface's explicit connection demand.
   useEffect(() => {
     if (!isActive) return;
-    void session.connect();
-  }, [isActive, session]);
+    void session.connect().catch(() => {});
+  }, [isActive, session, sessionStatus]);
 
   // Auto-resume the session when it becomes visible here (mirrors ConversationsPanel).
   useEffect(() => {
