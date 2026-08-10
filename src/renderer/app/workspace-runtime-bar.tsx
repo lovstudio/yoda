@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
+  Blocks,
   Bot,
   Boxes,
   Brain,
@@ -9,7 +10,6 @@ import {
   ExternalLink,
   Gauge,
   Settings2,
-  Sparkles,
   Stethoscope,
   Terminal,
 } from 'lucide-react';
@@ -908,6 +908,33 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             triggerLabelClassName={RUNTIME_BAR_ACTION_LABEL_CLASS}
             onOpenLibrary={() => appState.navigation.navigate('library', { section: 'prompts' })}
           />
+          <span aria-hidden className="@max-[1120px]:hidden">
+            ·
+          </span>
+          <Popover open={isSkillPopoverOpen} onOpenChange={setIsSkillPopoverOpen}>
+            <PopoverTrigger
+              aria-label={t('workspaceRuntime.skill')}
+              className={cn(
+                RUNTIME_BAR_ACTION_CLASS,
+                isSkillPopoverOpen && 'bg-background-2 text-foreground'
+              )}
+              title={t('workspaceRuntime.skill')}
+            >
+              <Blocks className="size-3.5" />
+              <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>{t('workspaceRuntime.skill')}</span>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              side="top"
+              sideOffset={8}
+              className="w-[26rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+            >
+              <SkillQuickSearchPopover
+                onInstalled={handleSkillInstalled}
+                onManageSkills={openSkillsManagement}
+              />
+            </PopoverContent>
+          </Popover>
           {sessionContext && contextPercent != null ? (
             <>
               <span aria-hidden className="@max-[1120px]:hidden">
@@ -1775,30 +1802,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               </Button>
             </div>
           </div>
-        </PopoverContent>
-      </Popover>
-      <Popover open={isSkillPopoverOpen} onOpenChange={setIsSkillPopoverOpen}>
-        <PopoverTrigger
-          aria-label={t('workspaceRuntime.skill')}
-          className={cn(
-            RUNTIME_BAR_ACTION_CLASS,
-            isSkillPopoverOpen && 'bg-background-2 text-foreground'
-          )}
-          title={t('workspaceRuntime.skill')}
-        >
-          <Sparkles className="size-3.5" />
-          <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>{t('workspaceRuntime.skill')}</span>
-        </PopoverTrigger>
-        <PopoverContent
-          align="end"
-          side="top"
-          sideOffset={8}
-          className="w-[26rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
-        >
-          <SkillQuickSearchPopover
-            onInstalled={handleSkillInstalled}
-            onManageSkills={openSkillsManagement}
-          />
         </PopoverContent>
       </Popover>
       <button

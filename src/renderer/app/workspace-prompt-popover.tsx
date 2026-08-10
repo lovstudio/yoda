@@ -1,4 +1,4 @@
-import { ArrowUpRight, ChevronRight, LockKeyhole, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowUpRight, ChevronRight, LockKeyhole, Plus, TextQuote, Trash2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -82,7 +82,7 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
             open && 'bg-background-2 text-foreground'
           )}
         >
-          <Sparkles className="size-3.5" />
+          <TextQuote className="size-3.5" />
           <span className={triggerLabelClassName}>{t('workspaceRuntime.prompt.label')}</span>
         </PopoverTrigger>
         <PopoverContent
@@ -93,7 +93,7 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
         >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-2.5">
             <div className="flex min-w-0 items-center gap-2">
-              <Sparkles className="size-4 shrink-0 text-foreground-muted" />
+              <TextQuote className="size-4 shrink-0 text-foreground-muted" />
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <div className="text-sm font-medium">{t('workspaceRuntime.prompt.title')}</div>
                 <Badge variant="outline" className="shrink-0 text-[10px]">
