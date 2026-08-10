@@ -1,4 +1,4 @@
-import { Loader2, MoreHorizontal } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentReplyDisplayLevel } from '@shared/agent-reply-display';
@@ -7,7 +7,6 @@ import { displaySessionPromptText } from '@renderer/features/tasks/context-panel
 import { SessionPromptRestoreButton } from '@renderer/features/tasks/conversations/session-prompt-restore-button';
 import {
   buildSessionConversationItems,
-  buildSessionConversationPreviewItems,
   type SessionConversationItem,
 } from '@renderer/features/tasks/session-conversation';
 import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
@@ -20,7 +19,6 @@ export function SessionConversationList({
   variant,
   promptNumbers,
   isLoading = false,
-  onOpenAll,
   onRestorePrompt,
   restoringPromptId,
 }: {
@@ -31,7 +29,6 @@ export function SessionConversationList({
   /** Optional one-based transcript positions when displaying a prompt subset. */
   promptNumbers?: number[];
   isLoading?: boolean;
-  onOpenAll?: () => void;
   onRestorePrompt?: (prompt: ClaudeSessionPrompt, index: number) => void;
   restoringPromptId?: string | null;
 }) {
@@ -39,13 +36,6 @@ export function SessionConversationList({
   const items = useMemo(
     () => buildSessionConversationItems(prompts, messages, displayLevel, promptNumbers),
     [displayLevel, messages, promptNumbers, prompts]
-  );
-  const visibleItems = useMemo(
-    () =>
-      variant === 'preview'
-        ? buildSessionConversationPreviewItems(items)
-        : items.map((item) => ({ type: 'message' as const, item })),
-    [items, variant]
   );
 
   if (isLoading) {
@@ -67,27 +57,15 @@ export function SessionConversationList({
 
   return (
     <div className={cn('grid', variant === 'preview' ? 'gap-1' : 'gap-2')}>
-      {visibleItems.map((entry) =>
-        entry.type === 'truncated' ? (
-          <button
-            key="truncated"
-            type="button"
-            className="flex min-w-0 items-center justify-center gap-1.5 rounded-sm px-2 py-1 text-[11px] text-foreground-passive hover:bg-background-1 hover:text-foreground-muted focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            onClick={onOpenAll}
-          >
-            <MoreHorizontal className="size-3.5" />
-            {t('tasks.sessionInfo.truncatedMessages', { count: entry.hiddenCount })}
-          </button>
-        ) : (
-          <SessionConversationRow
-            key={entry.item.key}
-            item={entry.item}
-            variant={variant}
-            onRestorePrompt={onRestorePrompt}
-            isRestoring={restoringPromptId === entry.item.prompt?.id}
-          />
-        )
-      )}
+      {items.map((item) => (
+        <SessionConversationRow
+          key={item.key}
+          item={item}
+          variant={variant}
+          onRestorePrompt={onRestorePrompt}
+          isRestoring={restoringPromptId === item.prompt?.id}
+        />
+      ))}
     </div>
   );
 }

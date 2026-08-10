@@ -582,7 +582,6 @@ export const SessionPromptsContent = observer(function SessionPromptsContent({
         displayLevel={displayLevel}
         variant="preview"
         isLoading={prompts.isLoading}
-        onOpenAll={() => prompts.openPromptsModal(displayLevel)}
         onRestorePrompt={prompts.requestRestorePrompt}
         restoringPromptId={prompts.restoringPromptId}
       />
