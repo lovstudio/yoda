@@ -42,11 +42,11 @@ export const SidebarHelpMenu = observer(function SidebarHelpMenu() {
             type="button"
             aria-label={t('sidebar.help')}
             title={t('sidebar.help')}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-tertiary-passive transition-colors hover:bg-background-tertiary-1 hover:text-foreground-tertiary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-foreground-tertiary-passive transition-colors hover:bg-background-tertiary-1/55 hover:text-foreground-tertiary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
         }
       >
-        <CircleHelp className="size-[17px]" />
+        <CircleHelp className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="end" sideOffset={8} className="w-60">
         <DropdownMenuLabel className="flex items-center gap-2 px-2 py-2">
