@@ -3243,6 +3243,7 @@
       "placeholder": "Search local skills…",
       "localTitle": "Local skills",
       "resultCount": "{{count}} results",
+      "moreLocalHint": "There are more results. Search to narrow the list.",
       "loadingLocal": "Loading local skills…",
       "noLocalResults": "No local skills match “{{query}}”",
       "noLocalSkills": "No local skills are installed yet",
