@@ -153,6 +153,7 @@ describe('SkillQuickSearchPopover', () => {
     await settle();
 
     expect(host.textContent).toContain('Calendar');
+    expect(mocks.getCatalog).toHaveBeenCalledWith({ lightweight: true });
     expect(mocks.searchClawHub).not.toHaveBeenCalled();
 
     const manageButton = host.querySelector<HTMLButtonElement>(

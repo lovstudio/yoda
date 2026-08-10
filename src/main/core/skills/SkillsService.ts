@@ -137,6 +137,7 @@ export class SkillsService {
   private static readonly CATALOG_VERSION = 4;
   private static readonly INSTALLED_STATE_CACHE_MS = 30_000;
   private static readonly PLUGIN_SKILL_DIR_CACHE_MS = 60_000;
+  private static readonly QUICK_CATALOG_CACHE_MS = 30_000;
   private catalogCache: CatalogIndex | null = null;
   private installedStateCache = new Map<
     string,
@@ -147,6 +148,8 @@ export class SkillsService {
     expiresAt: number;
   } | null = null;
   private pluginSkillDirsPromise: Promise<ScanDirectory[]> | null = null;
+  private quickCatalogCache = new Map<string, { expiresAt: number; value: CatalogIndex }>();
+  private quickCatalogPromises = new Map<string, Promise<CatalogIndex>>();
 
   async initialize(): Promise<void> {
     await fs.promises.mkdir(SKILLS_ROOT, { recursive: true });
@@ -158,7 +161,12 @@ export class SkillsService {
    * @param projectPath When provided (local project root), project-local skill
    *   directories are scanned and merged in alongside the global ones.
    */
-  async getCatalogIndex(projectPath?: string): Promise<CatalogIndex> {
+  async getCatalogIndex(
+    projectPath?: string,
+    options?: { lightweight?: boolean }
+  ): Promise<CatalogIndex> {
+    if (options?.lightweight) return this.getQuickCatalogIndex(projectPath);
+
     if (this.catalogCache) {
       return this.mergeInstalledState(this.catalogCache, projectPath);
     }
@@ -179,6 +187,40 @@ export class SkillsService {
     const bundled = this.loadBundledCatalog();
     this.catalogCache = bundled;
     return this.mergeInstalledState(bundled, projectPath);
+  }
+
+  private async getQuickCatalogIndex(projectPath?: string): Promise<CatalogIndex> {
+    const cacheKey = projectPath ? path.resolve(projectPath) : '<global>';
+    const cached = this.quickCatalogCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+    const pending = this.quickCatalogPromises.get(cacheKey);
+    if (pending) return pending;
+
+    const promise = this.buildQuickCatalogIndex(projectPath);
+    this.quickCatalogPromises.set(cacheKey, promise);
+    try {
+      const value = await promise;
+      this.quickCatalogCache.set(cacheKey, {
+        expiresAt: Date.now() + SkillsService.QUICK_CATALOG_CACHE_MS,
+        value,
+      });
+      return value;
+    } finally {
+      if (this.quickCatalogPromises.get(cacheKey) === promise) {
+        this.quickCatalogPromises.delete(cacheKey);
+      }
+    }
+  }
+
+  private async buildQuickCatalogIndex(projectPath?: string): Promise<CatalogIndex> {
+    return {
+      version: SkillsService.CATALOG_VERSION,
+      lastUpdated: new Date().toISOString(),
+      skills: await this.getInstalledSkills(this.projectSkillDirs(projectPath), {
+        includeAudit: false,
+      }),
+    };
   }
 
   /** Skill directories under a project root that may contain local skills. */
@@ -250,7 +292,10 @@ export class SkillsService {
     }
   }
 
-  async getInstalledSkills(extraDirs: ScanDirectory[] = []): Promise<CatalogSkill[]> {
+  async getInstalledSkills(
+    extraDirs: ScanDirectory[] = [],
+    options: { includeAudit?: boolean } = {}
+  ): Promise<CatalogSkill[]> {
     await this.initialize();
     const pluginSkillDirs = await this.findPluginSkillDirectories();
     const targetDirectories = agentTargets.map((target) => ({
@@ -365,6 +410,7 @@ export class SkillsService {
           runtimeIds: Array.from(entry.runtimeIds),
           sourceKey: manifest?.sourceKey,
           reviewedContentHash: manifest?.reviewedContentHash,
+          includeAudit: options.includeAudit,
         });
       })
     );
@@ -1132,6 +1178,7 @@ export class SkillsService {
   private invalidateCaches(): void {
     this.catalogCache = null;
     this.installedStateCache.clear();
+    this.quickCatalogCache.clear();
     this.pluginSkillDirsCache = null;
   }
 
@@ -1261,6 +1308,7 @@ export class SkillsService {
       runtimeIds: RuntimeId[];
       sourceKey?: string;
       reviewedContentHash?: string;
+      includeAudit?: boolean;
     }
   ): Promise<CatalogSkill> {
     const { frontmatter, hasFrontmatter, unknownFields } = parseFrontmatter(content);
@@ -1270,9 +1318,10 @@ export class SkillsService {
       hasFrontmatter,
       unknownFields,
     });
-    const audit = await auditSkillDirectory(skillDir, frontmatter);
+    const audit =
+      options.includeAudit === false ? undefined : await auditSkillDirectory(skillDir, frontmatter);
     const key = makeSkillKey('local', id, skillDir);
-    const healthIssues = [...audit.healthIssues];
+    const healthIssues = [...(audit?.healthIssues ?? [])];
     if (!options.managed) {
       healthIssues.push({
         severity: 'info',
@@ -1303,7 +1352,7 @@ export class SkillsService {
         message: `${validationIssues.length} format validation issue${validationIssues.length === 1 ? '' : 's'}`,
       });
     }
-    if (options.reviewedContentHash && options.reviewedContentHash !== audit.contentHash) {
+    if (options.reviewedContentHash && audit && options.reviewedContentHash !== audit.contentHash) {
       healthIssues.push({
         severity: 'warning',
         code: 'content-changed',
@@ -1320,7 +1369,7 @@ export class SkillsService {
         source: 'local',
         locator: skillDir,
         version: frontmatter.metadata?.version,
-        contentHash: audit.contentHash,
+        contentHash: audit?.contentHash,
       },
       id,
       displayName: frontmatter.name || id,
@@ -1333,24 +1382,28 @@ export class SkillsService {
       installed: true,
       disabled: options.disabled ?? false,
       localPath: skillDir,
-      skillMdContent: content,
-      contentHash: audit.contentHash,
+      skillMdContent: options.includeAudit === false ? undefined : content,
+      contentHash: audit?.contentHash,
       workflowId: variantMatch ? id.slice(0, -variantMatch[0].length) : id,
       variant: variantMatch?.[1]?.toLocaleLowerCase(),
       version: frontmatter.metadata?.version,
-      dependencies: audit.dependencies,
-      riskLevel: audit.riskLevel,
+      dependencies: audit?.dependencies,
+      riskLevel: audit?.riskLevel,
       healthIssues,
-      installation: {
-        path: skillDir,
-        managed: options.managed,
-        scope: options.scope,
-        runtimeIds: options.runtimeIds,
-        contentHash: audit.contentHash,
-        fileCount: audit.fileCount,
-        totalBytes: audit.totalBytes,
-        sourceKey: options.sourceKey,
-      },
+      ...(audit
+        ? {
+            installation: {
+              path: skillDir,
+              managed: options.managed,
+              scope: options.scope,
+              runtimeIds: options.runtimeIds,
+              contentHash: audit.contentHash,
+              fileCount: audit.fileCount,
+              totalBytes: audit.totalBytes,
+              sourceKey: options.sourceKey,
+            },
+          }
+        : {}),
     };
   }
 
