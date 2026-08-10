@@ -219,4 +219,44 @@ describe('SkillQuickSearchPopover', () => {
 
     expect(mocks.getCatalog).toHaveBeenCalledOnce();
   });
+
+  it('keeps a large local catalog to a compact first render', async () => {
+    const { SkillQuickSearchPopover } = await import(
+      '@renderer/features/skills/components/SkillQuickSearchPopover'
+    );
+    mocks.getCatalog.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...catalog,
+        skills: Array.from({ length: 45 }, (_, index) => ({
+          ...localSkill,
+          key: `skill:local:bulk-${index}:test`,
+          id: `bulk-${index}`,
+          displayName: `Bulk ${index}`,
+          ref: {
+            ...localSkill.ref,
+            key: `skill:local:bulk-${index}:test`,
+            id: `bulk-${index}`,
+          },
+        })),
+      },
+    });
+
+    await act(async () =>
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SkillQuickSearchPopover, {
+            onInstalled: mocks.onInstalled,
+            onManageSkills: mocks.onManageSkills,
+          })
+        )
+      )
+    );
+    await settle();
+
+    expect(host.querySelectorAll('[data-testid="skill-icon"]')).toHaveLength(40);
+    expect(host.textContent).toContain('skills.quickSearch.moreLocalHint');
+  });
 });

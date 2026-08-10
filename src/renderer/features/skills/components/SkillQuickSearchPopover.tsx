@@ -30,6 +30,8 @@ type ExternalSearchState = {
   results: ClawHubSkillSearchResult[];
 };
 
+const MAX_VISIBLE_LOCAL_SKILLS = 40;
+
 export function SkillQuickSearchPopover({
   onInstalled,
   onManageSkills,
@@ -44,6 +46,10 @@ export function SkillQuickSearchPopover({
   const localResults = useMemo(
     () => filterInstalledSkills(catalog?.skills ?? [], normalizedQuery),
     [catalog?.skills, normalizedQuery]
+  );
+  const visibleLocalResults = useMemo(
+    () => localResults.slice(0, MAX_VISIBLE_LOCAL_SKILLS),
+    [localResults]
   );
   const currentExternalResults =
     externalSearch?.query === normalizedQuery ? externalSearch.results : null;
@@ -161,9 +167,9 @@ export function SkillQuickSearchPopover({
               <Loader2 className="size-4 animate-spin" />
               {t('skills.quickSearch.loadingLocal')}
             </div>
-          ) : localResults.length > 0 ? (
+          ) : visibleLocalResults.length > 0 ? (
             <div className="space-y-0.5">
-              {localResults.map((skill) => (
+              {visibleLocalResults.map((skill) => (
                 <div key={skill.key} className="flex items-center gap-2.5 rounded-md px-2 py-1.5">
                   <SkillIconRenderer skill={skill} size="xs" />
                   <div className="min-w-0 flex-1">
@@ -184,6 +190,11 @@ export function SkillQuickSearchPopover({
                   <Check aria-hidden className="size-3.5 shrink-0 text-emerald-500" />
                 </div>
               ))}
+              {localResults.length > visibleLocalResults.length ? (
+                <p className="px-2 pb-1 pt-2 text-[10px] text-foreground-passive">
+                  {t('skills.quickSearch.moreLocalHint')}
+                </p>
+              ) : null}
             </div>
           ) : (
             <div className="rounded-md border border-dashed border-border px-3 py-4 text-center">

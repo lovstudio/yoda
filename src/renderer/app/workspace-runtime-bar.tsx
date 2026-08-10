@@ -1,7 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
-  Blocks,
   Bot,
   Boxes,
   Brain,
@@ -45,8 +44,6 @@ import {
   getProjectStore,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
-import { SkillQuickSearchPopover } from '@renderer/features/skills/components/SkillQuickSearchPopover';
-import { skillsQuickCatalogQueryOptions } from '@renderer/features/skills/skills-query';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { LatestReplyScreenshotButton } from '@renderer/features/tasks/conversations/latest-reply-screenshot';
@@ -98,6 +95,7 @@ import {
   getNextAccountResetCredit,
   getQuotaWindowLabel,
 } from './workspace-runtime-bar-format';
+import { WorkspaceSkillPopover } from './workspace-skill-popover';
 
 type WorkspaceAgentSession = Omit<AppAgentSessionResource, 'runtimeId' | 'title' | 'taskTitle'> & {
   runtimeId?: AppAgentSessionResource['runtimeId'];
@@ -159,7 +157,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const [agentPanelTab, setAgentPanelTab] = useState<AgentPanelTab>('all');
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
   const [isConfigPopoverOpen, setIsConfigPopoverOpen] = useState(false);
-  const [isSkillPopoverOpen, setIsSkillPopoverOpen] = useState(false);
   const [accountUsageWarningThresholdDraft, setAccountUsageWarningThresholdDraft] = useState('95');
   const notifiedAccountUsageWindowsRef = useRef(new Set<string>());
   const resourceHistory = useSyncExternalStore(
@@ -227,10 +224,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const runtimeId = explicitConversationRuntimeId(
     provisionedTask?.taskView.tabManager.activeConversation?.data.runtimeId
   );
-  useEffect(() => {
-    if (!runtimeId) return;
-    void queryClient.prefetchQuery(skillsQuickCatalogQueryOptions);
-  }, [queryClient, runtimeId]);
   const configRuntimeId =
     runtimeId ??
     composerDefaults?.runtimeId ??
@@ -768,32 +761,29 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     updateInterfaceSettings({ dockSessionHistory: !sessionHistoryDocked });
   };
 
-  const prefetchSkillsCatalog = useCallback(() => {
-    void queryClient.prefetchQuery(skillsQuickCatalogQueryOptions);
-  }, [queryClient]);
+  const handleSkillInstalled = useCallback(
+    (skill: { key: string; displayName: string }) => {
+      if (!provisionedTask || !activeConversation || connectionId) return;
+      showConfirmActionModal({
+        title: t('skills.quickSearch.reloadTitle'),
+        description: t('skills.quickSearch.reloadDescription', { name: skill.displayName }),
+        confirmLabel: t('skills.quickSearch.reloadConfirm'),
+        variant: 'default',
+        onSuccess: () =>
+          void provisionedTask.conversations.restartConversation(
+            activeConversation.id,
+            undefined,
+            undefined,
+            skill.key
+          ),
+      });
+    },
+    [activeConversation, connectionId, provisionedTask, showConfirmActionModal, t]
+  );
 
-  const handleSkillInstalled = (skill: { key: string; displayName: string }) => {
-    setIsSkillPopoverOpen(false);
-    if (!provisionedTask || !activeConversation || connectionId) return;
-    showConfirmActionModal({
-      title: t('skills.quickSearch.reloadTitle'),
-      description: t('skills.quickSearch.reloadDescription', { name: skill.displayName }),
-      confirmLabel: t('skills.quickSearch.reloadConfirm'),
-      variant: 'default',
-      onSuccess: () =>
-        void provisionedTask.conversations.restartConversation(
-          activeConversation.id,
-          undefined,
-          undefined,
-          skill.key
-        ),
-    });
-  };
-
-  const openSkillsManagement = () => {
-    setIsSkillPopoverOpen(false);
+  const openSkillsManagement = useCallback(() => {
     appState.navigation.navigate('skills');
-  };
+  }, []);
 
   const openAgentSession = (session: WorkspaceAgentSession) => {
     setIsAgentPopoverOpen(false);
@@ -964,32 +954,12 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           <span aria-hidden className="@max-[1120px]:hidden">
             ·
           </span>
-          <Popover open={isSkillPopoverOpen} onOpenChange={setIsSkillPopoverOpen}>
-            <PopoverTrigger
-              aria-label={t('workspaceRuntime.skill')}
-              className={cn(
-                RUNTIME_BAR_ACTION_CLASS,
-                isSkillPopoverOpen && 'bg-background-2 text-foreground'
-              )}
-              title={t('workspaceRuntime.skill')}
-              onFocus={prefetchSkillsCatalog}
-              onPointerEnter={prefetchSkillsCatalog}
-            >
-              <Blocks className="size-3.5" />
-              <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>{t('workspaceRuntime.skill')}</span>
-            </PopoverTrigger>
-            <PopoverContent
-              align="start"
-              side="top"
-              sideOffset={8}
-              className="w-[26rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
-            >
-              <SkillQuickSearchPopover
-                onInstalled={handleSkillInstalled}
-                onManageSkills={openSkillsManagement}
-              />
-            </PopoverContent>
-          </Popover>
+          <WorkspaceSkillPopover
+            triggerClassName={RUNTIME_BAR_ACTION_CLASS}
+            triggerLabelClassName={RUNTIME_BAR_ACTION_LABEL_CLASS}
+            onInstalled={handleSkillInstalled}
+            onManageSkills={openSkillsManagement}
+          />
           {sessionContext && contextPercent != null ? (
             <>
               <span aria-hidden className="@max-[1120px]:hidden">

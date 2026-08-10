@@ -10,10 +10,14 @@ describe('Workspace runtime bar prompt group', () => {
     new URL('./workspace-prompt-popover.tsx', import.meta.url),
     'utf8'
   );
+  const skillPopoverSource = readFileSync(
+    new URL('./workspace-skill-popover.tsx', import.meta.url),
+    'utf8'
+  );
 
   it('places the current Agent prompt and Skill entries before context usage', () => {
     const promptEntry = runtimeBarSource.indexOf('<WorkspacePromptPopover');
-    const skillEntry = runtimeBarSource.indexOf("aria-label={t('workspaceRuntime.skill')}");
+    const skillEntry = runtimeBarSource.indexOf('<WorkspaceSkillPopover');
     const contextEntry = runtimeBarSource.indexOf('{sessionContext && contextPercent != null ? (');
 
     expect(promptEntry).toBeGreaterThan(-1);
@@ -22,7 +26,8 @@ describe('Workspace runtime bar prompt group', () => {
     expect(runtimeBarSource).toContain('runtimeId={runtimeId}');
     expect(runtimeBarSource).toContain('projectId={activeProjectId}');
     expect(promptPopoverSource).toContain('<TextQuote className="size-3.5" />');
-    expect(runtimeBarSource).toContain('<Blocks className="size-3.5" />');
+    expect(skillPopoverSource).toContain('<Blocks className="size-3.5" />');
+    expect(skillPopoverSource).toContain("aria-label={t('workspaceRuntime.skill')}");
   });
 
   it('keeps user, project, and enterprise tabs while reusing atomic injection controls', () => {

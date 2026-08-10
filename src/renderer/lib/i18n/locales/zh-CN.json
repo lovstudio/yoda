@@ -3258,6 +3258,7 @@
       "placeholder": "搜索本地 Skill…",
       "localTitle": "本地 Skill",
       "resultCount": "{{count}} 个结果",
+      "moreLocalHint": "结果较多，请输入关键词缩小范围。",
       "loadingLocal": "正在加载本地 Skill…",
       "noLocalResults": "本地没有与“{{query}}”匹配的 Skill",
       "noLocalSkills": "尚未安装本地 Skill",
