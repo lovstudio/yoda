@@ -835,6 +835,19 @@ export class TaskManagerStore {
     const inFlight = this._provisionPromises.get(taskId);
     if (inFlight) return inFlight;
 
+    // Publish the opening state before the first async boundary. A task can be
+    // opened from the sidebar in the same event turn that provisioning starts;
+    // exposing `provision` here prevents the route from painting an idle frame
+    // before the shared opening surface takes ownership of the transition.
+    const task = this.tasks.get(taskId);
+    if (task && isUnprovisioned(task) && task.phase === 'idle') {
+      runInAction(() => {
+        if (isUnprovisioned(task) && task.phase === 'idle') {
+          task.phase = 'provision';
+        }
+      });
+    }
+
     const promise = this._provisionTask(taskId).finally(() => {
       if (this._provisionPromises.get(taskId) === promise) {
         this._provisionPromises.delete(taskId);
@@ -851,9 +864,11 @@ export class TaskManagerStore {
     const task = this.tasks.get(taskId);
     if (!task || !isUnprovisioned(task)) return;
 
-    runInAction(() => {
-      task.phase = 'provision';
-    });
+    if (task.phase !== 'provision') {
+      runInAction(() => {
+        if (isUnprovisioned(task)) task.phase = 'provision';
+      });
+    }
 
     const taskViewPreload = this._getTaskViewPreload(taskId);
     try {

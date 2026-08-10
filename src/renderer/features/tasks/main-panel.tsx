@@ -56,13 +56,18 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
     enabled: isOpening,
   });
   const latestDeliverySummary = deliverySummaries?.[0]?.text.trim() || null;
+  // Do not replace the opening body after the task has already painted. Cold
+  // tasks often resolve this optional summary while provisioning, and swapping
+  // a spinner for markdown at that point reads as a second loading screen.
+  // A summary already present in the query cache is still shown immediately.
+  const [openingSummary] = useState(() => latestDeliverySummary);
 
   const renderOpeningState = (progressMessage: string) => (
     <SessionOpeningSurface
       heading={progressMessage}
       description={progressMessage}
       progressMessage={progressMessage}
-      summary={latestDeliverySummary ? <MarkdownRenderer content={latestDeliverySummary} /> : null}
+      summary={openingSummary ? <MarkdownRenderer content={openingSummary} /> : null}
     />
   );
 

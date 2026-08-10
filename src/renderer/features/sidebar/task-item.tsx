@@ -153,7 +153,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
 
   const handleProvision = () => {
     if (task.state !== 'unprovisioned' || task.phase !== 'idle') return;
-    void taskManager?.provisionTask(taskId);
+    void taskManager?.provisionTask(taskId).catch(() => {});
   };
 
   const needsReview = task.data.needsReview;
@@ -247,6 +247,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         if (e.button !== 0 || (e.target instanceof Element && e.target.closest('button'))) return;
         e.preventDefault();
         taskPreloadIntent.runNow();
+        // Start the same single-flight provision used by click handling while
+        // the pointer is still down. The route then enters directly into the
+        // opening surface instead of first painting the idle state.
+        handleProvision();
       }}
       onClick={(e) => {
         // Alt/Option pins the task into the global side pane (landing

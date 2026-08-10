@@ -9,8 +9,11 @@ const mocks = vi.hoisted(() => ({
   toggleTaskCollapsed: vi.fn(),
   getTaskDeliverySummaries: vi.fn(),
   preloadTask: vi.fn(),
+  provisionTask: vi.fn(),
   prewarmTask: vi.fn(),
   hoverIntent: undefined as (() => void) | undefined,
+  taskPhase: null as 'idle' | null,
+  taskState: 'unregistered' as 'unregistered' | 'unprovisioned',
 }));
 
 vi.mock('react-i18next', () => ({
@@ -72,10 +75,12 @@ vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
   getTaskManagerStore: () => ({
     archivingTaskIds: new Set<string>(),
     preloadTask: mocks.preloadTask,
+    provisionTask: mocks.provisionTask,
     prewarmTask: mocks.prewarmTask,
   }),
   getTaskStore: () => ({
-    state: 'unregistered',
+    state: mocks.taskState,
+    phase: mocks.taskPhase,
     data: {
       id: 'task-1',
       name: 'Long-term task',
@@ -136,8 +141,12 @@ describe('SidebarTaskItem long-term marker', () => {
     mocks.getTaskDeliverySummaries.mockReset();
     mocks.getTaskDeliverySummaries.mockResolvedValue([]);
     mocks.preloadTask.mockReset();
+    mocks.provisionTask.mockReset();
+    mocks.provisionTask.mockResolvedValue(undefined);
     mocks.prewarmTask.mockReset();
     mocks.hoverIntent = undefined;
+    mocks.taskPhase = null;
+    mocks.taskState = 'unregistered';
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -203,6 +212,34 @@ describe('SidebarTaskItem long-term marker', () => {
     expect(mocks.preloadTask).toHaveBeenCalledOnce();
     expect(mocks.preloadTask).toHaveBeenCalledWith('task-1');
     expect(mocks.prewarmTask).not.toHaveBeenCalled();
+  });
+
+  it('starts provisioning on primary pointer down for a cold task', async () => {
+    mocks.taskState = 'unprovisioned';
+    mocks.taskPhase = 'idle';
+    const { SidebarTaskItem } = await import('@renderer/features/sidebar/task-item');
+
+    await act(async () => {
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SidebarTaskItem, {
+            projectId: 'project-1',
+            taskId: 'task-1',
+          })
+        )
+      );
+    });
+
+    const row = host.querySelector<HTMLElement>('[data-sidebar-task-id="task-1"]');
+    expect(row).not.toBeNull();
+
+    await act(async () => {
+      row?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+    });
+
+    expect(mocks.provisionTask).toHaveBeenCalledWith('task-1');
   });
 
   it('opens the preview only after hovering the archive action', async () => {
