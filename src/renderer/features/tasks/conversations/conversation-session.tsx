@@ -288,8 +288,9 @@ export const ConversationSession = observer(function ConversationSession({
     void session.connect().catch(() => {});
   };
 
-  if (!isVisible) return null;
-
+  // Keep the terminal shell mounted while route visibility catches up. The
+  // effects above still gate connect/resume demand on isVisible, so a brief
+  // route transition cannot blank and remount the visual surface.
   if (!sessionId || session?.status !== 'ready' || !session.pty) {
     const hasStartError = Boolean(session?.connectionError);
     return (

@@ -15,6 +15,7 @@ import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
+import { SessionOpeningSurface } from '../components/session-opening-surface';
 import type { ConversationStore } from './conversation-manager';
 import { ConversationSession } from './conversation-session';
 import { isConversationSurfaceVisible } from './conversation-surface-visibility';
@@ -67,6 +68,13 @@ export const ConversationsPanel = observer(function ConversationsPanel({
   }, [tm.resolvedTabs]);
 
   const activeConversation: ConversationStore | undefined = tm.activeConversation;
+  const activeDescriptor = tm.activeDescriptor;
+  // A tab can be selected before its conversation store arrives from the
+  // manager snapshot. Keep the main surface stable during that short window;
+  // falling through to the list makes the panel visibly jump before the PTY
+  // can take over.
+  const isResolvingActiveConversation =
+    activeDescriptor?.kind === 'conversation' && !activeConversation;
   const hasConversationTabs = tm.resolvedTabs.some((tab) => tab.kind === 'conversation');
   const conversationStores = Array.from(conversations.conversations.values());
   const archivedConversations = useArchivedConversations(projectId, taskId);
@@ -90,7 +98,14 @@ export const ConversationsPanel = observer(function ConversationsPanel({
             sessionIds={allSessionIds}
             activeSessionId={activeConversation?.session.sessionId ?? null}
           >
-            {!hasConversationTabs ? (
+            {isResolvingActiveConversation ? (
+              <SessionOpeningSurface
+                surface="conversation-session-pending"
+                heading={t('tasks.conversations.startingTitle')}
+                description={t('tasks.conversations.startingDescription')}
+                progressMessage={t('tasks.conversations.startingDescription')}
+              />
+            ) : !hasConversationTabs ? (
               conversationCount > 0 ? (
                 <ConversationSessionList
                   conversations={conversationStores}
