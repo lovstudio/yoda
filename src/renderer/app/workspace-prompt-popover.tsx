@@ -1,4 +1,12 @@
-import { ArrowUpRight, Building2, LockKeyhole, Sparkles } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Building2,
+  FolderCog,
+  LockKeyhole,
+  Sparkles,
+  UserRound,
+  type LucideIcon,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -14,10 +22,7 @@ import {
   getProjectSettingsStore,
   getProjectStore,
 } from '@renderer/features/projects/stores/project-selectors';
-import { ProjectPromptSection } from '@renderer/features/prompt-library/project-prompt-section';
 import { PromptInjectionControls } from '@renderer/features/prompt-library/prompt-injection-controls';
-import { PromptLibraryChapter } from '@renderer/features/prompt-library/prompt-library-chapter';
-import { UserInstructionSection } from '@renderer/features/prompt-library/prompt-system-section';
 import { usePrompts, useUpdatePrompt } from '@renderer/features/prompt-library/use-prompts';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { Badge } from '@renderer/lib/ui/badge';
@@ -53,11 +58,6 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
   const runtimeName = runtime?.name ?? runtimeId;
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState<PromptScope>('user');
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projectId ?? null);
-
-  useEffect(() => {
-    setSelectedProjectId(projectId ?? null);
-  }, [projectId]);
 
   const handleOpenLibrary = useCallback(() => {
     setOpen(false);
@@ -88,20 +88,33 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
           align="start"
           side="top"
           sideOffset={8}
-          className="flex max-h-[min(80vh,42rem)] w-[min(36rem,calc(100vw-1rem))] flex-col gap-0 overflow-hidden border border-border bg-background p-0 text-foreground shadow-lg"
+          className="flex h-[min(80vh,42rem)] max-h-[calc(100vh-1rem)] min-h-0 w-[min(36rem,calc(100vw-1rem))] flex-col gap-0 overflow-hidden border border-border bg-background p-0 text-foreground shadow-lg"
         >
-          <div className="shrink-0 border-b border-border p-3">
-            <div className="flex items-center justify-between gap-3">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border p-3">
+            <div className="flex min-w-0 items-start gap-2.5">
+              <Sparkles className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
               <div className="min-w-0">
-                <div className="text-sm font-medium">{t('workspaceRuntime.prompt.title')}</div>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <div className="text-sm font-medium">{t('workspaceRuntime.prompt.title')}</div>
+                  <Badge variant="outline" className="shrink-0 text-[10px]">
+                    {runtimeName}
+                  </Badge>
+                </div>
                 <div className="mt-0.5 truncate text-xs text-foreground-passive">
                   {t('workspaceRuntime.prompt.description', { name: runtimeName })}
                 </div>
               </div>
-              <Badge variant="outline" className="shrink-0">
-                {runtimeName}
-              </Badge>
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              className="shrink-0"
+              onClick={handleOpenLibrary}
+            >
+              <ArrowUpRight className="size-3.5" />
+              {t('workspaceRuntime.prompt.manageLibrary')}
+            </Button>
           </div>
 
           <Tabs
@@ -121,30 +134,49 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
               <TabsTab value="enterprise">{t('workspaceRuntime.prompt.enterpriseTab')}</TabsTab>
             </TabsList>
 
-            <TabsPanel value="user" className="min-h-0 overflow-y-auto px-3 pb-3">
-              <UserInstructionSection runtimeId={runtimeId} />
-              <PromptInjectionScopeSection
-                runtimeId={runtimeId}
-                scope="user"
-                onOpenLibrary={handleOpenLibrary}
+            <TabsPanel
+              value="user"
+              className="h-full min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 pt-3"
+            >
+              <PromptScopeSummary
+                icon={UserRound}
+                title={t('workspaceRuntime.prompt.userTab')}
+                description={t('workspaceRuntime.prompt.userScopeDescription')}
               />
+              <PromptInjectionScopeSection runtimeId={runtimeId} scope="user" />
             </TabsPanel>
 
-            <TabsPanel value="project" className="min-h-0 overflow-y-auto px-3 pb-3">
-              <ProjectPromptSection
-                projectId={selectedProjectId}
-                runtimeId={runtimeId}
-                onProjectIdChange={setSelectedProjectId}
+            <TabsPanel
+              value="project"
+              className="h-full min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 pt-3"
+            >
+              <PromptScopeSummary
+                icon={FolderCog}
+                title={t('workspaceRuntime.prompt.projectTab')}
+                description={t('workspaceRuntime.prompt.projectScopeDescription')}
+                meta={
+                  projectId
+                    ? t('workspaceRuntime.prompt.currentProject')
+                    : t('workspaceRuntime.prompt.projectNotSelected')
+                }
               />
               <PromptInjectionScopeSection
                 runtimeId={runtimeId}
                 scope="project"
-                projectId={selectedProjectId}
-                onOpenLibrary={handleOpenLibrary}
+                projectId={projectId}
               />
             </TabsPanel>
 
-            <TabsPanel value="enterprise" className="min-h-0 overflow-y-auto px-3 pb-3">
+            <TabsPanel
+              value="enterprise"
+              className="h-full min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 pt-3"
+            >
+              <PromptScopeSummary
+                icon={Building2}
+                title={t('workspaceRuntime.prompt.enterpriseTitle')}
+                description={t('workspaceRuntime.prompt.enterpriseDescription')}
+                meta={t('workspaceRuntime.prompt.enterpriseManaged')}
+              />
               <EnterprisePromptSection runtimeId={runtimeId} />
             </TabsPanel>
           </Tabs>
@@ -154,16 +186,43 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
   );
 });
 
+function PromptScopeSummary({
+  icon: Icon,
+  title,
+  description,
+  meta,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  meta?: string;
+}) {
+  return (
+    <div className="flex items-start gap-2.5 border-b border-border/60 pb-3">
+      <Icon className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <h2 className="text-sm font-medium text-foreground">{title}</h2>
+          {meta ? (
+            <span className="rounded bg-background-1 px-1.5 py-0.5 text-[10px] text-foreground-passive">
+              {meta}
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-0.5 text-xs leading-5 text-foreground-muted">{description}</p>
+      </div>
+    </div>
+  );
+}
+
 const PromptInjectionScopeSection = observer(function PromptInjectionScopeSection({
   runtimeId,
   scope,
   projectId,
-  onOpenLibrary,
 }: {
   runtimeId: RuntimeId;
   scope: 'user' | 'project';
-  projectId?: string | null;
-  onOpenLibrary: () => void;
+  projectId?: string;
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -235,45 +294,43 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
   const projectReady = scope !== 'project' || Boolean(projectId && projectSettings);
 
   return (
-    <PromptLibraryChapter
-      dataSlot={`workspace-prompt-${scope}-injection`}
-      className="mt-3"
-      icon={Sparkles}
-      title={title}
-      description={description}
-      actions={
-        <div className="flex items-center justify-between gap-2">
-          {supportsInjection && projectReady ? (
-            <span className="text-[10px] tabular-nums text-foreground-passive">
-              {t('workspaceRuntime.prompt.enabledCount', {
-                enabled: enabledCount,
-                count: orderedPrompts.length,
-              })}
-            </span>
-          ) : null}
-          <Button type="button" variant="ghost" size="xs" onClick={onOpenLibrary}>
-            <ArrowUpRight className="size-3.5" />
-            {t('workspaceRuntime.prompt.manageLibrary')}
-          </Button>
-        </div>
-      }
+    <section
+      data-slot={`workspace-prompt-${scope}-injection`}
+      className="mt-3 overflow-hidden rounded-lg border border-border bg-background-secondary"
     >
+      <div className="flex items-start justify-between gap-3 px-3 py-2.5">
+        <div className="min-w-0">
+          <h3 className="text-xs font-medium text-foreground">{title}</h3>
+          <p className="mt-0.5 text-[11px] leading-4 text-foreground-muted">{description}</p>
+        </div>
+        {supportsInjection && projectReady ? (
+          <span className="shrink-0 rounded bg-background-1 px-1.5 py-0.5 text-[10px] tabular-nums text-foreground-passive">
+            {t('workspaceRuntime.prompt.enabledCount', {
+              enabled: enabledCount,
+              count: orderedPrompts.length,
+            })}
+          </span>
+        ) : null}
+      </div>
+
       {!supportsInjection ? (
-        <p className="text-xs leading-5 text-foreground-muted">
+        <p className="border-t border-border/60 px-3 py-3 text-xs leading-5 text-foreground-muted">
           {t('workspaceRuntime.prompt.injectionUnsupported', {
             name: getRuntime(runtimeId)?.name ?? runtimeId,
           })}
         </p>
       ) : scope === 'project' && !projectId ? (
-        <p className="text-xs leading-5 text-foreground-muted">
+        <p className="border-t border-border/60 px-3 py-3 text-xs leading-5 text-foreground-muted">
           {t('workspaceRuntime.prompt.projectRequired')}
         </p>
       ) : scope === 'project' && !projectReady ? (
-        <p className="text-xs leading-5 text-foreground-muted">
+        <p className="border-t border-border/60 px-3 py-3 text-xs leading-5 text-foreground-muted">
           {t('workspaceRuntime.prompt.projectLoading')}
         </p>
       ) : isLoading ? (
-        <p className="text-xs leading-5 text-foreground-muted">{t('common.loading')}</p>
+        <p className="border-t border-border/60 px-3 py-3 text-xs leading-5 text-foreground-muted">
+          {t('common.loading')}
+        </p>
       ) : (
         <PromptInjectionControls
           variant="compact"
@@ -286,11 +343,13 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
           onPromptEnabledChange={handlePromptEnabledChange}
           disabled={updatePrompt.isPending}
           empty={
-            <p className="text-xs text-foreground-muted">{t('promptLibrary.injection.empty')}</p>
+            <p className="border-t border-border/60 px-3 py-3 text-xs text-foreground-muted">
+              {t('promptLibrary.injection.empty')}
+            </p>
           }
         />
       )}
-    </PromptLibraryChapter>
+    </section>
   );
 });
 
@@ -300,45 +359,37 @@ function EnterprisePromptSection({ runtimeId }: { runtimeId: RuntimeId }) {
   const isClaude = runtime?.cli === 'claude';
 
   return (
-    <PromptLibraryChapter
-      dataSlot="workspace-prompt-enterprise"
-      className="mt-3"
-      icon={Building2}
-      title={t('workspaceRuntime.prompt.enterpriseTitle')}
-      description={t('workspaceRuntime.prompt.enterpriseDescription')}
-      actions={
-        <Badge variant="outline" className="shrink-0">
-          <LockKeyhole className="size-3" />
-          {t('workspaceRuntime.prompt.enterpriseManaged')}
-        </Badge>
-      }
-    >
-      <div className="grid gap-3 text-xs leading-5">
-        <p className="text-foreground-muted">
-          {isClaude
-            ? t('workspaceRuntime.prompt.enterpriseClaudeDescription')
-            : t('workspaceRuntime.prompt.enterpriseGenericDescription', {
-                name: runtime?.name ?? runtimeId,
-              })}
-        </p>
-        {isClaude ? (
-          <div className="rounded-md border border-border bg-background px-3 py-2.5">
-            <div className="font-medium text-foreground">
-              {t('workspaceRuntime.prompt.enterpriseManagedPaths')}
-            </div>
-            <code className="mt-1.5 block break-all font-mono text-[10px] text-foreground-passive">
-              /Library/Application Support/ClaudeCode/CLAUDE.md
-            </code>
-            <code className="mt-1 block break-all font-mono text-[10px] text-foreground-passive">
-              /etc/claude-code/CLAUDE.md
-            </code>
-          </div>
-        ) : null}
-        <div className="flex items-start gap-2 rounded-md bg-background-1 px-3 py-2.5 text-foreground-passive">
-          <LockKeyhole className="mt-0.5 size-3.5 shrink-0" />
-          <span>{t('workspaceRuntime.prompt.enterpriseReadOnly')}</span>
+    <div data-slot="workspace-prompt-enterprise" className="mt-3 grid gap-3">
+      <div className="flex items-start gap-2.5 rounded-lg border border-border bg-background-secondary p-3">
+        <LockKeyhole className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
+        <div className="min-w-0 text-xs leading-5">
+          <p className="font-medium text-foreground">
+            {t('workspaceRuntime.prompt.enterpriseManaged')}
+          </p>
+          <p className="mt-0.5 text-foreground-muted">
+            {isClaude
+              ? t('workspaceRuntime.prompt.enterpriseClaudeDescription')
+              : t('workspaceRuntime.prompt.enterpriseGenericDescription', {
+                  name: runtime?.name ?? runtimeId,
+                })}
+          </p>
         </div>
       </div>
-    </PromptLibraryChapter>
+      {isClaude ? (
+        <div className="rounded-lg bg-background-1 px-3 py-2.5">
+          <div className="text-[10px] font-medium text-foreground-passive">
+            {t('workspaceRuntime.prompt.enterpriseManagedPaths')}
+          </div>
+          <div className="mt-1 grid gap-0.5 font-mono text-[10px] leading-4 text-foreground-muted">
+            <code className="break-all">/Library/Application Support/ClaudeCode/CLAUDE.md</code>
+            <code className="break-all">/etc/claude-code/CLAUDE.md</code>
+          </div>
+        </div>
+      ) : null}
+      <p className="flex items-start gap-1.5 px-1 text-[11px] leading-4 text-foreground-passive">
+        <LockKeyhole className="mt-0.5 size-3.5 shrink-0" />
+        <span>{t('workspaceRuntime.prompt.enterpriseReadOnly')}</span>
+      </p>
+    </div>
   );
 }
