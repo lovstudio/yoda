@@ -1,4 +1,4 @@
-import { Check, Copy, Loader2, RotateCcw } from 'lucide-react';
+import { AlertCircle, Check, Copy, Loader2, RotateCcw } from 'lucide-react';
 import { Button } from '@renderer/lib/ui/button';
 
 export type ConversationSessionPendingError = {
@@ -30,7 +30,11 @@ export function ConversationSessionPendingState({
     >
       <div className="flex max-w-sm flex-col items-center text-center">
         <span className="flex size-9 items-center justify-center rounded-full bg-background-2">
-          <Loader2 className="size-4 animate-spin text-primary" aria-hidden />
+          {error ? (
+            <AlertCircle className="size-4 text-status-cancelled" aria-hidden />
+          ) : (
+            <Loader2 className="size-4 animate-spin text-primary" aria-hidden />
+          )}
         </span>
         <div className="mt-3 text-sm font-medium text-foreground">{heading}</div>
         <div className="mt-1 text-xs leading-relaxed text-foreground-passive">{description}</div>
