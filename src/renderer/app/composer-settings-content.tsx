@@ -1,25 +1,11 @@
-import { ArrowUpRight, Bot, Folder, LibraryBig, Plus, SlidersHorizontal } from 'lucide-react';
+import { Bot, SlidersHorizontal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ProjectPromptPrinciples, TaskOutputLanguage } from '@shared/project-settings';
-import { isPromptAvailableForTarget } from '@shared/prompt-library';
+import type { TaskOutputLanguage } from '@shared/project-settings';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
-import {
-  effectiveGlobalEnabled,
-  setGlobalOverride,
-  setProjectItems,
-} from '@renderer/features/projects/project-prompt-principles';
-import {
-  getProjectSettingsStore,
-  getProjectStore,
-} from '@renderer/features/projects/stores/project-selectors';
-import { PromptInjectionControls } from '@renderer/features/prompt-library/prompt-injection-controls';
-import { usePrompts, useUpdatePrompt } from '@renderer/features/prompt-library/use-prompts';
 import { AutoTrustWorktreesControl } from '@renderer/features/tasks/components/auto-trust-worktrees-control';
 import { PermissionModeSelect } from '@renderer/features/tasks/components/permission-mode-select';
-import { appState } from '@renderer/lib/stores/app-state';
-import { Button } from '@renderer/lib/ui/button';
 import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
 import {
   Select,
@@ -29,7 +15,6 @@ import {
   SelectValue,
 } from '@renderer/lib/ui/select';
 import { Switch } from '@renderer/lib/ui/switch';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 
 const TASK_OUTPUT_ENABLED_LANGUAGE_OPTIONS: TaskOutputLanguage[] = ['app', 'prompt', 'zh-CN', 'en'];
@@ -40,7 +25,6 @@ export const DEFAULT_INPUT_PROMPT_LANGUAGE: TaskOutputLanguage = 'skip';
 
 export interface ComposerSettingsContentProps {
   runtimeId: RuntimeId | null;
-  projectId?: string;
   attachImagesAsPaths: boolean;
   inputPromptLanguage: TaskOutputLanguage;
   namingLanguage: TaskOutputLanguage;
@@ -49,8 +33,6 @@ export interface ComposerSettingsContentProps {
   onInputPromptLanguageChange: (value: TaskOutputLanguage) => void;
   onNamingLanguageChange: (value: TaskOutputLanguage) => void;
   onSummaryLanguageChange: (value: TaskOutputLanguage) => void;
-  onCreatePrompt?: () => void;
-  onManagePrompts?: () => void;
   footer?: ReactNode;
 }
 
@@ -61,7 +43,6 @@ export interface ComposerSettingsContentProps {
  */
 export const ComposerSettingsContent = observer(function ComposerSettingsContent({
   runtimeId,
-  projectId,
   attachImagesAsPaths,
   inputPromptLanguage,
   namingLanguage,
@@ -70,56 +51,10 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
   onInputPromptLanguageChange,
   onNamingLanguageChange,
   onSummaryLanguageChange,
-  onCreatePrompt,
-  onManagePrompts,
   footer,
 }: ComposerSettingsContentProps) {
   const { t } = useTranslation();
-  const { data: promptLibraryItems } = usePrompts();
-  const updateLibraryPrompt = useUpdatePrompt();
-  const projectStore = projectId ? getProjectStore(projectId) : undefined;
-  const promptPrinciples = (promptLibraryItems ?? [])
-    .filter((prompt) =>
-      isPromptAvailableForTarget(prompt, {
-        projectId,
-        workspaceId: projectStore?.data?.workspaceId,
-      })
-    )
-    .slice()
-    .sort((left, right) => left.injectionOrder - right.injectionOrder);
-  const projectSettingsStore = projectId ? getProjectSettingsStore(projectId) : undefined;
-  const projectSettings = projectSettingsStore?.settings ?? null;
-  const projectPromptPrinciples = projectSettings?.promptPrinciples;
-  const projectPrincipleItems = projectPromptPrinciples?.items ?? [];
   const runtime = runtimeId ? getRuntime(runtimeId) : undefined;
-  const supportsPromptConfiguration = Boolean(
-    runtime?.appendSystemPromptFlag ||
-      runtime?.appendSystemPromptConfigKey ||
-      runtime?.cli === 'claude' ||
-      runtime?.cli === 'codex'
-  );
-  const enabledPromptCount =
-    promptPrinciples.filter((prompt) =>
-      projectId ? effectiveGlobalEnabled(projectPromptPrinciples, prompt) : prompt.injectionEnabled
-    ).length + projectPrincipleItems.filter((principle) => principle.enabled).length;
-  const saveProjectPromptPrinciples = (next: ProjectPromptPrinciples | undefined) => {
-    if (!projectSettingsStore || !projectSettings) return;
-    void projectSettingsStore.save({ ...projectSettings, promptPrinciples: next });
-  };
-  const managePrompts = () => {
-    if (onManagePrompts) {
-      onManagePrompts();
-      return;
-    }
-    appState.navigation.navigate('library', { section: 'prompts' });
-  };
-  const createPrompt = () => {
-    if (onCreatePrompt) {
-      onCreatePrompt();
-      return;
-    }
-    appState.navigation.navigate('library', { section: 'prompts', createPrompt: true });
-  };
 
   return (
     <div className="grid gap-3">
@@ -183,108 +118,6 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
           ) : null}
         </ComposerSettingsSection>
       ) : null}
-      {runtimeId && supportsPromptConfiguration ? (
-        <ComposerSettingsSection
-          icon={<LibraryBig className="size-3.5" />}
-          label={t('home.promptConfigurationLabel')}
-          meta={
-            <span
-              role="status"
-              aria-label={t('home.enabledPromptCount', { count: enabledPromptCount })}
-              className="shrink-0 text-[10px] tabular-nums text-foreground-passive"
-            >
-              ({enabledPromptCount})
-            </span>
-          }
-          action={
-            <TooltipProvider delay={150}>
-              <div className="-mr-1 flex items-center gap-0.5">
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={t('promptLibrary.new')}
-                        onClick={createPrompt}
-                      >
-                        <Plus className="size-3" />
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>{t('promptLibrary.new')}</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={t('home.openPromptLibrary')}
-                        onClick={managePrompts}
-                      >
-                        <ArrowUpRight className="size-3" />
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>{t('home.openPromptLibrary')}</TooltipContent>
-                </Tooltip>
-              </div>
-            </TooltipProvider>
-          }
-        >
-          {promptPrinciples.length > 0 || (projectId && projectPrincipleItems.length > 0) ? (
-            <div data-slot="compact-prompt-list" className="min-w-0">
-              {promptPrinciples.length > 0 ? (
-                <PromptInjectionControls
-                  variant="compact"
-                  prompts={promptPrinciples}
-                  isPromptEnabled={(prompt) =>
-                    projectId
-                      ? effectiveGlobalEnabled(projectPromptPrinciples, prompt)
-                      : prompt.injectionEnabled
-                  }
-                  onPromptEnabledChange={(prompt, checked) => {
-                    if (projectId) {
-                      saveProjectPromptPrinciples(
-                        setGlobalOverride(projectPromptPrinciples, prompt, checked)
-                      );
-                      return;
-                    }
-                    updateLibraryPrompt.mutate({
-                      id: prompt.id,
-                      patch: { injectionEnabled: checked },
-                    });
-                  }}
-                  disabled={updateLibraryPrompt.isPending}
-                />
-              ) : null}
-              {projectId && projectPrincipleItems.length > 0 ? (
-                <CompactProjectPromptControls
-                  items={projectPrincipleItems}
-                  separated={promptPrinciples.length > 0}
-                  onEnabledChange={(id, enabled) =>
-                    saveProjectPromptPrinciples(
-                      setProjectItems(
-                        projectPromptPrinciples,
-                        projectPrincipleItems.map((item) =>
-                          item.id === id ? { ...item, enabled } : item
-                        )
-                      )
-                    )
-                  }
-                />
-              ) : null}
-            </div>
-          ) : (
-            <p className="px-3 py-2.5 text-[11px] text-foreground-passive">
-              {t('settings.prompts.empty')}
-            </p>
-          )}
-        </ComposerSettingsSection>
-      ) : null}
       {footer}
     </div>
   );
@@ -340,59 +173,6 @@ function ComposerSettingRow({
       </div>
       <div className="flex shrink-0 items-center">{control}</div>
     </div>
-  );
-}
-
-function CompactProjectPromptControls({
-  items,
-  separated,
-  onEnabledChange,
-}: {
-  items: NonNullable<ProjectPromptPrinciples['items']>;
-  separated: boolean;
-  onEnabledChange: (id: string, enabled: boolean) => void;
-}) {
-  const { t } = useTranslation();
-  const enabledCount = items.filter((item) => item.enabled).length;
-
-  return (
-    <section
-      data-slot="project-prompt-injection-group"
-      className={cn(separated && 'border-t border-border/50')}
-    >
-      <div className="flex min-w-0 items-center gap-2 border-b border-border/60 bg-background-1 px-3 py-1.5">
-        <Folder className="size-3 shrink-0 text-foreground-muted" />
-        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
-          {t('home.promptPrinciplesProjectHeading')}
-        </span>
-        <span className="text-[11px] tabular-nums text-foreground-passive">
-          {t('home.promptPrinciplesEnabledCount', {
-            enabled: enabledCount,
-            count: items.length,
-          })}
-        </span>
-      </div>
-      <div className="divide-y divide-border/50">
-        {items.map((item) => {
-          const name = item.name || t('home.promptPrincipleUnnamed');
-          return (
-            <div
-              key={item.id}
-              data-slot="project-prompt-injection-row"
-              className="flex min-h-8 items-center justify-between gap-3 px-3 py-1.5"
-            >
-              <span className="min-w-0 truncate text-[11px] text-foreground">{name}</span>
-              <Switch
-                size="sm"
-                checked={item.enabled}
-                onCheckedChange={(enabled) => onEnabledChange(item.id, enabled)}
-                aria-label={t('promptLibrary.injection.toggle', { name })}
-              />
-            </div>
-          );
-        })}
-      </div>
-    </section>
   );
 }
 
