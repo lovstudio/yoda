@@ -91,6 +91,7 @@ import {
   loadCodexRolloutTranscriptTailForConversation,
   type CodexRolloutShareImageGroup,
 } from '@main/core/conversations/codex-rollout-terminal-history';
+import { getActiveRuntimeStatuses } from '@main/core/conversations/getActiveRuntimeStatuses';
 import { getClaudeSessionMetadata } from '@main/core/conversations/getClaudeSessionMetadata';
 import { getCodexSessionContext } from '@main/core/conversations/getCodexSessionContext';
 import { getConversationRuntimeStatuses } from '@main/core/conversations/getConversationRuntimeStatuses';
@@ -111,7 +112,11 @@ import { getUsageOverview } from '@main/core/stats/getUsageOverview';
 import { generateTaskName } from '@main/core/tasks/name-generation/generateTaskName';
 import { archiveTask } from '@main/core/tasks/operations/archiveTask';
 import { createTask } from '@main/core/tasks/operations/createTask';
-import { getTasks } from '@main/core/tasks/operations/getTasks';
+import {
+  getAllActiveTasks,
+  getAllTaskActivityTimestamps,
+  getTasks,
+} from '@main/core/tasks/operations/getTasks';
 import { setTaskFavorite } from '@main/core/tasks/operations/setTaskFavorite';
 import { setTaskLongTerm } from '@main/core/tasks/operations/setTaskLongTerm';
 import { setTaskNeedsReview } from '@main/core/tasks/operations/setTaskNeedsReview';
@@ -119,6 +124,7 @@ import { setTaskPinned } from '@main/core/tasks/operations/setTaskPinned';
 import { taskManager } from '@main/core/tasks/task-manager';
 import { workspaceRegistry } from '@main/core/workspaces/workspace-registry';
 import { log } from '@main/lib/logger';
+import { MobileDashboardSnapshotCache } from './mobile-dashboard-snapshot-cache';
 import {
   MobileInputAttachmentError,
   MobileInputAttachmentStore,
@@ -138,6 +144,10 @@ import {
   MobileSessionInputRequestConflictError,
 } from './mobile-session-input-requests';
 import { mobileSkillSummaries } from './mobile-skills';
+import {
+  resolveMobileTaskActivityStatuses,
+  resolveTaskActivityStatus,
+} from './mobile-task-activity';
 import { mobileGatewayNetworkUrls } from './network-addresses';
 
 const MAX_BODY_BYTES = 128 * 1024;
@@ -812,30 +822,14 @@ function isTaskActivityRunning(status: MobileTaskActivityStatus): boolean {
   return status === 'working' || status === 'awaiting-input' || status === 'bootstrapping';
 }
 
-function resolveTaskActivityStatus(
-  task: Task,
-  runtimeStatuses: AgentSessionRuntimeStatus[],
-  bootstrapStatus = taskManager.getBootstrapStatus(task.id)
-): MobileTaskActivityStatus {
-  if (bootstrapStatus.status === 'bootstrapping') return 'bootstrapping';
-  if (bootstrapStatus.status === 'error') return 'error';
-  if (runtimeStatuses.includes('working')) return 'working';
-  if (runtimeStatuses.includes('awaiting-input')) return 'awaiting-input';
-  if (runtimeStatuses.includes('error')) return 'error';
-  if (task.status === 'review' || task.needsReview) return 'review';
-  if (task.status === 'done') return 'done';
-  if (task.status === 'cancelled') return 'cancelled';
-  if (task.status === 'todo') return 'todo';
-  if (runtimeStatuses.includes('completed')) return 'completed';
-  return 'idle';
-}
-
 export class MobileGatewayService {
   private server: http.Server | null = null;
   private attachmentStore: MobileInputAttachmentStore | null = null;
   private readonly sessionEventStreams = new Set<MobileSessionEventStream>();
   private readonly sessionInputRequests =
     new MobileSessionInputRequestCache<MobileSessionInputResponse>();
+  private readonly dashboardSnapshotCache =
+    new MobileDashboardSnapshotCache<MobileDashboardSnapshot>();
   private readonly sessionEventEpoch = randomUUID();
   private sessionEventSequence = 0;
   private lifecycleGeneration = 0;
@@ -848,6 +842,7 @@ export class MobileGatewayService {
 
   async initialize(): Promise<void> {
     this.lifecycleGeneration += 1;
+    this.dashboardSnapshotCache.clear();
     if (!shouldStartGateway()) return;
 
     this.host = process.env.YODA_MOBILE_GATEWAY_HOST?.trim() || '0.0.0.0';
@@ -901,6 +896,7 @@ export class MobileGatewayService {
 
   dispose(): void {
     this.lifecycleGeneration += 1;
+    this.dashboardSnapshotCache.clear();
     this.disposeMetroProcess();
     for (const stream of [...this.sessionEventStreams]) stream.close();
     this.sessionInputRequests.clear();
@@ -1269,12 +1265,19 @@ export class MobileGatewayService {
   }
 
   private async getSnapshot(): Promise<MobileDashboardSnapshot> {
-    const [projects, tasks] = await Promise.all([getProjects(), getTasks()]);
-    const projectActivityById = getMobileProjectActivityById(projects, tasks);
+    return this.dashboardSnapshotCache.get(() => this.buildSnapshot());
+  }
+
+  private async buildSnapshot(): Promise<MobileDashboardSnapshot> {
+    const [projects, activeTasks, taskActivityTimestamps] = await Promise.all([
+      getProjects(),
+      getAllActiveTasks(),
+      getAllTaskActivityTimestamps(),
+    ]);
+    const projectActivityById = getMobileProjectActivityById(projects, taskActivityTimestamps);
     const mappedProjects = projects.map((project) =>
       this.mapProject(project, projectActivityById.get(project.id) ?? project.updatedAt)
     );
-    const activeTasks = tasks.filter((task) => !task.archivedAt);
     const activityStatuses = await this.getTaskActivityStatuses(activeTasks);
     const mappedTasks = activeTasks.map((task) =>
       this.mapTask(task, activityStatuses.get(task.id) ?? 'idle')
@@ -1510,6 +1513,9 @@ export class MobileGatewayService {
         await setTaskNeedsReview(taskId, action.value);
         break;
     }
+    // Mobile refreshes the dashboard immediately after a mutation. Do not let
+    // the short polling cache overwrite that optimistic state with old data.
+    this.dashboardSnapshotCache.clear();
 
     return {
       ok: true,
@@ -1522,45 +1528,51 @@ export class MobileGatewayService {
   private async getTaskActivityStatuses(
     tasks: Task[]
   ): Promise<Map<string, MobileTaskActivityStatus>> {
-    const entries = await Promise.all(
-      tasks.map(async (task): Promise<[string, MobileTaskActivityStatus]> => {
-        const bootstrapStatus = taskManager.getBootstrapStatus(task.id);
-        const conversationCount = Object.values(task.conversations).reduce(
-          (sum, count) => sum + count,
-          0
-        );
-        if (conversationCount === 0) {
-          return [task.id, resolveTaskActivityStatus(task, [], bootstrapStatus)];
-        }
-
-        const conversations = await getConversationsForTask(task.projectId, task.id).catch(
-          (error: unknown) => {
-            log.warn('MobileGateway: failed to load task conversations for activity status', {
-              taskId: task.id,
-              error: String(error),
-            });
-            return [];
-          }
-        );
-        const runtimeByConversation = await getConversationRuntimeStatuses(
-          task.projectId,
-          task.id,
-          conversations.map((conversation) => conversation.id)
-        ).catch((error: unknown) => {
-          log.warn('MobileGateway: failed to load task runtime status', {
-            taskId: task.id,
-            error: String(error),
-          });
-          return {};
+    return resolveMobileTaskActivityStatuses({
+      tasks,
+      loadBatch: getActiveRuntimeStatuses,
+      getBootstrapStatus: (taskId) => taskManager.getBootstrapStatus(taskId),
+      loadFallback: (task) => this.getTaskActivityStatusFallback(task),
+      onBatchError: (error) => {
+        log.warn('MobileGateway: failed to load active runtime status batch', {
+          error: String(error),
         });
+      },
+    });
+  }
 
-        return [
-          task.id,
-          resolveTaskActivityStatus(task, Object.values(runtimeByConversation), bootstrapStatus),
-        ];
-      })
+  private async getTaskActivityStatusFallback(task: Task): Promise<MobileTaskActivityStatus> {
+    const bootstrapStatus = taskManager.getBootstrapStatus(task.id);
+    const conversationCount = Object.values(task.conversations).reduce(
+      (sum, count) => sum + count,
+      0
     );
-    return new Map(entries);
+    if (conversationCount === 0) {
+      return resolveTaskActivityStatus(task, [], bootstrapStatus);
+    }
+
+    const conversations = await getConversationsForTask(task.projectId, task.id).catch(
+      (error: unknown) => {
+        log.warn('MobileGateway: failed to load task conversations for activity status', {
+          taskId: task.id,
+          error: String(error),
+        });
+        return [];
+      }
+    );
+    const runtimeByConversation = await getConversationRuntimeStatuses(
+      task.projectId,
+      task.id,
+      conversations.map((conversation) => conversation.id)
+    ).catch((error: unknown) => {
+      log.warn('MobileGateway: failed to load task runtime status', {
+        taskId: task.id,
+        error: String(error),
+      });
+      return {};
+    });
+
+    return resolveTaskActivityStatus(task, Object.values(runtimeByConversation), bootstrapStatus);
   }
 
   private async getTaskSessions(
@@ -2214,10 +2226,18 @@ export class MobileGatewayService {
       throw new MobileGatewayError(422, 'create_task_failed', mapCreateTaskError(result.error));
     }
 
+    this.dashboardSnapshotCache.clear();
     this.requireAttachmentStore().release(attachmentIds);
 
     return {
-      task: this.mapTask(result.data.task, resolveTaskActivityStatus(result.data.task, [])),
+      task: this.mapTask(
+        result.data.task,
+        resolveTaskActivityStatus(
+          result.data.task,
+          [],
+          taskManager.getBootstrapStatus(result.data.task.id)
+        )
+      ),
       sessionId: conversationId,
       warning: result.data.warning ? mapCreateTaskWarning(result.data.warning) : undefined,
     };

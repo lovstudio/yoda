@@ -97,7 +97,7 @@ export const SessionPanel = observer(function SessionPanel() {
             title={t('tasks.sessionPanel.basic')}
             open={openSection === 'basic'}
           >
-            {(active) => <SessionInfoPanel active={active} chromeless />}
+            {(active) => <SessionInfoPanel active={panelActive && active} chromeless />}
           </Blind>
         );
       case 'conversation':
@@ -105,6 +105,7 @@ export const SessionPanel = observer(function SessionPanel() {
           <ConversationBlind
             key={unit}
             open={openSection === 'conversation'}
+            active={panelActive && openSection === 'conversation'}
             title={t('tasks.sessionPanel.conversation')}
           />
         );
@@ -113,6 +114,7 @@ export const SessionPanel = observer(function SessionPanel() {
           <TranscriptBlind
             key={unit}
             open={openSection === 'transcript'}
+            active={panelActive && openSection === 'transcript'}
             title={t('tasks.sessionPanel.transcript')}
           />
         );
@@ -145,7 +147,7 @@ export const SessionPanel = observer(function SessionPanel() {
             open={openSection === 'overview'}
             actions={<SessionOverviewAIButton />}
           >
-            {(active) => <SessionOverviewPanel active={active} />}
+            {(active) => <SessionOverviewPanel active={panelActive && active} />}
           </Blind>
         );
     }
@@ -216,18 +218,20 @@ function Blind({
  */
 const ConversationBlind = observer(function ConversationBlind({
   open,
+  active,
   title,
 }: {
   open: boolean;
+  active: boolean;
   title: string;
 }) {
-  // A collapsed blind remains a passive observer of the shared query cache;
-  // another visible prompt surface may keep the count warm, but this one never polls.
-  const prompts = useSessionPrompts(open);
+  // Hidden/collapsed task surfaces remain passive observers of shared state.
+  // Re-entering this open blind immediately refreshes both feeds.
+  const prompts = useSessionPrompts(active);
   const { value: interfaceSettings, update: updateInterfaceSettings } =
     useAppSettingsKey('interface');
   const displayLevel = interfaceSettings?.agentReplyDisplayLevel ?? 'concise';
-  const transcriptFeed = useConversationTranscript(displayLevel === 'verbose');
+  const transcriptFeed = useConversationTranscript(active && displayLevel === 'verbose');
   return (
     <Blind
       id="conversation"
@@ -320,17 +324,19 @@ function agentReplyDisplayLevelDescriptionKey(level: AgentReplyDisplayLevel): st
 
 /**
  * The Transcript blind: a live mirror of the conversation's on-disk transcript
- * (Claude session JSONL / Codex rollout). Subscribes regardless of open state
- * so the header's line count is always live.
+ * (Claude session JSONL / Codex rollout). The last known count stays visible
+ * while collapsed; live file work exists only while this blind is visible.
  */
 const TranscriptBlind = observer(function TranscriptBlind({
   open,
+  active,
   title,
 }: {
   open: boolean;
+  active: boolean;
   title: string;
 }) {
-  const feed = useConversationTranscript(true);
+  const feed = useConversationTranscript(active);
   return (
     <Blind
       id="transcript"

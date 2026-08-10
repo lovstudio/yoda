@@ -1,3 +1,4 @@
+import { observable, type IObservableValue } from 'mobx';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,7 +16,9 @@ interface TestTaskView {
 
 const mocks = vi.hoisted(() => ({
   taskView: null as TestTaskView | null,
+  sidebarCollapsed: null as IObservableValue<boolean> | null,
   setSessionPanelOpenSectionIds: vi.fn<(sectionIds: string[]) => void>(),
+  useConversationTranscript: vi.fn((_active: boolean) => ({})),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -55,7 +58,7 @@ vi.mock('@renderer/features/tasks/transcript-panel', () => ({
   TranscriptContent: () => null,
   TranscriptCount: () => null,
   TranscriptFileActions: () => null,
-  useConversationTranscript: () => ({}),
+  useConversationTranscript: mocks.useConversationTranscript,
 }));
 
 describe('SessionPanel default section', () => {
@@ -67,13 +70,17 @@ describe('SessionPanel default section', () => {
     sidebarPrefs = new TaskSidebarPreferenceStore();
     sidebarPrefs.setSidebarTab('changes');
     sidebarPrefs.sessionPanelUnitOrder = ['basic'];
+    mocks.sidebarCollapsed = observable.box(false);
     mocks.setSessionPanelOpenSectionIds.mockReset();
+    mocks.useConversationTranscript.mockClear();
     mocks.setSessionPanelOpenSectionIds.mockImplementation((sectionIds) =>
       sidebarPrefs.setSessionPanelOpenSectionIds(sectionIds)
     );
     mocks.taskView = {
       sidebarPrefs,
-      isSidebarCollapsed: false,
+      get isSidebarCollapsed() {
+        return mocks.sidebarCollapsed?.get() ?? false;
+      },
       get sessionPanelOpenSectionIds() {
         return [...sidebarPrefs.sessionPanelOpenSectionIds];
       },
@@ -104,5 +111,28 @@ describe('SessionPanel default section', () => {
     expect(basicTrigger?.getAttribute('aria-expanded')).toBe('false');
     expect(mocks.setSessionPanelOpenSectionIds).not.toHaveBeenCalled();
     expect(sidebarPrefs.sessionPanelOpenSectionIds).toEqual([]);
+  });
+
+  it('subscribes to the transcript only while its blind is open and visible', async () => {
+    sidebarPrefs.setSidebarTab('session');
+    sidebarPrefs.sessionPanelUnitOrder = ['transcript'];
+    const { SessionPanel } = await import('@renderer/features/tasks/view/session-panel');
+    await act(async () => root.render(<SessionPanel />));
+
+    expect(mocks.useConversationTranscript).toHaveBeenLastCalledWith(false);
+    const transcriptTrigger = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('tasks.sessionPanel.transcript')
+    );
+    await act(async () => transcriptTrigger?.click());
+    expect(mocks.useConversationTranscript).toHaveBeenLastCalledWith(true);
+
+    await act(async () => sidebarPrefs.setSidebarTab('changes'));
+    expect(mocks.useConversationTranscript).toHaveBeenLastCalledWith(false);
+
+    await act(async () => sidebarPrefs.setSidebarTab('session'));
+    expect(mocks.useConversationTranscript).toHaveBeenLastCalledWith(true);
+
+    await act(async () => mocks.sidebarCollapsed?.set(true));
+    expect(mocks.useConversationTranscript).toHaveBeenLastCalledWith(false);
   });
 });

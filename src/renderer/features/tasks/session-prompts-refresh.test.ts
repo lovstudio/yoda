@@ -63,7 +63,7 @@ describe('session conversation polling', () => {
     queryClient.clear();
   });
 
-  it('uses the same cache key while making a collapsed consumer passive', () => {
+  it('uses the same cache key while making a collapsed or hidden consumer passive', () => {
     const active = sessionConversationQueryOptions({
       active: true,
       conversation: codexConversation,
@@ -95,7 +95,8 @@ describe('session conversation polling', () => {
       new URL('./view/session-panel.tsx', import.meta.url),
       'utf8'
     );
-    expect(sessionPanelSource).toContain('const prompts = useSessionPrompts(open);');
+    expect(sessionPanelSource).toContain("active={panelActive && openSection === 'conversation'}");
+    expect(sessionPanelSource).toContain('const prompts = useSessionPrompts(active);');
     expect(sessionPanelSource).not.toContain('const prompts = useSessionPrompts(true);');
   });
 

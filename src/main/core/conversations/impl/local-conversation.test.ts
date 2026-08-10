@@ -372,6 +372,8 @@ describe('LocalConversationProvider', () => {
 
   afterEach(() => {
     ptySessionRegistry.unregister(sessionId);
+    ptySessionRegistry.unsubscribe(sessionId, 'final-output-consumer');
+    ptySessionRegistry.unsubscribe(sessionId, 'immediate-output-consumer');
     vi.useRealTimers();
   });
 
@@ -506,6 +508,8 @@ describe('LocalConversationProvider', () => {
   it('lets the registry flush final output and emit exit after provider cleanup', async () => {
     const provider = createProvider();
     await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+    const consumerId = 'final-output-consumer';
+    ptySessionRegistry.subscribe(sessionId, consumerId);
 
     spawned[0].pty.emitData('final output');
     spawned[0].pty.emitExit({ exitCode: 7 });
@@ -526,6 +530,7 @@ describe('LocalConversationProvider', () => {
       eventNames.indexOf(agentSessionExitedChannel)
     );
     expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
   });
 
   it('registers the PTY before immediate post-spawn output and exit can run', async () => {
@@ -539,6 +544,8 @@ describe('LocalConversationProvider', () => {
       return pty;
     });
     const provider = createProvider();
+    const consumerId = 'immediate-output-consumer';
+    ptySessionRegistry.subscribe(sessionId, consumerId);
 
     await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
 
@@ -553,6 +560,7 @@ describe('LocalConversationProvider', () => {
       sessionId
     );
     expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
   });
 
   it('uses provider resume arguments when explicitly resumed after exit', async () => {

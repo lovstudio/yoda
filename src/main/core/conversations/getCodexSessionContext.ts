@@ -161,6 +161,28 @@ export async function getCodexSessionContext(
   };
 }
 
+/** Resolve the active rollout without parsing transcript or harness content. */
+export async function getCodexSessionRolloutPath(
+  cwd: string,
+  conversationId: string,
+  conversationTitle?: string,
+  conversationCreatedAt?: string | null,
+  options: {
+    codexHome?: string;
+    reservedThreadIds?: ReadonlySet<string>;
+    conversationLastInteractedAt?: string | null;
+  } = {}
+): Promise<string | null> {
+  const resolved = await resolveCurrentCodexThread(
+    cwd,
+    conversationId,
+    conversationTitle,
+    conversationCreatedAt,
+    options
+  );
+  return resolved?.thread.rolloutPath ?? null;
+}
+
 /** Prompt-only rollout reader for progressive project-history surfaces. */
 export async function getCodexSessionPrompts(
   cwd: string,
