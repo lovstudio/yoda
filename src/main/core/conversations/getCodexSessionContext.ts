@@ -946,7 +946,7 @@ function parseCodexRolloutLines(
         continue;
       }
       if (payload.type === 'turn_aborted') {
-        const abortedTurnId = nullableString(payload.turn_id) ?? currentTurnId;
+        const abortedTurnId: string | null = nullableString(payload.turn_id) ?? currentTurnId;
         if (abortedTurnId === currentTurnId) currentTurnId = null;
         continue;
       }

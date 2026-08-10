@@ -140,6 +140,53 @@ describe('ptyController.subscribe history handoff', () => {
     mockConversationLookup();
   });
 
+  it('replays the current Codex rollout over a live interrupted terminal snapshot', async () => {
+    const sessionId = 'project-interrupted:task-interrupted:conversation-interrupted';
+    const consumerId = 'consumer-interrupted';
+    mocks.loadHistory.mockResolvedValue('current rollout with prompt 7 and prompt 8');
+
+    const pty = new FakePty();
+    ptySessionRegistry.register(sessionId, pty);
+    pty.emitData(
+      'Conversation interrupted - tell the model what to do differently.\n' +
+        'MCP startup interrupted.\n'
+    );
+
+    await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
+      success: true,
+      data: {
+        buffer: 'current rollout with prompt 7 and prompt 8',
+        generation: 1,
+        sequence: 0,
+      },
+    });
+    expect(mocks.loadHistory).toHaveBeenCalledOnce();
+
+    ptySessionRegistry.unregister(sessionId);
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
+  });
+
+  it('keeps a normal live Codex terminal snapshot as the source of truth', async () => {
+    const sessionId = 'project-live-normal:task-live-normal:conversation-live-normal';
+    const consumerId = 'consumer-live-normal';
+    const pty = new FakePty();
+    ptySessionRegistry.register(sessionId, pty);
+    pty.emitData('Codex is ready for the next prompt.\n');
+
+    await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
+      success: true,
+      data: {
+        buffer: 'Codex is ready for the next prompt.\n',
+        generation: 1,
+        sequence: 0,
+      },
+    });
+    expect(mocks.loadHistory).not.toHaveBeenCalled();
+
+    ptySessionRegistry.unregister(sessionId);
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
+  });
+
   it('returns the new live snapshot when a PTY registers during history loading', async () => {
     const sessionId = 'project-live:task-live:conversation-live';
     const consumerId = 'consumer-live';
