@@ -485,13 +485,19 @@ export function useSessionPrompts(active: boolean): {
     displayLevel: Exclude<AgentReplyDisplayLevel, 'verbose'> = 'hidden'
   ) => {
     if (!conversation) return;
-    showSessionPrompts({
-      prompts: conversationData?.prompts ?? [],
-      messages: conversationData?.messages ?? [],
-      displayLevel,
-      sessionTitle: conversation.title,
-      onRestorePrompt: requestRestorePrompt,
-    });
+    const show = (data: SessionConversationData | undefined) => {
+      showSessionPrompts({
+        prompts: data?.prompts ?? [],
+        messages: data?.messages ?? [],
+        displayLevel,
+        sessionTitle: conversation.title,
+        onRestorePrompt: requestRestorePrompt,
+      });
+    };
+    void conversationQuery.refetch().then(
+      (result) => show(result.data ?? conversationData),
+      () => show(conversationData)
+    );
   };
 
   return {

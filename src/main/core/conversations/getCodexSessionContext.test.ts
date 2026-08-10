@@ -452,6 +452,57 @@ describe('getCodexSessionContext', () => {
     ]);
   });
 
+  it('keeps response-item prompts after event prompts in a mixed rollout', async () => {
+    const rows: Record<string, unknown>[] = [
+      codexRow('session_meta', { id: 'conversation-1', cwd }),
+    ];
+    for (let index = 1; index <= 6; index += 1) {
+      const turnId = `turn-${index}`;
+      rows.push(
+        codexEvent('task_started', { turn_id: turnId }),
+        codexEvent('user_message', { message: `Prompt ${index}`, turn_id: turnId }),
+        codexEvent('task_complete', { turn_id: turnId })
+      );
+    }
+    rows.push(
+      codexResponse('user', 'Prompt 7', 'turn-7'),
+      codexResponse('user', 'Prompt 8', 'turn-8'),
+      codexEvent('turn_aborted', { turn_id: 'turn-8', reason: 'interrupted' })
+    );
+    writeFileSync(rolloutPath, rows.map((row) => JSON.stringify(row)).join('\n'));
+    insertThread(statePath, rolloutPath, {
+      id: 'conversation-1',
+      cwd,
+      title: 'Thread title',
+      firstUserMessage: 'Prompt 1',
+    });
+
+    const context = await getConfiguredCodexSessionContext(cwd, 'conversation-1');
+
+    expect(context?.prompts.map((prompt) => [prompt.text, prompt.restoreTarget])).toEqual([
+      ['Prompt 1', { kind: 'codex-turn', turnId: 'turn-1' }],
+      ['Prompt 2', { kind: 'codex-turn', turnId: 'turn-2' }],
+      ['Prompt 3', { kind: 'codex-turn', turnId: 'turn-3' }],
+      ['Prompt 4', { kind: 'codex-turn', turnId: 'turn-4' }],
+      ['Prompt 5', { kind: 'codex-turn', turnId: 'turn-5' }],
+      ['Prompt 6', { kind: 'codex-turn', turnId: 'turn-6' }],
+      ['Prompt 7', undefined],
+      ['Prompt 8', undefined],
+    ]);
+    expect(
+      context?.messages.filter((message) => message.role === 'user').map((message) => message.text)
+    ).toEqual([
+      'Prompt 1',
+      'Prompt 2',
+      'Prompt 3',
+      'Prompt 4',
+      'Prompt 5',
+      'Prompt 6',
+      'Prompt 7',
+      'Prompt 8',
+    ]);
+  });
+
   it('excludes Codex harness injections from response-item prompt history', async () => {
     writeFileSync(
       rolloutPath,
@@ -607,6 +658,9 @@ describe('getCodexSessionContext', () => {
       ['Initial active request', undefined],
       ['Steer active request', { kind: 'codex-turn', turnId: 'turn-active' }],
     ]);
+    expect(
+      context?.messages.filter((message) => message.role === 'user').map((message) => message.text)
+    ).toEqual(['Initial active request', 'Steer active request']);
   });
 
   it('removes rolled-back Codex turns from the visible current branch', async () => {
