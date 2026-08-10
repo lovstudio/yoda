@@ -1,15 +1,4 @@
-import {
-  ArrowUpRight,
-  Building2,
-  ChevronRight,
-  FolderCog,
-  LockKeyhole,
-  Plus,
-  Sparkles,
-  Trash2,
-  UserRound,
-  type LucideIcon,
-} from 'lucide-react';
+import { ArrowUpRight, ChevronRight, LockKeyhole, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -102,19 +91,14 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
           sideOffset={8}
           className="flex h-[min(54vh,26rem)] max-h-[calc(100vh-1rem)] min-h-0 w-[min(22rem,calc(100vw-1rem))] flex-col gap-0 overflow-hidden border border-border bg-background p-0 text-foreground shadow-lg"
         >
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border p-3">
-            <div className="flex min-w-0 items-start gap-2.5">
-              <Sparkles className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
-              <div className="min-w-0">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <div className="text-sm font-medium">{t('workspaceRuntime.prompt.title')}</div>
-                  <Badge variant="outline" className="shrink-0 text-[10px]">
-                    {runtimeName}
-                  </Badge>
-                </div>
-                <div className="mt-0.5 truncate text-xs text-foreground-passive">
-                  {t('workspaceRuntime.prompt.description', { name: runtimeName })}
-                </div>
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-2.5">
+            <div className="flex min-w-0 items-center gap-2">
+              <Sparkles className="size-4 shrink-0 text-foreground-muted" />
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <div className="text-sm font-medium">{t('workspaceRuntime.prompt.title')}</div>
+                <Badge variant="outline" className="shrink-0 text-[10px]">
+                  {runtimeName}
+                </Badge>
               </div>
             </div>
             <Button
@@ -148,31 +132,16 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
 
             <TabsPanel
               value="user"
-              className="h-full min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 pt-3"
+              className="h-full min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 pt-2"
             >
-              <PromptScopeSummary
-                icon={UserRound}
-                title={t('workspaceRuntime.prompt.userTab')}
-                description={t('workspaceRuntime.prompt.userScopeDescription')}
-              />
               <PromptInstructionScopeSection runtimeId={runtimeId} scope="user" />
               <PromptInjectionScopeSection runtimeId={runtimeId} scope="user" />
             </TabsPanel>
 
             <TabsPanel
               value="project"
-              className="h-full min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 pt-3"
+              className="h-full min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 pt-2"
             >
-              <PromptScopeSummary
-                icon={FolderCog}
-                title={t('workspaceRuntime.prompt.projectTab')}
-                description={t('workspaceRuntime.prompt.projectScopeDescription')}
-                meta={
-                  projectId
-                    ? t('workspaceRuntime.prompt.currentProject')
-                    : t('workspaceRuntime.prompt.projectNotSelected')
-                }
-              />
               <PromptInstructionScopeSection
                 runtimeId={runtimeId}
                 scope="project"
@@ -187,14 +156,8 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
 
             <TabsPanel
               value="enterprise"
-              className="h-full min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 pt-3"
+              className="h-full min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 pt-2"
             >
-              <PromptScopeSummary
-                icon={Building2}
-                title={t('workspaceRuntime.prompt.enterpriseTitle')}
-                description={t('workspaceRuntime.prompt.enterpriseDescription')}
-                meta={t('workspaceRuntime.prompt.enterpriseManaged')}
-              />
               <EnterprisePromptSection runtimeId={runtimeId} />
             </TabsPanel>
           </Tabs>
@@ -203,35 +166,6 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
     </>
   );
 });
-
-function PromptScopeSummary({
-  icon: Icon,
-  title,
-  description,
-  meta,
-}: {
-  icon: LucideIcon;
-  title: string;
-  description: string;
-  meta?: string;
-}) {
-  return (
-    <div className="flex items-start gap-2.5 border-b border-border/60 pb-3">
-      <Icon className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <h2 className="text-sm font-medium text-foreground">{title}</h2>
-          {meta ? (
-            <span className="rounded bg-background-1 px-1.5 py-0.5 text-[10px] text-foreground-passive">
-              {meta}
-            </span>
-          ) : null}
-        </div>
-        <p className="mt-0.5 text-xs leading-5 text-foreground-muted">{description}</p>
-      </div>
-    </div>
-  );
-}
 
 function PromptInstructionScopeSection({
   runtimeId,
@@ -243,19 +177,11 @@ function PromptInstructionScopeSection({
   projectId?: string;
 }) {
   const { t } = useTranslation();
-  const runtimeName = getRuntime(runtimeId)?.name ?? runtimeId;
-  const title =
-    scope === 'user'
-      ? t('promptLibrary.system.title')
-      : t('promptLibrary.project.instructionFiles', { runtime: runtimeName });
 
   return (
-    <section data-slot={`workspace-prompt-${scope}-files`} className="mt-3">
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <h3 className="text-[11px] font-medium text-foreground">{title}</h3>
-      </div>
+    <section data-slot={`workspace-prompt-${scope}-files`} className="mt-1">
       {scope === 'project' && !projectId ? (
-        <p className="rounded-lg border border-dashed border-border px-3 py-2.5 text-xs text-foreground-muted">
+        <p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-foreground-muted">
           {t('workspaceRuntime.prompt.projectRequired')}
         </p>
       ) : (
@@ -399,14 +325,6 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
     saveProjectItems(projectItems.filter((item) => item.id !== id));
   };
 
-  const title =
-    scope === 'project'
-      ? t('workspaceRuntime.prompt.projectInjectionTitle')
-      : t('workspaceRuntime.prompt.userInjectionTitle');
-  const description =
-    scope === 'project'
-      ? t('workspaceRuntime.prompt.projectInjectionDescription')
-      : t('workspaceRuntime.prompt.userInjectionDescription');
   const supportsInjection = runtimeSupportsPromptInjection(runtimeId);
   const projectReady = scope !== 'project' || Boolean(projectId && projectSettings);
   const mutationPending = updatePrompt.isPending || createPrompt.isPending;
@@ -416,11 +334,8 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
       data-slot={`workspace-prompt-${scope}-injection`}
       className="mt-3 overflow-hidden rounded-lg border border-border bg-background-secondary"
     >
-      <div className="flex items-start justify-between gap-3 px-3 py-2.5">
-        <div className="min-w-0">
-          <h3 className="text-xs font-medium text-foreground">{title}</h3>
-          <p className="mt-0.5 text-[11px] leading-4 text-foreground-muted">{description}</p>
-        </div>
+      <div className="flex items-center justify-between gap-3 px-3 py-2">
+        <h3 className="text-xs font-medium text-foreground">{t('promptLibrary.tabs.dynamic')}</h3>
         {supportsInjection && projectReady ? (
           <span className="shrink-0 rounded bg-background-1 px-1.5 py-0.5 text-[10px] tabular-nums text-foreground-passive">
             {t('workspaceRuntime.prompt.enabledCount', {
@@ -433,9 +348,7 @@ const PromptInjectionScopeSection = observer(function PromptInjectionScopeSectio
 
       {!supportsInjection ? (
         <p className="border-t border-border/60 px-3 py-3 text-xs leading-5 text-foreground-muted">
-          {t('workspaceRuntime.prompt.injectionUnsupported', {
-            name: getRuntime(runtimeId)?.name ?? runtimeId,
-          })}
+          {t('workspaceRuntime.prompt.injectionUnsupported')}
         </p>
       ) : scope === 'project' && !projectId ? (
         <p className="border-t border-border/60 px-3 py-3 text-xs leading-5 text-foreground-muted">
@@ -542,11 +455,7 @@ function DynamicPromptAddForm({
           <Textarea
             value={content}
             onChange={(event) => setContent(event.target.value)}
-            placeholder={
-              scope === 'project'
-                ? t('promptLibrary.project.contentPlaceholder')
-                : t('promptLibrary.form.contentPlaceholder')
-            }
+            placeholder={t('workspaceRuntime.prompt.dynamicContentPlaceholder')}
             className="min-h-14 resize-y px-2 py-1.5 text-[11px] leading-4"
           />
           <div className="flex justify-end gap-1.5">
@@ -674,21 +583,12 @@ function EnterprisePromptSection({ runtimeId }: { runtimeId: RuntimeId }) {
   const isClaude = runtime?.cli === 'claude';
 
   return (
-    <div data-slot="workspace-prompt-enterprise" className="mt-3 grid gap-3">
-      <div className="flex items-start gap-2.5 rounded-lg border border-border bg-background-secondary p-3">
-        <LockKeyhole className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
-        <div className="min-w-0 text-xs leading-5">
-          <p className="font-medium text-foreground">
-            {t('workspaceRuntime.prompt.enterpriseManaged')}
-          </p>
-          <p className="mt-0.5 text-foreground-muted">
-            {isClaude
-              ? t('workspaceRuntime.prompt.enterpriseClaudeDescription')
-              : t('workspaceRuntime.prompt.enterpriseGenericDescription', {
-                  name: runtime?.name ?? runtimeId,
-                })}
-          </p>
-        </div>
+    <div data-slot="workspace-prompt-enterprise" className="mt-1 grid gap-2">
+      <div className="flex items-center gap-2 rounded-lg border border-border bg-background-secondary px-3 py-2">
+        <LockKeyhole className="size-4 shrink-0 text-foreground-muted" />
+        <Badge variant="outline" className="text-[10px]">
+          {t('workspaceRuntime.prompt.enterpriseManaged')}
+        </Badge>
       </div>
       {isClaude ? (
         <div className="rounded-lg bg-background-1 px-3 py-2.5">
@@ -701,10 +601,6 @@ function EnterprisePromptSection({ runtimeId }: { runtimeId: RuntimeId }) {
           </div>
         </div>
       ) : null}
-      <p className="flex items-start gap-1.5 px-1 text-[11px] leading-4 text-foreground-passive">
-        <LockKeyhole className="mt-0.5 size-3.5 shrink-0" />
-        <span>{t('workspaceRuntime.prompt.enterpriseReadOnly')}</span>
-      </p>
     </div>
   );
 }
