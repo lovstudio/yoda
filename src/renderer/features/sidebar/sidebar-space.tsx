@@ -5,16 +5,13 @@ import { useWorkspaceLayoutContext } from '@renderer/lib/layout/layout-provider'
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { ProjectsSettingsMenu } from './projects-group-label';
-import { SidebarProductMenu } from './sidebar-product-menu';
 
 export function SidebarSpace() {
   const { t } = useTranslation();
   const { isLeftOpen, setCollapsed } = useWorkspaceLayoutContext();
   return (
     <div className="[-webkit-app-region:drag] flex h-10 w-full items-center gap-1 px-2">
-      <div className="min-w-0 flex-1 pl-14">
-        <SidebarProductMenu />
-      </div>
+      <div className="min-w-0 flex-1" aria-hidden="true" />
       <NavButtons>
         <ProjectsSettingsMenu renderTrigger={(props) => <NavIconButton {...props} />} />
         <Tooltip>
