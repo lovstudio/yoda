@@ -9,6 +9,7 @@ import type { Prompt } from '@shared/prompt-library';
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   updatePrompt: vi.fn(),
+  updatePromptAsync: vi.fn(async () => undefined),
   prompts: [
     {
       id: 'global-enabled',
@@ -47,6 +48,12 @@ const mocks = vi.hoisted(() => ({
             text: 'Project prompt content',
             enabled: true,
           },
+          {
+            id: 'project-disabled',
+            name: 'Hidden project prompt',
+            text: 'Hidden project prompt content',
+            enabled: false,
+          },
         ],
       },
     },
@@ -64,6 +71,7 @@ vi.mock('react-i18next', async (importOriginal) => ({
       if (key === 'home.enabledPromptCount') return `${values?.count ?? 0} enabled`;
       if (key === 'home.openPromptLibrary') return 'Manage prompts in Library';
       if (key === 'promptLibrary.injection.toggle') return `toggle ${values?.name ?? ''}`;
+      if (key === 'promptLibrary.injection.editPrompt') return `edit ${values?.name ?? ''}`;
       return key;
     },
   }),
@@ -71,7 +79,11 @@ vi.mock('react-i18next', async (importOriginal) => ({
 
 vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
   usePrompts: () => ({ data: mocks.prompts }),
-  useUpdatePrompt: () => ({ mutate: mocks.updatePrompt, isPending: false }),
+  useUpdatePrompt: () => ({
+    mutate: mocks.updatePrompt,
+    mutateAsync: mocks.updatePromptAsync,
+    isPending: false,
+  }),
 }));
 
 vi.mock('@renderer/features/projects/stores/project-selectors', () => ({
@@ -161,7 +173,9 @@ describe('ComposerSettingsContent', () => {
     expect(promptHeader?.querySelector('[aria-label="promptLibrary.new"]')).not.toBeNull();
     expect(host.textContent).not.toContain('home.promptConfigurationDescription');
     expect(host.textContent).toContain('Detailed global prompt');
+    expect(host.textContent).not.toContain('Another detailed prompt');
     expect(host.textContent).toContain('Detailed project prompt');
+    expect(host.textContent).not.toContain('Hidden project prompt');
     expect(host.textContent).not.toContain('Prompt content');
     expect(host.textContent).not.toContain('Project prompt content');
     expect(
@@ -170,7 +184,7 @@ describe('ComposerSettingsContent', () => {
     const promptList = host.querySelector<HTMLElement>('[data-slot="compact-prompt-list"]');
     expect(promptList).not.toBeNull();
     expect(promptList?.className).not.toContain('overflow-y-auto');
-    expect(host.querySelectorAll('[data-slot="prompt-injection-row"]')).toHaveLength(2);
+    expect(host.querySelectorAll('[data-slot="prompt-injection-row"]')).toHaveLength(1);
     expect(host.querySelectorAll('[data-slot="project-prompt-injection-row"]')).toHaveLength(1);
     expect(host.querySelector('[data-slot="prompt-group-injection-toggle"]')).toBeNull();
     const globalPromptToggle = host.querySelector<HTMLButtonElement>(
@@ -184,6 +198,32 @@ describe('ComposerSettingsContent', () => {
     );
     await act(async () => projectPromptToggle?.click());
     expect(mocks.settingsStore.save).toHaveBeenCalledTimes(2);
+
+    const globalPromptTrigger = host.querySelector<HTMLButtonElement>(
+      '[aria-label="edit Detailed global prompt"]'
+    );
+    await act(async () => globalPromptTrigger?.click());
+    expect(host.querySelector('[data-slot="prompt-injection-editor"]')).not.toBeNull();
+    expect(
+      host.querySelector<HTMLInputElement>('[data-slot="prompt-injection-editor"] input')?.value
+    ).toBe('Detailed global prompt');
+    expect(
+      host.querySelector<HTMLTextAreaElement>('[data-slot="prompt-injection-editor"] textarea')
+        ?.value
+    ).toBe('Prompt content');
+
+    const savePromptButton = host.querySelector<HTMLButtonElement>(
+      '[data-slot="prompt-injection-save"]'
+    );
+    await act(async () => savePromptButton?.click());
+    expect(mocks.updatePromptAsync).toHaveBeenCalledWith({
+      id: 'global-enabled',
+      patch: {
+        title: 'Detailed global prompt',
+        content: 'Prompt content',
+        versionBump: 'patch',
+      },
+    });
 
     const libraryButton = host.querySelector<HTMLButtonElement>(
       'button[aria-label="Manage prompts in Library"]'

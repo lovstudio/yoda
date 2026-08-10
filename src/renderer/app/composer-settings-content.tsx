@@ -1,6 +1,15 @@
-import { ArrowUpRight, Bot, Folder, LibraryBig, Plus, SlidersHorizontal } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Bot,
+  ChevronRight,
+  Folder,
+  LibraryBig,
+  Loader2,
+  Plus,
+  SlidersHorizontal,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ProjectPromptPrinciples, TaskOutputLanguage } from '@shared/project-settings';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
@@ -16,7 +25,9 @@ import { AutoTrustWorktreesControl } from '@renderer/features/tasks/components/a
 import { PermissionModeSelect } from '@renderer/features/tasks/components/permission-mode-select';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/lib/ui/collapsible';
 import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
+import { Input } from '@renderer/lib/ui/input';
 import {
   Select,
   SelectContent,
@@ -25,6 +36,7 @@ import {
   SelectValue,
 } from '@renderer/lib/ui/select';
 import { Switch } from '@renderer/lib/ui/switch';
+import { Textarea } from '@renderer/lib/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 
@@ -87,10 +99,13 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
       runtime?.cli === 'claude' ||
       runtime?.cli === 'codex'
   );
-  const enabledPromptCount =
-    promptPrinciples.filter((prompt) =>
-      projectId ? effectiveGlobalEnabled(projectPromptPrinciples, prompt) : prompt.injectionEnabled
-    ).length + projectPrincipleItems.filter((principle) => principle.enabled).length;
+  const isLibraryPromptEnabled = (prompt: (typeof promptPrinciples)[number]) =>
+    projectId ? effectiveGlobalEnabled(projectPromptPrinciples, prompt) : prompt.injectionEnabled;
+  const enabledLibraryPromptCount = promptPrinciples.filter(isLibraryPromptEnabled).length;
+  const enabledProjectPromptCount = projectPrincipleItems.filter(
+    (principle) => principle.enabled
+  ).length;
+  const enabledPromptCount = enabledLibraryPromptCount + enabledProjectPromptCount;
   const saveProjectPromptPrinciples = (next: ProjectPromptPrinciples | undefined) => {
     if (!projectSettingsStore || !projectSettings) return;
     void projectSettingsStore.save({ ...projectSettings, promptPrinciples: next });
@@ -225,48 +240,70 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
           }
         >
           {promptPrinciples.length > 0 || (projectId && projectPrincipleItems.length > 0) ? (
-            <div data-slot="compact-prompt-list" className="min-w-0">
-              {promptPrinciples.length > 0 ? (
-                <PromptInjectionControls
-                  variant="compact"
-                  prompts={promptPrinciples}
-                  isPromptEnabled={(prompt) =>
-                    projectId
-                      ? effectiveGlobalEnabled(projectPromptPrinciples, prompt)
-                      : prompt.injectionEnabled
-                  }
-                  onPromptEnabledChange={(prompt, checked) => {
-                    if (projectId) {
-                      saveProjectPromptPrinciples(
-                        setGlobalOverride(projectPromptPrinciples, prompt, checked)
-                      );
-                      return;
+            enabledPromptCount > 0 ? (
+              <div data-slot="compact-prompt-list" className="min-w-0">
+                {promptPrinciples.length > 0 ? (
+                  <PromptInjectionControls
+                    variant="compact"
+                    prompts={promptPrinciples}
+                    isPromptEnabled={isLibraryPromptEnabled}
+                    onPromptEnabledChange={(prompt, checked) => {
+                      if (projectId) {
+                        void saveProjectPromptPrinciples(
+                          setGlobalOverride(projectPromptPrinciples, prompt, checked)
+                        );
+                        return;
+                      }
+                      updateLibraryPrompt.mutate({
+                        id: prompt.id,
+                        patch: { injectionEnabled: checked },
+                      });
+                    }}
+                    onPromptEdit={(prompt, draft) =>
+                      updateLibraryPrompt.mutateAsync({
+                        id: prompt.id,
+                        patch: {
+                          title: draft.title,
+                          content: draft.content,
+                          versionBump: 'patch',
+                        },
+                      })
                     }
-                    updateLibraryPrompt.mutate({
-                      id: prompt.id,
-                      patch: { injectionEnabled: checked },
-                    });
-                  }}
-                  disabled={updateLibraryPrompt.isPending}
-                />
-              ) : null}
-              {projectId && projectPrincipleItems.length > 0 ? (
-                <CompactProjectPromptControls
-                  items={projectPrincipleItems}
-                  separated={promptPrinciples.length > 0}
-                  onEnabledChange={(id, enabled) =>
-                    saveProjectPromptPrinciples(
-                      setProjectItems(
-                        projectPromptPrinciples,
-                        projectPrincipleItems.map((item) =>
-                          item.id === id ? { ...item, enabled } : item
+                    disabled={updateLibraryPrompt.isPending}
+                  />
+                ) : null}
+                {projectId && projectPrincipleItems.length > 0 ? (
+                  <CompactProjectPromptControls
+                    items={projectPrincipleItems}
+                    separated={enabledLibraryPromptCount > 0}
+                    onEnabledChange={(id, enabled) => {
+                      void saveProjectPromptPrinciples(
+                        setProjectItems(
+                          projectPromptPrinciples,
+                          projectPrincipleItems.map((item) =>
+                            item.id === id ? { ...item, enabled } : item
+                          )
+                        )
+                      );
+                    }}
+                    onEdit={(id, patch) =>
+                      saveProjectPromptPrinciples(
+                        setProjectItems(
+                          projectPromptPrinciples,
+                          projectPrincipleItems.map((item) =>
+                            item.id === id ? { ...item, ...patch } : item
+                          )
                         )
                       )
-                    )
-                  }
-                />
-              ) : null}
-            </div>
+                    }
+                  />
+                ) : null}
+              </div>
+            ) : (
+              <p className="px-3 py-2.5 text-[11px] text-foreground-passive">
+                {t('promptLibrary.injection.empty')}
+              </p>
+            )
           ) : (
             <p className="px-3 py-2.5 text-[11px] text-foreground-passive">
               {t('settings.prompts.empty')}
@@ -336,13 +373,50 @@ function CompactProjectPromptControls({
   items,
   separated,
   onEnabledChange,
+  onEdit,
 }: {
   items: NonNullable<ProjectPromptPrinciples['items']>;
   separated: boolean;
   onEnabledChange: (id: string, enabled: boolean) => void;
+  onEdit: (
+    id: string,
+    patch: Pick<NonNullable<ProjectPromptPrinciples['items']>[number], 'name' | 'text'>
+  ) => Promise<unknown> | unknown;
 }) {
   const { t } = useTranslation();
   const enabledCount = items.filter((item) => item.enabled).length;
+  const enabledItems = items.filter((item) => item.enabled);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ name: string; text: string } | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  if (enabledItems.length === 0) return null;
+
+  const handleExpandedChange = (id: string, open: boolean) => {
+    if (!open) {
+      setExpandedId(null);
+      setDraft(null);
+      return;
+    }
+    const item = items.find((entry) => entry.id === id);
+    if (!item) return;
+    setExpandedId(id);
+    setDraft({ name: item.name, text: item.text });
+  };
+
+  const handleSave = async (id: string) => {
+    if (!draft) return;
+    const next = { name: draft.name.trim(), text: draft.text.trim() };
+    if (!next.name || !next.text) return;
+    setSavingId(id);
+    try {
+      await onEdit(id, next);
+      setExpandedId(null);
+      setDraft(null);
+    } finally {
+      setSavingId(null);
+    }
+  };
 
   return (
     <section
@@ -362,22 +436,103 @@ function CompactProjectPromptControls({
         </span>
       </div>
       <div className="divide-y divide-border/50">
-        {items.map((item) => {
+        {enabledItems.map((item) => {
           const name = item.name || t('home.promptPrincipleUnnamed');
+          const isOpen = expandedId === item.id;
+          const isSaving = savingId === item.id;
           return (
-            <div
+            <Collapsible
               key={item.id}
-              data-slot="project-prompt-injection-row"
-              className="flex min-h-8 items-center justify-between gap-3 px-3 py-1.5"
+              open={isOpen}
+              onOpenChange={(open) => handleExpandedChange(item.id, open)}
+              className="transition-colors data-[panel-open]:bg-background-1/40"
             >
-              <span className="min-w-0 truncate text-[11px] text-foreground">{name}</span>
-              <Switch
-                size="sm"
-                checked={item.enabled}
-                onCheckedChange={(enabled) => onEnabledChange(item.id, enabled)}
-                aria-label={t('promptLibrary.injection.toggle', { name })}
-              />
-            </div>
+              <div
+                data-slot="project-prompt-injection-row"
+                className="flex min-h-8 min-w-0 items-center justify-between gap-3"
+              >
+                <CollapsibleTrigger
+                  className="group flex min-w-0 flex-1 items-center gap-2 self-stretch px-3 py-1.5 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
+                  aria-label={t('promptLibrary.injection.editPrompt', { name })}
+                  title={t('promptLibrary.injection.editPrompt', { name })}
+                >
+                  <ChevronRight
+                    className={cn(
+                      'size-3.5 shrink-0 text-foreground-muted transition-transform',
+                      isOpen && 'rotate-90'
+                    )}
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 truncate text-[11px] text-foreground">{name}</span>
+                </CollapsibleTrigger>
+                <Switch
+                  size="sm"
+                  checked={item.enabled}
+                  disabled={isSaving}
+                  onCheckedChange={(enabled) => onEnabledChange(item.id, enabled)}
+                  aria-label={t('promptLibrary.injection.toggle', { name })}
+                />
+              </div>
+              <CollapsibleContent>
+                {draft && isOpen ? (
+                  <div
+                    data-slot="project-prompt-injection-editor"
+                    className="grid gap-2.5 border-t border-border/50 bg-background px-3 py-3 pl-10"
+                  >
+                    <label className="grid gap-1">
+                      <span className="text-[10px] text-foreground-muted">{t('common.name')}</span>
+                      <Input
+                        value={draft.name}
+                        disabled={isSaving}
+                        aria-label={t('common.name')}
+                        onChange={(event) =>
+                          setDraft((current) =>
+                            current ? { ...current, name: event.target.value } : current
+                          )
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-[10px] text-foreground-muted">
+                        {t('promptLibrary.form.content')}
+                      </span>
+                      <Textarea
+                        value={draft.text}
+                        disabled={isSaving}
+                        aria-label={t('promptLibrary.form.content')}
+                        onChange={(event) =>
+                          setDraft((current) =>
+                            current ? { ...current, text: event.target.value } : current
+                          )
+                        }
+                        className="min-h-20 resize-y text-xs"
+                      />
+                    </label>
+                    <div className="flex justify-end gap-1.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        disabled={isSaving}
+                        onClick={() => handleExpandedChange(item.id, false)}
+                      >
+                        {t('common.cancel')}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="xs"
+                        disabled={isSaving || !draft.name.trim() || !draft.text.trim()}
+                        data-slot="project-prompt-injection-save"
+                        onClick={() => void handleSave(item.id)}
+                      >
+                        {isSaving ? <Loader2 className="size-3 animate-spin" /> : null}
+                        {isSaving ? t('common.saving') : t('common.save')}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </CollapsibleContent>
+            </Collapsible>
           );
         })}
       </div>
