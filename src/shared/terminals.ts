@@ -15,6 +15,10 @@ export type CreateTerminalParams = {
   taskId: string;
   name: string;
   initialSize?: { cols: number; rows: number };
+  /** Start a one-shot command process instead of an interactive shell. */
+  command?: string;
+  /** Workspace terminals may opt out of persistence for one-shot commands. */
+  persist?: boolean;
 };
 
 export const GLOBAL_TERMINAL_PROJECT_ID = 'workspace';
