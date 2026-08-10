@@ -96,8 +96,8 @@ export const ConversationSession = observer(function ConversationSession({
   // panes pass isVisible=true even when they are not the routed active task.
   useEffect(() => {
     if (!isVisible || !session) return;
-    void session.connect();
-  }, [isVisible, session]);
+    void session.connect().catch(() => {});
+  }, [isVisible, session, sessionStatus]);
 
   const {
     isSearchOpen,

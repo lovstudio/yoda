@@ -140,6 +140,7 @@ export class PtySession {
         PtySession.hotSessions.map((session) => ({
           sessionId: session.sessionId,
           mounted: session.pty?.mounted ?? false,
+          connecting: session.status === 'connecting',
         })),
         PtySession.hotLimit,
         protectedSessionId
