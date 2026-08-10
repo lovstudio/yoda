@@ -8,3 +8,10 @@ export async function fetchSkillsCatalog(): Promise<CatalogIndex> {
   if (result.success && result.data) return result.data;
   throw new Error(result.error ?? 'Failed to load catalog');
 }
+
+export const skillsCatalogQueryOptions = {
+  queryKey: skillsCatalogQueryKey,
+  queryFn: fetchSkillsCatalog,
+  staleTime: 5 * 60_000,
+  gcTime: 30 * 60_000,
+} as const;

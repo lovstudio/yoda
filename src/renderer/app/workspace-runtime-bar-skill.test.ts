@@ -15,6 +15,8 @@ describe('workspace Skill placement', () => {
     expect(source).toContain('<Popover open={isSkillPopoverOpen}');
     expect(source).toContain('onManageSkills={openSkillsManagement}');
     expect(source).toContain('<Blocks className="size-3.5" />');
+    expect(source).toContain('onPointerEnter={prefetchSkillsCatalog}');
+    expect(source).toContain('void queryClient.prefetchQuery(skillsCatalogQueryOptions);');
     expect(source).toContain("appState.navigation.navigate('skills');");
     expect(source).not.toContain("onClick={() => appState.navigation.navigate('skills')}");
   });

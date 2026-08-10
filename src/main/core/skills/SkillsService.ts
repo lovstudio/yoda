@@ -135,12 +135,18 @@ function httpsGet(url: string, redirectCount = 0): Promise<string> {
 
 export class SkillsService {
   private static readonly CATALOG_VERSION = 4;
-  private static readonly INSTALLED_STATE_CACHE_MS = 2_000;
+  private static readonly INSTALLED_STATE_CACHE_MS = 30_000;
+  private static readonly PLUGIN_SKILL_DIR_CACHE_MS = 60_000;
   private catalogCache: CatalogIndex | null = null;
   private installedStateCache = new Map<
     string,
     { catalog: CatalogIndex; expiresAt: number; value: CatalogIndex }
   >();
+  private pluginSkillDirsCache: {
+    value: ScanDirectory[];
+    expiresAt: number;
+  } | null = null;
+  private pluginSkillDirsPromise: Promise<ScanDirectory[]> | null = null;
 
   async initialize(): Promise<void> {
     await fs.promises.mkdir(SKILLS_ROOT, { recursive: true });
@@ -365,6 +371,27 @@ export class SkillsService {
   }
 
   private async findPluginSkillDirectories(): Promise<ScanDirectory[]> {
+    const now = Date.now();
+    if (this.pluginSkillDirsCache && this.pluginSkillDirsCache.expiresAt > now) {
+      return this.pluginSkillDirsCache.value;
+    }
+    if (this.pluginSkillDirsPromise) return this.pluginSkillDirsPromise;
+
+    const pending = this.scanPluginSkillDirectories();
+    this.pluginSkillDirsPromise = pending;
+    try {
+      const value = await pending;
+      this.pluginSkillDirsCache = {
+        value,
+        expiresAt: Date.now() + SkillsService.PLUGIN_SKILL_DIR_CACHE_MS,
+      };
+      return value;
+    } finally {
+      if (this.pluginSkillDirsPromise === pending) this.pluginSkillDirsPromise = null;
+    }
+  }
+
+  private async scanPluginSkillDirectories(): Promise<ScanDirectory[]> {
     const found = new Set<string>();
     const visit = async (directory: string, depth: number): Promise<void> => {
       if (depth > MAX_PLUGIN_SCAN_DEPTH) return;
@@ -1105,6 +1132,7 @@ export class SkillsService {
   private invalidateCaches(): void {
     this.catalogCache = null;
     this.installedStateCache.clear();
+    this.pluginSkillDirsCache = null;
   }
 
   private async readLocalSkill(
