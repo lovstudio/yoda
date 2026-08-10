@@ -63,7 +63,10 @@ export function WorkspaceLayout({ leftSidebar, mainContent, rightPane }: Workspa
         id="workspace-main"
         data-yoda-surface="workspace-main"
         minSize={MAIN_PANEL_MIN_SIZE}
-        className="relative bg-background text-foreground"
+        // Keep the workspace panel itself from becoming a scroll owner. Route
+        // content owns its scroll regions; otherwise a restored scrollTop can
+        // move a task's titlebar out of the viewport while its body remains.
+        className="relative min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
         data-modal-scope-root
       >
         {mainContent}
