@@ -25,8 +25,9 @@ describe('Workspace runtime bar prompt group', () => {
     expect(promptPopoverSource).toContain('value="user"');
     expect(promptPopoverSource).toContain('value="project"');
     expect(promptPopoverSource).toContain('value="enterprise"');
-    expect(promptPopoverSource).toContain('<UserInstructionSection');
-    expect(promptPopoverSource).toContain('<ProjectPromptSection');
+    expect(promptPopoverSource).toContain('<PromptScopeSummary');
+    expect(promptPopoverSource).toContain('h-[min(80vh,42rem)]');
+    expect(promptPopoverSource).toContain('h-full min-h-0 overflow-y-auto');
     expect(promptPopoverSource).toContain('<PromptInjectionControls');
     expect(promptPopoverSource).toContain('setGlobalOverride');
   });
