@@ -180,7 +180,14 @@ describe('FrontendPty stream ordering', () => {
       })
       .mockResolvedValueOnce({
         success: true,
-        data: { buffer: 'PROMPTS-1-TO-8', generation: 1, sequence: 3 },
+        data: {
+          buffer: 'PROMPTS-1-TO-8',
+          generation: 1,
+          sequence: 3,
+          replayedFromHistory: true,
+          interruptionOutputTail:
+            'Conversation interrupted - tell the model what to do differently.',
+        },
       });
 
     pty = new FrontendPty('late-interruption-session');
@@ -204,12 +211,55 @@ describe('FrontendPty stream ordering', () => {
       const rendered = pty?.terminal.buffer.active.getLine(0)?.translateToString(true);
       expect(rendered).toBe('PROMPTS-1-TO-8');
     });
+    ipcMocks.emitData(output(4, '\x1b[2KSTALE-INTERRUPTION-REPAINT'));
+    await vi.waitFor(() => {
+      expect(pty?.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe(
+        'PROMPTS-1-TO-8'
+      );
+      expect(ipcMocks.acknowledgeOutput).toHaveBeenCalledWith(
+        'late-interruption-session',
+        consumerId,
+        1,
+        4
+      );
+    });
     await vi.waitFor(() => {
       expect(ipcMocks.acknowledgeOutput).toHaveBeenCalledWith(
         'late-interruption-session',
         consumerId,
         1,
         3
+      );
+    });
+  });
+
+  it('holds stale repaint after the first snapshot already contains replayed history', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer: 'PROMPTS-1-TO-8',
+        generation: 1,
+        sequence: 3,
+        replayedFromHistory: true,
+        interruptionOutputTail: 'Conversation interrupted - tell the model what to do differently.',
+      },
+    });
+
+    pty = new FrontendPty('initial-history-session');
+    mountAndOpenFlushGate(pty);
+    await pty.connect();
+
+    ipcMocks.emitData(output(4, '\x1b[2KSTALE-INTERRUPTION-REPAINT'));
+
+    await vi.waitFor(() => {
+      expect(pty?.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe(
+        'PROMPTS-1-TO-8'
+      );
+      expect(ipcMocks.acknowledgeOutput).toHaveBeenCalledWith(
+        'initial-history-session',
+        expect.any(String),
+        1,
+        4
       );
     });
   });

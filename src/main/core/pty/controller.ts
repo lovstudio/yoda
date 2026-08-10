@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import { and, eq } from 'drizzle-orm';
-import { isInterruptedCodexTerminalOutput } from '@shared/codex-terminal-interruption';
+import {
+  CODEX_INTERRUPTION_SCAN_TAIL_CHARS,
+  isInterruptedCodexTerminalOutput,
+} from '@shared/codex-terminal-interruption';
 import { createRPCController } from '@shared/ipc/rpc';
 import { parsePtySessionId } from '@shared/ptySessionId';
 import { err, ok } from '@shared/result';
@@ -76,6 +79,8 @@ export const ptyController = createRPCController({
           buffer: historicalBuffer,
           generation: latestSnapshot.generation,
           sequence: latestSnapshot.sequence,
+          replayedFromHistory: true,
+          interruptionOutputTail: latestSnapshot.buffer.slice(-CODEX_INTERRUPTION_SCAN_TAIL_CHARS),
         });
       }
 
@@ -99,6 +104,8 @@ export const ptyController = createRPCController({
         buffer: historicalBuffer,
         generation: latestSnapshot.generation,
         sequence: latestSnapshot.sequence,
+        replayedFromHistory: true,
+        interruptionOutputTail: latestSnapshot.buffer.slice(-CODEX_INTERRUPTION_SCAN_TAIL_CHARS),
       });
     }
     if (
@@ -113,6 +120,8 @@ export const ptyController = createRPCController({
       buffer: historicalBuffer,
       generation: latestSnapshot.generation,
       sequence: latestSnapshot.sequence,
+      replayedFromHistory: Boolean(historicalBuffer),
+      interruptionOutputTail: undefined,
     });
   },
 

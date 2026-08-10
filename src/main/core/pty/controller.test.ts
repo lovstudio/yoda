@@ -159,6 +159,8 @@ describe('ptyController.subscribe history handoff', () => {
         buffer: 'current rollout with prompt 7 and prompt 8',
         generation: 1,
         sequence: 0,
+        replayedFromHistory: true,
+        interruptionOutputTail: expect.stringContaining('Conversation interrupted'),
       },
     });
     expect(mocks.loadHistory).toHaveBeenCalledOnce();
@@ -192,6 +194,8 @@ describe('ptyController.subscribe history handoff', () => {
         buffer: 'current rollout with all eight prompts',
         generation: 1,
         sequence: 1,
+        replayedFromHistory: true,
+        interruptionOutputTail: expect.stringContaining('Conversation interrupted'),
       },
     });
 
@@ -307,6 +311,8 @@ describe('ptyController.subscribe history handoff', () => {
         buffer: 'current rollout with prompt 7 and prompt 8',
         generation: 1,
         sequence: 1,
+        replayedFromHistory: true,
+        interruptionOutputTail: expect.stringContaining('Conversation interrupted'),
       },
     });
 
