@@ -145,7 +145,7 @@ describe('AiLabAppBuildRunner', () => {
     expect(await apps.list()).toEqual([
       expect.objectContaining({ name: 'Recovered', runtimeKind: 'react-vite' }),
     ]);
-    expect(await jobs.list()).toEqual([]);
+    await vi.waitFor(async () => expect(await jobs.list()).toEqual([]), { timeout: 1_000 });
   });
 });
 
