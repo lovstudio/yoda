@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
 import { makePtySessionId } from '@shared/ptySessionId';
+import {
+  registerConversationHydrationBarrier,
+  wasConversationHydrationCancelled,
+} from '@main/core/conversations/conversation-hydration-barrier';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { Pty, PtyExitInfo } from '@main/core/pty/pty';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
@@ -18,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   getProviderConfig: vi.fn(),
   getRemoteShellProfile: vi.fn(),
   injectTuiStartupInput: vi.fn(),
+  listTmuxSessionMarkersStrict: vi.fn(),
   maybeAutoTrustSsh: vi.fn(),
   maybeAutoTrustCodexSsh: vi.fn(),
   noteOutput: vi.fn(),
@@ -29,6 +34,7 @@ const mocks = vi.hoisted(() => ({
   resolveSshCommand: vi.fn(),
   resolveTerminalThemeMode: vi.fn(),
   setRuntimeStatus: vi.fn(),
+  waitForTmuxReattach: vi.fn(),
   wireAgentClassifier: vi.fn(),
 }));
 
@@ -90,7 +96,13 @@ vi.mock('@main/core/pty/tmux-availability', () => ({
 
 vi.mock('@main/core/pty/tmux-session-name', () => ({
   killTmuxSession: vi.fn(),
+  listTmuxSessionMarkersStrict: mocks.listTmuxSessionMarkersStrict,
   sendLiteralToTmuxSession: vi.fn(),
+}));
+
+vi.mock('@main/core/pty/tmux-reattach', () => ({
+  TmuxReattachMissError: class TmuxReattachMissError extends Error {},
+  waitForTmuxReattach: mocks.waitForTmuxReattach,
 }));
 
 vi.mock('@main/core/settings/resolve-terminal-theme-mode', () => ({
@@ -154,6 +166,7 @@ class FakePty implements Pty {
   readonly writes: string[] = [];
   killCalls = 0;
   writeError: Error | null = null;
+  bufferedExit: PtyExitInfo | null = null;
 
   write(data: string): void {
     this.attemptedWrites.push(data);
@@ -177,6 +190,7 @@ class FakePty implements Pty {
 
   onExit(handler: (info: PtyExitInfo) => void): void {
     this.exitHandlers.push(handler);
+    if (this.bufferedExit) queueMicrotask(() => handler(this.bufferedExit as PtyExitInfo));
   }
 }
 
@@ -234,6 +248,7 @@ describe('SshConversationProvider registration lifecycle', () => {
     mocks.getProviderConfig.mockResolvedValue(undefined);
     mocks.getRemoteShellProfile.mockResolvedValue({});
     mocks.injectTuiStartupInput.mockResolvedValue(true);
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([]);
     mocks.maybeAutoTrustSsh.mockResolvedValue(undefined);
     mocks.maybeAutoTrustCodexSsh.mockResolvedValue(undefined);
     mocks.resolveAvailableTmuxSessionName.mockResolvedValue(undefined);
@@ -241,6 +256,7 @@ describe('SshConversationProvider registration lifecycle', () => {
     mocks.resolveRuntimeTmuxEnv.mockReturnValue(undefined);
     mocks.resolveSshCommand.mockReturnValue('SSH_COMMAND');
     mocks.resolveTerminalThemeMode.mockResolvedValue('dark');
+    mocks.waitForTmuxReattach.mockResolvedValue(undefined);
   });
 
   afterEach(async () => {
@@ -276,6 +292,38 @@ describe('SshConversationProvider registration lifecycle', () => {
     expect(freshPty.writes).toEqual([]);
   });
 
+  it('cancels first-prompt hydration when task teardown detaches a pending SSH start', async () => {
+    const pendingOpen = deferred<{ success: true; data: FakePty }>();
+    mocks.openSsh2Pty.mockReturnValue(pendingOpen.promise);
+    const pty = new FakePty();
+    provider = createProvider();
+
+    const startup = provider.startSession(conversation);
+    const hydration = registerConversationHydrationBarrier(conversation, startup);
+    await vi.waitFor(() => expect(mocks.openSsh2Pty).toHaveBeenCalledOnce());
+
+    await provider.detachAll();
+    pendingOpen.resolve({ success: true, data: pty });
+    await hydration;
+
+    expect(wasConversationHydrationCancelled(hydration)).toBe(true);
+    expect(pty.killCalls).toBe(1);
+    expect(provider.getActiveSessionCount()).toBe(0);
+  });
+
+  it('cancels marker-delayed hydration before the SSH provider starts', async () => {
+    const pendingMarker = deferred<void>();
+    const hydration = registerConversationHydrationBarrier(conversation, pendingMarker.promise);
+    provider = createProvider();
+
+    await provider.detachAll();
+    pendingMarker.resolve(undefined);
+    await hydration;
+
+    expect(wasConversationHydrationCancelled(hydration)).toBe(true);
+    expect(mocks.openSsh2Pty).not.toHaveBeenCalled();
+  });
+
   it('single-flights concurrent starts for the same session', async () => {
     const pendingOpen = deferred<{ success: true; data: FakePty }>();
     mocks.openSsh2Pty.mockReturnValue(pendingOpen.promise);
@@ -293,6 +341,40 @@ describe('SshConversationProvider registration lifecycle', () => {
     expect(provider.getActiveSessionCount()).toBe(1);
     expect(ptySessionRegistry.get(sessionId)).toBe(pty);
     expect(pty.killCalls).toBe(0);
+  });
+
+  it('rejects startup when the SSH channel cannot be opened', async () => {
+    mocks.openSsh2Pty.mockResolvedValue({
+      success: false,
+      error: new Error('channel refused'),
+    });
+    provider = createProvider();
+
+    await expect(provider.startSession(conversation)).rejects.toThrow(
+      'Failed to open SSH channel: channel refused'
+    );
+
+    expect(provider.getActiveSessionCount()).toBe(0);
+    expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
+  });
+
+  it('rejects a channel that closed before startup could acknowledge the first prompt', async () => {
+    const pty = new FakePty();
+    pty.bufferedExit = { exitCode: 0 };
+    mocks.openSsh2Pty.mockResolvedValue({ success: true, data: pty });
+    provider = createProvider();
+
+    await expect(
+      provider.startSession(
+        { ...conversation, runtimeId: 'codex' },
+        undefined,
+        false,
+        'Deliver this once'
+      )
+    ).rejects.toThrow('codex exited during SSH startup');
+
+    expect(provider.getActiveSessionCount()).toBe(0);
+    expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
   });
 
   it('injects runtime startup input after registering the remote PTY', async () => {
@@ -318,6 +400,9 @@ describe('SshConversationProvider registration lifecycle', () => {
     const pty = new FakePty();
     mocks.openSsh2Pty.mockResolvedValue({ success: true, data: pty });
     mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([
+      { sessionName: 'tmux-session', cwd: '/remote/workspace', attachedClients: 0 },
+    ]);
     provider = createProvider();
 
     await provider.startSession(
@@ -340,6 +425,38 @@ describe('SshConversationProvider registration lifecycle', () => {
       expect.anything(),
       expect.anything()
     );
+    expect(mocks.waitForTmuxReattach).toHaveBeenCalledWith({
+      ctx: expect.anything(),
+      pty,
+      baseline: { sessionName: 'tmux-session', cwd: '/remote/workspace', attachedClients: 0 },
+    });
+  });
+
+  it('rejects SSH startup when the strict tmux attach misses after the channel opens', async () => {
+    const pty = new FakePty();
+    mocks.openSsh2Pty.mockResolvedValue({ success: true, data: pty });
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([
+      { sessionName: 'tmux-session', cwd: '/remote/workspace', attachedClients: 0 },
+    ]);
+    mocks.waitForTmuxReattach.mockRejectedValueOnce(new Error('reattach missed'));
+    provider = createProvider();
+
+    await expect(
+      provider.startSession(
+        conversation,
+        undefined,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { reattachExistingTmuxSession: true }
+      )
+    ).rejects.toThrow('reattach missed');
+
+    expect(provider.getActiveSessionCount()).toBe(0);
+    expect(pty.killCalls).toBe(1);
   });
 
   it('detaches silence tracking when stop removes the live PTY', async () => {

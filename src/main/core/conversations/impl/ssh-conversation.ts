@@ -6,7 +6,7 @@ import {
 } from '@shared/conversations';
 import { agentSessionExitedChannel } from '@shared/events/agentEvents';
 import type { ProjectPromptPrinciples } from '@shared/project-settings';
-import { makePtySessionId } from '@shared/ptySessionId';
+import { makePtySessionId, parsePtySessionId } from '@shared/ptySessionId';
 import { wireAgentClassifier } from '@main/core/agent-hooks/classifier-wiring';
 import { claudeTrustService } from '@main/core/agent-hooks/claude-trust-service';
 import { codexTrustService } from '@main/core/agent-hooks/codex-trust-service';
@@ -25,13 +25,23 @@ import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { resolveSshCommand } from '@main/core/pty/spawn-utils';
 import { openSsh2Pty } from '@main/core/pty/ssh2-pty';
 import { resolveAvailableTmuxSessionName } from '@main/core/pty/tmux-availability';
-import { killTmuxSession, sendLiteralToTmuxSession } from '@main/core/pty/tmux-session-name';
+import { TmuxReattachMissError, waitForTmuxReattach } from '@main/core/pty/tmux-reattach';
+import {
+  killTmuxSession,
+  listTmuxSessionMarkersStrict,
+  sendLiteralToTmuxSession,
+  type TmuxSessionMarker,
+} from '@main/core/pty/tmux-session-name';
 import { resolveTerminalThemeMode } from '@main/core/settings/resolve-terminal-theme-mode';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import type { SshClientProxy } from '@main/core/ssh/ssh-client-proxy';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
+import {
+  cancelConversationHydrationBarrier,
+  cancelConversationHydrationBarriersForTask,
+} from '../conversation-hydration-barrier';
 import { withExecutionModeInstructions } from '../execution-mode';
 import {
   recordConversationAuthProvider,
@@ -120,6 +130,7 @@ export class SshConversationProvider implements ConversationProvider {
       conversation.taskId,
       conversation.id
     );
+    const reattachExistingTmuxSession = startOptions?.reattachExistingTmuxSession === true;
     this.knownSessionIds.add(sessionId);
 
     if (this.sessions.has(sessionId)) return;
@@ -143,6 +154,7 @@ export class SshConversationProvider implements ConversationProvider {
     let startFailed = false;
     let spawnedPty: Pty | undefined;
     let detachSilenceReconcilerForRollback: (() => void) | undefined;
+    let reattachMarkerBaseline: TmuxSessionMarker | undefined;
 
     try {
       await claudeTrustService.maybeAutoTrustSsh({
@@ -209,6 +221,13 @@ export class SshConversationProvider implements ConversationProvider {
 
       const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
       if (!this.ownsPendingStart(sessionId, startToken)) return;
+      if (reattachExistingTmuxSession) {
+        if (!tmuxSessionName) throw new TmuxReattachMissError();
+        const markers = await listTmuxSessionMarkersStrict(this.ctx);
+        if (!this.ownsPendingStart(sessionId, startToken)) return;
+        reattachMarkerBaseline = markers.find((marker) => marker.sessionName === tmuxSessionName);
+        if (!reattachMarkerBaseline) throw new TmuxReattachMissError();
+      }
       const providerEnv = resolveRuntimeEnv(providerConfig, {
         runtimeId: conversation.runtimeId,
         tmuxEnabled: Boolean(tmuxSessionName),
@@ -225,7 +244,7 @@ export class SshConversationProvider implements ConversationProvider {
         tmuxSessionName,
         tmuxEnv: resolveRuntimeTmuxEnv(providerEnv),
         tmuxSessionIdentity: conversation.id,
-        tmuxReattachExistingSession: startOptions?.reattachExistingTmuxSession === true,
+        tmuxReattachExistingSession: reattachExistingTmuxSession,
         autoApprove: conversation.autoApprove ?? false,
         resume: isResuming,
       };
@@ -259,15 +278,20 @@ export class SshConversationProvider implements ConversationProvider {
           sessionId,
           error: result.error.message,
         });
-        return;
+        throw new Error(`Failed to open SSH channel: ${result.error.message}`);
       }
 
       const pty = result.data;
       spawnedPty = pty;
-      const startupInputPromise = startupInput
-        ? injectTuiStartupInput({ pty, runtimeId: conversation.runtimeId, input: startupInput })
+      const tmuxReattachPromise = reattachMarkerBaseline
+        ? waitForTmuxReattach({ ctx: this.ctx, pty, baseline: reattachMarkerBaseline })
         : undefined;
+      const startupInputPromise =
+        startupInput && !reattachExistingTmuxSession
+          ? injectTuiStartupInput({ pty, runtimeId: conversation.runtimeId, input: startupInput })
+          : undefined;
       void startupInputPromise?.catch(() => {});
+      void tmuxReattachPromise?.catch(() => {});
 
       // hooks not supported yet, rely on classifier for visual indicator
       wireAgentClassifier({
@@ -298,7 +322,9 @@ export class SshConversationProvider implements ConversationProvider {
       }
 
       let shouldEmitAgentSessionExited = false;
+      let exitedBeforeCommit = false;
       pty.onExit(({ exitCode }) => {
+        if (!startCommitted) exitedBeforeCommit = true;
         this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
         if (this.sessions.get(sessionId) !== pty) return;
         shouldEmitAgentSessionExited = true;
@@ -340,6 +366,10 @@ export class SshConversationProvider implements ConversationProvider {
         ptySessionRegistry.unregister(sessionId);
         return;
       }
+      if (tmuxReattachPromise) {
+        await tmuxReattachPromise;
+        if (!this.ownsPendingStart(sessionId, startToken)) return;
+      }
       this.sessions.set(sessionId, pty);
       this.sessionInfos.set(sessionId, {
         sessionId,
@@ -357,6 +387,14 @@ export class SshConversationProvider implements ConversationProvider {
         },
         initialPrompt?.trim() ? 'working' : 'idle'
       );
+      // Ssh2PtySession replays a close received during channel open in a
+      // microtask after onExit subscribes. Do not acknowledge startup until
+      // that replay has had a chance to invalidate the just-registered PTY.
+      await Promise.resolve();
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
+      if (exitedBeforeCommit || this.sessions.get(sessionId) !== pty) {
+        throw new Error(`${conversation.runtimeId} exited during SSH startup.`);
+      }
       if (startupInputPromise) {
         const delivered = await startupInputPromise;
         if (!this.ownsPendingStart(sessionId, startToken)) return;
@@ -451,6 +489,10 @@ export class SshConversationProvider implements ConversationProvider {
 
   private cancelAllPendingStarts(): void {
     for (const sessionId of this.pendingStarts.keys()) {
+      const conversationId = parsePtySessionId(sessionId)?.leafId;
+      if (conversationId) {
+        cancelConversationHydrationBarrier(this.projectId, this.taskId, conversationId);
+      }
       this.pendingStarts.delete(sessionId);
       ptySessionRegistry.unregister(sessionId);
     }
@@ -465,6 +507,7 @@ export class SshConversationProvider implements ConversationProvider {
 
   async stopSession(conversationId: string): Promise<void> {
     const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
+    cancelConversationHydrationBarrier(this.projectId, this.taskId, conversationId);
     this.knownSessionIds.delete(sessionId);
     this.pendingStarts.delete(sessionId);
     this.releaseSilenceReconciler(sessionId);
@@ -505,6 +548,7 @@ export class SshConversationProvider implements ConversationProvider {
   }
 
   async detachAll(): Promise<void> {
+    cancelConversationHydrationBarriersForTask(this.projectId, this.taskId);
     this.cancelAllPendingStarts();
     for (const sessionId of Array.from(this.silenceReconcilerDetachers.keys())) {
       this.releaseSilenceReconciler(sessionId);

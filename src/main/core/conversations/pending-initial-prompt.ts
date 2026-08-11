@@ -3,7 +3,7 @@ import type {
   CreateConversationParams,
   PendingInitialPrompt,
 } from '@shared/conversations';
-import type { ConversationConfig } from './types';
+import type { ConversationConfig, ConversationProvider } from './types';
 
 export type HydratedConversationStart = {
   isResuming: boolean;
@@ -37,6 +37,18 @@ export function pendingInitialPromptFromParams(
     model: params.model,
     reasoningEffort: params.reasoningEffort,
   };
+}
+
+/**
+ * Codex creates its durable thread asynchronously after the PTY starts. Keep
+ * the recovery copy until session-title discovery stores that thread binding;
+ * other runtimes still acknowledge delivery when their startup call resolves.
+ */
+export function shouldClearPendingInitialPromptAfterStart(
+  provider: Pick<ConversationProvider, 'waitsForInitialPromptSessionBinding'>,
+  runtimeId: Conversation['runtimeId']
+): boolean {
+  return provider.waitsForInitialPromptSessionBinding?.(runtimeId) !== true;
 }
 
 export function withoutPendingInitialPrompt(configValue: string | null): string | null {

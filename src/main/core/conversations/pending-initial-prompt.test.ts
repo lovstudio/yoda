@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   hydratedConversationStart,
   pendingInitialPromptFromParams,
+  shouldClearPendingInitialPromptAfterStart,
   withoutPendingInitialPrompt,
 } from './pending-initial-prompt';
+import type { ConversationProvider } from './types';
 
 describe('pending initial prompt delivery', () => {
   it('persists a non-deferred first prompt until Agent startup succeeds', () => {
@@ -65,6 +67,17 @@ describe('pending initial prompt delivery', () => {
       model: null,
       reasoningEffort: 'high',
     });
+  });
+
+  it('uses provider capability to choose the first-prompt acknowledgement', () => {
+    const localProvider: Pick<ConversationProvider, 'waitsForInitialPromptSessionBinding'> = {
+      waitsForInitialPromptSessionBinding: (runtimeId) => runtimeId === 'codex',
+    };
+    const sshProvider = {};
+
+    expect(shouldClearPendingInitialPromptAfterStart(localProvider, 'codex')).toBe(false);
+    expect(shouldClearPendingInitialPromptAfterStart(localProvider, 'claude')).toBe(true);
+    expect(shouldClearPendingInitialPromptAfterStart(sshProvider, 'codex')).toBe(true);
   });
 
   it('clears only the delivery marker and preserves conversation settings', () => {

@@ -35,6 +35,8 @@ export type ActiveConversationSession = {
 export interface ConversationProvider {
   /** Absolute path of the worktree the agent runs in (used to locate transcripts). */
   readonly taskPath: string;
+  /** Whether this provider confirms a first prompt through durable native session binding. */
+  waitsForInitialPromptSessionBinding?(runtimeId: Conversation['runtimeId']): boolean;
   startSession(
     conversation: Conversation,
     initialSize?: { cols: number; rows: number },
@@ -64,6 +66,6 @@ export type ConversationConfig = {
   skillPolicy?: SkillSessionPolicy;
   executionMode?: ConversationExecutionMode;
   sessionSource?: AgentSessionSource;
-  /** Cleared only after the Agent session is spawned with its first prompt. */
+  /** Cleared after the provider-specific first-prompt acknowledgement. */
   pendingInitialPrompt?: PendingInitialPrompt;
 };

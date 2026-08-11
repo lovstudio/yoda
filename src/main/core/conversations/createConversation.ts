@@ -18,8 +18,12 @@ import { telemetryService } from '@main/lib/telemetry';
 import { resolveTask } from '../projects/utils';
 import { buildConversationCreatedTelemetry } from './conversation-created-telemetry';
 import { conversationEvents } from './conversation-events';
+import { withConversationOperation } from './conversation-operation-lock';
 import { localAgentSessionCatalog } from './local-agent-session-catalog-instance';
-import { pendingInitialPromptFromParams } from './pending-initial-prompt';
+import {
+  pendingInitialPromptFromParams,
+  shouldClearPendingInitialPromptAfterStart,
+} from './pending-initial-prompt';
 import { clearPendingInitialPrompt } from './pending-initial-prompt-store';
 import { mapConversationRowToConversation } from './utils';
 
@@ -134,57 +138,76 @@ export async function createConversation(params: CreateConversationParams): Prom
           });
     const lastInteractedAt = new Date().toISOString();
 
-    if (!registrationIsCurrent()) {
-      throw new Error('Conversation creation was cancelled before persistence.');
-    }
-    const [row] = await db
-      .insert(conversations)
-      .values({
-        id,
-        projectId: params.projectId,
-        taskId: params.taskId,
-        title: params.title,
-        runtime: params.runtime,
-        config,
-        isInitialConversation: params.isInitialConversation ?? false,
-        createdAt: sql`CURRENT_TIMESTAMP`,
-        updatedAt: sql`CURRENT_TIMESTAMP`,
-        lastInteractedAt,
-      })
-      .returning();
+    const conversation = await withConversationOperation(
+      { id, projectId: params.projectId },
+      async () => {
+        if (!registrationIsCurrent()) {
+          throw new Error('Conversation creation was cancelled before persistence.');
+        }
+        const [row] = await db
+          .insert(conversations)
+          .values({
+            id,
+            projectId: params.projectId,
+            taskId: params.taskId,
+            title: params.title,
+            runtime: params.runtime,
+            config,
+            isInitialConversation: params.isInitialConversation ?? false,
+            createdAt: sql`CURRENT_TIMESTAMP`,
+            updatedAt: sql`CURRENT_TIMESTAMP`,
+            lastInteractedAt,
+          })
+          .returning();
 
-    await db.update(tasks).set({ lastInteractedAt }).where(eq(tasks.id, params.taskId));
+        await db.update(tasks).set({ lastInteractedAt }).where(eq(tasks.id, params.taskId));
 
-    if (!registrationIsCurrent()) {
-      await db.delete(conversations).where(eq(conversations.id, id));
-      throw new Error('Conversation creation was cancelled during persistence.');
-    }
-    const conversation = mapConversationRowToConversation(row);
+        if (!registrationIsCurrent()) {
+          await db.delete(conversations).where(eq(conversations.id, id));
+          throw new Error('Conversation creation was cancelled during persistence.');
+        }
+        const createdConversation = mapConversationRowToConversation(row);
+        const startupConversation = pendingInitialPrompt
+          ? mapConversationRowToConversation(row, true)
+          : createdConversation;
 
-    conversationEvents._emit('conversation:created', conversation);
+        conversationEvents._emit('conversation:created', createdConversation);
 
-    if (!sessionSource) {
-      const sessionInitialPrompt = params.deferInitialPrompt ? undefined : params.initialPrompt;
-      const sessionImagePaths = params.deferInitialPrompt ? undefined : params.imagePaths;
-      await task.conversations.startSession(
-        conversation,
-        params.initialSize,
-        false,
-        sessionInitialPrompt,
-        undefined,
-        sessionImagePaths,
-        { model: params.model, reasoningEffort: params.reasoningEffort }
-      );
-      if (pendingInitialPrompt) {
-        await clearPendingInitialPrompt(id);
+        if (!sessionSource) {
+          const sessionInitialPrompt = params.deferInitialPrompt ? undefined : params.initialPrompt;
+          const sessionImagePaths = params.deferInitialPrompt ? undefined : params.imagePaths;
+          await task.conversations.startSession(
+            startupConversation,
+            params.initialSize,
+            false,
+            sessionInitialPrompt,
+            undefined,
+            sessionImagePaths,
+            { model: params.model, reasoningEffort: params.reasoningEffort }
+          );
+          if (
+            pendingInitialPrompt &&
+            shouldClearPendingInitialPromptAfterStart(
+              task.conversations,
+              startupConversation.runtimeId
+            )
+          ) {
+            await clearPendingInitialPrompt(id, {
+              projectId: startupConversation.projectId,
+              taskId: startupConversation.taskId,
+              deliveryToken: pendingInitialPrompt.deliveryToken,
+            });
+          }
+        }
+        return createdConversation;
       }
-    }
+    );
     telemetryService.capture(
       'conversation_created',
       buildConversationCreatedTelemetry(params, id, existingConversation === undefined)
     );
 
-    return mapConversationRowToConversation(row);
+    return conversation;
   } finally {
     if (registrationEpoch !== undefined) {
       ptySessionRegistry.cancelRegistration(sessionId, registrationEpoch);

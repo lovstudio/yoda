@@ -110,7 +110,7 @@ describe('buildTmuxShellLine', () => {
     expect(line).toContain("@yoda_agent_session_id 'resolved-thread'");
   });
 
-  it('attaches a pane proven to have survived app restart without replacing its agent', () => {
+  it('attaches only a pane proven to have survived app restart', () => {
     const line = buildTmuxShellLine(
       'agent-session',
       'codex resume current-thread',
@@ -125,7 +125,8 @@ describe('buildTmuxShellLine', () => {
     expect(existingPaneBranch).toContain('then tmux -L yoda -f /dev/null attach-session');
     expect(existingPaneBranch).not.toContain('kill-session');
     expect(existingPaneBranch).not.toContain('@yoda_agent_session_id');
-    expect(line).toContain('else tmux -L yoda -f /dev/null new-session');
+    expect(line).toContain('else exit 75');
+    expect(line).not.toContain('new-session');
 
     if (process.platform !== 'win32') {
       const parsed = spawnSync('/bin/sh', ['-n'], { input: line, encoding: 'utf8' });

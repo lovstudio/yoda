@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -47,6 +47,7 @@ const NEW_SESSION_THREAD_CREATE_GRACE_MS = 1_000;
 const NEW_SESSION_THREAD_CREATE_MAX_DRIFT_MS = 60_000;
 const ROUTED_SESSION_SETTLE_MS = 10_000;
 const MAX_INTERRUPTED_STUB_BYTES = 256 * 1024;
+const MAX_INITIAL_TURN_SCAN_BYTES = 2 * 1024 * 1024;
 const TITLE_PREFIX_MATCH_MIN_LENGTH = 16;
 
 const activeCodexThreadTitlePollers = new Set<CodexThreadTitlePoller>();
@@ -73,6 +74,8 @@ export class CodexSessionTitleSource implements SessionTitleSource {
       startedAtMs,
       isResuming: ctx.isResuming ?? false,
       threadId: ctx.agentSessionId,
+      waitForInitialPrompt: ctx.waitForInitialPrompt ?? false,
+      expectedInitialPrompt: ctx.expectedInitialPrompt,
       onTitle,
       onSessionBound,
     });
@@ -112,6 +115,98 @@ export function findNewCodexThreadTitle(params: {
   });
 }
 
+function findNextCodexThreadTitle(params: {
+  statePath: string;
+  cwd: string;
+  minCreatedAtMs: number;
+  maxCreatedAtMs: number;
+  after?: Pick<CodexThreadTitle, 'createdAtMs' | 'id'>;
+}): CodexThreadTitle | undefined {
+  const afterCreatedAtMs = params.after?.createdAtMs ?? null;
+  const afterId = params.after?.id ?? '';
+  return withCodexState(params.statePath, (db) => {
+    const row = db
+      .prepare(
+        `
+          SELECT
+            id,
+            cwd,
+            title,
+            first_user_message AS firstUserMessage,
+            NULLIF(rollout_path, '') AS rolloutPath,
+            tokens_used AS tokensUsed,
+            COALESCE(created_at_ms, created_at * 1000) AS createdAtMs,
+            COALESCE(updated_at_ms, updated_at * 1000) AS updatedAtMs
+          FROM threads
+          WHERE cwd = ?
+            AND archived = 0
+            AND TRIM(title) <> ''
+            AND COALESCE(created_at_ms, created_at * 1000) >= ?
+            AND COALESCE(created_at_ms, created_at * 1000) <= ?
+            AND (
+              ? IS NULL
+              OR COALESCE(created_at_ms, created_at * 1000) > ?
+              OR (COALESCE(created_at_ms, created_at * 1000) = ? AND id > ?)
+            )
+          ORDER BY COALESCE(created_at_ms, created_at * 1000) ASC, id ASC
+          LIMIT 1
+        `
+      )
+      .get(
+        params.cwd,
+        params.minCreatedAtMs,
+        params.maxCreatedAtMs,
+        afterCreatedAtMs,
+        afterCreatedAtMs,
+        afterCreatedAtMs,
+        afterId
+      );
+    return parseCodexThreadTitle(row);
+  });
+}
+
+export function findAcknowledgedCodexThreadForInitialPrompt(params: {
+  statePath: string;
+  cwd: string;
+  attemptStartedAtMs: number;
+  expectedInitialPrompt: string;
+}): CodexThreadTitle | undefined {
+  const expectedPrompt = params.expectedInitialPrompt.trim();
+  if (!expectedPrompt) return undefined;
+  const minCreatedAtMs = params.attemptStartedAtMs - NEW_SESSION_THREAD_CREATE_GRACE_MS;
+  const maxCreatedAtMs = params.attemptStartedAtMs + NEW_SESSION_THREAD_CREATE_MAX_DRIFT_MS;
+  const exact = findCodexThreadTitleByTitle({
+    statePath: params.statePath,
+    cwd: params.cwd,
+    title: expectedPrompt,
+  });
+  if (
+    exact &&
+    exact.createdAtMs >= minCreatedAtMs &&
+    exact.createdAtMs <= maxCreatedAtMs &&
+    isLikelyRelaunchedPrompt(expectedPrompt, exact.firstUserMessage) &&
+    codexThreadAcknowledgesInitialPrompt(exact, expectedPrompt)
+  ) {
+    return exact;
+  }
+
+  let after: Pick<CodexThreadTitle, 'createdAtMs' | 'id'> | undefined;
+  while (true) {
+    const candidate = findNextCodexThreadTitle({
+      statePath: params.statePath,
+      cwd: params.cwd,
+      minCreatedAtMs,
+      maxCreatedAtMs,
+      ...(after ? { after } : {}),
+    });
+    if (!candidate) return undefined;
+    if (codexThreadAcknowledgesInitialPrompt(candidate, expectedPrompt)) {
+      return candidate;
+    }
+    after = candidate;
+  }
+}
+
 export function resolveCodexStatePath(
   codexHome = process.env.CODEX_HOME ?? join(homedir(), '.codex')
 ): string {
@@ -132,6 +227,7 @@ export function findRecentCodexThreadTitle(params: {
             cwd,
             title,
             first_user_message AS firstUserMessage,
+            NULLIF(rollout_path, '') AS rolloutPath,
             COALESCE(created_at_ms, created_at * 1000) AS createdAtMs,
             COALESCE(updated_at_ms, updated_at * 1000) AS updatedAtMs
           FROM threads
@@ -162,6 +258,8 @@ export function findCodexThreadTitleByTitle(params: {
             cwd,
             title,
             first_user_message AS firstUserMessage,
+            NULLIF(rollout_path, '') AS rolloutPath,
+            tokens_used AS tokensUsed,
             COALESCE(created_at_ms, created_at * 1000) AS createdAtMs,
             COALESCE(updated_at_ms, updated_at * 1000) AS updatedAtMs
           FROM threads
@@ -675,6 +773,8 @@ type CodexThreadTitlePollerOptions = {
   startedAtMs: number;
   isResuming: boolean;
   threadId?: string;
+  waitForInitialPrompt: boolean;
+  expectedInitialPrompt?: string;
   onTitle: TitleListener;
   onSessionBound?: SessionBindingListener;
 };
@@ -687,11 +787,13 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
   private readonly minUpdatedAtMs: number;
   private threadId: string | undefined;
   private notifiedSessionId: string | undefined;
+  private bindingInFlight = false;
+  private readonly rejectedThreadIds = new Set<string>();
   private lastTitle: string | undefined;
   private stopped = false;
 
   constructor(private readonly options: CodexThreadTitlePollerOptions) {
-    this.bindDeadline = options.startedAtMs + READY_POLL_MAX_MS;
+    this.bindDeadline = Date.now() + READY_POLL_MAX_MS;
     this.minUpdatedAtMs = options.startedAtMs - RESUME_START_GRACE_MS;
     activeCodexThreadTitlePollers.add(this);
     this.threadId = options.threadId;
@@ -701,6 +803,14 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
   stop(): void {
     this.stopped = true;
     activeCodexThreadTitlePollers.delete(this);
+    if (!this.notifiedSessionId && !this.bindingInFlight && this.threadId) {
+      if (claimedCodexThreadOwners.get(this.threadId) === this.options.conversationId) {
+        claimedCodexThreadOwners.delete(this.threadId);
+      }
+      if (claimedCodexThreadsByOwner.get(this.options.conversationId) === this.threadId) {
+        claimedCodexThreadsByOwner.delete(this.options.conversationId);
+      }
+    }
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = undefined;
@@ -723,17 +833,13 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
               cwd: this.options.cwd,
               minUpdatedAtMs: this.minUpdatedAtMs,
             })
-          : findNewCodexThreadTitle({
-              statePath: this.options.statePath,
-              cwd: this.options.cwd,
-              minCreatedAtMs: this.minCreatedAtMs,
-              maxCreatedAtMs: this.maxCreatedAtMs,
-            });
+          : this.findFreshThread();
 
-      if (row && this.threadId === row.id) {
+      if (row) {
         row = this.findSupersedingThread(row) ?? row;
       }
-      if (row && this.tryBindThread(row)) {
+      const initialPromptAcknowledged = row ? this.initialPromptAcknowledged(row) : false;
+      if (row && this.tryBindThread(row, initialPromptAcknowledged) && initialPromptAcknowledged) {
         this.handleRow(row);
       }
     } catch (error) {
@@ -745,6 +851,8 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
 
     if (this.threadId || Date.now() <= this.bindDeadline) {
       this.schedule(READY_POLL_INTERVAL_MS);
+    } else {
+      this.stop();
     }
   }
 
@@ -809,14 +917,70 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
     return this.options.startedAtMs + NEW_SESSION_THREAD_CREATE_MAX_DRIFT_MS;
   }
 
+  private findFreshThread(): CodexThreadTitle | undefined {
+    const expectedPrompt = this.options.expectedInitialPrompt?.trim();
+    if (!expectedPrompt) {
+      return findNewCodexThreadTitle({
+        statePath: this.options.statePath,
+        cwd: this.options.cwd,
+        minCreatedAtMs: this.minCreatedAtMs,
+        maxCreatedAtMs: this.maxCreatedAtMs,
+      });
+    }
+    if (expectedPrompt) {
+      const exact = findCodexThreadTitleByTitle({
+        statePath: this.options.statePath,
+        cwd: this.options.cwd,
+        title: expectedPrompt,
+      });
+      if (
+        exact &&
+        exact.createdAtMs >= this.minCreatedAtMs &&
+        exact.createdAtMs <= this.maxCreatedAtMs &&
+        isLikelyRelaunchedPrompt(expectedPrompt, exact.firstUserMessage) &&
+        !this.isFreshThreadUnavailable(exact)
+      ) {
+        return exact;
+      }
+    }
+
+    let after: Pick<CodexThreadTitle, 'createdAtMs' | 'id'> | undefined;
+    while (true) {
+      const candidate = findNextCodexThreadTitle({
+        statePath: this.options.statePath,
+        cwd: this.options.cwd,
+        minCreatedAtMs: this.minCreatedAtMs,
+        maxCreatedAtMs: this.maxCreatedAtMs,
+        ...(after ? { after } : {}),
+      });
+      if (!candidate) return undefined;
+      if (
+        !this.isFreshThreadUnavailable(candidate) &&
+        (!expectedPrompt || isLikelyRelaunchedPrompt(expectedPrompt, candidate.firstUserMessage))
+      ) {
+        return candidate;
+      }
+      after = candidate;
+    }
+    return undefined;
+  }
+
+  private isFreshThreadUnavailable(row: CodexThreadTitle): boolean {
+    if (this.rejectedThreadIds.has(row.id)) return true;
+    const claimedBy = claimedCodexThreadOwners.get(row.id);
+    return claimedBy !== undefined && claimedBy !== this.options.conversationId;
+  }
+
   isFreshCandidateOwnerFor(row: CodexThreadTitle): boolean {
+    const expectedPrompt = this.options.expectedInitialPrompt?.trim();
     return (
       !this.stopped &&
       !this.threadId &&
       !this.options.isResuming &&
       this.options.cwd === row.cwd &&
       row.createdAtMs >= this.minCreatedAtMs &&
-      row.createdAtMs <= this.maxCreatedAtMs
+      row.createdAtMs <= this.maxCreatedAtMs &&
+      (!expectedPrompt || isLikelyRelaunchedPrompt(expectedPrompt, row.firstUserMessage))
     );
   }
 
@@ -828,10 +992,10 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
     return this.options.startedAtMs;
   }
 
-  private tryBindThread(row: CodexThreadTitle): boolean {
+  private tryBindThread(row: CodexThreadTitle, initialPromptAcknowledged: boolean): boolean {
+    if (!initialPromptAcknowledged) return false;
     if (this.threadId === row.id) {
-      this.notifySessionBound(row.id);
-      return true;
+      return this.notifySessionBound(row.id);
     }
 
     const claimedBy = claimedCodexThreadOwners.get(row.id);
@@ -842,52 +1006,159 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
     claimedCodexThreadOwners.set(row.id, this.options.conversationId);
     claimedCodexThreadsByOwner.set(this.options.conversationId, row.id);
     this.threadId = row.id;
-    this.notifySessionBound(row.id);
-    return true;
+    return this.notifySessionBound(row.id);
+  }
+
+  private initialPromptAcknowledged(row: CodexThreadTitle): boolean {
+    if (!this.options.waitForInitialPrompt) return true;
+    const expectedPrompt = this.options.expectedInitialPrompt?.trim();
+    return codexThreadAcknowledgesInitialPrompt(row, expectedPrompt ?? row.firstUserMessage);
   }
 
   private findSupersedingThread(current: CodexThreadTitle): CodexThreadTitle | undefined {
     if (this.options.isResuming || !isInterruptedCodexThreadStub(current)) return undefined;
-    const candidate = findNewCodexThreadTitle({
-      statePath: this.options.statePath,
-      cwd: this.options.cwd,
-      minCreatedAtMs: current.createdAtMs + 1,
-      maxCreatedAtMs: this.maxCreatedAtMs,
-    });
-    if (
-      !candidate ||
-      !isLikelyRelaunchedPrompt(current.firstUserMessage, candidate.firstUserMessage)
-    ) {
-      return undefined;
-    }
+    let after: Pick<CodexThreadTitle, 'createdAtMs' | 'id'> = current;
+    while (true) {
+      const candidate = findNextCodexThreadTitle({
+        statePath: this.options.statePath,
+        cwd: this.options.cwd,
+        minCreatedAtMs: current.createdAtMs,
+        maxCreatedAtMs: this.maxCreatedAtMs,
+        after,
+      });
+      if (!candidate) return undefined;
+      after = candidate;
+      if (!isLikelyRelaunchedPrompt(current.firstUserMessage, candidate.firstUserMessage)) {
+        continue;
+      }
+      if (this.isFreshThreadUnavailable(candidate)) continue;
+      const bestOwner = bestFreshOwnerFor(candidate);
+      if (bestOwner && bestOwner !== this) continue;
 
-    const claimedBy = claimedCodexThreadOwners.get(candidate.id);
-    if (claimedBy && claimedBy !== this.options.conversationId) return undefined;
-    if (bestFreshOwnerFor(candidate)) return undefined;
-
-    if (claimedCodexThreadOwners.get(current.id) === this.options.conversationId) {
-      claimedCodexThreadOwners.delete(current.id);
+      if (claimedCodexThreadOwners.get(current.id) === this.options.conversationId) {
+        claimedCodexThreadOwners.delete(current.id);
+      }
+      claimedCodexThreadOwners.set(candidate.id, this.options.conversationId);
+      claimedCodexThreadsByOwner.set(this.options.conversationId, candidate.id);
+      this.threadId = candidate.id;
+      return candidate;
     }
-    claimedCodexThreadOwners.set(candidate.id, this.options.conversationId);
-    claimedCodexThreadsByOwner.set(this.options.conversationId, candidate.id);
-    this.threadId = candidate.id;
-    this.notifySessionBound(candidate.id);
-    return candidate;
   }
 
-  private notifySessionBound(sessionId: string): void {
-    if (this.notifiedSessionId === sessionId) return;
-    this.notifiedSessionId = sessionId;
+  private notifySessionBound(sessionId: string): boolean {
+    if (this.notifiedSessionId === sessionId) return true;
+    if (this.bindingInFlight) return false;
     try {
-      this.options.onSessionBound?.(sessionId);
+      const result = this.options.onSessionBound?.(sessionId);
+      if (!(result instanceof Promise)) {
+        if (result === false) {
+          this.rejectedThreadIds.add(sessionId);
+          this.releaseTentativeThread(sessionId);
+          return false;
+        }
+        this.notifiedSessionId = sessionId;
+        return true;
+      }
+      this.bindingInFlight = true;
+      void result
+        .then((stored) => {
+          if (stored === false) {
+            this.rejectedThreadIds.add(sessionId);
+            this.releaseTentativeThread(sessionId);
+            return;
+          }
+          if (this.threadId !== sessionId) return;
+          this.notifiedSessionId = sessionId;
+        })
+        .catch((error) => {
+          log.warn('CodexSessionTitleSource: session binding listener rejected', {
+            conversationId: this.options.conversationId,
+            sessionId,
+            error: String(error),
+          });
+        })
+        .finally(() => {
+          this.bindingInFlight = false;
+          if (this.stopped && !this.notifiedSessionId) {
+            this.releaseTentativeThread(sessionId);
+          }
+        });
+      return false;
     } catch (error) {
       log.warn('CodexSessionTitleSource: session binding listener threw', {
         conversationId: this.options.conversationId,
         sessionId,
         error: String(error),
       });
+      return false;
     }
   }
+
+  private releaseTentativeThread(sessionId: string): void {
+    if (this.notifiedSessionId || this.threadId !== sessionId) return;
+    if (claimedCodexThreadOwners.get(sessionId) === this.options.conversationId) {
+      claimedCodexThreadOwners.delete(sessionId);
+    }
+    if (claimedCodexThreadsByOwner.get(this.options.conversationId) === sessionId) {
+      claimedCodexThreadsByOwner.delete(this.options.conversationId);
+    }
+    this.threadId = undefined;
+  }
+}
+
+function codexThreadHasInitialTurnEvidence(row: CodexThreadTitle): boolean {
+  const rolloutPath = row.rolloutPath;
+  if (!rolloutPath || !existsSync(rolloutPath)) return false;
+
+  let descriptor: number | undefined;
+  try {
+    const bytesToRead = Math.min(statSync(rolloutPath).size, MAX_INITIAL_TURN_SCAN_BYTES);
+    if (bytesToRead <= 0) return false;
+    descriptor = openSync(rolloutPath, 'r');
+    const buffer = Buffer.allocUnsafe(bytesToRead);
+    const bytesRead = readSync(descriptor, buffer, 0, bytesToRead, 0);
+    const lines = buffer.toString('utf8', 0, bytesRead).split('\n');
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (typeof parsed !== 'object' || parsed === null) continue;
+      const record = parsed as Record<string, unknown>;
+      const payload = record.payload;
+      if (typeof payload !== 'object' || payload === null) continue;
+      const event = payload as Record<string, unknown>;
+      if (
+        record.type === 'event_msg' &&
+        (event.type === 'task_started' || event.type === 'turn_started')
+      ) {
+        return true;
+      }
+    }
+  } catch (error) {
+    log.debug('CodexSessionTitleSource: initial turn evidence is not ready', {
+      threadId: row.id,
+      error: String(error),
+    });
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+  return false;
+}
+
+function codexThreadAcknowledgesInitialPrompt(
+  row: CodexThreadTitle,
+  expectedPrompt: string
+): boolean {
+  if (!isLikelyRelaunchedPrompt(expectedPrompt, row.firstUserMessage)) return false;
+  if (isInterruptedCodexThreadStub(row)) return false;
+  if (isRoutedPrompt(expectedPrompt) && Date.now() < row.createdAtMs + ROUTED_SESSION_SETTLE_MS) {
+    return false;
+  }
+  return codexThreadHasInitialTurnEvidence(row);
 }
 
 function bestFreshOwnerFor(row: CodexThreadTitle): CodexThreadTitlePoller | undefined {

@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { conversationUnarchivedChannel } from '@shared/events/conversationEvents';
 import { projectManager } from '@main/core/projects/project-manager';
 import type { ProjectProvider } from '@main/core/projects/project-provider';
@@ -19,6 +19,7 @@ import { resolveAgentResumeSessionId } from './codex-session-id';
 import { getReservedCodexThreadIds } from './codex-thread-reservations';
 import { ensureCodexThreadUnarchived } from './codex-unarchive';
 import { conversationEvents } from './conversation-events';
+import { withConversationOperation } from './conversation-operation-lock';
 import { getConversationRuntimeStateRoot } from './conversation-session-source';
 import { withRuntimeStateRoot } from './session-state-roots';
 import { mapConversationRowToConversation } from './utils';
@@ -28,57 +29,63 @@ export async function unarchiveConversation(
   taskId: string,
   conversationId: string
 ): Promise<void> {
-  const [row] = await db
-    .select({
-      conversation: conversations,
-      task: tasks,
-      projectPath: projects.path,
-    })
-    .from(conversations)
-    .innerJoin(tasks, eq(conversations.taskId, tasks.id))
-    .innerJoin(projects, eq(tasks.projectId, projects.id))
-    .where(
-      and(
-        eq(conversations.id, conversationId),
-        eq(conversations.projectId, projectId),
-        eq(conversations.taskId, taskId)
+  return withConversationOperation({ projectId, id: conversationId }, async () => {
+    const [row] = await db
+      .select({
+        conversation: conversations,
+        task: tasks,
+        projectPath: projects.path,
+      })
+      .from(conversations)
+      .innerJoin(tasks, eq(conversations.taskId, tasks.id))
+      .innerJoin(projects, eq(tasks.projectId, projects.id))
+      .where(
+        and(
+          eq(conversations.id, conversationId),
+          eq(conversations.projectId, projectId),
+          eq(conversations.taskId, taskId),
+          isNotNull(conversations.archivedAt)
+        )
       )
-    )
-    .limit(1);
-  if (!row) return;
+      .limit(1);
+    if (!row) return;
 
-  await db
-    .update(conversations)
-    .set({
-      archivedAt: null,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
-    })
-    .where(
-      and(
-        eq(conversations.id, conversationId),
-        eq(conversations.projectId, projectId),
-        eq(conversations.taskId, taskId)
+    const [unarchived] = await db
+      .update(conversations)
+      .set({
+        archivedAt: null,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(
+        and(
+          eq(conversations.id, conversationId),
+          eq(conversations.projectId, projectId),
+          eq(conversations.taskId, taskId),
+          isNotNull(conversations.archivedAt)
+        )
       )
-    );
+      .returning({ id: conversations.id });
+    if (!unarchived) return;
 
-  await unarchiveCodexConversation({
-    conversation: row.conversation,
-    task: row.task,
-    projectPath: row.projectPath,
-    project: projectManager.getProject(projectId),
-  }).catch((error: unknown) => {
-    log.warn('unarchiveConversation: Codex session unarchive failed', {
-      conversationId,
-      error: String(error),
+    await unarchiveCodexConversation({
+      conversation: row.conversation,
+      task: row.task,
+      projectPath: row.projectPath,
+      project: projectManager.getProject(projectId),
+    }).catch((error: unknown) => {
+      log.warn('unarchiveConversation: Codex session unarchive failed', {
+        conversationId,
+        error: String(error),
+      });
     });
-  });
 
-  conversationEvents._emit('conversation:unarchived', conversationId, projectId, taskId);
-  events.emit(conversationUnarchivedChannel, { conversationId, projectId, taskId });
-  telemetryService.capture('conversation_unarchived', {
-    project_id: projectId,
-    task_id: taskId,
-    conversation_id: conversationId,
+    conversationEvents._emit('conversation:unarchived', conversationId, projectId, taskId);
+    events.emit(conversationUnarchivedChannel, { conversationId, projectId, taskId });
+    telemetryService.capture('conversation_unarchived', {
+      project_id: projectId,
+      task_id: taskId,
+      conversation_id: conversationId,
+    });
   });
 }
 

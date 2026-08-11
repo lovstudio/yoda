@@ -197,8 +197,9 @@ function createForkedConversationConfig(
   forkedSessionId: string
 ): string | null {
   const config: ConversationConfig = rawConfig ? (JSON.parse(rawConfig) as ConversationConfig) : {};
+  delete config.pendingInitialPrompt;
   const sessionSource = source.sessionSource;
-  if (!sessionSource) return rawConfig;
+  if (!sessionSource) return rawConfig === null ? null : JSON.stringify(config);
   return JSON.stringify({
     ...config,
     sessionSource: {

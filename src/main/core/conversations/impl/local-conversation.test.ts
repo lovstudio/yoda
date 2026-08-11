@@ -7,6 +7,7 @@ import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-r
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { Pty, PtyExitInfo } from '@main/core/pty/pty';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
+import type * as ImageAttachments from './image-attachments';
 import { LocalConversationProvider } from './local-conversation';
 
 const mocks = vi.hoisted(() => ({
@@ -20,9 +21,11 @@ const mocks = vi.hoisted(() => ({
   getHookToken: vi.fn(),
   getProviderConfig: vi.fn(),
   getRuntimeInferenceCredentials: vi.fn(),
+  injectClipboardImagesAndPrompt: vi.fn(),
   injectTuiStartupInput: vi.fn(),
   ensureCodexResumeProviderCompatible: vi.fn(),
   killTmuxSession: vi.fn(),
+  listTmuxSessionMarkersStrict: vi.fn(),
   repairCodexThreadHistoryProjection: vi.fn(),
   migrateLegacyCodexMaasHistory: vi.fn(),
   logDebug: vi.fn(),
@@ -35,7 +38,9 @@ const mocks = vi.hoisted(() => ({
   prepareWindowsClaudeSettings: vi.fn(),
   promptLibraryList: vi.fn(),
   reconcileCodexStateRoot: vi.fn(),
+  recordPendingInitialPromptAttempt: vi.fn(),
   ensureCodexThreadUnarchived: vi.fn(),
+  findAcknowledgedCodexThreadForInitialPrompt: vi.fn(),
   resolveAvailableTmuxSessionName: vi.fn(),
   resolveAgentResumeSessionId: vi.fn(),
   resolveCodexThreadIdForConversation: vi.fn(),
@@ -47,10 +52,12 @@ const mocks = vi.hoisted(() => ({
   setRuntimeStatus: vi.fn(),
   spawnLocalPty: vi.fn(),
   startTitle: vi.fn(),
+  storeConversationSessionSource: vi.fn(),
   stopTitle: vi.fn(),
   watchClaudeRunState: vi.fn(() => ({ stop: vi.fn() })),
   watchClaudeSessionActivity: vi.fn(() => ({ stop: vi.fn() })),
   watchCodexRunState: vi.fn(() => ({ stop: vi.fn() })),
+  waitForTmuxReattach: vi.fn(),
   wireAgentClassifier: vi.fn(),
 }));
 
@@ -164,6 +171,14 @@ vi.mock('./tui-startup-input', () => ({
   injectTuiStartupInput: mocks.injectTuiStartupInput,
 }));
 
+vi.mock('./image-attachments', async () => {
+  const actual = await vi.importActual<typeof ImageAttachments>('./image-attachments');
+  return {
+    ...actual,
+    injectClipboardImagesAndPrompt: mocks.injectClipboardImagesAndPrompt,
+  };
+});
+
 vi.mock('@main/core/prompt-library/prompt-library-service', () => ({
   promptLibraryService: {
     list: mocks.promptLibraryList,
@@ -183,8 +198,18 @@ vi.mock('@main/core/pty/tmux-availability', () => ({
   resolveAvailableTmuxSessionName: mocks.resolveAvailableTmuxSessionName,
 }));
 
+vi.mock('@main/core/pty/tmux-reattach', () => ({
+  TmuxReattachMissError: class TmuxReattachMissError extends Error {
+    constructor() {
+      super('The persisted tmux session ended before it could be reattached.');
+    }
+  },
+  waitForTmuxReattach: mocks.waitForTmuxReattach,
+}));
+
 vi.mock('@main/core/pty/tmux-session-name', () => ({
   killTmuxSession: mocks.killTmuxSession,
+  listTmuxSessionMarkersStrict: mocks.listTmuxSessionMarkersStrict,
   makeTmuxSessionName: (sessionId: string) => `tmux-${sessionId}`,
   sendLiteralToTmuxSession: mocks.sendLiteralToTmuxSession,
 }));
@@ -200,6 +225,11 @@ vi.mock('@main/core/session-title/session-title-manager', () => ({
   },
 }));
 
+vi.mock('@main/core/session-title/codex-title-source', () => ({
+  findAcknowledgedCodexThreadForInitialPrompt: mocks.findAcknowledgedCodexThreadForInitialPrompt,
+  resolveCodexStatePath: (stateRoot: string) => `${stateRoot}/state_5.sqlite`,
+}));
+
 vi.mock('../codex-session-id', () => ({
   resolveAgentResumeSessionId: mocks.resolveAgentResumeSessionId,
   resolveCodexThreadIdForConversation: mocks.resolveCodexThreadIdForConversation,
@@ -207,6 +237,14 @@ vi.mock('../codex-session-id', () => ({
 
 vi.mock('../codex-unarchive', () => ({
   ensureCodexThreadUnarchived: mocks.ensureCodexThreadUnarchived,
+}));
+
+vi.mock('../pending-initial-prompt-store', () => ({
+  recordPendingInitialPromptAttempt: mocks.recordPendingInitialPromptAttempt,
+}));
+
+vi.mock('../stored-conversation-session-source', () => ({
+  storeConversationSessionSource: mocks.storeConversationSessionSource,
 }));
 
 vi.mock('@main/core/settings/runtime-settings-service', () => ({
@@ -322,8 +360,10 @@ describe('LocalConversationProvider', () => {
     vi.clearAllMocks();
     mocks.getHookPort.mockReturnValue(0);
     mocks.getHookToken.mockReturnValue('token');
+    mocks.injectClipboardImagesAndPrompt.mockResolvedValue(undefined);
     mocks.injectTuiStartupInput.mockResolvedValue(true);
     mocks.killTmuxSession.mockResolvedValue(undefined);
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([]);
     mocks.aiLogFinish.mockResolvedValue(undefined);
     mocks.aiLogStart.mockResolvedValue('ai-log-id');
     mocks.buildAgentEnv.mockReturnValue({});
@@ -358,6 +398,21 @@ describe('LocalConversationProvider', () => {
       return conversation.sessionSource?.sessionId ?? conversation.id;
     });
     mocks.resolveCodexThreadIdForConversation.mockReturnValue('conv-1');
+    mocks.recordPendingInitialPromptAttempt.mockImplementation(
+      async (
+        _conversationId: string,
+        attemptStartedAtMs: number,
+        attemptContext?: { stateRoot?: string; cwd?: string }
+      ) => ({
+        prompt: 'Fix this',
+        attemptStartedAtMs,
+        ...(attemptContext?.stateRoot ? { attemptStateRoot: attemptContext.stateRoot } : {}),
+        ...(attemptContext?.cwd ? { attemptCwd: attemptContext.cwd } : {}),
+      })
+    );
+    mocks.findAcknowledgedCodexThreadForInitialPrompt.mockReturnValue(undefined);
+    mocks.storeConversationSessionSource.mockResolvedValue(true);
+    mocks.waitForTmuxReattach.mockResolvedValue(undefined);
     mocks.resolveAvailableTmuxSessionName.mockResolvedValue(undefined);
     mocks.resolveLocalPtySpawn.mockImplementation(
       ({
@@ -405,6 +460,56 @@ describe('LocalConversationProvider', () => {
     await vi.advanceTimersByTimeAsync(1_000);
 
     expect(spawned).toHaveLength(1);
+  });
+
+  it('waits for clipboard image and prompt delivery before startup resolves', async () => {
+    let finishDelivery!: () => void;
+    mocks.injectClipboardImagesAndPrompt.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishDelivery = resolve;
+      })
+    );
+    const provider = createProvider();
+
+    let settled = false;
+    const start = provider
+      .startSession(conversation, { cols: 80, rows: 24 }, false, 'Inspect this image', undefined, [
+        '/tmp/input.png',
+      ])
+      .finally(() => {
+        settled = true;
+      });
+    await vi.waitFor(() => expect(mocks.injectClipboardImagesAndPrompt).toHaveBeenCalledOnce());
+    expect(settled).toBe(false);
+
+    finishDelivery();
+    await start;
+
+    expect(mocks.injectClipboardImagesAndPrompt).toHaveBeenCalledWith({
+      pty: spawned[0].pty,
+      runtimeId: 'claude',
+      imagePaths: ['/tmp/input.png'],
+      prompt: 'Inspect this image',
+    });
+  });
+
+  it('fails startup and preserves caller recovery when clipboard delivery fails', async () => {
+    mocks.injectClipboardImagesAndPrompt.mockRejectedValueOnce(new Error('clipboard failed'));
+    const provider = createProvider();
+
+    await expect(
+      provider.startSession(
+        conversation,
+        { cols: 80, rows: 24 },
+        false,
+        'Inspect this image',
+        undefined,
+        ['/tmp/input.png']
+      )
+    ).rejects.toThrow('clipboard failed');
+
+    expect(spawned[0].pty.killCalls).toBe(1);
+    expect(provider.getActiveSessionCount()).toBe(0);
   });
 
   it('detaches silence tracking once when stop races the PTY exit callback', async () => {
@@ -571,6 +676,11 @@ describe('LocalConversationProvider', () => {
       sessionId
     );
     expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
+    expect(mocks.aiLogFinish).toHaveBeenCalledWith('ai-log-id', {
+      status: 'failed',
+      error: 'Signal SIGTERM',
+    });
+    expect(mocks.stopTitle).toHaveBeenCalledWith(conversation.id);
     ptySessionRegistry.unsubscribe(sessionId, consumerId);
   });
 
@@ -786,6 +896,9 @@ describe('LocalConversationProvider', () => {
       initialPromptFlag: '',
     });
     mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([
+      { sessionName: 'tmux-session', cwd: '/workspace', attachedClients: 0 },
+    ]);
     mocks.resolveAgentResumeSessionId.mockReturnValue('current-fork-thread');
     const importedConversation: Conversation = {
       ...conversation,
@@ -986,6 +1099,9 @@ describe('LocalConversationProvider', () => {
       initialPromptFlag: '',
     });
     mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([
+      { sessionName: 'tmux-session', cwd: '/workspace', attachedClients: 0 },
+    ]);
     mocks.repairCodexThreadHistoryProjection.mockReturnValue({
       status: 'repaired',
       byteOffset: 11_193_113,
@@ -1144,6 +1260,226 @@ describe('LocalConversationProvider', () => {
 
     expect(mocks.watchCodexRunState).toHaveBeenCalledOnce();
     expect(mocks.wireAgentClassifier).toHaveBeenCalledOnce();
+    expect(mocks.startTitle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        waitForInitialPrompt: true,
+        expectedInitialPrompt: 'Fix this',
+      })
+    );
+  });
+
+  it('records a pending Codex delivery attempt before spawning it', async () => {
+    vi.setSystemTime(12_345);
+    const pendingConversation: Conversation = {
+      ...conversation,
+      runtimeId: 'codex',
+      pendingInitialPrompt: { prompt: 'Fix this' },
+    };
+    const provider = createProvider();
+
+    await provider.startSession(pendingConversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    expect(mocks.recordPendingInitialPromptAttempt).toHaveBeenCalledWith(
+      conversation.id,
+      12_345,
+      {
+        projectId: conversation.projectId,
+        taskId: conversation.taskId,
+        stateRoot: expect.any(String),
+        cwd: '/workspace',
+      },
+      undefined
+    );
+    expect(mocks.spawnLocalPty).toHaveBeenCalledOnce();
+    expect(mocks.startTitle).toHaveBeenCalledWith(expect.objectContaining({ startedAtMs: 12_345 }));
+  });
+
+  it('does not spawn from a stale pending snapshot acknowledged during attempt recording', async () => {
+    mocks.recordPendingInitialPromptAttempt.mockResolvedValueOnce(undefined);
+    const pendingConversation: Conversation = {
+      ...conversation,
+      runtimeId: 'codex',
+      pendingInitialPrompt: { prompt: 'Fix this' },
+    };
+    const provider = createProvider();
+
+    await provider.startSession(pendingConversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    expect(mocks.spawnLocalPty).not.toHaveBeenCalled();
+    expect(mocks.startTitle).not.toHaveBeenCalled();
+  });
+
+  it('resumes an acknowledged native turn instead of replaying its pending prompt', async () => {
+    mocks.findAcknowledgedCodexThreadForInitialPrompt.mockReturnValue({
+      id: 'acknowledged-thread',
+      cwd: '/workspace',
+      title: 'Fix this',
+      firstUserMessage: 'Fix this',
+      createdAtMs: 5_050,
+      updatedAtMs: 5_100,
+    });
+    const pendingConversation: Conversation = {
+      ...conversation,
+      runtimeId: 'codex',
+      pendingInitialPrompt: {
+        prompt: 'Fix this',
+        attemptStartedAtMs: 5_000,
+        attemptStateRoot: '/state/original-codex-home',
+        attemptCwd: '/workspace',
+      },
+    };
+    const provider = createProvider();
+
+    await provider.startSession(pendingConversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    expect(mocks.storeConversationSessionSource).toHaveBeenCalledWith(
+      conversation.id,
+      expect.objectContaining({
+        sessionId: 'acknowledged-thread',
+        stateRoot: '/state/original-codex-home',
+      }),
+      {
+        projectId: conversation.projectId,
+        taskId: conversation.taskId,
+        expectedPendingAttemptStartedAtMs: 5_000,
+      }
+    );
+    expect(mocks.findAcknowledgedCodexThreadForInitialPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statePath: '/state/original-codex-home/state_5.sqlite',
+        cwd: '/workspace',
+      })
+    );
+    expect(mocks.recordPendingInitialPromptAttempt).not.toHaveBeenCalled();
+    expect(mocks.startTitle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isResuming: true,
+        agentSessionId: 'acknowledged-thread',
+        waitForInitialPrompt: false,
+      })
+    );
+  });
+
+  it('reconciles a surviving pending Codex pane against its original attempt window', async () => {
+    vi.setSystemTime(12_345);
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([
+      { sessionName: 'tmux-session', cwd: '/workspace', attachedClients: 0 },
+    ]);
+    const pendingConversation: Conversation = {
+      ...conversation,
+      runtimeId: 'codex',
+      pendingInitialPrompt: {
+        prompt: 'Fix this',
+        attemptStartedAtMs: 5_000,
+        attemptStateRoot: '/state/original-codex-home',
+      },
+    };
+    const provider = createProvider();
+
+    await provider.startSession(
+      pendingConversation,
+      { cols: 80, rows: 24 },
+      false,
+      'Fix this',
+      undefined,
+      undefined,
+      undefined,
+      { reattachExistingTmuxSession: true }
+    );
+
+    expect(mocks.recordPendingInitialPromptAttempt).not.toHaveBeenCalled();
+    expect(mocks.startTitle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startedAtMs: 5_000,
+        stateRoot: '/state/original-codex-home',
+      })
+    );
+  });
+
+  it('auto-detects a surviving attempted-prompt pane before an ordinary resume can reset its window', async () => {
+    vi.setSystemTime(12_345);
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([
+      { sessionName: 'tmux-session', cwd: '/workspace', attachedClients: 0 },
+    ]);
+    const provider = createProvider();
+
+    await provider.startSession(
+      {
+        ...conversation,
+        runtimeId: 'codex',
+        pendingInitialPrompt: { prompt: 'Fix this', attemptStartedAtMs: 5_000 },
+      },
+      { cols: 80, rows: 24 },
+      false,
+      'Fix this'
+    );
+
+    expect(mocks.recordPendingInitialPromptAttempt).not.toHaveBeenCalled();
+    expect(mocks.resolveLocalPtySpawn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: expect.objectContaining({ tmuxReattachExistingSession: true }),
+      })
+    );
+    expect(mocks.startTitle).toHaveBeenCalledWith(expect.objectContaining({ startedAtMs: 5_000 }));
+  });
+
+  it('leaves an attempted prompt intact when its sampled tmux pane vanished before attach', async () => {
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([]);
+    const provider = createProvider();
+
+    await expect(
+      provider.startSession(
+        {
+          ...conversation,
+          runtimeId: 'codex',
+          pendingInitialPrompt: { prompt: 'Fix this', attemptStartedAtMs: 5_000 },
+        },
+        { cols: 80, rows: 24 },
+        false,
+        'Fix this',
+        undefined,
+        undefined,
+        undefined,
+        { reattachExistingTmuxSession: true }
+      )
+    ).rejects.toThrow('ended before it could be reattached');
+
+    expect(mocks.recordPendingInitialPromptAttempt).not.toHaveBeenCalled();
+    expect(mocks.spawnLocalPty).not.toHaveBeenCalled();
+  });
+
+  it('does not commit a reattach whose pane disappears after PTY spawn', async () => {
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([
+      { sessionName: 'tmux-session', cwd: '/workspace', attachedClients: 0 },
+    ]);
+    mocks.waitForTmuxReattach.mockRejectedValueOnce(new Error('attach outcome missed'));
+    const provider = createProvider();
+
+    await expect(
+      provider.startSession(
+        {
+          ...conversation,
+          runtimeId: 'codex',
+          pendingInitialPrompt: { prompt: 'Fix this', attemptStartedAtMs: 5_000 },
+        },
+        { cols: 80, rows: 24 },
+        false,
+        'Fix this',
+        undefined,
+        undefined,
+        undefined,
+        { reattachExistingTmuxSession: true }
+      )
+    ).rejects.toThrow('attach outcome missed');
+
+    expect(provider.getActiveSessionCount()).toBe(0);
+    expect(mocks.startTitle).not.toHaveBeenCalled();
+    expect(mocks.recordPendingInitialPromptAttempt).not.toHaveBeenCalled();
+    expect(spawned[0].pty.killCalls).toBe(1);
   });
 
   it('uses hooks alone when the selected hook monitor is available', async () => {

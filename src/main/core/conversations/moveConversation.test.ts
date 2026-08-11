@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   sourceStop: vi.fn(),
   sourceRestart: vi.fn(),
+  stabilizePendingInitialPromptDelivery: vi.fn(),
   targetStart: vi.fn(),
 }));
 
@@ -24,6 +25,10 @@ vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
 vi.mock('../projects/utils', () => ({ resolveTask: mocks.resolveTask }));
 vi.mock('./conversation-events', () => ({
   conversationEvents: { _emit: mocks.hookEmit },
+}));
+vi.mock('./pending-initial-prompt-store', () => ({
+  clearPendingInitialPrompt: vi.fn(),
+  stabilizePendingInitialPromptDelivery: mocks.stabilizePendingInitialPromptDelivery,
 }));
 vi.mock('./utils', () => ({ mapConversationRowToConversation: mocks.mapConversation }));
 
@@ -82,6 +87,7 @@ describe('moveConversation', () => {
     mocks.sourceStop.mockResolvedValue(undefined);
     mocks.sourceRestart.mockResolvedValue(undefined);
     mocks.targetStart.mockResolvedValue(undefined);
+    mocks.stabilizePendingInitialPromptDelivery.mockResolvedValue({ config: sourceRow.config });
     mocks.mapConversation.mockImplementation((row: typeof sourceRow) => ({
       id: row.id,
       projectId: row.projectId,
@@ -130,6 +136,54 @@ describe('moveConversation', () => {
     expect(mocks.update).not.toHaveBeenCalled();
   });
 
+  it('rejects an attempted pending first prompt before stopping or updating ownership', async () => {
+    mocks.mapConversation.mockImplementation((row: typeof sourceRow) => ({
+      id: row.id,
+      projectId: row.projectId,
+      taskId: row.taskId,
+      runtimeId: 'codex',
+      title: row.title,
+      lastInteractedAt: row.lastInteractedAt,
+      isInitialConversation: row.isInitialConversation,
+      resume: true,
+      pendingInitialPrompt: {
+        prompt: 'Keep this exact first prompt',
+        attemptStartedAtMs: 1_786_387_322_082,
+      },
+    }));
+
+    await expect(
+      moveConversation('project-1', 'task-1', 'task-2', 'conversation-1')
+    ).rejects.toThrow('Resume the pending first prompt before moving this conversation.');
+
+    expect(mocks.mapConversation).toHaveBeenCalledWith(sourceRow, true);
+    expect(mocks.resolveTask).not.toHaveBeenCalled();
+    expect(mocks.sourceStop).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.targetStart).not.toHaveBeenCalled();
+    expect(mocks.emit).not.toHaveBeenCalled();
+  });
+
+  it('rejects when a first-prompt attempt wins the delivery CAS during move validation', async () => {
+    mocks.stabilizePendingInitialPromptDelivery.mockResolvedValue({
+      config: JSON.stringify({
+        pendingInitialPrompt: { prompt: 'Keep this exact first prompt', attemptStartedAtMs: 123 },
+      }),
+      pendingInitialPrompt: {
+        prompt: 'Keep this exact first prompt',
+        attemptStartedAtMs: 123,
+      },
+    });
+
+    await expect(
+      moveConversation('project-1', 'task-1', 'task-2', 'conversation-1')
+    ).rejects.toThrow('Resume the pending first prompt before moving this conversation.');
+
+    expect(mocks.sourceStop).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.targetStart).not.toHaveBeenCalled();
+  });
+
   it('restarts the source session when persisting the move fails', async () => {
     mocks.update.mockImplementation((table: unknown) => {
       expect(table).toBe(conversations);
@@ -150,5 +204,23 @@ describe('moveConversation', () => {
       true
     );
     expect(mocks.emit).not.toHaveBeenCalled();
+  });
+
+  it('does not restart from a stale snapshot when the delivery CAS wins first', async () => {
+    mocks.update.mockImplementation((table: unknown) => {
+      expect(table).toBe(conversations);
+      return {
+        set: () => ({
+          where: () => ({ returning: async () => [] }),
+        }),
+      };
+    });
+
+    await expect(
+      moveConversation('project-1', 'task-1', 'task-2', 'conversation-1')
+    ).rejects.toThrow('Conversation moved concurrently');
+
+    expect(mocks.sourceRestart).not.toHaveBeenCalled();
+    expect(mocks.targetStart).not.toHaveBeenCalled();
   });
 });

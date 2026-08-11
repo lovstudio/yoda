@@ -205,6 +205,12 @@ function toCurrentResolvedThread(
   reservedThreadIds?: ReadonlySet<string>
 ): ResolvedCodexThread | undefined {
   const resolved = toResolvedThread(thread, fallbackId);
+  // A heuristic match can point at the root thread owned by another Yoda
+  // conversation. Lineage traversal already excludes reserved descendants,
+  // but the root is seeded as reachable before that filter runs. Reject it
+  // here so an unrelated conversation starts fresh instead of attaching to
+  // the other session and later persisting that mistaken binding.
+  if (resolved && reservedThreadIds?.has(resolved.id)) return undefined;
   if (!resolved || !thread) return resolved;
   const currentThreadId = resolveLatestCodexThreadIdInLineage({
     statePath,

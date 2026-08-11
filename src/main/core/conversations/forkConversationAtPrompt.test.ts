@@ -219,6 +219,80 @@ describe('forkConversationAtPrompt', () => {
     expect(inserted.forkedFromPromptIndex).toBe(0);
   });
 
+  it('removes a pending first prompt from a fork without a stored session source', async () => {
+    mocks.selectChain.limit.mockResolvedValue([
+      {
+        ...sourceRow,
+        config: JSON.stringify({
+          permissionMode: 'full-auto',
+          pendingInitialPrompt: {
+            prompt: 'Do not replay me in the fork',
+            attemptStartedAtMs: 1_786_387_322_082,
+          },
+        }),
+      },
+    ]);
+
+    await forkConversationAtPrompt({
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'source-conversation',
+      promptIndex: 0,
+      target: { kind: 'codex-turn', turnId: 'turn-1' },
+    });
+
+    const inserted = mocks.insertChain.values.mock.calls[0]?.[0] as { config: string };
+    expect(JSON.parse(inserted.config)).toEqual({ permissionMode: 'full-auto' });
+  });
+
+  it('removes a pending first prompt and rewrites an existing session source for the fork', async () => {
+    const sourceConfig = {
+      permissionMode: 'full-auto',
+      pendingInitialPrompt: {
+        prompt: 'Do not replay me in the fork',
+        attemptStartedAtMs: 1_786_387_322_082,
+      },
+      sessionSource: {
+        catalogId: 'old-catalog',
+        runtimeId: 'codex',
+        sessionId: 'source-thread',
+        stateRoot: '/state/codex',
+      },
+    };
+    mocks.selectChain.limit.mockResolvedValue([
+      { ...sourceRow, config: JSON.stringify(sourceConfig) },
+    ]);
+    mocks.mapConversationRowToConversation.mockImplementation(
+      (row: Record<string, unknown>): Conversation =>
+        ({
+          ...row,
+          runtimeId: row.runtime,
+          lastInteractedAt: row.lastInteractedAt ?? null,
+          sessionSource: sourceConfig.sessionSource,
+        }) as Conversation
+    );
+
+    await forkConversationAtPrompt({
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'source-conversation',
+      promptIndex: 0,
+      target: { kind: 'codex-turn', turnId: 'turn-1' },
+    });
+
+    const inserted = mocks.insertChain.values.mock.calls[0]?.[0] as { config: string };
+    expect(JSON.parse(inserted.config)).toEqual({
+      permissionMode: 'full-auto',
+      sessionSource: {
+        catalogId: expect.any(String),
+        runtimeId: 'codex',
+        sessionId: 'forked-thread',
+        stateRoot: '/state/codex',
+      },
+    });
+    expect(JSON.parse(inserted.config).sessionSource.catalogId).not.toBe('old-catalog');
+  });
+
   it('records the direct parent when a restored branch is forked again', async () => {
     mocks.selectChain.limit.mockResolvedValue([
       {

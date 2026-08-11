@@ -155,6 +155,28 @@ describe('resolveCodexThreadIdForConversation', () => {
     ).toEqual({ id: 'legacy-codex-thread', title: 'Original long user prompt' });
   });
 
+  it('does not reuse a reserved root found through the activity window', () => {
+    insertThread(statePath, {
+      id: 'other-conversation-thread',
+      cwd: '/repo',
+      title: 'Another Yoda conversation',
+      createdAtMs: Date.parse('2026-07-27T10:10:43.000Z'),
+      updatedAtMs: Date.parse('2026-07-27T10:58:42.000Z'),
+    });
+
+    expect(
+      resolveCodexThreadForConversation({
+        conversationId: 'new-yoda-conversation',
+        cwd: '/repo',
+        title: 'Unrelated new task',
+        createdAt: '2026-07-27 08:03:43',
+        lastInteractedAt: '2026-07-27T10:49:21.067Z',
+        statePath,
+        reservedThreadIds: new Set(['other-conversation-thread']),
+      })
+    ).toBeUndefined();
+  });
+
   it('keeps overlapping renamed legacy threads ambiguous', () => {
     insertThread(statePath, {
       id: 'legacy-codex-thread-1',
@@ -537,6 +559,7 @@ function createStateDb(statePath: string): void {
         title TEXT NOT NULL,
         first_user_message TEXT NOT NULL DEFAULT '',
         preview TEXT NOT NULL DEFAULT '',
+        tokens_used INTEGER NOT NULL DEFAULT 0,
         archived INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,

@@ -7,7 +7,7 @@ import {
 import { agentSessionExitedChannel } from '@shared/events/agentEvents';
 import type { ProjectPromptPrinciples } from '@shared/project-settings';
 import { makePtyId } from '@shared/ptyId';
-import { makePtySessionId } from '@shared/ptySessionId';
+import { makePtySessionId, parsePtySessionId } from '@shared/ptySessionId';
 import { getRuntime } from '@shared/runtime-registry';
 import {
   resolveRuntimeStatusMonitor,
@@ -49,8 +49,17 @@ import { buildAgentEnv } from '@main/core/pty/pty-env';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { logLocalPtySpawnWarnings, resolveLocalPtySpawn } from '@main/core/pty/pty-spawn-platform';
 import { resolveAvailableTmuxSessionName } from '@main/core/pty/tmux-availability';
-import { killTmuxSession, sendLiteralToTmuxSession } from '@main/core/pty/tmux-session-name';
-import { resolveCodexStatePath } from '@main/core/session-title/codex-title-source';
+import { TmuxReattachMissError, waitForTmuxReattach } from '@main/core/pty/tmux-reattach';
+import {
+  killTmuxSession,
+  listTmuxSessionMarkersStrict,
+  sendLiteralToTmuxSession,
+  type TmuxSessionMarker,
+} from '@main/core/pty/tmux-session-name';
+import {
+  findAcknowledgedCodexThreadForInitialPrompt,
+  resolveCodexStatePath,
+} from '@main/core/session-title/codex-title-source';
 import { sessionTitleManager } from '@main/core/session-title/session-title-manager';
 import { resolveTerminalThemeMode } from '@main/core/settings/resolve-terminal-theme-mode';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
@@ -65,13 +74,20 @@ import {
 import { getReservedCodexThreadIds } from '../codex-thread-reservations';
 import { ensureCodexThreadUnarchived } from '../codex-unarchive';
 import { buildCohubAdapterCommand, getCohubAdapterEnvironment } from '../cohub-adapter-command';
+import {
+  cancelConversationHydrationBarrier,
+  cancelConversationHydrationBarriersForTask,
+} from '../conversation-hydration-barrier';
 import { getConversationRuntimeStateRoot } from '../conversation-session-source';
 import { withExecutionModeInstructions } from '../execution-mode';
+import { createLocalAgentSessionCatalogId } from '../local-agent-session-catalog';
+import { recordPendingInitialPromptAttempt } from '../pending-initial-prompt-store';
 import { withRuntimeStateRoot } from '../session-state-roots';
 import {
   recordConversationAuthProvider,
   snapshotTaskDiffOnSessionExit,
 } from '../session-stats-hooks';
+import { storeConversationSessionSource } from '../stored-conversation-session-source';
 import { buildAgentCommand } from './agent-command';
 import { injectClipboardImagesAndPrompt, substituteImageMentions } from './image-attachments';
 import { getEnabledPromptPrinciplesText } from './prompt-principles';
@@ -111,6 +127,10 @@ export class LocalConversationProvider implements ConversationProvider {
   private readonly runStateWatchers = new Map<string, RunStateWatcher[]>();
   private readonly sessionArtifactCleanups = new Map<string, { pty: Pty; cleanup: () => void }>();
   private readonly silenceReconcilerDetachers = new Map<string, () => void>();
+
+  waitsForInitialPromptSessionBinding(runtimeId: Conversation['runtimeId']): boolean {
+    return runtimeId === 'codex';
+  }
 
   constructor({
     projectId,
@@ -160,7 +180,7 @@ export class LocalConversationProvider implements ConversationProvider {
       conversation.taskId,
       conversation.id
     );
-    const reattachExistingTmuxSession = startOptions?.reattachExistingTmuxSession === true;
+    let reattachExistingTmuxSession = startOptions?.reattachExistingTmuxSession === true;
     this.knownSessionIds.add(sessionId);
     if (this.sessions.has(sessionId)) return;
     const existingStart = this.pendingStarts.get(sessionId);
@@ -189,6 +209,7 @@ export class LocalConversationProvider implements ConversationProvider {
     let preparedSettingsCleanup: (() => void) | undefined;
     let artifactCleanupRegistered = false;
     let detachSilenceReconcilerForRollback: (() => void) | undefined;
+    let reattachMarkerBaseline: TmuxSessionMarker | undefined;
 
     try {
       await claudeTrustService.maybeAutoTrustLocal({
@@ -209,6 +230,57 @@ export class LocalConversationProvider implements ConversationProvider {
 
       const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
       if (!this.ownsPendingStart(sessionId, startToken)) return;
+      const providerDef = getRuntime(conversation.runtimeId);
+      const pendingAttempt = conversation.pendingInitialPrompt;
+      if (
+        conversation.runtimeId === 'codex' &&
+        !isResuming &&
+        !reattachExistingTmuxSession &&
+        pendingAttempt?.attemptStartedAtMs !== undefined
+      ) {
+        const pendingExpectedPrompt = pendingAttempt.imagePaths?.length
+          ? substituteImageMentions(pendingAttempt.prompt, pendingAttempt.imagePaths)
+          : pendingAttempt.prompt;
+        if (pendingExpectedPrompt?.trim()) {
+          const pendingStateRoot =
+            pendingAttempt.attemptStateRoot ??
+            resolveRuntimeStateDirectory('codex', providerConfig);
+          const acknowledgedThread = findAcknowledgedCodexThreadForInitialPrompt({
+            statePath: resolveCodexStatePath(pendingStateRoot),
+            cwd: pendingAttempt.attemptCwd ?? this.taskPath,
+            attemptStartedAtMs: pendingAttempt.attemptStartedAtMs,
+            expectedInitialPrompt: pendingExpectedPrompt,
+          });
+          if (acknowledgedThread) {
+            const sessionSource = {
+              catalogId: createLocalAgentSessionCatalogId(
+                'codex',
+                pendingStateRoot,
+                acknowledgedThread.id
+              ),
+              runtimeId: 'codex' as const,
+              sessionId: acknowledgedThread.id,
+              stateRoot: pendingStateRoot,
+            };
+            const stored = await storeConversationSessionSource(conversation.id, sessionSource, {
+              projectId: conversation.projectId,
+              taskId: conversation.taskId,
+              expectedPendingAttemptStartedAtMs: pendingAttempt.attemptStartedAtMs,
+            });
+            if (!this.ownsPendingStart(sessionId, startToken)) return;
+            if (stored) {
+              conversation = {
+                ...conversation,
+                sessionSource,
+                pendingInitialPrompt: undefined,
+              };
+              isResuming = true;
+              initialPrompt = undefined;
+              imagePaths = undefined;
+            }
+          }
+        }
+      }
       const runtimeStateRoot = conversation.sessionSource
         ? getConversationRuntimeStateRoot(conversation, providerConfig)
         : undefined;
@@ -375,7 +447,6 @@ export class LocalConversationProvider implements ConversationProvider {
       }
       const port = agentHookService.getPort();
       const token = agentHookService.getToken();
-      const providerDef = getRuntime(conversation.runtimeId);
       const hooksAvailable = port > 0 && providerDef?.supportsHooks;
       const configuredStatusMonitor = resolveRuntimeStatusMonitor(
         conversation.runtimeId,
@@ -446,6 +517,26 @@ export class LocalConversationProvider implements ConversationProvider {
 
       const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
       if (!this.ownsPendingStart(sessionId, startToken)) return;
+      if (reattachExistingTmuxSession && !tmuxSessionName) {
+        throw new TmuxReattachMissError();
+      }
+      if (tmuxSessionName && (reattachExistingTmuxSession || pendingAttempt?.attemptStartedAtMs)) {
+        const markers = await listTmuxSessionMarkersStrict(this.ctx);
+        if (!this.ownsPendingStart(sessionId, startToken)) return;
+        const canonicalPane = markers.find((marker) => marker.sessionName === tmuxSessionName);
+        if (reattachExistingTmuxSession && !canonicalPane) {
+          throw new TmuxReattachMissError();
+        }
+        if (
+          !reattachExistingTmuxSession &&
+          !effectiveIsResuming &&
+          pendingAttempt?.attemptStartedAtMs !== undefined &&
+          canonicalPane
+        ) {
+          reattachExistingTmuxSession = true;
+        }
+        if (reattachExistingTmuxSession) reattachMarkerBaseline = canonicalPane;
+      }
       // A surviving Codex process already reconstructed the truncated prefix in
       // memory. Replace only this Yoda-owned tmux session after a successful
       // cursor repair so the next process reloads the now-complete projection.
@@ -502,6 +593,40 @@ export class LocalConversationProvider implements ConversationProvider {
       if (!this.ownsPendingStart(sessionId, startToken)) return;
 
       const sessionStartedAtMs = Date.now();
+      let titleDiscoveryStartedAtMs = sessionStartedAtMs;
+      let titleDiscoveryStateRoot = titleStateRoot;
+      if (
+        conversation.runtimeId === 'codex' &&
+        !effectiveIsResuming &&
+        conversation.pendingInitialPrompt
+      ) {
+        const previousAttemptStartedAtMs = conversation.pendingInitialPrompt.attemptStartedAtMs;
+        if (reattachExistingTmuxSession && previousAttemptStartedAtMs !== undefined) {
+          titleDiscoveryStartedAtMs = previousAttemptStartedAtMs;
+          titleDiscoveryStateRoot =
+            conversation.pendingInitialPrompt.attemptStateRoot ?? titleStateRoot;
+        } else {
+          titleDiscoveryStartedAtMs = Date.now();
+          const recordedPending = await recordPendingInitialPromptAttempt(
+            conversation.id,
+            titleDiscoveryStartedAtMs,
+            {
+              projectId: conversation.projectId,
+              taskId: conversation.taskId,
+              stateRoot: titleStateRoot,
+              cwd: this.taskPath,
+            },
+            conversation.pendingInitialPrompt.deliveryToken
+          );
+          if (!this.ownsPendingStart(sessionId, startToken)) return;
+          if (!recordedPending) {
+            log.info('LocalConversationProvider: pending prompt was acknowledged concurrently', {
+              conversationId: conversation.id,
+            });
+            return;
+          }
+        }
+      }
       const pty = (() => {
         try {
           const resolved = resolveLocalPtySpawn({
@@ -560,12 +685,27 @@ export class LocalConversationProvider implements ConversationProvider {
         }
       })();
       spawnedPty = pty;
-      const startupInputPromise = startupInput
-        ? injectTuiStartupInput({ pty, runtimeId: conversation.runtimeId, input: startupInput })
+      const tmuxReattachPromise = reattachMarkerBaseline
+        ? waitForTmuxReattach({ ctx: this.ctx, pty, baseline: reattachMarkerBaseline })
         : undefined;
+      const startupInputPromise =
+        startupInput && !reattachExistingTmuxSession
+          ? injectTuiStartupInput({ pty, runtimeId: conversation.runtimeId, input: startupInput })
+          : undefined;
+      const clipboardInputPromise =
+        useClipboardImagePaste && pendingImagePaths && !reattachExistingTmuxSession
+          ? injectClipboardImagesAndPrompt({
+              pty,
+              runtimeId: conversation.runtimeId,
+              imagePaths: pendingImagePaths,
+              prompt: initialPrompt,
+            })
+          : undefined;
       // Attach the readiness listener immediately so early TUI output is observed;
       // the result is awaited after registry ownership is committed below.
       void startupInputPromise?.catch(() => {});
+      void clipboardInputPromise?.catch(() => {});
+      void tmuxReattachPromise?.catch(() => {});
 
       if (preparedSettings.cleanup) {
         this.sessionArtifactCleanups.set(sessionId, {
@@ -623,18 +763,27 @@ export class LocalConversationProvider implements ConversationProvider {
       }
 
       let shouldEmitAgentSessionExited = false;
-      pty.onExit(({ exitCode }) => {
+      pty.onExit(({ exitCode, signal }) => {
         this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
+        const exitedBySignal = signal !== undefined && signal !== 0;
+        const failed = exitedBySignal || (typeof exitCode === 'number' && exitCode !== 0);
+        if (!invocationLogFinished) {
+          invocationLogFinished = true;
+          void aiLogService.finish(invocationLogId, {
+            status: failed ? 'failed' : 'succeeded',
+            error: exitedBySignal
+              ? `Signal ${String(signal)}`
+              : failed
+                ? `Exit code ${exitCode}`
+                : undefined,
+          });
+        }
         if (this.sessions.get(sessionId) !== pty) return;
         shouldEmitAgentSessionExited = true;
-        void aiLogService.finish(invocationLogId, {
-          status: typeof exitCode === 'number' && exitCode !== 0 ? 'failed' : 'succeeded',
-          error:
-            typeof exitCode === 'number' && exitCode !== 0 ? `Exit code ${exitCode}` : undefined,
-        });
         void interactiveTurnLogger.onSessionExit(conversation.id);
         this.sessions.delete(sessionId);
         this.sessionInfos.delete(sessionId);
+        sessionTitleManager.stop(conversation.id);
         this.stopRunStateWatcher(conversation.id);
         markRuntimeSessionExited({
           projectId: conversation.projectId,
@@ -644,6 +793,7 @@ export class LocalConversationProvider implements ConversationProvider {
         telemetryService.capture('agent_run_finished', {
           provider: conversation.runtimeId,
           exit_code: typeof exitCode === 'number' ? exitCode : -1,
+          exit_signal: signal === undefined ? '' : String(signal),
           project_id: conversation.projectId,
           task_id: conversation.taskId,
           conversation_id: conversation.id,
@@ -672,6 +822,10 @@ export class LocalConversationProvider implements ConversationProvider {
         ptySessionRegistry.unregister(sessionId);
         return;
       }
+      if (tmuxReattachPromise) {
+        await tmuxReattachPromise;
+        if (!this.ownsPendingStart(sessionId, startToken)) return;
+      }
       this.sessions.set(sessionId, pty);
       this.sessionInfos.set(sessionId, {
         sessionId,
@@ -695,18 +849,9 @@ export class LocalConversationProvider implements ConversationProvider {
         if (!this.ownsPendingStart(sessionId, startToken)) return;
         if (!delivered) throw new Error(`${conversation.runtimeId} exited before startup input.`);
       }
-      if (useClipboardImagePaste && pendingImagePaths) {
-        void injectClipboardImagesAndPrompt({
-          pty,
-          runtimeId: conversation.runtimeId,
-          imagePaths: pendingImagePaths,
-          prompt: initialPrompt,
-        }).catch((error) => {
-          log.warn('LocalConversationProvider: clipboard image injection failed', {
-            conversationId: conversation.id,
-            error: String(error),
-          });
-        });
+      if (clipboardInputPromise) {
+        await clipboardInputPromise;
+        if (!this.ownsPendingStart(sessionId, startToken)) return;
       }
       if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
       sessionTitleManager.start({
@@ -715,10 +860,16 @@ export class LocalConversationProvider implements ConversationProvider {
         projectId: conversation.projectId,
         taskId: conversation.taskId,
         cwd: this.taskPath,
-        startedAtMs: sessionStartedAtMs,
+        startedAtMs: titleDiscoveryStartedAtMs,
         isResuming: effectiveIsResuming,
         agentSessionId: effectiveIsResuming ? agentSessionId : undefined,
-        stateRoot: titleStateRoot,
+        stateRoot: titleDiscoveryStateRoot,
+        waitForInitialPrompt:
+          !effectiveIsResuming && Boolean(effectiveInitialPrompt?.trim() || pendingImagePaths),
+        expectedInitialPrompt: effectiveInitialPrompt,
+        initialPromptAttemptStartedAtMs: conversation.pendingInitialPrompt
+          ? titleDiscoveryStartedAtMs
+          : undefined,
       });
       this.startRunStateWatcher(
         conversation,
@@ -758,6 +909,7 @@ export class LocalConversationProvider implements ConversationProvider {
           ptySessionRegistry.unregister(sessionId);
         }
         if (invocationLogIdForRollback && !invocationLogFinished) {
+          invocationLogFinished = true;
           void aiLogService.finish(invocationLogIdForRollback, {
             status: 'failed',
             error: startFailed ? 'PTY startup failed' : 'PTY startup cancelled',
@@ -766,6 +918,7 @@ export class LocalConversationProvider implements ConversationProvider {
       } else if (!startCommitted) {
         preparedSettingsCleanup?.();
         if (invocationLogIdForRollback && !invocationLogFinished) {
+          invocationLogFinished = true;
           void aiLogService.finish(invocationLogIdForRollback, {
             status: 'failed',
             error: startFailed ? 'PTY startup failed' : 'PTY startup cancelled',
@@ -959,6 +1112,10 @@ export class LocalConversationProvider implements ConversationProvider {
 
   private cancelAllPendingStarts(): void {
     for (const sessionId of this.pendingStarts.keys()) {
+      const conversationId = parsePtySessionId(sessionId)?.leafId;
+      if (conversationId) {
+        cancelConversationHydrationBarrier(this.projectId, this.taskId, conversationId);
+      }
       this.pendingStarts.delete(sessionId);
       ptySessionRegistry.unregister(sessionId);
     }
@@ -973,6 +1130,7 @@ export class LocalConversationProvider implements ConversationProvider {
 
   async stopSession(conversationId: string): Promise<void> {
     const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
+    cancelConversationHydrationBarrier(this.projectId, this.taskId, conversationId);
     this.knownSessionIds.delete(sessionId);
     this.cancelPendingStart(sessionId);
     this.releaseSilenceReconciler(sessionId);
@@ -1018,6 +1176,7 @@ export class LocalConversationProvider implements ConversationProvider {
   }
 
   async detachAll(): Promise<void> {
+    cancelConversationHydrationBarriersForTask(this.projectId, this.taskId);
     this.cancelAllPendingStarts();
     for (const sessionId of Array.from(this.silenceReconcilerDetachers.keys())) {
       this.releaseSilenceReconciler(sessionId);

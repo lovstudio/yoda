@@ -15,10 +15,18 @@ export interface SessionTitleContext {
   /** Timestamp captured immediately before spawning the agent process. */
   startedAtMs?: number;
   isResuming?: boolean;
+  /** Delay durable binding until a fresh session records its first turn. */
+  waitForInitialPrompt?: boolean;
+  /** Effective prompt passed to the fresh provider process, for ownership matching. */
+  expectedInitialPrompt?: string;
+  /** Persisted delivery-attempt token used to reject stale native binding callbacks. */
+  initialPromptAttemptStartedAtMs?: number;
 }
 
 export type TitleListener = (title: string) => void;
-export type SessionBindingListener = (sessionId: string) => void;
+export type SessionBindingListener = (
+  sessionId: string
+) => boolean | void | Promise<boolean | void>;
 
 export interface SessionTitleWatcher {
   stop(): void;

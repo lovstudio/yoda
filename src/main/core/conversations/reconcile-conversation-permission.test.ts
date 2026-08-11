@@ -8,11 +8,14 @@ const mocks = vi.hoisted(() => ({
   updateChain: {
     set: vi.fn(),
     where: vi.fn(),
+    returning: vi.fn(),
   },
 }));
 
 vi.mock('drizzle-orm', () => ({
+  and: vi.fn((...conditions: unknown[]) => conditions),
   eq: vi.fn((left: unknown, right: unknown) => ({ left, right })),
+  isNull: vi.fn((value: unknown) => ({ isNull: value })),
 }));
 
 vi.mock('@main/core/agents-config/agents-config-service', () => ({
@@ -30,14 +33,21 @@ vi.mock('@main/db/client', () => ({
 }));
 
 vi.mock('@main/db/schema', () => ({
-  conversations: { id: 'conversation.id' },
+  conversations: {
+    archivedAt: 'conversation.archivedAt',
+    config: 'conversation.config',
+    id: 'conversation.id',
+    projectId: 'conversation.projectId',
+    taskId: 'conversation.taskId',
+  },
 }));
 
 describe('reconcileConversationPermission', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.updateChain.set.mockReturnThis();
-    mocks.updateChain.where.mockResolvedValue(undefined);
+    mocks.updateChain.where.mockReturnThis();
+    mocks.updateChain.returning.mockResolvedValue([{ id: 'conversation-1' }]);
     mocks.getSetting.mockImplementation((key: string) => {
       if (key === 'runtimePermissionModes') return Promise.resolve({});
       if (key === 'runtimeAutoApproveDefaults') return Promise.resolve({});
@@ -49,6 +59,8 @@ describe('reconcileConversationPermission', () => {
     mocks.getAgent.mockResolvedValue({ accessMode: 'full-access' });
     const conversation = {
       id: 'conversation-1',
+      projectId: 'project-1',
+      taskId: 'task-1',
       runtimeId: 'codex',
       permissionMode: 'default',
       autoApprove: false,
@@ -70,6 +82,8 @@ describe('reconcileConversationPermission', () => {
   it('keeps an explicit plan session unchanged', async () => {
     const conversation = {
       id: 'conversation-2',
+      projectId: 'project-1',
+      taskId: 'task-1',
       runtimeId: 'codex',
       permissionMode: 'plan',
       autoApprove: false,

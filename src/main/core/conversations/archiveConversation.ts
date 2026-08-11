@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { conversationArchivedChannel } from '@shared/events/conversationEvents';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { projectManager } from '@main/core/projects/project-manager';
@@ -22,6 +22,8 @@ import { ensureCodexThreadArchived } from './codex-archive';
 import { resolveAgentResumeSessionId } from './codex-session-id';
 import { getReservedCodexThreadIds } from './codex-thread-reservations';
 import { conversationEvents } from './conversation-events';
+import { cancelConversationHydrationBarrier } from './conversation-hydration-barrier';
+import { withConversationOperation } from './conversation-operation-lock';
 import { getConversationRuntimeStateRoot } from './conversation-session-source';
 import { runPreArchiveCommand } from './pre-archive-command';
 import { withRuntimeStateRoot } from './session-state-roots';
@@ -40,6 +42,18 @@ export async function archiveConversation(
   conversationId: string,
   options: ArchiveConversationOptions = {}
 ): Promise<void> {
+  cancelConversationHydrationBarrier(projectId, taskId, conversationId);
+  return withConversationOperation({ projectId, id: conversationId }, () =>
+    performArchiveConversation(projectId, taskId, conversationId, options)
+  );
+}
+
+async function performArchiveConversation(
+  projectId: string,
+  taskId: string,
+  conversationId: string,
+  options: ArchiveConversationOptions
+): Promise<void> {
   const [row] = await db
     .select({
       conversation: conversations,
@@ -53,7 +67,8 @@ export async function archiveConversation(
       and(
         eq(conversations.id, conversationId),
         eq(conversations.projectId, projectId),
-        eq(conversations.taskId, taskId)
+        eq(conversations.taskId, taskId),
+        isNull(conversations.archivedAt)
       )
     )
     .limit(1);
@@ -74,7 +89,7 @@ export async function archiveConversation(
     }
   }
 
-  await db
+  const [archived] = await db
     .update(conversations)
     .set({
       archivedAt: sql`CURRENT_TIMESTAMP`,
@@ -84,9 +99,15 @@ export async function archiveConversation(
       and(
         eq(conversations.id, conversationId),
         eq(conversations.projectId, projectId),
-        eq(conversations.taskId, taskId)
+        eq(conversations.taskId, taskId),
+        isNull(conversations.archivedAt)
       )
-    );
+    )
+    .returning({ id: conversations.id });
+  if (!archived) return;
+
+  const task = resolveTask(projectId, taskId);
+  await task?.conversations.stopSession(conversationId);
 
   await archiveCodexConversation({
     conversation: row.conversation,
@@ -99,9 +120,6 @@ export async function archiveConversation(
       error: String(error),
     });
   });
-
-  const task = resolveTask(projectId, taskId);
-  await task?.conversations.stopSession(conversationId);
 
   conversationEvents._emit('conversation:archived', conversationId, projectId, taskId);
   events.emit(conversationArchivedChannel, { conversationId, projectId, taskId });

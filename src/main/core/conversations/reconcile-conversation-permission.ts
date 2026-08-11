@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { isAgentAccessMode, resolveAgentPermissionMode } from '@shared/agents';
 import type { Conversation } from '@shared/conversations';
 import {
@@ -19,7 +19,8 @@ import type { ConversationConfig } from './types';
  */
 export async function reconcileConversationPermission(
   conversation: Conversation,
-  rawConfig: string | null
+  rawConfig: string | null,
+  options?: { failOnConflict?: boolean }
 ): Promise<Conversation> {
   const config: ConversationConfig = rawConfig ? JSON.parse(rawConfig) : {};
   if (config.runtimeOverrides?.permissionMode !== undefined) return conversation;
@@ -53,10 +54,25 @@ export async function reconcileConversationPermission(
   if (conversation.skillPolicy) config.skillPolicy = conversation.skillPolicy;
   config.permissionMode = permissionMode;
   config.autoApprove = autoApprove;
-  await db
+  const [updated] = await db
     .update(conversations)
     .set({ config: JSON.stringify(config) })
-    .where(eq(conversations.id, conversation.id));
+    .where(
+      and(
+        eq(conversations.id, conversation.id),
+        eq(conversations.projectId, conversation.projectId),
+        eq(conversations.taskId, conversation.taskId),
+        isNull(conversations.archivedAt),
+        rawConfig === null ? isNull(conversations.config) : eq(conversations.config, rawConfig)
+      )
+    )
+    .returning({ id: conversations.id });
+  if (!updated) {
+    if (options?.failOnConflict) {
+      throw new Error(`Conversation changed while reconciling permission: ${conversation.id}`);
+    }
+    return conversation;
+  }
 
   return { ...conversation, permissionMode, autoApprove };
 }

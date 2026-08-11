@@ -98,7 +98,15 @@ export async function injectClipboardImagesAndPrompt({
 }): Promise<void> {
   const segments = splitPromptByImageMarkers((prompt ?? '').trim(), imagePaths);
   if (segments.length === 0) return;
+  let exited = false;
+  pty.onExit(() => {
+    exited = true;
+  });
+  const ensureLive = (): void => {
+    if (exited) throw new Error(`${runtimeId} exited before clipboard input was delivered.`);
+  };
   await waitForTuiReady(pty);
+  ensureLive();
   log.info('injectClipboardImagesAndPrompt: injecting', {
     runtimeId,
     segments: segments.length,
@@ -113,8 +121,10 @@ export async function injectClipboardImagesAndPrompt({
         // Wrap every chunk in bracketed-paste markers (not just multiline
         // ones): raw `@`/`/` chars typed outside a paste would trigger the
         // TUI's own autocomplete popups mid-injection.
+        ensureLive();
         pty.write(`\x1b[200~${segment.text}\x1b[201~`);
         await sleep(TEXT_SEGMENT_DELAY_MS);
+        ensureLive();
         continue;
       }
       const image = nativeImage.createFromPath(segment.path);
@@ -122,19 +132,25 @@ export async function injectClipboardImagesAndPrompt({
         log.warn('injectClipboardImagesAndPrompt: image could not be decoded, falling back', {
           imagePath: segment.path,
         });
+        ensureLive();
         pty.write(`\x1b[200~@${segment.path}\x1b[201~`);
         await sleep(TEXT_SEGMENT_DELAY_MS);
+        ensureLive();
         continue;
       }
       clipboard.writeImage(image);
+      ensureLive();
       pty.write(CTRL_V);
       await sleep(IMAGE_PASTE_DELAY_MS);
+      ensureLive();
     }
 
     await sleep(Math.max(getAgentCommandSubmitDelayMs(runtimeId), PROMPT_SUBMIT_DELAY_MS));
+    ensureLive();
     pty.write(getAgentCommandSubmitInput(runtimeId));
     // Restore only after the TUI has had a chance to read the last image.
     await sleep(CLIPBOARD_RESTORE_DELAY_MS);
+    ensureLive();
   } finally {
     restoreClipboard(saved);
   }
@@ -142,16 +158,18 @@ export async function injectClipboardImagesAndPrompt({
 
 /** Resolves once PTY output has been quiet for TUI_READY_QUIET_MS (or on timeout). */
 function waitForTuiReady(pty: Pty): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let done = false;
     let quietTimer: ReturnType<typeof setTimeout> | undefined;
     const finish = () => {
       if (done) return;
       done = true;
       if (quietTimer) clearTimeout(quietTimer);
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
       resolve();
     };
+    const timeout = setTimeout(finish, TUI_READY_TIMEOUT_MS);
+    timeout.unref?.();
     // Pty.onData has no unsubscribe; the handler turns into a no-op once done.
     pty.onData(() => {
       if (done) return;
@@ -159,8 +177,13 @@ function waitForTuiReady(pty: Pty): Promise<void> {
       quietTimer = setTimeout(finish, TUI_READY_QUIET_MS);
       quietTimer.unref?.();
     });
-    const timeout = setTimeout(finish, TUI_READY_TIMEOUT_MS);
-    timeout.unref?.();
+    pty.onExit(() => {
+      if (done) return;
+      done = true;
+      if (quietTimer) clearTimeout(quietTimer);
+      if (timeout) clearTimeout(timeout);
+      reject(new Error('PTY exited before the TUI became ready for clipboard input.'));
+    });
   });
 }
 

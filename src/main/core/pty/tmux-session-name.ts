@@ -103,12 +103,12 @@ export function buildTmuxShellLine(
 
   // Startup hydration only sets this flag after inspecting Yoda's isolated
   // tmux server and finding this exact canonical session name. The agent in
-  // that pane is still running, so treat it as authoritative: do not use a
-  // newly resolved Codex thread to overwrite its marker or kill it just to
-  // attach a new front-end client. The command remains the race-safe fallback
-  // if the pane disappears before this shell reaches tmux.
+  // that pane is still running, so treat it as authoritative. If it disappears
+  // before this shell reaches tmux, fail this attach attempt and leave the
+  // pending prompt intact; creating here would run a new command with the old
+  // delivery-attempt window and could send the first prompt twice.
   if (reattachExistingSession) {
-    return `if ${checkExists}; then ${attach}; else ${createAndAttach}; fi`;
+    return `if ${checkExists}; then ${attach}; else exit 75; fi`;
   }
   if (!sessionIdentity) {
     return `(${checkExists} && ${prep} && ${attach}) || (${createAndAttach})`;

@@ -3,7 +3,16 @@ import { taskProvisionProgressChannel } from '@shared/events/taskEvents';
 import { makePtySessionId } from '@shared/ptySessionId';
 import type { Task } from '@shared/tasks';
 import type { Terminal } from '@shared/terminals';
-import { hydratedConversationStart } from '@main/core/conversations/pending-initial-prompt';
+import {
+  isConversationHydrationCancelled,
+  registerConversationHydrationBarrier,
+} from '@main/core/conversations/conversation-hydration-barrier';
+import { withConversationOperation } from '@main/core/conversations/conversation-operation-lock';
+import { getActiveConversation } from '@main/core/conversations/get-active-conversation';
+import {
+  hydratedConversationStart,
+  shouldClearPendingInitialPromptAfterStart,
+} from '@main/core/conversations/pending-initial-prompt';
 import { clearPendingInitialPrompt } from '@main/core/conversations/pending-initial-prompt-store';
 import type {
   ConversationProvider,
@@ -14,6 +23,7 @@ import { SshExecutionContext } from '@main/core/execution-context/ssh-execution-
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { GitFetchService } from '@main/core/git/git-fetch-service';
 import type { GitRepositoryService } from '@main/core/git/repository-service';
+import { TmuxReattachMissError } from '@main/core/pty/tmux-reattach';
 import { decodeTmuxSessionName, listTmuxSessionMarkers } from '@main/core/pty/tmux-session-name';
 import type { TerminalProvider } from '@main/core/terminals/terminal-provider';
 import type { Workspace } from '@main/core/workspaces/workspace';
@@ -84,48 +94,66 @@ async function withConversationHydrationSlot(run: () => Promise<void>): Promise<
   }
 }
 
-async function hydrateConversationBatch(
+async function hydratePersistedConversation(
   provider: ConversationProvider,
-  conversations: Conversation[],
+  conversation: Conversation,
   logPrefix: string,
   startOptions?: ConversationStartOptions
 ): Promise<void> {
-  let nextIndex = 0;
-  const hydrateNext = async (): Promise<void> => {
-    while (nextIndex < conversations.length) {
-      const conversation = conversations[nextIndex++];
-      await withConversationHydrationSlot(async () => {
-        const pending = conversation.pendingInitialPrompt;
-        const start = hydratedConversationStart(conversation);
-        try {
-          await provider.startSession(
-            conversation,
-            undefined,
-            start.isResuming,
-            start.initialPrompt,
-            undefined,
-            start.imagePaths,
-            { model: start.model, reasoningEffort: start.reasoningEffort },
-            startOptions
-          );
-          if (pending) {
-            await clearPendingInitialPrompt(conversation.id);
-          }
-        } catch (error) {
-          log.error(`${logPrefix}: failed to hydrate conversation`, {
-            conversationId: conversation.id,
-            error: String(error),
+  await withConversationHydrationSlot(() =>
+    withConversationOperation(conversation, async () => {
+      if (isConversationHydrationCancelled(conversation)) return;
+      const persistedConversation = await getActiveConversation(conversation);
+      if (!persistedConversation || isConversationHydrationCancelled(conversation)) return;
+      const pending = persistedConversation.pendingInitialPrompt;
+      const start = hydratedConversationStart(persistedConversation);
+      const startOnce = async (options?: ConversationStartOptions): Promise<void> => {
+        await provider.startSession(
+          persistedConversation,
+          undefined,
+          start.isResuming,
+          start.initialPrompt,
+          undefined,
+          start.imagePaths,
+          { model: start.model, reasoningEffort: start.reasoningEffort },
+          options
+        );
+        if (isConversationHydrationCancelled(conversation)) return;
+        if (
+          pending &&
+          shouldClearPendingInitialPromptAfterStart(provider, persistedConversation.runtimeId)
+        ) {
+          await clearPendingInitialPrompt(persistedConversation.id, {
+            projectId: persistedConversation.projectId,
+            taskId: persistedConversation.taskId,
+            deliveryToken: pending.deliveryToken,
           });
         }
-      });
-    }
-  };
+      };
 
-  await Promise.all(
-    Array.from(
-      { length: Math.min(CONVERSATION_HYDRATION_CONCURRENCY, conversations.length) },
-      hydrateNext
-    )
+      try {
+        await startOnce(startOptions);
+      } catch (error) {
+        let hydrationError = error;
+        if (
+          error instanceof TmuxReattachMissError &&
+          startOptions?.reattachExistingTmuxSession &&
+          pending &&
+          !isConversationHydrationCancelled(conversation)
+        ) {
+          try {
+            await startOnce();
+            return;
+          } catch (retryError) {
+            hydrationError = retryError;
+          }
+        }
+        log.error(`${logPrefix}: failed to hydrate conversation`, {
+          conversationId: persistedConversation.id,
+          error: String(hydrationError),
+        });
+      }
+    })
   );
 }
 
@@ -140,27 +168,33 @@ export async function hydratePersistedConversations(
   logPrefix: string,
   liveTmuxSessionIds: Promise<ReadonlySet<string>> = Promise.resolve(new Set())
 ): Promise<void> {
-  const pending = conversations.filter((conversation) => conversation.pendingInitialPrompt);
-  const pendingIds = new Set(pending.map((conversation) => conversation.id));
+  const hasLiveCanonicalSession = (
+    sessionIds: ReadonlySet<string>,
+    conversation: Conversation
+  ): boolean =>
+    sessionIds.has(makePtySessionId(conversation.projectId, conversation.taskId, conversation.id));
+  const hydrations = conversations.map((conversation) => {
+    const prompt = conversation.pendingInitialPrompt;
+    // A prompt that has never been attempted starts immediately. Every other
+    // conversation waits for the bounded marker sample so a surviving pane is
+    // reattached instead of racing renderer resume or receiving a duplicate.
+    const hydration =
+      prompt && prompt.attemptStartedAtMs === undefined
+        ? hydratePersistedConversation(provider, conversation, logPrefix)
+        : liveTmuxSessionIds.then((sessionIds) => {
+            const live = hasLiveCanonicalSession(sessionIds, conversation);
+            if (!prompt && !live) return;
+            return hydratePersistedConversation(
+              provider,
+              conversation,
+              logPrefix,
+              live ? { reattachExistingTmuxSession: true } : undefined
+            );
+          });
+    return registerConversationHydrationBarrier(conversation, Promise.resolve(hydration));
+  });
 
-  // A brand-new prompt must not wait for the bounded tmux marker lookup.
-  const pendingHydration = hydrateConversationBatch(provider, pending, logPrefix);
-  const reconnectHydration = liveTmuxSessionIds.then((sessionIds) =>
-    hydrateConversationBatch(
-      provider,
-      conversations.filter(
-        (conversation) =>
-          !pendingIds.has(conversation.id) &&
-          sessionIds.has(
-            makePtySessionId(conversation.projectId, conversation.taskId, conversation.id)
-          )
-      ),
-      logPrefix,
-      { reattachExistingTmuxSession: true }
-    )
-  );
-
-  await Promise.all([pendingHydration, reconnectHydration]);
+  await Promise.all(hydrations);
 }
 
 function tmuxMarkerCacheKey(type: WorkspaceType): string {

@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { conversationRenamedChannel } from '@shared/events/conversationEvents';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { normalizeTaskDisplayName as normalizeSessionTitle } from '@shared/task-name';
@@ -42,16 +42,7 @@ class SessionTitleManager {
           });
         });
       },
-      (sessionId) => {
-        void this.applySessionBinding(ctx, sessionId).catch((err) => {
-          log.warn('SessionTitleManager: applySessionBinding failed', {
-            conversationId: ctx.conversationId,
-            runtimeId: ctx.runtimeId,
-            sessionId,
-            error: String(err),
-          });
-        });
-      }
+      (sessionId) => this.applySessionBinding(ctx, sessionId)
     );
     this.watchers.set(key, watcher);
   }
@@ -77,7 +68,14 @@ class SessionTitleManager {
     const [convRow] = await db
       .select({ title: conversations.title, titleSource: conversations.titleSource })
       .from(conversations)
-      .where(eq(conversations.id, ctx.conversationId))
+      .where(
+        and(
+          eq(conversations.id, ctx.conversationId),
+          eq(conversations.projectId, ctx.projectId),
+          eq(conversations.taskId, ctx.taskId),
+          isNull(conversations.archivedAt)
+        )
+      )
       .limit(1);
     if (!convRow) return;
 
@@ -87,14 +85,25 @@ class SessionTitleManager {
     if (convRow.titleSource === 'user' || convRow.titleSource === 'yoda') return;
 
     if (convRow.title !== displayTitle) {
-      await db
+      const [updated] = await db
         .update(conversations)
         .set({
           title: displayTitle,
           titleSource: 'agent',
           updatedAt: sql`CURRENT_TIMESTAMP`,
         })
-        .where(eq(conversations.id, ctx.conversationId));
+        .where(
+          and(
+            eq(conversations.id, ctx.conversationId),
+            eq(conversations.projectId, ctx.projectId),
+            eq(conversations.taskId, ctx.taskId),
+            isNull(conversations.archivedAt),
+            sql`${conversations.title} IS ${convRow.title}`,
+            sql`${conversations.titleSource} IS ${convRow.titleSource}`
+          )
+        )
+        .returning({ id: conversations.id });
+      if (!updated) return;
       conversationEvents._emit(
         'conversation:renamed',
         ctx.conversationId,
@@ -111,14 +120,22 @@ class SessionTitleManager {
     }
   }
 
-  private async applySessionBinding(ctx: SessionTitleContext, sessionId: string): Promise<void> {
-    if (ctx.runtimeId !== 'codex' || !ctx.stateRoot) return;
-    await storeConversationSessionSource(ctx.conversationId, {
-      catalogId: createLocalAgentSessionCatalogId('codex', ctx.stateRoot, sessionId),
-      runtimeId: 'codex',
-      sessionId,
-      stateRoot: ctx.stateRoot,
-    });
+  private async applySessionBinding(ctx: SessionTitleContext, sessionId: string): Promise<boolean> {
+    if (ctx.runtimeId !== 'codex' || !ctx.stateRoot) return false;
+    return storeConversationSessionSource(
+      ctx.conversationId,
+      {
+        catalogId: createLocalAgentSessionCatalogId('codex', ctx.stateRoot, sessionId),
+        runtimeId: 'codex',
+        sessionId,
+        stateRoot: ctx.stateRoot,
+      },
+      {
+        projectId: ctx.projectId,
+        taskId: ctx.taskId,
+        expectedPendingAttemptStartedAtMs: ctx.initialPromptAttemptStartedAtMs,
+      }
+    );
   }
 }
 

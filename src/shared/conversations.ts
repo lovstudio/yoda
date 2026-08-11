@@ -59,6 +59,14 @@ export type PendingInitialPrompt = {
   imagePaths?: string[];
   model?: string | null;
   reasoningEffort?: string | null;
+  /** Rotated before ownership-changing operations so stale startup snapshots lose their CAS. */
+  deliveryToken?: string;
+  /** Start time of the last local delivery attempt, used to reconcile a surviving tmux pane. */
+  attemptStartedAtMs?: number;
+  /** Provider state root used by that attempt; runtime settings may change before recovery. */
+  attemptStateRoot?: string;
+  /** Working directory used by that attempt, retained as native-thread ownership evidence. */
+  attemptCwd?: string;
 };
 
 export type AgentSessionSource = {
