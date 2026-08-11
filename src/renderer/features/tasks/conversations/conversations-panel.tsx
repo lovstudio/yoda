@@ -112,15 +112,14 @@ export const ConversationsPanel = observer(function ConversationsPanel({
   // Keep debug telemetry structural. File/diff route targets can contain a
   // workspace path or remote metadata, neither of which helps diagnose this
   // conversation surface.
-  const routeTabTrace =
+  const routeTabTraceKey =
     !isDebugTracing || !params.tab
-      ? null
+      ? ''
       : params.tab.kind === 'conversation'
-        ? { kind: params.tab.kind, conversationId: params.tab.conversationId }
+        ? `conversation:${params.tab.conversationId}`
         : params.tab.kind === 'room-member'
-          ? { kind: params.tab.kind, memberId: params.tab.memberId }
-          : { kind: params.tab.kind };
-  const routeTabTraceKey = routeTabTrace ? JSON.stringify(routeTabTrace) : '';
+          ? `room-member:${params.tab.memberId}`
+          : params.tab.kind;
   const conversationIds = isDebugTracing
     ? conversationStores
         .map((conversation) => conversation.data.id)
@@ -185,7 +184,7 @@ export const ConversationsPanel = observer(function ConversationsPanel({
       isVisible,
       forceVisible,
       focusedRegion: provisioned.taskView.focusedRegion,
-      routeTab: routeTabTrace,
+      routeTab: routeTabTraceKey || null,
       activeTabId: tm.activeTabId ?? null,
       activeDescriptor: activeDescriptor
         ? { tabId: activeDescriptor.tabId, kind: activeDescriptor.kind }
@@ -218,7 +217,7 @@ export const ConversationsPanel = observer(function ConversationsPanel({
     panelStateTraceKey,
     projectId,
     provisioned.taskView.focusedRegion,
-    routeTabTrace,
+    routeTabTraceKey,
     surface,
     taskId,
     tm,

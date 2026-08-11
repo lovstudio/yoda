@@ -222,7 +222,16 @@ export const ConversationSession = observer(function ConversationSession({
         lastAutoResumePtyRef.current = null;
       }
     });
-  }, [conversation, conversations, isVisible, sessionId, sessionPty, sessionStatus]);
+  }, [
+    conversation,
+    conversations,
+    isVisible,
+    projectId,
+    sessionId,
+    sessionPty,
+    sessionStatus,
+    taskId,
+  ]);
 
   const markConversationSubmitted = (forceWorking = false) => {
     conversation.setWorking({ force: forceWorking });
