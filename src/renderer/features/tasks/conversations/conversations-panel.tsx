@@ -1,6 +1,6 @@
 import { MessageSquare } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Conversation } from '@shared/conversations';
 import { DockedSessionHistory } from '@renderer/features/tasks/conversations/session-history-panel';
@@ -32,13 +32,11 @@ export const ConversationsPanel = observer(function ConversationsPanel({
   /** Detached task windows are outside the main workspace route but still own a visible session. */
   forceVisible?: boolean;
 }) {
-  const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
   const { params } = useParams('task');
   const provisioned = useRequireProvisionedTask();
   const { conversations } = provisioned;
   const { tabManager: tm } = provisioned.taskView;
-  const showNewConversationModal = useShowModal('newConversationModal');
   const isActive = useIsActiveTask(taskId);
   // Split-view extra panes are visible but not the routed (active) task. They
   // still need their PTY session resumed so input can be sent — gating resume on
@@ -51,36 +49,16 @@ export const ConversationsPanel = observer(function ConversationsPanel({
   });
   const autoFocus = isActive && provisioned.taskView.focusedRegion === 'main';
 
-  const handleCreate = () => {
-    log.debug('[conversation-panel] create requested', { projectId, taskId });
-    showNewConversationModal({
-      projectId,
-      taskId,
-      onSuccess: ({ conversationIds }) => {
-        const conversationId = conversationIds[0];
-        if (conversationId) {
-          log.debug('[conversation-panel] create succeeded; opening conversation', {
-            projectId,
-            taskId,
-            conversationId,
-          });
-          tm.openConversation(conversationId);
-        }
-        provisioned.taskView.setFocusedRegion('main');
-      },
-    });
-  };
-
-  // Build session ID list for PaneSizingProvider (all open conversation tabs).
-  const allSessionIds = useMemo(() => {
-    return tm.resolvedTabs
-      .filter((tab) => tab.kind === 'conversation')
-      .map((tab) => tab.store.session.sessionId)
-      .filter(Boolean) as string[];
-  }, [tm.resolvedTabs]);
-
   const activeConversation: ConversationStore | undefined = tm.activeConversation;
   const activeDescriptor = tm.activeDescriptor;
+  const activeSessionId = activeConversation?.session.sessionId ?? null;
+  // PaneSizingProvider only validates resize ownership for the active session.
+  // Supplying every open conversation used to resolve every tab before the
+  // terminal could mount; one stable O(1) entry is sufficient here.
+  const paneSessionIds = useMemo(
+    () => (activeSessionId ? [activeSessionId] : []),
+    [activeSessionId]
+  );
   const routeConversationId =
     params.tab?.kind === 'conversation' ? params.tab.conversationId : undefined;
   // A tab can be selected before its conversation store arrives from the
@@ -89,10 +67,13 @@ export const ConversationsPanel = observer(function ConversationsPanel({
   // can take over.
   const isResolvingActiveConversation =
     activeDescriptor?.kind === 'conversation' && !activeConversation;
-  const hasConversationTabs = tm.resolvedTabs.some((tab) => tab.kind === 'conversation');
-  const conversationStores = Array.from(conversations.conversations.values());
-  const archivedConversations = useArchivedConversations(projectId, taskId);
-  const conversationCount = conversationStores.length + archivedConversations.length;
+  // The visible agents surface either has an active conversation descriptor or
+  // no active tab at all. Only repair malformed/stale tab state by scanning in
+  // the latter case, keeping the normal session path independent of tab count.
+  const hasConversationTabs =
+    activeDescriptor?.kind === 'conversation' ||
+    (!activeDescriptor &&
+      tm.tabOrder.some((tabId) => tm.entries.get(tabId)?.kind === 'conversation'));
   const isResolvingRouteConversation =
     routeConversationId !== undefined &&
     (tm.activeConversationId !== routeConversationId || !activeConversation);
@@ -102,12 +83,10 @@ export const ConversationsPanel = observer(function ConversationsPanel({
   const isResolvingTaskSession =
     params.tab === undefined &&
     !hasConversationTabs &&
-    (conversationStores.length > 0 || !conversations.hasAuthoritativeSnapshot);
+    (conversations.conversations.size > 0 || !conversations.hasAuthoritativeSnapshot);
   const isResolvingConversation =
     isResolvingActiveConversation || isResolvingRouteConversation || isResolvingTaskSession;
 
-  // Sorting the IDs makes a state transition easy to compare in the console,
-  // but is intentionally debug-only so normal renders keep the existing cost.
   const isDebugTracing = log.level === 'debug';
   // Keep debug telemetry structural. File/diff route targets can contain a
   // workspace path or remote metadata, neither of which helps diagnose this
@@ -120,30 +99,10 @@ export const ConversationsPanel = observer(function ConversationsPanel({
         : params.tab.kind === 'room-member'
           ? `room-member:${params.tab.memberId}`
           : params.tab.kind;
-  const conversationIds = isDebugTracing
-    ? conversationStores
-        .map((conversation) => conversation.data.id)
-        .sort()
-        .join(',')
-    : '';
-  const archivedConversationIds = isDebugTracing
-    ? archivedConversations
-        .map((conversation) => conversation.id)
-        .sort()
-        .join(',')
-    : '';
-  const conversationTabIds = isDebugTracing
-    ? tm.resolvedTabs
-        .flatMap((tab) => (tab.kind === 'conversation' ? [tab.conversationId] : []))
-        .sort()
-        .join(',')
-    : '';
   const surface = isResolvingConversation
     ? 'resolving'
     : !hasConversationTabs
-      ? conversationCount > 0
-        ? 'list'
-        : 'empty'
+      ? 'landing'
       : activeConversation
         ? 'session'
         : 'blank';
@@ -166,9 +125,6 @@ export const ConversationsPanel = observer(function ConversationsPanel({
         isResolvingRouteConversation,
         isResolvingTaskSession,
         surface,
-        conversationIds,
-        archivedConversationIds,
-        conversationTabIds,
       ].join('\u001f')
     : '';
   const lastPanelStateTraceKey = useRef<string | null>(null);
@@ -197,16 +153,10 @@ export const ConversationsPanel = observer(function ConversationsPanel({
         routeConversation: isResolvingRouteConversation,
         taskSession: isResolvingTaskSession,
       },
-      conversationIds,
-      archivedConversationIds,
-      conversationTabIds,
     });
   }, [
     activeConversation?.session.sessionId,
     activeDescriptor,
-    archivedConversationIds,
-    conversationIds,
-    conversationTabIds,
     conversations.hasAuthoritativeSnapshot,
     forceVisible,
     isActive,
@@ -238,55 +188,13 @@ export const ConversationsPanel = observer(function ConversationsPanel({
         >
           <PaneSizingProvider
             paneId="conversations"
-            sessionIds={allSessionIds}
-            activeSessionId={activeConversation?.session.sessionId ?? null}
+            sessionIds={paneSessionIds}
+            activeSessionId={activeSessionId}
           >
             {isResolvingConversation ? (
-              <SessionOpeningSurface
-                surface="conversation-session-pending"
-                heading={t('tasks.conversations.startingTitle')}
-                description={t('tasks.conversations.startingDescription')}
-                progressMessage={t('tasks.conversations.startingDescription')}
-              />
+              <ConversationOpeningSurface />
             ) : !hasConversationTabs ? (
-              conversationCount > 0 ? (
-                <ConversationSessionList
-                  conversations={conversationStores}
-                  archivedConversations={archivedConversations}
-                  activeConversationId={tm.activeConversationId}
-                  title={t('tasks.conversations.sessions')}
-                  createLabel={t('tasks.conversations.createConversation')}
-                  createAction={handleCreate}
-                  onOpen={(conversationId) => {
-                    log.debug('[conversation-panel] open requested', {
-                      projectId,
-                      taskId,
-                      conversationId,
-                      activeConversationId: tm.activeConversationId ?? null,
-                    });
-                    tm.openConversation(conversationId);
-                    provisioned.taskView.setFocusedRegion('main');
-                  }}
-                  onArchivedRestored={() => provisioned.taskView.setFocusedRegion('main')}
-                />
-              ) : (
-                <EmptyState
-                  icon={<MessageSquare className="h-5 w-5 text-muted-foreground" />}
-                  label={t('tasks.conversations.emptyTitle')}
-                  description={t('tasks.conversations.emptyDescription')}
-                  action={
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleCreate}
-                      className="flex items-center gap-2"
-                    >
-                      {t('tasks.conversations.createConversation')}
-                      <ShortcutHint settingsKey="newConversation" />
-                    </Button>
-                  }
-                />
-              )
+              <ConversationLandingSurface projectId={projectId} taskId={taskId} />
             ) : (
               <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                 {activeConversation ? (
@@ -301,8 +209,122 @@ export const ConversationsPanel = observer(function ConversationsPanel({
           </PaneSizingProvider>
         </div>
       </div>
-      <DockedSessionHistory />
+      {activeConversation ? <PostPaintSessionHistory key={activeConversation.data.id} /> : null}
     </div>
+  );
+});
+
+function ConversationOpeningSurface() {
+  const { t } = useTranslation();
+  return (
+    <SessionOpeningSurface
+      surface="conversation-session-pending"
+      heading={t('tasks.conversations.startingTitle')}
+      description={t('tasks.conversations.startingDescription')}
+      progressMessage={t('tasks.conversations.startingDescription')}
+    />
+  );
+}
+
+/**
+ * Keep transcript parsing and its polling RPC outside the terminal's first
+ * browser paint. The dock still renders cached query data immediately; only a
+ * cold read is delayed by two animation frames.
+ */
+function PostPaintSessionHistory() {
+  const [canLoad, setCanLoad] = useState(false);
+
+  useEffect(() => {
+    let secondFrame: number | null = null;
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => setCanLoad(true));
+    });
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      if (secondFrame !== null) cancelAnimationFrame(secondFrame);
+    };
+  }, []);
+
+  return <DockedSessionHistory active={canLoad} />;
+}
+
+const ConversationLandingSurface = observer(function ConversationLandingSurface({
+  projectId,
+  taskId,
+}: {
+  projectId: string;
+  taskId: string;
+}) {
+  const { t } = useTranslation();
+  const provisioned = useRequireProvisionedTask();
+  const { conversations } = provisioned;
+  const { tabManager: tm } = provisioned.taskView;
+  const showNewConversationModal = useShowModal('newConversationModal');
+  const conversationStores = Array.from(conversations.conversations.values());
+  const archivedConversations = useArchivedConversations(projectId, taskId);
+  const conversationCount = conversationStores.length + archivedConversations.length;
+
+  const handleCreate = () => {
+    log.debug('[conversation-panel] create requested', { projectId, taskId });
+    showNewConversationModal({
+      projectId,
+      taskId,
+      onSuccess: ({ conversationIds }) => {
+        const conversationId = conversationIds[0];
+        if (conversationId) {
+          log.debug('[conversation-panel] create succeeded; opening conversation', {
+            projectId,
+            taskId,
+            conversationId,
+          });
+          tm.openConversation(conversationId);
+        }
+        provisioned.taskView.setFocusedRegion('main');
+      },
+    });
+  };
+
+  if (conversationCount === 0) {
+    return (
+      <EmptyState
+        icon={<MessageSquare className="h-5 w-5 text-muted-foreground" />}
+        label={t('tasks.conversations.emptyTitle')}
+        description={t('tasks.conversations.emptyDescription')}
+        action={
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleCreate}
+            className="flex items-center gap-2"
+          >
+            {t('tasks.conversations.createConversation')}
+            <ShortcutHint settingsKey="newConversation" />
+          </Button>
+        }
+      />
+    );
+  }
+
+  return (
+    <ConversationSessionList
+      conversations={conversationStores}
+      archivedConversations={archivedConversations}
+      activeConversationId={tm.activeConversationId}
+      title={t('tasks.conversations.sessions')}
+      createLabel={t('tasks.conversations.createConversation')}
+      createAction={handleCreate}
+      onOpen={(conversationId) => {
+        log.debug('[conversation-panel] open requested', {
+          projectId,
+          taskId,
+          conversationId,
+          activeConversationId: tm.activeConversationId ?? null,
+        });
+        tm.openConversation(conversationId);
+        provisioned.taskView.setFocusedRegion('main');
+      }}
+      onArchivedRestored={() => provisioned.taskView.setFocusedRegion('main')}
+    />
   );
 });
 

@@ -140,14 +140,19 @@ const DOCK_PROMPT_HEAD_COUNT = 1;
  * via the header. The action menu opens the complete branch tree in a separate
  * floating panel, while collapsing stops the current-path background fetch.
  */
-export const DockedSessionHistory = observer(function DockedSessionHistory() {
+export const DockedSessionHistory = observer(function DockedSessionHistory({
+  active = true,
+}: {
+  /** Starts cold transcript reads only after the owning terminal has painted. */
+  active?: boolean;
+}) {
   const { t } = useTranslation();
   const { value: ui, update } = useAppSettingsKey('interface');
   const enabled = ui?.dockSessionHistory ?? true;
   const rows = Math.min(MAX_DOCK_ROWS, Math.max(MIN_DOCK_ROWS, ui?.dockSessionHistoryRows ?? 3));
   const [collapsed, setCollapsed] = useState(false);
   const [treeOpen, setTreeOpen] = useState(false);
-  const prompts = useSessionPrompts(enabled && !collapsed);
+  const prompts = useSessionPrompts(active && enabled && !collapsed);
   const promptTree = useSessionPromptTree(enabled && treeOpen);
   const { restoringPrompt, requestRestorePrompt } = useConversationPromptRestore();
   const provisionedTask = useRequireProvisionedTask();

@@ -164,6 +164,20 @@ describe('DockedSessionHistory conversation tree menu', () => {
     expect(mocks.useSessionPromptTree).toHaveBeenLastCalledWith(false);
   });
 
+  it('keeps cold transcript loading paused until its owner activates it', async () => {
+    const { DockedSessionHistory } = await import(
+      '@renderer/features/tasks/conversations/session-history-panel'
+    );
+    await act(async () => root.render(createElement(DockedSessionHistory, { active: false })));
+
+    expect(mocks.useSessionPrompts).toHaveBeenLastCalledWith(false);
+    expect(host.textContent).toContain('current path prompt');
+
+    await act(async () => root.render(createElement(DockedSessionHistory, { active: true })));
+
+    expect(mocks.useSessionPrompts).toHaveBeenLastCalledWith(true);
+  });
+
   it('shows the complete prompt in a tooltip when hovering a truncated row', async () => {
     const fullPrompt =
       'This is the complete prompt text that stays available even when the docked row truncates it.';
