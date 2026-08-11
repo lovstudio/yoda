@@ -227,6 +227,32 @@ describe('runBundledMigrations', () => {
     }
   });
 
+  it('adds the automation run session target without rewriting existing runs', () => {
+    const db = new Database(':memory:');
+    try {
+      createMigrationTable(db);
+      insertAppliedMigrationRows(db, getBundledMigrationCount() - 1);
+      db.exec(`
+        CREATE TABLE automation_runs (
+          id text PRIMARY KEY NOT NULL,
+          task_id text
+        );
+        INSERT INTO automation_runs (id, task_id) VALUES ('existing-run', 'task-1');
+      `);
+
+      runBundledMigrations(db);
+
+      expect(columnExists(db, 'automation_runs', 'conversation_id')).toBe(true);
+      expect(
+        db
+          .prepare('SELECT task_id, conversation_id FROM automation_runs WHERE id = ?')
+          .get('existing-run')
+      ).toEqual({ task_id: 'task-1', conversation_id: null });
+    } finally {
+      db.close();
+    }
+  });
+
   it('creates missing workspace grouping schema idempotently', () => {
     const db = new Database(':memory:');
     try {

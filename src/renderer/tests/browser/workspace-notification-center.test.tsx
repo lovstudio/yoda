@@ -1,10 +1,17 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { userEvent } from 'vitest/browser';
 import { WorkspaceNotificationCenter } from '@renderer/app/workspace-notification-center';
 import { workspaceNotificationStore } from '@renderer/lib/stores/notification-store';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const mocks = vi.hoisted(() => ({
+  copyTextToClipboard: vi.fn(),
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+}));
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -22,6 +29,11 @@ vi.mock('react-i18next', () => ({
         return `More ${options?.title ?? ''}`;
       }
       if (key === 'workspaceRuntime.notifications.deleteAction') return 'Delete';
+      if (key === 'workspaceRuntime.notifications.copy.idle') return 'Copy details';
+      if (key === 'workspaceRuntime.notifications.copy.copied') return 'Details copied';
+      if (key === 'common.copyDebugInfo') return 'Copy debug info';
+      if (key === 'common.debugInfoCopied') return 'Debug info copied';
+      if (key === 'common.copyFailed') return 'Copy failed';
       return key;
     },
     i18n: { language: 'en' },
@@ -29,7 +41,13 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('@renderer/lib/hooks/use-toast', () => ({
-  copyTextToClipboard: vi.fn().mockResolvedValue(undefined),
+  copyTextToClipboard: mocks.copyTextToClipboard,
+  useToast: () => ({
+    toast: {
+      success: mocks.toastSuccess,
+      error: mocks.toastError,
+    },
+  }),
 }));
 
 describe('WorkspaceNotificationCenter', () => {
@@ -39,6 +57,10 @@ describe('WorkspaceNotificationCenter', () => {
   beforeEach(() => {
     localStorage.clear();
     workspaceNotificationStore.clear();
+    mocks.copyTextToClipboard.mockReset();
+    mocks.copyTextToClipboard.mockResolvedValue(undefined);
+    mocks.toastSuccess.mockReset();
+    mocks.toastError.mockReset();
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -132,4 +154,63 @@ describe('WorkspaceNotificationCenter', () => {
       conversationId: 'session-1',
     });
   });
+
+  it('copies diagnostic context for an error from its actions menu', async () => {
+    workspaceNotificationStore.enqueue({
+      title: 'Build failed',
+      description: 'The packager exited with code 1.',
+      details: 'Error: EACCES\nPath: /tmp/output',
+      kind: 'error',
+      source: 'system',
+      reason: 'error',
+      target: { projectId: 'project-1', taskId: 'task-1', conversationId: 'session-1' },
+    });
+    const notification = workspaceNotificationStore.getSnapshot()[0];
+
+    await act(async () => {
+      root.render(
+        createElement(WorkspaceNotificationCenter, {
+          triggerClassName: 'trigger',
+          triggerLabelClassName: 'label',
+          onOpenTarget: vi.fn(),
+        })
+      );
+    });
+
+    const trigger = host.querySelector<HTMLButtonElement>('[aria-label="Notifications 1"]');
+    await act(async () => trigger?.click());
+
+    const moreActions = document.querySelector<HTMLButtonElement>(
+      '[aria-label="More Build failed"]'
+    );
+    expect(moreActions).not.toBeNull();
+    await userEvent.click(moreActions!);
+    await vi.waitFor(() => {
+      expect(findDropdownMenuItem('Copy debug info')).toBeDefined();
+    });
+
+    const copyDebugInfo = findDropdownMenuItem('Copy debug info');
+    expect(copyDebugInfo).toBeDefined();
+    await userEvent.click(copyDebugInfo!);
+    await vi.waitFor(() => {
+      expect(mocks.copyTextToClipboard).toHaveBeenCalledOnce();
+    });
+
+    const copied = mocks.copyTextToClipboard.mock.calls[0]?.[0] as string;
+    expect(copied).toContain('Error: Build failed');
+    expect(copied).toContain('Error: EACCES');
+    expect(copied).toContain(`Notification ID: ${notification?.id}`);
+    expect(copied).toContain('Source: system');
+    expect(copied).toContain('Reason: error');
+    expect(copied).toContain(
+      'Target: {"projectId":"project-1","taskId":"task-1","conversationId":"session-1"}'
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Debug info copied');
+  });
 });
+
+function findDropdownMenuItem(text: string): HTMLElement | undefined {
+  return Array.from(
+    document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+  ).find((item) => item.textContent?.includes(text));
+}

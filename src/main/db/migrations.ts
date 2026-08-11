@@ -198,6 +198,16 @@ function ensureTeamOrchestrationCompatibility(connection: BetterSqlite3.Database
   }
 }
 
+function ensureAutomationRunCompatibility(connection: BetterSqlite3.Database): void {
+  if (
+    !tableExists(connection, 'automation_runs') ||
+    columnExists(connection, 'automation_runs', 'conversation_id')
+  ) {
+    return;
+  }
+  connection.exec('ALTER TABLE automation_runs ADD conversation_id text');
+}
+
 export function getBundledMigrationCount(): number {
   return migrationEntries.length;
 }
@@ -229,6 +239,8 @@ export function runBundledMigrations(connection: BetterSqlite3.Database): void {
         ensureTeamCommunicationCompatibility(connection);
       } else if (record.tag === '0053_lean_wendell_rand') {
         ensureTeamOrchestrationCompatibility(connection);
+      } else if (record.tag === '0056_cute_masque') {
+        ensureAutomationRunCompatibility(connection);
       } else {
         const sqlKey = Object.keys(sqlFiles).find((k) => k.includes(record.tag));
         if (!sqlKey) throw new Error(`Missing bundled SQL for migration: ${record.tag}`);
@@ -248,4 +260,5 @@ export function runBundledMigrations(connection: BetterSqlite3.Database): void {
   ensureWorkspaceSchemaCompatibility(connection);
   ensureTeamCommunicationCompatibility(connection);
   ensureTeamOrchestrationCompatibility(connection);
+  ensureAutomationRunCompatibility(connection);
 }

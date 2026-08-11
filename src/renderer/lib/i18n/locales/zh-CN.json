@@ -1604,6 +1604,7 @@
     "environmentBranchLabel": "基础分支",
     "environmentBranchStrategyLabel": "分支策略",
     "environmentNewBranch": "新开分支",
+    "environmentNewBranchCompact": "新分支",
     "environmentExistingBranch": "现有分支",
     "runHostAria": "选择运行宿主机",
     "runHostLocal": "本机",
@@ -3149,7 +3150,8 @@
       "workspace": "工作区",
       "runner": "执行 Agent：{{name}}",
       "lastRun": "上次运行",
-      "openLastRun": "查看“{{name}}”的上次运行",
+      "openLastRun": "打开“{{name}}”的上次运行会话",
+      "continueSession": "继续会话",
       "neverRun": "尚未运行"
     },
     "recentRuns": {

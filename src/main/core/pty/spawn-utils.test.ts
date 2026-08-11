@@ -138,6 +138,23 @@ describe('resolveSshCommand', () => {
     expect(result).toContain('kill-session');
   });
 
+  it('attaches an existing hydrated remote tmux session without replacing it', () => {
+    const result = resolveSshCommand(
+      'agent',
+      makeAgentConfig({
+        tmuxSessionName: 'agent-session',
+        tmuxSessionIdentity: 'fork-thread',
+        tmuxReattachExistingSession: true,
+      }),
+      undefined,
+      zshProfile
+    );
+
+    const [existingPaneBranch] = result.split('; else ');
+    expect(existingPaneBranch).toContain('then tmux -L yoda -f /dev/null attach-session');
+    expect(existingPaneBranch).not.toContain('kill-session');
+  });
+
   it('launches remote general terminals with the captured remote shell', () => {
     const result = resolveSshCommand('general', makeGeneralConfig(), undefined, zshProfile);
 

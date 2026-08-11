@@ -15,6 +15,8 @@ export interface AgentSessionConfig {
   tmuxSessionIdentity?: string;
   /** Temporary identities accepted while the runtime's real thread is discovered. */
   tmuxSessionIdentityAliases?: string[];
+  /** Attach a canonical tmux pane that survived an app restart without replacing it. */
+  tmuxReattachExistingSession?: boolean;
   autoApprove: boolean;
   resume: boolean;
 }

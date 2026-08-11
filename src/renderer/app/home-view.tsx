@@ -47,7 +47,7 @@ import {
   BUILTIN_STARTUP_TEAM_ID,
   type AgentTeam,
 } from '@shared/agent-team';
-import { agentToDraft, resolveAgentPermissionMode, type Agent } from '@shared/agents';
+import { resolveAgentPermissionMode, type Agent } from '@shared/agents';
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
 import { FEATURE_WORKFLOW_STAGES, hasFeatureWorkflowContract } from '@shared/feature-workflow';
 import type { Branch } from '@shared/git';
@@ -63,7 +63,6 @@ import type { QuickActionTaskSource } from '@shared/tasks';
 import { resolveHomeProjectId } from '@renderer/app/home-project-selection';
 import { FeatureWorkflowPreview } from '@renderer/features/agent-room/feature-workflow-rail';
 import { invalidateTeamRoomQueries } from '@renderer/features/agent-room/team-room-queries';
-import { AgentModelCombobox } from '@renderer/features/agents-config/agent-model-combobox';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
 import { createAiLabProject } from '@renderer/features/ai-lab/create-ai-lab-project';
 import { startAiLabBuildTask } from '@renderer/features/ai-lab/start-ai-lab-build-task';
@@ -83,10 +82,12 @@ import { ProjectSelector } from '@renderer/features/tasks/create-task-modal/proj
 import { useRuntimePermissionModes } from '@renderer/features/tasks/hooks/useRuntimePermissionModes';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { accountGreetingName } from '@renderer/lib/account-display';
-import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
 import { AgentSlotSelector } from '@renderer/lib/components/agent-slot/agent-slot-selector';
 import { AvatarValue } from '@renderer/lib/components/avatar-value';
-import { ProjectBranchSelector } from '@renderer/lib/components/project-branch-selector';
+import {
+  ProjectBranchMenuItems,
+  ProjectBranchSelector,
+} from '@renderer/lib/components/project-branch-selector';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { useAccountSession } from '@renderer/lib/hooks/useAccount';
@@ -110,7 +111,6 @@ import {
 } from '@renderer/lib/ui/dialog';
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -118,12 +118,17 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { MicroLabel } from '@renderer/lib/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
+import { Switch } from '@renderer/lib/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
+import { resolveAgentSlot } from './agent-slot-resolution';
 import {
   dualField,
   withComposerDefault,
@@ -327,28 +332,6 @@ function getRunModeInputChrome(mode: HomeRunMode): RunModeInputChrome {
 
   const exhaustive: never = mode;
   return exhaustive;
-}
-
-/**
- * Resolve what a slot runs with. A slot is an Agent assignment: its system
- * prompt is the Agent's prompt, and its runtime is the per-slot override (loose
- * coupling) falling back to the Agent's preferred runtime. With no Agent the
- * slot cannot run — provider is null and the caller must bail.
- */
-function resolveAgentSlot(args: {
-  selectedAgentId: string | null;
-  agents: Agent[];
-  runtimeOverride: RuntimeId | null;
-}): { provider: RuntimeId | null; systemPrompt: string; agent: Agent | null } {
-  const agent = args.selectedAgentId
-    ? (args.agents.find((a) => a.id === args.selectedAgentId) ?? null)
-    : null;
-  if (!agent) return { provider: null, systemPrompt: '', agent: null };
-  return {
-    provider: args.runtimeOverride ?? agent.preferredRuntime,
-    systemPrompt: agent.systemPrompt,
-    agent,
-  };
 }
 
 function agentSkillSelection(agent: Agent | null): SkillSelectionInput | undefined {
@@ -732,7 +715,7 @@ export const HomeComposer = observer(function HomeComposer({
     },
     [runtimeOverridden, setComposerDefault, updateDraft]
   );
-  const { runtimeId, setRuntimeOverride } = useEffectiveRuntime(connectionId, {
+  const { runtimeId } = useEffectiveRuntime(connectionId, {
     value: providerOverrideValue,
     set: setRuntimeOverridePersisted,
   });
@@ -783,13 +766,6 @@ export const HomeComposer = observer(function HomeComposer({
   const reviewerOverridden = composerDefaults?.reviewerRuntime !== undefined;
   const reviewerRuntime =
     composerDefaults?.reviewerRuntime ?? draft?.reviewReviewerRuntime ?? DEFAULT_REVIEWER_RUNTIME;
-  const setReviewerProvider = useCallback(
-    (next: RuntimeId) => {
-      if (reviewerOverridden) setComposerDefault('reviewerRuntime', next);
-      else updateDraft({ reviewReviewerRuntime: next });
-    },
-    [reviewerOverridden, setComposerDefault, updateDraft]
-  );
   // Agent Teams are reusable, project/task-decoupled templates surfaced as the
   // `team` paradigm (「多智能体（name）」). Built-ins + user teams come from the list.
   const { data: teams = [] } = useQuery({
@@ -880,13 +856,22 @@ export const HomeComposer = observer(function HomeComposer({
     const resolved = resolveAgentSlot({
       selectedAgentId: slotAgentId(slotKey),
       agents: userAgents,
-      runtimeOverride: runtimeId,
+      fallbackRuntime: runtimeId,
     });
 
     const name = runtimeName(resolved.provider);
     if (!name) return null;
     return `${name} · ${modelLabel(resolved.agent?.model ?? null)}`;
   }, [runMode, runtimeId, activeTeam, slotAgentId, userAgents, t]);
+  const normalAgentRuntime = useMemo(
+    () =>
+      resolveAgentSlot({
+        selectedAgentId: slotAgentId(NORMAL_PROMPT_KEY),
+        agents: userAgents,
+        fallbackRuntime: runtimeId,
+      }).provider,
+    [runtimeId, slotAgentId, userAgents]
+  );
   // Variants reuse the base agent (NORMAL_PROMPT_KEY) with only a runtime
   // override, so their model label mirrors the base config's model.
   const compareModelLabel = useMemo(() => {
@@ -1011,11 +996,11 @@ export const HomeComposer = observer(function HomeComposer({
     (): CompareVariant => ({
       id: crypto.randomUUID(),
       projectId: selectedProjectId ?? null,
-      runtimeId,
+      runtimeId: normalAgentRuntime,
       strategyKind: effectiveStandardStrategyKind,
       baseBranch: selectedBranch ?? null,
     }),
-    [selectedProjectId, runtimeId, effectiveStandardStrategyKind, selectedBranch]
+    [selectedProjectId, normalAgentRuntime, effectiveStandardStrategyKind, selectedBranch]
   );
   const addVariant = useCallback(() => {
     setCompareVariants((prev) => {
@@ -1262,14 +1247,20 @@ export const HomeComposer = observer(function HomeComposer({
             // Creation failures are reported by the caller that owns the launch promise.
           });
       };
-      // Resolve a slot to its Agent's prompt + runtime (per-slot runtime
-      // override wins over the Agent's preferred runtime).
-      const resolveSlot = (slotKey: string, runtimeOverride: RuntimeId | null) =>
+      // Resolve a slot from its Agent profile. The fallback is only used for
+      // Agents intentionally configured to follow the run-mode default.
+      const resolveSlot = (slotKey: string, fallbackRuntime: RuntimeId | null) =>
         resolveAgentSlot({
           selectedAgentId: slotAgentId(slotKey),
           agents: userAgents,
-          runtimeOverride,
+          fallbackRuntime,
         });
+      // Comparison is an explicit experiment surface: it intentionally runs a
+      // copy of the base Agent with the per-variant runtime selected there.
+      const resolveComparisonSlot = (runtimeOverride: RuntimeId | null) => {
+        const slot = resolveSlot(NORMAL_PROMPT_KEY, runtimeId);
+        return slot.agent && runtimeOverride ? { ...slot, provider: runtimeOverride } : slot;
+      };
 
       if (runMode === 'build') {
         const slot = resolveSlot(BUILD_PROMPT_KEY, runtimeId);
@@ -1815,7 +1806,7 @@ export const HomeComposer = observer(function HomeComposer({
         // compare mode was entered); they all share the composer prompt.
         const specs: CompareSpec[] = compareVariants.flatMap((variant, index): CompareSpec[] => {
           if (!variant.projectId) return [];
-          const slot = resolveSlot(NORMAL_PROMPT_KEY, variant.runtimeId);
+          const slot = resolveComparisonSlot(variant.runtimeId);
           if (!slot.provider) return [];
           return [
             {
@@ -2445,25 +2436,14 @@ export const HomeComposer = observer(function HomeComposer({
               selectedTeamId={selectedTeamId}
               onChange={setRunMode}
               onSelectTeam={setSelectedTeamId}
-              renderConfiguration={(configurationMode, configurationTeamId, onRuntimeChange) => (
+              renderConfiguration={(configurationMode, configurationTeamId) => (
                 <ModeConfigurationPanel
                   mode={configurationMode}
-                  runtimeId={runtimeId}
-                  onRuntimeChange={(agent) => {
-                    setRuntimeOverride(agent);
-                    onRuntimeChange();
-                  }}
-                  reviewerRuntime={reviewerRuntime}
-                  onReviewerProviderChange={(provider) => {
-                    setReviewerProvider(provider);
-                    onRuntimeChange();
-                  }}
                   teams={teams}
                   selectedTeamId={configurationTeamId ?? selectedTeamId}
                   agents={userAgents}
                   slotAgentId={slotAgentId}
                   onSlotAgentChange={setSlotAgent}
-                  connectionId={connectionId}
                   className="mt-2 border-t-0 pt-0"
                 />
               )}
@@ -2896,11 +2876,7 @@ interface RunModeSelectorProps {
   selectedTeamId: string;
   onChange: (mode: HomeRunMode) => void;
   onSelectTeam: (teamId: string) => void;
-  renderConfiguration: (
-    mode: HomeRunMode,
-    teamId: string | undefined,
-    onRuntimeChange: () => void
-  ) => ReactNode;
+  renderConfiguration: (mode: HomeRunMode, teamId: string | undefined) => ReactNode;
 }
 
 function RunModeSelector({
@@ -2922,7 +2898,6 @@ function RunModeSelector({
   const [pendingId, setPendingId] = useState<string>(() =>
     entryIdForState(options, mode, selectedTeamId)
   );
-  const [runtimeDirty, setRuntimeDirty] = useState(false);
   const labelOf = (option: RunModeOption) =>
     option.label ?? (option.labelKey ? t(option.labelKey) : '');
   const current =
@@ -2932,15 +2907,12 @@ function RunModeSelector({
   const CurrentIcon = current.icon;
   const PendingIcon = pending.icon;
   const dirty =
-    runtimeDirty ||
-    pending.mode !== mode ||
-    (pending.mode === 'team' && pending.teamId !== selectedTeamId);
+    pending.mode !== mode || (pending.mode === 'team' && pending.teamId !== selectedTeamId);
   const isNonStandardMode = mode !== 'normal';
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
       setPendingId(entryIdForState(options, mode, selectedTeamId));
-      setRuntimeDirty(false);
     }
     setOpen(next);
   };
@@ -2948,7 +2920,6 @@ function RunModeSelector({
   const handleConfirm = () => {
     if (pending.teamId) onSelectTeam(pending.teamId);
     if (pending.mode !== mode) onChange(pending.mode);
-    setRuntimeDirty(false);
     setOpen(false);
   };
 
@@ -3094,7 +3065,7 @@ function RunModeSelector({
               )}
             </div>
             <p className="text-xs text-foreground-muted">{t(pending.descKey)}</p>
-            {renderConfiguration(pending.mode, pending.teamId, () => setRuntimeDirty(true))}
+            {renderConfiguration(pending.mode, pending.teamId)}
           </div>
         </div>
         <DialogFooter className="px-3 py-2.5">
@@ -3128,31 +3099,21 @@ interface StrategyChipLabels {
 
 interface ModeConfigurationPanelProps {
   mode: HomeRunMode;
-  runtimeId: RuntimeId | null;
-  onRuntimeChange: (agent: RuntimeId) => void;
-  reviewerRuntime: RuntimeId;
-  onReviewerProviderChange: (provider: RuntimeId) => void;
   teams: AgentTeam[];
   selectedTeamId: string;
   agents: Agent[];
   slotAgentId: (slotKey: string) => string | null;
   onSlotAgentChange: (slotKey: string, agentId: string) => void;
-  connectionId?: string;
   className?: string;
 }
 
 function ModeConfigurationPanel({
   mode,
-  runtimeId,
-  onRuntimeChange,
-  reviewerRuntime,
-  onReviewerProviderChange,
   teams,
   selectedTeamId,
   agents,
   slotAgentId,
   onSlotAgentChange,
-  connectionId,
   className,
 }: ModeConfigurationPanelProps) {
   const { t } = useTranslation();
@@ -3167,32 +3128,18 @@ function ModeConfigurationPanel({
   });
 
   return (
-    // Slots stack as Agent cards (identity + client + model + skills) so every
-    // run mode — including the multi-agent team — shows the same rich card.
+    // Slots stack as Agent cards (identity + configured skills) so every run
+    // mode shows the same reusable Agent profile.
     <div className={cn('mt-3 border-t border-border/60 pt-3', className)}>
       {mode === 'normal' && (
         <div className="mt-2 flex flex-col gap-1.5">
-          <Agent
-            icon={Bot}
-            label={t('home.agentLabel')}
-            value={runtimeId}
-            onChange={onRuntimeChange}
-            connectionId={connectionId}
-            {...slotProps(NORMAL_PROMPT_KEY)}
-          />
+          <Agent icon={Bot} label={t('home.agentLabel')} {...slotProps(NORMAL_PROMPT_KEY)} />
         </div>
       )}
 
       {mode === 'build' && (
         <div className="flex flex-col gap-1.5">
-          <Agent
-            icon={AppWindow}
-            label={t('home.buildAgent')}
-            value={runtimeId}
-            onChange={onRuntimeChange}
-            connectionId={connectionId}
-            {...slotProps(BUILD_PROMPT_KEY)}
-          />
+          <Agent icon={AppWindow} label={t('home.buildAgent')} {...slotProps(BUILD_PROMPT_KEY)} />
           <p className="px-1 text-xs leading-relaxed text-foreground-muted">
             {t('home.buildAgentHint')}
           </p>
@@ -3204,9 +3151,6 @@ function ModeConfigurationPanel({
           <Agent
             icon={Lightbulb}
             label={t('home.brainstormAgent')}
-            value={runtimeId}
-            onChange={onRuntimeChange}
-            connectionId={connectionId}
             {...slotProps(SPEC_PROMPT_KEY)}
           />
         </div>
@@ -3217,17 +3161,11 @@ function ModeConfigurationPanel({
           <Agent
             icon={Bot}
             label={t('home.reviewImplementer')}
-            value={runtimeId}
-            onChange={onRuntimeChange}
-            connectionId={connectionId}
             {...slotProps(REVIEW_IMPLEMENTER_PROMPT_KEY)}
           />
           <Agent
             icon={ShieldCheck}
             label={t('home.reviewReviewer')}
-            value={reviewerRuntime}
-            onChange={onReviewerProviderChange}
-            connectionId={connectionId}
             {...slotProps(REVIEW_REVIEWER_PROMPT_KEY)}
           />
           <div className="px-1 text-xs text-foreground-muted">
@@ -3290,11 +3228,6 @@ function ModeConfigurationPanel({
 interface AgentProps {
   icon: ComponentType<{ className?: string }>;
   label: string;
-  /** Per-slot runtime override. Loosely coupled to the Agent's preferred runtime. */
-  value: RuntimeId | null;
-  onChange: (provider: RuntimeId) => void;
-  connectionId?: string;
-  action?: ReactNode;
   /** User Agents this slot can pick from. */
   agents: Agent[];
   /** Currently selected Agent id for this slot, or null when none chosen yet. */
@@ -3302,17 +3235,7 @@ interface AgentProps {
   onSelectAgent: (agentId: string) => void;
 }
 
-function Agent({
-  icon: Icon,
-  label,
-  value,
-  onChange,
-  connectionId,
-  action,
-  agents,
-  selectedAgentId,
-  onSelectAgent,
-}: AgentProps) {
+function Agent({ icon: Icon, label, agents, selectedAgentId, onSelectAgent }: AgentProps) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
   const showAgentModal = useShowModal('agentEditModal');
@@ -3321,10 +3244,6 @@ function Agent({
   const selectedAgent = selectedAgentId
     ? (agents.find((a) => a.id === selectedAgentId) ?? null)
     : null;
-  // Runtime shown on the card: the per-slot override wins, else the Agent's
-  // preferred runtime. Editing it here sets the per-slot override (loose
-  // coupling — it does not mutate the Agent).
-  const runtime = value ?? selectedAgent?.preferredRuntime ?? null;
   const resolveSkillName = (identifier: string) =>
     installedSkills.find((skill) => skill.key === identifier || skill.id === identifier)
       ?.displayName ?? identifier;
@@ -3373,7 +3292,6 @@ function Agent({
             <Settings2 className="size-3.5" />
           </button>
         )}
-        {action}
       </div>
 
       {selectedAgent && (
@@ -3383,22 +3301,6 @@ function Agent({
               {selectedAgent.description}
             </p>
           )}
-
-          {/* Hairline drops the runtime/model overrides to a quieter tier than
-              the agent itself — they are loosely-coupled tweaks, not the choice. */}
-          <div aria-hidden className="mx-1 h-px bg-border/50" />
-
-          <div className="flex min-w-0 items-center gap-1">
-            <AgentSelector
-              value={runtime}
-              model={selectedAgent.model}
-              onChange={onChange}
-              connectionId={connectionId}
-              className="h-7 min-w-0 flex-1 rounded-md border-transparent bg-transparent text-sm transition-colors hover:bg-background-2"
-            />
-            <SlotModelInput key={selectedAgent.id} agent={selectedAgent} />
-          </div>
-
           {skillNames.length > 0 && (
             <div className="flex flex-wrap gap-1 px-1">
               {skillNames.map((name, index) => (
@@ -3414,41 +3316,6 @@ function Agent({
         </>
       )}
     </div>
-  );
-}
-
-/**
- * Inline model field for a slot's Agent. Edits the Agent's `model` (the same
- * field the Agent editor writes), persisted on blur/Enter. Empty = runtime
- * default.
- */
-function SlotModelInput({ agent }: { agent: Agent }) {
-  const { update } = useAgents();
-  // Seeded once; the parent remounts this via key={agent.id} when the slot's
-  // Agent changes, so local edits never get clobbered mid-typing.
-  const [value, setValue] = useState(agent.model ?? '');
-  const lastSubmittedValue = useRef<string | null>(agent.model ?? null);
-
-  const commit = (rawValue: string | null) => {
-    const next = rawValue?.trim() || null;
-    setValue(next ?? '');
-    if (next === lastSubmittedValue.current) return;
-    const previous = lastSubmittedValue.current;
-    lastSubmittedValue.current = next;
-    void update({ id: agent.id, draft: { ...agentToDraft(agent), model: next } }).catch(() => {
-      if (lastSubmittedValue.current === next) lastSubmittedValue.current = previous;
-    });
-  };
-
-  return (
-    <AgentModelCombobox
-      value={value}
-      onChange={(next) => setValue(next ?? '')}
-      onSelect={commit}
-      onBlur={commit}
-      onSubmit={commit}
-      className="h-7 w-28 shrink-0 rounded-md border border-transparent bg-transparent text-xs transition-colors hover:bg-background-2 focus-within:bg-background-2 focus-within:ring-1 focus-within:ring-ring [&_[data-slot=input-group-control]]:min-w-0 [&_[data-slot=input-group-control]]:px-2"
-    />
   );
 }
 
@@ -3506,7 +3373,6 @@ function EnvironmentSelector({
     ? t('home.environmentNewBranch')
     : t('home.environmentExistingBranch');
   const summary = [
-    t('home.environmentLabel'),
     current.label,
     branchConfiguration?.branchLabel,
     branchConfiguration ? branchStrategyLabel : undefined,
@@ -3523,26 +3389,25 @@ function EnvironmentSelector({
           <button
             data-yoda-surface="home-composer-environment"
             type="button"
-            aria-label={t('home.environmentAria')}
+            aria-label={`${t('home.environmentAria')}：${summary}`}
             title={summary}
             className="flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2"
           >
             <CurrentIcon className="size-3.5 shrink-0 text-foreground-muted" />
-            <span className="shrink-0 font-medium">{t('home.environmentLabel')}</span>
-            <span aria-hidden="true" className="text-foreground-passive">
-              ·
-            </span>
-            <span className="shrink-0">{current.label}</span>
             {branchConfiguration ? (
               <>
                 <span aria-hidden="true" className="text-foreground-passive">
                   ·
                 </span>
                 <span className="min-w-0 max-w-32 truncate">{branchConfiguration.branchLabel}</span>
-                <span aria-hidden="true" className="text-foreground-passive">
-                  ·
-                </span>
-                <span className="shrink-0">{branchStrategyLabel}</span>
+                {forking ? (
+                  <>
+                    <span aria-hidden="true" className="text-foreground-passive">
+                      ·
+                    </span>
+                    <span className="shrink-0">{t('home.environmentNewBranchCompact')}</span>
+                  </>
+                ) : null}
               </>
             ) : null}
             <ChevronDown className="size-3 shrink-0 text-foreground-muted" />
@@ -3589,37 +3454,37 @@ function EnvironmentSelector({
                   </span>
                 </DropdownMenuItem>
               ) : (
-                <ProjectBranchSelector
-                  projectId={branchConfiguration.projectId}
-                  value={branchConfiguration.branchValue}
-                  onValueChange={branchConfiguration.onBranchChange}
-                  trigger={
-                    <ComboboxTrigger
-                      aria-label={branchConfiguration.baseBranchAriaLabel}
-                      className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-sm text-foreground outline-hidden transition-colors hover:bg-background-quaternary-1 data-popup-open:bg-background-quaternary-1"
-                    >
-                      <BranchIcon className="size-4 shrink-0 text-foreground-muted" />
-                      <span className="min-w-0 flex-1 truncate">
-                        <ComboboxValue />
-                      </span>
-                      <ChevronDown className="size-3.5 shrink-0 text-foreground-muted" />
-                    </ComboboxTrigger>
-                  }
-                />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger
+                    aria-label={branchConfiguration.baseBranchAriaLabel}
+                    className="gap-2 rounded-md px-2.5 py-2"
+                  >
+                    <BranchIcon className="size-4 shrink-0 text-foreground-muted" />
+                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                      {branchConfiguration.branchLabel}
+                    </span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-64 p-1.5">
+                    <ProjectBranchMenuItems
+                      projectId={branchConfiguration.projectId}
+                      value={branchConfiguration.branchValue}
+                      onValueChange={branchConfiguration.onBranchChange}
+                    />
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
               )}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuLabel>{t('home.environmentBranchStrategyLabel')}</DropdownMenuLabel>
-              <DropdownMenuCheckboxItem
-                checked={forking}
+              <DropdownMenuItem
+                closeOnClick={false}
                 disabled={branchConfiguration.forkDisabled}
-                aria-label={branchConfiguration.forkAriaLabel}
-                onCheckedChange={(checked) => branchConfiguration.onForkChange(checked === true)}
+                onClick={() => branchConfiguration.onForkChange(!forking)}
                 className="items-start gap-2 rounded-md px-2.5 py-2"
               >
                 <GitFork className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
-                <span className="min-w-0">
+                <span className="min-w-0 flex-1">
                   <span className="block text-sm text-foreground">
                     {t('home.environmentNewBranch')}
                   </span>
@@ -3629,7 +3494,17 @@ function EnvironmentSelector({
                       : branchConfiguration.forkLabels.noWorktreeDesc}
                   </span>
                 </span>
-              </DropdownMenuCheckboxItem>
+                <Switch
+                  size="sm"
+                  checked={forking}
+                  disabled={branchConfiguration.forkDisabled}
+                  aria-label={branchConfiguration.forkAriaLabel}
+                  onCheckedChange={branchConfiguration.onForkChange}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => event.stopPropagation()}
+                  className="mt-0.5"
+                />
+              </DropdownMenuItem>
             </DropdownMenuGroup>
           </>
         ) : null}
@@ -3758,35 +3633,22 @@ function ForkSwitchChip({ checked, disabled, onChange, ariaLabel, labels }: Fork
     <Tooltip>
       <TooltipTrigger
         render={
-          <button
-            type="button"
-            role="switch"
-            aria-checked={checked}
-            aria-label={ariaLabel}
-            disabled={disabled}
-            onClick={() => onChange(!checked)}
-            className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 disabled:pointer-events-none disabled:opacity-50"
+          <div
+            className={cn(
+              'flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground',
+              disabled && 'opacity-50'
+            )}
           >
             <GitFork className="size-3.5 text-foreground-muted" />
             <span>{t('home.forkChipLabel')}</span>
-            {/* Visual-only mini switch (the chip button carries the switch role);
-                mirrors the sm Switch in @renderer/lib/ui/switch. */}
-            <span
-              className={cn(
-                'relative inline-flex h-[14px] w-[24px] shrink-0 items-center rounded-full border border-border-1 transition-colors',
-                checked ? 'bg-background-neutral' : 'bg-background'
-              )}
-            >
-              <span
-                className={cn(
-                  'pointer-events-none block size-3 rounded-full transition-transform',
-                  checked
-                    ? 'translate-x-[calc(100%-2px)] bg-background-3'
-                    : 'translate-x-0 bg-background-neutral/50'
-                )}
-              />
-            </span>
-          </button>
+            <Switch
+              size="sm"
+              checked={checked}
+              disabled={disabled}
+              aria-label={ariaLabel}
+              onCheckedChange={onChange}
+            />
+          </div>
         }
       />
       <TooltipContent align="start" className="max-w-72">

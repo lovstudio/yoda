@@ -108,7 +108,10 @@ describe('AutomationRunner', () => {
     await runner.fire(automation.id, 'manual');
 
     expect(createParams?.initialConversation?.executionMode).toBe('automation');
-    expect(mocks.startRun).toHaveBeenCalledWith(automation.id, 'manual', createParams?.id);
+    expect(mocks.startRun).toHaveBeenCalledWith(automation.id, 'manual', {
+      taskId: createParams?.id,
+      conversationId: createParams?.initialConversation?.id,
+    });
     expect(mocks.finishRunningRunForTask).toHaveBeenCalledWith(createParams?.id, 'success');
     expect(mocks.startRun.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.finishRunningRunForTask.mock.invocationCallOrder[0]

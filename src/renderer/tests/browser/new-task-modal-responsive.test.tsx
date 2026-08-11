@@ -120,7 +120,7 @@ vi.mock('@renderer/app/home-view', () => ({
             },
           },
           chip('项目', 96),
-          chip('环境 · 本机 · main · 新开分支', 220),
+          chip('main · 新分支', 152),
           chip('代理', 172),
           chip('配置', 64, { surface: 'home-composer-session-settings' }),
           chip('对比', 64, {

@@ -1604,6 +1604,7 @@
     "environmentBranchLabel": "Base branch",
     "environmentBranchStrategyLabel": "Branch strategy",
     "environmentNewBranch": "New branch",
+    "environmentNewBranchCompact": "New",
     "environmentExistingBranch": "Existing branch",
     "runHostAria": "Choose run host",
     "runHostLocal": "Local host",
@@ -3149,7 +3150,8 @@
       "workspace": "Workspace",
       "runner": "Agent: {{name}}",
       "lastRun": "Last run",
-      "openLastRun": "Open the last run for \"{{name}}\"",
+      "openLastRun": "Open the last run session for \"{{name}}\"",
+      "continueSession": "Continue session",
       "neverRun": "Never run"
     },
     "recentRuns": {

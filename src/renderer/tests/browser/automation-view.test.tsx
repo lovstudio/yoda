@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
   run: vi.fn(),
   navigate: vi.fn(),
+  openTaskTarget: vi.fn(),
   confirm: vi.fn(),
   toast: vi.fn(),
 }));
@@ -58,6 +59,7 @@ const fixtures = vi.hoisted(() => {
     id: 'run-1',
     automationId: activeAutomation.id,
     taskId: 'task-1',
+    conversationId: 'conversation-1',
     trigger: 'cron',
     status: 'success' as const,
     startedAt: '2026-07-31T01:00:00.000Z',
@@ -131,6 +133,11 @@ vi.mock('@renderer/lib/layout/navigation-provider', () => ({
   isCurrentView: () => false,
 }));
 
+vi.mock('@renderer/app/open-task-target', async (importOriginal) => ({
+  ...(await importOriginal()),
+  openTaskTarget: mocks.openTaskTarget,
+}));
+
 vi.mock('@renderer/lib/modal/modal-provider', () => ({
   useModalContext: () => ({
     closeModal: vi.fn(),
@@ -176,6 +183,7 @@ describe('AutomationMainPanel', () => {
     mocks.remove.mockReset();
     mocks.run.mockReset();
     mocks.navigate.mockReset();
+    mocks.openTaskTarget.mockReset();
     mocks.confirm.mockReset();
     mocks.toast.mockReset();
     host = document.createElement('div');
@@ -209,11 +217,16 @@ describe('AutomationMainPanel', () => {
     const recentRunButton = host.querySelector<HTMLButtonElement>(
       'button[aria-label="automation.card.openLastRun"]'
     );
+    expect(recentRunButton?.textContent).toContain('automation.card.continueSession');
     await act(async () => recentRunButton?.click());
-    expect(mocks.navigate).toHaveBeenCalledWith('task', {
-      projectId: INTERNAL_PROJECT_ID,
-      taskId: fixtures.recentRun.taskId,
-    });
+    expect(mocks.openTaskTarget).toHaveBeenCalledWith(
+      {
+        projectId: INTERNAL_PROJECT_ID,
+        taskId: fixtures.recentRun.taskId,
+        conversationId: fixtures.recentRun.conversationId,
+      },
+      mocks.navigate
+    );
   });
 
   it('keeps filters and the primary run action visible without hover', async () => {
