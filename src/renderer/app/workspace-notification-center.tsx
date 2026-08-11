@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   CircleAlert,
+  Copy,
   Info,
   LoaderCircle,
   Mail,
@@ -11,9 +12,9 @@ import {
   MoreHorizontal,
   Trash2,
 } from 'lucide-react';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { copyTextToClipboard } from '@renderer/lib/hooks/use-toast';
+import { copyTextToClipboard, useToast } from '@renderer/lib/hooks/use-toast';
 import {
   workspaceNotificationStore,
   type WorkspaceNotification,
@@ -263,26 +264,8 @@ function NotificationDetails({
   onOpenTarget: (target: WorkspaceNotificationTarget) => void;
 }) {
   const { t } = useTranslation();
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const action = workspaceNotificationStore.getAction(notification.id);
-  const details =
-    notification.details ??
-    [notification.title, notification.description].filter(Boolean).join('\n\n');
-
-  useEffect(() => {
-    if (copyState === 'idle') return;
-    const timer = window.setTimeout(() => setCopyState('idle'), 2_000);
-    return () => window.clearTimeout(timer);
-  }, [copyState]);
-
-  const copyDetails = async () => {
-    try {
-      await copyTextToClipboard(details);
-      setCopyState('copied');
-    } catch {
-      setCopyState('failed');
-    }
-  };
+  const details = getNotificationDetails(notification);
 
   return (
     <>
@@ -300,9 +283,6 @@ function NotificationDetails({
         <div className="min-w-0 flex-1 truncate text-sm font-medium">
           {t('workspaceRuntime.notifications.detailsTitle')}
         </div>
-        <Button type="button" variant="ghost" size="xs" onClick={() => void copyDetails()}>
-          {t(`workspaceRuntime.notifications.copy.${copyState}`)}
-        </Button>
         <NotificationActionsMenu
           notification={notification}
           onDelete={onDelete}
@@ -395,6 +375,38 @@ function NotificationDetails({
   );
 }
 
+function getNotificationDetails(notification: WorkspaceNotification): string {
+  return (
+    notification.details ??
+    [notification.title, notification.description].filter(Boolean).join('\n\n')
+  );
+}
+
+function formatNotificationCopyText(notification: WorkspaceNotification): string {
+  const details = getNotificationDetails(notification);
+  if (notification.kind !== 'error') return details;
+
+  return [
+    `Error: ${notification.title}`,
+    notification.description ? `Description: ${notification.description}` : undefined,
+    '',
+    'Details:',
+    details,
+    '',
+    'Diagnostic context:',
+    `Notification ID: ${notification.id}`,
+    `Source: ${notification.source}`,
+    `Reason: ${notification.reason}`,
+    `Status: ${notification.status}`,
+    `First seen: ${notification.createdAt}`,
+    `Last updated: ${notification.updatedAt}`,
+    `Occurrences: ${notification.occurrenceCount}`,
+    notification.target ? `Target: ${JSON.stringify(notification.target)}` : undefined,
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join('\n');
+}
+
 function NotificationActionsMenu({
   notification,
   className,
@@ -409,6 +421,22 @@ function NotificationActionsMenu({
   onMarkUnread: () => void;
 }) {
   const { t } = useTranslation();
+  const { toast } = useToast();
+
+  const copyNotification = async () => {
+    try {
+      await copyTextToClipboard(formatNotificationCopyText(notification));
+      toast.success(
+        t(
+          notification.kind === 'error'
+            ? 'common.debugInfoCopied'
+            : 'workspaceRuntime.notifications.copy.copied'
+        )
+      );
+    } catch {
+      toast.error(t('common.copyFailed'));
+    }
+  };
 
   return (
     <DropdownMenu>
@@ -430,7 +458,15 @@ function NotificationActionsMenu({
           </Button>
         }
       />
-      <DropdownMenuContent align="end" className="w-36">
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuItem onClick={() => void copyNotification()}>
+          <Copy aria-hidden />
+          {t(
+            notification.kind === 'error'
+              ? 'common.copyDebugInfo'
+              : 'workspaceRuntime.notifications.copy.idle'
+          )}
+        </DropdownMenuItem>
         {notification.readAt === null ? (
           <DropdownMenuItem onClick={onMarkRead}>
             <MailOpen aria-hidden />
