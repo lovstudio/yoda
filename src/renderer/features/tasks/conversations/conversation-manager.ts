@@ -109,6 +109,14 @@ export class ConversationManagerStore {
       if (event.taskId !== this.taskId) return;
       const conversationStore = this.conversations.get(event.conversationId);
       if (!conversationStore) return;
+      log.debug('[conversation-status] agent event', {
+        projectId: event.projectId,
+        taskId: event.taskId,
+        conversationId: event.conversationId,
+        type: event.type,
+        source: event.source ?? null,
+        notificationType: event.payload.notificationType ?? null,
+      });
       if (event.type === 'awaiting-input') {
         conversationStore.setAwaitingInput('elicitation_dialog', {
           actionDescription: event.payload.message ?? event.payload.title,
@@ -165,6 +173,13 @@ export class ConversationManagerStore {
       if (event.projectId !== this.projectId || event.taskId !== this.taskId) return;
       const conversationStore = this.conversations.get(event.conversationId);
       if (!conversationStore) return;
+      log.debug('[conversation-status] authoritative event', {
+        projectId: event.projectId,
+        taskId: event.taskId,
+        conversationId: event.conversationId,
+        status: event.status,
+        hasPendingAction: Boolean(event.pendingAction),
+      });
       conversationStore.applyAuthoritativeStatus(event.status, event.pendingAction);
     });
   }
@@ -710,12 +725,23 @@ export class ConversationStore {
   }
 
   setStatus(status: AgentStatus, options: { emit?: boolean } = {}) {
-    const changed = this.status !== status;
+    const previousStatus = this.status;
+    const changed = previousStatus !== status;
     this.status = status;
     this.seen = status === 'idle' || status === 'working';
     if (status !== 'awaiting-input') {
       this.lastNotificationType = null;
       this.pendingActionDescription = null;
+    }
+    if (changed) {
+      log.debug('[conversation-status] transition', {
+        projectId: this.data.projectId,
+        taskId: this.data.taskId,
+        conversationId: this.data.id,
+        from: previousStatus,
+        to: status,
+        emitsStatusEvent: options.emit !== false,
+      });
     }
     if (changed && options.emit !== false) {
       events.emit(agentSessionStatusChangedChannel, {

@@ -91,13 +91,17 @@ export class PtySession {
     runInAction(() => {
       this.connectionError = null;
     });
-    if (!this.connectionEnabled) return;
+    if (!this.connectionEnabled) {
+      log.debug('[pty-session] connection deferred', { sessionId: this.sessionId });
+      return;
+    }
     if (this.connectPromise) return this.connectPromise;
     if (this.pty) {
       PtySession.touchHotSession(this);
       return;
     }
 
+    log.debug('[pty-session] preparation requested', { sessionId: this.sessionId });
     const promise = this.connectInternal();
     this.connectPromise = promise;
     try {
@@ -116,6 +120,7 @@ export class PtySession {
       runInAction(() => {
         this.status = 'connecting';
       });
+      log.debug('[pty-session] preparation started', { sessionId: this.sessionId });
 
       const terminalSettings = await withTimeout(
         rpc.appSettings.get('terminal') as Promise<AppSettings['terminal']>,
@@ -141,6 +146,7 @@ export class PtySession {
         this.status = 'ready';
         this.connectionError = null;
       });
+      log.debug('[pty-session] preparation ready', { sessionId: this.sessionId });
     } catch (error) {
       if (this.pty === pty) {
         pty?.dispose();
@@ -167,6 +173,10 @@ export class PtySession {
     // the pane size is unchanged. Without seeding, a subsequent restart would
     // read null and spawn the backend PTY at the 80x24 fallback (half-height TUI).
     const carriedDims = this.pty?.lastSentDims ?? null;
+    log.debug('[pty-session] reconnect requested', {
+      sessionId: this.sessionId,
+      carriedDims,
+    });
     this.pty?.dispose();
     runInAction(() => {
       this.pty = null;
@@ -230,6 +240,7 @@ export class PtySession {
 
   private evictRenderer(): void {
     if (this.pty?.mounted) return;
+    log.debug('[pty-session] renderer evicted by hot-session limit', { sessionId: this.sessionId });
     this.connectionRequested = false;
     this.connectPromise = null;
     this.pty?.dispose();
