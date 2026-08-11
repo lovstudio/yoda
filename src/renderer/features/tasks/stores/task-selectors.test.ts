@@ -52,6 +52,47 @@ describe('taskSessionStatusSummary', () => {
       'completed'
     );
   });
+
+  it('merges live runtime status into mounted conversation metadata', () => {
+    const store = new TaskStore(makeTask(), 'provisioned');
+    store.provisionedTask = {
+      conversations: {
+        conversations: new Map([
+          [
+            'conversation-1',
+            {
+              data: {
+                id: 'conversation-1',
+                title: 'Live session',
+                runtimeId: 'codex',
+                lastInteractedAt: '2026-08-10T04:56:32.240Z',
+              },
+              indicatorStatus: null,
+            },
+          ],
+        ]),
+      },
+    } as unknown as ProvisionedTask;
+    mocks.taskSessionStatuses.mockReturnValue([
+      { conversationId: 'conversation-1', status: 'working' },
+    ]);
+
+    expect(taskSessionStatusSummary(store)).toEqual({
+      primaryStatus: 'working',
+      totalCount: 1,
+      attentionCount: 0,
+      workingCount: 1,
+      sessions: [
+        {
+          conversationId: 'conversation-1',
+          status: 'working',
+          title: 'Live session',
+          runtimeId: 'codex',
+          lastInteractedAt: '2026-08-10T04:56:32.240Z',
+        },
+      ],
+    });
+  });
 });
 
 describe('summarizeTaskSessionStatuses', () => {

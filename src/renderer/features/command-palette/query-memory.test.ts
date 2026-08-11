@@ -4,6 +4,7 @@ import {
   rememberCommandPaletteQuery,
   rememberRecentCommandPaletteQuery,
   removeRecentCommandPaletteQuery,
+  resetCommandPaletteQuery,
   resolveInitialCommandPaletteQuery,
 } from './query-memory';
 
@@ -36,6 +37,15 @@ describe('command palette query memory', () => {
     const storage = createMemoryStorage();
 
     rememberCommandPaletteQuery('', 'task-search', storage);
+
+    expect(resolveInitialCommandPaletteQuery(undefined, 'task-search', storage)).toBe('');
+  });
+
+  it('clears the saved query after a search is triggered', () => {
+    const storage = createMemoryStorage();
+
+    rememberCommandPaletteQuery('in:tasks release notes', 'task-search', storage);
+    resetCommandPaletteQuery('task-search', storage);
 
     expect(resolveInitialCommandPaletteQuery(undefined, 'task-search', storage)).toBe('');
   });

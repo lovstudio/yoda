@@ -47,6 +47,7 @@ export const TabbedPtyPanel = observer(function TabbedPtyPanel<TEntity>({
 
   const activeSession = activeTab ? getSession(activeTab) : null;
   const activeSessionId = activeSession?.sessionId ?? null;
+  const sessionStatus = activeSession?.status;
   const activeOnEnterPress = activeTab && onEnterPress ? () => onEnterPress(activeTab) : undefined;
   const activeOnInterruptPress =
     activeTab && onInterruptPress ? () => onInterruptPress(activeTab) : undefined;
@@ -60,8 +61,8 @@ export const TabbedPtyPanel = observer(function TabbedPtyPanel<TEntity>({
   // other MobX observers must remain passive and must not create an xterm.
   useEffect(() => {
     if (!activeSession) return;
-    void activeSession.connect();
-  }, [activeSession]);
+    void activeSession.connect().catch(() => {});
+  }, [activeSession, sessionStatus]);
 
   const {
     isSearchOpen,
@@ -94,7 +95,6 @@ export const TabbedPtyPanel = observer(function TabbedPtyPanel<TEntity>({
 
   // Fire when the session transitions to 'ready' (MobX observer re-renders automatically
   // because activeSession?.status is read in the render body below).
-  const sessionStatus = activeSession?.status;
   useEffect(() => {
     if (sessionStatus === 'ready' && focusPendingRef.current) {
       focusPendingRef.current = false;

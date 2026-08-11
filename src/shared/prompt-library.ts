@@ -133,6 +133,14 @@ export function incrementPromptVersion(
   return `${major}.${minor}.${patch + 1}`;
 }
 
+/** Where a prompt is allowed to participate in runtime injection. */
+export const promptBindingsSchema = z.object({
+  global: z.boolean().default(true),
+  workspaceIds: z.array(z.string().min(1)).max(128).default([]),
+  projectIds: z.array(z.string().min(1)).max(128).default([]),
+});
+export type PromptBindings = z.infer<typeof promptBindingsSchema>;
+
 export const promptSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -142,12 +150,61 @@ export const promptSchema = z.object({
   extraInfo: z.string(),
   injectionEnabled: z.boolean(),
   injectionOrder: z.number().int(),
+  bindings: promptBindingsSchema,
   version: promptVersionSchema,
   source: promptSourceSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 export type Prompt = z.infer<typeof promptSchema>;
+
+export type PromptInjectionScope = 'user' | 'project';
+
+export type PromptInjectionTarget = {
+  projectId?: string | null;
+  workspaceId?: string | null;
+};
+
+type PromptInjectionTargetInput = string | null | PromptInjectionTarget | undefined;
+
+function normalizePromptInjectionTarget(target: PromptInjectionTargetInput): PromptInjectionTarget {
+  if (typeof target === 'string') return { projectId: target };
+  return target ?? {};
+}
+
+function matchesPromptTarget(
+  bindings: PromptBindings,
+  target: PromptInjectionTargetInput
+): boolean {
+  const normalizedTarget = normalizePromptInjectionTarget(target);
+  return Boolean(
+    (normalizedTarget.projectId && bindings.projectIds.includes(normalizedTarget.projectId)) ||
+      (normalizedTarget.workspaceId && bindings.workspaceIds.includes(normalizedTarget.workspaceId))
+  );
+}
+
+/**
+ * Returns whether a prompt belongs in a configuration tab. The user tab shows
+ * global prompts only; the project tab shows explicit project/workspace
+ * bindings only. Runtime availability is intentionally handled separately by
+ * `isPromptAvailableForTarget`, which includes both layers.
+ */
+export function isPromptBoundToScope(
+  prompt: Pick<Prompt, 'bindings'>,
+  scope: PromptInjectionScope,
+  target?: PromptInjectionTargetInput
+): boolean {
+  if (scope === 'user') return prompt.bindings.global;
+  return !prompt.bindings.global && matchesPromptTarget(prompt.bindings, target);
+}
+
+/** A prompt is available at runtime when its global or target binding matches. */
+export function isPromptAvailableForTarget(
+  prompt: Pick<Prompt, 'bindings'>,
+  target?: PromptInjectionTargetInput
+): boolean {
+  return prompt.bindings.global || matchesPromptTarget(prompt.bindings, target);
+}
 
 export const promptVersionSnapshotSchema = z.object({
   id: z.string(),
@@ -169,9 +226,10 @@ export const promptCreateInputSchema = z.object({
   tags: promptTagsSchema.default([]),
   extraInfo: z.string().default(''),
   injectionEnabled: z.boolean().default(false),
+  bindings: promptBindingsSchema.default({ global: true, workspaceIds: [], projectIds: [] }),
   source: promptSourceSchema.optional(),
 });
-export type PromptCreateInput = z.infer<typeof promptCreateInputSchema>;
+export type PromptCreateInput = z.input<typeof promptCreateInputSchema>;
 
 export const promptUpdateInputSchema = z
   .object({
@@ -181,8 +239,9 @@ export const promptUpdateInputSchema = z
     tags: promptTagsSchema,
     extraInfo: z.string(),
     injectionEnabled: z.boolean(),
+    bindings: promptBindingsSchema,
     source: promptSourceSchema.nullable(),
     versionBump: promptVersionBumpSchema,
   })
   .partial();
-export type PromptUpdateInput = z.infer<typeof promptUpdateInputSchema>;
+export type PromptUpdateInput = z.input<typeof promptUpdateInputSchema>;

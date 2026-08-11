@@ -42,7 +42,7 @@ export function AgentStatusIndicator({
       >
         <Loader2
           className={cn(
-            'size-3.5 animate-spin text-primary group-hover/interrupt:hidden',
+            'size-3.5 motion-safe:animate-spin text-primary group-hover/interrupt:hidden',
             className
           )}
         />
@@ -66,11 +66,16 @@ export function AgentStatusIndicator({
   const renderIndicator = () => {
     switch (status) {
       case 'working':
-        return <Loader2 className={cn('size-3.5 animate-spin text-primary', className)} />;
+        return (
+          <Loader2 className={cn('size-3.5 motion-safe:animate-spin text-primary', className)} />
+        );
       case 'awaiting-input':
         return (
           <MessageCircleQuestionMark
-            className={cn('size-4 animate-pulse text-amber-500 dark:text-amber-300', className)}
+            className={cn(
+              'size-4 motion-safe:animate-pulse text-amber-500 dark:text-amber-300',
+              className
+            )}
             aria-label={statusLabel}
           />
         );

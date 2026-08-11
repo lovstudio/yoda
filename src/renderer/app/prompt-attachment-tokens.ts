@@ -89,6 +89,19 @@ export function findTokenRanges(text: string, tokens: PromptToken[]): TokenRange
 }
 
 /**
+ * Inputs that can change inline-token geometry. The full value is intentional:
+ * text on either side of a token can affect wrapping and bidirectional layout.
+ * Returning null for the empty state also gives React effects a stable identity
+ * while ordinary prompt text changes without attachments.
+ */
+export function tokenRectLayoutKey(text: string, ranges: TokenRange[]): string | null {
+  if (ranges.length === 0) return null;
+  return `${text}\u0000${ranges
+    .map((range) => `${range.token.id}:${range.start}:${range.end}`)
+    .join('\u0000')}`;
+}
+
+/**
  * Enforce token atomicity on a textarea selection: a collapsed caret inside a
  * token snaps to the boundary in the direction of travel (relative to the
  * previous caret); a range selection partially overlapping a token expands to
@@ -174,8 +187,11 @@ export interface TokenRectMeasurer {
   dispose(): void;
 }
 
-function configureMirror(mirror: HTMLDivElement, textarea: HTMLTextAreaElement): void {
-  const style = window.getComputedStyle(textarea);
+function configureMirror(
+  mirror: HTMLDivElement,
+  textarea: HTMLTextAreaElement,
+  style: CSSStyleDeclaration
+): void {
   for (const prop of MIRROR_STYLE_PROPS) {
     mirror.style[prop as never] = style[prop as never];
   }
@@ -202,6 +218,8 @@ export function createTokenRectMeasurer(textarea: HTMLTextAreaElement): TokenRec
 
   let styleSignature = '';
   let width = -1;
+  let layoutKey: string | null = null;
+  let cachedResult: Map<string, TokenRect[]> | null = null;
 
   return {
     measure(ranges): Map<string, TokenRect[]> {
@@ -212,10 +230,21 @@ export function createTokenRectMeasurer(textarea: HTMLTextAreaElement): TokenRec
       const nextStyleSignature = MIRROR_STYLE_PROPS.map((prop) => style[prop as never]).join(
         '\u0000'
       );
-      if (nextStyleSignature !== styleSignature || textarea.clientWidth !== width) {
-        configureMirror(mirror, textarea);
+      const nextWidth = textarea.clientWidth;
+      const nextLayoutKey = tokenRectLayoutKey(textarea.value, ranges);
+      if (
+        cachedResult &&
+        nextLayoutKey === layoutKey &&
+        nextStyleSignature === styleSignature &&
+        nextWidth === width
+      ) {
+        return cachedResult;
+      }
+
+      if (nextStyleSignature !== styleSignature || nextWidth !== width) {
+        configureMirror(mirror, textarea, style);
         styleSignature = nextStyleSignature;
-        width = textarea.clientWidth;
+        width = nextWidth;
       }
 
       mirror.replaceChildren();
@@ -253,6 +282,8 @@ export function createTokenRectMeasurer(textarea: HTMLTextAreaElement): TokenRec
       } finally {
         mirror.replaceChildren();
       }
+      layoutKey = nextLayoutKey;
+      cachedResult = result;
       return result;
     },
 

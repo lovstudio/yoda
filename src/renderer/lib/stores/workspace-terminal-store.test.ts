@@ -84,13 +84,11 @@ describe('WorkspaceTerminalStore', () => {
         projectId: 'project-1',
         taskId: 'local:project-1:project-view',
         name: 'Start locally',
+        command: 'pnpm run dev',
+        persist: false,
       })
     );
-    const terminalId = mocks.createWorkspaceTerminal.mock.calls[0]?.[0].id;
-    expect(mocks.sendInput).toHaveBeenCalledWith(
-      `project-1:local:project-1:project-view:${terminalId}`,
-      'pnpm run dev\r'
-    );
+    expect(mocks.sendInput).not.toHaveBeenCalled();
     expect(mocks.createTaskTerminal).not.toHaveBeenCalled();
   });
 
@@ -135,13 +133,30 @@ describe('WorkspaceTerminalStore', () => {
 
     await store.runCommand(project as never, 'pnpm run dev', 'Start locally', 'start');
     expect(mocks.createWorkspaceTerminal).toHaveBeenCalledTimes(1);
-    expect(mocks.sendInput).toHaveBeenCalledTimes(1);
+    expect(mocks.sendInput).not.toHaveBeenCalled();
+
+    const terminalStore = store.manager?.terminals.get(terminalId);
+    if (!terminalStore) throw new Error('Expected the quick action terminal to exist.');
+    terminalStore.session.hasExited = true;
+    expect(store.isQuickActionRunning(project as never, 'start')).toBe(false);
+    await expect(store.openQuickActionTerminal(project as never, 'start')).resolves.toBe(false);
+
+    await expect(
+      store.runCommand(project as never, 'pnpm run dev', 'Start locally', 'start')
+    ).resolves.toBe(terminalId);
+    expect(mocks.deleteWorkspaceTerminal).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      taskId: 'local:project-1:project-view',
+      terminalId,
+    });
+    expect(mocks.createWorkspaceTerminal).toHaveBeenCalledTimes(2);
+    expect(store.isQuickActionRunning(project as never, 'start')).toBe(true);
 
     await store.manager?.deleteTerminal(terminalId);
     expect(store.isQuickActionRunning(project as never, 'start')).toBe(false);
   });
 
-  it('discovers persisted quick action Terminals before opening the drawer', async () => {
+  it('does not treat a hydrated legacy quick action Terminal as running', async () => {
     const store = new WorkspaceTerminalStore();
     const project = { id: 'project-1', type: 'local', path: '/repo' } as const;
     const terminal: Terminal = {
@@ -155,9 +170,8 @@ describe('WorkspaceTerminalStore', () => {
     await store.prefetchProjectTerminals(project as never);
 
     expect(store.isOpen).toBe(false);
-    expect(store.isQuickActionRunning(project as never, 'start')).toBe(true);
-    await expect(store.openQuickActionTerminal(project as never, 'start')).resolves.toBe(true);
-    expect(store.tabs?.activeTabId).toBe(terminal.id);
+    expect(store.isQuickActionRunning(project as never, 'start')).toBe(false);
+    await expect(store.openQuickActionTerminal(project as never, 'start')).resolves.toBe(false);
   });
 
   it('opens runtime actions as ordinary global Terminal tabs', async () => {

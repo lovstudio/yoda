@@ -243,6 +243,7 @@ export function createWorkspaceFactory(
 
 type TaskProviderOpts = {
   projectId: string;
+  sidebarWorkspaceId?: string | null;
   taskId: string;
   taskPath: string;
   tmuxEnabled: boolean;
@@ -263,6 +264,7 @@ export function buildTaskProviders(
     return {
       conversations: new SshConversationProvider({
         projectId: opts.projectId,
+        sidebarWorkspaceId: opts.sidebarWorkspaceId,
         taskPath: opts.taskPath,
         taskId: opts.taskId,
         tmux: opts.tmuxEnabled,
@@ -291,6 +293,7 @@ export function buildTaskProviders(
   return {
     conversations: new LocalConversationProvider({
       projectId: opts.projectId,
+      sidebarWorkspaceId: opts.sidebarWorkspaceId,
       taskPath: opts.taskPath,
       taskId: opts.taskId,
       tmux: opts.tmuxEnabled,

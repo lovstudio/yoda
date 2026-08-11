@@ -11,6 +11,53 @@ export const MAAS_PLATFORM_IDS = [
   'custom',
 ] as const;
 
+export const MAAS_MANAGED_GATEWAY_IDS = ['litellm', 'cliproxyapi', 'newapi'] as const;
+
+export type MaasManagedGatewayId = (typeof MAAS_MANAGED_GATEWAY_IDS)[number];
+
+export type MaasManagedGatewayRepository = {
+  repository: string;
+  url: string;
+};
+
+export const MAAS_MANAGED_GATEWAY_REPOSITORIES: Record<
+  MaasManagedGatewayId,
+  MaasManagedGatewayRepository
+> = {
+  litellm: {
+    repository: 'BerriAI/litellm',
+    url: 'https://github.com/BerriAI/litellm',
+  },
+  cliproxyapi: {
+    repository: 'router-for-me/CLIProxyAPI',
+    url: 'https://github.com/router-for-me/CLIProxyAPI',
+  },
+  newapi: {
+    repository: 'QuantumNous/new-api',
+    url: 'https://github.com/QuantumNous/new-api',
+  },
+};
+
+export type MaasManagedGatewayStarTrendPoint = {
+  date: string;
+  starCount: number;
+};
+
+export type MaasManagedGatewayStarTrend = {
+  points: MaasManagedGatewayStarTrendPoint[];
+  source: 'ossinsight';
+  calibratedToCurrent: boolean;
+  fetchedAt: string;
+};
+
+export type MaasManagedGatewayStarSnapshot = {
+  platformId: MaasManagedGatewayId;
+  repositoryUrl: string;
+  starCount: number | null;
+  fetchedAt: string | null;
+  trend: MaasManagedGatewayStarTrend | null;
+};
+
 export type MaasPlatformTemplateId = (typeof MAAS_PLATFORM_IDS)[number];
 export type MaasProfileId = `${MaasPlatformTemplateId}:${string}`;
 export type CustomMaasPlatformId = `custom:${string}`;

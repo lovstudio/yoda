@@ -9,7 +9,6 @@ import {
   ExternalLink,
   Gauge,
   Settings2,
-  Sparkles,
   Stethoscope,
   Terminal,
 } from 'lucide-react';
@@ -45,7 +44,6 @@ import {
   getProjectStore,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
-import { SkillQuickSearchPopover } from '@renderer/features/skills/components/SkillQuickSearchPopover';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { LatestReplyScreenshotButton } from '@renderer/features/tasks/conversations/latest-reply-screenshot';
@@ -79,6 +77,7 @@ import {
 import { startRendererPerformanceReporter } from './renderer-performance-reporter';
 import { rankWorkspaceAgentSessions } from './workspace-agent-sessions';
 import { WorkspaceNotificationCenter } from './workspace-notification-center';
+import { WorkspacePromptPopover } from './workspace-prompt-popover';
 import type { WorkspaceResourceDetailKind } from './workspace-resource-details-modal';
 import {
   getWorkspaceLatencyP95,
@@ -96,6 +95,7 @@ import {
   getNextAccountResetCredit,
   getQuotaWindowLabel,
 } from './workspace-runtime-bar-format';
+import { WorkspaceSkillPopover } from './workspace-skill-popover';
 
 type WorkspaceAgentSession = Omit<AppAgentSessionResource, 'runtimeId' | 'title' | 'taskTitle'> & {
   runtimeId?: AppAgentSessionResource['runtimeId'];
@@ -157,7 +157,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const [agentPanelTab, setAgentPanelTab] = useState<AgentPanelTab>('all');
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
   const [isConfigPopoverOpen, setIsConfigPopoverOpen] = useState(false);
-  const [isSkillPopoverOpen, setIsSkillPopoverOpen] = useState(false);
   const [accountUsageWarningThresholdDraft, setAccountUsageWarningThresholdDraft] = useState('95');
   const notifiedAccountUsageWindowsRef = useRef(new Set<string>());
   const resourceHistory = useSyncExternalStore(
@@ -762,28 +761,29 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     updateInterfaceSettings({ dockSessionHistory: !sessionHistoryDocked });
   };
 
-  const handleSkillInstalled = (skill: { key: string; displayName: string }) => {
-    setIsSkillPopoverOpen(false);
-    if (!provisionedTask || !activeConversation || connectionId) return;
-    showConfirmActionModal({
-      title: t('skills.quickSearch.reloadTitle'),
-      description: t('skills.quickSearch.reloadDescription', { name: skill.displayName }),
-      confirmLabel: t('skills.quickSearch.reloadConfirm'),
-      variant: 'default',
-      onSuccess: () =>
-        void provisionedTask.conversations.restartConversation(
-          activeConversation.id,
-          undefined,
-          undefined,
-          skill.key
-        ),
-    });
-  };
+  const handleSkillInstalled = useCallback(
+    (skill: { key: string; displayName: string }) => {
+      if (!provisionedTask || !activeConversation || connectionId) return;
+      showConfirmActionModal({
+        title: t('skills.quickSearch.reloadTitle'),
+        description: t('skills.quickSearch.reloadDescription', { name: skill.displayName }),
+        confirmLabel: t('skills.quickSearch.reloadConfirm'),
+        variant: 'default',
+        onSuccess: () =>
+          void provisionedTask.conversations.restartConversation(
+            activeConversation.id,
+            undefined,
+            undefined,
+            skill.key
+          ),
+      });
+    },
+    [activeConversation, connectionId, provisionedTask, showConfirmActionModal, t]
+  );
 
-  const openSkillsManagement = () => {
-    setIsSkillPopoverOpen(false);
+  const openSkillsManagement = useCallback(() => {
     appState.navigation.navigate('skills');
-  };
+  }, []);
 
   const openAgentSession = (session: WorkspaceAgentSession) => {
     setIsAgentPopoverOpen(false);
@@ -824,11 +824,54 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     });
   };
 
+  const renderConfigPopover = () => (
+    <Popover open={isConfigPopoverOpen} onOpenChange={setIsConfigPopoverOpen}>
+      <PopoverTrigger
+        aria-label={t('workspaceRuntime.config.title')}
+        className={cn(
+          RUNTIME_BAR_ACTION_CLASS,
+          isConfigPopoverOpen && 'bg-background-2 text-foreground'
+        )}
+        title={t('workspaceRuntime.config.title')}
+      >
+        <Settings2 className="size-3.5" />
+        <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>{t('workspaceRuntime.config.title')}</span>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="top"
+        sideOffset={8}
+        className="max-h-[min(32rem,calc(100vh-3rem))] w-96 gap-0 overflow-y-auto border border-border bg-background p-0 text-foreground shadow-lg"
+      >
+        <div className="border-b border-border p-3">
+          <div className="text-sm font-medium">{t('workspaceRuntime.config.title')}</div>
+          <div className="mt-0.5 text-xs text-foreground-passive">
+            {t('workspaceRuntime.config.description')}
+          </div>
+        </div>
+        <div className="p-3">
+          <ComposerSettingsContent
+            runtimeId={configRuntimeId}
+            attachImagesAsPaths={attachImagesField.value}
+            inputPromptLanguage={inputPromptLanguageField.value}
+            namingLanguage={namingLanguageField.value}
+            summaryLanguage={summaryLanguageField.value}
+            onAttachImagesAsPathsChange={attachImagesField.setValue}
+            onInputPromptLanguageChange={inputPromptLanguageField.setValue}
+            onNamingLanguageChange={namingLanguageField.setValue}
+            onSummaryLanguageChange={summaryLanguageField.setValue}
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+
   return (
     <footer
       data-yoda-surface="workspace-runtime-bar"
       className="@container flex h-7 min-w-0 shrink-0 items-center gap-1 overflow-hidden whitespace-nowrap border-t border-border bg-background-secondary px-2 text-[11px] text-foreground-muted @min-[1441px]:gap-2"
     >
+      {!runtimeId ? renderConfigPopover() : null}
       {runtimeId ? (
         <div className="flex min-w-0 items-center gap-0.5 overflow-hidden @min-[1121px]:gap-1.5">
           <Popover open={isRuntimePopoverOpen} onOpenChange={setIsRuntimePopoverOpen}>
@@ -900,6 +943,23 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               />
             </PopoverContent>
           </Popover>
+          {renderConfigPopover()}
+          <WorkspacePromptPopover
+            runtimeId={runtimeId}
+            projectId={activeProjectId}
+            triggerClassName={RUNTIME_BAR_ACTION_CLASS}
+            triggerLabelClassName={RUNTIME_BAR_ACTION_LABEL_CLASS}
+            onOpenLibrary={() => appState.navigation.navigate('library', { section: 'prompts' })}
+          />
+          <span aria-hidden className="@max-[1120px]:hidden">
+            ·
+          </span>
+          <WorkspaceSkillPopover
+            triggerClassName={RUNTIME_BAR_ACTION_CLASS}
+            triggerLabelClassName={RUNTIME_BAR_ACTION_LABEL_CLASS}
+            onInstalled={handleSkillInstalled}
+            onManageSkills={openSkillsManagement}
+          />
           {sessionContext && contextPercent != null ? (
             <>
               <span aria-hidden className="@max-[1120px]:hidden">
@@ -1271,59 +1331,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           ) : null}
         </div>
       ) : null}
-      <Popover open={isConfigPopoverOpen} onOpenChange={setIsConfigPopoverOpen}>
-        <PopoverTrigger
-          aria-label={t('workspaceRuntime.config.title')}
-          className={cn(
-            RUNTIME_BAR_ACTION_CLASS,
-            isConfigPopoverOpen && 'bg-background-2 text-foreground'
-          )}
-          title={t('workspaceRuntime.config.title')}
-        >
-          <Settings2 className="size-3.5" />
-          <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>
-            {t('workspaceRuntime.config.title')}
-          </span>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          side="top"
-          sideOffset={8}
-          className="max-h-[min(32rem,calc(100vh-3rem))] w-96 gap-0 overflow-y-auto border border-border bg-background p-0 text-foreground shadow-lg"
-        >
-          <div className="border-b border-border p-3">
-            <div className="text-sm font-medium">{t('workspaceRuntime.config.title')}</div>
-            <div className="mt-0.5 text-xs text-foreground-passive">
-              {t('workspaceRuntime.config.description')}
-            </div>
-          </div>
-          <div className="p-3">
-            <ComposerSettingsContent
-              runtimeId={configRuntimeId}
-              projectId={activeProjectId}
-              attachImagesAsPaths={attachImagesField.value}
-              inputPromptLanguage={inputPromptLanguageField.value}
-              namingLanguage={namingLanguageField.value}
-              summaryLanguage={summaryLanguageField.value}
-              onAttachImagesAsPathsChange={attachImagesField.setValue}
-              onInputPromptLanguageChange={inputPromptLanguageField.setValue}
-              onNamingLanguageChange={namingLanguageField.setValue}
-              onSummaryLanguageChange={summaryLanguageField.setValue}
-              onCreatePrompt={() => {
-                setIsConfigPopoverOpen(false);
-                appState.navigation.navigate('library', {
-                  section: 'prompts',
-                  createPrompt: true,
-                });
-              }}
-              onManagePrompts={() => {
-                setIsConfigPopoverOpen(false);
-                appState.navigation.navigate('library', { section: 'prompts' });
-              }}
-            />
-          </div>
-        </PopoverContent>
-      </Popover>
       <span className="flex-1" />
       <WorkspaceNotificationCenter
         triggerClassName={RUNTIME_BAR_ACTION_CLASS}
@@ -1767,30 +1774,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               </Button>
             </div>
           </div>
-        </PopoverContent>
-      </Popover>
-      <Popover open={isSkillPopoverOpen} onOpenChange={setIsSkillPopoverOpen}>
-        <PopoverTrigger
-          aria-label={t('workspaceRuntime.skill')}
-          className={cn(
-            RUNTIME_BAR_ACTION_CLASS,
-            isSkillPopoverOpen && 'bg-background-2 text-foreground'
-          )}
-          title={t('workspaceRuntime.skill')}
-        >
-          <Sparkles className="size-3.5" />
-          <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>{t('workspaceRuntime.skill')}</span>
-        </PopoverTrigger>
-        <PopoverContent
-          align="end"
-          side="top"
-          sideOffset={8}
-          className="w-[26rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
-        >
-          <SkillQuickSearchPopover
-            onInstalled={handleSkillInstalled}
-            onManageSkills={openSkillsManagement}
-          />
         </PopoverContent>
       </Popover>
       <button

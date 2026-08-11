@@ -153,6 +153,7 @@ describe('SkillQuickSearchPopover', () => {
     await settle();
 
     expect(host.textContent).toContain('Calendar');
+    expect(mocks.getCatalog).toHaveBeenCalledWith({ lightweight: true });
     expect(mocks.searchClawHub).not.toHaveBeenCalled();
 
     const manageButton = host.querySelector<HTMLButtonElement>(
@@ -188,5 +189,74 @@ describe('SkillQuickSearchPopover', () => {
       ownerHandle: 'publisher',
     });
     expect(mocks.onInstalled).toHaveBeenCalledWith(installedExternalSkill);
+  });
+
+  it('reuses the catalog when the picker is reopened', async () => {
+    const { SkillQuickSearchPopover } = await import(
+      '@renderer/features/skills/components/SkillQuickSearchPopover'
+    );
+    const renderPicker = async () =>
+      act(async () =>
+        root.render(
+          createElement(
+            QueryClientProvider,
+            { client: queryClient },
+            createElement(SkillQuickSearchPopover, {
+              onInstalled: mocks.onInstalled,
+              onManageSkills: mocks.onManageSkills,
+            })
+          )
+        )
+      );
+
+    await renderPicker();
+    await settle();
+    expect(mocks.getCatalog).toHaveBeenCalledOnce();
+
+    await act(async () => root.render(null));
+    await renderPicker();
+    await settle();
+
+    expect(mocks.getCatalog).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a large local catalog to a compact first render', async () => {
+    const { SkillQuickSearchPopover } = await import(
+      '@renderer/features/skills/components/SkillQuickSearchPopover'
+    );
+    mocks.getCatalog.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...catalog,
+        skills: Array.from({ length: 45 }, (_, index) => ({
+          ...localSkill,
+          key: `skill:local:bulk-${index}:test`,
+          id: `bulk-${index}`,
+          displayName: `Bulk ${index}`,
+          ref: {
+            ...localSkill.ref,
+            key: `skill:local:bulk-${index}:test`,
+            id: `bulk-${index}`,
+          },
+        })),
+      },
+    });
+
+    await act(async () =>
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SkillQuickSearchPopover, {
+            onInstalled: mocks.onInstalled,
+            onManageSkills: mocks.onManageSkills,
+          })
+        )
+      )
+    );
+    await settle();
+
+    expect(host.querySelectorAll('[data-testid="skill-icon"]')).toHaveLength(40);
+    expect(host.textContent).toContain('skills.quickSearch.moreLocalHint');
   });
 });

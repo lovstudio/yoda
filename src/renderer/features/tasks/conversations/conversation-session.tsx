@@ -96,8 +96,8 @@ export const ConversationSession = observer(function ConversationSession({
   // panes pass isVisible=true even when they are not the routed active task.
   useEffect(() => {
     if (!isVisible || !session) return;
-    void session.connect();
-  }, [isVisible, session]);
+    void session.connect().catch(() => {});
+  }, [isVisible, session, sessionStatus]);
 
   const {
     isSearchOpen,
@@ -251,12 +251,73 @@ export const ConversationSession = observer(function ConversationSession({
   );
   const webLinks = useWorkspaceWebLinks();
 
+  const [startDebugCopied, setStartDebugCopied] = useState(false);
+  const startDebugCopyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (startDebugCopyResetRef.current) clearTimeout(startDebugCopyResetRef.current);
+    },
+    []
+  );
+  const handleCopyStartDebugInfo = () => {
+    const { data, session: s, status, sessionExited } = conversation;
+    const lines = [
+      'Yoda — agent session terminal preparation failed',
+      `time: ${new Date().toISOString()}`,
+      `runtime: ${agentConfig[data.runtimeId]?.name ?? data.runtimeId} (${data.runtimeId})`,
+      `conversation: ${data.id}`,
+      `task: ${data.taskId}`,
+      `project: ${data.projectId}`,
+      `ptySession: ${s.sessionId}`,
+      `ptyStatus: ${s.status}`,
+      `ptyError: ${s.connectionError ?? 'n/a'}`,
+      `agentStatus: ${status}`,
+      `sessionExited: ${sessionExited}`,
+      `visible: ${isVisible}`,
+      `target: ${remoteConnectionId ? `ssh:${remoteConnectionId}` : 'local'}`,
+      `workspace: ${provisioned.path}`,
+      `createdAt: ${data.createdAt ?? 'n/a'}`,
+      `lastInteractedAt: ${data.lastInteractedAt ?? 'n/a'}`,
+    ];
+    void navigator.clipboard.writeText(lines.join('\n'));
+    setStartDebugCopied(true);
+    if (startDebugCopyResetRef.current) clearTimeout(startDebugCopyResetRef.current);
+    startDebugCopyResetRef.current = setTimeout(() => setStartDebugCopied(false), 1500);
+  };
+  const handleRetryStart = () => {
+    void session.connect().catch(() => {});
+  };
+
+  // Keep the terminal shell mounted while route visibility catches up. The
+  // effects above still gate connect/resume demand on isVisible, so a brief
+  // route transition cannot blank and remount the visual surface.
   if (!sessionId || session?.status !== 'ready' || !session.pty) {
+    const hasStartError = Boolean(session?.connectionError);
     return (
       <ConversationSessionPendingState
         title={conversation.data.title}
-        heading={t('tasks.conversations.startingTitle')}
-        description={t('tasks.conversations.startingDescription')}
+        heading={
+          hasStartError
+            ? t('tasks.conversations.startingErrorTitle')
+            : t('tasks.conversations.startingTitle')
+        }
+        description={
+          hasStartError
+            ? t('tasks.conversations.startingErrorDescription')
+            : t('tasks.conversations.startingDescription')
+        }
+        error={
+          hasStartError
+            ? {
+                retryLabel: t('common.retry'),
+                onRetry: handleRetryStart,
+                copyDebugLabel: t('common.copyDebugInfo'),
+                debugCopiedLabel: t('common.debugInfoCopied'),
+                debugCopied: startDebugCopied,
+                onCopyDebug: handleCopyStartDebugInfo,
+              }
+            : undefined
+        }
       />
     );
   }

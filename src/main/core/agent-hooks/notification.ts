@@ -6,6 +6,10 @@ import {
   notificationFocusTaskChannel,
   type AppNotificationCreated,
 } from '@shared/events/appEvents';
+import {
+  getAgentNotificationKind,
+  shouldShowAgentNotification,
+} from '@shared/notification-settings';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import { getMainWindow } from '@main/app/window';
 import { appSettingsService } from '@main/core/settings/settings-service';
@@ -14,9 +18,40 @@ import { tasks } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 
+const AGENT_NOTIFICATION_DEDUPE_WINDOW_MS = 3_000;
+const recentAgentNotifications = new Map<string, number>();
+
+function suppressDuplicateAgentNotification(event: AgentEvent): boolean {
+  if (!event.source) return false;
+
+  const kind = getAgentNotificationKind(event);
+  if (!kind) return false;
+
+  const now = Date.now();
+  for (const [key, timestamp] of recentAgentNotifications) {
+    if (now - timestamp >= AGENT_NOTIFICATION_DEDUPE_WINDOW_MS) {
+      recentAgentNotifications.delete(key);
+    }
+  }
+
+  const key = `${event.conversationId}:${kind}`;
+  const previous = recentAgentNotifications.get(key);
+  if (previous !== undefined && now - previous < AGENT_NOTIFICATION_DEDUPE_WINDOW_MS) {
+    return true;
+  }
+  recentAgentNotifications.set(key, now);
+  return false;
+}
+
 function getNotificationMessage(
   event: AgentEvent
 ): Pick<AppNotificationCreated, 'description' | 'kind' | 'messageKey' | 'reason'> | null {
+  if (event.type === 'stop') {
+    return {
+      description: 'Your agent finished',
+      kind: 'success',
+    };
+  }
   if (!agentEventRequiresUserAction(event)) return null;
   return {
     description: 'Your agent is waiting for input',
@@ -40,6 +75,7 @@ export async function maybeShowNotification(event: AgentEvent, appFocused: boole
   try {
     const message = getNotificationMessage(event);
     if (!message) return;
+    if (suppressDuplicateAgentNotification(event)) return;
 
     const runtimeName =
       getRuntime(event.runtimeId as RuntimeId)?.name ?? event.runtimeId ?? 'Agent';
@@ -66,10 +102,12 @@ export async function maybeShowNotification(event: AgentEvent, appFocused: boole
         .join('\n'),
     });
 
-    const { enabled, osNotifications } = await appSettingsService.get('notifications');
-    if (!enabled || !osNotifications || appFocused || !Notification.isSupported()) return;
+    const settings = await appSettingsService.get('notifications');
+    if (!shouldShowAgentNotification(event, settings, appFocused) || !Notification.isSupported()) {
+      return;
+    }
 
-    const notification = new Notification({ title, body: message.description, silent: true });
+    const notification = new Notification({ title, body: message.description, silent: false });
 
     notification.on('click', () => {
       const win = getMainWindow();

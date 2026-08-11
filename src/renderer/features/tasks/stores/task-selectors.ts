@@ -145,15 +145,26 @@ export function summarizeTaskSessionStatuses(
 }
 
 /**
- * Rich task-level session status. Mounted tasks contribute titles/runtime/time;
- * unmounted tasks fall back to the global runtime mirror and remain actionable.
+ * Rich task-level session status. The global runtime mirror is authoritative for
+ * live status, while mounted conversation stores contribute display metadata
+ * and provide a fallback during runtime hydration.
  */
 export function taskSessionStatusSummary(store: TaskStore): TaskSessionStatusSummary {
+  const task = registeredTaskData(store);
+  if (!task) return summarizeTaskSessionStatuses([]);
+  const runtimeStatuses = new Map(
+    appState.agentRuntime
+      .taskSessionStatuses(task.projectId, task.id)
+      .map(({ conversationId, status }) => [conversationId, status] as const)
+  );
+  const sessions: TaskSessionStatusItem[] = [];
   const provisioned = asProvisioned(store);
-  if (provisioned && provisioned.conversations.conversations.size > 0) {
-    const sessions: TaskSessionStatusItem[] = [];
+
+  if (provisioned) {
     for (const conversation of provisioned.conversations.conversations.values()) {
-      const status = conversation.indicatorStatus;
+      // A live status can arrive before the task's conversation store is ready,
+      // so prefer the mount-independent runtime mirror whenever it has a value.
+      const status = runtimeStatuses.get(conversation.data.id) ?? conversation.indicatorStatus;
       if (!status || status === 'idle') continue;
       sessions.push({
         conversationId: conversation.data.id,
@@ -162,17 +173,17 @@ export function taskSessionStatusSummary(store: TaskStore): TaskSessionStatusSum
         runtimeId: conversation.data.runtimeId,
         lastInteractedAt: conversation.data.lastInteractedAt ?? undefined,
       });
+      runtimeStatuses.delete(conversation.data.id);
     }
-    return summarizeTaskSessionStatuses(sessions);
   }
 
-  const task = registeredTaskData(store);
-  if (!task) return summarizeTaskSessionStatuses([]);
-  return summarizeTaskSessionStatuses(
-    appState.agentRuntime
-      .taskSessionStatuses(task.projectId, task.id)
-      .map(({ conversationId, status }) => ({ conversationId, status }))
-  );
+  // Keep sessions discovered by the global mirror visible even while a task is
+  // mounted but its conversation list is still catching up.
+  for (const [conversationId, status] of runtimeStatuses) {
+    sessions.push({ conversationId, status });
+  }
+
+  return summarizeTaskSessionStatuses(sessions);
 }
 
 export type TaskViewKind =

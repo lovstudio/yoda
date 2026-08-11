@@ -49,6 +49,7 @@ import { ManagedGatewayCardShell } from './ManagedGatewayCardShell';
 
 type LiteLlmManagedCardProps = {
   onOpenManualSettings: () => void;
+  starCount?: number | null;
 };
 
 const operationActionKeys: Record<LiteLlmManagedOperation, string> = {
@@ -62,7 +63,7 @@ function normalizeEndpoint(endpoint: string): string {
   return endpoint.trim().replace(/\/+$/, '');
 }
 
-export function LiteLlmManagedCard({ onOpenManualSettings }: LiteLlmManagedCardProps) {
+export function LiteLlmManagedCard({ onOpenManualSettings, starCount }: LiteLlmManagedCardProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const { data: connections } = useMaasConnections();
@@ -475,6 +476,7 @@ export function LiteLlmManagedCard({ onOpenManualSettings }: LiteLlmManagedCardP
       icon={<Waypoints className="h-8 w-8 text-primary" />}
       name="LiteLLM"
       description={description}
+      starCount={starCount}
       actions={
         <HeaderActionToolbar label={t('settings.integrationsTab.litellmActions')}>
           {renderPrimaryAction()}

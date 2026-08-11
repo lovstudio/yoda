@@ -172,6 +172,61 @@ describe('FrontendPty stream ordering', () => {
     });
   });
 
+  it('replaces a historical fallback before painting the first live generation', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer: 'historical Working row\n',
+        generation: 0,
+        sequence: 0,
+        replayedFromHistory: true,
+      },
+    });
+
+    pty = new FrontendPty('history-to-live-session');
+    mountAndOpenFlushGate(pty);
+    await pty.connect();
+    ipcMocks.emitData(output(1, 'live Working row'));
+
+    await vi.waitFor(() => {
+      const rendered = Array.from({ length: pty?.terminal.rows ?? 0 }, (_, index) =>
+        pty?.terminal.buffer.active.getLine(index)?.translateToString(true)
+      ).join('\n');
+      expect(rendered).toContain('live Working row');
+      expect(rendered).not.toContain('historical Working row');
+    });
+  });
+
+  it('keeps the live Codex TUI authoritative after an interruption screen', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer: 'Conversation interrupted - tell the model what to do differently.',
+        generation: 1,
+        sequence: 3,
+      },
+    });
+
+    pty = new FrontendPty('live-interruption-session');
+    mountAndOpenFlushGate(pty);
+    await pty.connect();
+
+    ipcMocks.emitData(output(4, '\x1b[2J\x1b[HNORMAL-CODEX-TUI'));
+
+    await vi.waitFor(() => {
+      expect(pty?.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe(
+        'NORMAL-CODEX-TUI'
+      );
+      expect(ipcMocks.subscribe).toHaveBeenCalledOnce();
+      expect(ipcMocks.acknowledgeOutput).toHaveBeenCalledWith(
+        'live-interruption-session',
+        expect.any(String),
+        1,
+        4
+      );
+    });
+  });
+
   it('cancels a pending first subscription on unmount and discards its snapshot', async () => {
     const pendingSubscribe = deferred<{
       success: true;

@@ -12,6 +12,7 @@ import {
   agentSessionExitedChannel,
   agentSessionStatusChangedChannel,
   isAttentionNotification,
+  type AgentEvent,
   type AgentSessionRuntimeStatus,
   type NotificationType,
 } from '@shared/events/agentEvents';
@@ -20,6 +21,7 @@ import {
   conversationMovedChannel,
   conversationRenamedChannel,
 } from '@shared/events/conversationEvents';
+import { getAgentNotificationKind } from '@shared/notification-settings';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { events, rpc } from '@renderer/lib/ipc';
 import { PtySession } from '@renderer/lib/pty/pty-session';
@@ -27,6 +29,27 @@ import { log } from '@renderer/utils/logger';
 import { soundPlayer } from '@renderer/utils/soundPlayer';
 
 export type AgentStatus = AgentSessionRuntimeStatus;
+
+const SOUND_DEDUPE_WINDOW_MS = 3_000;
+const recentSoundEvents = new Map<string, number>();
+
+function shouldPlayNotificationSound(event: AgentEvent): boolean {
+  if (!event.source) return true;
+
+  const kind = getAgentNotificationKind(event);
+  if (!kind) return true;
+
+  const now = Date.now();
+  for (const [key, timestamp] of recentSoundEvents) {
+    if (now - timestamp >= SOUND_DEDUPE_WINDOW_MS) recentSoundEvents.delete(key);
+  }
+
+  const key = `${event.conversationId}:${kind}`;
+  const previous = recentSoundEvents.get(key);
+  if (previous !== undefined && now - previous < SOUND_DEDUPE_WINDOW_MS) return false;
+  recentSoundEvents.set(key, now);
+  return true;
+}
 
 export class ConversationManagerStore {
   private _loaded = false;
@@ -90,7 +113,9 @@ export class ConversationManagerStore {
         conversationStore.setAwaitingInput('elicitation_dialog', {
           actionDescription: event.payload.message ?? event.payload.title,
         });
-        soundPlayer.play('needs_attention', appFocused);
+        if (shouldPlayNotificationSound(event)) {
+          soundPlayer.play('needs_attention', appFocused);
+        }
         return;
       }
       if (event.type === 'awaiting-input-resolved') {
@@ -109,12 +134,16 @@ export class ConversationManagerStore {
         conversationStore.setAwaitingInput(nt, {
           actionDescription: event.payload.message ?? event.payload.title,
         });
-        soundPlayer.play('needs_attention', appFocused);
+        if (shouldPlayNotificationSound(event)) {
+          soundPlayer.play('needs_attention', appFocused);
+        }
         return;
       }
       if (event.type === 'stop') {
         conversationStore.setStatus('completed');
-        soundPlayer.play('task_complete', appFocused);
+        if (shouldPlayNotificationSound(event)) {
+          soundPlayer.play('task_complete', appFocused);
+        }
         return;
       }
       if (event.type === 'error') {

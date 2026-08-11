@@ -73,6 +73,44 @@ describe('task hydration queries', () => {
     });
   });
 
+  it('selects active tasks across every project without changing the all-task default', async () => {
+    sqlite.exec(`
+      INSERT INTO tasks (id, project_id, name, status, archived_at, last_interacted_at)
+      VALUES
+        ('other-active', 'project-2', 'Other active', 'in_progress', NULL, NULL),
+        (
+          'other-archived',
+          'project-2',
+          'Other archived',
+          'done',
+          '2026-08-01',
+          '2026-08-10T12:00:00.000Z'
+        );
+    `);
+    const { getAllActiveTasks, getAllTaskActivityTimestamps, getTasks } = await import(
+      './getTasks'
+    );
+
+    const [active, all, activityTimestamps] = await Promise.all([
+      getAllActiveTasks(),
+      getTasks(),
+      getAllTaskActivityTimestamps(),
+    ]);
+
+    expect(active).toHaveLength(34);
+    expect(active.every((item) => !item.archivedAt)).toBe(true);
+    expect(active.some((item) => item.id === 'other-active')).toBe(true);
+    expect(active.some((item) => item.id === 'other-archived')).toBe(false);
+    expect(all).toHaveLength(918);
+    expect(all.some((item) => item.id === 'other-archived')).toBe(true);
+    expect(activityTimestamps).toContainEqual(
+      expect.objectContaining({
+        projectId: 'project-2',
+        lastInteractedAt: '2026-08-10T12:00:00.000Z',
+      })
+    );
+  });
+
   it('scopes lightweight counts to one project when requested', async () => {
     sqlite
       .prepare(

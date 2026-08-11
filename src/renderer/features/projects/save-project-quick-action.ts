@@ -13,8 +13,11 @@ export async function saveProjectQuickAction(
   if (!currentSettings) return false;
 
   const currentActions = currentSettings.quickActions ?? [];
+  const sourceIntent = action.sourceIntent?.trim();
   const existing = currentActions.find(
-    (item) => item.kind === action.kind && item.command.trim() === action.command.trim()
+    (item) =>
+      (Boolean(sourceIntent) && item.sourceIntent?.trim() === sourceIntent) ||
+      (item.kind === action.kind && item.command.trim() === action.command.trim())
   );
   const savedAction = existing ? { ...action, id: existing.id } : action;
   const nextActions = existing

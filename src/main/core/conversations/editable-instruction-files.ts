@@ -1,9 +1,14 @@
+import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { desc, eq } from 'drizzle-orm';
 import type {
   EditableRuntimeInstructionFile,
   EditableRuntimeInstructionFilesRequest,
+  ListRuntimeInstructionFileVersionsRequest,
+  RestoreRuntimeInstructionFileVersionRequest,
   RuntimeInstructionFile,
+  RuntimeInstructionFileVersion,
   SaveEditableRuntimeInstructionFileRequest,
 } from '@shared/conversations';
 import { getRuntime } from '@shared/runtime-registry';
@@ -14,6 +19,8 @@ import { getProjectById } from '@main/core/projects/operations/getProjects';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { sshConnectionManager } from '@main/core/ssh/ssh-connection-manager';
 import { resolveRemoteHome } from '@main/core/ssh/utils';
+import { db } from '@main/db/client';
+import { runtimeInstructionFileVersions } from '@main/db/schema';
 import { resolveRuntimeStateDirectory } from './impl/runtime-env';
 
 const MAX_INSTRUCTION_FILE_BYTES = 2 * 1024 * 1024;
@@ -30,6 +37,8 @@ type InstructionFileHost = {
   read: (filePath: string) => Promise<string>;
   write: (filePath: string, content: string) => Promise<void>;
 };
+
+type InstructionFileVersionRow = typeof runtimeInstructionFileVersions.$inferSelect;
 
 function candidatesFor(
   cli: string,
@@ -174,6 +183,66 @@ async function readCandidate(
   }
 }
 
+function instructionFileKey(
+  request: EditableRuntimeInstructionFilesRequest,
+  filePath: string
+): string {
+  return `${request.runtimeId}\u0000${request.projectId ?? ''}\u0000${filePath}`;
+}
+
+function toInstructionFileVersion(row: InstructionFileVersionRow): RuntimeInstructionFileVersion {
+  return {
+    id: row.id,
+    runtimeId: row.runtimeId as RuntimeInstructionFileVersion['runtimeId'],
+    projectId: row.projectId,
+    scope: row.scope as RuntimeInstructionFileVersion['scope'],
+    kind: row.kind as RuntimeInstructionFileVersion['kind'],
+    path: row.path,
+    version: row.version,
+    content: row.content,
+    createdAt: row.createdAt,
+  };
+}
+
+async function listVersionRows(fileKey: string): Promise<InstructionFileVersionRow[]> {
+  return db
+    .select()
+    .from(runtimeInstructionFileVersions)
+    .where(eq(runtimeInstructionFileVersions.fileKey, fileKey))
+    .orderBy(desc(runtimeInstructionFileVersions.version));
+}
+
+async function appendVersion(
+  request: EditableRuntimeInstructionFilesRequest,
+  candidate: InstructionFileCandidate,
+  filePath: string,
+  content: string,
+  version: number
+): Promise<void> {
+  await db.insert(runtimeInstructionFileVersions).values({
+    id: randomUUID(),
+    fileKey: instructionFileKey(request, filePath),
+    runtimeId: request.runtimeId,
+    projectId: request.projectId ?? null,
+    scope: candidate.scope,
+    kind: candidate.kind,
+    path: filePath,
+    version,
+    content,
+  });
+}
+
+async function resolveEditableCandidate(
+  request: EditableRuntimeInstructionFilesRequest,
+  filePath: string
+): Promise<{ host: InstructionFileHost; candidate: InstructionFileCandidate }> {
+  const host = await resolveInstructionFileHost(request);
+  const normalizedPath = host.normalize(filePath);
+  const candidate = host.candidates.find((item) => host.normalize(item.path) === normalizedPath);
+  if (!candidate) throw new Error('Instruction file is outside the selected prompt layer');
+  return { host, candidate };
+}
+
 export async function getEditableRuntimeInstructionFiles(
   request: EditableRuntimeInstructionFilesRequest
 ): Promise<EditableRuntimeInstructionFile[]> {
@@ -188,12 +257,21 @@ export async function saveEditableRuntimeInstructionFile(
     throw new Error('Instruction file exceeds 2 MB');
   }
 
-  const host = await resolveInstructionFileHost(request);
-  const normalizedPath = host.normalize(request.path);
-  const candidate = host.candidates.find((item) => host.normalize(item.path) === normalizedPath);
-  if (!candidate) throw new Error('Instruction file is outside the selected prompt layer');
+  const { host, candidate } = await resolveEditableCandidate(request, request.path);
+  const filePath = host.normalize(candidate.path);
+  const current = await readCandidate(host, candidate);
+  const fileKey = instructionFileKey(request, filePath);
+  const existingVersions = await listVersionRows(fileKey);
 
   await host.write(candidate.path, request.content);
+  if (current.content !== request.content) {
+    let nextVersion = (existingVersions[0]?.version ?? 0) + 1;
+    if (current.exists && existingVersions.length === 0) {
+      await appendVersion(request, candidate, filePath, current.content, nextVersion);
+      nextVersion += 1;
+    }
+    await appendVersion(request, candidate, filePath, request.content, nextVersion);
+  }
   return {
     kind: candidate.kind,
     path: candidate.path,
@@ -201,5 +279,39 @@ export async function saveEditableRuntimeInstructionFile(
     exists: true,
     content: request.content,
     bytes: Buffer.byteLength(request.content),
+  } as EditableRuntimeInstructionFile;
+}
+
+export async function listRuntimeInstructionFileVersions(
+  request: ListRuntimeInstructionFileVersionsRequest
+): Promise<RuntimeInstructionFileVersion[]> {
+  const { host, candidate } = await resolveEditableCandidate(request, request.path);
+  const rows = await listVersionRows(instructionFileKey(request, host.normalize(candidate.path)));
+  return rows.map(toInstructionFileVersion);
+}
+
+export async function restoreRuntimeInstructionFileVersion(
+  request: RestoreRuntimeInstructionFileVersionRequest
+): Promise<EditableRuntimeInstructionFile> {
+  const { host, candidate } = await resolveEditableCandidate(request, request.path);
+  const filePath = host.normalize(candidate.path);
+  const fileKey = instructionFileKey(request, filePath);
+  const rows = await listVersionRows(fileKey);
+  const selected = rows.find((row) => row.version === request.version);
+  if (!selected) throw new Error('Instruction file version not found');
+
+  await host.write(candidate.path, selected.content);
+  const latest = rows[0];
+  if (latest?.content !== selected.content) {
+    await appendVersion(request, candidate, filePath, selected.content, (latest?.version ?? 0) + 1);
+  }
+
+  return {
+    kind: candidate.kind,
+    path: candidate.path,
+    scope: candidate.scope,
+    exists: true,
+    content: selected.content,
+    bytes: Buffer.byteLength(selected.content),
   } as EditableRuntimeInstructionFile;
 }

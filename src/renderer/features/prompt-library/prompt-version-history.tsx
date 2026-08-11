@@ -15,8 +15,11 @@ export function PromptVersionHistory({ prompt }: { prompt: Prompt }) {
   const { data: versions = [], isLoading } = usePromptVersions(prompt.id);
   const restoreVersion = useRestorePromptVersion();
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
+  const historicalVersions = versions.filter((version) => version.version !== prompt.version);
   const selected =
-    versions.find((version) => version.version === selectedVersion) ?? versions[0] ?? null;
+    historicalVersions.find((version) => version.version === selectedVersion) ??
+    historicalVersions[0] ??
+    null;
 
   const handleRestore = () => {
     if (!selected || selected.version === prompt.version) return;
@@ -64,24 +67,28 @@ export function PromptVersionHistory({ prompt }: { prompt: Prompt }) {
         <Loader2 className="size-4 animate-spin text-foreground-muted" />
       ) : (
         <>
-          <div className="flex flex-wrap gap-1.5" aria-label={t('promptLibrary.versions.title')}>
-            {versions.map((version) => (
-              <button
-                key={version.id}
-                type="button"
-                aria-pressed={selected?.version === version.version}
-                onClick={() => setSelectedVersion(version.version)}
-                className={cn(
-                  'rounded-md border px-2 py-1 text-xs outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring',
-                  selected?.version === version.version
-                    ? 'border-foreground-muted bg-background-1 text-foreground'
-                    : 'border-border bg-background text-foreground-muted hover:text-foreground'
-                )}
-              >
-                v{version.version}
-              </button>
-            ))}
-          </div>
+          {historicalVersions.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5" aria-label={t('promptLibrary.versions.title')}>
+              {historicalVersions.map((version) => (
+                <button
+                  key={version.id}
+                  type="button"
+                  aria-pressed={selected?.version === version.version}
+                  onClick={() => setSelectedVersion(version.version)}
+                  className={cn(
+                    'rounded-md border px-2 py-1 text-xs outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring',
+                    selected?.version === version.version
+                      ? 'border-foreground-muted bg-background-1 text-foreground'
+                      : 'border-border bg-background text-foreground-muted hover:text-foreground'
+                  )}
+                >
+                  v{version.version}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-foreground-passive">{t('promptLibrary.versions.empty')}</p>
+          )}
 
           {selected && (
             <div className="grid gap-2 rounded-md border border-border bg-background p-3">

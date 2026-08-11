@@ -2083,7 +2083,6 @@ export const HomeComposer = observer(function HomeComposer({
       >
         <ComposerSettingsContent
           runtimeId={runtimeId}
-          projectId={selectedProjectId}
           attachImagesAsPaths={attachImagesAsPaths}
           inputPromptLanguage={inputPromptLanguageField.value}
           namingLanguage={namingLanguageField.value}

@@ -203,6 +203,10 @@ export const prompts = sqliteTable('prompts', {
   extraInfo: text('extra_info').notNull().default(''),
   injectionEnabled: integer('injection_enabled', { mode: 'boolean' }).notNull().default(false),
   injectionOrder: integer('injection_order').notNull().default(0),
+  /** JSON encoded PromptBindings; legacy rows default to global injection. */
+  bindingsJson: text('bindings_json')
+    .notNull()
+    .default('{"global":true,"workspaceIds":[],"projectIds":[]}'),
   version: text('version').notNull().default('1.0.0'),
   sourceJson: text('source_json'),
   sortOrder: integer('sort_order').notNull().default(0),
@@ -237,6 +241,35 @@ export const promptVersions = sqliteTable(
     promptIdIdx: index('idx_prompt_versions_prompt_id').on(table.promptId),
     promptVersionIdx: uniqueIndex('idx_prompt_versions_prompt_id_version').on(
       table.promptId,
+      table.version
+    ),
+  })
+);
+
+/** Saved snapshots for user/project instruction files such as AGENTS.md. */
+export const runtimeInstructionFileVersions = sqliteTable(
+  'runtime_instruction_file_versions',
+  {
+    id: text('id').primaryKey(),
+    fileKey: text('file_key').notNull(),
+    runtimeId: text('runtime_id').notNull(),
+    projectId: text('project_id'),
+    scope: text('scope').notNull(),
+    kind: text('kind').notNull(),
+    path: text('path').notNull(),
+    version: integer('version').notNull(),
+    content: text('content').notNull(),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    fileKeyIdx: index('idx_runtime_instruction_file_versions_file_key').on(
+      table.fileKey,
+      table.version
+    ),
+    fileKeyVersionIdx: uniqueIndex('idx_runtime_instruction_file_versions_file_key_version').on(
+      table.fileKey,
       table.version
     ),
   })

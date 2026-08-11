@@ -11,6 +11,7 @@ import type {
 import { cliProxyApiManagedService } from './cliproxyapi-managed-service';
 import { liteLlmManagedService } from './litellm-managed-service';
 import { maasService } from './maas-service';
+import { maasManagedGatewayStarsService } from './managed-gateway-stars';
 import { newApiManagedService } from './new-api-managed-service';
 
 async function listConnections() {
@@ -88,6 +89,8 @@ export const maasController = createRPCController({
   setRuntimeBinding,
   getGlobalBinding,
   setGlobalBinding,
+  listManagedGatewayStars: (args?: { forceRefresh?: boolean }) =>
+    maasManagedGatewayStarsService.list(!!args?.forceRefresh),
   getLiteLlmManagedStatus: () => liteLlmManagedService.getStatus(),
   installLiteLlm: () => liteLlmManagedService.install(),
   startLiteLlm: () => liteLlmManagedService.start(),

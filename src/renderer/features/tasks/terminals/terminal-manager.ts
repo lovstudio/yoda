@@ -2,7 +2,7 @@ import { makeObservable, observable, onBecomeObserved, runInAction } from 'mobx'
 import { makePtySessionId } from '@shared/ptySessionId';
 import { type CreateTerminalParams, type Terminal } from '@shared/terminals';
 import { rpc } from '@renderer/lib/ipc';
-import { PtySession } from '@renderer/lib/pty/pty-session';
+import { PtySession, type PtySessionExecution } from '@renderer/lib/pty/pty-session';
 import { log } from '@renderer/utils/logger';
 import { nextTerminalName } from './terminal-tabs';
 
@@ -120,7 +120,10 @@ export class TerminalManagerStore {
         store = existing;
         return;
       }
-      store = new TerminalStore(optimistic, { deferConnection: true });
+      store = new TerminalStore(optimistic, {
+        deferConnection: true,
+        execution: params.command ? 'command' : 'interactive',
+      });
       ownsOptimisticStore = true;
       this.terminals.set(params.id, store);
     });
@@ -238,6 +241,37 @@ export class TerminalManagerStore {
     return terminal;
   }
 
+  async createOneShotCommandTerminal({
+    id,
+    command,
+    label,
+    initialSize,
+  }: {
+    id?: string;
+    command: string;
+    label: string;
+    initialSize?: { cols: number; rows: number };
+  }): Promise<Terminal> {
+    const normalizedCommand = command.trim();
+    if (!normalizedCommand) throw new Error('Terminal command is empty.');
+
+    const names = Array.from(this.terminals.values()).map((terminal) => terminal.data.name);
+    return this.createTerminal({
+      id: id ?? crypto.randomUUID(),
+      projectId: this.projectId,
+      taskId: this.taskId,
+      name: nextCommandTerminalName(label, names),
+      initialSize,
+      command: normalizedCommand,
+      persist: false,
+    });
+  }
+
+  isCommandTerminalRunning(terminalId: string): boolean {
+    const store = this.terminals.get(terminalId);
+    return store?.execution === 'command' && !store.session.hasExited;
+  }
+
   async deleteTerminal(terminalId: string): Promise<void> {
     if (this._disposed) return;
     const store = this.terminals.get(terminalId);
@@ -349,17 +383,23 @@ export class TerminalManagerStore {
 export class TerminalStore {
   data: Terminal;
   session: PtySession;
+  readonly execution: PtySessionExecution;
   private _disposed = false;
 
-  constructor(terminal: Terminal, options?: { deferConnection?: boolean }) {
+  constructor(
+    terminal: Terminal,
+    options?: { deferConnection?: boolean; execution?: PtySessionExecution }
+  ) {
     this.data = terminal;
+    this.execution = options?.execution ?? 'interactive';
     this.session = new PtySession(
       makePtySessionId(terminal.projectId, terminal.taskId, terminal.id),
       {
         deferConnection: options?.deferConnection,
+        execution: this.execution,
       }
     );
-    makeObservable(this, { data: observable, session: observable });
+    makeObservable(this, { data: observable, session: observable, execution: false });
   }
 
   dispose(): void {

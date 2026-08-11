@@ -853,6 +853,7 @@ describe('TaskManagerStore task view preload', () => {
     const second = manager.provisionTask('task-1');
 
     expect(second).toBe(first);
+    expect(store.phase).toBe('provision');
     expect(mocks.mountProject).toHaveBeenCalledOnce();
     expect(mocks.provisionTask).not.toHaveBeenCalled();
 

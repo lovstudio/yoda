@@ -49,6 +49,14 @@ export function rememberCommandPaletteQuery(
   }
 }
 
+/** Clears the transient query once the user has acted on a search result. */
+export function resetCommandPaletteQuery(
+  queryMemory: CommandPaletteQueryMemory | undefined,
+  storage?: QueryStorage
+): void {
+  rememberCommandPaletteQuery('', queryMemory, storage);
+}
+
 function parseRecentSearches(value: string | null): string[] {
   if (!value) return [];
 

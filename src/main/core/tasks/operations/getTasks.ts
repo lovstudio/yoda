@@ -9,6 +9,33 @@ export async function getTasks(projectId?: string): Promise<Task[]> {
   return hydrateTaskRows(await selectTaskRows({ projectId }));
 }
 
+/** Mobile/global active snapshot: filter archived rows before task hydration. */
+export async function getAllActiveTasks(): Promise<Task[]> {
+  return hydrateTaskRows(await selectTaskRows({ archived: false }));
+}
+
+/**
+ * Lightweight project-recency input. Archived task activity still contributes
+ * to project ordering, but does not need conversation or issue hydration.
+ */
+export async function getAllTaskActivityTimestamps(): Promise<
+  Array<{
+    projectId: string;
+    createdAt: string;
+    updatedAt: string;
+    lastInteractedAt: string | null;
+  }>
+> {
+  return db
+    .select({
+      projectId: tasks.projectId,
+      createdAt: tasks.createdAt,
+      updatedAt: tasks.updatedAt,
+      lastInteractedAt: tasks.lastInteractedAt,
+    })
+    .from(tasks);
+}
+
 /** Renderer mount snapshot: active tasks only. Internal all-task callers keep getTasks(). */
 export async function getActiveTasks(projectId: string): Promise<Task[]> {
   return hydrateTaskRows(await selectTaskRows({ projectId, archived: false }));

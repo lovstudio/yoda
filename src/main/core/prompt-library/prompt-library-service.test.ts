@@ -45,6 +45,7 @@ function createSchema(sqlite: Database.Database): void {
       extra_info TEXT DEFAULT '' NOT NULL,
       injection_enabled INTEGER DEFAULT false NOT NULL,
       injection_order INTEGER DEFAULT 0 NOT NULL,
+      bindings_json TEXT DEFAULT '{"global":true,"projectIds":[]}' NOT NULL,
       version TEXT DEFAULT '1.0.0' NOT NULL,
       source_json TEXT,
       sort_order INTEGER DEFAULT 0 NOT NULL,
