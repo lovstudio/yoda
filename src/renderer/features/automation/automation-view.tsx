@@ -2,7 +2,9 @@ import {
   Bot,
   CalendarClock,
   CheckCircle2,
+  ChevronRight,
   CircleDashed,
+  ClipboardCopy,
   Clock3,
   Folder,
   History,
@@ -10,7 +12,6 @@ import {
   Lock,
   MessageSquare,
   MoreHorizontal,
-  Pause,
   Pencil,
   Play,
   Plus,
@@ -37,11 +38,12 @@ import { isValidRuntimeId, RUNTIMES, type RuntimeId } from '@shared/runtime-regi
 import { openTaskTarget } from '@renderer/app/open-task-target';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
-import { useToast } from '@renderer/lib/hooks/use-toast';
+import { copyTextToClipboard, useToast } from '@renderer/lib/hooks/use-toast';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/lib/ui/collapsible';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,9 +65,12 @@ import { Textarea } from '@renderer/lib/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import {
+  AUTOMATION_SCHEDULE_PREVIEW_DAYS,
+  buildAutomationSchedulePreview,
   buildFriendlyCron,
   DEFAULT_AUTOMATION_CRON,
   parseFriendlySchedule,
+  type AutomationScheduleEvent,
 } from './automation-schedule';
 import {
   useAutomationHistory,
@@ -343,6 +348,8 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
           </div>
         )}
 
+        <AutomationScheduleOverview items={items} />
+
         <section className="mt-5 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-medium text-foreground-muted">
@@ -357,7 +364,7 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
             />
           </div>
 
-          <div className="mt-3 space-y-2.5">
+          <div className="mt-3">
             {visibleItems.length === 0 ? (
               <AutomationEmptyState
                 filter={filter}
@@ -365,30 +372,32 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
                 onCreate={openCreate}
               />
             ) : (
-              visibleItems.map((entry) => (
-                <AutomationCard
-                  key={entry.id}
-                  entry={entry}
-                  isRunning={runningId === entry.id}
-                  isUpdating={updatingId === entry.id}
-                  lastRun={latestRuns.get(entry.id)}
-                  onEdit={openEdit}
-                  onDelete={handleDelete}
-                  onRun={handleRun}
-                  onToggle={handleToggle}
-                  onOpenRun={(run) => {
-                    if (!run.taskId) return;
-                    openTaskTarget(
-                      {
-                        projectId: INTERNAL_PROJECT_ID,
-                        taskId: run.taskId,
-                        ...(run.conversationId ? { conversationId: run.conversationId } : {}),
-                      },
-                      navigate
-                    );
-                  }}
-                />
-              ))
+              <div className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border">
+                {visibleItems.map((entry) => (
+                  <AutomationAccordionRow
+                    key={entry.id}
+                    entry={entry}
+                    isRunning={runningId === entry.id}
+                    isUpdating={updatingId === entry.id}
+                    lastRun={latestRuns.get(entry.id)}
+                    onEdit={openEdit}
+                    onDelete={handleDelete}
+                    onRun={handleRun}
+                    onToggle={handleToggle}
+                    onOpenRun={(run) => {
+                      if (!run.taskId) return;
+                      openTaskTarget(
+                        {
+                          projectId: INTERNAL_PROJECT_ID,
+                          taskId: run.taskId,
+                          ...(run.conversationId ? { conversationId: run.conversationId } : {}),
+                        },
+                        navigate
+                      );
+                    }}
+                  />
+                ))}
+              </div>
             )}
           </div>
         </section>
@@ -449,6 +458,145 @@ function AutomationFilterControl({
       ))}
     </div>
   );
+}
+
+function AutomationScheduleOverview({ items }: { items: Automation[] }) {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage ?? i18n.language;
+  const [now, setNow] = useState(() => new Date());
+  const events = useMemo(() => buildAutomationSchedulePreview(items, now), [items, now]);
+  const days = useMemo(() => buildAutomationTimelineDays(events, now), [events, now]);
+  const scheduledCount = items.filter(
+    (item) => item.status === 'active' && item.triggerKind === 'cron' && item.cronExpr
+  ).length;
+
+  React.useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  return (
+    <section
+      data-schedule-timeline
+      className="mt-5 overflow-hidden rounded-lg border border-border bg-background"
+      aria-labelledby="automation-schedule-overview-title"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/70 px-4 py-3.5 @3xl:px-5">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-foreground-passive">
+            {t('automation.timeline.label')}
+          </p>
+          <h2 id="automation-schedule-overview-title" className="mt-0.5 text-sm font-semibold">
+            {t('automation.timeline.title')}
+          </h2>
+          <p className="mt-1 text-xs leading-5 text-foreground-muted">
+            {t('automation.timeline.description')}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-xs text-foreground-muted">
+          <span>{t('automation.timeline.scheduledCount', { count: scheduledCount })}</span>
+          {events.length > 0 && (
+            <span aria-hidden="true" className="text-foreground-passive">
+              ·
+            </span>
+          )}
+          {events.length > 0 && (
+            <span>{t('automation.timeline.eventCount', { count: events.length })}</span>
+          )}
+        </div>
+      </div>
+
+      {events.length === 0 ? (
+        <p className="px-4 py-5 text-sm text-foreground-muted @3xl:px-5">
+          {t('automation.timeline.empty')}
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 gap-px bg-border/70 @2xl:grid-cols-2 @4xl:grid-cols-4 @5xl:grid-cols-7">
+          {days.map((day) => (
+            <section key={day.start.toISOString()} className="min-h-32 bg-background px-3 py-3">
+              <time
+                dateTime={day.start.toISOString().slice(0, 10)}
+                className="block text-[11px] font-medium text-foreground-muted"
+              >
+                {isSameCalendarDay(day.start, now)
+                  ? t('automation.timeline.today')
+                  : formatTimelineDay(day.start, locale)}
+              </time>
+              {day.events.length === 0 ? (
+                <p className="mt-3 text-xs text-foreground-passive">
+                  {t('automation.timeline.noEvents')}
+                </p>
+              ) : (
+                <ol className="mt-2.5 space-y-1.5">
+                  {day.events.map((event) => (
+                    <li
+                      key={`${event.automationId}:${event.scheduledAt}`}
+                      className="flex min-w-0 items-baseline gap-2 text-xs"
+                      title={`${event.title} · ${formatTimelineTime(event.scheduledAt, locale)}`}
+                    >
+                      <time
+                        dateTime={event.scheduledAt}
+                        className="shrink-0 tabular-nums text-foreground-muted"
+                      >
+                        {formatTimelineTime(event.scheduledAt, locale)}
+                      </time>
+                      <span className="min-w-0 truncate text-foreground">{event.title}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function buildAutomationTimelineDays(
+  events: AutomationScheduleEvent[],
+  now: Date
+): Array<{ start: Date; events: AutomationScheduleEvent[] }> {
+  const firstDay = new Date(now);
+  firstDay.setHours(0, 0, 0, 0);
+
+  return Array.from({ length: AUTOMATION_SCHEDULE_PREVIEW_DAYS }, (_, index) => {
+    const start = new Date(firstDay);
+    start.setDate(start.getDate() + index);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+
+    return {
+      start,
+      events: events.filter((event) => {
+        const scheduledAt = new Date(event.scheduledAt).getTime();
+        return scheduledAt >= start.getTime() && scheduledAt < end.getTime();
+      }),
+    };
+  });
+}
+
+function isSameCalendarDay(left: Date, right: Date): boolean {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function formatTimelineDay(date: Date, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    weekday: 'short',
+    month: 'numeric',
+    day: 'numeric',
+  }).format(date);
+}
+
+function formatTimelineTime(iso: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(iso));
 }
 
 function AutomationEmptyState({
@@ -512,7 +660,7 @@ const RUN_STATUS_STYLES: Record<AutomationRun['status'], { icon: LucideIcon; cla
     },
   };
 
-const AutomationCard = observer(function AutomationCard({
+const AutomationAccordionRow = observer(function AutomationAccordionRow({
   entry,
   isRunning,
   isUpdating,
@@ -534,202 +682,247 @@ const AutomationCard = observer(function AutomationCard({
   onOpenRun: (run: Pick<AutomationRun, 'taskId' | 'conversationId'>) => void;
 }) {
   const { t, i18n } = useTranslation();
+  const { toast } = useToast();
   const locale = i18n.resolvedLanguage ?? i18n.language;
   const runtime = RUNTIMES.find((item) => item.id === entry.runtime);
   const syncedFromCodex = entry.source === 'codex';
-  const scheduleLabel =
-    entry.triggerKind === 'cron'
-      ? entry.nextRunAt
-        ? t('automation.nextRunLabel', { time: formatTime(entry.nextRunAt, locale) })
-        : t('automation.schedule.pending')
-      : t('automation.schedule.manual');
+  const friendlySchedule = entry.cronExpr ? parseFriendlySchedule(entry.cronExpr) : null;
+  const scheduleDescription =
+    entry.triggerKind === 'manual'
+      ? t('automation.schedule.manual')
+      : friendlySchedule
+        ? [
+            t(`automation.form.scheduleKinds.${friendlySchedule.kind}`),
+            friendlySchedule.kind === 'weekly'
+              ? t(`automation.form.weekdays.${friendlySchedule.weekday}`)
+              : null,
+            friendlySchedule.time,
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        : entry.cronExpr || t('automation.schedule.pending');
+  const nextRunDescription = entry.nextRunAt
+    ? formatTime(entry.nextRunAt, locale)
+    : t('automation.schedule.pending');
   const runStyle = lastRun ? RUN_STATUS_STYLES[lastRun.status] : null;
   const RunStatusIcon = runStyle?.icon;
   const lastRunAt = lastRun?.startedAt ?? entry.lastRunAt;
 
+  const copyBasics = async () => {
+    const details = [
+      `${t('automation.form.title')}: ${entry.title}`,
+      `${t('automation.form.workspace')}: ${entry.workspaceName}`,
+      `${t('automation.form.agent')}: ${runtime?.name ?? entry.runtime}`,
+      `${t('automation.form.trigger')}: ${t(`automation.trigger.${entry.triggerKind}`)}`,
+      `${t('automation.card.schedule')}: ${scheduleDescription}`,
+      entry.triggerKind === 'cron' && entry.cronExpr
+        ? `${t('automation.form.cron')}: ${entry.cronExpr}`
+        : null,
+      entry.triggerKind === 'cron'
+        ? `${t('automation.timeline.nextRun')}: ${nextRunDescription}`
+        : null,
+      '',
+      `${t('automation.form.prompt')}:`,
+      entry.prompt,
+    ]
+      .filter((line): line is string => line !== null)
+      .join('\n');
+
+    try {
+      await copyTextToClipboard(details);
+      toast({ title: t('automation.copySucceeded') });
+    } catch (error) {
+      toast({
+        title: t('automation.copyFailed'),
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
-    <article className="group overflow-hidden rounded-lg border border-border bg-background transition-colors hover:border-border-strong">
-      <div className="px-4 py-3.5">
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background-1 text-foreground-muted">
-            <Workflow className="size-3.5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h3 className="min-w-0 truncate text-sm font-semibold tracking-tight">
-                {entry.title}
-              </h3>
-              <Badge
-                variant="secondary"
-                className={cn(
-                  'rounded-md px-1.5 py-0.5 text-[11px]',
-                  entry.status === 'active'
-                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                    : 'text-foreground-muted'
+    <article className="min-w-0 bg-background">
+      <Collapsible className="transition-colors data-[panel-open]:bg-background-1/20">
+        <div className="flex min-h-12 min-w-0 items-center gap-2 pr-3 transition-colors hover:bg-background-1/60">
+          <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-2 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50">
+            <ChevronRight
+              className="size-3.5 shrink-0 text-foreground-muted transition-transform group-data-[panel-open]:rotate-90"
+              aria-hidden="true"
+            />
+            <h3 className="min-w-0 truncate text-sm font-medium tracking-tight">{entry.title}</h3>
+          </CollapsibleTrigger>
+          <Switch
+            size="sm"
+            checked={entry.status === 'active'}
+            disabled={syncedFromCodex || isUpdating}
+            onCheckedChange={syncedFromCodex ? undefined : () => onToggle(entry)}
+            aria-label={
+              syncedFromCodex
+                ? t('automation.source.codexManaged')
+                : entry.status === 'active'
+                  ? t('automation.actions.pause')
+                  : t('automation.actions.resume')
+            }
+          />
+        </div>
+
+        <CollapsibleContent>
+          <div className="border-t border-border/70 px-4 py-4 @3xl:px-5">
+            <p className="max-w-3xl text-sm leading-6 text-foreground-muted">{entry.prompt}</p>
+
+            <dl className="mt-4 grid gap-x-6 gap-y-3 @3xl:grid-cols-2 @5xl:grid-cols-3">
+              <AutomationDetail icon={CalendarClock} label={t('automation.card.schedule')}>
+                <span>{scheduleDescription}</span>
+                {entry.triggerKind === 'cron' && entry.cronExpr && (
+                  <code className="font-mono text-[11px] text-foreground-passive">
+                    {entry.cronExpr}
+                  </code>
                 )}
-              >
-                {entry.status === 'active'
-                  ? t('automation.status.active')
-                  : t('automation.status.paused')}
-              </Badge>
-            </div>
-            <p className="mt-1.5 line-clamp-2 text-sm leading-5 text-foreground-muted">
-              {entry.prompt}
-            </p>
-          </div>
+              </AutomationDetail>
+              <AutomationDetail icon={Clock3} label={t('automation.timeline.nextRun')}>
+                {entry.triggerKind === 'cron' ? nextRunDescription : t('automation.card.neverRun')}
+              </AutomationDetail>
+              <AutomationDetail icon={Folder} label={t('automation.card.workspace')}>
+                {entry.workspaceName}
+              </AutomationDetail>
+              <AutomationDetail icon={Bot} label={t('automation.form.agent')}>
+                {runtime?.name ?? entry.runtime}
+              </AutomationDetail>
+              <AutomationDetail icon={History} label={t('automation.card.lastRun')}>
+                {lastRunAt ? (
+                  <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <RelativeTime value={lastRunAt} />
+                    {lastRun && runStyle && RunStatusIcon && (
+                      <span className={cn('inline-flex items-center gap-1', runStyle.className)}>
+                        <RunStatusIcon
+                          className={cn('size-3', lastRun.status === 'running' && 'animate-spin')}
+                        />
+                        {t(`automation.runStatus.${lastRun.status}`)}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  t('automation.card.neverRun')
+                )}
+              </AutomationDetail>
+            </dl>
 
-          {!syncedFromCodex && (
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <DropdownMenuTrigger
-                      aria-label={t('automation.actions.more', { name: entry.title })}
-                      className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted outline-none transition-colors hover:bg-background-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-                    />
-                  }
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-3">
+              <div className="flex min-w-0 items-center gap-2 text-xs text-foreground-muted">
+                <span
+                  className="inline-flex min-w-0 items-center gap-1.5"
+                  title={syncedFromCodex ? t('automation.source.codexHint') : undefined}
                 >
-                  <MoreHorizontal className="size-4" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  {t('automation.actions.more', { name: entry.title })}
-                </TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem onClick={() => onEdit(entry)}>
-                  <Pencil className="size-4" />
-                  {t('automation.actions.edit')}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onToggle(entry)}>
-                  {entry.status === 'active' ? (
-                    <Pause className="size-4" />
+                  {syncedFromCodex ? (
+                    <RefreshCw className="size-3.5 shrink-0" />
                   ) : (
-                    <Play className="size-4" />
+                    <Settings2 className="size-3.5 shrink-0" />
                   )}
-                  {entry.status === 'active'
-                    ? t('automation.actions.pause')
-                    : t('automation.actions.resume')}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={() => onDelete(entry)}>
-                  <Trash2 className="size-4" />
-                  {t('automation.actions.delete')}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-xs text-foreground-muted">
-          <span className="inline-flex min-w-0 items-center gap-1.5">
-            <CalendarClock className="size-3 shrink-0" />
-            <span className="truncate">{scheduleLabel}</span>
-          </span>
-          <span className="inline-flex min-w-0 items-center gap-1.5">
-            <Folder className="size-3 shrink-0" />
-            <span className="truncate">{entry.workspaceName}</span>
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <Bot className="size-3" />
-            {t('automation.card.runner', { name: runtime?.name ?? entry.runtime })}
-          </span>
-          {lastRunAt && (
-            <span className="inline-flex items-center gap-1.5">
-              <History className="size-3 shrink-0" />
-              <span>
-                {t('automation.card.lastRun')} <RelativeTime value={lastRunAt} />
-              </span>
-              {lastRun && runStyle && RunStatusIcon && (
-                <span className={cn('inline-flex items-center gap-1', runStyle.className)}>
-                  <RunStatusIcon
-                    className={cn('size-3', lastRun.status === 'running' && 'animate-spin')}
-                  />
-                  {t(`automation.runStatus.${lastRun.status}`)}
+                  {syncedFromCodex
+                    ? t('automation.source.codexManaged')
+                    : t('automation.source.yodaManaged')}
                 </span>
-              )}
-            </span>
-          )}
-        </div>
-      </div>
+                {syncedFromCodex && (
+                  <Badge variant="outline" className="gap-1.5 text-foreground-muted">
+                    <Lock className="size-3" />
+                    {t('automation.source.readOnly')}
+                  </Badge>
+                )}
+              </div>
 
-      <footer className="flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border/70 bg-background/40 px-4 py-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-          <span
-            className="inline-flex items-center gap-1.5 text-xs text-foreground-muted"
-            title={syncedFromCodex ? t('automation.source.codexHint') : undefined}
-          >
-            {syncedFromCodex ? (
-              <RefreshCw className="size-3.5" />
-            ) : (
-              <Settings2 className="size-3.5" />
-            )}
-            {syncedFromCodex
-              ? t('automation.source.codexManaged')
-              : t('automation.source.yodaManaged')}
-          </span>
-
-          {syncedFromCodex ? (
-            <Badge variant="outline" className="gap-1.5 text-foreground-muted">
-              <Lock className="size-3" />
-              {t('automation.source.readOnly')}
-            </Badge>
-          ) : (
-            <>
-              <span aria-hidden="true" className="h-3.5 w-px bg-border/70" />
-              <span className="inline-flex items-center gap-2 text-xs text-foreground-muted">
-                {entry.status === 'active'
-                  ? t('automation.actions.enabled')
-                  : t('automation.actions.disabled')}
-                <Switch
-                  size="sm"
-                  checked={entry.status === 'active'}
-                  disabled={isUpdating}
-                  onCheckedChange={() => onToggle(entry)}
-                  aria-label={
-                    entry.status === 'active'
-                      ? t('automation.actions.pause')
-                      : t('automation.actions.resume')
-                  }
-                />
-              </span>
-            </>
-          )}
-        </div>
-
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
-          {lastRun?.taskId && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              aria-label={t('automation.card.openLastRun', { name: entry.title })}
-              onClick={() => onOpenRun(lastRun)}
-            >
-              <MessageSquare className="size-3.5" />
-              {t('automation.card.continueSession')}
-            </Button>
-          )}
-          {!syncedFromCodex && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onRun(entry)}
-              disabled={isRunning}
-            >
-              {isRunning ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Play className="size-3.5" />
-              )}
-              {isRunning ? t('automation.actions.running') : t('automation.actions.runNow')}
-            </Button>
-          )}
-        </div>
-      </footer>
+              <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+                <Button type="button" variant="ghost" size="sm" onClick={() => void copyBasics()}>
+                  <ClipboardCopy className="size-3.5" />
+                  {t('automation.actions.copyInfo')}
+                </Button>
+                {lastRun?.taskId && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={t('automation.card.openLastRun', { name: entry.title })}
+                    onClick={() => onOpenRun(lastRun)}
+                  >
+                    <MessageSquare className="size-3.5" />
+                    {t('automation.card.continueSession')}
+                  </Button>
+                )}
+                {!syncedFromCodex && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onRun(entry)}
+                    disabled={isRunning}
+                  >
+                    {isRunning ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Play className="size-3.5" />
+                    )}
+                    {isRunning ? t('automation.actions.running') : t('automation.actions.runNow')}
+                  </Button>
+                )}
+                {!syncedFromCodex && (
+                  <DropdownMenu>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <DropdownMenuTrigger
+                            aria-label={t('automation.actions.more', { name: entry.title })}
+                            className="flex size-8 shrink-0 items-center justify-center rounded-md text-foreground-muted outline-none transition-colors hover:bg-background-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                          />
+                        }
+                      >
+                        <MoreHorizontal className="size-4" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {t('automation.actions.more', { name: entry.title })}
+                      </TooltipContent>
+                    </Tooltip>
+                    <DropdownMenuContent align="end" className="w-40">
+                      <DropdownMenuItem onClick={() => onEdit(entry)}>
+                        <Pencil className="size-4" />
+                        {t('automation.actions.edit')}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem variant="destructive" onClick={() => onDelete(entry)}>
+                        <Trash2 className="size-4" />
+                        {t('automation.actions.delete')}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </article>
   );
 });
+
+function AutomationDetail({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: LucideIcon;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="flex items-center gap-1.5 text-[11px] font-medium text-foreground-passive">
+        <Icon className="size-3 shrink-0" />
+        {label}
+      </dt>
+      <dd className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-5 text-foreground-muted">
+        {children}
+      </dd>
+    </div>
+  );
+}
 
 function AutomationEditor({
   draft,

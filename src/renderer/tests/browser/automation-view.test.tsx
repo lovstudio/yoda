@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   openTaskTarget: vi.fn(),
   confirm: vi.fn(),
   toast: vi.fn(),
+  copyTextToClipboard: vi.fn(),
 }));
 
 const fixtures = vi.hoisted(() => {
@@ -112,6 +113,7 @@ vi.mock('@renderer/features/automation/use-automations', () => ({
 vi.mock('@renderer/lib/hooks/use-toast', () => ({
   useToast: () => ({ toast: mocks.toast }),
   toast: mocks.toast,
+  copyTextToClipboard: mocks.copyTextToClipboard,
 }));
 
 vi.mock('@renderer/lib/ipc', () => ({
@@ -186,6 +188,8 @@ describe('AutomationMainPanel', () => {
     mocks.openTaskTarget.mockReset();
     mocks.confirm.mockReset();
     mocks.toast.mockReset();
+    mocks.copyTextToClipboard.mockReset();
+    mocks.copyTextToClipboard.mockResolvedValue(undefined);
     host = document.createElement('div');
     host.style.width = '1200px';
     host.style.height = '900px';
@@ -201,28 +205,46 @@ describe('AutomationMainPanel', () => {
     host.remove();
   });
 
-  it('keeps run history informational and places session continuation in the action bar', async () => {
+  it('keeps rows concise until their accordion is opened, then exposes details and actions', async () => {
     const { AutomationMainPanel } = await import('@renderer/features/automation/automation-view');
     await act(async () => root.render(createElement(AutomationMainPanel)));
 
     expect(host.textContent).toContain(fixtures.activeAutomation.title);
-    expect(host.textContent).toContain(fixtures.activeAutomation.prompt);
     expect(host.textContent).toContain(fixtures.pausedAutomation.title);
     expect(host.textContent).toContain(fixtures.codexAutomation.title);
-    expect(host.textContent).not.toContain('Aug');
     expect(findButton(host, 'automation.filters.all')?.getAttribute('aria-pressed')).toBe('true');
-    expect(host.textContent).not.toContain('automation.recentRuns.title');
+    expect(host.querySelector('[data-schedule-timeline]')?.textContent).toContain(
+      'automation.timeline.title'
+    );
 
     const activeCard = Array.from(host.querySelectorAll('article')).find((card) =>
       card.textContent?.includes(fixtures.activeAutomation.title)
     );
-    const recentRunButton = activeCard?.querySelector<HTMLButtonElement>(
-      'footer button[aria-label="automation.card.openLastRun"]'
+    const trigger = activeCard?.querySelector<HTMLButtonElement>(
+      '[data-slot="collapsible-trigger"]'
     );
 
-    expect(
-      activeCard?.firstElementChild?.querySelector('[aria-label="automation.card.openLastRun"]')
-    ).toBeNull();
+    expect(trigger?.getAttribute('aria-expanded')).toBe('false');
+    expect(activeCard?.querySelector('[data-slot="switch"]')).not.toBeNull();
+    expect(findButton(activeCard as HTMLElement, 'automation.actions.runNow')).toBeUndefined();
+
+    await act(async () => trigger?.click());
+
+    expect(trigger?.getAttribute('aria-expanded')).toBe('true');
+    expect(activeCard?.textContent).toContain(fixtures.activeAutomation.prompt);
+    expect(activeCard?.textContent).toContain('automation.card.workspace');
+
+    const copyButton = findButton(activeCard as HTMLElement, 'automation.actions.copyInfo');
+    await act(async () => copyButton?.click());
+    expect(mocks.copyTextToClipboard).toHaveBeenCalledOnce();
+    expect(mocks.copyTextToClipboard.mock.calls[0]?.[0]).toContain(fixtures.activeAutomation.title);
+    expect(mocks.copyTextToClipboard.mock.calls[0]?.[0]).toContain(
+      fixtures.activeAutomation.cronExpr
+    );
+
+    const recentRunButton = activeCard?.querySelector<HTMLButtonElement>(
+      'button[aria-label="automation.card.openLastRun"]'
+    );
     expect(recentRunButton?.textContent).toContain('automation.card.continueSession');
     await act(async () => recentRunButton?.click());
     expect(mocks.openTaskTarget).toHaveBeenCalledWith(
@@ -235,11 +257,19 @@ describe('AutomationMainPanel', () => {
     );
   });
 
-  it('keeps filters and the primary run action visible without hover', async () => {
+  it('keeps filters compact and puts manual execution in the expanded action bar', async () => {
     const { AutomationMainPanel } = await import('@renderer/features/automation/automation-view');
     await act(async () => root.render(createElement(AutomationMainPanel)));
 
-    const runButton = findButton(host, 'automation.actions.runNow');
+    const activeCard = Array.from(host.querySelectorAll('article')).find((card) =>
+      card.textContent?.includes(fixtures.activeAutomation.title)
+    );
+    const trigger = activeCard?.querySelector<HTMLButtonElement>(
+      '[data-slot="collapsible-trigger"]'
+    );
+    await act(async () => trigger?.click());
+
+    const runButton = findButton(activeCard as HTMLElement, 'automation.actions.runNow');
     expect(runButton).toBeTruthy();
     await act(async () => runButton?.click());
     expect(mocks.run).toHaveBeenCalledWith(fixtures.activeAutomation.id, expect.any(Object));
@@ -248,9 +278,15 @@ describe('AutomationMainPanel', () => {
     await act(async () => pausedFilter?.click());
     const visibleCards = Array.from(host.querySelectorAll('article'));
     expect(visibleCards).toHaveLength(2);
-    expect(host.textContent).toContain(fixtures.pausedAutomation.title);
-    expect(host.textContent).toContain(fixtures.codexAutomation.title);
-    expect(host.textContent).not.toContain(fixtures.activeAutomation.title);
+    expect(
+      visibleCards.some((card) => card.textContent?.includes(fixtures.pausedAutomation.title))
+    ).toBe(true);
+    expect(
+      visibleCards.some((card) => card.textContent?.includes(fixtures.codexAutomation.title))
+    ).toBe(true);
+    expect(
+      visibleCards.some((card) => card.textContent?.includes(fixtures.activeAutomation.title))
+    ).toBe(false);
   });
 
   it('opens the product-oriented creation editor from the page action', async () => {
@@ -266,29 +302,25 @@ describe('AutomationMainPanel', () => {
     expect(host.textContent).toContain('automation.form.manualHint');
   });
 
-  it('keeps Codex-synced automations visibly read-only', async () => {
+  it('keeps Codex-synced automations visibly read-only after expansion', async () => {
     const { AutomationMainPanel } = await import('@renderer/features/automation/automation-view');
     await act(async () => root.render(createElement(AutomationMainPanel)));
 
     const codexCard = Array.from(host.querySelectorAll('article')).find((card) =>
       card.textContent?.includes(fixtures.codexAutomation.title)
     );
+    const trigger = codexCard?.querySelector<HTMLButtonElement>(
+      '[data-slot="collapsible-trigger"]'
+    );
+    const codexSwitch = codexCard?.querySelector('[data-slot="switch"]');
+
+    expect(codexSwitch?.hasAttribute('data-disabled')).toBe(true);
+    await act(async () => trigger?.click());
+
     expect(codexCard?.textContent).toContain('automation.source.codexManaged');
     expect(codexCard?.textContent).toContain('automation.source.readOnly');
-    expect(codexCard?.querySelector('footer')).not.toBeNull();
     expect(findButton(codexCard as HTMLElement, 'automation.actions.runNow')).toBeUndefined();
     expect(codexCard?.querySelector('button[aria-label^="automation.actions.more"]')).toBeNull();
-  });
-
-  it('uses one card structure while keeping management ownership explicit', async () => {
-    const { AutomationMainPanel } = await import('@renderer/features/automation/automation-view');
-    await act(async () => root.render(createElement(AutomationMainPanel)));
-
-    const cards = Array.from(host.querySelectorAll('article'));
-    expect(cards).toHaveLength(3);
-    expect(cards.every((card) => card.querySelector('footer'))).toBe(true);
-    expect(cards[0]?.textContent).toContain(fixtures.activeAutomation.title);
-    expect(cards[1]?.textContent).toContain('automation.source.yodaManaged');
-    expect(cards[2]?.textContent).toContain(fixtures.codexAutomation.title);
+    expect(findButton(codexCard as HTMLElement, 'automation.actions.copyInfo')).toBeTruthy();
   });
 });

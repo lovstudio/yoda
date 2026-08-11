@@ -3073,6 +3073,8 @@
     "runFailed": "Automation failed",
     "saveFailed": "Failed to save automation",
     "updateFailed": "Failed to update automation",
+    "copySucceeded": "Automation details copied",
+    "copyFailed": "Failed to copy automation details",
     "listCount": "{{count}} automations",
     "yourAutomations": "Your automations",
     "yourAutomationsDescription": "Review schedules and recent results, or run one on demand.",
@@ -3093,6 +3095,17 @@
       "noRuns": "No runs yet",
       "latestRuns": "Last {{count}} completed runs",
       "runHint": "Results appear after the first run"
+    },
+    "timeline": {
+      "label": "Upcoming schedule",
+      "title": "Next 7 days",
+      "description": "Every active scheduled automation is shown at its expected run time.",
+      "scheduledCount": "{{count}} scheduled automations",
+      "eventCount": "{{count}} runs",
+      "empty": "No scheduled automations will run in the next 7 days.",
+      "today": "Today",
+      "noEvents": "No runs",
+      "nextRun": "Next run"
     },
     "filters": {
       "label": "Filter automations",
@@ -3144,7 +3157,8 @@
       "enabled": "Enabled",
       "disabled": "Paused",
       "runNow": "Run now",
-      "running": "Running"
+      "running": "Running",
+      "copyInfo": "Copy details"
     },
     "card": {
       "schedule": "Schedule",

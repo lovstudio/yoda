@@ -3073,6 +3073,8 @@
     "runFailed": "自动化运行失败",
     "saveFailed": "自动化保存失败",
     "updateFailed": "自动化状态更新失败",
+    "copySucceeded": "已复制自动化信息",
+    "copyFailed": "复制自动化信息失败",
     "listCount": "{{count}} 个自动化",
     "yourAutomations": "你的自动化",
     "yourAutomationsDescription": "查看计划、最近结果，并随时手动运行。",
@@ -3093,6 +3095,17 @@
       "noRuns": "尚无记录",
       "latestRuns": "最近 {{count}} 次已完成运行",
       "runHint": "运行一次后会显示结果"
+    },
+    "timeline": {
+      "label": "未来执行时间线",
+      "title": "未来 7 天",
+      "description": "所有启用中的定时任务会按实际执行时间排列。",
+      "scheduledCount": "{{count}} 个定时任务",
+      "eventCount": "{{count}} 次执行",
+      "empty": "未来 7 天没有待执行的定时任务。",
+      "today": "今天",
+      "noEvents": "无安排",
+      "nextRun": "下次执行"
     },
     "filters": {
       "label": "筛选自动化",
@@ -3144,7 +3157,8 @@
       "enabled": "已启用",
       "disabled": "已暂停",
       "runNow": "立即运行",
-      "running": "正在运行"
+      "running": "正在运行",
+      "copyInfo": "复制基本信息"
     },
     "card": {
       "schedule": "运行计划",
