@@ -110,6 +110,20 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
     asProvisioned(task)?.taskView.tabManager.setActiveTab(OVERVIEW_TAB_ID);
   };
 
+  // Pending acceptance leaves the active-workspace list just like archive.
+  // Update optimistically, then collapse the currently open task immediately
+  // rather than leaving its working surface visible until the RPC resolves.
+  const handleMarkNeedsReview = () => {
+    void task.setNeedsReview(true).catch((error: unknown) => {
+      log.warn('useTaskMenuActions: mark pending acceptance failed', {
+        projectId,
+        taskId,
+        error,
+      });
+    });
+    navigate('home');
+  };
+
   return {
     projectId,
     projectName,
@@ -137,7 +151,7 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
     onUnfavorite: () => void task.setFavorite(false),
     onMarkLongTerm: () => void task.setLongTerm(true),
     onUnmarkLongTerm: () => void task.setLongTerm(false),
-    onMarkNeedsReview: () => void task.setNeedsReview(true),
+    onMarkNeedsReview: handleMarkNeedsReview,
     onUnmarkNeedsReview: () => void task.setNeedsReview(false),
     onRename: () => showRename({ projectId, taskId, currentName: taskName }),
     // Quick archive (sidebar icon): straight to archive, no skill, no dialog.

@@ -250,9 +250,28 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       onSelect: actions.isLongTerm ? actions.onUnmarkLongTerm : actions.onMarkLongTerm,
     });
   }
-  // group 2 — archive / restore and pending acceptance. Archive is a flat pair:
-  // direct archive (note dialog, no skill) and, when configured, run the
+  // group 2 — pending acceptance, then archive / restore. Archive is a flat
+  // pair: direct archive (note dialog, no skill) and, when configured, run the
   // pre-archive skill then archive.
+  if (actions.canMarkReview) {
+    items.push(
+      actions.needsReview
+        ? {
+            key: 'unmark-review',
+            group: 2,
+            icon: CircleSlash,
+            label: t('tasks.context.unmarkReview'),
+            onSelect: actions.onUnmarkNeedsReview,
+          }
+        : {
+            key: 'mark-review',
+            group: 2,
+            icon: CircleDot,
+            label: t('tasks.context.markForReview'),
+            onSelect: actions.onMarkNeedsReview,
+          }
+    );
+  }
   if (!actions.isArchived) {
     items.push({
       key: 'archive',
@@ -281,25 +300,6 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       label: t('projects.tasks.restore'),
       onSelect: actions.onRestore,
     });
-  }
-  if (actions.canMarkReview) {
-    items.push(
-      actions.needsReview
-        ? {
-            key: 'unmark-review',
-            group: 2,
-            icon: CircleSlash,
-            label: t('tasks.context.unmarkReview'),
-            onSelect: actions.onUnmarkNeedsReview,
-          }
-        : {
-            key: 'mark-review',
-            group: 2,
-            icon: CircleDot,
-            label: t('tasks.context.markForReview'),
-            onSelect: actions.onMarkNeedsReview,
-          }
-    );
   }
 
   // group 3 — task hierarchy

@@ -151,7 +151,7 @@ describe('TaskContextMenuItems grouping', () => {
     host.remove();
   });
 
-  it('keeps pending acceptance with archive actions below independent task markers', async () => {
+  it('puts pending acceptance before archive actions below independent task markers', async () => {
     const { TaskContextMenuItems } = await import(
       '@renderer/features/tasks/components/task-context-menu'
     );
@@ -199,9 +199,9 @@ describe('TaskContextMenuItems grouping', () => {
         'tasks.context.markLongTerm',
       ],
       [
+        'tasks.context.markForReview',
         'tasks.context.archiveDirect',
         'tasks.context.archiveWithSkill',
-        'tasks.context.markForReview',
       ],
       [
         'tasks.context.createSubtask',
