@@ -224,7 +224,7 @@ final class ShareViewController: UIViewController, UITextViewDelegate {
         .filter { !$0.isEmpty }
         .joined(separator: "\n\n")
       UIPasteboard.general.setItems(
-        [[UTType.plainText.identifier: "\(marker)\n\(combined)\"]],
+        [[UTType.plainText.identifier: "\(marker)\n\(combined)"]],
         options: [.expirationDate: Date(timeIntervalSinceNow: 300)]
       )
     }
