@@ -103,7 +103,8 @@ describe('persisted conversation hydration', () => {
       undefined,
       undefined,
       undefined,
-      { model: undefined, reasoningEffort: undefined }
+      { model: undefined, reasoningEffort: undefined },
+      { reattachExistingTmuxSession: true }
     );
     expect(mocks.clearPendingInitialPrompt).toHaveBeenCalledOnce();
     expect(mocks.clearPendingInitialPrompt).toHaveBeenCalledWith(pending.id);

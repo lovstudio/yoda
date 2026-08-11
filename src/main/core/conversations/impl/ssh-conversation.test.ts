@@ -314,6 +314,34 @@ describe('SshConversationProvider registration lifecycle', () => {
     });
   });
 
+  it('marks a canonical tmux pane as attach-only during startup hydration', async () => {
+    const pty = new FakePty();
+    mocks.openSsh2Pty.mockResolvedValue({ success: true, data: pty });
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    provider = createProvider();
+
+    await provider.startSession(
+      conversation,
+      undefined,
+      true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { reattachExistingTmuxSession: true }
+    );
+
+    expect(mocks.resolveSshCommand).toHaveBeenCalledWith(
+      'agent',
+      expect.objectContaining({
+        tmuxSessionName: 'tmux-session',
+        tmuxReattachExistingSession: true,
+      }),
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
   it('detaches silence tracking when stop removes the live PTY', async () => {
     const detach = vi.fn();
     mocks.attachSilenceReconciler.mockReturnValue(detach);

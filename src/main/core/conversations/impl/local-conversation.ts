@@ -34,6 +34,7 @@ import { runtimeStatusMonitorRegistry } from '@main/core/conversations/runtime-s
 import type {
   ActiveConversationSession,
   ConversationProvider,
+  ConversationStartOptions,
 } from '@main/core/conversations/types';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import { LocalFileSystem } from '@main/core/fs/impl/local-fs';
@@ -151,13 +152,15 @@ export class LocalConversationProvider implements ConversationProvider {
     initialPrompt?: string,
     tmuxOverride?: boolean,
     imagePaths?: string[],
-    runtimeOverrides?: SessionRuntimeOverrides
+    runtimeOverrides?: SessionRuntimeOverrides,
+    startOptions?: ConversationStartOptions
   ): Promise<void> {
     const sessionId = makePtySessionId(
       conversation.projectId,
       conversation.taskId,
       conversation.id
     );
+    const reattachExistingTmuxSession = startOptions?.reattachExistingTmuxSession === true;
     this.knownSessionIds.add(sessionId);
     if (this.sessions.has(sessionId)) return;
     const existingStart = this.pendingStarts.get(sessionId);
@@ -226,7 +229,12 @@ export class LocalConversationProvider implements ConversationProvider {
         conversation.runtimeId === 'codex' || conversation.runtimeId === 'claude'
           ? resolveRuntimeStateDirectory(conversation.runtimeId, sessionProviderConfig)
           : undefined;
-      if (isResuming && conversation.runtimeId === 'codex' && runtimeStateRoot) {
+      if (
+        isResuming &&
+        conversation.runtimeId === 'codex' &&
+        runtimeStateRoot &&
+        !reattachExistingTmuxSession
+      ) {
         await import('@main/core/maas/maas-service').then(({ maasService }) =>
           maasService.reconcileCodexStateRoot(runtimeStateRoot)
         );
@@ -310,7 +318,11 @@ export class LocalConversationProvider implements ConversationProvider {
           resolveAgentResumeSessionId(conversation, this.taskPath, { reservedThreadIds }))
         : conversation.id;
       let restartTmuxAfterHistoryRepair = false;
-      if (effectiveIsResuming && conversation.runtimeId === 'codex') {
+      if (
+        effectiveIsResuming &&
+        conversation.runtimeId === 'codex' &&
+        !reattachExistingTmuxSession
+      ) {
         const compatibility = ensureCodexResumeProviderCompatibleForConfig(
           agentSessionId,
           sessionProviderConfig
@@ -351,7 +363,7 @@ export class LocalConversationProvider implements ConversationProvider {
           });
         }
       }
-      if (effectiveIsResuming) {
+      if (effectiveIsResuming && !reattachExistingTmuxSession) {
         await ensureCodexThreadUnarchived({
           runtimeId: conversation.runtimeId,
           providerConfig: sessionProviderConfig,
@@ -511,6 +523,7 @@ export class LocalConversationProvider implements ConversationProvider {
                 conversation.runtimeId === 'codex' && !conversation.sessionSource
                   ? [conversation.id]
                   : undefined,
+              tmuxReattachExistingSession: reattachExistingTmuxSession,
             },
           });
 
