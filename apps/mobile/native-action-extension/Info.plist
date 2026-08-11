@@ -4,6 +4,8 @@
   <dict>
     <key>CFBundleDisplayName</key>
     <string>Yoda 新工作</string>
+    <key>CFBundleSymbolName</key>
+    <string>wand.and.stars</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
