@@ -133,6 +133,10 @@ import {
   type SessionOutputMode,
 } from './session-display-preferences';
 import { subscribeSessionEvents } from './session-event-stream';
+import {
+  readMobileShareExtensionImage,
+  readMobileShareExtensionText,
+} from './share-extension-input';
 import { resolveMobileTaskEntry } from './task-navigation';
 import { startMobileVoiceInput, type MobileVoiceInputSession } from './voice-input';
 
@@ -800,7 +804,15 @@ export function App() {
     void (async () => {
       try {
         const resolvedFile = await resolveMobileExternalFile(file);
-        if (resolvedFile.kind === 'image') {
+        if (resolvedFile.source === 'share-extension' && resolvedFile.kind === 'image') {
+          const image = await readMobileShareExtensionImage(resolvedFile);
+          setDemandImages((current) => [...current, image]);
+        } else if (resolvedFile.source === 'share-extension' && resolvedFile.kind === 'text') {
+          const content = await readMobileShareExtensionText(resolvedFile);
+          setPrompt((current) =>
+            current ? `${current}\n\n${content}`.slice(0, MOBILE_SESSION_INPUT_MAX_CHARS) : content
+          );
+        } else if (resolvedFile.kind === 'image') {
           const image = await importMobileInputImage(resolvedFile.uri, resolvedFile.name);
           setDemandImages((current) => [...current, image]);
         } else if (resolvedFile.kind === 'text') {

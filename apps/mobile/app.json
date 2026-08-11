@@ -22,7 +22,8 @@
           "speechRecognitionPermission": "Allow Yoda Mobile to recognize speech for Agent requests."
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      "./plugins/with-yoda-mobile-share-extension"
     ],
     "ios": {
       "appleTeamId": "SR95DUC5MJ",
