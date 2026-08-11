@@ -484,6 +484,37 @@ export function findClosestCodexThreadRolloutByCreatedAt(params: {
   });
 }
 
+export function findNewCodexThreadRollout(params: {
+  statePath: string;
+  cwd: string;
+  minCreatedAtMs: number;
+  maxCreatedAtMs: number;
+}): CodexThreadRollout | undefined {
+  return withCodexState(params.statePath, (db) => {
+    const row = db
+      .prepare(
+        `
+          SELECT
+            id,
+            cwd,
+            NULLIF(rollout_path, '') AS rolloutPath,
+            COALESCE(created_at_ms, created_at * 1000) AS createdAtMs,
+            COALESCE(updated_at_ms, updated_at * 1000) AS updatedAtMs
+          FROM threads
+          WHERE cwd = ?
+            AND archived = 0
+            AND NULLIF(rollout_path, '') IS NOT NULL
+            AND COALESCE(created_at_ms, created_at * 1000) >= ?
+            AND COALESCE(created_at_ms, created_at * 1000) <= ?
+          ORDER BY COALESCE(created_at_ms, created_at * 1000) ASC, id ASC
+          LIMIT 1
+        `
+      )
+      .get(params.cwd, params.minCreatedAtMs, params.maxCreatedAtMs);
+    return parseCodexThreadRollout(row);
+  });
+}
+
 export function findRecentCodexThreadRollout(params: {
   statePath: string;
   cwd: string;

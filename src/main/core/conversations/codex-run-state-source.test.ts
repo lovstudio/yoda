@@ -427,6 +427,42 @@ describe('resolveCodexRolloutPathForConversation', () => {
     ).resolves.toEqual({ state: 'idle', lastStartedAt: at });
   });
 
+  it('waits for a new session thread instead of binding an older thread in the same cwd', () => {
+    dir = mkdtempSync(join(tmpdir(), 'yoda-codex-run-state-'));
+    const statePath = join(dir, 'state_5.sqlite');
+    const olderRolloutPath = join(dir, 'older.jsonl');
+    const expectedRolloutPath = join(dir, 'expected.jsonl');
+    const startedAtMs = Date.parse('2026-06-08T17:49:25.000Z');
+    createStateDb(statePath);
+    writeFileSync(olderRolloutPath, `${line({ type: 'task_started', turn_id: 'older' })}\n`);
+    insertThread(statePath, {
+      id: 'older-thread',
+      cwd: '/shared-repo',
+      rolloutPath: olderRolloutPath,
+      createdAtMs: startedAtMs - 30_000,
+      updatedAtMs: startedAtMs + 1_000,
+    });
+
+    const context = {
+      conversationId: 'new-conversation',
+      cwd: '/shared-repo',
+      startedAtMs,
+      statePath,
+    };
+    expect(resolveCodexRolloutPathForConversation(context)).toBeUndefined();
+
+    writeFileSync(expectedRolloutPath, `${line({ type: 'task_started', turn_id: 'expected' })}\n`);
+    insertThread(statePath, {
+      id: 'expected-thread',
+      cwd: '/shared-repo',
+      rolloutPath: expectedRolloutPath,
+      createdAtMs: startedAtMs + 500,
+      updatedAtMs: startedAtMs + 1_500,
+    });
+
+    expect(resolveCodexRolloutPathForConversation(context)).toBe(expectedRolloutPath);
+  });
+
   it('prefers an explicit resumed thread over the most recently updated thread in the same cwd', async () => {
     dir = mkdtempSync(join(tmpdir(), 'yoda-codex-run-state-'));
     const statePath = join(dir, 'state_5.sqlite');

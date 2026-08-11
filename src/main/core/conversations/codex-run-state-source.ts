@@ -7,7 +7,7 @@ import {
   type RunStateEvent,
 } from '@shared/events/agent-run-state';
 import {
-  findClosestCodexThreadRolloutByCreatedAt,
+  findNewCodexThreadRollout,
   findRecentCodexThreadRollout,
   getClaimedCodexThreadId,
   readCodexThreadRolloutPath,
@@ -46,6 +46,7 @@ export interface CodexTurnVerdict {
 const BIND_POLL_INTERVAL_MS = 1_000;
 const BIND_POLL_MAX_MS = 5 * 60_000;
 const RESUME_START_GRACE_MS = 10_000;
+const NEW_SESSION_THREAD_CREATE_GRACE_MS = 1_000;
 const NEW_SESSION_THREAD_CREATE_MAX_DISTANCE_MS = 60_000;
 const REQUEST_USER_INPUT_TOOL = 'request_user_input';
 const RUN_STATE_SCAN_CHUNK_BYTES = 256 * 1024;
@@ -366,11 +367,11 @@ export function resolveCodexRolloutPathForConversation({
         cwd,
         minUpdatedAtMs: startedAtMs - RESUME_START_GRACE_MS,
       })
-    : findClosestCodexThreadRolloutByCreatedAt({
+    : findNewCodexThreadRollout({
         statePath,
         cwd,
-        targetCreatedAtMs: startedAtMs,
-        maxDistanceMs: NEW_SESSION_THREAD_CREATE_MAX_DISTANCE_MS,
+        minCreatedAtMs: startedAtMs - NEW_SESSION_THREAD_CREATE_GRACE_MS,
+        maxCreatedAtMs: startedAtMs + NEW_SESSION_THREAD_CREATE_MAX_DISTANCE_MS,
       });
   return row?.rolloutPath;
 }
