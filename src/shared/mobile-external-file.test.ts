@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseMobileExternalFileUrl,
   parseMobileShareExtensionClipboard,
+  parseMobileShareExtensionClipboardPayload,
 } from '../../apps/mobile/src/external-file-input';
 
 describe('mobile external file input', () => {
@@ -46,6 +47,18 @@ describe('mobile external file input', () => {
       }
     );
     expect(parseMobileShareExtensionClipboard('YODA_MOBILE_SHARE|share-token|pdf')).toBeNull();
+  });
+
+  it('reads an optional quick-action instruction after the share marker', () => {
+    expect(
+      parseMobileShareExtensionClipboardPayload('YODA_MOBILE_SHARE|share-token|image\n分析这张截图')
+    ).toMatchObject({
+      file: {
+        kind: 'image',
+        shareToken: 'share-token',
+      },
+      payload: '分析这张截图',
+    });
   });
 
   it('keeps unsupported local files visible for a user-facing error', () => {

@@ -136,3 +136,16 @@ export function parseMobileShareExtensionClipboard(value: string): MobileExterna
     uri: `yodamobile://share?${query.toString()}`,
   };
 }
+
+/** Read the optional instruction carried after a Share Extension marker. */
+export function parseMobileShareExtensionClipboardPayload(
+  value: string
+): { file: MobileExternalFile; payload: string } | null {
+  const marker = value.split(/\r?\n/, 1)[0] ?? '';
+  const file = parseMobileShareExtensionClipboard(value);
+  if (!file) return null;
+  return {
+    file,
+    payload: value.slice(marker.length).replace(/^\r?\n/, ''),
+  };
+}

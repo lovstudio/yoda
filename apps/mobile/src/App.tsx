@@ -136,6 +136,7 @@ import { subscribeSessionEvents } from './session-event-stream';
 import {
   clearMobileShareExtensionInput,
   readMobileShareExtensionImage,
+  readMobileShareExtensionPrompt,
   readMobileShareExtensionText,
   readPendingMobileShareExtension,
 } from './share-extension-input';
@@ -830,7 +831,15 @@ export function App() {
         const resolvedFile = await resolveMobileExternalFile(file);
         if (resolvedFile.source === 'share-extension' && resolvedFile.kind === 'image') {
           const image = await readMobileShareExtensionImage(resolvedFile);
+          const sharedPrompt = await readMobileShareExtensionPrompt(resolvedFile);
           setDemandImages((current) => [...current, image]);
+          if (sharedPrompt) {
+            setPrompt((current) =>
+              current
+                ? `${current}\n\n${sharedPrompt}`.slice(0, MOBILE_SESSION_INPUT_MAX_CHARS)
+                : sharedPrompt.slice(0, MOBILE_SESSION_INPUT_MAX_CHARS)
+            );
+          }
         } else if (resolvedFile.source === 'share-extension' && resolvedFile.kind === 'text') {
           const content = await readMobileShareExtensionText(resolvedFile);
           setPrompt((current) =>

@@ -5,9 +5,22 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { withXcodeProject } = require('@expo/config-plugins');
 
-const EXTENSION_DIRECTORY = 'YodaMobileShareExtension';
-const EXTENSION_TARGET = 'YodaMobileShareExtension';
-const EXTENSION_BUNDLE_IDENTIFIER = 'ai.lovstudio.yoda.mobile.share';
+const EXTENSIONS = [
+  {
+    directory: 'YodaMobileShareExtension',
+    target: 'YodaMobileShareExtension',
+    bundleIdentifier: 'ai.lovstudio.yoda.mobile.share',
+    templateDirectory: 'native-share-extension',
+    files: ['Info.plist', 'ShareViewController.swift'],
+  },
+  {
+    directory: 'YodaMobileQuickActionExtension',
+    target: 'YodaMobileQuickActionExtension',
+    bundleIdentifier: 'ai.lovstudio.yoda.mobile.quick-action',
+    templateDirectory: 'native-action-extension',
+    files: ['Info.plist', 'ActionViewController.swift'],
+  },
+];
 
 function unquote(value) {
   return typeof value === 'string' ? value.replace(/^"|"$/g, '') : value;
@@ -42,17 +55,17 @@ function addRootGroup(project, name) {
   return { group: created.pbxGroup, uuid: created.uuid };
 }
 
-function writeExtensionFiles(config) {
+function writeExtensionFiles(config, extension) {
   const nativeRoot = config.modRequest.platformProjectRoot;
-  const extensionRoot = path.join(nativeRoot, EXTENSION_DIRECTORY);
-  const templateRoot = path.join(__dirname, '..', 'native-share-extension');
+  const extensionRoot = path.join(nativeRoot, extension.directory);
+  const templateRoot = path.join(__dirname, '..', extension.templateDirectory);
   fs.mkdirSync(extensionRoot, { recursive: true });
-  for (const fileName of ['Info.plist', 'ShareViewController.swift']) {
+  for (const fileName of extension.files) {
     fs.copyFileSync(path.join(templateRoot, fileName), path.join(extensionRoot, fileName));
   }
 }
 
-function updateBuildSettings(project, target, config) {
+function updateBuildSettings(project, target, config, extension) {
   const configurationList = project.pbxXCConfigurationList()[target.buildConfigurationList];
   if (!configurationList) return;
 
@@ -69,11 +82,11 @@ function updateBuildSettings(project, target, config) {
       CURRENT_PROJECT_VERSION: buildNumber,
       DEVELOPMENT_TEAM: config.ios?.appleTeamId,
       GENERATE_INFOPLIST_FILE: 'NO',
-      INFOPLIST_FILE: `${EXTENSION_DIRECTORY}/Info.plist`,
+      INFOPLIST_FILE: `${extension.directory}/Info.plist`,
       IPHONEOS_DEPLOYMENT_TARGET: '15.1',
       MARKETING_VERSION: marketingVersion,
-      PRODUCT_BUNDLE_IDENTIFIER: EXTENSION_BUNDLE_IDENTIFIER,
-      PRODUCT_NAME: EXTENSION_TARGET,
+      PRODUCT_BUNDLE_IDENTIFIER: extension.bundleIdentifier,
+      PRODUCT_NAME: extension.target,
       SKIP_INSTALL: 'YES',
       SWIFT_VERSION: '5.0',
       TARGETED_DEVICE_FAMILY: '"1,2"',
@@ -82,13 +95,62 @@ function updateBuildSettings(project, target, config) {
   }
 }
 
-function addExtensionFiles(project, targetUuid, groupUuid) {
-  if (!project.hasFile('ShareViewController.swift')) {
+function ensureTargetBuildPhases(project, targetUuid) {
+  const target = project.pbxNativeTargetSection()[targetUuid];
+  const hasBuildPhase = (comment) =>
+    Boolean(target?.buildPhases?.some((phase) => phase.comment === comment));
+
+  if (!hasBuildPhase('Sources')) {
+    project.addBuildPhase([], 'PBXSourcesBuildPhase', 'Sources', targetUuid);
+  }
+  if (!hasBuildPhase('Resources')) {
+    project.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', targetUuid);
+  }
+  if (!hasBuildPhase('Frameworks')) {
+    project.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', targetUuid);
+  }
+}
+
+function findFileReferenceUuid(project, fileName) {
+  const files = project.pbxFileReferenceSection();
+  for (const [uuid, file] of Object.entries(files)) {
+    if (uuid.endsWith('_comment')) continue;
+    if (unquote(file.path) === fileName || unquote(file.name) === fileName) return uuid;
+  }
+  return null;
+}
+
+function addExistingSourceToTarget(project, targetUuid, sourceFile) {
+  const sources = project.pbxSourcesBuildPhaseObj(targetUuid);
+  if (!sources || sources.files.some((file) => file.comment === `${sourceFile} in Sources`)) {
+    return;
+  }
+
+  const fileRef = findFileReferenceUuid(project, sourceFile);
+  if (!fileRef) return;
+
+  const file = {
+    basename: sourceFile,
+    fileRef,
+    group: 'Sources',
+    uuid: project.generateUuid(),
+  };
+  project.addToPbxBuildFileSection(file);
+  project.addToPbxSourcesBuildPhase(file);
+}
+
+function addExtensionFiles(project, targetUuid, groupUuid, extension) {
+  const sourceFile = extension.files.find((fileName) => fileName.endsWith('.swift'));
+  if (!sourceFile) throw new Error(`No Swift source configured for ${extension.target}`);
+
+  if (!project.hasFile(sourceFile)) {
     project.addSourceFile(
-      'ShareViewController.swift',
+      sourceFile,
       { target: targetUuid, lastKnownFileType: 'sourcecode.swift' },
       groupUuid
     );
+  } else {
+    addExistingSourceToTarget(project, targetUuid, sourceFile);
   }
   if (!project.hasFile('Info.plist')) {
     project.addFile('Info.plist', groupUuid, { lastKnownFileType: 'text.plist.xml' });
@@ -97,24 +159,27 @@ function addExtensionFiles(project, targetUuid, groupUuid) {
 
 function withYodaMobileShareExtension(config) {
   return withXcodeProject(config, (config) => {
-    writeExtensionFiles(config);
-
     const project = config.modResults;
-    let nativeTarget = findNativeTarget(project, EXTENSION_TARGET);
-    if (!nativeTarget) {
-      const created = project.addTarget(
-        EXTENSION_TARGET,
-        'app_extension',
-        EXTENSION_DIRECTORY,
-        EXTENSION_BUNDLE_IDENTIFIER
-      );
-      nativeTarget = { target: created.pbxNativeTarget, uuid: created.uuid };
-    }
+    for (const extension of EXTENSIONS) {
+      writeExtensionFiles(config, extension);
 
-    const group = addRootGroup(project, EXTENSION_DIRECTORY);
-    addExtensionFiles(project, nativeTarget.uuid, group.uuid);
-    updateBuildSettings(project, nativeTarget.target, config);
-    project.addTargetAttribute('CreatedOnToolsVersion', '1500', { uuid: nativeTarget.uuid });
+      let nativeTarget = findNativeTarget(project, extension.target);
+      if (!nativeTarget) {
+        const created = project.addTarget(
+          extension.target,
+          'app_extension',
+          extension.directory,
+          extension.bundleIdentifier
+        );
+        nativeTarget = { target: created.pbxNativeTarget, uuid: created.uuid };
+      }
+
+      ensureTargetBuildPhases(project, nativeTarget.uuid);
+      const group = addRootGroup(project, extension.directory);
+      addExtensionFiles(project, nativeTarget.uuid, group.uuid, extension);
+      updateBuildSettings(project, nativeTarget.target, config, extension);
+      project.addTargetAttribute('CreatedOnToolsVersion', '1500', { uuid: nativeTarget.uuid });
+    }
     return config;
   });
 }

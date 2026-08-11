@@ -55,3 +55,9 @@ export async function readMobileShareExtensionImage(
   if (!image) throw new Error('共享图片已不可用，请从系统分享面板重新发送。');
   return importMobileInputImage(image.data, file.name);
 }
+
+/** Read the optional instruction entered in the native quick-action composer. */
+export async function readMobileShareExtensionPrompt(file: MobileExternalFile): Promise<string> {
+  if (file.kind !== 'image') throw new Error('当前共享内容不是图片。');
+  return (await readShareMarker(file)).trim();
+}
