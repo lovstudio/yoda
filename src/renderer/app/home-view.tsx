@@ -84,10 +84,7 @@ import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/tas
 import { accountGreetingName } from '@renderer/lib/account-display';
 import { AgentSlotSelector } from '@renderer/lib/components/agent-slot/agent-slot-selector';
 import { AvatarValue } from '@renderer/lib/components/avatar-value';
-import {
-  ProjectBranchMenuItems,
-  ProjectBranchSelector,
-} from '@renderer/lib/components/project-branch-selector';
+import { ProjectBranchMenuItems } from '@renderer/lib/components/project-branch-selector';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { useAccountSession } from '@renderer/lib/hooks/useAccount';
@@ -2328,18 +2325,60 @@ export const HomeComposer = observer(function HomeComposer({
         {!taskScopedTarget && runMode === 'normal' && compareVariants.length > 0 && (
           <div className="flex flex-col gap-2">
             {compareVariants.map((variant, index) => {
+              const variantProject = asMounted(
+                variant.projectId ? projectManager.projects.get(variant.projectId) : undefined
+              );
               const variantRunHostKind: RunHostKind =
-                asMounted(
-                  variant.projectId ? projectManager.projects.get(variant.projectId) : undefined
-                )?.data.type === 'ssh'
-                  ? 'ssh'
-                  : 'local';
+                variantProject?.data.type === 'ssh' ? 'ssh' : 'local';
+              const variantRepository = variant.projectId
+                ? getRepositoryStore(variant.projectId)
+                : undefined;
+              const variantBranch = variant.baseBranch ?? variantRepository?.defaultBranch;
+              const variantBranchLabel = branchLabel(variantBranch);
+              const variantBranchNeedsCheckout = branchNeedsCheckout(
+                variantBranch,
+                variantRepository?.currentBranch ?? null
+              );
+              const variantStrategyLabels: StrategyChipLabels = {
+                newBranchTitle: t('home.strategyNewBranchTitle', {
+                  branch: variantBranchLabel,
+                }),
+                newBranchDesc: t('home.strategyNewBranchDesc', {
+                  branch: variantBranchLabel,
+                }),
+                noWorktreeTitle: variantBranchNeedsCheckout
+                  ? t('home.strategyCheckoutExistingTitle', { branch: variantBranchLabel })
+                  : t('home.strategyNoWorktreeTitle', { branch: variantBranchLabel }),
+                noWorktreeDesc: variantBranchNeedsCheckout
+                  ? t('home.strategyCheckoutExistingDesc', { branch: variantBranchLabel })
+                  : t('home.strategyNoWorktreeDesc'),
+              };
+              const variantBranchConfiguration: EnvironmentBranchConfiguration | undefined =
+                variant.projectId
+                  ? {
+                      projectId: variant.projectId,
+                      strategyKind: variant.strategyKind,
+                      locked: false,
+                      forkDisabled: variantRepository?.isUnborn ?? false,
+                      branchValue: variantBranch,
+                      branchLabel: variantBranchLabel,
+                      branchRunsInPlace: !variantBranchNeedsCheckout,
+                      onBranchChange: (branch) => updateVariant(variant.id, { baseBranch: branch }),
+                      onForkChange: (forked) =>
+                        updateVariant(variant.id, {
+                          strategyKind: forked ? 'new-branch' : 'no-worktree',
+                        }),
+                      forkLabels: variantStrategyLabels,
+                      baseBranchAriaLabel: t('home.baseBranchAria'),
+                      forkAriaLabel: t('home.strategyAria'),
+                    }
+                  : undefined;
               return (
                 <CompareVariantRow
                   key={variant.id}
                   variant={variant}
-                  strategyLabels={strategyLabels}
                   runHostKind={variantRunHostKind}
+                  branchConfiguration={variantBranchConfiguration}
                   modelLabel={compareModelLabel}
                   renderSettings={renderComposerSettingsButton}
                   trailing={index === 0 ? renderAddCompareButton() : undefined}
@@ -2466,15 +2505,15 @@ export const HomeComposer = observer(function HomeComposer({
 const VARIANT_DND_TYPE = 'application/x-yoda-compare-variant';
 
 /**
- * One extra comparison environment under the base composer row. Mirrors the base
- * row's config chips (project · host · branch · fork · runtime/model) plus a
- * per-variant prompt override, and a left drag handle to reorder the variants.
+ * One comparison environment under the composer. Mirrors the base row's project,
+ * consolidated environment, runtime/model, and settings controls, with a left
+ * drag handle to reorder the variants.
  * Empty fields fall back to the base config at submit time.
  */
 function CompareVariantRow({
   variant,
-  strategyLabels,
   runHostKind,
+  branchConfiguration,
   modelLabel,
   renderSettings,
   trailing,
@@ -2484,8 +2523,8 @@ function CompareVariantRow({
   onReorder,
 }: {
   variant: CompareVariant;
-  strategyLabels: StrategyChipLabels;
   runHostKind: RunHostKind;
+  branchConfiguration?: EnvironmentBranchConfiguration;
   modelLabel: string;
   renderSettings: () => ReactNode;
   trailing?: ReactNode;
@@ -2496,7 +2535,6 @@ function CompareVariantRow({
 }) {
   const { t } = useTranslation();
   const [dragOver, setDragOver] = useState(false);
-  const forking = variant.strategyKind === 'new-branch';
   return (
     <div
       onDragOver={(event) => {
@@ -2539,25 +2577,13 @@ function CompareVariantRow({
           </ComboboxTrigger>
         }
       />
-      {variant.projectId && <RunHostSelector kind={runHostKind} onSelectKind={onRunHostChange} />}
       {variant.projectId && (
-        <BaseBranchChip
-          projectId={variant.projectId}
-          locked={false}
-          value={variant.baseBranch ?? undefined}
-          label=""
-          inPlace={false}
-          onChange={(branch) => onChange({ baseBranch: branch })}
-          ariaLabel={t('home.baseBranchAria')}
+        <EnvironmentSelector
+          kind={runHostKind}
+          onSelectKind={onRunHostChange}
+          branchConfiguration={branchConfiguration}
         />
       )}
-      <ForkSwitchChip
-        checked={forking}
-        disabled={false}
-        onChange={(forked) => onChange({ strategyKind: forked ? 'new-branch' : 'no-worktree' })}
-        ariaLabel={t('home.strategyAria')}
-        labels={strategyLabels}
-      />
       <RuntimePickerChip
         value={variant.runtimeId}
         modelLabel={modelLabel}
@@ -3545,154 +3571,6 @@ function EnvironmentSelector({
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-function RunHostSelector({ kind, onSelectKind }: RunHostSelectorProps) {
-  const { t } = useTranslation();
-  const options: Array<{
-    kind: RunHostKind;
-    icon: ComponentType<{ className?: string }>;
-    label: string;
-  }> = [
-    { kind: 'local', icon: Monitor, label: t('home.runHostLocal') },
-    { kind: 'ssh', icon: Server, label: t('home.runHostSsh') },
-  ];
-  const current = options.find((option) => option.kind === kind) ?? options[0];
-  const CurrentIcon = current.icon;
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <button
-            type="button"
-            aria-label={t('home.runHostAria')}
-            className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2"
-          >
-            <CurrentIcon className="size-3.5 text-foreground-muted" />
-            <span>{current.label}</span>
-            <ChevronDown className="size-3 text-foreground-muted" />
-          </button>
-        }
-      />
-      <DropdownMenuContent align="start" className="w-48 p-1.5">
-        {options.map((option) => {
-          const Icon = option.icon;
-          const active = option.kind === kind;
-          return (
-            <DropdownMenuItem
-              key={option.kind}
-              disabled={!onSelectKind || active}
-              onClick={() => onSelectKind?.(option.kind)}
-              className="gap-2 rounded-md px-2.5 py-2"
-            >
-              <Icon className="size-4 shrink-0 text-foreground-muted" />
-              <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                {option.label}
-              </span>
-              {active && <Check className="size-3.5 shrink-0 text-foreground-muted" />}
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-interface BaseBranchChipProps {
-  projectId: string;
-  /** Subtasks are pinned to the parent task's branch. */
-  locked: boolean;
-  value: Branch | undefined;
-  label: string;
-  /** The task will run in place on this branch (anchor icon). */
-  inPlace: boolean;
-  onChange: (next: Branch) => void;
-  ariaLabel: string;
-}
-
-function BaseBranchChip({
-  projectId,
-  locked,
-  value,
-  label,
-  inPlace,
-  onChange,
-  ariaLabel,
-}: BaseBranchChipProps) {
-  const Icon = inPlace ? Anchor : GitBranch;
-
-  if (locked) {
-    return (
-      <span className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground">
-        <Icon className="size-3.5 text-foreground-muted" />
-        {label}
-      </span>
-    );
-  }
-
-  return (
-    <ProjectBranchSelector
-      projectId={projectId}
-      value={value}
-      onValueChange={onChange}
-      trigger={
-        <ComboboxTrigger
-          aria-label={ariaLabel}
-          className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2"
-        >
-          <Icon className="size-3.5 text-foreground-muted" />
-          <ComboboxValue />
-          <ChevronDown className="size-3 text-foreground-muted" />
-        </ComboboxTrigger>
-      }
-    />
-  );
-}
-
-interface ForkSwitchChipProps {
-  checked: boolean;
-  disabled: boolean;
-  onChange: (forked: boolean) => void;
-  ariaLabel: string;
-  labels: StrategyChipLabels;
-}
-
-function ForkSwitchChip({ checked, disabled, onChange, ariaLabel, labels }: ForkSwitchChipProps) {
-  const { t } = useTranslation();
-  const title = checked ? labels.newBranchTitle : labels.noWorktreeTitle;
-  const desc = checked ? labels.newBranchDesc : labels.noWorktreeDesc;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <div
-            className={cn(
-              'flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground',
-              disabled && 'opacity-50'
-            )}
-          >
-            <GitFork className="size-3.5 text-foreground-muted" />
-            <span>{t('home.forkChipLabel')}</span>
-            <Switch
-              size="sm"
-              checked={checked}
-              disabled={disabled}
-              aria-label={ariaLabel}
-              onCheckedChange={onChange}
-            />
-          </div>
-        }
-      />
-      <TooltipContent align="start" className="max-w-72">
-        <div className="flex flex-col gap-0.5">
-          <span className="font-medium">{title}</span>
-          <span className="text-foreground-muted">{desc}</span>
-        </div>
-      </TooltipContent>
-    </Tooltip>
   );
 }
 

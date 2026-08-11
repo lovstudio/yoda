@@ -29,6 +29,10 @@ describe('new task modal responsive contract', () => {
     expect(home).toContain('data-yoda-surface="home-composer-compare-action"');
     expect(home).toContain('data-yoda-surface="home-composer-environment"');
     expect(home).toContain('branchConfiguration={environmentBranchConfiguration}');
+    expect(home).toContain('branchConfiguration={branchConfiguration}');
+    expect(home).not.toContain('function RunHostSelector(');
+    expect(home).not.toContain('function BaseBranchChip(');
+    expect(home).not.toContain('function ForkSwitchChip(');
     expect(home).toContain('<ProjectBranchMenuItems');
     expect(home).toContain('<DropdownMenuSub');
     expect(home).toContain('<Switch');
