@@ -203,6 +203,24 @@ describe('ConversationManagerStore', () => {
     expect(store.taskStatus).toBe('awaiting-input');
   });
 
+  it('mirrors awaiting-input context to the main-process runtime authority', () => {
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+
+    item?.setAwaitingInput('permission_prompt', { actionDescription: 'Allow this command?' });
+
+    expect(mocks.eventEmitMock).toHaveBeenLastCalledWith(agentSessionStatusChangedChannel, {
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'conversation-1',
+      status: 'awaiting-input',
+      pendingAction: {
+        notificationType: 'permission_prompt',
+        actionDescription: 'Allow this command?',
+      },
+    });
+  });
+
   it('prioritizes awaiting-input over another working conversation', () => {
     const workingConversation: Conversation = {
       ...conversation,

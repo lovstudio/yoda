@@ -749,6 +749,14 @@ export class ConversationStore {
         taskId: this.data.taskId,
         conversationId: this.data.id,
         status,
+        ...(status === 'awaiting-input' && this.lastNotificationType
+          ? {
+              pendingAction: {
+                notificationType: this.lastNotificationType,
+                actionDescription: this.pendingActionDescription ?? undefined,
+              },
+            }
+          : {}),
       });
     }
   }

@@ -1,15 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { agentEventChannel } from '@shared/events/agentEvents';
+import {
+  agentEventChannel,
+  agentSessionStatusChangedChannel,
+  type AgentSessionStatusChanged,
+} from '@shared/events/agentEvents';
 import { agentSessionRuntimeStore, type AgentSessionKey } from './agent-session-runtime';
 
 const mocks = vi.hoisted(() => ({
   emit: vi.fn(),
   isAppFocused: vi.fn(() => false),
   maybeShowNotification: vi.fn(),
+  statusListener: undefined as ((event: AgentSessionStatusChanged) => void) | undefined,
 }));
 
 vi.mock('@main/lib/events', () => ({
-  events: { emit: mocks.emit, on: vi.fn(() => () => {}) },
+  events: {
+    emit: mocks.emit,
+    on: vi.fn((event, listener: (payload: AgentSessionStatusChanged) => void) => {
+      if (event.name === agentSessionStatusChangedChannel.name) mocks.statusListener = listener;
+      return () => {
+        mocks.statusListener = undefined;
+      };
+    }),
+  },
 }));
 vi.mock('@main/core/agent-hooks/notification', () => ({
   isAppFocused: mocks.isAppFocused,
@@ -24,8 +37,13 @@ const session: AgentSessionKey = {
 };
 
 describe('AgentSessionRuntimeStore local subscriptions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.statusListener = undefined;
+  });
+
   afterEach(() => {
-    agentSessionRuntimeStore.remove(session);
+    agentSessionRuntimeStore.dispose();
     vi.restoreAllMocks();
   });
 
@@ -62,6 +80,79 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0]?.[0]).toMatchObject({ status: 'idle' });
     unsubscribe();
+  });
+
+  it('rebroadcasts renderer working after the mounted session leaves awaiting-input', () => {
+    agentSessionRuntimeStore.setStatus(session, 'awaiting-input');
+    mocks.emit.mockClear();
+    agentSessionRuntimeStore.initialize();
+
+    mocks.statusListener?.({ ...session, status: 'working' });
+
+    expect(mocks.emit).toHaveBeenCalledWith(agentSessionStatusChangedChannel, {
+      ...session,
+      status: 'working',
+      pendingAction: null,
+    });
+  });
+
+  it('accepts renderer awaiting-input when it carries pending action context', () => {
+    agentSessionRuntimeStore.dispatch(session, { kind: 'turn-started', at: 1 }, 'codex-rollout');
+    mocks.emit.mockClear();
+    agentSessionRuntimeStore.initialize();
+
+    mocks.statusListener?.({
+      ...session,
+      status: 'awaiting-input',
+      pendingAction: {
+        notificationType: 'permission_prompt',
+        actionDescription: 'Allow this command?',
+      },
+    });
+
+    expect(mocks.emit).toHaveBeenCalledWith(agentSessionStatusChangedChannel, {
+      ...session,
+      status: 'awaiting-input',
+      pendingAction: {
+        notificationType: 'permission_prompt',
+        actionDescription: 'Allow this command?',
+      },
+    });
+  });
+
+  it('broadcasts a directly seeded awaiting-input state', () => {
+    agentSessionRuntimeStore.setStatus(session, 'working');
+    mocks.emit.mockClear();
+
+    agentSessionRuntimeStore.setStatus(session, 'awaiting-input');
+
+    expect(mocks.emit).toHaveBeenCalledWith(agentSessionStatusChangedChannel, {
+      ...session,
+      status: 'awaiting-input',
+      pendingAction: null,
+    });
+  });
+
+  it('preserves a terminal notification when its runtime entry is removed', () => {
+    agentSessionRuntimeStore.setStatus(session, 'completed');
+    mocks.emit.mockClear();
+
+    agentSessionRuntimeStore.remove(session);
+
+    expect(mocks.emit).not.toHaveBeenCalled();
+  });
+
+  it('broadcasts idle when a tracked running state is removed', () => {
+    agentSessionRuntimeStore.setStatus(session, 'working');
+    mocks.emit.mockClear();
+
+    agentSessionRuntimeStore.remove(session);
+
+    expect(mocks.emit).toHaveBeenCalledWith(agentSessionStatusChangedChannel, {
+      ...session,
+      status: 'idle',
+      pendingAction: null,
+    });
   });
 
   it('turns authoritative completion into a notification event and sound signal', () => {

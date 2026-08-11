@@ -82,7 +82,8 @@ function eventFor(event: AgentEvent, at: number): RunStateEvent | null {
  */
 function eventForRendererStatus(
   status: AgentSessionRuntimeStatus,
-  at: number
+  at: number,
+  pendingAction?: PendingAction | null
 ): RunStateEvent | null {
   switch (status) {
     case 'working':
@@ -94,9 +95,10 @@ function eventForRendererStatus(
     case 'idle':
       return { kind: 'watchdog-idle', at };
     case 'awaiting-input':
-      // The renderer should not be the source of awaiting-input (it lacks the
-      // notification type); ignore — hook/classifier/app-server own this.
-      return null;
+      // The mounted renderer can detect an interactive prompt before the
+      // selected durable monitor catches up. Only accept it when the renderer
+      // preserved the notification subtype/context needed by the reducer.
+      return pendingAction ? { kind: 'awaiting-input', at, pendingAction } : null;
     default:
       return null;
   }
@@ -163,7 +165,7 @@ class AgentSessionRuntimeStore {
   initialize(): void {
     if (this.offRendererStatusChanged) return;
     this.offRendererStatusChanged = events.on(agentSessionStatusChangedChannel, (event) => {
-      const reducerEvent = eventForRendererStatus(event.status, Date.now());
+      const reducerEvent = eventForRendererStatus(event.status, Date.now(), event.pendingAction);
       if (!reducerEvent) return;
       this.dispatch(event, reducerEvent, `renderer:${event.status}`);
     });
@@ -225,19 +227,12 @@ class AgentSessionRuntimeStore {
           source,
         });
       }
-      // Broadcast deterministic transitions (e.g. from the codex rollout tailer)
-      // to the renderer. Renderer-originated changes already update the renderer
-      // store directly and are echoed here, so only forward changes that did NOT
-      // originate from the renderer to avoid a redundant round-trip.
-      if (!source.startsWith('renderer:')) {
-        events.emit(agentSessionStatusChangedChannel, {
-          projectId: session.projectId,
-          taskId: session.taskId,
-          conversationId: session.conversationId,
-          status: next.status,
-          pendingAction: next.pendingAction,
-        });
-      }
+      // Publish every canonical transition, including renderer-originated
+      // predictions. The mounted ConversationStore already changed locally, but
+      // the mount-independent AgentRuntimeStore is a separate renderer store and
+      // only observes main-process broadcasts. Re-applying the same status to the
+      // ConversationStore uses emit:false, so this round-trip cannot loop.
+      this.publishState(session, next);
       if (
         AUTHORITATIVE_RUN_STATE_SOURCES.has(source) &&
         ((statusChanged && next.status === 'completed') ||
@@ -250,7 +245,6 @@ class AgentSessionRuntimeStore {
           events.emit(agentEventChannel, { event: notificationEvent, appFocused });
         }
       }
-      this.notifyListeners(session, next);
     }
     return next;
   }
@@ -268,7 +262,7 @@ class AgentSessionRuntimeStore {
     const previous = this.entries.get(key)?.state;
     const state = initialRunState(status, at);
     this.entries.set(key, { session, state, watchdogProtected: false });
-    if (!previous || previous.status !== state.status) this.notifyListeners(session, state);
+    if (!previous || previous.status !== state.status) this.publishState(session, state);
   }
 
   setFromAgentEvent(event: AgentEvent): void {
@@ -285,7 +279,7 @@ class AgentSessionRuntimeStore {
     const previous = this.entries.get(key)?.state;
     this.entries.delete(key);
     if (previous && isAgentSessionRunningStatus(previous.status)) {
-      this.notifyListeners(session, initialRunState('idle', Date.now()));
+      this.publishState(session, initialRunState('idle', Date.now()));
     }
   }
 
@@ -334,6 +328,18 @@ class AgentSessionRuntimeStore {
         });
       }
     }
+  }
+
+  /** Keep renderer mirrors and main-process subscribers on one canonical state. */
+  private publishState(session: AgentSessionKey, state: RunState): void {
+    events.emit(agentSessionStatusChangedChannel, {
+      projectId: session.projectId,
+      taskId: session.taskId,
+      conversationId: session.conversationId,
+      status: state.status,
+      pendingAction: state.pendingAction,
+    });
+    this.notifyListeners(session, state);
   }
 }
 
