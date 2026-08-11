@@ -203,6 +203,32 @@ describe('getCodexSessionContext', () => {
       'Follow-up prompt',
     ]);
 
+    appendFileSync(
+      rolloutPath,
+      `\n${JSON.stringify({
+        timestamp: '2026-06-02T11:00:06.000Z',
+        type: 'turn_context',
+        payload: {
+          turn_id: 'turn-2',
+          model: 'gpt-5.6-sol',
+          effort: 'high',
+          service_tier: 'default',
+        },
+      })}`
+    );
+    const refreshedMetadata = await getCodexSessionRuntimeMetadata(
+      cwd,
+      'conversation-1',
+      undefined,
+      undefined,
+      { codexHome, reservedThreadIds: new Set() }
+    );
+    expect(refreshedMetadata).toEqual({
+      model: 'gpt-5.6-sol',
+      reasoningEffort: 'high',
+      serviceTier: 'default',
+    });
+
     instructionsSpy.mockRestore();
     skillsSpy.mockRestore();
   });

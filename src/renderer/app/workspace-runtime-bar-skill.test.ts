@@ -33,4 +33,14 @@ describe('workspace Skill placement', () => {
     expect(source).toContain('rpc.conversations.getCodexSessionRuntimeMetadata(');
     expect(source).not.toContain('rpc.conversations.getCodexSessionContext(');
   });
+
+  it('renders the active model only from provider-reported session metadata', () => {
+    const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain('const activeSessionModel = sessionModelDetails?.model ?? null;');
+    expect(source).toContain('{activeSessionModel}');
+    expect(source).not.toContain('sessionRuntimeOverride');
+    expect(source).not.toContain('runtimeSnapshot?.model.defaultModel');
+    expect(source).not.toContain('runtimeSnapshot?.model.nativeModel');
+  });
 });

@@ -53,7 +53,6 @@ import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/tas
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { AgentInfoCard } from '@renderer/lib/components/agent-selector/agent-info-card';
 import type { SessionModelSettings } from '@renderer/lib/components/agent-selector/session-model-editor';
-import { runtimeSnapshotQueryKey } from '@renderer/lib/components/agent-selector/use-runtime-snapshot';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
@@ -146,12 +145,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const [isCompacting, setIsCompacting] = useState(false);
   const [isResettingAccountUsage, setIsResettingAccountUsage] = useState(false);
   const [isRuntimePopoverOpen, setIsRuntimePopoverOpen] = useState(false);
-  const [sessionRuntimeOverride, setSessionRuntimeOverride] = useState<
-    | (SessionModelSettings & {
-        conversationId: string;
-      })
-    | null
-  >(null);
   const [isAgentPopoverOpen, setIsAgentPopoverOpen] = useState(false);
   const [isReclaimingTmux, setIsReclaimingTmux] = useState(false);
   const [agentPanelTab, setAgentPanelTab] = useState<AgentPanelTab>('all');
@@ -290,51 +283,18 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       ].join('\n')
     : null;
   const connectionId = provisionedTask?.workspace.sshConnectionId;
-  const { data: runtimeSnapshot } = useQuery({
-    queryKey: runtimeId
-      ? runtimeSnapshotQueryKey(runtimeId, connectionId)
-      : (['runtimeSnapshot', 'inactive', connectionId ?? 'local'] as const),
-    queryFn: () => {
-      if (!runtimeId) throw new Error('A runtime is required to read its model.');
-      return rpc.runtimeSettings.getRuntimeSnapshot(runtimeId, { connectionId });
-    },
-    enabled: Boolean(runtimeId),
-    staleTime: 30_000,
-  });
   const { data: sessionModelDetails } = useActiveSessionModelDetails({
     runtimeId,
     cwd: provisionedTask?.path,
     conversation: activeConversation,
     connectionId,
   });
-  const optimisticSessionSettings =
-    sessionRuntimeOverride && sessionRuntimeOverride.conversationId === activeConversation?.id
-      ? sessionRuntimeOverride
-      : null;
-  const optimisticSessionModel = optimisticSessionSettings?.model ?? null;
-  const activeSessionModel = optimisticSessionModel ?? sessionModelDetails?.model ?? null;
-  const displayedReasoningEffort =
-    optimisticSessionSettings?.reasoningEffort ?? sessionModelDetails?.reasoningEffort ?? null;
-  const displayedFastMode =
-    optimisticSessionSettings?.fastMode ?? sessionModelDetails?.fastMode ?? false;
-  const displayedModel =
-    activeSessionModel ??
-    runtimeSnapshot?.model.defaultModel ??
-    runtimeSnapshot?.model.nativeModel ??
-    null;
-  useEffect(() => {
-    if (
-      sessionRuntimeOverride &&
-      sessionRuntimeOverride.conversationId === activeConversation?.id &&
-      sessionModelDetails?.model === sessionRuntimeOverride.model &&
-      (sessionRuntimeOverride.reasoningEffort === undefined ||
-        sessionModelDetails.reasoningEffort === sessionRuntimeOverride.reasoningEffort) &&
-      (sessionRuntimeOverride.fastMode === undefined ||
-        sessionModelDetails.fastMode === sessionRuntimeOverride.fastMode)
-    ) {
-      setSessionRuntimeOverride(null);
-    }
-  }, [activeConversation?.id, sessionModelDetails, sessionRuntimeOverride]);
+  // This surface describes the active session, so provider-reported runtime
+  // metadata is the only valid source. Requested overrides and global defaults
+  // are configuration, not evidence of the model the session actually uses.
+  const activeSessionModel = sessionModelDetails?.model ?? null;
+  const displayedReasoningEffort = sessionModelDetails?.reasoningEffort ?? null;
+  const displayedFastMode = sessionModelDetails?.fastMode ?? false;
   const dependency = runtimeId
     ? connectionId
       ? appState.dependencies.getRemote(connectionId).data?.[runtimeId]
@@ -645,7 +605,14 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       undefined,
       settings
     );
-    setSessionRuntimeOverride({ conversationId: activeConversation.id, ...settings });
+    await queryClient.invalidateQueries({
+      queryKey: [
+        'workspaceSessionModel',
+        runtimeId ?? 'none',
+        provisionedTask.path,
+        activeConversation.id,
+      ],
+    });
   };
 
   const handleAccountUsagePopoverOpen = (open: boolean) => {
@@ -896,13 +863,13 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               <span className="truncate font-medium text-foreground @max-[720px]:hidden">
                 {runtime?.name ?? runtimeId}
               </span>
-              {displayedModel ? (
+              {activeSessionModel ? (
                 <>
                   <span aria-hidden className="text-foreground-passive @max-[720px]:hidden">
                     ·
                   </span>
                   <span className="max-w-52 truncate font-mono text-[10px] text-foreground">
-                    {displayedModel}
+                    {activeSessionModel}
                   </span>
                   {displayedReasoningEffort ? (
                     <span className="max-w-16 truncate rounded-sm bg-background-2 px-1 font-mono text-[9px] text-foreground-passive @max-[960px]:hidden">
