@@ -86,7 +86,10 @@ import { accountGreetingName } from '@renderer/lib/account-display';
 import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
 import { AgentSlotSelector } from '@renderer/lib/components/agent-slot/agent-slot-selector';
 import { AvatarValue } from '@renderer/lib/components/avatar-value';
-import { ProjectBranchSelector } from '@renderer/lib/components/project-branch-selector';
+import {
+  ProjectBranchMenuItems,
+  ProjectBranchSelector,
+} from '@renderer/lib/components/project-branch-selector';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { useAccountSession } from '@renderer/lib/hooks/useAccount';
@@ -110,7 +113,6 @@ import {
 } from '@renderer/lib/ui/dialog';
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -118,10 +120,14 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { MicroLabel } from '@renderer/lib/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
+import { Switch } from '@renderer/lib/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import {
@@ -3506,7 +3512,6 @@ function EnvironmentSelector({
     ? t('home.environmentNewBranch')
     : t('home.environmentExistingBranch');
   const summary = [
-    t('home.environmentLabel'),
     current.label,
     branchConfiguration?.branchLabel,
     branchConfiguration ? branchStrategyLabel : undefined,
@@ -3523,26 +3528,25 @@ function EnvironmentSelector({
           <button
             data-yoda-surface="home-composer-environment"
             type="button"
-            aria-label={t('home.environmentAria')}
+            aria-label={`${t('home.environmentAria')}：${summary}`}
             title={summary}
             className="flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2"
           >
             <CurrentIcon className="size-3.5 shrink-0 text-foreground-muted" />
-            <span className="shrink-0 font-medium">{t('home.environmentLabel')}</span>
-            <span aria-hidden="true" className="text-foreground-passive">
-              ·
-            </span>
-            <span className="shrink-0">{current.label}</span>
             {branchConfiguration ? (
               <>
                 <span aria-hidden="true" className="text-foreground-passive">
                   ·
                 </span>
                 <span className="min-w-0 max-w-32 truncate">{branchConfiguration.branchLabel}</span>
-                <span aria-hidden="true" className="text-foreground-passive">
-                  ·
-                </span>
-                <span className="shrink-0">{branchStrategyLabel}</span>
+                {forking ? (
+                  <>
+                    <span aria-hidden="true" className="text-foreground-passive">
+                      ·
+                    </span>
+                    <span className="shrink-0">{t('home.environmentNewBranchCompact')}</span>
+                  </>
+                ) : null}
               </>
             ) : null}
             <ChevronDown className="size-3 shrink-0 text-foreground-muted" />
@@ -3589,37 +3593,37 @@ function EnvironmentSelector({
                   </span>
                 </DropdownMenuItem>
               ) : (
-                <ProjectBranchSelector
-                  projectId={branchConfiguration.projectId}
-                  value={branchConfiguration.branchValue}
-                  onValueChange={branchConfiguration.onBranchChange}
-                  trigger={
-                    <ComboboxTrigger
-                      aria-label={branchConfiguration.baseBranchAriaLabel}
-                      className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-sm text-foreground outline-hidden transition-colors hover:bg-background-quaternary-1 data-popup-open:bg-background-quaternary-1"
-                    >
-                      <BranchIcon className="size-4 shrink-0 text-foreground-muted" />
-                      <span className="min-w-0 flex-1 truncate">
-                        <ComboboxValue />
-                      </span>
-                      <ChevronDown className="size-3.5 shrink-0 text-foreground-muted" />
-                    </ComboboxTrigger>
-                  }
-                />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger
+                    aria-label={branchConfiguration.baseBranchAriaLabel}
+                    className="gap-2 rounded-md px-2.5 py-2"
+                  >
+                    <BranchIcon className="size-4 shrink-0 text-foreground-muted" />
+                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                      {branchConfiguration.branchLabel}
+                    </span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-64 p-1.5">
+                    <ProjectBranchMenuItems
+                      projectId={branchConfiguration.projectId}
+                      value={branchConfiguration.branchValue}
+                      onValueChange={branchConfiguration.onBranchChange}
+                    />
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
               )}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuLabel>{t('home.environmentBranchStrategyLabel')}</DropdownMenuLabel>
-              <DropdownMenuCheckboxItem
-                checked={forking}
+              <DropdownMenuItem
+                closeOnClick={false}
                 disabled={branchConfiguration.forkDisabled}
-                aria-label={branchConfiguration.forkAriaLabel}
-                onCheckedChange={(checked) => branchConfiguration.onForkChange(checked === true)}
+                onClick={() => branchConfiguration.onForkChange(!forking)}
                 className="items-start gap-2 rounded-md px-2.5 py-2"
               >
                 <GitFork className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
-                <span className="min-w-0">
+                <span className="min-w-0 flex-1">
                   <span className="block text-sm text-foreground">
                     {t('home.environmentNewBranch')}
                   </span>
@@ -3629,7 +3633,17 @@ function EnvironmentSelector({
                       : branchConfiguration.forkLabels.noWorktreeDesc}
                   </span>
                 </span>
-              </DropdownMenuCheckboxItem>
+                <Switch
+                  size="sm"
+                  checked={forking}
+                  disabled={branchConfiguration.forkDisabled}
+                  aria-label={branchConfiguration.forkAriaLabel}
+                  onCheckedChange={branchConfiguration.onForkChange}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => event.stopPropagation()}
+                  className="mt-0.5"
+                />
+              </DropdownMenuItem>
             </DropdownMenuGroup>
           </>
         ) : null}
@@ -3758,35 +3772,22 @@ function ForkSwitchChip({ checked, disabled, onChange, ariaLabel, labels }: Fork
     <Tooltip>
       <TooltipTrigger
         render={
-          <button
-            type="button"
-            role="switch"
-            aria-checked={checked}
-            aria-label={ariaLabel}
-            disabled={disabled}
-            onClick={() => onChange(!checked)}
-            className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 disabled:pointer-events-none disabled:opacity-50"
+          <div
+            className={cn(
+              'flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground',
+              disabled && 'opacity-50'
+            )}
           >
             <GitFork className="size-3.5 text-foreground-muted" />
             <span>{t('home.forkChipLabel')}</span>
-            {/* Visual-only mini switch (the chip button carries the switch role);
-                mirrors the sm Switch in @renderer/lib/ui/switch. */}
-            <span
-              className={cn(
-                'relative inline-flex h-[14px] w-[24px] shrink-0 items-center rounded-full border border-border-1 transition-colors',
-                checked ? 'bg-background-neutral' : 'bg-background'
-              )}
-            >
-              <span
-                className={cn(
-                  'pointer-events-none block size-3 rounded-full transition-transform',
-                  checked
-                    ? 'translate-x-[calc(100%-2px)] bg-background-3'
-                    : 'translate-x-0 bg-background-neutral/50'
-                )}
-              />
-            </span>
-          </button>
+            <Switch
+              size="sm"
+              checked={checked}
+              disabled={disabled}
+              aria-label={ariaLabel}
+              onCheckedChange={onChange}
+            />
+          </div>
         }
       />
       <TooltipContent align="start" className="max-w-72">
