@@ -168,6 +168,7 @@ export const automationRuns = sqliteTable(
       .notNull()
       .references(() => automations.id, { onDelete: 'cascade' }),
     taskId: text('task_id'), // the task created for this run, if any
+    conversationId: text('conversation_id'), // the session created for this run, if any
     trigger: text('trigger').notNull(), // 'manual' | 'cron'
     status: text('status').notNull(), // 'running' | 'success' | 'failed' | 'skipped'
     startedAt: text('started_at')

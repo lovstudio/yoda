@@ -8,6 +8,7 @@ import {
   History,
   Loader2,
   Lock,
+  MessageSquare,
   MoreHorizontal,
   Pause,
   Pencil,
@@ -33,6 +34,7 @@ import type {
 } from '@shared/automation';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { isValidRuntimeId, RUNTIMES, type RuntimeId } from '@shared/runtime-registry';
+import { openTaskTarget } from '@renderer/app/open-task-target';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { useToast } from '@renderer/lib/hooks/use-toast';
@@ -391,9 +393,17 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
                   onDelete={handleDelete}
                   onRun={handleRun}
                   onToggle={handleToggle}
-                  onOpenTask={(taskId) =>
-                    navigate('task', { projectId: INTERNAL_PROJECT_ID, taskId })
-                  }
+                  onOpenRun={(run) => {
+                    if (!run.taskId) return;
+                    openTaskTarget(
+                      {
+                        projectId: INTERNAL_PROJECT_ID,
+                        taskId: run.taskId,
+                        ...(run.conversationId ? { conversationId: run.conversationId } : {}),
+                      },
+                      navigate
+                    );
+                  }}
                 />
               ))
             )}
@@ -569,7 +579,7 @@ const AutomationCard = observer(function AutomationCard({
   onDelete,
   onRun,
   onToggle,
-  onOpenTask,
+  onOpenRun,
 }: {
   entry: Automation;
   isRunning: boolean;
@@ -579,7 +589,7 @@ const AutomationCard = observer(function AutomationCard({
   onDelete: (entry: Automation) => void;
   onRun: (entry: Automation) => void;
   onToggle: (entry: Automation) => void;
-  onOpenTask: (taskId: string) => void;
+  onOpenRun: (run: Pick<AutomationRun, 'taskId' | 'conversationId'>) => void;
 }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language;
@@ -696,10 +706,14 @@ const AutomationCard = observer(function AutomationCard({
                 type="button"
                 className="inline-flex items-center gap-1.5 rounded-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
                 aria-label={t('automation.card.openLastRun', { name: entry.title })}
-                onClick={() => onOpenTask(lastRun.taskId as string)}
+                onClick={() => onOpenRun(lastRun)}
               >
                 <History className="size-3.5" />
                 {t('automation.card.lastRun')} <RelativeTime value={lastRunAt} />
+                <span className="inline-flex items-center gap-1 text-foreground">
+                  <MessageSquare className="size-3" />
+                  {t('automation.card.continueSession')}
+                </span>
               </button>
             ) : (
               <span className="inline-flex items-center gap-1.5">

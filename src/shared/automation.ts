@@ -73,6 +73,8 @@ export type AutomationRun = {
   id: string;
   automationId: string;
   taskId: string | null;
+  /** The Agent session created for this run, when it has one. */
+  conversationId: string | null;
   trigger: string;
   status: AutomationRunStatus;
   startedAt: string;

@@ -3150,7 +3150,8 @@
       "workspace": "Workspace",
       "runner": "Agent: {{name}}",
       "lastRun": "Last run",
-      "openLastRun": "Open the last run for \"{{name}}\"",
+      "openLastRun": "Open the last run session for \"{{name}}\"",
+      "continueSession": "Continue session",
       "neverRun": "Never run"
     },
     "recentRuns": {

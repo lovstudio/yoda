@@ -70,7 +70,10 @@ export class AutomationRunner {
     // event can then close the run even before createTask() returns.
     const taskId = randomUUID();
     const conversationId = randomUUID();
-    const runId = await automationService.startRun(automationId, trigger, taskId);
+    const runId = await automationService.startRun(automationId, trigger, {
+      taskId,
+      conversationId,
+    });
     try {
       const existing = await db
         .select({ name: tasks.name })
