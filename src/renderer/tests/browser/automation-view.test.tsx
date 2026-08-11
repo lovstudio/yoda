@@ -201,11 +201,10 @@ describe('AutomationMainPanel', () => {
     host.remove();
   });
 
-  it('defaults to all automations so paused Codex tasks stay visible', async () => {
+  it('keeps run history informational and places session continuation in the action bar', async () => {
     const { AutomationMainPanel } = await import('@renderer/features/automation/automation-view');
     await act(async () => root.render(createElement(AutomationMainPanel)));
 
-    expect(host.textContent).toContain('automation.summary.status');
     expect(host.textContent).toContain(fixtures.activeAutomation.title);
     expect(host.textContent).toContain(fixtures.activeAutomation.prompt);
     expect(host.textContent).toContain(fixtures.pausedAutomation.title);
@@ -214,9 +213,16 @@ describe('AutomationMainPanel', () => {
     expect(findButton(host, 'automation.filters.all')?.getAttribute('aria-pressed')).toBe('true');
     expect(host.textContent).not.toContain('automation.recentRuns.title');
 
-    const recentRunButton = host.querySelector<HTMLButtonElement>(
-      'button[aria-label="automation.card.openLastRun"]'
+    const activeCard = Array.from(host.querySelectorAll('article')).find((card) =>
+      card.textContent?.includes(fixtures.activeAutomation.title)
     );
+    const recentRunButton = activeCard?.querySelector<HTMLButtonElement>(
+      'footer button[aria-label="automation.card.openLastRun"]'
+    );
+
+    expect(
+      activeCard?.firstElementChild?.querySelector('[aria-label="automation.card.openLastRun"]')
+    ).toBeNull();
     expect(recentRunButton?.textContent).toContain('automation.card.continueSession');
     await act(async () => recentRunButton?.click());
     expect(mocks.openTaskTarget).toHaveBeenCalledWith(
