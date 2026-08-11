@@ -72,6 +72,7 @@ import {
   parseFriendlySchedule,
   type AutomationScheduleEvent,
 } from './automation-schedule';
+import { BrowserSessionHealthCard } from './browser-session-health-card';
 import {
   useAutomationHistory,
   useAutomations,
@@ -349,6 +350,8 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
         )}
 
         <AutomationScheduleOverview items={items} />
+
+        <BrowserSessionHealthCard />
 
         <section className="mt-5 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-3">

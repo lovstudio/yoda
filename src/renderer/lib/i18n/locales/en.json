@@ -3224,6 +3224,99 @@
       "enabled": "Enable after saving",
       "enabledHint": "Turn off to save it as paused"
     },
+    "sessionHealth": {
+      "title": "Session health",
+      "description": "Ego checks browser sign-in status on schedule and lets you know when action is needed.",
+      "masterSwitch": "Background checks",
+      "targetCount": "{{count}} targets",
+      "addTarget": "Add target",
+      "targetSwitch": "Enable \"{{name}}\"",
+      "egoStatus": "Ego · {{status}}",
+      "egoStatuses": {
+        "unknown": "Pending",
+        "connected": "Connected",
+        "not_running": "Not running",
+        "waiting_user": "Waiting for you",
+        "error": "Error"
+      },
+      "statuses": {
+        "paused": "Paused",
+        "unknown": "Pending",
+        "checking": "Checking",
+        "fresh": "Valid",
+        "auth_required": "Sign-in needed",
+        "needs_human": "Needs attention",
+        "waiting_user": "Needs attention",
+        "network_error": "Network issue",
+        "error": "Check failed"
+      },
+      "statusDetails": {
+        "paused": "Scheduled checks are currently paused.",
+        "unknown": "Enable this target and run one check to confirm its status.",
+        "checking": "Checking the browser sign-in status…",
+        "fresh": "The latest check is valid.",
+        "auth_required": "Finish signing in with Ego, then continue the check.",
+        "needs_human": "This page needs your attention in Ego.",
+        "waiting_user": "Ego is waiting for you to finish on the page.",
+        "network_error": "The latest check encountered a network issue.",
+        "error": "The latest check did not finish."
+      },
+      "facts": {
+        "lastChecked": "Last checked",
+        "neverChecked": "Not checked yet",
+        "streak": "Valid streak",
+        "times": "{{count}} times",
+        "interval": "Interval",
+        "minutes": "{{count}} min"
+      },
+      "actions": {
+        "more": "Manage \"{{name}}\"",
+        "runNow": "Check now",
+        "edit": "Edit",
+        "copyDiagnostics": "Copy diagnostics",
+        "delete": "Delete",
+        "loginInEgo": "Sign in with Ego",
+        "resumeAfterLogin": "Signed in, continue check"
+      },
+      "diagnostics": {
+        "copied": "Diagnostics copied"
+      },
+      "errors": {
+        "actionFailed": "Session health action failed",
+        "copyDebug": "Copy debug details",
+        "dismiss": "Dismiss error"
+      },
+      "editor": {
+        "createTitle": "Add check target",
+        "editTitle": "Edit check target",
+        "createDescription": "New targets stay paused so you can run a manual check first.",
+        "editDescription": "Update page markers and the check interval.",
+        "createdPaused": "Target added and left paused",
+        "updated": "Target updated",
+        "ready": "Everything is ready to save.",
+        "requiredHint": "Add a name, valid URL, at least one sign-in marker, and an interval."
+      },
+      "form": {
+        "name": "Name",
+        "namePlaceholder": "For example: Team workspace",
+        "url": "Read-only page URL",
+        "urlPlaceholder": "https://example.com/account",
+        "loginUrlMarker": "Sign-in URL marker",
+        "loginUrlMarkerPlaceholder": "For example: /login or signin",
+        "loginTitleMarker": "Sign-in title marker",
+        "loginTitleMarkerPlaceholder": "For example: Sign in",
+        "interval": "Check interval (minutes)"
+      },
+      "empty": {
+        "title": "No check targets yet",
+        "description": "Add a work page that should stay signed in, then run one manual check after saving."
+      },
+      "delete": {
+        "title": "Delete check target?",
+        "description": "\"{{name}}\" and its check history will be deleted.",
+        "confirm": "Delete"
+      }
+    },
     "delete": {
       "title": "Delete automation?",
       "description": "\"{{name}}\" will be deleted. This action cannot be undone.",

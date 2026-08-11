@@ -56,7 +56,7 @@ optional_env:
 - Provider 集成或 CLI 行为：`agents/integrations/providers.md`
 - 文档站或落地页（yoda.lovstudio.ai）：`agents/workflows/docs-site.md`
 - MCP 改动：`agents/integrations/mcp.md`
-- Chrome 登录态探针：`agents/integrations/browser-session-keeper.md`
+- ego-browser 会话健康检查：`agents/integrations/ego-browser-session-health.md`
 
 ## 高危区域
 

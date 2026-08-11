@@ -8,6 +8,7 @@ import { aiLogsController } from './core/ai-logs/controller';
 import { appController } from './core/app/controller';
 import { asanaController } from './core/asana/controller';
 import { automationController } from './core/automation/controller';
+import { browserSessionHealthController } from './core/browser-session-health/controller';
 import { conversationController } from './core/conversations/controller';
 import { dependenciesController } from './core/dependencies/controller';
 import { doctorController } from './core/doctor/controller';
@@ -67,6 +68,7 @@ export const rpcRouter = createRPCRouter({
   aiLab: aiLabController,
   aiLogs: aiLogsController,
   automation: automationController,
+  browserSessionHealth: browserSessionHealthController,
   legacyPort: legacyPortController,
   app: appController,
   asana: asanaController,

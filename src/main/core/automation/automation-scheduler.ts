@@ -2,6 +2,7 @@ import { Cron } from 'croner';
 import { automationsUpdatedChannel } from '@shared/events/appEvents';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
+import { browserSessionHealthService } from '../browser-session-health/browser-session-health-service';
 import { automationRunner } from './automation-runner';
 import { shouldScheduleInYoda } from './automation-schedule-policy';
 import { automationService } from './automation-service';
@@ -22,6 +23,7 @@ export class AutomationScheduler {
     this.initialized = true;
     automationRunner.initialize();
     await automationService.initialize();
+    await browserSessionHealthService.initialize();
     await automationService.sweepInterruptedRuns();
     await this.reload();
     // Rebuild whenever automations change (CRUD). Run-state events use a
@@ -38,6 +40,7 @@ export class AutomationScheduler {
 
   dispose(): void {
     this.clear();
+    browserSessionHealthService.dispose();
     automationService.dispose();
     this.initialized = false;
   }

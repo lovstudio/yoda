@@ -3224,6 +3224,99 @@
       "enabled": "保存后启用",
       "enabledHint": "关闭后会以暂停状态保存"
     },
+    "sessionHealth": {
+      "title": "会话健康",
+      "description": "由 Ego 定时确认网页登录状态，需要操作时会提醒你。",
+      "masterSwitch": "后台检查",
+      "targetCount": "{{count}} 个目标",
+      "addTarget": "添加目标",
+      "targetSwitch": "启用“{{name}}”",
+      "egoStatus": "Ego · {{status}}",
+      "egoStatuses": {
+        "unknown": "待确认",
+        "connected": "已连接",
+        "not_running": "未运行",
+        "waiting_user": "等待接管",
+        "error": "异常"
+      },
+      "statuses": {
+        "paused": "暂停",
+        "unknown": "待确认",
+        "checking": "检查中",
+        "fresh": "有效",
+        "auth_required": "待登录",
+        "needs_human": "待接管",
+        "waiting_user": "待接管",
+        "network_error": "网络异常",
+        "error": "检查异常"
+      },
+      "statusDetails": {
+        "paused": "当前不执行定时检查。",
+        "unknown": "启用后运行一次检查即可确认状态。",
+        "checking": "正在检查网页登录状态…",
+        "fresh": "最近一次检查有效。",
+        "auth_required": "请在 Ego 完成登录，再继续检查。",
+        "needs_human": "页面需要你在 Ego 中处理。",
+        "waiting_user": "Ego 正在等待你处理页面。",
+        "network_error": "最近一次检查遇到网络问题。",
+        "error": "最近一次检查未完成。"
+      },
+      "facts": {
+        "lastChecked": "最近检查",
+        "neverChecked": "尚未检查",
+        "streak": "连续有效",
+        "times": "{{count}} 次",
+        "interval": "间隔",
+        "minutes": "{{count}} 分钟"
+      },
+      "actions": {
+        "more": "管理“{{name}}”",
+        "runNow": "立即检查",
+        "edit": "编辑",
+        "copyDiagnostics": "复制诊断",
+        "delete": "删除",
+        "loginInEgo": "在 Ego 登录",
+        "resumeAfterLogin": "登录完成，继续检查"
+      },
+      "diagnostics": {
+        "copied": "诊断信息已复制"
+      },
+      "errors": {
+        "actionFailed": "会话健康操作失败",
+        "copyDebug": "复制调试信息",
+        "dismiss": "关闭错误"
+      },
+      "editor": {
+        "createTitle": "添加检查目标",
+        "editTitle": "编辑检查目标",
+        "createDescription": "新目标会保持停用，保存后可先手动检查。",
+        "editDescription": "更新页面标记与检查间隔。",
+        "createdPaused": "目标已添加并保持停用",
+        "updated": "目标已更新",
+        "ready": "设置完整，可以保存。",
+        "requiredHint": "填写名称、有效 URL、至少一个登录标记和检查间隔。"
+      },
+      "form": {
+        "name": "名称",
+        "namePlaceholder": "例如：团队工作台",
+        "url": "只读页面 URL",
+        "urlPlaceholder": "https://example.com/account",
+        "loginUrlMarker": "登录 URL 标记",
+        "loginUrlMarkerPlaceholder": "例如：/login 或 signin",
+        "loginTitleMarker": "登录标题标记",
+        "loginTitleMarkerPlaceholder": "例如：登录",
+        "interval": "检查间隔（分钟）"
+      },
+      "empty": {
+        "title": "还没有检查目标",
+        "description": "添加需要保持登录的工作页面，保存后先手动检查一次。"
+      },
+      "delete": {
+        "title": "删除检查目标？",
+        "description": "“{{name}}”及其检查记录将被删除。",
+        "confirm": "删除"
+      }
+    },
     "delete": {
       "title": "删除自动化？",
       "description": "“{{name}}” 将被删除，此操作无法撤销。",

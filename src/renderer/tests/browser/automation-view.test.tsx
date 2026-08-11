@@ -12,6 +12,12 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   remove: vi.fn(),
   run: vi.fn(),
+  setSessionHealthEnabled: vi.fn(),
+  upsertSessionTarget: vi.fn(),
+  removeSessionTarget: vi.fn(),
+  runSessionTarget: vi.fn(),
+  resumeSessionTarget: vi.fn(),
+  focusSessionHandoff: vi.fn(),
   navigate: vi.fn(),
   openTaskTarget: vi.fn(),
   confirm: vi.fn(),
@@ -67,8 +73,82 @@ const fixtures = vi.hoisted(() => {
     finishedAt: '2026-07-31T01:04:00.000Z',
     error: null,
   };
-  return { activeAutomation, pausedAutomation, codexAutomation, recentRun };
+  const makeSessionTarget = (id: string, status: string, enabled = true) => ({
+    id,
+    name: `Session ${id}`,
+    url: `https://example.com/${id}`,
+    enabled,
+    intervalMinutes: 15,
+    loginUrlPatterns: ['/login'],
+    loginTitlePatterns: ['Sign in'],
+    humanUrlPatterns: [],
+    humanTitlePatterns: [],
+    status,
+    lastCheckedAt: '2026-08-11T12:00:00.000Z',
+    consecutiveHealthyChecks: status === 'fresh' ? 4 : 0,
+    lastFreshAt: status === 'fresh' ? '2026-08-11T12:00:00.000Z' : null,
+    nextCheckAt: '2026-08-11T12:15:00.000Z',
+    lastError: null,
+    finalUrl: `https://example.com/${id}`,
+    handoffUrl: status === 'auth_required' ? 'ego://task-space/session-health' : null,
+    ownership: status === 'auth_required' ? 'agentDelegatedToUser' : 'agent',
+    taskSpaceId: 42,
+  });
+  const sessionTargets = [
+    makeSessionTarget('fresh', 'fresh'),
+    makeSessionTarget('login', 'auth_required'),
+    makeSessionTarget('handoff', 'needs_human'),
+    makeSessionTarget('network', 'network_error'),
+    makeSessionTarget('paused', 'unknown', false),
+  ];
+  const sessionHealth = {
+    config: {
+      version: 1 as const,
+      enabled: true,
+      targets: sessionTargets.map(
+        ({
+          status: _status,
+          lastCheckedAt: _lastCheckedAt,
+          consecutiveHealthyChecks: _consecutiveHealthyChecks,
+          lastFreshAt: _lastFreshAt,
+          nextCheckAt: _nextCheckAt,
+          lastError: _lastError,
+          finalUrl: _finalUrl,
+          handoffUrl: _handoffUrl,
+          ownership: _ownership,
+          taskSpaceId: _taskSpaceId,
+          ...target
+        }) => target
+      ),
+    },
+    targets: sessionTargets,
+    statuses: {},
+    attention: {
+      targetId: 'login',
+      targetName: 'Session login',
+      state: 'auth_required' as const,
+      title: 'Sign-in needed',
+      message: 'Finish sign-in in Ego.',
+      at: '2026-08-11T12:00:00.000Z',
+      handoffUrl: 'ego://task-space/session-health',
+    },
+    connected: true,
+    egoStatus: 'waiting_user' as const,
+    taskSpaceName: 'Yoda 会话保活' as const,
+    taskSpaceId: 42,
+    ownership: 'agentDelegatedToUser' as const,
+    checkedAt: '2026-08-11T12:00:00.000Z',
+  };
+  return {
+    activeAutomation,
+    pausedAutomation,
+    codexAutomation,
+    recentRun,
+    sessionHealth,
+  };
 });
+
+const sessionHealthState = vi.hoisted(() => ({ error: null as Error | null }));
 
 vi.mock('react-i18next', async (importOriginal) => ({
   ...(await importOriginal<typeof ReactI18nextModule>()),
@@ -110,6 +190,39 @@ vi.mock('@renderer/features/automation/use-automations', () => ({
   }),
 }));
 
+vi.mock('@renderer/features/automation/use-browser-session-health', () => ({
+  useBrowserSessionHealth: () => ({
+    data: fixtures.sessionHealth,
+    error: sessionHealthState.error,
+    isLoading: false,
+  }),
+  useSetBrowserSessionHealthEnabled: () => ({
+    mutate: mocks.setSessionHealthEnabled,
+    isPending: false,
+    variables: undefined,
+  }),
+  useUpsertBrowserSessionHealthTarget: () => ({
+    mutate: mocks.upsertSessionTarget,
+    isPending: false,
+    variables: undefined,
+  }),
+  useRemoveBrowserSessionHealthTarget: () => ({
+    mutate: mocks.removeSessionTarget,
+    isPending: false,
+    variables: undefined,
+  }),
+  useRunBrowserSessionHealthTarget: () => ({
+    mutate: mocks.runSessionTarget,
+    isPending: false,
+    variables: undefined,
+  }),
+  useResumeBrowserSessionHealthAfterLogin: () => ({
+    mutate: mocks.resumeSessionTarget,
+    isPending: false,
+    variables: undefined,
+  }),
+}));
+
 vi.mock('@renderer/lib/hooks/use-toast', () => ({
   useToast: () => ({ toast: mocks.toast }),
   toast: mocks.toast,
@@ -117,7 +230,11 @@ vi.mock('@renderer/lib/hooks/use-toast', () => ({
 }));
 
 vi.mock('@renderer/lib/ipc', () => ({
-  rpc: {},
+  rpc: {
+    browserSessionHealth: {
+      focusHandoff: mocks.focusSessionHandoff,
+    },
+  },
   events: {
     emit: vi.fn(),
     on: () => vi.fn(),
@@ -184,12 +301,19 @@ describe('AutomationMainPanel', () => {
     mocks.update.mockReset();
     mocks.remove.mockReset();
     mocks.run.mockReset();
+    mocks.setSessionHealthEnabled.mockReset();
+    mocks.upsertSessionTarget.mockReset();
+    mocks.removeSessionTarget.mockReset();
+    mocks.runSessionTarget.mockReset();
+    mocks.resumeSessionTarget.mockReset();
+    mocks.focusSessionHandoff.mockReset().mockResolvedValue(undefined);
     mocks.navigate.mockReset();
     mocks.openTaskTarget.mockReset();
     mocks.confirm.mockReset();
     mocks.toast.mockReset();
     mocks.copyTextToClipboard.mockReset();
     mocks.copyTextToClipboard.mockResolvedValue(undefined);
+    sessionHealthState.error = null;
     host = document.createElement('div');
     host.style.width = '1200px';
     host.style.height = '900px';
@@ -276,7 +400,9 @@ describe('AutomationMainPanel', () => {
 
     const pausedFilter = findButton(host, 'automation.filters.paused');
     await act(async () => pausedFilter?.click());
-    const visibleCards = Array.from(host.querySelectorAll('article'));
+    const visibleCards = Array.from(host.querySelectorAll('article')).filter(
+      (card) => !card.closest('[data-browser-session-health]')
+    );
     expect(visibleCards).toHaveLength(2);
     expect(
       visibleCards.some((card) => card.textContent?.includes(fixtures.pausedAutomation.title))
@@ -322,5 +448,92 @@ describe('AutomationMainPanel', () => {
     expect(findButton(codexCard as HTMLElement, 'automation.actions.runNow')).toBeUndefined();
     expect(codexCard?.querySelector('button[aria-label^="automation.actions.more"]')).toBeNull();
     expect(findButton(codexCard as HTMLElement, 'automation.actions.copyInfo')).toBeTruthy();
+  });
+
+  it('shows the main session-health states without exposing row actions inline', async () => {
+    const { AutomationMainPanel } = await import('@renderer/features/automation/automation-view');
+    await act(async () => root.render(createElement(AutomationMainPanel)));
+
+    const healthCard = host.querySelector('[data-browser-session-health]');
+    expect(healthCard?.textContent).toContain('automation.sessionHealth.statuses.fresh');
+    expect(healthCard?.textContent).toContain('automation.sessionHealth.statuses.auth_required');
+    expect(healthCard?.textContent).toContain('automation.sessionHealth.statuses.needs_human');
+    expect(healthCard?.textContent).toContain('automation.sessionHealth.statuses.network_error');
+    expect(healthCard?.textContent).toContain('automation.sessionHealth.statuses.paused');
+
+    const freshRow = Array.from(healthCard?.querySelectorAll('article') ?? []).find((row) =>
+      row.textContent?.includes('Session fresh')
+    );
+    expect(findButton(freshRow as HTMLElement, 'automation.sessionHealth.actions.runNow')).toBe(
+      undefined
+    );
+    expect(
+      freshRow?.querySelector('button[aria-label^="automation.sessionHealth.actions.more"]')
+    ).toBeTruthy();
+  });
+
+  it('requires an explicit resume action after the user finishes signing in', async () => {
+    const { AutomationMainPanel } = await import('@renderer/features/automation/automation-view');
+    await act(async () => root.render(createElement(AutomationMainPanel)));
+
+    const loginRow = Array.from(
+      host.querySelectorAll('[data-browser-session-health] article')
+    ).find((row) => row.textContent?.includes('Session login'));
+    const loginButton = findButton(
+      loginRow as HTMLElement,
+      'automation.sessionHealth.actions.loginInEgo'
+    );
+    const resumeButton = findButton(
+      loginRow as HTMLElement,
+      'automation.sessionHealth.actions.resumeAfterLogin'
+    );
+
+    await act(async () => loginButton?.click());
+    expect(mocks.focusSessionHandoff).toHaveBeenCalledOnce();
+    expect(mocks.resumeSessionTarget).not.toHaveBeenCalled();
+
+    await act(async () => resumeButton?.click());
+    expect(mocks.resumeSessionTarget).toHaveBeenCalledWith('login', expect.any(Object));
+  });
+
+  it('does not submit a target when Enter follows IME composition', async () => {
+    const { AutomationMainPanel } = await import('@renderer/features/automation/automation-view');
+    await act(async () => root.render(createElement(AutomationMainPanel)));
+
+    await act(async () => findButton(host, 'automation.sessionHealth.addTarget')?.click());
+    const form = host.querySelector<HTMLFormElement>('[data-session-health-editor]');
+    const inputs = Array.from(form?.querySelectorAll<HTMLInputElement>('input') ?? []);
+    const setInputValue = (input: HTMLInputElement, value: string) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    await act(async () => {
+      setInputValue(inputs[0]!, 'Cloud console');
+      setInputValue(inputs[1]!, 'https://example.com/account');
+      setInputValue(inputs[2]!, '/login');
+      inputs[0]!.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+      inputs[0]!.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+      inputs[0]!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      );
+      form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+    expect(mocks.upsertSessionTarget).not.toHaveBeenCalled();
+  });
+
+  it('copies debug context from a session-health error', async () => {
+    sessionHealthState.error = new Error('Ego fixture disconnected');
+    const { AutomationMainPanel } = await import('@renderer/features/automation/automation-view');
+    await act(async () => root.render(createElement(AutomationMainPanel)));
+
+    const copyButton = findButton(host, 'automation.sessionHealth.errors.copyDebug');
+    await act(async () => copyButton?.click());
+
+    expect(mocks.copyTextToClipboard).toHaveBeenCalledOnce();
+    expect(mocks.copyTextToClipboard.mock.calls[0]?.[0]).toContain('Ego fixture disconnected');
+    expect(mocks.copyTextToClipboard.mock.calls[0]?.[0]).toContain('get_snapshot');
   });
 });
