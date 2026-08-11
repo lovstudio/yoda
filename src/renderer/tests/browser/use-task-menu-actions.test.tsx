@@ -1,4 +1,4 @@
-import { act, createElement } from 'react';
+import { act, createElement, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TaskMenuActions } from '@renderer/features/tasks/components/task-context-menu';
@@ -94,7 +94,10 @@ describe('useTaskMenuActions', () => {
     const { useTaskMenuActions } = await import(
       '@renderer/features/tasks/components/use-task-menu-actions'
     );
-    let actions: TaskMenuActions | null = null;
+    let resolveActions: (actions: TaskMenuActions | null) => void;
+    const actionsReady = new Promise<TaskMenuActions | null>((resolve) => {
+      resolveActions = resolve;
+    });
     let resolveRequest: (() => void) | undefined;
     mocks.task.setNeedsReview.mockImplementation(
       () =>
@@ -104,7 +107,10 @@ describe('useTaskMenuActions', () => {
     );
 
     function Probe() {
-      actions = useTaskMenuActions('project-1', 'task-1');
+      const actions = useTaskMenuActions('project-1', 'task-1');
+      useEffect(() => {
+        resolveActions(actions);
+      }, [actions]);
       return null;
     }
 
@@ -112,6 +118,7 @@ describe('useTaskMenuActions', () => {
       root.render(createElement(Probe));
     });
 
+    const actions = await actionsReady;
     expect(actions).not.toBeNull();
 
     await act(async () => {
