@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronDown, MousePointer2, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, MousePointer2, Sparkles, X } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -8,9 +8,7 @@ import {
   type AgentAccessMode,
   type AgentDraft,
 } from '@shared/agents';
-import { toRuntimeModelId, type ModelProviderCatalogSource } from '@shared/model-provider-catalog';
 import { groupSkillFamilies, type SkillFamily } from '@shared/skills/grouping';
-import { useModelProviderCatalog } from '@renderer/features/settings/model-provider-catalog-query';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import SkillFamilyCount from '@renderer/features/skills/components/SkillFamilyCount';
 import { useSkills } from '@renderer/features/skills/components/useSkills';
@@ -21,18 +19,6 @@ import { useToast } from '@renderer/lib/hooks/use-toast';
 import type { BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { useCloseGuard } from '@renderer/lib/modal/use-close-guard';
 import { Button } from '@renderer/lib/ui/button';
-import {
-  Combobox,
-  ComboboxCollection,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxGroup,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxLabel,
-  ComboboxList,
-  ComboboxTrigger,
-} from '@renderer/lib/ui/combobox';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
 import {
   DialogContentArea,
@@ -41,7 +27,6 @@ import {
   DialogTitle,
 } from '@renderer/lib/ui/dialog';
 import { Input } from '@renderer/lib/ui/input';
-import { InputGroupButton } from '@renderer/lib/ui/input-group';
 import { Label } from '@renderer/lib/ui/label';
 import {
   Select,
@@ -51,8 +36,8 @@ import {
   SelectValue,
 } from '@renderer/lib/ui/select';
 import { Textarea } from '@renderer/lib/ui/textarea';
-import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
+import { AgentModelCombobox } from './agent-model-combobox';
 import { useAgents } from './use-agents';
 
 type Props = BaseModalProps<Agent> & { agent?: Agent };
@@ -69,21 +54,6 @@ const CODEX_REASONING_EFFORTS = [
   'ultra',
 ] as const;
 
-type AgentModelOption = {
-  key: string;
-  providerId: string;
-  providerName: string;
-  modelId: string;
-  value: string;
-  sources: ModelProviderCatalogSource[];
-};
-
-type AgentModelGroup = {
-  value: string;
-  label: string;
-  items: AgentModelOption[];
-};
-
 function OptionalLabel({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   return (
@@ -94,29 +64,6 @@ function OptionalLabel({ children }: { children: ReactNode }) {
       </span>
     </span>
   );
-}
-
-function buildAgentModelGroups(
-  providers: readonly {
-    id: string;
-    name: string;
-    models: readonly { id: string; sources: ModelProviderCatalogSource[] }[];
-  }[]
-): AgentModelGroup[] {
-  return providers
-    .map((provider) => ({
-      value: provider.id,
-      label: provider.name,
-      items: provider.models.map((model) => ({
-        key: `${provider.id}:${model.id}`,
-        providerId: provider.id,
-        providerName: provider.name,
-        modelId: model.id,
-        value: toRuntimeModelId(provider.id, model.id),
-        sources: model.sources,
-      })),
-    }))
-    .filter((group) => group.items.length > 0);
 }
 
 function SkillModeSelect({
@@ -168,23 +115,9 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
   const { create, update } = useAgents();
   const { installedSkills, isLoading: skillsLoading } = useSkills();
   const { value: defaultRuntime } = useAppSettingsKey('defaultRuntime');
-  const modelCatalog = useModelProviderCatalog();
   const [draft, setDraft] = useState<AgentDraft>(agent ? agentToDraft(agent) : emptyAgentDraft());
   const [saving, setSaving] = useState(false);
   const reasoningRuntime = draft.preferredRuntime ?? defaultRuntime;
-  const [modelMenuOpen, setModelMenuOpen] = useState(false);
-  const modelGroups = useMemo(
-    () => buildAgentModelGroups(modelCatalog.data?.providers ?? []),
-    [modelCatalog.data]
-  );
-  const modelOptions = useMemo(() => modelGroups.flatMap((group) => group.items), [modelGroups]);
-  const selectedModelOption = useMemo(() => {
-    const value = draft.model?.trim();
-    if (!value) return null;
-    return (
-      modelOptions.find((option) => option.value === value || option.modelId === value) ?? null
-    );
-  }, [draft.model, modelOptions]);
   const installedSkillFamilies = useMemo(() => {
     const configuredIdentifiers = new Set([...draft.enabledSkillIds, ...draft.manualSkillIds]);
     const preferredKeys = new Set(
@@ -391,80 +324,12 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
                 <Label htmlFor="agent-model" className="text-xs">
                   <OptionalLabel>{t('agentManager.model')}</OptionalLabel>
                 </Label>
-                <Combobox
-                  items={modelGroups}
-                  value={selectedModelOption}
-                  inputValue={draft.model ?? ''}
-                  open={modelMenuOpen}
-                  onOpenChange={setModelMenuOpen}
-                  onInputValueChange={(value, { reason }: { reason: string }) => {
-                    if (reason === 'input-change') set('model', value || null);
-                  }}
-                  onValueChange={(option: AgentModelOption | null) => {
-                    if (!option) return;
-                    set('model', option.value);
-                    setModelMenuOpen(false);
-                  }}
-                  itemToStringLabel={(option: AgentModelOption) => option.value}
-                  itemToStringValue={(option: AgentModelOption) => option.key}
-                  isItemEqualToValue={(left: AgentModelOption, right: AgentModelOption) =>
-                    left.key === right.key
-                  }
-                  filter={(option: AgentModelOption, query) =>
-                    `${option.providerName} ${option.modelId} ${option.value}`
-                      .toLowerCase()
-                      .includes(query.trim().toLowerCase())
-                  }
-                  autoHighlight
-                >
-                  <ComboboxInput
-                    id="agent-model"
-                    placeholder={t('agentManager.modelPlaceholder')}
-                    className="h-9 text-sm"
-                    showTrigger={false}
-                    rightAddon={
-                      <InputGroupButton
-                        size="icon-xs"
-                        variant="ghost"
-                        render={<ComboboxTrigger />}
-                        aria-label={t('agentManager.modelCandidates')}
-                      >
-                        <ChevronDown className="size-3.5" />
-                      </InputGroupButton>
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && isImeComposing(event)) event.stopPropagation();
-                    }}
-                  />
-                  <ComboboxContent className="w-[min(24rem,var(--available-width))]">
-                    <ComboboxEmpty>
-                      {modelCatalog.isLoading
-                        ? t('common.loading')
-                        : t('agentManager.modelCustomHint')}
-                    </ComboboxEmpty>
-                    <ComboboxList>
-                      {(group: AgentModelGroup) => (
-                        <ComboboxGroup key={group.value} items={group.items}>
-                          <ComboboxLabel>{group.label}</ComboboxLabel>
-                          <ComboboxCollection>
-                            {(option: AgentModelOption) => (
-                              <ComboboxItem key={option.key} value={option} className="text-xs">
-                                <span className="min-w-0 flex-1 truncate font-mono">
-                                  {option.value}
-                                </span>
-                                {option.sources.includes('custom') ? (
-                                  <span className="text-[10px] text-muted-foreground">
-                                    {t('agentManager.modelCustom')}
-                                  </span>
-                                ) : null}
-                              </ComboboxItem>
-                            )}
-                          </ComboboxCollection>
-                        </ComboboxGroup>
-                      )}
-                    </ComboboxList>
-                  </ComboboxContent>
-                </Combobox>
+                <AgentModelCombobox
+                  id="agent-model"
+                  value={draft.model}
+                  onChange={(value) => set('model', value)}
+                  className="h-9 text-sm"
+                />
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
