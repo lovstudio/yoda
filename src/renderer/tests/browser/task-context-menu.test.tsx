@@ -151,7 +151,7 @@ describe('TaskContextMenuItems grouping', () => {
     host.remove();
   });
 
-  it('uses the six requested groups and keeps both move actions together', async () => {
+  it('keeps pending acceptance with archive actions below independent task markers', async () => {
     const { TaskContextMenuItems } = await import(
       '@renderer/features/tasks/components/task-context-menu'
     );
@@ -197,6 +197,10 @@ describe('TaskContextMenuItems grouping', () => {
         'tasks.context.pinTask',
         'tasks.context.favoriteTask',
         'tasks.context.markLongTerm',
+      ],
+      [
+        'tasks.context.archiveDirect',
+        'tasks.context.archiveWithSkill',
         'tasks.context.markForReview',
       ],
       [
@@ -206,7 +210,6 @@ describe('TaskContextMenuItems grouping', () => {
         'tasks.context.createParent',
       ],
       ['tasks.context.copyTaskId', 'tasks.context.copyTaskBasicInfo', 'tasks.context.copyYodaLink'],
-      ['tasks.context.archiveDirect', 'tasks.context.archiveWithSkill'],
       ['tasks.context.moveToProject', 'workspaces.moveToWorkspace'],
     ]);
   });

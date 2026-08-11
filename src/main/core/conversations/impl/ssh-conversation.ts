@@ -16,6 +16,7 @@ import { createClaudeInterruptSniffer } from '@main/core/conversations/claude-in
 import type {
   ActiveConversationSession,
   ConversationProvider,
+  ConversationStartOptions,
 } from '@main/core/conversations/types';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import { SshFileSystem } from '@main/core/fs/impl/ssh-fs';
@@ -111,7 +112,8 @@ export class SshConversationProvider implements ConversationProvider {
     initialPrompt?: string,
     tmuxOverride?: boolean,
     imagePaths?: string[],
-    runtimeOverrides?: SessionRuntimeOverrides
+    runtimeOverrides?: SessionRuntimeOverrides,
+    startOptions?: ConversationStartOptions
   ): Promise<void> {
     const sessionId = makePtySessionId(
       conversation.projectId,
@@ -223,6 +225,7 @@ export class SshConversationProvider implements ConversationProvider {
         tmuxSessionName,
         tmuxEnv: resolveRuntimeTmuxEnv(providerEnv),
         tmuxSessionIdentity: conversation.id,
+        tmuxReattachExistingSession: startOptions?.reattachExistingTmuxSession === true,
         autoApprove: conversation.autoApprove ?? false,
         resume: isResuming,
       };

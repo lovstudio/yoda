@@ -978,6 +978,44 @@ describe('LocalConversationProvider', () => {
     expect(mocks.spawnLocalPty).toHaveBeenCalledOnce();
   });
 
+  it('only attaches to a tmux pane proven to have survived startup hydration', async () => {
+    mocks.getProviderConfig.mockResolvedValue({
+      cli: 'codex',
+      resumeFlag: 'resume',
+      resumeSessionIdArg: true,
+      initialPromptFlag: '',
+    });
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    mocks.repairCodexThreadHistoryProjection.mockReturnValue({
+      status: 'repaired',
+      byteOffset: 11_193_113,
+      fromOrdinal: 1_305,
+      toOrdinal: 1_304,
+    });
+    const provider = createProvider();
+
+    await provider.startSession(
+      { ...conversation, runtimeId: 'codex' },
+      { cols: 80, rows: 24 },
+      true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { reattachExistingTmuxSession: true }
+    );
+
+    expect(mocks.reconcileCodexStateRoot).not.toHaveBeenCalled();
+    expect(mocks.repairCodexThreadHistoryProjection).not.toHaveBeenCalled();
+    expect(mocks.ensureCodexThreadUnarchived).not.toHaveBeenCalled();
+    expect(mocks.killTmuxSession).not.toHaveBeenCalled();
+    expect(mocks.resolveLocalPtySpawn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: expect.objectContaining({ tmuxReattachExistingSession: true }),
+      })
+    );
+  });
+
   it('reports active and detachable agent session counts', async () => {
     mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
     const provider = createProvider();

@@ -8,6 +8,18 @@ import {
 } from '@shared/conversations';
 import type { SkillSessionPolicy } from '@shared/skills/types';
 
+/**
+ * Controls how a persisted conversation is brought back into the app process.
+ *
+ * `reattachExistingTmuxSession` is reserved for startup hydration after Yoda
+ * has already verified that the conversation's canonical tmux pane survived.
+ * It must not be used for an ordinary user-initiated resume, where replacing a
+ * pane bound to an obsolete fork can still be the correct behavior.
+ */
+export type ConversationStartOptions = {
+  reattachExistingTmuxSession?: boolean;
+};
+
 export type ActiveConversationSession = {
   sessionId: string;
   conversationId: string;
@@ -33,7 +45,9 @@ export interface ConversationProvider {
     /** Absolute local paths of image attachments to deliver with the initial prompt. */
     imagePaths?: string[],
     /** Explicit runtime parameters for a new session or supported resume-time overrides. */
-    runtimeOverrides?: SessionRuntimeOverrides
+    runtimeOverrides?: SessionRuntimeOverrides,
+    /** Startup-only behavior for a tmux pane proven to have survived the app restart. */
+    startOptions?: ConversationStartOptions
   ): Promise<void>;
   stopSession(conversationId: string): Promise<void>;
   sendInput(conversationId: string, data: string): Promise<boolean>;

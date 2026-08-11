@@ -32,7 +32,8 @@ function posixShellLineForSsh(
               undefined,
               cfg.tmuxEnv,
               cfg.tmuxSessionIdentity,
-              cfg.tmuxSessionIdentityAliases
+              cfg.tmuxSessionIdentityAliases,
+              cfg.tmuxReattachExistingSession
             )
           : line,
       };

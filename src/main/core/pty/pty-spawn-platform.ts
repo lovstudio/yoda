@@ -39,6 +39,8 @@ export type PtySpawnIntent =
       tmuxSessionIdentity?: string;
       /** Temporary identities accepted while the runtime's real thread is discovered. */
       tmuxSessionIdentityAliases?: string[];
+      /** Attach a canonical tmux pane that survived an app restart without replacing it. */
+      tmuxReattachExistingSession?: boolean;
     }
   | {
       kind: 'run-command';
@@ -54,6 +56,8 @@ export type PtySpawnIntent =
       tmuxSessionIdentity?: string;
       /** Temporary identities accepted while the runtime's real thread is discovered. */
       tmuxSessionIdentityAliases?: string[];
+      /** Attach a canonical tmux pane that survived an app restart without replacing it. */
+      tmuxReattachExistingSession?: boolean;
     };
 
 export type LocalPtySpawnWarning = 'shell_setup_ignored_on_windows' | 'tmux_unsupported_on_windows';
@@ -250,7 +254,8 @@ function resolvePosixSpawn(
             intent.tmuxSize,
             intent.tmuxEnv,
             intent.tmuxSessionIdentity,
-            intent.tmuxSessionIdentityAliases
+            intent.tmuxSessionIdentityAliases,
+            intent.tmuxReattachExistingSession
           ),
         ],
         cwd: intent.cwd,
@@ -295,7 +300,8 @@ function resolvePosixSpawn(
           intent.tmuxSize,
           intent.tmuxEnv,
           intent.tmuxSessionIdentity,
-          intent.tmuxSessionIdentityAliases
+          intent.tmuxSessionIdentityAliases,
+          intent.tmuxReattachExistingSession
         ),
       ],
       cwd: intent.cwd,

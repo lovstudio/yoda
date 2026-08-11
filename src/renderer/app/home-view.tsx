@@ -84,7 +84,10 @@ import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/tas
 import { accountGreetingName } from '@renderer/lib/account-display';
 import { AgentSlotSelector } from '@renderer/lib/components/agent-slot/agent-slot-selector';
 import { AvatarValue } from '@renderer/lib/components/avatar-value';
-import { ProjectBranchSelector } from '@renderer/lib/components/project-branch-selector';
+import {
+  ProjectBranchMenuItems,
+  ProjectBranchSelector,
+} from '@renderer/lib/components/project-branch-selector';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { useAccountSession } from '@renderer/lib/hooks/useAccount';
@@ -109,11 +112,20 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { MicroLabel } from '@renderer/lib/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
+import { Switch } from '@renderer/lib/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import { resolveAgentSlot } from './agent-slot-resolution';
@@ -2199,6 +2211,39 @@ export const HomeComposer = observer(function HomeComposer({
     </button>
   );
 
+  const environmentBranchConfiguration: EnvironmentBranchConfiguration | undefined =
+    !taskScopedTarget && mounted && runMode === 'normal'
+      ? {
+          projectId: mounted.data.id,
+          strategyKind: effectiveStandardStrategyKind,
+          locked: Boolean(parentBranchName),
+          forkDisabled: isUnborn,
+          branchValue: selectedBranch,
+          branchLabel: selectedBranchLabel,
+          branchRunsInPlace: selectedBranchRunsInPlace,
+          onBranchChange: setBaseBranch,
+          onForkChange: (forked) => setStrategyKind(forked ? 'new-branch' : 'no-worktree'),
+          forkLabels: strategyLabels,
+          baseBranchAriaLabel: t('home.baseBranchAria'),
+          forkAriaLabel: t('home.strategyAria'),
+        }
+      : !taskScopedTarget && mounted && runMode === 'review'
+        ? {
+            projectId: mounted.data.id,
+            strategyKind: effectiveReviewStrategyKind,
+            locked: Boolean(parentBranchName),
+            forkDisabled: isUnborn,
+            branchValue: selectedBranch,
+            branchLabel: selectedBranchLabel,
+            branchRunsInPlace: selectedBranchRunsInPlace,
+            onBranchChange: setBaseBranch,
+            onForkChange: (forked) => setReviewStrategyKind(forked ? 'new-branch' : 'no-worktree'),
+            forkLabels: reviewStrategyLabels,
+            baseBranchAriaLabel: t('home.baseBranchAria'),
+            forkAriaLabel: t('home.reviewStrategyAria'),
+          }
+        : undefined;
+
   return (
     <div data-yoda-surface="home-composer" className={className}>
       {showDreamActions ? (
@@ -2367,9 +2412,10 @@ export const HomeComposer = observer(function HomeComposer({
               </div>
             )}
             {runMode !== 'build' && (
-              <RunHostSelector
+              <EnvironmentSelector
                 kind={runHostKind}
                 onSelectKind={isProjectLocked ? undefined : selectRunHostProject}
+                branchConfiguration={environmentBranchConfiguration}
               />
             )}
             {runMode === 'brainstorm' && <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>}
@@ -2382,40 +2428,6 @@ export const HomeComposer = observer(function HomeComposer({
             )}
             {!taskScopedTarget && mounted && runMode === 'team' && (
               <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
-            )}
-            {!taskScopedTarget && mounted && runMode === 'normal' && (
-              <BranchStrategyChips
-                projectId={mounted.data.id}
-                strategyKind={effectiveStandardStrategyKind}
-                locked={Boolean(parentBranchName)}
-                forkDisabled={isUnborn}
-                branchValue={selectedBranch}
-                branchLabel={selectedBranchLabel}
-                branchRunsInPlace={selectedBranchRunsInPlace}
-                onBranchChange={setBaseBranch}
-                onForkChange={(forked) => setStrategyKind(forked ? 'new-branch' : 'no-worktree')}
-                forkLabels={strategyLabels}
-                baseBranchAriaLabel={t('home.baseBranchAria')}
-                forkAriaLabel={t('home.strategyAria')}
-              />
-            )}
-            {!taskScopedTarget && mounted && runMode === 'review' && (
-              <BranchStrategyChips
-                projectId={mounted.data.id}
-                strategyKind={effectiveReviewStrategyKind}
-                locked={Boolean(parentBranchName)}
-                forkDisabled={isUnborn}
-                branchValue={selectedBranch}
-                branchLabel={selectedBranchLabel}
-                branchRunsInPlace={selectedBranchRunsInPlace}
-                onBranchChange={setBaseBranch}
-                onForkChange={(forked) =>
-                  setReviewStrategyKind(forked ? 'new-branch' : 'no-worktree')
-                }
-                forkLabels={reviewStrategyLabels}
-                baseBranchAriaLabel={t('home.baseBranchAria')}
-                forkAriaLabel={t('home.reviewStrategyAria')}
-              />
             )}
             <RunModeSelector
               mode={runMode}
@@ -2693,6 +2705,25 @@ interface TaskScopedProjectButtonProps {
 interface RunHostSelectorProps {
   kind: RunHostKind;
   onSelectKind?: (kind: RunHostKind) => void;
+}
+
+interface EnvironmentBranchConfiguration {
+  projectId: string;
+  strategyKind: TaskStrategyKind;
+  locked: boolean;
+  forkDisabled: boolean;
+  branchValue: Branch | undefined;
+  branchLabel: string;
+  branchRunsInPlace: boolean;
+  onBranchChange: (next: Branch) => void;
+  onForkChange: (forked: boolean) => void;
+  forkLabels: StrategyChipLabels;
+  baseBranchAriaLabel: string;
+  forkAriaLabel: string;
+}
+
+interface EnvironmentSelectorProps extends RunHostSelectorProps {
+  branchConfiguration?: EnvironmentBranchConfiguration;
 }
 
 interface RunModeOption {
@@ -3316,6 +3347,172 @@ function Chip({ icon: Icon, children }: ChipProps) {
   );
 }
 
+/**
+ * The host, starting branch, and branch-creation policy form one execution
+ * environment. Keep their current values visible in one compact label group;
+ * the dropdown retains the detailed controls without spending three toolbar slots.
+ */
+function EnvironmentSelector({
+  kind,
+  onSelectKind,
+  branchConfiguration,
+}: EnvironmentSelectorProps) {
+  const { t } = useTranslation();
+  const options: Array<{
+    kind: RunHostKind;
+    icon: ComponentType<{ className?: string }>;
+    label: string;
+  }> = [
+    { kind: 'local', icon: Monitor, label: t('home.runHostLocal') },
+    { kind: 'ssh', icon: Server, label: t('home.runHostSsh') },
+  ];
+  const current = options.find((option) => option.kind === kind) ?? options[0];
+  const CurrentIcon = current.icon;
+  const forking = branchConfiguration?.strategyKind === 'new-branch';
+  const branchStrategyLabel = forking
+    ? t('home.environmentNewBranch')
+    : t('home.environmentExistingBranch');
+  const summary = [
+    current.label,
+    branchConfiguration?.branchLabel,
+    branchConfiguration ? branchStrategyLabel : undefined,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(' · ');
+  const BranchIcon =
+    branchConfiguration && !forking && branchConfiguration.branchRunsInPlace ? Anchor : GitBranch;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            data-yoda-surface="home-composer-environment"
+            type="button"
+            aria-label={`${t('home.environmentAria')}：${summary}`}
+            title={summary}
+            className="flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2"
+          >
+            <CurrentIcon className="size-3.5 shrink-0 text-foreground-muted" />
+            {branchConfiguration ? (
+              <>
+                <span aria-hidden="true" className="text-foreground-passive">
+                  ·
+                </span>
+                <span className="min-w-0 max-w-32 truncate">{branchConfiguration.branchLabel}</span>
+                {forking ? (
+                  <>
+                    <span aria-hidden="true" className="text-foreground-passive">
+                      ·
+                    </span>
+                    <span className="shrink-0">{t('home.environmentNewBranchCompact')}</span>
+                  </>
+                ) : null}
+              </>
+            ) : null}
+            <ChevronDown className="size-3 shrink-0 text-foreground-muted" />
+          </button>
+        }
+      />
+      <DropdownMenuContent align="start" className="w-72 p-1.5">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t('home.environmentHostLabel')}</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={kind}
+            onValueChange={(nextKind) => {
+              if (nextKind === 'local' || nextKind === 'ssh') onSelectKind?.(nextKind);
+            }}
+          >
+            {options.map((option) => {
+              const Icon = option.icon;
+              return (
+                <DropdownMenuRadioItem
+                  key={option.kind}
+                  value={option.kind}
+                  disabled={!onSelectKind}
+                  className="gap-2 rounded-md px-2.5 py-2"
+                >
+                  <Icon className="size-4 shrink-0 text-foreground-muted" />
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                    {option.label}
+                  </span>
+                </DropdownMenuRadioItem>
+              );
+            })}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+        {branchConfiguration ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>{t('home.environmentBranchLabel')}</DropdownMenuLabel>
+              {branchConfiguration.locked ? (
+                <DropdownMenuItem disabled className="gap-2 rounded-md px-2.5 py-2">
+                  <BranchIcon className="size-4 shrink-0 text-foreground-muted" />
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                    {branchConfiguration.branchLabel}
+                  </span>
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger
+                    aria-label={branchConfiguration.baseBranchAriaLabel}
+                    className="gap-2 rounded-md px-2.5 py-2"
+                  >
+                    <BranchIcon className="size-4 shrink-0 text-foreground-muted" />
+                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                      {branchConfiguration.branchLabel}
+                    </span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-64 p-1.5">
+                    <ProjectBranchMenuItems
+                      projectId={branchConfiguration.projectId}
+                      value={branchConfiguration.branchValue}
+                      onValueChange={branchConfiguration.onBranchChange}
+                    />
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>{t('home.environmentBranchStrategyLabel')}</DropdownMenuLabel>
+              <DropdownMenuItem
+                closeOnClick={false}
+                disabled={branchConfiguration.forkDisabled}
+                onClick={() => branchConfiguration.onForkChange(!forking)}
+                className="items-start gap-2 rounded-md px-2.5 py-2"
+              >
+                <GitFork className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm text-foreground">
+                    {t('home.environmentNewBranch')}
+                  </span>
+                  <span className="mt-0.5 block whitespace-normal text-[11px] leading-snug text-foreground-passive">
+                    {forking
+                      ? branchConfiguration.forkLabels.newBranchDesc
+                      : branchConfiguration.forkLabels.noWorktreeDesc}
+                  </span>
+                </span>
+                <Switch
+                  size="sm"
+                  checked={forking}
+                  disabled={branchConfiguration.forkDisabled}
+                  aria-label={branchConfiguration.forkAriaLabel}
+                  onCheckedChange={branchConfiguration.onForkChange}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => event.stopPropagation()}
+                  className="mt-0.5"
+                />
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function RunHostSelector({ kind, onSelectKind }: RunHostSelectorProps) {
   const { t } = useTranslation();
   const options: Array<{
@@ -3365,67 +3562,6 @@ function RunHostSelector({ kind, onSelectKind }: RunHostSelectorProps) {
         })}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-interface BranchStrategyChipsProps {
-  projectId: string;
-  /** Effective strategy: `new-branch` forks, anything else runs on the picked branch. */
-  strategyKind: TaskStrategyKind;
-  /** Parent-task subtasks lock the base to the parent branch. */
-  locked: boolean;
-  /** Unborn repos can't fork — disable the switch. */
-  forkDisabled: boolean;
-  /** User-selected starting branch; the fork switch does not rewrite it. */
-  branchValue: Branch | undefined;
-  branchLabel: string;
-  /** True when not-forking can run directly in the current checkout. */
-  branchRunsInPlace: boolean;
-  onBranchChange: (next: Branch) => void;
-  onForkChange: (forked: boolean) => void;
-  forkLabels: StrategyChipLabels;
-  baseBranchAriaLabel: string;
-  forkAriaLabel: string;
-}
-
-/**
- * The branch picker and fork switch are orthogonal axes of one decision: start
- * from this branch, then either work on it directly or create a new branch.
- */
-function BranchStrategyChips({
-  projectId,
-  strategyKind,
-  locked,
-  forkDisabled,
-  branchValue,
-  branchLabel,
-  branchRunsInPlace,
-  onBranchChange,
-  onForkChange,
-  forkLabels,
-  baseBranchAriaLabel,
-  forkAriaLabel,
-}: BranchStrategyChipsProps) {
-  const forking = strategyKind === 'new-branch';
-  return (
-    <>
-      <BaseBranchChip
-        projectId={projectId}
-        locked={locked}
-        value={branchValue}
-        label={branchLabel}
-        inPlace={!forking && branchRunsInPlace}
-        onChange={onBranchChange}
-        ariaLabel={baseBranchAriaLabel}
-      />
-      <ForkSwitchChip
-        checked={forking}
-        disabled={forkDisabled}
-        onChange={onForkChange}
-        ariaLabel={forkAriaLabel}
-        labels={forkLabels}
-      />
-    </>
   );
 }
 
@@ -3497,35 +3633,22 @@ function ForkSwitchChip({ checked, disabled, onChange, ariaLabel, labels }: Fork
     <Tooltip>
       <TooltipTrigger
         render={
-          <button
-            type="button"
-            role="switch"
-            aria-checked={checked}
-            aria-label={ariaLabel}
-            disabled={disabled}
-            onClick={() => onChange(!checked)}
-            className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 disabled:pointer-events-none disabled:opacity-50"
+          <div
+            className={cn(
+              'flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground',
+              disabled && 'opacity-50'
+            )}
           >
             <GitFork className="size-3.5 text-foreground-muted" />
             <span>{t('home.forkChipLabel')}</span>
-            {/* Visual-only mini switch (the chip button carries the switch role);
-                mirrors the sm Switch in @renderer/lib/ui/switch. */}
-            <span
-              className={cn(
-                'relative inline-flex h-[14px] w-[24px] shrink-0 items-center rounded-full border border-border-1 transition-colors',
-                checked ? 'bg-background-neutral' : 'bg-background'
-              )}
-            >
-              <span
-                className={cn(
-                  'pointer-events-none block size-3 rounded-full transition-transform',
-                  checked
-                    ? 'translate-x-[calc(100%-2px)] bg-background-3'
-                    : 'translate-x-0 bg-background-neutral/50'
-                )}
-              />
-            </span>
-          </button>
+            <Switch
+              size="sm"
+              checked={checked}
+              disabled={disabled}
+              aria-label={ariaLabel}
+              onCheckedChange={onChange}
+            />
+          </div>
         }
       />
       <TooltipContent align="start" className="max-w-72">
