@@ -48,7 +48,7 @@ final class ShareViewController: UIViewController {
         ]],
         options: [.expirationDate: Date(timeIntervalSinceNow: 300)]
       )
-      self.openHostApp(kind: "image", token: token, name: self.imageName(for: provider))
+      self.finishRequest()
     }
   }
 
@@ -66,42 +66,13 @@ final class ShareViewController: UIViewController {
         [[UTType.plainText.identifier: "\(marker)\n\(text)"]],
         options: [.expirationDate: Date(timeIntervalSinceNow: 300)]
       )
-      self.openHostApp(kind: "text", token: token, name: "共享文本.txt")
+      self.finishRequest()
     }
   }
 
-  private func imageName(for provider: NSItemProvider) -> String {
-    let suggestedName = provider.suggestedName?.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let suggestedName, !suggestedName.isEmpty else { return "截图.png" }
-    return suggestedName
-  }
-
-  private func openHostApp(kind: String, token: String, name: String) {
-    var components = URLComponents()
-    components.scheme = "yodamobile"
-    components.host = "share"
-    components.queryItems = [
-      URLQueryItem(name: "source", value: "share-extension"),
-      URLQueryItem(name: "kind", value: kind),
-      URLQueryItem(name: "token", value: token),
-      URLQueryItem(name: "name", value: name),
-    ]
-
-    guard let url = components.url else {
-      showError("分享链接生成失败，请重试。")
-      return
-    }
-
+  private func finishRequest() {
     DispatchQueue.main.async { [weak self] in
-      self?.extensionContext?.open(url) { [weak self] opened in
-        DispatchQueue.main.async {
-          if opened {
-            self?.extensionContext?.completeRequest(returningItems: nil)
-          } else {
-            self?.showError("Yoda Mobile 尚未打开，请先启动一次主 App 后重试。")
-          }
-        }
-      }
+      self?.extensionContext?.completeRequest(returningItems: nil)
     }
   }
 

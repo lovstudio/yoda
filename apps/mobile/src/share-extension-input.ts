@@ -1,15 +1,32 @@
 import * as Clipboard from 'expo-clipboard';
-import type { MobileExternalFile } from './external-file-input';
+import {
+  MOBILE_SHARE_MARKER_PREFIX,
+  parseMobileShareExtensionClipboard,
+  type MobileExternalFile,
+} from './external-file-input';
 import { importMobileInputImage } from './input-media';
 import type { MobileImageDraft } from './input-upload';
-
-const MOBILE_SHARE_MARKER_PREFIX = 'YODA_MOBILE_SHARE|';
 
 function expectedMarker(file: MobileExternalFile): string {
   if (file.source !== 'share-extension' || !file.shareToken) {
     throw new Error('共享内容标记已失效，请从系统分享面板重新发送。');
   }
   return `${MOBILE_SHARE_MARKER_PREFIX}${file.shareToken}|${file.kind}`;
+}
+
+/** Find Share Extension data when iOS returns to the app without opening its UI. */
+export async function readPendingMobileShareExtension(): Promise<MobileExternalFile | null> {
+  return parseMobileShareExtensionClipboard(await Clipboard.getStringAsync());
+}
+
+/** Remove the temporary marker after the app has imported the shared content. */
+export async function clearMobileShareExtensionInput(): Promise<void> {
+  try {
+    const value = await Clipboard.getStringAsync();
+    if (parseMobileShareExtensionClipboard(value)) await Clipboard.setStringAsync('');
+  } catch {
+    // Clipboard access can be unavailable while iOS is finishing the extension handoff.
+  }
 }
 
 async function readShareMarker(file: MobileExternalFile): Promise<string> {

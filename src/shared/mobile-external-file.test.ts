@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { parseMobileExternalFileUrl } from '../../apps/mobile/src/external-file-input';
+import {
+  parseMobileExternalFileUrl,
+  parseMobileShareExtensionClipboard,
+} from '../../apps/mobile/src/external-file-input';
 
 describe('mobile external file input', () => {
   it('recognizes an iOS image Open In URL and decodes its display name', () => {
@@ -31,6 +34,18 @@ describe('mobile external file input', () => {
       source: 'share-extension',
       uri: 'yodamobile://share?source=share-extension&kind=image&token=share-token&name=Screenshot.png',
     });
+  });
+
+  it('recovers a Share Extension handoff from the clipboard after returning manually', () => {
+    expect(parseMobileShareExtensionClipboard('YODA_MOBILE_SHARE|share-token|image')).toMatchObject(
+      {
+        kind: 'image',
+        name: '共享图片.png',
+        shareToken: 'share-token',
+        source: 'share-extension',
+      }
+    );
+    expect(parseMobileShareExtensionClipboard('YODA_MOBILE_SHARE|share-token|pdf')).toBeNull();
   });
 
   it('keeps unsupported local files visible for a user-facing error', () => {

@@ -134,8 +134,10 @@ import {
 } from './session-display-preferences';
 import { subscribeSessionEvents } from './session-event-stream';
 import {
+  clearMobileShareExtensionInput,
   readMobileShareExtensionImage,
   readMobileShareExtensionText,
+  readPendingMobileShareExtension,
 } from './share-extension-input';
 import { resolveMobileTaskEntry } from './task-navigation';
 import { startMobileVoiceInput, type MobileVoiceInputSession } from './voice-input';
@@ -681,6 +683,7 @@ export function App() {
     useState<MobileInputUploadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const openTaskRequestRef = useRef(0);
+  const shareExtensionProbeRef = useRef(false);
 
   const applyPairingUrl = useCallback(async (url: string | null) => {
     if (!url) return false;
@@ -796,6 +799,27 @@ export function App() {
     return () => subscription.remove();
   }, [handleIncomingUrl]);
 
+  const probePendingShareExtension = useCallback(async () => {
+    if (shareExtensionProbeRef.current) return;
+    shareExtensionProbeRef.current = true;
+    try {
+      const file = await readPendingMobileShareExtension();
+      if (file) setPendingExternalFile((current) => current ?? file);
+    } catch {
+      // The pasteboard may be temporarily unavailable while the extension closes.
+    } finally {
+      shareExtensionProbeRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') void probePendingShareExtension();
+    });
+    if (AppState.currentState === 'active') void probePendingShareExtension();
+    return () => subscription.remove();
+  }, [probePendingShareExtension]);
+
   useEffect(() => {
     if (!connection || !pendingExternalFile) return;
     const file = pendingExternalFile;
@@ -822,6 +846,10 @@ export function App() {
           );
         } else {
           throw new Error('当前支持图片和文本文件，PDF 等格式暂未接入编辑流程。');
+        }
+
+        if (resolvedFile.source === 'share-extension') {
+          await clearMobileShareExtensionInput();
         }
 
         setDemandProjectId(null);

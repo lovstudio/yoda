@@ -8,6 +8,8 @@ export type MobileExternalFile = {
   shareToken?: string;
 };
 
+export const MOBILE_SHARE_MARKER_PREFIX = 'YODA_MOBILE_SHARE|';
+
 const IMAGE_EXTENSIONS = new Set([
   'avif',
   'bmp',
@@ -106,4 +108,31 @@ export function parseMobileExternalFileUrl(rawUrl: string): MobileExternalFile |
       : 'unsupported';
 
   return { kind, name, uri: rawUrl };
+}
+
+/** Recover a pending Share Extension handoff after the user returns to the app manually. */
+export function parseMobileShareExtensionClipboard(value: string): MobileExternalFile | null {
+  const marker = value.split(/\r?\n/, 1)[0] ?? '';
+  if (!marker.startsWith(MOBILE_SHARE_MARKER_PREFIX)) return null;
+  const match = /^([A-Za-z0-9-]{1,128})\|(image|text)$/.exec(
+    marker.slice(MOBILE_SHARE_MARKER_PREFIX.length)
+  );
+  if (!match) return null;
+
+  const token = match[1];
+  const kind = match[2] as 'image' | 'text';
+  const name = kind === 'image' ? '共享图片.png' : '共享文本.txt';
+  const query = new URLSearchParams({
+    source: 'share-extension',
+    kind,
+    token,
+    name,
+  });
+  return {
+    kind,
+    name,
+    shareToken: token,
+    source: 'share-extension',
+    uri: `yodamobile://share?${query.toString()}`,
+  };
 }
