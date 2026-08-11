@@ -213,6 +213,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         // The sidebar icon archives immediately. The overflow menu
         // retains the optional-note and pre-archive-command flows.
         menuActions.onArchiveQuick();
+        navigate('home');
       }}
     >
       <Archive className="h-4 w-4" />

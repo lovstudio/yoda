@@ -7,6 +7,7 @@ import { userEvent } from 'vitest/browser';
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   toggleTaskCollapsed: vi.fn(),
+  archiveQuick: vi.fn(),
   getTaskDeliverySummaries: vi.fn(),
   preloadTask: vi.fn(),
   provisionTask: vi.fn(),
@@ -66,7 +67,7 @@ vi.mock('@renderer/lib/ui/markdown-renderer', () => ({
 vi.mock('@renderer/features/tasks/components/use-task-menu-actions', () => ({
   useTaskMenuActions: () => ({
     onRename: vi.fn(),
-    onArchiveQuick: vi.fn(),
+    onArchiveQuick: mocks.archiveQuick,
   }),
 }));
 
@@ -138,6 +139,7 @@ describe('SidebarTaskItem long-term marker', () => {
   beforeEach(() => {
     mocks.navigate.mockClear();
     mocks.toggleTaskCollapsed.mockClear();
+    mocks.archiveQuick.mockClear();
     mocks.getTaskDeliverySummaries.mockReset();
     mocks.getTaskDeliverySummaries.mockResolvedValue([]);
     mocks.preloadTask.mockReset();
@@ -240,6 +242,35 @@ describe('SidebarTaskItem long-term marker', () => {
     });
 
     expect(mocks.provisionTask).toHaveBeenCalledWith('task-1');
+  });
+
+  it('returns to home after quick-archiving from the sidebar', async () => {
+    const { SidebarTaskItem } = await import('@renderer/features/sidebar/task-item');
+
+    await act(async () => {
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SidebarTaskItem, {
+            projectId: 'project-1',
+            taskId: 'task-1',
+          })
+        )
+      );
+    });
+
+    const archiveButton = host.querySelector<HTMLButtonElement>(
+      '[aria-label="sidebar.archiveTask"]'
+    );
+    expect(archiveButton).not.toBeNull();
+
+    await act(async () => {
+      archiveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    });
+
+    expect(mocks.archiveQuick).toHaveBeenCalledOnce();
+    expect(mocks.navigate).toHaveBeenCalledWith('home');
   });
 
   it('opens the preview only after hovering the archive action', async () => {
