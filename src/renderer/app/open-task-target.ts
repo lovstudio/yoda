@@ -255,12 +255,24 @@ export async function openProvisionedTaskTab(
       provisioned.taskView.setFocusedRegion('main');
       return true;
     case 'conversation': {
+      const { tabManager } = provisioned.taskView;
+      const hadTab = tabManager.hasConversationTab(tabTarget.conversationId);
+      // Select the target before hydration. The panel can now render its stable
+      // opening surface immediately instead of showing the previous renderer
+      // while ensureConversation performs its RPC work.
+      tabManager.openConversation(tabTarget.conversationId);
       const found = await provisioned.conversations.ensureConversation(tabTarget.conversationId);
-      if (!shouldApply()) return true;
+      if (!shouldApply()) {
+        if (!hadTab) tabManager.closeConversation(tabTarget.conversationId);
+        return true;
+      }
       if (!found) {
+        // The entry above is only provisional until the active snapshot proves
+        // that the conversation exists. Remove it before opening an archived
+        // transcript or closing a dangling target.
+        tabManager.closeConversation(tabTarget.conversationId);
         return openArchivedConversationFallback(provisioned, tabTarget.conversationId, shouldApply);
       }
-      provisioned.taskView.tabManager.openConversation(tabTarget.conversationId);
       provisioned.taskView.setFocusedRegion('main');
       return true;
     }

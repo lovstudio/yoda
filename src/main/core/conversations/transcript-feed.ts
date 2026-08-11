@@ -1,5 +1,5 @@
 import { watch, type FSWatcher } from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import { eq } from 'drizzle-orm';
 import { conversationTranscriptChangedChannel } from '@shared/events/conversationEvents';
 import {
@@ -11,12 +11,12 @@ import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
-import { iterateLines } from '@main/utils/text-lines';
 import { resolveTask } from '../projects/utils';
 import { findClaudeTranscriptPathBySessionId } from './claude-transcript-locator';
 import { getReservedCodexThreadIds } from './codex-thread-reservations';
 import { getConversationRuntimeStateRoot } from './conversation-session-source';
-import { getCodexSessionContext } from './getCodexSessionContext';
+import { getCodexSessionRolloutPath } from './getCodexSessionContext';
+import { readIncrementalTranscriptTail } from './incremental-transcript-tail-reader';
 import { mapConversationRowToConversation } from './utils';
 
 /**
@@ -30,15 +30,12 @@ import { mapConversationRowToConversation } from './utils';
 const DEBOUNCE_MS = 250;
 const READY_POLL_INTERVAL_MS = 1_000;
 const READY_POLL_MAX_INTERVAL_MS = 10_000;
-/** The sidebar panel tails this many lines; the file tab shows the rest. */
-const MAX_TAIL_LINES = 500;
-
 export interface ConversationTranscript {
   /** Absolute path of the JSONL file, for opening in the file viewer. */
   filePath: string | null;
   /** Total JSONL lines in the file (non-empty). */
   totalLines: number;
-  /** The last {@link MAX_TAIL_LINES} raw JSONL lines, in file order. */
+  /** The last 500 raw JSONL lines, in file order. */
   lines: string[];
 }
 
@@ -54,25 +51,17 @@ export async function getConversationTranscript(
   taskId: string,
   conversationId: string
 ): Promise<ConversationTranscript> {
-  const filePath = await resolveTranscriptPath(projectId, taskId, conversationId);
+  const watchEntry = watches.get(transcriptWatchKey(projectId, taskId, conversationId));
+  const filePath =
+    watchEntry?.filePath ?? (await resolveTranscriptPath(projectId, taskId, conversationId));
   if (!filePath) return EMPTY_TRANSCRIPT;
 
-  let raw: string;
   try {
-    raw = await readFile(filePath, 'utf8');
+    const transcript = await readIncrementalTranscriptTail(filePath);
+    return { filePath, ...transcript };
   } catch {
     return { ...EMPTY_TRANSCRIPT, filePath };
   }
-
-  let totalLines = 0;
-  const tail: string[] = [];
-  for (const line of iterateLines(raw)) {
-    if (!line.trim()) continue;
-    totalLines += 1;
-    tail.push(line);
-    if (tail.length > MAX_TAIL_LINES) tail.shift();
-  }
-  return { filePath, totalLines, lines: tail };
 }
 
 // ── Live watch (ref-counted per conversation) ────────────────────────────────
@@ -80,6 +69,8 @@ export async function getConversationTranscript(
 class TranscriptWatch {
   refs = 0;
   readonly listeners = new Set<TranscriptChangeListener>();
+  filePath: string | null = null;
+  private readonly initialAttempt: Promise<void>;
   private watcher: FSWatcher | undefined;
   private readyTimer: NodeJS.Timeout | undefined;
   private debounceTimer: NodeJS.Timeout | undefined;
@@ -91,7 +82,11 @@ class TranscriptWatch {
     private readonly taskId: string,
     private readonly conversationId: string
   ) {
-    this.waitForTranscript();
+    this.initialAttempt = this.waitForTranscript();
+  }
+
+  waitUntilInitialAttempt(): Promise<void> {
+    return this.initialAttempt;
   }
 
   stop(): void {
@@ -102,22 +97,26 @@ class TranscriptWatch {
       this.watcher?.close();
     } catch {}
     this.watcher = undefined;
+    this.filePath = null;
     this.listeners.clear();
   }
 
-  private waitForTranscript(): void {
+  private async waitForTranscript(): Promise<void> {
     if (this.stopped) return;
-    resolveTranscriptPath(this.projectId, this.taskId, this.conversationId)
-      .then(async (filePath) => {
-        if (!filePath) throw new Error('Transcript path is not ready.');
-        await stat(filePath);
-        if (this.stopped) return;
-        this.attach(filePath);
-      })
-      .catch(() => {
-        if (this.stopped) return;
-        this.scheduleReadyRetry();
-      });
+    try {
+      const filePath = await resolveTranscriptPath(
+        this.projectId,
+        this.taskId,
+        this.conversationId
+      );
+      if (!filePath) throw new Error('Transcript path is not ready.');
+      await stat(filePath);
+      if (this.stopped) return;
+      this.attach(filePath);
+    } catch {
+      if (this.stopped) return;
+      this.scheduleReadyRetry();
+    }
   }
 
   private attach(filePath: string): void {
@@ -128,6 +127,7 @@ class TranscriptWatch {
         if (eventType === 'rename') this.restart(watcher);
       });
       this.watcher = watcher;
+      this.filePath = filePath;
       this.readyPollInterval = READY_POLL_INTERVAL_MS;
       watcher.on('error', (error) => {
         log.warn('TranscriptFeed: watcher failed; retrying', {
@@ -154,6 +154,7 @@ class TranscriptWatch {
       watcher.close();
     } catch {}
     this.watcher = undefined;
+    this.filePath = null;
     this.readyPollInterval = READY_POLL_INTERVAL_MS;
     this.scheduleReadyRetry();
   }
@@ -162,7 +163,7 @@ class TranscriptWatch {
     if (this.stopped || this.readyTimer) return;
     this.readyTimer = setTimeout(() => {
       this.readyTimer = undefined;
-      this.waitForTranscript();
+      void this.waitForTranscript();
     }, this.readyPollInterval);
     this.readyPollInterval = Math.min(READY_POLL_MAX_INTERVAL_MS, this.readyPollInterval * 2);
     this.readyTimer.unref?.();
@@ -232,12 +233,14 @@ async function acquireConversationTranscript(
   if (existing) {
     existing.refs += 1;
     if (listener) existing.listeners.add(listener);
+    await existing.waitUntilInitialAttempt();
     return existing;
   }
   const watchEntry = new TranscriptWatch(projectId, taskId, conversationId);
   watchEntry.refs = 1;
   if (listener) watchEntry.listeners.add(listener);
   watches.set(key, watchEntry);
+  await watchEntry.waitUntilInitialAttempt();
   return watchEntry;
 }
 
@@ -286,7 +289,7 @@ async function resolveTranscriptPath(
     const providerConfig = await runtimeOverrideSettings.getItem('codex');
     const stateRoot = getConversationRuntimeStateRoot(conversation, providerConfig);
     const reservedThreadIds = await getReservedCodexThreadIds(conversation.id);
-    const context = await getCodexSessionContext(
+    return await getCodexSessionRolloutPath(
       cwd,
       conversation.sessionSource?.sessionId ?? conversation.id,
       conversation.title,
@@ -296,7 +299,6 @@ async function resolveTranscriptPath(
         reservedThreadIds,
       }
     ).catch(() => null);
-    return context?.rolloutPath ?? null;
   }
   return null;
 }

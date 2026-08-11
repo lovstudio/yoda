@@ -38,6 +38,7 @@ type ToastOptions = {
   description?: string;
   action?: ToastActionOption;
   cancel?: ToastActionOption;
+  persistNotification?: boolean;
 };
 
 describe('toast', () => {
@@ -89,6 +90,22 @@ describe('toast', () => {
     workspaceNotificationStore.invokeAction(notification.id, undefined);
     expect(undo).toHaveBeenCalledTimes(1);
     expect(workspaceNotificationStore.getAction(notification.id)).toBeUndefined();
+    expect(workspaceNotificationStore.getSnapshot()).toEqual([]);
+  });
+
+  it('keeps transient archive undo toasts out of the notification queue', () => {
+    const undo = vi.fn();
+
+    toast.success('Task archived', {
+      duration: 6_000,
+      persistNotification: false,
+      action: { label: 'Undo', onClick: undo },
+    });
+
+    expect(mocks.sonnerToast.success).toHaveBeenCalledTimes(1);
+    const options = mocks.sonnerToast.success.mock.calls[0][1] as ToastOptions;
+    expect(options.action?.label).toBe('Undo');
+    expect(options.persistNotification).toBeUndefined();
     expect(workspaceNotificationStore.getSnapshot()).toEqual([]);
   });
 

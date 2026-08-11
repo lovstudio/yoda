@@ -85,6 +85,8 @@ function createProvisionedTask(ensureConversationResult: boolean): ProvisionedTa
       setSidebarCollapsed: vi.fn(),
       setSidebarTab: vi.fn(),
       tabManager: {
+        closeConversation: vi.fn(),
+        hasConversationTab: vi.fn().mockReturnValue(false),
         openConversation: vi.fn(),
         openDiff: vi.fn(),
         openFile: vi.fn(),
@@ -124,7 +126,7 @@ describe('openProvisionedTaskTab', () => {
     expect(mocks.showModal).not.toHaveBeenCalled();
   });
 
-  it('does not activate a conversation after an async replay is superseded', async () => {
+  it('activates the conversation shell before an async replay completes', async () => {
     let finishEnsure!: (found: boolean) => void;
     const provisioned = createProvisionedTask(true);
     vi.mocked(provisioned.conversations.ensureConversation).mockReturnValue(
@@ -139,11 +141,14 @@ describe('openProvisionedTaskTab', () => {
       { kind: 'conversation', conversationId: 'conversation-1' },
       { shouldApply: () => current }
     );
+    expect(provisioned.taskView.tabManager.openConversation).toHaveBeenCalledWith('conversation-1');
     current = false;
     finishEnsure(true);
 
     await expect(opened).resolves.toBe(true);
-    expect(provisioned.taskView.tabManager.openConversation).not.toHaveBeenCalled();
+    expect(provisioned.taskView.tabManager.closeConversation).toHaveBeenCalledWith(
+      'conversation-1'
+    );
     expect(provisioned.taskView.setFocusedRegion).not.toHaveBeenCalled();
   });
 
@@ -158,7 +163,10 @@ describe('openProvisionedTaskTab', () => {
 
     expect(opened).toBe(true);
     expect(mocks.getArchivedConversationsForTask).toHaveBeenCalledWith('project-1', 'task-1');
-    expect(provisioned.taskView.tabManager.openConversation).not.toHaveBeenCalled();
+    expect(provisioned.taskView.tabManager.openConversation).toHaveBeenCalledWith('conversation-1');
+    expect(provisioned.taskView.tabManager.closeConversation).toHaveBeenCalledWith(
+      'conversation-1'
+    );
     expect(provisioned.taskView.setSidebarCollapsed).toHaveBeenCalledWith(false);
     expect(provisioned.taskView.setSidebarTab).toHaveBeenCalledWith('conversations');
     expect(provisioned.taskView.setFocusedRegion).toHaveBeenCalledWith('main');

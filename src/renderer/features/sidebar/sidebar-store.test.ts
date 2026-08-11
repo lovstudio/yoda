@@ -245,6 +245,24 @@ describe('SidebarStore task recency ordering', () => {
 
     expect(store.orderedProjects).toEqual([]);
   });
+
+  it('keeps an expanded project connected to tasks loaded after the project row', () => {
+    const project = makeProject('project-1', [], 'loading');
+    const store = makeSidebarStore([project]);
+
+    store.toggleProjectExpanded('project-1');
+    expect(taskIds(store.sidebarRows)).toEqual([]);
+
+    runInAction(() => {
+      project.mountedProject?.taskManager.tasks.set(
+        'loaded-task',
+        makeTask('loaded-task', { createdAt: '2026-06-02T10:00:00.000Z' })
+      );
+    });
+
+    expect(store.expandedProjectIds.has('project-1')).toBe(true);
+    expect(taskIds(store.sidebarRows)).toEqual(['loaded-task']);
+  });
 });
 
 describe('SidebarStore subtask tree rows', () => {

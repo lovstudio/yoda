@@ -159,6 +159,19 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     [t]
   );
 
+  const saveExecutedQuickAction = useCallback(
+    async (action: QuickAction) => {
+      try {
+        if (!(await saveProjectQuickAction(projectId, action))) {
+          toast.error(t('sidebar.captureAutomation.executedButSaveFailed'));
+        }
+      } catch {
+        toast.error(t('sidebar.captureAutomation.executedButSaveFailed'));
+      }
+    },
+    [projectId, t]
+  );
+
   const handleNaturalLanguage = () => {
     if (submitting) return;
     if (!serializedIntent) {
@@ -197,6 +210,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
       },
     });
     void execution
+      .then(() => saveExecutedQuickAction(action))
       .catch((submitError) => {
         if (enteredTask) showAsyncFailure(submitError);
         else
@@ -229,20 +243,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     };
     const execution = runProjectQuickAction({ project, action, runtimeId });
     onSuccess();
-    void execution.then(
-      async () => {
-        try {
-          if (!(await saveProjectQuickAction(projectId, action))) {
-            toast.error(t('sidebar.captureAutomation.executedButSaveFailed'));
-          }
-        } catch {
-          toast.error(t('sidebar.captureAutomation.executedButSaveFailed'));
-        }
-      },
-      (submitError) => {
-        showAsyncFailure(submitError);
-      }
-    );
+    void execution.then(() => saveExecutedQuickAction(action), showAsyncFailure);
   };
 
   const primaryDisabled =

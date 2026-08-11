@@ -22,6 +22,8 @@ const mocks = vi.hoisted(() => ({
   getRuntimeInferenceCredentials: vi.fn(),
   injectTuiStartupInput: vi.fn(),
   ensureCodexResumeProviderCompatible: vi.fn(),
+  killTmuxSession: vi.fn(),
+  repairCodexThreadHistoryProjection: vi.fn(),
   migrateLegacyCodexMaasHistory: vi.fn(),
   logDebug: vi.fn(),
   logError: vi.fn(),
@@ -128,6 +130,10 @@ vi.mock('@main/core/conversations/codex-run-state-source', () => ({
   watchCodexRunState: mocks.watchCodexRunState,
 }));
 
+vi.mock('@main/core/conversations/codex-history-projection-repair', () => ({
+  repairCodexThreadHistoryProjection: mocks.repairCodexThreadHistoryProjection,
+}));
+
 // Pulls in the DB client transitively; unit tests have no Electron app.
 vi.mock('@main/core/conversations/session-stats-hooks', () => ({
   recordConversationAuthProvider: vi.fn(),
@@ -178,7 +184,7 @@ vi.mock('@main/core/pty/tmux-availability', () => ({
 }));
 
 vi.mock('@main/core/pty/tmux-session-name', () => ({
-  killTmuxSession: vi.fn(),
+  killTmuxSession: mocks.killTmuxSession,
   makeTmuxSessionName: (sessionId: string) => `tmux-${sessionId}`,
   sendLiteralToTmuxSession: mocks.sendLiteralToTmuxSession,
 }));
@@ -317,10 +323,15 @@ describe('LocalConversationProvider', () => {
     mocks.getHookPort.mockReturnValue(0);
     mocks.getHookToken.mockReturnValue('token');
     mocks.injectTuiStartupInput.mockResolvedValue(true);
+    mocks.killTmuxSession.mockResolvedValue(undefined);
     mocks.aiLogFinish.mockResolvedValue(undefined);
     mocks.aiLogStart.mockResolvedValue('ai-log-id');
     mocks.buildAgentEnv.mockReturnValue({});
     mocks.ensureCodexResumeProviderCompatible.mockReturnValue({ status: 'unchanged' });
+    mocks.repairCodexThreadHistoryProjection.mockReturnValue({
+      status: 'unchanged',
+      reason: 'checkpoint-current',
+    });
     mocks.migrateLegacyCodexMaasHistory.mockReturnValue({ rows: 0, files: 0 });
     mocks.getProviderConfig.mockResolvedValue({
       cli: 'claude',
@@ -372,6 +383,8 @@ describe('LocalConversationProvider', () => {
 
   afterEach(() => {
     ptySessionRegistry.unregister(sessionId);
+    ptySessionRegistry.unsubscribe(sessionId, 'final-output-consumer');
+    ptySessionRegistry.unsubscribe(sessionId, 'immediate-output-consumer');
     vi.useRealTimers();
   });
 
@@ -506,6 +519,8 @@ describe('LocalConversationProvider', () => {
   it('lets the registry flush final output and emit exit after provider cleanup', async () => {
     const provider = createProvider();
     await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+    const consumerId = 'final-output-consumer';
+    ptySessionRegistry.subscribe(sessionId, consumerId);
 
     spawned[0].pty.emitData('final output');
     spawned[0].pty.emitExit({ exitCode: 7 });
@@ -526,6 +541,7 @@ describe('LocalConversationProvider', () => {
       eventNames.indexOf(agentSessionExitedChannel)
     );
     expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
   });
 
   it('registers the PTY before immediate post-spawn output and exit can run', async () => {
@@ -539,6 +555,8 @@ describe('LocalConversationProvider', () => {
       return pty;
     });
     const provider = createProvider();
+    const consumerId = 'immediate-output-consumer';
+    ptySessionRegistry.subscribe(sessionId, consumerId);
 
     await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
 
@@ -553,6 +571,7 @@ describe('LocalConversationProvider', () => {
       sessionId
     );
     expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
   });
 
   it('uses provider resume arguments when explicitly resumed after exit', async () => {
@@ -747,6 +766,10 @@ describe('LocalConversationProvider', () => {
       ctx: expect.anything(),
       statePath: '/state/codex-account-a/state_5.sqlite',
     });
+    expect(mocks.repairCodexThreadHistoryProjection).toHaveBeenCalledWith({
+      statePath: '/state/codex-account-a/state_5.sqlite',
+      threadId: 'native-thread-1',
+    });
     expect(mocks.buildAgentEnv).toHaveBeenCalledWith(
       expect.objectContaining({
         providerVars: { CODEX_HOME: '/state/codex-account-a' },
@@ -927,6 +950,32 @@ describe('LocalConversationProvider', () => {
         }),
       })
     );
+  });
+
+  it('restarts a surviving tmux process after repairing its Codex history projection', async () => {
+    mocks.getProviderConfig.mockResolvedValue({
+      cli: 'codex',
+      resumeFlag: 'resume',
+      resumeSessionIdArg: true,
+      initialPromptFlag: '',
+    });
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    mocks.repairCodexThreadHistoryProjection.mockReturnValue({
+      status: 'repaired',
+      byteOffset: 11_193_113,
+      fromOrdinal: 1_305,
+      toOrdinal: 1_304,
+    });
+    const provider = createProvider();
+
+    await provider.startSession(
+      { ...conversation, runtimeId: 'codex' },
+      { cols: 80, rows: 24 },
+      true
+    );
+
+    expect(mocks.killTmuxSession).toHaveBeenCalledWith(expect.anything(), 'tmux-session');
+    expect(mocks.spawnLocalPty).toHaveBeenCalledOnce();
   });
 
   it('reports active and detachable agent session counts', async () => {

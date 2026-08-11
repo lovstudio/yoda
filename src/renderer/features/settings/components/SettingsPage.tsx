@@ -231,6 +231,9 @@ export function SettingsPage({
         },
         {
           id: 'notifications',
+          title: t('settings.notifications.title'),
+          description: t('settings.notifications.description'),
+          surface: 'plain',
           component: <NotificationSettingsCard />,
         },
         {

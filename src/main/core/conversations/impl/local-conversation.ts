@@ -28,6 +28,7 @@ import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-r
 import { createClaudeInterruptSniffer } from '@main/core/conversations/claude-interrupt-sniffer';
 import { watchClaudeRunState } from '@main/core/conversations/claude-run-state-source';
 import { watchClaudeSessionActivity } from '@main/core/conversations/claude-session-activity-source';
+import { repairCodexThreadHistoryProjection } from '@main/core/conversations/codex-history-projection-repair';
 import { watchCodexRunState } from '@main/core/conversations/codex-run-state-source';
 import { runtimeStatusMonitorRegistry } from '@main/core/conversations/runtime-status-monitor-registry';
 import type {
@@ -92,6 +93,7 @@ export class LocalConversationProvider implements ConversationProvider {
   private knownSessionIds = new Set<string>();
   private readonly pendingStarts = new Map<string, { token: symbol; completion: Promise<void> }>();
   private readonly projectId: string;
+  private readonly sidebarWorkspaceId?: string | null;
   readonly taskPath: string;
   private readonly taskId: string;
   private readonly tmux: boolean;
@@ -111,6 +113,7 @@ export class LocalConversationProvider implements ConversationProvider {
 
   constructor({
     projectId,
+    sidebarWorkspaceId,
     taskPath,
     taskId,
     tmux = false,
@@ -120,6 +123,7 @@ export class LocalConversationProvider implements ConversationProvider {
     resolveProjectPromptPrinciples,
   }: {
     projectId: string;
+    sidebarWorkspaceId?: string | null;
     taskPath: string;
     taskId: string;
     tmux?: boolean;
@@ -129,6 +133,7 @@ export class LocalConversationProvider implements ConversationProvider {
     resolveProjectPromptPrinciples?: () => Promise<ProjectPromptPrinciples | undefined>;
   }) {
     this.projectId = projectId;
+    this.sidebarWorkspaceId = sidebarWorkspaceId;
     this.taskPath = taskPath;
     this.taskId = taskId;
     this.tmux = tmux;
@@ -304,6 +309,7 @@ export class LocalConversationProvider implements ConversationProvider {
         ? (codexThreadId ??
           resolveAgentResumeSessionId(conversation, this.taskPath, { reservedThreadIds }))
         : conversation.id;
+      let restartTmuxAfterHistoryRepair = false;
       if (effectiveIsResuming && conversation.runtimeId === 'codex') {
         const compatibility = ensureCodexResumeProviderCompatibleForConfig(
           agentSessionId,
@@ -321,6 +327,27 @@ export class LocalConversationProvider implements ConversationProvider {
             conversationId: conversation.id,
             threadId: agentSessionId,
             ...compatibility,
+          });
+        }
+
+        const projectionRepair = repairCodexThreadHistoryProjection({
+          statePath: resolveCodexStatePath(
+            resolveRuntimeStateDirectory('codex', sessionProviderConfig)
+          ),
+          threadId: agentSessionId,
+        });
+        if (projectionRepair.status === 'repaired') {
+          restartTmuxAfterHistoryRepair = true;
+          log.info('LocalConversationProvider: repaired stalled Codex history projection', {
+            conversationId: conversation.id,
+            threadId: agentSessionId,
+            ...projectionRepair,
+          });
+        } else if (projectionRepair.status === 'failed') {
+          log.warn('LocalConversationProvider: could not repair Codex history projection', {
+            conversationId: conversation.id,
+            threadId: agentSessionId,
+            reason: projectionRepair.reason,
           });
         }
       }
@@ -360,7 +387,10 @@ export class LocalConversationProvider implements ConversationProvider {
           ? substituteImageMentions(initialPrompt, pendingImagePaths)
           : initialPrompt;
       const appendSystemPrompt = withExecutionModeInstructions(
-        await getEnabledPromptPrinciplesText(await this.resolveProjectPromptPrinciples?.()),
+        await getEnabledPromptPrinciplesText(await this.resolveProjectPromptPrinciples?.(), {
+          projectId: this.projectId,
+          workspaceId: this.sidebarWorkspaceId,
+        }),
         conversation.executionMode
       );
       if (!this.ownsPendingStart(sessionId, startToken)) return;
@@ -404,6 +434,13 @@ export class LocalConversationProvider implements ConversationProvider {
 
       const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
       if (!this.ownsPendingStart(sessionId, startToken)) return;
+      // A surviving Codex process already reconstructed the truncated prefix in
+      // memory. Replace only this Yoda-owned tmux session after a successful
+      // cursor repair so the next process reloads the now-complete projection.
+      if (restartTmuxAfterHistoryRepair && tmuxSessionName) {
+        await killTmuxSession(this.ctx, tmuxSessionName);
+        if (!this.ownsPendingStart(sessionId, startToken)) return;
+      }
       const configuredRuntimeEnv = resolveRuntimeEnv(sessionProviderConfig, {
         runtimeId: conversation.runtimeId,
         tmuxEnabled: Boolean(tmuxSessionName),
@@ -561,8 +598,8 @@ export class LocalConversationProvider implements ConversationProvider {
       this.silenceReconcilerDetachers.set(sessionId, detachSilenceReconciler);
       detachSilenceReconcilerForRollback = detachSilenceReconciler;
       pty.onData(() => agentSilenceReconciler.noteOutput(sessionId));
-      if (conversation.runtimeId === 'claude') {
-        // Sub-second Esc-interrupt detection from the TUI's "Interrupted" line.
+      if (conversation.runtimeId === 'claude' || conversation.runtimeId === 'codex') {
+        // Sub-second Esc-interrupt detection from the TUI's interruption line.
         pty.onData(
           createClaudeInterruptSniffer({
             projectId: conversation.projectId,

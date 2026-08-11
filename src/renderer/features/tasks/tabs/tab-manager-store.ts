@@ -295,6 +295,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       openDiff: action,
       openDiffPreview: action,
       closeTab: action,
+      closeConversation: action,
       closeActiveTab: action,
       closeOtherTabs: action,
       closeTabsToRight: action,
@@ -1144,6 +1145,12 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
 
   hasConversationTab(conversationId: string): boolean {
     return this._findConversationEntry(conversationId) !== undefined;
+  }
+
+  /** Close a conversation tab by entity id, including an unresolved entry. */
+  closeConversation(conversationId: string): void {
+    const entry = this._findConversationEntry(conversationId);
+    if (entry) this.closeTab(entry.tabId);
   }
 
   /**

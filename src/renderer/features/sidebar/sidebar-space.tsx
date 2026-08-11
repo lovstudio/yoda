@@ -10,7 +10,8 @@ export function SidebarSpace() {
   const { t } = useTranslation();
   const { isLeftOpen, setCollapsed } = useWorkspaceLayoutContext();
   return (
-    <div className="[-webkit-app-region:drag] flex h-10 w-full items-center justify-end px-2">
+    <div className="[-webkit-app-region:drag] flex h-10 w-full items-center gap-1 px-2">
+      <div className="min-w-0 flex-1" aria-hidden="true" />
       <NavButtons>
         <ProjectsSettingsMenu renderTrigger={(props) => <NavIconButton {...props} />} />
         <Tooltip>

@@ -6,7 +6,7 @@ import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { log } from '@renderer/utils/logger';
 import { captureTelemetry } from '@renderer/utils/telemetryClient';
-import { fetchSkillsCatalog, skillsCatalogQueryKey } from '../skills-query';
+import { skillsCatalogQueryKey, skillsCatalogQueryOptions } from '../skills-query';
 
 export function useSkills() {
   const { t } = useTranslation();
@@ -14,10 +14,7 @@ export function useSkills() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { data: catalog = null, isPending: isLoading } = useQuery({
-    queryKey: skillsCatalogQueryKey,
-    queryFn: fetchSkillsCatalog,
-  });
+  const { data: catalog = null, isPending: isLoading } = useQuery(skillsCatalogQueryOptions);
 
   const refreshMutation = useMutation({
     mutationFn: async () => {

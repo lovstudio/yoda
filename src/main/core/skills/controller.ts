@@ -34,9 +34,11 @@ function parseTriggerQueries(raw: unknown): SkillTriggerQuery[] {
 }
 
 export const skillsController = createRPCController({
-  getCatalog: async (args?: { projectPath?: string }) => {
+  getCatalog: async (args?: { projectPath?: string; lightweight?: boolean }) => {
     try {
-      const catalog = await skillsService.getCatalogIndex(args?.projectPath);
+      const catalog = await skillsService.getCatalogIndex(args?.projectPath, {
+        lightweight: args?.lightweight,
+      });
       return { success: true, data: catalog };
     } catch (error) {
       log.error('Failed to get skills catalog:', error);

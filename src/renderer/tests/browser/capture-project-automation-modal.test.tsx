@@ -304,7 +304,7 @@ describe('CaptureProjectAutomationModal', () => {
     expect(mocks.compile).not.toHaveBeenCalled();
   });
 
-  it('enters a task immediately and defers quick-action distillation until completion', async () => {
+  it('enters a task immediately and records it in the quick-action list', async () => {
     await renderModal();
     await act(async () => setTextareaValue(textarea('quick-action-intent'), '$release-via-cicd'));
     await act(async () => primaryButton()?.click());
@@ -329,7 +329,18 @@ describe('CaptureProjectAutomationModal', () => {
       onTaskCreated: expect.any(Function),
     });
     expect(mocks.compile).not.toHaveBeenCalled();
-    expect(mocks.saveProjectQuickAction).not.toHaveBeenCalled();
+    await waitFor(
+      () => mocks.saveProjectQuickAction.mock.calls.length === 1,
+      'natural-language quick action was not saved'
+    );
+    expect(mocks.saveProjectQuickAction).toHaveBeenCalledWith(
+      'project-1',
+      expect.objectContaining({
+        command: '$release-via-cicd',
+        kind: 'skill',
+        sourceIntent: '$release-via-cicd',
+      })
+    );
   });
 
   it('serializes Yoda composer references into the task prompt', async () => {

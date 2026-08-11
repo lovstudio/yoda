@@ -21,24 +21,11 @@ describe('shared composer settings surfaces', () => {
     expect(content).toContain("t('settings.tasks.summaryLanguageLabel')");
     expect(content).toContain('<PermissionModeSelect');
     expect(content).toContain('<AutoTrustWorktreesControl compact');
-    expect(content).toContain("t('home.enabledPromptCount'");
-    expect(content).toContain("t('promptLibrary.new')");
-    expect(content).toContain("t('home.openPromptLibrary')");
-    expect(content).toContain('createPrompt: true');
-    expect(content).toContain('<Plus');
-    expect(content).toContain('<ArrowUpRight');
-    expect(content).not.toContain('<ArrowRight');
-    expect(content).toContain('size="icon-xs"');
-    expect(content).toContain('({enabledPromptCount})');
     expect(content).toContain('data-slot="composer-settings-section-header"');
-    expect(content).not.toContain("t('home.promptConfigurationDescription')");
-    expect(content).toContain("appState.navigation.navigate('library', { section: 'prompts' })");
-    expect(content).toContain('<PromptInjectionControls');
-    expect(content).toContain('variant="compact"');
-    expect(content).toContain('<CompactProjectPromptControls');
-    expect(content).toContain('data-slot="compact-prompt-list"');
     expect(content).not.toContain('max-h-48 overflow-y-auto overscroll-contain');
     expect(content).not.toContain('<InstructionFilesSection');
+    expect(content).not.toContain('PromptInjectionControls');
+    expect(content).not.toContain('promptConfigurationLabel');
   });
 
   it('guides new prompts toward one concise instruction', () => {
@@ -57,16 +44,24 @@ describe('shared composer settings surfaces', () => {
     expect(zhCN.promptLibrary.project.contentPlaceholder).toContain('一条');
   });
 
-  it('places Config before the existing right-side workspace utilities', () => {
+  it('places Config before Prompt and the existing right-side workspace utilities', () => {
     const runtimeBar = readFileSync(
       new URL('./workspace-runtime-bar.tsx', import.meta.url),
       'utf8'
     );
-    const configIndex = runtimeBar.indexOf("aria-label={t('workspaceRuntime.config.title')}");
+    const configDefinitionIndex = runtimeBar.indexOf(
+      "aria-label={t('workspaceRuntime.config.title')}"
+    );
+    const runtimeEntry = runtimeBar.indexOf('<Popover open={isRuntimePopoverOpen}');
+    const configRenderIndex = runtimeBar.indexOf('{renderConfigPopover()}');
+    const promptIndex = runtimeBar.indexOf('<WorkspacePromptPopover');
     const agentsIndex = runtimeBar.indexOf("aria-label={t('workspaceRuntime.agents.triggerLabel'");
 
-    expect(configIndex).toBeGreaterThan(0);
-    expect(agentsIndex).toBeGreaterThan(configIndex);
+    expect(configDefinitionIndex).toBeGreaterThan(0);
+    expect(runtimeEntry).toBeGreaterThan(0);
+    expect(runtimeEntry).toBeLessThan(configRenderIndex);
+    expect(configRenderIndex).toBeLessThan(promptIndex);
+    expect(agentsIndex).toBeGreaterThan(configRenderIndex);
   });
 
   it('applies the image-path setting to the active conversation TUI paste boundary', () => {

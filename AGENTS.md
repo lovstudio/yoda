@@ -97,6 +97,12 @@ optional_env:
 - 拿 task manager 用 `getTaskManagerStore(projectId)`，不要走 `project.taskManager`
 - 拿已挂载项目用 `asMounted(getProjectStore(id))`，不要内联 `isMountedProject` 判断
 
+### 任务状态同步约定（renderer sidebar）
+
+- 侧栏任务状态异常先沿 `persistence → main event → renderer store → selector → observer row` 完整链路排查；虚拟列表行的 wrapper、memo 或测量 ref 不是状态源。
+- `appState.agentRuntime` 是实时 Agent 会话状态的权威镜像；已挂载的 conversation store 负责标题、runtime、交互时间等展示元数据，并在 runtime hydration 期间提供回退。
+- `taskStatusUpdatedChannel` 驱动持久化任务生命周期，`agentSessionStatusChangedChannel` 驱动 Agent 运行态；两条链路语义独立，不能用其中一条替代另一条。
+
 ## 铁律
 
 - 合并前必须跑 `pnpm run format`、`pnpm run lint`、`pnpm run typecheck`、`pnpm test`。

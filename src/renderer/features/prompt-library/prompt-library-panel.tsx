@@ -48,23 +48,27 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { projectDisplayName, type Project } from '@shared/projects';
 import {
   incrementPromptVersion,
   normalizePromptTags,
   PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES,
   PROMPT_SOURCE_DEFAULT_TIMEOUT_SECONDS,
   type Prompt,
+  type PromptBindings,
   type PromptCreateInput,
   type PromptSource,
   type PromptSourceError,
   type PromptVersionBump,
 } from '@shared/prompt-library';
 import type { RuntimeId } from '@shared/runtime-registry';
+import type { Workspace } from '@shared/workspaces';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
+import { Checkbox } from '@renderer/lib/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -111,6 +115,7 @@ type PromptDraft = {
   tags: string;
   extraInfo: string;
   injectionEnabled: boolean;
+  bindings: PromptBindings;
   source?: PromptSource;
 };
 
@@ -135,6 +140,7 @@ const EMPTY_DRAFT: PromptDraft = {
   tags: '',
   extraInfo: '',
   injectionEnabled: false,
+  bindings: { global: true, workspaceIds: [], projectIds: [] },
 };
 
 const DEFAULT_REFRESH = String(PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES);
@@ -148,6 +154,11 @@ function draftFromEntry(entry: Prompt): PromptDraft {
     tags: entry.tags.join(', '),
     extraInfo: entry.extraInfo,
     injectionEnabled: entry.injectionEnabled,
+    bindings: {
+      global: entry.bindings.global,
+      workspaceIds: [...entry.bindings.workspaceIds],
+      projectIds: [...entry.bindings.projectIds],
+    },
     source: entry.source,
   };
 }
@@ -164,6 +175,11 @@ function draftToCreateInput(draft: PromptDraft): PromptCreateInput {
     tags: parseTagsText(draft.tags),
     extraInfo: draft.extraInfo.trim(),
     injectionEnabled: draft.injectionEnabled,
+    bindings: {
+      global: draft.bindings.global,
+      workspaceIds: [...new Set(draft.bindings.workspaceIds)],
+      projectIds: [...new Set(draft.bindings.projectIds)],
+    },
     source: draft.source,
   };
 }
@@ -197,6 +213,156 @@ function isExternalUrl(value: string): boolean {
     return false;
   }
 }
+
+const PromptBindingEditor = function PromptBindingEditor({
+  bindings,
+  onChange,
+}: {
+  bindings: PromptBindings;
+  onChange: (bindings: PromptBindings) => void;
+}) {
+  const { t } = useTranslation();
+  const [availableProjects, setAvailableProjects] = useState<Project[]>([]);
+  const [availableWorkspaces, setAvailableWorkspaces] = useState<Workspace[]>([]);
+  const [targetQuery, setTargetQuery] = useState('');
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      rpc.projects.getProjects().catch(() => []),
+      rpc.workspaces.listWorkspaces().catch(() => []),
+    ]).then(([projects, workspaces]) => {
+      if (!active) return;
+      setAvailableProjects(projects);
+      setAvailableWorkspaces(workspaces);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  const normalizedQuery = targetQuery.trim().toLocaleLowerCase();
+  const projects = availableProjects
+    .filter((project) => !project.isInternal)
+    .map((project) => ({ id: project.id, name: projectDisplayName(project) }))
+    .filter(
+      (project) => !normalizedQuery || project.name.toLocaleLowerCase().includes(normalizedQuery)
+    )
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const workspaces = availableWorkspaces
+    .filter(
+      (workspace) =>
+        !normalizedQuery || workspace.name.toLocaleLowerCase().includes(normalizedQuery)
+    )
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  const toggleBinding = (ids: string[], id: string, checked: boolean): string[] =>
+    checked ? [...new Set([...ids, id])] : ids.filter((value) => value !== id);
+
+  return (
+    <div className="grid gap-2 rounded-md border border-border bg-background px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">{t('promptLibrary.binding.title')}</p>
+          <p className="mt-0.5 text-xs text-foreground-muted">{t('promptLibrary.binding.hint')}</p>
+        </div>
+        <Switch
+          checked={bindings.global}
+          onCheckedChange={(global) => onChange({ ...bindings, global })}
+          aria-label={t('promptLibrary.binding.global')}
+        />
+      </div>
+      <div className="grid gap-1.5 border-t border-border pt-2">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-foreground-passive" />
+          <Input
+            value={targetQuery}
+            onChange={(event) => setTargetQuery(event.target.value)}
+            placeholder={t('promptLibrary.binding.searchPlaceholder')}
+            aria-label={t('promptLibrary.binding.search')}
+            className="h-7 pl-7 text-xs"
+          />
+        </div>
+        <div className="grid max-h-40 gap-2 overflow-y-auto pr-1">
+          <div className="grid gap-0.5">
+            <span className="px-1.5 text-[11px] font-medium text-foreground-muted">
+              {t('promptLibrary.binding.workspaces')}
+            </span>
+            {workspaces.length === 0 ? (
+              <span className="px-1.5 text-xs text-foreground-passive">
+                {t('promptLibrary.binding.noWorkspaces')}
+              </span>
+            ) : (
+              workspaces.map((workspace) => {
+                const checked = bindings.workspaceIds.includes(workspace.id);
+                return (
+                  <label
+                    key={workspace.id}
+                    className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-foreground hover:bg-background-1"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(nextChecked) =>
+                        onChange({
+                          ...bindings,
+                          workspaceIds: toggleBinding(
+                            bindings.workspaceIds,
+                            workspace.id,
+                            nextChecked === true
+                          ),
+                        })
+                      }
+                    />
+                    <span className="min-w-0 truncate">{workspace.name}</span>
+                  </label>
+                );
+              })
+            )}
+          </div>
+          <div className="grid gap-0.5">
+            <span className="px-1.5 text-[11px] font-medium text-foreground-muted">
+              {t('promptLibrary.binding.projects')}
+            </span>
+            {projects.length === 0 ? (
+              <span className="px-1.5 text-xs text-foreground-passive">
+                {t('promptLibrary.binding.noProjects')}
+              </span>
+            ) : (
+              projects.map((project) => {
+                const checked = bindings.projectIds.includes(project.id);
+                return (
+                  <label
+                    key={project.id}
+                    className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-foreground hover:bg-background-1"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(nextChecked) =>
+                        onChange({
+                          ...bindings,
+                          projectIds: toggleBinding(
+                            bindings.projectIds,
+                            project.id,
+                            nextChecked === true
+                          ),
+                        })
+                      }
+                    />
+                    <span className="min-w-0 truncate">{project.name}</span>
+                  </label>
+                );
+              })
+            )}
+          </div>
+        </div>
+        <p className="text-[11px] text-foreground-passive">
+          {t('promptLibrary.binding.selected', {
+            workspaces: bindings.workspaceIds.length,
+            projects: bindings.projectIds.length,
+          })}
+        </p>
+      </div>
+    </div>
+  );
+};
 
 function SortablePromptRow({
   entry,
@@ -931,6 +1097,10 @@ export function PromptLibraryPanel({
                           }
                         />
                       </div>
+                      <PromptBindingEditor
+                        bindings={draft.bindings}
+                        onChange={(bindings) => setDraft((current) => ({ ...current, bindings }))}
+                      />
                       {editingEntry ? (
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2.5">
                           <div>
@@ -1200,6 +1370,17 @@ export function PromptLibraryPanel({
                                               {t(`promptLibrary.source.type.${entry.source.type}`)}
                                             </span>
                                           ) : null}
+                                          <span className="shrink-0 rounded bg-background-1 px-1.5 py-0.5 text-[10px] text-foreground-muted">
+                                            {entry.bindings.global
+                                              ? t('promptLibrary.binding.globalShort')
+                                              : entry.bindings.workspaceIds.length > 0 ||
+                                                  entry.bindings.projectIds.length > 0
+                                                ? t('promptLibrary.binding.scopedShort', {
+                                                    workspaces: entry.bindings.workspaceIds.length,
+                                                    projects: entry.bindings.projectIds.length,
+                                                  })
+                                                : t('promptLibrary.binding.unboundShort')}
+                                          </span>
                                         </span>
                                         {entry.description ? (
                                           <span className="mt-0.5 block truncate text-xs text-foreground-muted">

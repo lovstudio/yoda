@@ -140,6 +140,54 @@ describe('ptyController.subscribe history handoff', () => {
     mockConversationLookup();
   });
 
+  it('keeps an interrupted live Codex terminal snapshot as the source of truth', async () => {
+    const sessionId = 'project-interrupted:task-interrupted:conversation-interrupted';
+    const consumerId = 'consumer-interrupted';
+    mocks.loadHistory.mockResolvedValue('current rollout with prompt 7 and prompt 8');
+
+    const pty = new FakePty();
+    ptySessionRegistry.register(sessionId, pty);
+    const liveTerminalBuffer =
+      '\x1b[38;5;1m■ Conversation interrupted - tell the model what to do differently. ' +
+      'Something went wrong? Hit `/feedback` to report the issue.\x1b[39m\n' +
+      '\x1b[2K› Improve documentation in @filename';
+    pty.emitData(liveTerminalBuffer);
+
+    await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
+      success: true,
+      data: {
+        buffer: liveTerminalBuffer,
+        generation: 1,
+        sequence: 0,
+      },
+    });
+    expect(mocks.loadHistory).not.toHaveBeenCalled();
+
+    ptySessionRegistry.unregister(sessionId);
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
+  });
+
+  it('keeps a normal live Codex terminal snapshot as the source of truth', async () => {
+    const sessionId = 'project-live-normal:task-live-normal:conversation-live-normal';
+    const consumerId = 'consumer-live-normal';
+    const pty = new FakePty();
+    ptySessionRegistry.register(sessionId, pty);
+    pty.emitData('Codex is ready for the next prompt.\n');
+
+    await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
+      success: true,
+      data: {
+        buffer: 'Codex is ready for the next prompt.\n',
+        generation: 1,
+        sequence: 0,
+      },
+    });
+    expect(mocks.loadHistory).not.toHaveBeenCalled();
+
+    ptySessionRegistry.unregister(sessionId);
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
+  });
+
   it('returns the new live snapshot when a PTY registers during history loading', async () => {
     const sessionId = 'project-live:task-live:conversation-live';
     const consumerId = 'consumer-live';
@@ -167,6 +215,40 @@ describe('ptyController.subscribe history handoff', () => {
       },
     });
     expect(mocks.emit.mock.calls.filter(([channel]) => channel === ptyDataChannel)).toHaveLength(1);
+
+    ptySessionRegistry.unregister(sessionId);
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
+  });
+
+  it('returns an interrupted live Codex PTY that registers during history loading', async () => {
+    const sessionId = 'project-raced:task-raced:conversation-raced';
+    const consumerId = 'consumer-raced';
+    const history = deferred<string>();
+    const historyStarted = deferred<void>();
+    mocks.loadHistory.mockImplementation(() => {
+      historyStarted.resolve();
+      return history.promise;
+    });
+
+    const resultPromise = ptyController.subscribe(sessionId, consumerId);
+    await historyStarted.promise;
+
+    const pty = new FakePty();
+    ptySessionRegistry.register(sessionId, pty);
+    const liveTerminalBuffer =
+      'Conversation interrupted - tell the model what to do differently.\n' +
+      '\x1b[2K› Improve documentation in @filename';
+    pty.emitData(liveTerminalBuffer);
+    history.resolve('current rollout with prompt 7 and prompt 8');
+
+    await expect(resultPromise).resolves.toEqual({
+      success: true,
+      data: {
+        buffer: liveTerminalBuffer,
+        generation: 1,
+        sequence: 1,
+      },
+    });
 
     ptySessionRegistry.unregister(sessionId);
     ptySessionRegistry.unsubscribe(sessionId, consumerId);
@@ -201,6 +283,44 @@ describe('ptyController.subscribe history handoff', () => {
     });
     expect(mocks.emit.mock.calls.filter(([channel]) => channel === ptyDataChannel)).toHaveLength(1);
     expect(mocks.emit.mock.calls.filter(([channel]) => channel === ptyExitChannel)).toHaveLength(1);
+
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
+  });
+
+  it('does not mix history into a PTY that is already being restored', async () => {
+    const sessionId = 'project-restoring:task-restoring:conversation-restoring';
+    const consumerId = 'consumer-restoring';
+    const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    mocks.loadHistory.mockResolvedValue('stale transcript fallback');
+
+    await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
+      success: true,
+      data: {
+        buffer: '',
+        generation: 0,
+        sequence: 0,
+      },
+    });
+    expect(mocks.loadHistory).not.toHaveBeenCalled();
+
+    ptySessionRegistry.cancelRegistration(sessionId, registrationEpoch);
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
+  });
+
+  it('marks a historical fallback so a later PTY generation can replace it', async () => {
+    const sessionId = 'project-history:task-history:conversation-history';
+    const consumerId = 'consumer-history';
+    mocks.loadHistory.mockResolvedValue('historical terminal text');
+
+    await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
+      success: true,
+      data: {
+        buffer: 'historical terminal text',
+        generation: 0,
+        sequence: 0,
+        replayedFromHistory: true,
+      },
+    });
 
     ptySessionRegistry.unsubscribe(sessionId, consumerId);
   });

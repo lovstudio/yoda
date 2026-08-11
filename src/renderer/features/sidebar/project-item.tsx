@@ -174,6 +174,17 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
 
   const isExpanded = sidebarStore.expandedProjectIds.has(projectId);
 
+  // Expanded state is persisted independently from project mounts. A project
+  // restored below the initial mount limit can therefore render its expanded
+  // row before its task manager exists; load it when that visible row enters
+  // the virtualized list, without mounting every expanded project at startup.
+  useEffect(() => {
+    if (!isExpanded || !project || !project.data || mountedProject) return;
+    void getProjectManagerStore()
+      .mountProject(projectId)
+      .catch(() => {});
+  }, [isExpanded, mountedProject, project, projectId]);
+
   const prefetchProjectMenuData = useCallback(() => {
     prefetchRepository();
     void settingsStore?.pageData.load();

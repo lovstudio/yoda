@@ -43,6 +43,7 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList({
   const showList = !collapsed && entries.length > 0;
   const taskGroupVisibleLimit = sidebarStore.taskGroupVisibleLimit;
   const listContainerRef = useRef<HTMLDivElement>(null);
+  const previousRowCountRef = useRef<number | null>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
   const activeProjectId =
     currentView === 'task'
@@ -76,6 +77,17 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList({
     measureElement: (element) => element.getBoundingClientRect().height,
   });
   const virtualItems = virtualizer.getVirtualItems();
+
+  // Pinned task rows can be inserted while their project is already visible.
+  // Re-measure the structural change before paint so the shared scroll root
+  // does not keep the old project-only viewport for one extra interaction.
+  const virtualRowCount = showList ? rows.length : 0;
+  useLayoutEffect(() => {
+    const previousRowCount = previousRowCountRef.current;
+    previousRowCountRef.current = virtualRowCount;
+    if (previousRowCount === null || previousRowCount === virtualRowCount) return;
+    virtualizer.measure();
+  }, [virtualRowCount, virtualizer]);
 
   // The section header sits above this list, so virtual rows need the same
   // scroll-root coordinate adjustment as the projects list. The margin only

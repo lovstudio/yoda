@@ -87,7 +87,11 @@ export const ProjectSettingsForm = observer(function ProjectSettingsForm({
             update={formModel.update}
             getOverrideSources={formModel.getOverrideSources}
           />
-          <PromptPrinciplesSection form={formModel.form} update={formModel.update} />
+          <PromptPrinciplesSection
+            projectId={projectId}
+            form={formModel.form}
+            update={formModel.update}
+          />
         </FieldGroup>
       </div>
       <ProjectSettingsFooter

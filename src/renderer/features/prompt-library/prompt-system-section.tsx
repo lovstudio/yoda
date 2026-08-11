@@ -1,13 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ChevronRight,
-  Loader2,
-  Plus,
-  RefreshCw,
-  Save,
-  SquareTerminal,
-  UserRound,
-} from 'lucide-react';
+import { ChevronRight, Loader2, RefreshCw, Save, SquareTerminal, UserRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RuntimeCustomConfigs } from '@shared/app-settings';
@@ -21,11 +13,14 @@ import { GlobalFileActionsDropdown } from '@renderer/lib/components/file-path-ac
 import { FileIcon } from '@renderer/lib/editor/file-icon';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
-import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
+import {
+  PromptInstructionVersionHistory,
+  runtimeInstructionFileVersionsQueryKey,
+} from './prompt-instruction-version-history';
 import { PromptLibraryChapter } from './prompt-library-chapter';
 
 const enabledPromptRuntimesQueryKey = ['promptLibrary', 'enabledRuntimes'] as const;
@@ -77,15 +72,13 @@ function useEditableInstructionFiles(request: EditableRuntimeInstructionFilesReq
 export function PromptInstructionFileEditor({
   file,
   request,
-  statusLabel,
-  statusMuted = false,
   initiallyExpanded = false,
+  compact = false,
 }: {
   file: EditableRuntimeInstructionFile;
   request: EditableRuntimeInstructionFilesRequest;
-  statusLabel: string;
-  statusMuted?: boolean;
   initiallyExpanded?: boolean;
+  compact?: boolean;
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -105,6 +98,9 @@ export function PromptInstructionFileEditor({
         instructionFilesQueryKey(request),
         (current) => current?.map((entry) => (entry.path === saved.path ? saved : entry))
       );
+      void queryClient.invalidateQueries({
+        queryKey: runtimeInstructionFileVersionsQueryKey(request, saved.path),
+      });
       toast({ title: t('promptLibrary.system.fileSaved') });
     },
     onError: (error) =>
@@ -124,19 +120,30 @@ export function PromptInstructionFileEditor({
         <button
           type="button"
           data-slot="runtime-instruction-file-toggle"
-          className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left outline-none hover:bg-background-1 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
+          className={cn(
+            'flex min-w-0 flex-1 items-center text-left outline-none hover:bg-background-1 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border',
+            compact ? 'gap-1.5 px-2 py-1.5' : 'gap-2 px-3 py-2.5'
+          )}
           aria-expanded={expanded}
           onClick={() => setExpanded((current) => !current)}
         >
           <ChevronRight
             className={cn(
-              'size-4 shrink-0 text-foreground-muted transition-transform',
+              'shrink-0 text-foreground-muted transition-transform',
+              compact ? 'size-3.5' : 'size-4',
               expanded && 'rotate-90'
             )}
           />
-          <FileIcon filename={filename} size={16} className="shrink-0" />
+          <FileIcon filename={filename} size={compact ? 14 : 16} className="shrink-0" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-foreground">{filename}</span>
+            <span
+              className={cn(
+                'block truncate font-medium text-foreground',
+                compact ? 'text-xs' : 'text-sm'
+              )}
+            >
+              {filename}
+            </span>
             <span
               className="block truncate font-mono text-[10px] text-foreground-passive"
               title={file.path}
@@ -145,40 +152,61 @@ export function PromptInstructionFileEditor({
             </span>
           </span>
         </button>
-        <Badge variant={statusMuted ? 'outline' : 'secondary'} className="mr-2 shrink-0">
-          {statusLabel}
-        </Badge>
-        {file.exists ? (
-          <span className="mr-2 shrink-0">
-            <GlobalFileActionsDropdown absolutePath={file.path} />
-          </span>
-        ) : null}
-      </div>
-
-      {expanded ? (
-        <div className="border-t border-border bg-background px-3 py-3">
-          <Textarea
-            value={content}
-            onChange={(event) => setContent(event.target.value)}
-            placeholder={t('promptLibrary.system.filePromptPlaceholder')}
-            className="min-h-28 resize-y font-mono text-xs leading-relaxed"
-            aria-label={t('promptLibrary.system.filePromptLabel', { name: filename })}
-          />
-          <div className="mt-2 flex justify-end">
+        <div className={cn('flex shrink-0 items-center gap-0.5', compact ? 'mr-1' : 'mr-2')}>
+          {file.exists ? (
+            <PromptInstructionVersionHistory
+              file={file}
+              request={request}
+              compact={compact}
+              onRestored={(restored) => {
+                setContent(restored.content);
+                queryClient.setQueryData<EditableRuntimeInstructionFile[]>(
+                  instructionFilesQueryKey(request),
+                  (current) =>
+                    current?.map((entry) => (entry.path === restored.path ? restored : entry))
+                );
+              }}
+            />
+          ) : null}
+          {changed || !file.exists ? (
             <Button
               type="button"
-              size="sm"
+              variant="outline"
+              size={compact ? 'xs' : 'sm'}
               disabled={!changed || save.isPending}
               onClick={() => save.mutate()}
             >
               {save.isPending ? (
-                <Loader2 className="size-4 animate-spin" />
+                <Loader2 className={cn('animate-spin', compact ? 'size-3.5' : 'size-4')} />
               ) : (
-                <Save className="size-4" />
+                <Save className={cn(compact ? 'size-3.5' : 'size-4')} />
               )}
               {file.exists ? t('common.save') : t('promptLibrary.system.createFile')}
             </Button>
-          </div>
+          ) : null}
+          {file.exists ? <GlobalFileActionsDropdown absolutePath={file.path} /> : null}
+        </div>
+      </div>
+
+      {expanded ? (
+        <div
+          className={cn(
+            'border-t border-border bg-background',
+            compact ? 'px-2 py-2' : 'px-3 py-3'
+          )}
+        >
+          <Textarea
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+            placeholder={t('promptLibrary.system.filePromptPlaceholder')}
+            className={cn(
+              'max-h-80 overflow-y-auto font-mono leading-relaxed',
+              compact
+                ? 'min-h-20 max-h-40 resize-none px-2 py-1.5 text-[11px]'
+                : 'min-h-28 resize-y text-xs'
+            )}
+            aria-label={t('promptLibrary.system.filePromptLabel', { name: filename })}
+          />
         </div>
       ) : null}
     </div>
@@ -189,10 +217,14 @@ export function PromptInstructionFilesEditor({
   runtimeId,
   projectId,
   scope,
+  compact = false,
+  initiallyExpanded = false,
 }: {
   runtimeId: RuntimeId;
   projectId?: string | null;
   scope: EditableRuntimeInstructionFile['scope'];
+  compact?: boolean;
+  initiallyExpanded?: boolean;
 }) {
   const { t } = useTranslation();
   const request = useMemo(
@@ -208,10 +240,7 @@ export function PromptInstructionFilesEditor({
     refetch,
   } = useEditableInstructionFiles(request);
   const scopedFiles = files.filter((file) => file.scope === scope);
-  const overrideFile = scopedFiles.find(isCodexOverrideFile);
-  const hasActiveOverride = overrideFile?.exists === true;
-  const [revealedOverridePath, setRevealedOverridePath] = useState<string | null>(null);
-  const showMissingOverride = overrideFile?.path === revealedOverridePath;
+  const visibleFiles = scopedFiles.filter((file) => !isCodexOverrideFile(file));
 
   if (isLoading) {
     return (
@@ -247,7 +276,7 @@ export function PromptInstructionFilesEditor({
     );
   }
 
-  if (scopedFiles.length === 0) {
+  if (visibleFiles.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-border px-3 py-3 text-xs text-foreground-muted">
         {t('promptLibrary.system.noInstructionFiles')}
@@ -255,50 +284,21 @@ export function PromptInstructionFilesEditor({
     );
   }
 
-  const visibleFiles = scopedFiles.filter(
-    (file) => !isCodexOverrideFile(file) || file.exists || showMissingOverride
-  );
-
   return (
     <div className="grid gap-2">
       <div className="overflow-hidden rounded-lg border border-border bg-background-secondary">
-        {visibleFiles.map((file) => {
-          const isOverride = isCodexOverrideFile(file);
-          const isOverriddenBase =
-            hasActiveOverride && instructionFilename(file.path) === 'AGENTS.md';
-          const statusLabel = !file.exists
-            ? t('promptLibrary.system.newFile')
-            : isOverride
-              ? t('promptLibrary.system.activeOverride')
-              : isOverriddenBase
-                ? t('promptLibrary.system.overriddenFile')
-                : t('promptLibrary.system.activeFile');
+        {visibleFiles.map((file, index) => {
           return (
             <PromptInstructionFileEditor
               key={`${file.kind}:${file.path}`}
               file={file}
               request={request}
-              statusLabel={statusLabel}
-              statusMuted={isOverriddenBase || !file.exists}
-              initiallyExpanded={isOverride && showMissingOverride && !file.exists}
+              compact={compact}
+              initiallyExpanded={initiallyExpanded && index === 0}
             />
           );
         })}
       </div>
-      {overrideFile && !overrideFile.exists && !showMissingOverride ? (
-        <div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-foreground-muted"
-            onClick={() => setRevealedOverridePath(overrideFile.path)}
-          >
-            <Plus className="size-4" />
-            {t('promptLibrary.system.addTemporaryOverride')}
-          </Button>
-        </div>
-      ) : null}
     </div>
   );
 }
