@@ -27,6 +27,7 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from '@renderer/lib/ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
 import { SessionPromptRestoreButton } from './session-prompt-restore-button';
@@ -398,9 +399,21 @@ function SessionPromptRow({
       <span className="w-6 shrink-0 text-right font-mono text-[10px] text-foreground-passive">
         {index}
       </span>
-      <span className="min-w-0 flex-1 truncate text-xs leading-5 text-foreground-muted">
-        {text}
-      </span>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span className="min-w-0 flex-1 truncate text-xs leading-5 text-foreground-muted" />
+          }
+        >
+          {text}
+        </TooltipTrigger>
+        <TooltipContent
+          align="start"
+          className="block max-h-64 max-w-md overflow-auto whitespace-pre-wrap break-words text-left leading-relaxed"
+        >
+          {text}
+        </TooltipContent>
+      </Tooltip>
       {timestamp && !canRestore ? (
         <span className="shrink-0 font-mono text-[10px] text-foreground-passive opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
           {timestamp}
@@ -410,10 +423,7 @@ function SessionPromptRow({
   );
 
   return (
-    <div
-      className="group flex h-6 w-full min-w-0 items-center gap-1 px-3 transition-colors hover:bg-background-1 focus-within:bg-background-1"
-      title={text}
-    >
+    <div className="group flex h-6 w-full min-w-0 items-center gap-1 px-3 transition-colors hover:bg-background-1 focus-within:bg-background-1">
       {handleClick ? (
         <button
           type="button"

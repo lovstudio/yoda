@@ -1,6 +1,7 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { userEvent } from 'vitest/browser';
 import type { ClaudeSessionPrompt } from '@shared/conversations';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -116,6 +117,7 @@ describe('DockedSessionHistory conversation tree menu', () => {
 
   afterEach(async () => {
     await act(async () => root.unmount());
+    document.querySelectorAll('[data-slot="tooltip-content"]').forEach((node) => node.remove());
     host.remove();
   });
 
@@ -130,9 +132,9 @@ describe('DockedSessionHistory conversation tree menu', () => {
     expect(mocks.useSessionPrompts).toHaveBeenLastCalledWith(true);
     expect(mocks.useSessionPromptTree).toHaveBeenLastCalledWith(false);
 
-    const currentPrompt = host.querySelector<HTMLButtonElement>(
-      'div[title="current path prompt"] > button'
-    );
+    const currentPrompt = host
+      .querySelector<HTMLButtonElement>('button [data-slot="tooltip-trigger"]')
+      ?.closest('button');
     await act(async () => currentPrompt?.click());
     expect(mocks.restoreCurrentPrompt).toHaveBeenCalledWith(prompt, 1);
 
@@ -160,6 +162,34 @@ describe('DockedSessionHistory conversation tree menu', () => {
     await waitForElementToDisappear('[data-session-prompt-tree]');
     expect(document.querySelector('[data-session-prompt-tree]')).toBeNull();
     expect(mocks.useSessionPromptTree).toHaveBeenLastCalledWith(false);
+  });
+
+  it('shows the complete prompt in a tooltip when hovering a truncated row', async () => {
+    const fullPrompt =
+      'This is the complete prompt text that stays available even when the docked row truncates it.';
+    mocks.useSessionPrompts.mockReturnValue({
+      prompts: [{ ...prompt, text: fullPrompt }],
+      isLoading: false,
+      hasPrompts: true,
+      hasConversation: true,
+      restoringPromptId: null,
+      requestRestorePrompt: mocks.restoreCurrentPrompt,
+      openPromptsModal: vi.fn(),
+    });
+
+    const { DockedSessionHistory } = await import(
+      '@renderer/features/tasks/conversations/session-history-panel'
+    );
+    await act(async () => root.render(createElement(DockedSessionHistory)));
+
+    const promptText = host.querySelector<HTMLElement>('[data-slot="tooltip-trigger"]');
+    expect(promptText?.textContent).toBe(fullPrompt);
+
+    await act(async () => userEvent.hover(promptText!));
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('[data-slot="tooltip-content"]')?.textContent).toBe(fullPrompt);
+    });
   });
 
   it('keeps the tree icon available while the current-path list is collapsed', async () => {
