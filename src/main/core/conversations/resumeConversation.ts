@@ -3,7 +3,9 @@ import { makePtySessionId } from '@shared/ptySessionId';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
+import { log } from '@main/lib/logger';
 import { resolveTask } from '../projects/utils';
+import { hasExternalCodexThreadWriter } from './codex-thread-writer';
 import { reconcileConversationPermission } from './reconcile-conversation-permission';
 import { mapConversationRowToConversation } from './utils';
 
@@ -50,6 +52,23 @@ export async function resumeConversation(
         mapConversationRowToConversation(row, true),
         row.config
       );
+      if (
+        task.conversations
+          .getActiveSessions()
+          .some((session) => session.conversationId === conversationId)
+      ) {
+        return true;
+      }
+      if (await hasExternalCodexThreadWriter(conversation.sessionSource)) {
+        log.info('resumeConversation: imported Codex thread is active in another process', {
+          projectId,
+          taskId,
+          conversationId,
+          threadId: conversation.sessionSource?.sessionId,
+        });
+        return false;
+      }
+      if (!ptySessionRegistry.isRegistrationCurrent(sessionKey, registrationEpoch)) return false;
       await task.conversations.startSession(conversation, initialSize, true);
       return task.conversations
         .getActiveSessions()

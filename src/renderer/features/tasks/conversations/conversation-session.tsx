@@ -92,6 +92,7 @@ export const ConversationSession = observer(function ConversationSession({
   const terminalRef = useRef<{ focus: () => void }>(null);
   const focusPendingRef = useRef(false);
   const lastAutoResumePtyRef = useRef<FrontendPty | null>(null);
+  const suppressNextAutoResumeRef = useRef(false);
 
   const sessionStateTraceKey =
     log.level === 'debug'
@@ -187,6 +188,7 @@ export const ConversationSession = observer(function ConversationSession({
   useEffect(() => {
     if (!isVisible) {
       lastAutoResumePtyRef.current = null;
+      suppressNextAutoResumeRef.current = false;
       return;
     }
     if (
@@ -199,6 +201,11 @@ export const ConversationSession = observer(function ConversationSession({
         lastAutoResumePty: lastAutoResumePtyRef.current,
       })
     ) {
+      return;
+    }
+    if (suppressNextAutoResumeRef.current) {
+      suppressNextAutoResumeRef.current = false;
+      lastAutoResumePtyRef.current = sessionPty;
       return;
     }
     lastAutoResumePtyRef.current = sessionPty;
@@ -219,7 +226,25 @@ export const ConversationSession = observer(function ConversationSession({
         running,
       });
       if (!running && lastAutoResumePtyRef.current === sessionPty) {
-        lastAutoResumePtyRef.current = null;
+        if (conversation.data.sessionSource?.runtimeId === 'codex') {
+          // The main process rejected an imported session before spawning a
+          // replacement (for example, another Codex window still owns its
+          // writer). Reconnect once to restore the rollout-history snapshot,
+          // then keep that replacement PTY read-only until an explicit retry.
+          suppressNextAutoResumeRef.current = true;
+          void session.reconnect().catch((error) => {
+            suppressNextAutoResumeRef.current = false;
+            lastAutoResumePtyRef.current = null;
+            log.debug('[conversation-session] history restore failed', {
+              projectId,
+              taskId,
+              conversationId: conversation.data.id,
+              error,
+            });
+          });
+        } else {
+          lastAutoResumePtyRef.current = null;
+        }
       }
     });
   }, [
@@ -227,6 +252,7 @@ export const ConversationSession = observer(function ConversationSession({
     conversations,
     isVisible,
     projectId,
+    session,
     sessionId,
     sessionPty,
     sessionStatus,
@@ -251,9 +277,11 @@ export const ConversationSession = observer(function ConversationSession({
     const pty = conversation.session.pty;
     const initialSize = pty ? getResumeInitialSize(pty, terminalContainerRef.current) : undefined;
     setIsRestarting(true);
-    void conversations
-      .restartConversation(conversation.data.id, initialSize)
-      .finally(() => setIsRestarting(false));
+    const restart =
+      conversation.data.sessionSource?.runtimeId === 'codex'
+        ? conversations.resumeConversation(conversation.data.id, initialSize)
+        : conversations.restartConversation(conversation.data.id, initialSize);
+    void restart.finally(() => setIsRestarting(false));
   };
 
   // Snapshot of the dead session for a bug report / paste into the agent.

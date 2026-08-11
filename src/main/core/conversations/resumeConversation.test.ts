@@ -5,6 +5,7 @@ import { resumeConversation } from './resumeConversation';
 
 const mocks = vi.hoisted(() => ({
   getActiveSessions: vi.fn(),
+  hasExternalCodexThreadWriter: vi.fn(),
   startSession: vi.fn(),
   resolveTask: vi.fn(),
   selectChain: {
@@ -26,6 +27,10 @@ vi.mock('@main/db/schema', () => ({
 
 vi.mock('../projects/utils', () => ({
   resolveTask: mocks.resolveTask,
+}));
+
+vi.mock('./codex-thread-writer', () => ({
+  hasExternalCodexThreadWriter: mocks.hasExternalCodexThreadWriter,
 }));
 
 vi.mock('./utils', () => ({
@@ -52,8 +57,11 @@ describe('resumeConversation', () => {
         taskId: 'task-1',
       },
     ]);
-    mocks.startSession.mockResolvedValue(undefined);
-    mocks.getActiveSessions.mockReturnValue([{ conversationId: 'conv-1' }]);
+    mocks.hasExternalCodexThreadWriter.mockResolvedValue(false);
+    mocks.getActiveSessions.mockReturnValue([]);
+    mocks.startSession.mockImplementation(async () => {
+      mocks.getActiveSessions.mockReturnValue([{ conversationId: 'conv-1' }]);
+    });
   });
 
   afterEach(() => {
@@ -72,6 +80,7 @@ describe('resumeConversation', () => {
   });
 
   it('reports when startup completes without a live provider session', async () => {
+    mocks.startSession.mockResolvedValue(undefined);
     mocks.getActiveSessions.mockReturnValue([]);
 
     await expect(resumeConversation('project-1', 'task-1', 'conv-1')).resolves.toBe(false);
@@ -96,6 +105,39 @@ describe('resumeConversation', () => {
     ]);
     await expect(resumePromise).resolves.toBe(false);
 
+    expect(mocks.startSession).not.toHaveBeenCalled();
+  });
+
+  it('keeps imported Codex history read-only while another process owns its writer', async () => {
+    const sessionSource = {
+      catalogId: 'catalog-1',
+      runtimeId: 'codex' as const,
+      sessionId: 'codex-thread-1',
+      stateRoot: '/state',
+    };
+    mocks.selectChain.limit.mockResolvedValueOnce([
+      {
+        id: 'conv-1',
+        projectId: 'project-1',
+        taskId: 'task-1',
+        runtimeId: 'codex',
+        sessionSource,
+      },
+    ]);
+    mocks.hasExternalCodexThreadWriter.mockResolvedValueOnce(true);
+
+    await expect(resumeConversation('project-1', 'task-1', 'conv-1')).resolves.toBe(false);
+
+    expect(mocks.hasExternalCodexThreadWriter).toHaveBeenCalledWith(sessionSource);
+    expect(mocks.startSession).not.toHaveBeenCalled();
+  });
+
+  it('reuses a Yoda-owned imported session without treating its writer as external', async () => {
+    mocks.getActiveSessions.mockReturnValue([{ conversationId: 'conv-1' }]);
+
+    await expect(resumeConversation('project-1', 'task-1', 'conv-1')).resolves.toBe(true);
+
+    expect(mocks.hasExternalCodexThreadWriter).not.toHaveBeenCalled();
     expect(mocks.startSession).not.toHaveBeenCalled();
   });
 });
