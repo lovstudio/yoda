@@ -58,12 +58,26 @@ export const ptyController = createRPCController({
     const initialSnapshot = ptySessionRegistry.subscribe(sessionId, consumerId);
     const hasPendingRegistration = () =>
       ptySessionRegistry.getDiagnostics(sessionId)?.registering === true;
+    const initialLive = ptySessionRegistry.get(sessionId) !== undefined;
+    const initialRegistering = hasPendingRegistration();
+    log.debug('[pty-subscribe] initial snapshot', {
+      sessionId,
+      generation: initialSnapshot.generation,
+      sequence: initialSnapshot.sequence,
+      snapshotCharacters: initialSnapshot.buffer.length,
+      live: initialLive,
+      registering: initialRegistering,
+    });
     // A live snapshot is terminal protocol, not transcript text. It remains the
     // only source that can reconstruct the CLI's cursor, colors, and input UI;
     // rollout history is a fallback only while no backend PTY exists.
     // A session that is already being restored will provide its own live screen;
     // returning transcript text here would append that old screen to the new PTY.
-    if (initialSnapshot.buffer || ptySessionRegistry.get(sessionId) || hasPendingRegistration()) {
+    if (initialSnapshot.buffer || initialLive || initialRegistering) {
+      log.debug('[pty-subscribe] resolved without history fallback', {
+        sessionId,
+        reason: initialSnapshot.buffer ? 'live-buffer' : initialLive ? 'live-pty' : 'registration',
+      });
       return ok(initialSnapshot);
     }
 
@@ -73,15 +87,31 @@ export const ptyController = createRPCController({
     // over stale history. Its listener was installed before the first call, so
     // live events remain queued and the returned watermark can deduplicate them.
     const latestSnapshot = ptySessionRegistry.subscribe(sessionId, consumerId);
+    const latestLive = ptySessionRegistry.get(sessionId) !== undefined;
+    const latestRegistering = hasPendingRegistration();
     if (
       latestSnapshot.generation !== initialSnapshot.generation ||
       latestSnapshot.sequence !== initialSnapshot.sequence ||
       latestSnapshot.buffer ||
-      ptySessionRegistry.get(sessionId) ||
-      hasPendingRegistration()
+      latestLive ||
+      latestRegistering
     ) {
+      log.debug('[pty-subscribe] live state arrived during history lookup', {
+        sessionId,
+        generation: latestSnapshot.generation,
+        sequence: latestSnapshot.sequence,
+        snapshotCharacters: latestSnapshot.buffer.length,
+        live: latestLive,
+        registering: latestRegistering,
+      });
       return ok(latestSnapshot);
     }
+    log.debug('[pty-subscribe] using history fallback', {
+      sessionId,
+      generation: latestSnapshot.generation,
+      sequence: latestSnapshot.sequence,
+      historyCharacters: historicalBuffer.length,
+    });
     return ok({
       buffer: historicalBuffer,
       generation: latestSnapshot.generation,

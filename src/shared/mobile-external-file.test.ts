@@ -19,6 +19,20 @@ describe('mobile external file input', () => {
     });
   });
 
+  it('recognizes a Yoda Mobile Share Extension handoff', () => {
+    expect(
+      parseMobileExternalFileUrl(
+        'yodamobile://share?source=share-extension&kind=image&token=share-token&name=Screenshot.png'
+      )
+    ).toEqual({
+      kind: 'image',
+      name: 'Screenshot.png',
+      shareToken: 'share-token',
+      source: 'share-extension',
+      uri: 'yodamobile://share?source=share-extension&kind=image&token=share-token&name=Screenshot.png',
+    });
+  });
+
   it('keeps unsupported local files visible for a user-facing error', () => {
     expect(parseMobileExternalFileUrl('file:///private/var/mobile/Inbox/report.pdf')).toEqual({
       kind: 'unsupported',

@@ -423,6 +423,11 @@ export class FrontendPty {
       stopListening,
     };
     this.pendingConnectAttempt = attempt;
+    log.debug('[pty-renderer] subscription requested', {
+      sessionId: this.sessionId,
+      mounted: this.isMounted,
+      flushGateOpen: this.hasFlushed,
+    });
 
     let result: Awaited<ReturnType<typeof rpc.pty.subscribe>>;
     try {
@@ -446,6 +451,14 @@ export class FrontendPty {
     this.resetBeforeNextLiveGeneration = snapshot.replayedFromHistory === true;
     this.acknowledgedGeneration = snapshot.generation;
     this.acknowledgedSequence = 0;
+    log.debug('[pty-renderer] subscription snapshot', {
+      sessionId: this.sessionId,
+      generation: snapshot.generation,
+      sequence: snapshot.sequence,
+      snapshotCharacters: snapshot.buffer.length,
+      replayedFromHistory: snapshot.replayedFromHistory === true,
+      pendingLiveEventCount: pendingEvents.length,
+    });
     this.startConsumerHeartbeat();
     if (snapshot.buffer) {
       this.writeOrBuffer(snapshot.buffer, {
@@ -482,15 +495,31 @@ export class FrontendPty {
   }
 
   private acceptOutputEvent(event: PtyDataEvent): void {
-    if (event.generation < this.outputGeneration) return;
+    if (event.generation < this.outputGeneration) {
+      log.debug('[pty-renderer] dropped stale output generation', {
+        sessionId: this.sessionId,
+        eventGeneration: event.generation,
+        currentGeneration: this.outputGeneration,
+        sequence: event.sequence,
+      });
+      return;
+    }
     const isNewGeneration = event.generation > this.outputGeneration;
     const shouldResetStaleHistory = isNewGeneration && this.resetBeforeNextLiveGeneration;
     if (event.generation > this.outputGeneration) {
+      const previousGeneration = this.outputGeneration;
       this.outputGeneration = event.generation;
       this.lastOutputSequence = 0;
       this.acknowledgedGeneration = event.generation;
       this.acknowledgedSequence = 0;
       this.resetBeforeNextLiveGeneration = false;
+      log.debug('[pty-renderer] live generation changed', {
+        sessionId: this.sessionId,
+        previousGeneration,
+        generation: event.generation,
+        firstSequence: event.sequence,
+        resetHistoricalScreen: shouldResetStaleHistory,
+      });
     }
     if (event.sequence <= this.lastOutputSequence) return;
 

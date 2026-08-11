@@ -1,6 +1,6 @@
 import { MessageSquare } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Conversation } from '@shared/conversations';
 import { DockedSessionHistory } from '@renderer/features/tasks/conversations/session-history-panel';
@@ -16,6 +16,7 @@ import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
+import { log } from '@renderer/utils/logger';
 import { SessionOpeningSurface } from '../components/session-opening-surface';
 import type { ConversationStore } from './conversation-manager';
 import { ConversationSession } from './conversation-session';
@@ -50,16 +51,25 @@ export const ConversationsPanel = observer(function ConversationsPanel({
   });
   const autoFocus = isActive && provisioned.taskView.focusedRegion === 'main';
 
-  const handleCreate = () =>
+  const handleCreate = () => {
+    log.debug('[conversation-panel] create requested', { projectId, taskId });
     showNewConversationModal({
       projectId,
       taskId,
       onSuccess: ({ conversationIds }) => {
         const conversationId = conversationIds[0];
-        if (conversationId) tm.openConversation(conversationId);
+        if (conversationId) {
+          log.debug('[conversation-panel] create succeeded; opening conversation', {
+            projectId,
+            taskId,
+            conversationId,
+          });
+          tm.openConversation(conversationId);
+        }
         provisioned.taskView.setFocusedRegion('main');
       },
     });
+  };
 
   // Build session ID list for PaneSizingProvider (all open conversation tabs).
   const allSessionIds = useMemo(() => {
@@ -96,6 +106,123 @@ export const ConversationsPanel = observer(function ConversationsPanel({
   const isResolvingConversation =
     isResolvingActiveConversation || isResolvingRouteConversation || isResolvingTaskSession;
 
+  // Sorting the IDs makes a state transition easy to compare in the console,
+  // but is intentionally debug-only so normal renders keep the existing cost.
+  const isDebugTracing = log.level === 'debug';
+  // Keep debug telemetry structural. File/diff route targets can contain a
+  // workspace path or remote metadata, neither of which helps diagnose this
+  // conversation surface.
+  const routeTabTraceKey =
+    !isDebugTracing || !params.tab
+      ? ''
+      : params.tab.kind === 'conversation'
+        ? `conversation:${params.tab.conversationId}`
+        : params.tab.kind === 'room-member'
+          ? `room-member:${params.tab.memberId}`
+          : params.tab.kind;
+  const conversationIds = isDebugTracing
+    ? conversationStores
+        .map((conversation) => conversation.data.id)
+        .sort()
+        .join(',')
+    : '';
+  const archivedConversationIds = isDebugTracing
+    ? archivedConversations
+        .map((conversation) => conversation.id)
+        .sort()
+        .join(',')
+    : '';
+  const conversationTabIds = isDebugTracing
+    ? tm.resolvedTabs
+        .flatMap((tab) => (tab.kind === 'conversation' ? [tab.conversationId] : []))
+        .sort()
+        .join(',')
+    : '';
+  const surface = isResolvingConversation
+    ? 'resolving'
+    : !hasConversationTabs
+      ? conversationCount > 0
+        ? 'list'
+        : 'empty'
+      : activeConversation
+        ? 'session'
+        : 'blank';
+  const panelStateTraceKey = isDebugTracing
+    ? [
+        projectId,
+        taskId,
+        isActive,
+        isVisible,
+        forceVisible,
+        provisioned.taskView.focusedRegion,
+        routeTabTraceKey,
+        activeDescriptor?.tabId ?? '',
+        activeDescriptor?.kind ?? '',
+        tm.activeTabId ?? '',
+        tm.activeConversationId ?? '',
+        activeConversation?.session.sessionId ?? '',
+        conversations.hasAuthoritativeSnapshot,
+        isResolvingActiveConversation,
+        isResolvingRouteConversation,
+        isResolvingTaskSession,
+        surface,
+        conversationIds,
+        archivedConversationIds,
+        conversationTabIds,
+      ].join('\u001f')
+    : '';
+  const lastPanelStateTraceKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!panelStateTraceKey || lastPanelStateTraceKey.current === panelStateTraceKey) return;
+    lastPanelStateTraceKey.current = panelStateTraceKey;
+    log.debug('[conversation-panel] state', {
+      projectId,
+      taskId,
+      surface,
+      isActive,
+      isVisible,
+      forceVisible,
+      focusedRegion: provisioned.taskView.focusedRegion,
+      routeTab: routeTabTraceKey || null,
+      activeTabId: tm.activeTabId ?? null,
+      activeDescriptor: activeDescriptor
+        ? { tabId: activeDescriptor.tabId, kind: activeDescriptor.kind }
+        : null,
+      activeConversationId: tm.activeConversationId ?? null,
+      activeSessionId: activeConversation?.session.sessionId ?? null,
+      hasAuthoritativeSnapshot: conversations.hasAuthoritativeSnapshot,
+      resolving: {
+        activeConversation: isResolvingActiveConversation,
+        routeConversation: isResolvingRouteConversation,
+        taskSession: isResolvingTaskSession,
+      },
+      conversationIds,
+      archivedConversationIds,
+      conversationTabIds,
+    });
+  }, [
+    activeConversation?.session.sessionId,
+    activeDescriptor,
+    archivedConversationIds,
+    conversationIds,
+    conversationTabIds,
+    conversations.hasAuthoritativeSnapshot,
+    forceVisible,
+    isActive,
+    isResolvingActiveConversation,
+    isResolvingRouteConversation,
+    isResolvingTaskSession,
+    isVisible,
+    panelStateTraceKey,
+    projectId,
+    provisioned.taskView.focusedRegion,
+    routeTabTraceKey,
+    surface,
+    taskId,
+    tm,
+  ]);
+
   const containerRef = useRef<HTMLDivElement>(null);
 
   return (
@@ -131,6 +258,12 @@ export const ConversationsPanel = observer(function ConversationsPanel({
                   createLabel={t('tasks.conversations.createConversation')}
                   createAction={handleCreate}
                   onOpen={(conversationId) => {
+                    log.debug('[conversation-panel] open requested', {
+                      projectId,
+                      taskId,
+                      conversationId,
+                      activeConversationId: tm.activeConversationId ?? null,
+                    });
                     tm.openConversation(conversationId);
                     provisioned.taskView.setFocusedRegion('main');
                   }}

@@ -4,6 +4,8 @@ export type MobileExternalFile = {
   kind: MobileExternalFileKind;
   name: string;
   uri: string;
+  source?: 'document' | 'share-extension';
+  shareToken?: string;
 };
 
 const IMAGE_EXTENSIONS = new Set([
@@ -51,7 +53,7 @@ const TEXT_EXTENSIONS = new Set([
   'yml',
 ]);
 
-/** Parse an iOS Open In / Android document URI without trusting it as a desktop path. */
+/** Parse an iOS Share Extension, Open In, or Android document URI. */
 export function parseMobileExternalFileUrl(rawUrl: string): MobileExternalFile | null {
   if (typeof rawUrl !== 'string' || !rawUrl.trim()) return null;
 
@@ -60,6 +62,30 @@ export function parseMobileExternalFileUrl(rawUrl: string): MobileExternalFile |
     url = new URL(rawUrl);
   } catch {
     return null;
+  }
+
+  if (url.protocol === 'yodamobile:' && url.hostname === 'share') {
+    const source = url.searchParams.get('source');
+    const kind = url.searchParams.get('kind');
+    const token = url.searchParams.get('token')?.trim();
+    if (
+      source !== 'share-extension' ||
+      (kind !== 'image' && kind !== 'text') ||
+      !token ||
+      token.length > 128
+    ) {
+      return null;
+    }
+
+    const fallbackName = kind === 'image' ? '共享图片.png' : '共享文本.txt';
+    const name = url.searchParams.get('name')?.trim() || fallbackName;
+    return {
+      kind,
+      name: name.slice(0, 240),
+      shareToken: token,
+      source: 'share-extension',
+      uri: rawUrl,
+    };
   }
 
   if (url.protocol !== 'file:' && url.protocol !== 'content:') return null;

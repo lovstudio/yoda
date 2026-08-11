@@ -28,6 +28,7 @@ import { useTerminalSearch } from '@renderer/lib/pty/use-terminal-search';
 import { Button } from '@renderer/lib/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { agentConfig } from '@renderer/utils/agentConfig';
+import { log } from '@renderer/utils/logger';
 import type { ConversationStore } from './conversation-manager';
 import { ConversationSessionPendingState } from './conversation-session-pending-state';
 import { shouldAutoResumeConversation } from './conversation-session-utils';
@@ -92,6 +93,55 @@ export const ConversationSession = observer(function ConversationSession({
   const focusPendingRef = useRef(false);
   const lastAutoResumePtyRef = useRef<FrontendPty | null>(null);
 
+  const sessionStateTraceKey =
+    log.level === 'debug'
+      ? [
+          projectId,
+          taskId,
+          conversation.data.id,
+          sessionId ?? '',
+          isVisible,
+          autoFocus,
+          sessionStatus ?? '',
+          Boolean(sessionPty),
+          Boolean(session?.connectionError),
+          conversation.status,
+          conversation.sessionExited,
+        ].join('\u001f')
+      : '';
+  const lastSessionStateTraceKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionStateTraceKey || lastSessionStateTraceKey.current === sessionStateTraceKey) return;
+    lastSessionStateTraceKey.current = sessionStateTraceKey;
+    log.debug('[conversation-session] state', {
+      projectId,
+      taskId,
+      conversationId: conversation.data.id,
+      sessionId,
+      isVisible,
+      autoFocus,
+      ptyStatus: sessionStatus ?? null,
+      hasFrontendPty: Boolean(sessionPty),
+      hasPreparationError: Boolean(session?.connectionError),
+      agentStatus: conversation.status,
+      sessionExited: conversation.sessionExited,
+    });
+  }, [
+    autoFocus,
+    conversation.data.id,
+    conversation.sessionExited,
+    conversation.status,
+    isVisible,
+    projectId,
+    session?.connectionError,
+    sessionId,
+    sessionPty,
+    sessionStateTraceKey,
+    sessionStatus,
+    taskId,
+  ]);
+
   // Visibility, not generic status observation, owns connection demand. Split
   // panes pass isVisible=true even when they are not the routed active task.
   useEffect(() => {
@@ -153,12 +203,35 @@ export const ConversationSession = observer(function ConversationSession({
     }
     lastAutoResumePtyRef.current = sessionPty;
     const initialSize = getResumeInitialSize(sessionPty, terminalContainerRef.current);
+    log.debug('[conversation-session] resume requested', {
+      projectId,
+      taskId,
+      conversationId: conversation.data.id,
+      sessionId,
+      initialSize: initialSize ?? null,
+    });
     void conversations.resumeConversation(conversation.data.id, initialSize).then((running) => {
+      log.debug('[conversation-session] resume settled', {
+        projectId,
+        taskId,
+        conversationId: conversation.data.id,
+        sessionId,
+        running,
+      });
       if (!running && lastAutoResumePtyRef.current === sessionPty) {
         lastAutoResumePtyRef.current = null;
       }
     });
-  }, [conversation, conversations, isVisible, sessionId, sessionPty, sessionStatus]);
+  }, [
+    conversation,
+    conversations,
+    isVisible,
+    projectId,
+    sessionId,
+    sessionPty,
+    sessionStatus,
+    taskId,
+  ]);
 
   const markConversationSubmitted = (forceWorking = false) => {
     conversation.setWorking({ force: forceWorking });
