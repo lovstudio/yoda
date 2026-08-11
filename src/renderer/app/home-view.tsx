@@ -2436,7 +2436,11 @@ export const HomeComposer = observer(function HomeComposer({
               selectedTeamId={selectedTeamId}
               onChange={setRunMode}
               onSelectTeam={setSelectedTeamId}
-              renderConfiguration={(configurationMode, configurationTeamId) => (
+              renderConfiguration={(
+                configurationMode,
+                configurationTeamId,
+                onConfigurationChange
+              ) => (
                 <ModeConfigurationPanel
                   mode={configurationMode}
                   teams={teams}
@@ -2444,6 +2448,7 @@ export const HomeComposer = observer(function HomeComposer({
                   agents={userAgents}
                   slotAgentId={slotAgentId}
                   onSlotAgentChange={setSlotAgent}
+                  onConfigurationChange={onConfigurationChange}
                   className="mt-2 border-t-0 pt-0"
                 />
               )}
@@ -2876,7 +2881,11 @@ interface RunModeSelectorProps {
   selectedTeamId: string;
   onChange: (mode: HomeRunMode) => void;
   onSelectTeam: (teamId: string) => void;
-  renderConfiguration: (mode: HomeRunMode, teamId: string | undefined) => ReactNode;
+  renderConfiguration: (
+    mode: HomeRunMode,
+    teamId: string | undefined,
+    onConfigurationChange: () => void
+  ) => ReactNode;
 }
 
 function RunModeSelector({
@@ -2894,10 +2903,13 @@ function RunModeSelector({
   const options = useMemo(() => groups.flatMap((group) => group.options), [groups]);
   // The mode change reshapes the whole development paradigm, so we stage it locally
   // and only commit on explicit confirmation rather than applying on each click.
-  // We stage by entry id since a mode (notably `team`) spans many entries.
+  // We stage by entry id since a mode (notably `team`) spans many entries. Agent
+  // profile edits persist independently, but still require an explicit confirmation
+  // before the chooser can be treated as settled.
   const [pendingId, setPendingId] = useState<string>(() =>
     entryIdForState(options, mode, selectedTeamId)
   );
+  const [configurationDirty, setConfigurationDirty] = useState(false);
   const labelOf = (option: RunModeOption) =>
     option.label ?? (option.labelKey ? t(option.labelKey) : '');
   const current =
@@ -2907,12 +2919,15 @@ function RunModeSelector({
   const CurrentIcon = current.icon;
   const PendingIcon = pending.icon;
   const dirty =
-    pending.mode !== mode || (pending.mode === 'team' && pending.teamId !== selectedTeamId);
+    configurationDirty ||
+    pending.mode !== mode ||
+    (pending.mode === 'team' && pending.teamId !== selectedTeamId);
   const isNonStandardMode = mode !== 'normal';
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
       setPendingId(entryIdForState(options, mode, selectedTeamId));
+      setConfigurationDirty(false);
     }
     setOpen(next);
   };
@@ -2920,6 +2935,7 @@ function RunModeSelector({
   const handleConfirm = () => {
     if (pending.teamId) onSelectTeam(pending.teamId);
     if (pending.mode !== mode) onChange(pending.mode);
+    setConfigurationDirty(false);
     setOpen(false);
   };
 
@@ -3065,7 +3081,7 @@ function RunModeSelector({
               )}
             </div>
             <p className="text-xs text-foreground-muted">{t(pending.descKey)}</p>
-            {renderConfiguration(pending.mode, pending.teamId)}
+            {renderConfiguration(pending.mode, pending.teamId, () => setConfigurationDirty(true))}
           </div>
         </div>
         <DialogFooter className="px-3 py-2.5">
@@ -3104,6 +3120,7 @@ interface ModeConfigurationPanelProps {
   agents: Agent[];
   slotAgentId: (slotKey: string) => string | null;
   onSlotAgentChange: (slotKey: string, agentId: string) => void;
+  onConfigurationChange: () => void;
   className?: string;
 }
 
@@ -3114,6 +3131,7 @@ function ModeConfigurationPanel({
   agents,
   slotAgentId,
   onSlotAgentChange,
+  onConfigurationChange,
   className,
 }: ModeConfigurationPanelProps) {
   const { t } = useTranslation();
@@ -3121,11 +3139,19 @@ function ModeConfigurationPanel({
 
   // A slot card needs its Agent selection. `key` is the slot's stable key (the
   // mode's prompt key, reused purely to key the per-slot selection).
-  const slotProps = (key: string) => ({
-    agents,
-    selectedAgentId: slotAgentId(key),
-    onSelectAgent: (agentId: string) => onSlotAgentChange(key, agentId),
-  });
+  const slotProps = (key: string) => {
+    const selectedAgentId = slotAgentId(key);
+    return {
+      agents,
+      selectedAgentId,
+      onSelectAgent: (agentId: string) => {
+        if (agentId === selectedAgentId) return;
+        onSlotAgentChange(key, agentId);
+        onConfigurationChange();
+      },
+      onConfigurationChange,
+    };
+  };
 
   return (
     // Slots stack as Agent cards (identity + configured skills) so every run
@@ -3233,9 +3259,17 @@ interface AgentProps {
   /** Currently selected Agent id for this slot, or null when none chosen yet. */
   selectedAgentId: string | null;
   onSelectAgent: (agentId: string) => void;
+  onConfigurationChange: () => void;
 }
 
-function Agent({ icon: Icon, label, agents, selectedAgentId, onSelectAgent }: AgentProps) {
+function Agent({
+  icon: Icon,
+  label,
+  agents,
+  selectedAgentId,
+  onSelectAgent,
+  onConfigurationChange,
+}: AgentProps) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
   const showAgentModal = useShowModal('agentEditModal');
@@ -3256,7 +3290,8 @@ function Agent({ icon: Icon, label, agents, selectedAgentId, onSelectAgent }: Ag
       ]
     : [];
   const editAgent = () =>
-    selectedAgent && showAgentModal({ agent: selectedAgent, onSuccess: () => undefined });
+    selectedAgent &&
+    showAgentModal({ agent: selectedAgent, onSuccess: () => onConfigurationChange() });
 
   return (
     <div className="group flex min-w-0 flex-col gap-1.5 rounded-xl border border-border/60 bg-background-1 p-2 transition-colors hover:border-border focus-within:border-border-1">
