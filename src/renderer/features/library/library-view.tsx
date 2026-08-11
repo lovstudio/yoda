@@ -194,7 +194,7 @@ export function LibraryMainPanel() {
   return (
     // @container so the layout adapts to its host's width (full window, shell
     // side pane, …) instead of the viewport.
-    <div className="@container flex min-h-0 flex-1 overflow-hidden bg-background text-foreground">
+    <div className="@container flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background text-foreground">
       {/* The nav rail collapses below @lg, where it's too cramped to be usable;
           the picker moves into the content header (or the chip-strip when
           pin-hosted). */}
@@ -226,7 +226,7 @@ export function LibraryMainPanel() {
             <LibrarySectionDropdown section={section} onSectionChange={onSectionChange} />
           </div>
         )}
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
           <LibrarySectionContent
             section={section}
             createPrompt={createPrompt}
