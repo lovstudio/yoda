@@ -206,7 +206,5 @@ async function settle(): Promise<void> {
 }
 
 async function clickUser(element: Element): Promise<void> {
-  await act(async () => {
-    await userEvent.click(element);
-  });
+  await userEvent.click(element);
 }
