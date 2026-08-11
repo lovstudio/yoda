@@ -50,8 +50,27 @@ vi.mock('@renderer/lib/ui/context-menu', async () => {
   const { createElement: create } = await import('react');
   const container =
     (slot: string) =>
-    ({ children }: { children?: ReactNode }) =>
-      create('div', { 'data-slot': slot }, children);
+    ({
+      children,
+      onOpenChange,
+    }: {
+      children?: ReactNode;
+      onOpenChange?: (open: boolean) => void;
+    }) =>
+      create(
+        'div',
+        {
+          'data-slot': slot,
+          onContextMenu:
+            slot === 'context-menu'
+              ? (event: React.MouseEvent) => {
+                  event.preventDefault();
+                  onOpenChange?.(true);
+                }
+              : undefined,
+        },
+        children
+      );
   const item =
     (slot: string) =>
     ({
@@ -192,6 +211,44 @@ describe('ProjectMenu quick actions submenu', () => {
     expect(onCreateTask).toHaveBeenCalledTimes(1);
     await act(async () => createAndRunItem?.click());
     expect(onCreateTaskAndRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('paints the context menu before starting cold project prefetch', async () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+
+    const { ProjectContextMenu } = await import('@renderer/features/sidebar/project-menu');
+    const onMenuOpen = vi.fn();
+
+    await act(async () => {
+      root.render(
+        createElement(ProjectContextMenu, {
+          ...requiredActions(),
+          onMenuOpen,
+          children: createElement('div', null, 'Cold project'),
+        })
+      );
+    });
+
+    await act(async () => {
+      host
+        .querySelector('[data-slot="context-menu"]')
+        ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    });
+
+    expect(onMenuOpen).not.toHaveBeenCalled();
+    expect(frameCallbacks).toHaveLength(1);
+
+    await act(async () => frameCallbacks.shift()?.(16));
+    expect(onMenuOpen).not.toHaveBeenCalled();
+    expect(frameCallbacks).toHaveLength(1);
+
+    await act(async () => frameCallbacks.shift()?.(32));
+    expect(onMenuOpen).toHaveBeenCalledOnce();
   });
 
   it.each([

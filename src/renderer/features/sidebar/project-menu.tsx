@@ -20,7 +20,7 @@ import {
   Trash2,
   WandSparkles,
 } from 'lucide-react';
-import React from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { QuickAction } from '@shared/project-settings';
 import {
@@ -472,14 +472,51 @@ interface ProjectContextMenuProps extends ProjectMenuActions {
   children: React.ReactNode;
 }
 
+/**
+ * Project-menu prefetch can synchronously publish several MobX loading states
+ * before its RPCs yield. Let the menu commit and paint first so a cold project
+ * never makes the context-menu gesture wait for repository/settings/terminal
+ * preparation.
+ */
+function useProjectMenuPrefetchAfterPaint(onMenuOpen?: () => void) {
+  const firstFrameRef = useRef<number | null>(null);
+  const secondFrameRef = useRef<number | null>(null);
+
+  const cancel = useCallback(() => {
+    if (firstFrameRef.current !== null) {
+      window.cancelAnimationFrame(firstFrameRef.current);
+      firstFrameRef.current = null;
+    }
+    if (secondFrameRef.current !== null) {
+      window.cancelAnimationFrame(secondFrameRef.current);
+      secondFrameRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => cancel, [cancel]);
+
+  return useCallback(
+    (open: boolean) => {
+      cancel();
+      if (!open || !onMenuOpen) return;
+
+      firstFrameRef.current = window.requestAnimationFrame(() => {
+        firstFrameRef.current = null;
+        secondFrameRef.current = window.requestAnimationFrame(() => {
+          secondFrameRef.current = null;
+          onMenuOpen();
+        });
+      });
+    },
+    [cancel, onMenuOpen]
+  );
+}
+
 export function ProjectContextMenu({ children, ...actions }: ProjectContextMenuProps) {
   const items = useMenuItems(actions);
+  const scheduleMenuPrefetch = useProjectMenuPrefetchAfterPaint(actions.onMenuOpen);
   return (
-    <ContextMenu
-      onOpenChange={(open) => {
-        if (open) actions.onMenuOpen?.();
-      }}
-    >
+    <ContextMenu onOpenChange={scheduleMenuPrefetch}>
       <ContextMenuTrigger className="block w-full min-w-0 overflow-hidden">
         {children}
       </ContextMenuTrigger>
@@ -553,11 +590,12 @@ export function ProjectActionsMenu({
   ...actions
 }: ProjectActionsMenuProps) {
   const items = useMenuItems(actions);
+  const scheduleMenuPrefetch = useProjectMenuPrefetchAfterPaint(actions.onMenuOpen);
   return (
     <DropdownMenu
       open={open}
       onOpenChange={(nextOpen) => {
-        if (nextOpen) actions.onMenuOpen?.();
+        scheduleMenuPrefetch(nextOpen);
         onOpenChange?.(nextOpen);
       }}
     >
