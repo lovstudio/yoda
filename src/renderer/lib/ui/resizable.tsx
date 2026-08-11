@@ -12,8 +12,25 @@ function ResizablePanelGroup({ className, ...props }: ResizablePrimitive.GroupPr
   );
 }
 
-function ResizablePanel({ ...props }: ResizablePrimitive.PanelProps) {
-  return <ResizablePrimitive.Panel data-slot="resizable-panel" {...props} />;
+function ResizablePanel({ className, style, ...props }: ResizablePrimitive.PanelProps) {
+  // react-resizable-panels v4 applies `overflow: auto` inline to its nested
+  // content element. That wins over Tailwind's `overflow-hidden` class and can
+  // turn a layout-only panel into a remembered scroll owner. In task views,
+  // restoring that scroll position moves the session titlebar out of view.
+  //
+  // Preserve the existing overflow-hidden contract at the primitive boundary.
+  // `clip` is intentional: unlike `hidden`, it also prevents focus/scroll
+  // restoration from changing scrollTop programmatically.
+  const clipsOverflow = className?.split(/\s+/).includes('overflow-hidden') ?? false;
+
+  return (
+    <ResizablePrimitive.Panel
+      data-slot="resizable-panel"
+      className={className}
+      style={clipsOverflow ? { overflow: 'clip', ...style } : style}
+      {...props}
+    />
+  );
 }
 
 function ResizableHandle({

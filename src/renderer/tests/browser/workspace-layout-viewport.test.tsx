@@ -2,6 +2,7 @@ import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceLayout } from '@renderer/lib/layout/workspace-layout';
+import { ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
 
 const mocks = vi.hoisted(() => ({
   setIsLeftOpen: vi.fn(),
@@ -9,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@renderer/lib/layout/layout-provider', () => ({
   useWorkspaceLayoutContext: () => ({
-    leftPanelRef: undefined,
+    leftPanelRef: { current: null },
     setIsLeftOpen: mocks.setIsLeftOpen,
     isLeftOpen: true,
   }),
@@ -47,5 +48,28 @@ describe('WorkspaceLayout viewport containment', () => {
     expect(mainPanelContent?.classList.contains('min-h-0')).toBe(true);
     expect(mainPanelContent?.classList.contains('min-w-0')).toBe(true);
     expect(mainPanelContent?.classList.contains('overflow-hidden')).toBe(true);
+    expect(mainPanelContent?.style.overflow).toBe('clip');
+  });
+
+  it('prevents an overflow-hidden panel from retaining a session scroll offset', () => {
+    flushSync(() => {
+      root.render(
+        <ResizablePanelGroup orientation="vertical">
+          <ResizablePanel id="session-panel" className="overflow-hidden">
+            <div style={{ height: 1200 }} />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      );
+    });
+
+    const panel = host.querySelector<HTMLElement>('#session-panel');
+    const panelContent = panel?.firstElementChild as HTMLElement | null;
+
+    expect(panelContent).not.toBeNull();
+    expect(panelContent?.style.overflow).toBe('clip');
+    expect(panelContent?.scrollHeight).toBeGreaterThan(panelContent?.clientHeight ?? 0);
+
+    if (panelContent) panelContent.scrollTop = 80;
+    expect(panelContent?.scrollTop).toBe(0);
   });
 });
