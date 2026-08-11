@@ -25,7 +25,7 @@ export function PromptLibraryChapter({
     <section
       data-slot={dataSlot}
       className={cn(
-        'shrink-0 overflow-hidden rounded-lg border border-border bg-background-secondary',
+        'min-w-0 shrink-0 overflow-hidden rounded-lg border border-border bg-background-secondary',
         className
       )}
     >

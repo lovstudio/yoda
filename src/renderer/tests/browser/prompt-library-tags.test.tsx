@@ -102,6 +102,10 @@ vi.mock('@renderer/lib/ipc', () => ({
   },
 }));
 
+vi.mock('@renderer/lib/hooks/useTheme', () => ({
+  useTheme: () => ({ effectiveTheme: 'ylight' }),
+}));
+
 vi.mock('@renderer/lib/modal/modal-provider', () => ({
   showModal: vi.fn(),
   useModalContext: () => ({
@@ -175,6 +179,44 @@ describe('PromptLibraryPanel tags', () => {
     expect(host.querySelectorAll('[data-slot="prompt-tag-badge"]')).toHaveLength(3);
     expect(host.textContent).toContain('Review');
     expect(host.textContent).toContain('Writing');
+  });
+
+  it('keeps expanded Markdown details inside a fixed-height reader', async () => {
+    mocks.prompts = [
+      {
+        ...prompt('markdown-detail', []),
+        content: [
+          '# Review checklist',
+          '',
+          '| Step | Owner |',
+          '| --- | --- |',
+          '| Verify this surface | Product |',
+          '',
+          ...Array.from({ length: 32 }, (_, index) => `- Checklist item ${index + 1}`),
+        ].join('\n'),
+      },
+    ];
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    const expand = host
+      .querySelector('[data-slot="prompt-library-row"]')
+      ?.querySelector<HTMLButtonElement>('button[aria-expanded]');
+    await act(async () => expand?.click());
+
+    const detail = host.querySelector<HTMLElement>('[data-slot="prompt-library-detail-content"]');
+    expect(detail).not.toBeNull();
+    expect(detail?.className).toContain('h-56');
+    expect(detail?.className).toContain('overflow-y-auto');
+    expect(detail?.className).toContain('overscroll-contain');
+    expect(detail?.querySelector('h2')?.textContent).toContain('Review checklist');
+    expect(detail?.querySelector('table')).not.toBeNull();
+    expect(
+      host.firstElementChild?.classList.contains('min-w-0') &&
+        host.querySelector('[data-slot="prompt-library-row"]')?.classList.contains('min-w-0')
+    ).toBe(true);
   });
 
   it('opens the new prompt editor for an initial create action', async () => {

@@ -9,7 +9,9 @@ final class ShareViewController: UIViewController {
     super.viewDidAppear(animated)
     guard !didStartProcessing else { return }
     didStartProcessing = true
-    processInput()
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+      self?.processInput()
+    }
   }
 
   private func processInput() {
@@ -41,14 +43,17 @@ final class ShareViewController: UIViewController {
 
       let token = UUID().uuidString
       let marker = "\(self.markerPrefix)\(token)|image"
-      UIPasteboard.general.setItems(
-        [[
-          UTType.png.identifier: pngData,
-          UTType.plainText.identifier: marker,
-        ]],
-        options: [.expirationDate: Date(timeIntervalSinceNow: 300)]
-      )
-      self.finishRequest()
+      DispatchQueue.main.async { [weak self] in
+        guard let self else { return }
+        UIPasteboard.general.setItems(
+          [[
+            UTType.png.identifier: pngData,
+            UTType.plainText.identifier: marker,
+          ]],
+          options: [.expirationDate: Date(timeIntervalSinceNow: 300)]
+        )
+        self.finishRequest()
+      }
     }
   }
 
@@ -62,17 +67,20 @@ final class ShareViewController: UIViewController {
 
       let token = UUID().uuidString
       let marker = "\(self.markerPrefix)\(token)|text"
-      UIPasteboard.general.setItems(
-        [[UTType.plainText.identifier: "\(marker)\n\(text)"]],
-        options: [.expirationDate: Date(timeIntervalSinceNow: 300)]
-      )
-      self.finishRequest()
+      DispatchQueue.main.async { [weak self] in
+        guard let self else { return }
+        UIPasteboard.general.setItems(
+          [[UTType.plainText.identifier: "\(marker)\n\(text)"]],
+          options: [.expirationDate: Date(timeIntervalSinceNow: 300)]
+        )
+        self.finishRequest()
+      }
     }
   }
 
   private func finishRequest() {
     DispatchQueue.main.async { [weak self] in
-      self?.extensionContext?.completeRequest(returningItems: nil)
+      self?.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
     }
   }
 
@@ -81,7 +89,7 @@ final class ShareViewController: UIViewController {
       guard let self else { return }
       let alert = UIAlertController(title: "Yoda Mobile", message: message, preferredStyle: .alert)
       alert.addAction(UIAlertAction(title: "完成", style: .default) { [weak self] _ in
-        self?.extensionContext?.completeRequest(returningItems: nil)
+        self?.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
       })
       self.present(alert, animated: true)
     }

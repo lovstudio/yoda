@@ -81,6 +81,7 @@ import {
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { Input } from '@renderer/lib/ui/input';
+import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 import {
   Select,
   SelectContent,
@@ -412,7 +413,7 @@ function SortablePromptRow({
         opacity: isDragging ? 0.45 : 1,
         zIndex: isDragging ? 1 : 'auto',
       }}
-      className="group/prompt relative border-t border-border first:border-t-0"
+      className="group/prompt relative min-w-0 border-t border-border first:border-t-0"
     >
       {children(dragHandle)}
     </li>
@@ -708,12 +709,15 @@ export function PromptLibraryPanel({
   return (
     <div
       className={cn(
-        '@container flex bg-background text-foreground',
+        '@container flex min-h-0 min-w-0 flex-1 overflow-x-hidden bg-background text-foreground',
         !embedded && 'h-full min-h-0 overflow-y-auto'
       )}
     >
       <div
-        className={cn('flex w-full flex-col', !embedded && 'mx-auto max-w-[1060px] px-10 pt-12')}
+        className={cn(
+          'flex min-w-0 w-full flex-col',
+          !embedded && 'mx-auto max-w-[1060px] px-4 pt-6 @3xl:px-6 @3xl:pt-8 @5xl:px-10 @5xl:pt-12'
+        )}
       >
         {!embedded && (
           <h1 className="text-4xl font-normal tracking-normal">{t('promptLibrary.title')}</h1>
@@ -722,7 +726,7 @@ export function PromptLibraryPanel({
         <Tabs
           value={activeScope}
           onValueChange={(value) => setActiveScope(value as PromptLibraryScope)}
-          className={cn(embedded ? 'mt-4' : 'mt-6')}
+          className={cn('min-w-0', embedded ? 'mt-4' : 'mt-6')}
         >
           <TabsList aria-label={t('promptLibrary.tabs.ariaLabel')} className="w-full max-w-md">
             <TabsIndicator />
@@ -1332,7 +1336,7 @@ export function PromptLibraryPanel({
                       items={visibleItems.map((entry) => entry.id)}
                       strategy={verticalListSortingStrategy}
                     >
-                      <ul className="overflow-hidden rounded-lg border border-border bg-background-secondary">
+                      <ul className="min-w-0 overflow-hidden rounded-lg border border-border bg-background-secondary">
                         {visibleItems.map((entry) => {
                           const isOpen = expandedIds.has(entry.id);
                           return (
@@ -1470,24 +1474,35 @@ export function PromptLibraryPanel({
                                     </DropdownMenu>
                                   </div>
                                   {isOpen ? (
-                                    <div className="grid gap-3 border-t border-border px-3 py-3 pl-14">
+                                    <div className="grid min-w-0 gap-3 border-t border-border px-3 py-3 @3xl:pl-14">
                                       {entry.source ? (
                                         <p className="truncate text-xs text-foreground-passive">
                                           {sourceTarget(entry.source)}
                                         </p>
                                       ) : null}
-                                      <pre className="min-w-0 whitespace-pre-wrap break-words font-mono text-xs text-foreground-passive">
-                                        {entry.content}
-                                      </pre>
+                                      <div
+                                        data-slot="prompt-library-detail-content"
+                                        role="region"
+                                        aria-label={t('promptLibrary.form.content')}
+                                        tabIndex={0}
+                                        className="h-56 min-h-0 min-w-0 overflow-y-auto overscroll-contain rounded-md border border-border bg-background px-3 py-2.5 text-xs leading-5 text-foreground-muted"
+                                      >
+                                        <MarkdownRenderer
+                                          content={entry.content}
+                                          variant="compact"
+                                          annotations={false}
+                                          className="min-w-0 break-words"
+                                        />
+                                      </div>
                                       {entry.extraInfo ? (
-                                        <div className="rounded-md border border-border bg-background px-3 py-2 text-xs leading-5 text-foreground-muted">
+                                        <div className="min-w-0 break-words rounded-md border border-border bg-background px-3 py-2 text-xs leading-5 text-foreground-muted">
                                           <span className="mr-2 font-medium text-foreground">
                                             {t('promptLibrary.form.extraInfo')}
                                           </span>
                                           {isExternalUrl(entry.extraInfo) ? (
                                             <button
                                               type="button"
-                                              className="inline-flex items-center gap-1 text-foreground underline underline-offset-2"
+                                              className="inline-flex max-w-full break-all text-left text-foreground underline underline-offset-2"
                                               onClick={() =>
                                                 void rpc.app.openExternal(entry.extraInfo.trim())
                                               }
@@ -1496,7 +1511,7 @@ export function PromptLibraryPanel({
                                               <ExternalLink className="size-3" />
                                             </button>
                                           ) : (
-                                            <span className="whitespace-pre-wrap">
+                                            <span className="whitespace-pre-wrap break-words">
                                               {entry.extraInfo}
                                             </span>
                                           )}
