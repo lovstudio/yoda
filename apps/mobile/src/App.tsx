@@ -685,6 +685,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const openTaskRequestRef = useRef(0);
   const shareExtensionProbeRef = useRef(false);
+  const [newTaskDismissOnBackdrop, setNewTaskDismissOnBackdrop] = useState(true);
 
   const applyPairingUrl = useCallback(async (url: string | null) => {
     if (!url) return false;
@@ -868,6 +869,7 @@ export function App() {
         setSelectedTaskId(null);
         setSelectedSessionId(null);
         setHomeTab('tasks');
+        setNewTaskDismissOnBackdrop(false);
         setNewTaskOpen(true);
         setError(null);
       } catch (e) {
@@ -1087,6 +1089,7 @@ export function App() {
     setNewTaskParent(parentTask);
     setNewTaskParentId(parentTask?.id ?? null);
     setNewTaskSiblingOf(null);
+    setNewTaskDismissOnBackdrop(true);
     if (parentTask) setDemandProjectId(parentTask.projectId);
     setNewTaskOpen(true);
   }, []);
@@ -1097,6 +1100,7 @@ export function App() {
       setNewTaskParent(attribution.parentTask);
       setNewTaskParentId(attribution.parentTaskId);
       setNewTaskSiblingOf(task);
+      setNewTaskDismissOnBackdrop(true);
       setDemandProjectId(attribution.projectId);
       setNewTaskOpen(true);
     },
@@ -1105,6 +1109,7 @@ export function App() {
 
   const closeNewTask = useCallback(() => {
     setNewTaskOpen(false);
+    setNewTaskDismissOnBackdrop(true);
     setNewTaskParent(null);
     setNewTaskParentId(null);
     setNewTaskSiblingOf(null);
@@ -1191,6 +1196,7 @@ export function App() {
       configurationError={mobileConfigurationError}
       demandConfiguration={demandConfiguration}
       images={demandImages}
+      dismissOnBackdrop={newTaskDismissOnBackdrop}
       open={newTaskOpen}
       parentTask={newTaskParent}
       siblingOfTask={newTaskSiblingOf}
@@ -2659,12 +2665,14 @@ function MobileDemandSettingsSheet({
 function NewTaskModal({
   open,
   onClose,
+  dismissOnBackdrop = true,
   parentTask = null,
   siblingOfTask = null,
   ...composerProps
 }: Omit<Parameters<typeof DemandComposer>[0], 'onSubmit'> & {
   open: boolean;
   onClose: () => void;
+  dismissOnBackdrop?: boolean;
   onSubmit: () => void;
   parentTask?: MobileTaskSummary | null;
   siblingOfTask?: MobileTaskSummary | null;
@@ -2683,7 +2691,12 @@ function NewTaskModal({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.newTaskOverlay}
       >
-        <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Pressable
+          accessible={false}
+          pointerEvents={dismissOnBackdrop ? 'auto' : 'none'}
+          style={StyleSheet.absoluteFill}
+          onPress={dismissOnBackdrop ? onClose : undefined}
+        />
         <SafeAreaView style={styles.newTaskWindow}>
           <View style={styles.newTaskWindowHeader}>
             <View style={styles.newTaskWindowHeaderTitleBlock}>
