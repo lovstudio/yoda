@@ -120,9 +120,7 @@ vi.mock('@renderer/app/home-view', () => ({
             },
           },
           chip('项目', 96),
-          chip('环境', 84),
-          chip('分支', 124),
-          chip('分叉', 96),
+          chip('环境 · 本机 · main · 新开分支', 220),
           chip('代理', 172),
           chip('配置', 64, { surface: 'home-composer-session-settings' }),
           chip('对比', 64, {
@@ -242,7 +240,7 @@ describe('NewTaskModal responsive layout', () => {
     );
     const firstTop = rect(controls.at(0) ?? null).top;
 
-    expect(controls).toHaveLength(7);
+    expect(controls).toHaveLength(5);
     expect(controls.every((control) => Math.abs(rect(control).top - firstTop) < 1)).toBe(true);
     expect(getComputedStyle(settingsLabel as Element).display).not.toBe('none');
     expect(getComputedStyle(compareLabel as Element).display).toBe('none');
