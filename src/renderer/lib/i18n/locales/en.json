@@ -1604,6 +1604,7 @@
     "environmentBranchLabel": "Base branch",
     "environmentBranchStrategyLabel": "Branch strategy",
     "environmentNewBranch": "New branch",
+    "environmentNewBranchCompact": "New",
     "environmentExistingBranch": "Existing branch",
     "runHostAria": "Choose run host",
     "runHostLocal": "Local host",
