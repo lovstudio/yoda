@@ -28,7 +28,7 @@
     "ios": {
       "appleTeamId": "SR95DUC5MJ",
       "bundleIdentifier": "ai.lovstudio.yoda.mobile",
-      "buildNumber": "7",
+      "buildNumber": "8",
       "requireFullScreen": true,
       "supportsTablet": true,
       "infoPlist": {

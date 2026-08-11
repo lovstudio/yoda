@@ -52,7 +52,7 @@ final class ShareViewController: UIViewController {
           ]],
           options: [.expirationDate: Date(timeIntervalSinceNow: 300)]
         )
-        self.finishRequest()
+        self.handoffToMainApp(kind: "image", token: token)
       }
     }
   }
@@ -73,7 +73,7 @@ final class ShareViewController: UIViewController {
           [[UTType.plainText.identifier: "\(marker)\n\(text)"]],
           options: [.expirationDate: Date(timeIntervalSinceNow: 300)]
         )
-        self.finishRequest()
+        self.handoffToMainApp(kind: "text", token: token)
       }
     }
   }
@@ -81,6 +81,30 @@ final class ShareViewController: UIViewController {
   private func finishRequest() {
     DispatchQueue.main.async { [weak self] in
       self?.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+    }
+  }
+
+  private func handoffToMainApp(kind: String, token: String) {
+    var components = URLComponents()
+    components.scheme = "yodamobile"
+    components.host = "share"
+    components.queryItems = [
+      URLQueryItem(name: "source", value: "share-extension"),
+      URLQueryItem(name: "kind", value: kind),
+      URLQueryItem(name: "token", value: token),
+    ]
+
+    guard let url = components.url else {
+      finishRequest()
+      return
+    }
+
+    // Share/Action extensions may be kept in the foreground by iOS. When the
+    // extension point accepts URL opening, this takes the user straight into
+    // Yoda Mobile. The pasteboard handoff remains the fallback for systems
+    // that reject opening the containing app from a Share Extension.
+    extensionContext?.open(url) { [weak self] _ in
+      self?.finishRequest()
     }
   }
 
