@@ -184,19 +184,18 @@ describe('WorkspaceNotificationCenter', () => {
       '[aria-label="More Build failed"]'
     );
     expect(moreActions).not.toBeNull();
-    await act(async () => {
-      await userEvent.click(moreActions!);
+    await userEvent.click(moreActions!);
+    await vi.waitFor(() => {
+      expect(findDropdownMenuItem('Copy debug info')).toBeDefined();
     });
 
-    const copyDebugInfo = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
-    ).find((item) => item.textContent?.includes('Copy debug info'));
+    const copyDebugInfo = findDropdownMenuItem('Copy debug info');
     expect(copyDebugInfo).toBeDefined();
-    await act(async () => {
-      await userEvent.click(copyDebugInfo!);
+    await userEvent.click(copyDebugInfo!);
+    await vi.waitFor(() => {
+      expect(mocks.copyTextToClipboard).toHaveBeenCalledOnce();
     });
 
-    expect(mocks.copyTextToClipboard).toHaveBeenCalledOnce();
     const copied = mocks.copyTextToClipboard.mock.calls[0]?.[0] as string;
     expect(copied).toContain('Error: Build failed');
     expect(copied).toContain('Error: EACCES');
@@ -209,3 +208,9 @@ describe('WorkspaceNotificationCenter', () => {
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Debug info copied');
   });
 });
+
+function findDropdownMenuItem(text: string): HTMLElement | undefined {
+  return Array.from(
+    document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+  ).find((item) => item.textContent?.includes(text));
+}
