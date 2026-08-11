@@ -5,7 +5,10 @@ import type { Task } from '@shared/tasks';
 import type { Terminal } from '@shared/terminals';
 import { hydratedConversationStart } from '@main/core/conversations/pending-initial-prompt';
 import { clearPendingInitialPrompt } from '@main/core/conversations/pending-initial-prompt-store';
-import type { ConversationProvider } from '@main/core/conversations/types';
+import type {
+  ConversationProvider,
+  ConversationStartOptions,
+} from '@main/core/conversations/types';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import { SshExecutionContext } from '@main/core/execution-context/ssh-execution-context';
 import type { IExecutionContext } from '@main/core/execution-context/types';
@@ -84,7 +87,8 @@ async function withConversationHydrationSlot(run: () => Promise<void>): Promise<
 async function hydrateConversationBatch(
   provider: ConversationProvider,
   conversations: Conversation[],
-  logPrefix: string
+  logPrefix: string,
+  startOptions?: ConversationStartOptions
 ): Promise<void> {
   let nextIndex = 0;
   const hydrateNext = async (): Promise<void> => {
@@ -101,7 +105,8 @@ async function hydrateConversationBatch(
             start.initialPrompt,
             undefined,
             start.imagePaths,
-            { model: start.model, reasoningEffort: start.reasoningEffort }
+            { model: start.model, reasoningEffort: start.reasoningEffort },
+            startOptions
           );
           if (pending) {
             await clearPendingInitialPrompt(conversation.id);
@@ -150,7 +155,8 @@ export async function hydratePersistedConversations(
             makePtySessionId(conversation.projectId, conversation.taskId, conversation.id)
           )
       ),
-      logPrefix
+      logPrefix,
+      { reattachExistingTmuxSession: true }
     )
   );
 

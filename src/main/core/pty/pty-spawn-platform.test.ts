@@ -329,4 +329,23 @@ describe('resolveLocalPtySpawn - POSIX', () => {
     expect(result.args[1]).toContain('[ "$current_identity" = \'fork-thread\' ]');
     expect(result.args[1]).toContain('kill-session -t "agent-session"');
   });
+
+  it('attaches an existing hydrated tmux session without replacing it', () => {
+    const result = resolveLocalPtySpawn({
+      platform: 'linux',
+      env: posixEnv,
+      intent: {
+        kind: 'run-command',
+        cwd: '/repo',
+        command: { kind: 'argv', command: 'codex', args: ['resume', 'fork-thread'] },
+        tmuxSessionName: 'agent-session',
+        tmuxSessionIdentity: 'fork-thread',
+        tmuxReattachExistingSession: true,
+      },
+    });
+
+    const [existingPaneBranch] = result.args[1].split('; else ');
+    expect(existingPaneBranch).toContain('then tmux -L yoda -f /dev/null attach-session');
+    expect(existingPaneBranch).not.toContain('kill-session');
+  });
 });

@@ -250,19 +250,51 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       onSelect: actions.isLongTerm ? actions.onUnmarkLongTerm : actions.onMarkLongTerm,
     });
   }
+  // group 2 — archive / restore and pending acceptance. Archive is a flat pair:
+  // direct archive (note dialog, no skill) and, when configured, run the
+  // pre-archive skill then archive.
+  if (!actions.isArchived) {
+    items.push({
+      key: 'archive',
+      group: 2,
+      icon: Archive,
+      label: t('tasks.context.archiveDirect'),
+      onSelect: actions.onArchive,
+    });
+    if (actions.onArchiveWithSkill) {
+      // The skill dialog prefills/edits the command and links to settings, so
+      // it stays enabled even when no preset is configured yet.
+      items.push({
+        key: 'archive-with-skill',
+        group: 2,
+        icon: Sparkles,
+        label: t('tasks.context.archiveWithSkill'),
+        onSelect: actions.onArchiveWithSkill,
+      });
+    }
+  }
+  if (actions.isArchived && actions.onRestore) {
+    items.push({
+      key: 'restore',
+      group: 2,
+      icon: ArchiveRestore,
+      label: t('projects.tasks.restore'),
+      onSelect: actions.onRestore,
+    });
+  }
   if (actions.canMarkReview) {
     items.push(
       actions.needsReview
         ? {
             key: 'unmark-review',
-            group: 1,
+            group: 2,
             icon: CircleSlash,
             label: t('tasks.context.unmarkReview'),
             onSelect: actions.onUnmarkNeedsReview,
           }
         : {
             key: 'mark-review',
-            group: 1,
+            group: 2,
             icon: CircleDot,
             label: t('tasks.context.markForReview'),
             onSelect: actions.onMarkNeedsReview,
@@ -270,11 +302,11 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
     );
   }
 
-  // group 2 — task hierarchy
+  // group 3 — task hierarchy
   if (!actions.isArchived && actions.onCreateSubtask) {
     items.push({
       key: 'create-subtask',
-      group: 2,
+      group: 3,
       icon: ListPlus,
       label: t('tasks.context.createSubtask'),
       onSelect: actions.onCreateSubtask,
@@ -283,7 +315,7 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
   if (!actions.isArchived && actions.onCreateSubtaskAndRun) {
     items.push({
       key: 'create-subtask-and-run',
-      group: 2,
+      group: 3,
       icon: Sparkles,
       label: t('tasks.context.createSubtaskAndRun'),
       onSelect: actions.onCreateSubtaskAndRun,
@@ -292,7 +324,7 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
   if (!actions.isArchived && actions.onSetParent) {
     items.push({
       key: 'set-parent',
-      group: 2,
+      group: 3,
       icon: ListTree,
       label: t('tasks.context.setParent'),
       onSelect: actions.onSetParent,
@@ -301,18 +333,18 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
   if (!actions.isArchived && actions.onCreateParent) {
     items.push({
       key: 'create-parent',
-      group: 2,
+      group: 3,
       icon: FolderTree,
       label: t('tasks.context.createParent'),
       onSelect: actions.onCreateParent,
     });
   }
 
-  // group 3 — copy (ID first)
+  // group 4 — copy (ID first)
   if (actions.taskId) {
     items.push({
       key: 'copy-task-id',
-      group: 3,
+      group: 4,
       icon: Copy,
       label: t('tasks.context.copyTaskId'),
       onSelect: () => {
@@ -323,7 +355,7 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
   if (actions.taskId || actions.taskName) {
     items.push({
       key: 'copy-task-basic-info',
-      group: 3,
+      group: 4,
       icon: ClipboardList,
       label: t('tasks.context.copyTaskBasicInfo'),
       onSelect: () => {
@@ -334,43 +366,10 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
   if (actions.onCopyYodaLink) {
     items.push({
       key: 'copy-yoda-link',
-      group: 3,
+      group: 4,
       icon: Link2,
       label: t('tasks.context.copyYodaLink'),
       onSelect: actions.onCopyYodaLink,
-    });
-  }
-
-  // group 4 — archive / restore. Archive is a flat pair:
-  // direct archive (note dialog, no skill) and, when configured, run the
-  // pre-archive skill then archive.
-  if (!actions.isArchived) {
-    items.push({
-      key: 'archive',
-      group: 4,
-      icon: Archive,
-      label: t('tasks.context.archiveDirect'),
-      onSelect: actions.onArchive,
-    });
-    if (actions.onArchiveWithSkill) {
-      // The skill dialog prefills/edits the command and links to settings, so
-      // it stays enabled even when no preset is configured yet.
-      items.push({
-        key: 'archive-with-skill',
-        group: 4,
-        icon: Sparkles,
-        label: t('tasks.context.archiveWithSkill'),
-        onSelect: actions.onArchiveWithSkill,
-      });
-    }
-  }
-  if (actions.isArchived && actions.onRestore) {
-    items.push({
-      key: 'restore',
-      group: 4,
-      icon: ArchiveRestore,
-      label: t('projects.tasks.restore'),
-      onSelect: actions.onRestore,
     });
   }
 
