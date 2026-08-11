@@ -15,7 +15,7 @@ import { automationRunsUpdatedChannel, automationsUpdatedChannel } from '@shared
 import { isValidRuntimeId } from '@shared/runtime-registry';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { db } from '@main/db/client';
-import { automationRuns, automations } from '@main/db/schema';
+import { automationRuns, automations, conversations } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import {
@@ -52,6 +52,7 @@ function toRun(row: AutomationRunRow): AutomationRun {
     id: row.id,
     automationId: row.automationId,
     taskId: row.taskId,
+    conversationId: row.conversationId,
     trigger: row.trigger,
     status: row.status as AutomationRunStatus,
     startedAt: row.startedAt,
@@ -354,12 +355,17 @@ export class AutomationService {
     return rows.length > 0;
   }
 
-  async startRun(automationId: string, trigger: string, taskId?: string): Promise<string> {
+  async startRun(
+    automationId: string,
+    trigger: string,
+    target?: { taskId?: string; conversationId?: string }
+  ): Promise<string> {
     const id = randomUUID();
     await db.insert(automationRuns).values({
       id,
       automationId,
-      taskId: taskId ?? null,
+      taskId: target?.taskId ?? null,
+      conversationId: target?.conversationId ?? null,
       trigger,
       status: 'running',
       startedAt: new Date().toISOString(),
@@ -407,7 +413,39 @@ export class AutomationService {
       .where(automationId ? eq(automationRuns.automationId, automationId) : undefined)
       .orderBy(desc(automationRuns.startedAt))
       .limit(Math.min(500, Math.max(1, limit)));
-    return rows.map(toRun);
+    const runs = rows.map(toRun);
+    const legacyTaskIds = [
+      ...new Set(runs.flatMap((run) => (run.taskId && !run.conversationId ? [run.taskId] : []))),
+    ];
+    if (legacyTaskIds.length === 0) return runs;
+
+    // Runs created before `conversation_id` was persisted still have an initial
+    // session in their task. Resolve it on read so historic results remain
+    // directly actionable instead of falling back to the task overview.
+    const taskConversations = await db
+      .select({
+        taskId: conversations.taskId,
+        conversationId: conversations.id,
+        isInitialConversation: conversations.isInitialConversation,
+      })
+      .from(conversations)
+      .where(inArray(conversations.taskId, legacyTaskIds))
+      .orderBy(asc(conversations.createdAt));
+    const conversationIdByTask = new Map<string, string>();
+    for (const conversation of taskConversations) {
+      if (
+        !conversationIdByTask.has(conversation.taskId) ||
+        conversation.isInitialConversation === true
+      ) {
+        conversationIdByTask.set(conversation.taskId, conversation.conversationId);
+      }
+    }
+    for (const run of runs) {
+      if (!run.conversationId && run.taskId) {
+        run.conversationId = conversationIdByTask.get(run.taskId) ?? null;
+      }
+    }
+    return runs;
   }
 
   /** Marks runs left `running` by a previous process as interrupted. Runs once. */
