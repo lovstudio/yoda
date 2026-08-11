@@ -73,7 +73,7 @@ final class ActionViewController: UIViewController, UITextViewDelegate {
 
     let titleLabel = UILabel()
     titleLabel.font = .preferredFont(forTextStyle: .headline)
-    titleLabel.text = "开始新工作"
+    titleLabel.text = "Yoda 新工作"
     titleStack.addArrangedSubview(titleLabel)
 
     let subtitleLabel = UILabel()
