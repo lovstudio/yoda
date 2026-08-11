@@ -1,8 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { agentEventChannel } from '@shared/events/agentEvents';
 import { agentSessionRuntimeStore, type AgentSessionKey } from './agent-session-runtime';
 
+const mocks = vi.hoisted(() => ({
+  emit: vi.fn(),
+  isAppFocused: vi.fn(() => false),
+  maybeShowNotification: vi.fn(),
+}));
+
 vi.mock('@main/lib/events', () => ({
-  events: { emit: vi.fn(), on: vi.fn(() => () => {}) },
+  events: { emit: mocks.emit, on: vi.fn(() => () => {}) },
+}));
+vi.mock('@main/core/agent-hooks/notification', () => ({
+  isAppFocused: mocks.isAppFocused,
+  maybeShowNotification: mocks.maybeShowNotification,
 }));
 vi.mock('./interrupt-marker', () => ({ clearInterruptMarker: vi.fn() }));
 
@@ -51,6 +62,67 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0]?.[0]).toMatchObject({ status: 'idle' });
     unsubscribe();
+  });
+
+  it('turns authoritative completion into a notification event and sound signal', () => {
+    agentSessionRuntimeStore.dispatch(
+      session,
+      { kind: 'turn-started', at: 100, force: true },
+      'codex-rollout'
+    );
+    agentSessionRuntimeStore.dispatch(
+      session,
+      { kind: 'turn-completed', at: 200 },
+      'codex-rollout'
+    );
+
+    expect(mocks.maybeShowNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'stop',
+        source: 'runtime',
+        projectId: session.projectId,
+        taskId: session.taskId,
+        conversationId: session.conversationId,
+        timestamp: 200,
+      }),
+      false
+    );
+    expect(mocks.emit).toHaveBeenCalledWith(
+      agentEventChannel,
+      expect.objectContaining({
+        appFocused: false,
+        event: expect.objectContaining({ type: 'stop', source: 'runtime' }),
+      })
+    );
+  });
+
+  it('preserves the permission subtype for authoritative attention events', () => {
+    agentSessionRuntimeStore.dispatch(
+      session,
+      {
+        kind: 'awaiting-input',
+        at: 300,
+        pendingAction: {
+          notificationType: 'permission_prompt',
+          toolName: 'shell',
+          actionDescription: 'Allow this command?',
+        },
+      },
+      'claude-transcript'
+    );
+
+    expect(mocks.maybeShowNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'notification',
+        source: 'runtime',
+        payload: expect.objectContaining({
+          notificationType: 'permission_prompt',
+          title: 'shell',
+          message: 'Allow this command?',
+        }),
+      }),
+      false
+    );
   });
 });
 

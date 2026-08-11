@@ -63,6 +63,7 @@ import type { QuickActionTaskSource } from '@shared/tasks';
 import { resolveHomeProjectId } from '@renderer/app/home-project-selection';
 import { FeatureWorkflowPreview } from '@renderer/features/agent-room/feature-workflow-rail';
 import { invalidateTeamRoomQueries } from '@renderer/features/agent-room/team-room-queries';
+import { AgentModelCombobox } from '@renderer/features/agents-config/agent-model-combobox';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
 import { createAiLabProject } from '@renderer/features/ai-lab/create-ai-lab-project';
 import { startAiLabBuildTask } from '@renderer/features/ai-lab/start-ai-lab-build-task';
@@ -2082,7 +2083,6 @@ export const HomeComposer = observer(function HomeComposer({
       >
         <ComposerSettingsContent
           runtimeId={runtimeId}
-          projectId={selectedProjectId}
           attachImagesAsPaths={attachImagesAsPaths}
           inputPromptLanguage={inputPromptLanguageField.value}
           namingLanguage={namingLanguageField.value}
@@ -3398,29 +3398,31 @@ function Agent({
  * default.
  */
 function SlotModelInput({ agent }: { agent: Agent }) {
-  const { t } = useTranslation();
   const { update } = useAgents();
   // Seeded once; the parent remounts this via key={agent.id} when the slot's
   // Agent changes, so local edits never get clobbered mid-typing.
   const [value, setValue] = useState(agent.model ?? '');
+  const lastSubmittedValue = useRef<string | null>(agent.model ?? null);
 
-  const commit = () => {
-    const next = value.trim() || null;
-    if (next === (agent.model ?? null)) return;
-    void update({ id: agent.id, draft: { ...agentToDraft(agent), model: next } });
+  const commit = (rawValue: string | null) => {
+    const next = rawValue?.trim() || null;
+    setValue(next ?? '');
+    if (next === lastSubmittedValue.current) return;
+    const previous = lastSubmittedValue.current;
+    lastSubmittedValue.current = next;
+    void update({ id: agent.id, draft: { ...agentToDraft(agent), model: next } }).catch(() => {
+      if (lastSubmittedValue.current === next) lastSubmittedValue.current = previous;
+    });
   };
 
   return (
-    <input
+    <AgentModelCombobox
       value={value}
-      onChange={(event) => setValue(event.target.value)}
+      onChange={(next) => setValue(next ?? '')}
+      onSelect={commit}
       onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') event.currentTarget.blur();
-      }}
-      placeholder={t('agentManager.modelPlaceholder')}
-      title={t('agentManager.model')}
-      className="h-7 w-28 shrink-0 rounded-md border border-transparent bg-transparent px-2 text-xs text-foreground outline-none transition-colors placeholder:text-foreground-passive hover:bg-background-2 focus-visible:bg-background-2 focus-visible:ring-1 focus-visible:ring-ring"
+      onSubmit={commit}
+      className="h-7 w-28 shrink-0 rounded-md border border-transparent bg-transparent text-xs transition-colors hover:bg-background-2 focus-within:bg-background-2 focus-within:ring-1 focus-within:ring-ring [&_[data-slot=input-group-control]]:min-w-0 [&_[data-slot=input-group-control]]:px-2"
     />
   );
 }

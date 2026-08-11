@@ -45,6 +45,7 @@ import { ManagedGatewayCardShell } from './ManagedGatewayCardShell';
 
 type CliProxyApiManagedCardProps = {
   onOpenManualSettings: () => void;
+  starCount?: number | null;
 };
 
 const operationActionKeys: Record<CliProxyApiManagedOperation, string> = {
@@ -57,7 +58,10 @@ function normalizeEndpoint(endpoint: string): string {
   return endpoint.trim().replace(/\/+$/, '');
 }
 
-export function CliProxyApiManagedCard({ onOpenManualSettings }: CliProxyApiManagedCardProps) {
+export function CliProxyApiManagedCard({
+  onOpenManualSettings,
+  starCount,
+}: CliProxyApiManagedCardProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const { data: connections } = useMaasConnections();
@@ -387,6 +391,7 @@ export function CliProxyApiManagedCard({ onOpenManualSettings }: CliProxyApiMana
       icon={<Network className="h-8 w-8 text-primary" />}
       name="CLIProxyAPI"
       description={description}
+      starCount={starCount}
       actions={
         <HeaderActionToolbar label={t('maas.managedGateways.cliProxyApi.actions')}>
           {renderPrimaryAction()}

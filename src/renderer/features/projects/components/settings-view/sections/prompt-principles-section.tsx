@@ -2,11 +2,13 @@ import { Plus, Trash2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import type { PromptPrinciple } from '@shared/project-settings';
+import { isPromptBoundToScope } from '@shared/prompt-library';
 import {
   effectiveGlobalEnabled,
   setGlobalOverride,
   setProjectItems,
 } from '@renderer/features/projects/project-prompt-principles';
+import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { PromptInjectionControls } from '@renderer/features/prompt-library/prompt-injection-controls';
 import { usePrompts } from '@renderer/features/prompt-library/use-prompts';
 import { Button } from '@renderer/lib/ui/button';
@@ -18,17 +20,26 @@ import { Textarea } from '@renderer/lib/ui/textarea';
 import type { FormState, FormUpdate } from '../project-settings-form-model';
 
 type PromptPrinciplesSectionProps = {
+  projectId: string;
   form: FormState;
   update: FormUpdate;
 };
 
 export const PromptPrinciplesSection = observer(function PromptPrinciplesSection({
+  projectId,
   form,
   update,
 }: PromptPrinciplesSectionProps) {
   const { t } = useTranslation();
   const { data: prompts } = usePrompts();
+  const projectWorkspaceId = getProjectStore(projectId)?.data?.workspaceId;
   const globalItems = (prompts ?? [])
+    .filter((prompt) =>
+      isPromptBoundToScope(prompt, 'project', {
+        projectId,
+        workspaceId: projectWorkspaceId,
+      })
+    )
     .slice()
     .sort((left, right) => left.injectionOrder - right.injectionOrder);
   const project = form.promptPrinciples;

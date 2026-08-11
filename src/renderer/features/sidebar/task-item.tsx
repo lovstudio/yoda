@@ -153,7 +153,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
 
   const handleProvision = () => {
     if (task.state !== 'unprovisioned' || task.phase !== 'idle') return;
-    void taskManager?.provisionTask(taskId);
+    void taskManager?.provisionTask(taskId).catch(() => {});
   };
 
   const needsReview = task.data.needsReview;
@@ -213,6 +213,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         // The sidebar icon archives immediately. The overflow menu
         // retains the optional-note and pre-archive-command flows.
         menuActions.onArchiveQuick();
+        navigate('home');
       }}
     >
       <Archive className="h-4 w-4" />
@@ -247,6 +248,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         if (e.button !== 0 || (e.target instanceof Element && e.target.closest('button'))) return;
         e.preventDefault();
         taskPreloadIntent.runNow();
+        // Start the same single-flight provision used by click handling while
+        // the pointer is still down. The route then enters directly into the
+        // opening surface instead of first painting the idle state.
+        handleProvision();
       }}
       onClick={(e) => {
         // Alt/Option pins the task into the global side pane (landing
@@ -256,10 +261,6 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           return;
         }
         handleOpenTask();
-      }}
-      onDoubleClick={(e) => {
-        e.stopPropagation();
-        menuActions.onRename();
       }}
     >
       <div className="flex min-w-0 flex-1 items-center gap-1 self-stretch overflow-hidden">

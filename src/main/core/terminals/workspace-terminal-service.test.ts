@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getDependencyManager: vi.fn(),
   getRuntimeConfig: vi.fn(),
   spawnTerminal: vi.fn(async () => {}),
+  spawnLifecycleScript: vi.fn(async () => {}),
   isTerminalDetachable: vi.fn(() => true),
   killTerminal: vi.fn(async () => {}),
   destroyAll: vi.fn(async () => {}),
@@ -39,6 +40,7 @@ vi.mock('@main/core/settings/runtime-settings-service', () => ({
 vi.mock('@main/core/terminals/impl/local-terminal-provider', () => ({
   LocalTerminalProvider: class {
     spawnTerminal = mocks.spawnTerminal;
+    spawnLifecycleScript = mocks.spawnLifecycleScript;
     isTerminalDetachable = mocks.isTerminalDetachable;
     killTerminal = mocks.killTerminal;
     destroyAll = mocks.destroyAll;
@@ -172,6 +174,41 @@ describe('WorkspaceTerminalService', () => {
     expect(mocks.persistTerminal).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'terminal-1', projectId: 'project-1' })
     );
+  });
+
+  it('runs one-shot project commands without persisting a stale quick-action terminal', async () => {
+    const terminalProvider = {
+      spawnTerminal: mocks.spawnTerminal,
+      spawnLifecycleScript: mocks.spawnLifecycleScript,
+      isTerminalDetachable: mocks.isTerminalDetachable,
+      killTerminal: mocks.killTerminal,
+      destroyAll: mocks.destroyAll,
+      detachAll: mocks.detachAll,
+    };
+    mocks.getProject.mockReturnValue({ projectId: 'project-1' });
+    mocks.getWorkspace.mockReturnValue({ terminals: terminalProvider });
+    const service = new WorkspaceTerminalService();
+
+    await service.createTerminal({
+      id: 'quick-action-1',
+      projectId: 'project-1',
+      taskId: 'local:project-1:project-view',
+      name: 'Start locally',
+      command: ' pnpm run dev ',
+      persist: false,
+    });
+
+    expect(mocks.spawnTerminal).not.toHaveBeenCalled();
+    expect(mocks.spawnLifecycleScript).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminal: expect.objectContaining({ id: 'quick-action-1' }),
+        command: 'pnpm run dev',
+        respawnOnExit: false,
+        preserveBufferOnExit: true,
+        watchDevServer: true,
+      })
+    );
+    expect(mocks.persistTerminal).not.toHaveBeenCalled();
   });
 
   it('hydrates persisted project terminals so tmux sessions can be reattached', async () => {

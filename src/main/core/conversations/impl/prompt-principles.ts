@@ -1,4 +1,5 @@
 import type { ProjectPromptPrinciples } from '@shared/project-settings';
+import { isPromptAvailableForTarget, type PromptInjectionTarget } from '@shared/prompt-library';
 import { promptLibraryService } from '@main/core/prompt-library/prompt-library-service';
 
 /**
@@ -9,7 +10,8 @@ import { promptLibraryService } from '@main/core/prompt-library/prompt-library-s
  * Returns undefined when nothing is enabled so callers can skip the flag.
  */
 export async function getEnabledPromptPrinciplesText(
-  projectPrinciples?: ProjectPromptPrinciples
+  projectPrinciples?: ProjectPromptPrinciples,
+  target?: string | PromptInjectionTarget
 ): Promise<string | undefined> {
   const globalItems = (await promptLibraryService.list()).sort(
     (left, right) => left.injectionOrder - right.injectionOrder
@@ -18,7 +20,7 @@ export async function getEnabledPromptPrinciplesText(
   const projectItems = projectPrinciples?.items ?? [];
 
   const texts: string[] = [];
-  for (const item of globalItems) {
+  for (const item of globalItems.filter((prompt) => isPromptAvailableForTarget(prompt, target))) {
     const enabled = overrides[item.id] ?? item.injectionEnabled;
     if (enabled && item.content.trim().length > 0) texts.push(item.content.trim());
   }

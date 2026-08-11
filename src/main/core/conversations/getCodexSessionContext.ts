@@ -79,6 +79,13 @@ type TurnTagged<T> = {
   turnId: string | null;
 };
 
+type CodexPromptCandidate = {
+  prompt: ClaudeSessionPrompt;
+  turnId: string | null;
+  order: number;
+  source: 'event' | 'response';
+};
+
 /**
  * Codex wraps each compaction summary with this prefix and reinjects it as a
  * `user` message (`prompts/templates/compact/summary_prefix.md`). We match on
@@ -159,6 +166,28 @@ export async function getCodexSessionContext(
     completedTurnCount: rollout.completedTurnCount,
     summary: rollout.summary,
   };
+}
+
+/** Resolve the active rollout without parsing transcript or harness content. */
+export async function getCodexSessionRolloutPath(
+  cwd: string,
+  conversationId: string,
+  conversationTitle?: string,
+  conversationCreatedAt?: string | null,
+  options: {
+    codexHome?: string;
+    reservedThreadIds?: ReadonlySet<string>;
+    conversationLastInteractedAt?: string | null;
+  } = {}
+): Promise<string | null> {
+  const resolved = await resolveCurrentCodexThread(
+    cwd,
+    conversationId,
+    conversationTitle,
+    conversationCreatedAt,
+    options
+  );
+  return resolved?.thread.rolloutPath ?? null;
 }
 
 /** Prompt-only rollout reader for progressive project-history surfaces. */
@@ -741,6 +770,7 @@ function isCodexContextLine(line: string, mode: CodexRolloutReadMode): boolean {
       (line.includes('"task_started"') ||
         line.includes('"turn_started"') ||
         line.includes('"user_message"') ||
+        line.includes('"turn_aborted"') ||
         line.includes('"thread_rolled_back"'))
     );
   }
@@ -757,6 +787,7 @@ function isCodexContextLine(line: string, mode: CodexRolloutReadMode): boolean {
       line.includes('"task_complete"') ||
       line.includes('"turn_complete"') ||
       line.includes('"user_message"') ||
+      line.includes('"turn_aborted"') ||
       line.includes('"thread_rolled_back"')
     );
   }
@@ -815,14 +846,19 @@ function parseCodexRolloutLines(
   const developerMessages: Array<TurnTagged<ClaudeSessionPrompt>> = [];
   const eventPrompts: ClaudeSessionPrompt[] = [];
   const eventPromptTurnIds: Array<string | null> = [];
+  const eventPromptOrders: number[] = [];
   const responseUserPrompts: ClaudeSessionPrompt[] = [];
   const responsePromptTurnIds: Array<string | null> = [];
+  const responsePromptOrders: number[] = [];
+  const staleResponsePrompts = new Set<ClaudeSessionPrompt>();
   const messages: Array<TurnTagged<SessionTranscriptMessage>> = [];
   const turnContexts: CodexTurnContext[] = [];
   const activeUserTurnIds: string[] = [];
   const completionCountsByTurnId = new Map<string, number>();
   let currentTurnId: string | null = null;
-  let pendingResponseUser: { turnId: string; text: string } | null = null;
+  let promptOrder = 0;
+  let pendingResponseUser: { turnId: string; text: string; prompt: ClaudeSessionPrompt } | null =
+    null;
   let completedTurnCount = 0;
   let sawRolloutUserPrompt = false;
   // Keep only the latest compaction summary — later compactions supersede earlier ones.
@@ -851,8 +887,13 @@ function parseCodexRolloutLines(
     );
     if (removedTurnIds.size === 0) return;
 
-    removePromptsForTurns(eventPrompts, eventPromptTurnIds, removedTurnIds);
-    removePromptsForTurns(responseUserPrompts, responsePromptTurnIds, removedTurnIds);
+    removePromptsForTurns(eventPrompts, eventPromptTurnIds, removedTurnIds, eventPromptOrders);
+    removePromptsForTurns(
+      responseUserPrompts,
+      responsePromptTurnIds,
+      removedTurnIds,
+      responsePromptOrders
+    );
     removeTaggedTurns(messages, removedTurnIds);
     removeTaggedTurns(developerMessages, removedTurnIds);
     removeTurnContexts(turnContexts, removedTurnIds);
@@ -904,6 +945,11 @@ function parseCodexRolloutLines(
         transitionToTurn(nullableString(payload.turn_id));
         continue;
       }
+      if (payload.type === 'turn_aborted') {
+        const abortedTurnId: string | null = nullableString(payload.turn_id) ?? currentTurnId;
+        if (abortedTurnId === currentTurnId) currentTurnId = null;
+        continue;
+      }
       if (payload.type === 'task_complete' || payload.type === 'turn_complete') {
         completedTurnCount += 1;
         const completedTurnId: string | null = nullableString(payload.turn_id) ?? currentTurnId;
@@ -937,6 +983,10 @@ function parseCodexRolloutLines(
         sawRolloutUserPrompt = true;
         const matchingPendingTurnId =
           pendingResponseUser?.text === text ? pendingResponseUser.turnId : null;
+        if (pendingResponseUser && matchingPendingTurnId === null) {
+          staleResponsePrompts.add(pendingResponseUser.prompt);
+          removeMessageForPrompt(messages, pendingResponseUser.prompt);
+        }
         const promptTurnId: string | null =
           nullableString(payload.turn_id) ?? matchingPendingTurnId ?? currentTurnId;
         const prompt = {
@@ -946,6 +996,8 @@ function parseCodexRolloutLines(
         };
         eventPrompts.push(prompt);
         eventPromptTurnIds.push(promptTurnId);
+        eventPromptOrders.push(promptOrder);
+        promptOrder += 1;
         noteUserTurn(promptTurnId);
         if (!currentTurnId && promptTurnId) currentTurnId = promptTurnId;
         pendingResponseUser = null;
@@ -972,7 +1024,7 @@ function parseCodexRolloutLines(
         });
       } else if (payload.role === 'user' && text.startsWith(CODEX_SUMMARY_PREFIX)) {
         summary = { text, timestamp };
-      } else if (payload.role === 'user' && !isCodexEnvironmentMessage(text)) {
+      } else if (payload.role === 'user' && !isCodexInternalUserMessage(text)) {
         sawRolloutUserPrompt = true;
         const promptTurnId: string | null = responseTurnId ?? currentTurnId;
         const prompt = {
@@ -982,9 +1034,11 @@ function parseCodexRolloutLines(
         };
         responseUserPrompts.push(prompt);
         responsePromptTurnIds.push(promptTurnId);
+        responsePromptOrders.push(promptOrder);
+        promptOrder += 1;
         noteUserTurn(promptTurnId);
         if (!currentTurnId && responseTurnId) currentTurnId = responseTurnId;
-        pendingResponseUser = responseTurnId ? { turnId: responseTurnId, text } : null;
+        pendingResponseUser = responseTurnId ? { turnId: responseTurnId, text, prompt } : null;
         pushMessage(messages, { ...prompt, role: 'user' }, promptTurnId);
       } else if (payload.role === 'assistant') {
         const phase = payload.phase === 'final_answer' ? 'final' : 'commentary';
@@ -1003,14 +1057,18 @@ function parseCodexRolloutLines(
     }
   }
 
-  const prompts =
-    eventPrompts.length > 0
-      ? eventPrompts
-      : responseUserPrompts.length > 0
-        ? responseUserPrompts
-        : firstUserMessage && !sawRolloutUserPrompt
-          ? [{ id: 'first-user-message', text: firstUserMessage, timestamp: null }]
-          : [];
+  const prompts = mergeCodexPromptSources(
+    eventPrompts,
+    eventPromptTurnIds,
+    eventPromptOrders,
+    responseUserPrompts,
+    responsePromptTurnIds,
+    responsePromptOrders,
+    staleResponsePrompts,
+    firstUserMessage && !sawRolloutUserPrompt
+      ? [{ id: 'first-user-message', text: firstUserMessage, timestamp: null }]
+      : []
+  );
 
   return {
     baseInstructions,
@@ -1027,6 +1085,75 @@ function parseCodexRolloutLines(
     modelProvider,
     summary,
   };
+}
+
+/**
+ * Codex has emitted user prompts through both `event_msg` and
+ * `response_item` across CLI versions. Keep the union instead of letting the
+ * presence of one representation hide prompts from the other. A prompt that
+ * appears in both streams for the same turn is one logical prompt; prefer the
+ * event representation because it carries the canonical rollout timestamp.
+ */
+function mergeCodexPromptSources(
+  eventPrompts: ClaudeSessionPrompt[],
+  eventPromptTurnIds: Array<string | null>,
+  eventPromptOrders: number[],
+  responseUserPrompts: ClaudeSessionPrompt[],
+  responsePromptTurnIds: Array<string | null>,
+  responsePromptOrders: number[],
+  staleResponsePrompts: ReadonlySet<ClaudeSessionPrompt>,
+  fallbackPrompts: ClaudeSessionPrompt[]
+): ClaudeSessionPrompt[] {
+  const candidates: CodexPromptCandidate[] = [
+    ...eventPrompts.map((prompt, sourceIndex) => ({
+      prompt,
+      turnId: eventPromptTurnIds[sourceIndex] ?? null,
+      order: eventPromptOrders[sourceIndex] ?? sourceIndex,
+      source: 'event' as const,
+    })),
+    ...responseUserPrompts.flatMap((prompt, sourceIndex) =>
+      staleResponsePrompts.has(prompt)
+        ? []
+        : [
+            {
+              prompt,
+              turnId: responsePromptTurnIds[sourceIndex] ?? null,
+              order: responsePromptOrders[sourceIndex] ?? sourceIndex,
+              source: 'response' as const,
+            },
+          ]
+    ),
+  ];
+
+  if (candidates.length === 0) return fallbackPrompts;
+
+  candidates.sort((left, right) => left.order - right.order);
+  const merged: CodexPromptCandidate[] = [];
+  for (const candidate of candidates) {
+    const duplicateIndex = merged.findIndex(
+      (existing) =>
+        existing.source !== candidate.source &&
+        candidate.turnId !== null &&
+        existing.turnId === candidate.turnId &&
+        existing.prompt.text === candidate.prompt.text
+    );
+    if (duplicateIndex < 0) {
+      merged.push(candidate);
+      continue;
+    }
+
+    const existing = merged[duplicateIndex];
+    if (!existing) continue;
+    const preferred =
+      existing.source === 'event' || candidate.source !== 'event' ? existing : candidate;
+    const other = preferred === existing ? candidate : existing;
+    if (!preferred.prompt.restoreTarget && other.prompt.restoreTarget) {
+      preferred.prompt.restoreTarget = other.prompt.restoreTarget;
+    }
+    merged[duplicateIndex] = preferred;
+  }
+
+  return merged.map(({ prompt }) => prompt);
 }
 
 function markLastPromptForTurn(
@@ -1083,16 +1210,31 @@ function pushMessage(
   messages.push({ value: message, turnId });
 }
 
+function removeMessageForPrompt(
+  messages: Array<TurnTagged<SessionTranscriptMessage>>,
+  prompt: ClaudeSessionPrompt
+): void {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]?.value;
+    if (message?.role === 'user' && message.id === prompt.id && message.text === prompt.text) {
+      messages.splice(index, 1);
+      return;
+    }
+  }
+}
+
 function removePromptsForTurns(
   prompts: ClaudeSessionPrompt[],
   promptTurnIds: Array<string | null>,
-  removedTurnIds: ReadonlySet<string>
+  removedTurnIds: ReadonlySet<string>,
+  promptOrders?: number[]
 ): void {
   for (let index = promptTurnIds.length - 1; index >= 0; index -= 1) {
     const turnId = promptTurnIds[index];
     if (!turnId || !removedTurnIds.has(turnId)) continue;
     promptTurnIds.splice(index, 1);
     prompts.splice(index, 1);
+    promptOrders?.splice(index, 1);
   }
 }
 
@@ -1174,11 +1316,23 @@ function extractContentText(content: unknown): string | null {
   return parts.length > 0 ? parts.join('\n') : null;
 }
 
-function isCodexEnvironmentMessage(text: string): boolean {
+/**
+ * Codex serializes several harness-generated inputs as `role: "user"` response
+ * items. They are part of the model context, not messages the person sent from
+ * Yoda, so they must stay out of prompt history and readable conversation rows.
+ */
+function isCodexInternalUserMessage(text: string): boolean {
+  const trimmed = text.trimStart();
   return (
-    text.startsWith('# AGENTS.md instructions for ') ||
-    text.startsWith('<environment_context>') ||
-    text.includes('\n<environment_context>')
+    trimmed.startsWith('# AGENTS.md instructions for ') ||
+    trimmed.startsWith('<environment_context>') ||
+    trimmed.includes('\n<environment_context>') ||
+    trimmed.startsWith('<skill>') ||
+    trimmed.startsWith('<recommended_plugins>') ||
+    trimmed.startsWith('<turn_aborted>') ||
+    trimmed.startsWith('Message from ') ||
+    (trimmed.startsWith('You are "') &&
+      trimmed.includes('one member of a team working together in this worktree.'))
   );
 }
 

@@ -51,6 +51,7 @@ import { ManagedGatewayCardShell } from './ManagedGatewayCardShell';
 
 type NewApiManagedCardProps = {
   onOpenManualSettings: () => void;
+  starCount?: number | null;
 };
 
 const operationActionKeys: Record<NewApiManagedOperation, string> = {
@@ -65,7 +66,7 @@ function normalizeEndpoint(endpoint: string): string {
   return endpoint.trim().replace(/\/+$/, '');
 }
 
-export function NewApiManagedCard({ onOpenManualSettings }: NewApiManagedCardProps) {
+export function NewApiManagedCard({ onOpenManualSettings, starCount }: NewApiManagedCardProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const { data: connections } = useMaasConnections();
@@ -510,6 +511,7 @@ export function NewApiManagedCard({ onOpenManualSettings }: NewApiManagedCardPro
       icon={<Route className="h-8 w-8 text-primary" />}
       name="New API"
       description={description}
+      starCount={starCount}
       actions={
         <HeaderActionToolbar label={t('settings.integrationsTab.newApiActions')}>
           {renderPrimaryAction()}

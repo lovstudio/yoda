@@ -13,8 +13,18 @@ const IME_EVENT_TYPES = [
 
 type ImeEventType = (typeof IME_EVENT_TYPES)[number];
 
+const TERMINAL_IME_TRACE_ENABLED = false;
+const NOOP_DISPOSABLE: IDisposable = { dispose: () => {} };
+
+interface TerminalImeDiagnosticsOptions {
+  /** Test/future runtime injection; production currently takes the constant-false fast path. */
+  enabled?: boolean;
+  eventTarget?: Document;
+  scheduleMicrotask?: (callback: () => void) => void;
+}
+
 function isImeTraceEnabled(): boolean {
-  return false;
+  return TERMINAL_IME_TRACE_ENABLED;
 }
 
 function isImeEventType(type: string): type is ImeEventType {
@@ -84,7 +94,6 @@ function logImeEvent(
   event: Event,
   textarea: HTMLTextAreaElement | undefined
 ): void {
-  if (!isImeTraceEnabled()) return;
   if (!isImeEventType(event.type)) return;
   if (!isFromTextarea(event, textarea)) return;
 
@@ -99,7 +108,6 @@ function logImeEvent(
 }
 
 function logTerminalData(data: string): void {
-  if (!isImeTraceEnabled()) return;
   console.debug('[yoda:trace-ime]', 'xterm:onData', {
     data,
     length: data.length,
@@ -107,19 +115,26 @@ function logTerminalData(data: string): void {
   });
 }
 
-export function registerTerminalImeDiagnostics(terminal: Terminal): IDisposable {
+export function registerTerminalImeDiagnostics(
+  terminal: Terminal,
+  options?: TerminalImeDiagnosticsOptions
+): IDisposable {
+  if (!(options?.enabled ?? isImeTraceEnabled())) return NOOP_DISPOSABLE;
+
   const textarea = terminal.textarea;
   const disposables: IDisposable[] = [];
+  const eventTarget = options?.eventTarget ?? document;
+  const scheduleMicrotask = options?.scheduleMicrotask ?? queueMicrotask;
 
   const listener = (event: Event) => {
     logImeEvent('capture', event, textarea);
-    queueMicrotask(() => logImeEvent('after', event, textarea));
+    scheduleMicrotask(() => logImeEvent('after', event, textarea));
   };
 
   for (const eventType of IME_EVENT_TYPES) {
-    document.addEventListener(eventType, listener, true);
+    eventTarget.addEventListener(eventType, listener, true);
     disposables.push({
-      dispose: () => document.removeEventListener(eventType, listener, true),
+      dispose: () => eventTarget.removeEventListener(eventType, listener, true),
     });
   }
 

@@ -119,7 +119,9 @@ export class WorkspaceTerminalStore {
 
   isQuickActionRunning(project: MountedProject['data'], actionId: string): boolean {
     const scope = this.getScope(project);
-    return Boolean(scope?.manager.terminals.has(quickActionTerminalId(project.id, actionId)));
+    return Boolean(
+      scope?.manager.isCommandTerminalRunning(quickActionTerminalId(project.id, actionId))
+    );
   }
 
   async prefetchProjectTerminals(project: MountedProject['data']): Promise<void> {
@@ -136,7 +138,7 @@ export class WorkspaceTerminalStore {
     const scope = this.activeScope;
     if (!scope) return false;
     const terminalId = quickActionTerminalId(project.id, actionId);
-    if (!scope.manager.terminals.has(terminalId)) return false;
+    if (!scope.manager.isCommandTerminalRunning(terminalId)) return false;
     scope.tabs.setActiveTab(terminalId);
     return true;
   }
@@ -179,10 +181,13 @@ export class WorkspaceTerminalStore {
     if (!scope) throw new Error('The project Terminal is unavailable.');
     const terminalId = actionId ? quickActionTerminalId(project.id, actionId) : undefined;
     if (terminalId && scope.manager.terminals.has(terminalId)) {
-      scope.tabs.setActiveTab(terminalId);
-      return terminalId;
+      if (scope.manager.isCommandTerminalRunning(terminalId)) {
+        scope.tabs.setActiveTab(terminalId);
+        return terminalId;
+      }
+      await scope.manager.deleteTerminal(terminalId);
     }
-    const terminal = await scope.manager.createCommandTerminal({
+    const terminal = await scope.manager.createOneShotCommandTerminal({
       id: terminalId,
       command: normalizedCommand,
       label,

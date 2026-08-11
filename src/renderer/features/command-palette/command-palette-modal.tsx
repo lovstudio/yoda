@@ -34,6 +34,7 @@ import {
   rememberCommandPaletteQuery,
   rememberRecentCommandPaletteQuery,
   removeRecentCommandPaletteQuery,
+  resetCommandPaletteQuery,
   resolveInitialCommandPaletteQuery,
   type CommandPaletteQueryMemory,
 } from './query-memory';
@@ -302,18 +303,24 @@ export function CommandPaletteModal({
     setRecentQueries(rememberRecentCommandPaletteQuery(query));
   };
 
+  const completeSearch = () => {
+    rememberCurrentSearch();
+    setQuery('');
+    resetCommandPaletteQuery(queryMemory);
+  };
+
   const handleDeleteRecentSearch = (recentQuery: string) => {
     setRecentQueries(removeRecentCommandPaletteQuery(recentQuery));
   };
 
   const handleExecuteAction = (item: PaletteAction) => {
-    rememberCurrentSearch();
+    completeSearch();
     item.execute();
   };
 
   const handleNavigateToTask = (item: SearchItem) => {
     if (!item.projectId) return;
-    rememberCurrentSearch();
+    completeSearch();
     void openCommandPaletteSearchTarget(item, navigate)
       .then(onClose)
       .catch((error: unknown) => {
@@ -327,14 +334,14 @@ export function CommandPaletteModal({
   };
 
   const handleNavigateToProject = (item: SearchItem) => {
-    rememberCurrentSearch();
+    completeSearch();
     onClose();
     navigate('project', { projectId: item.id });
   };
 
   const handleNavigateToConversation = (item: SearchItem) => {
     if (!item.projectId || !item.taskId) return;
-    rememberCurrentSearch();
+    completeSearch();
     void openCommandPaletteSearchTarget(item, navigate)
       .then(onClose)
       .catch((error: unknown) => {

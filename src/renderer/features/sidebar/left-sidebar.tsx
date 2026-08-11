@@ -28,7 +28,6 @@ import { cn } from '@renderer/utils/utils';
 import { GlobalSidePaneTarget } from './global-side-pane-target';
 import { SidebarPinnedTaskList } from './pinned-task-list';
 import { ProjectsGroupLabel } from './projects-group-label';
-import { SidebarAccountAnchor } from './sidebar-account-anchor';
 import {
   SidebarContainer,
   SidebarContent,
@@ -201,9 +200,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
         </div>
       )}
       <SidebarSpace />
-      <div className="px-2 pb-2">
-        <SidebarAccountAnchor />
-      </div>
       <SidebarContainer className="w-full border-r-0 flex-1 min-h-0">
         <div className="px-2">
           <SidebarMenu>

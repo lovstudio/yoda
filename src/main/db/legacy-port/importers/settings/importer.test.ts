@@ -207,7 +207,6 @@ describe('portLegacySettings', () => {
       enabled: false,
       sound: false,
       osNotifications: false,
-      soundFocusMode: 'unfocused',
     });
     expect(readRawSetting(appSqlite, 'defaultRuntime')).toBe('codex');
     expect(readRawSetting(appSqlite, 'theme')).toBe('ydark');

@@ -377,6 +377,7 @@ export async function buildTaskFromWorkspace(
     type,
     {
       projectId,
+      sidebarWorkspaceId: task.sidebarWorkspaceId,
       taskId: task.id,
       taskPath: workspace.path,
       tmuxEnabled,

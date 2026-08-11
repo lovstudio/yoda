@@ -4,7 +4,11 @@ import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CliProxyApiManagedStatus } from '@shared/cliproxyapi-managed';
 import type { LiteLlmManagedStatus } from '@shared/litellm-managed';
-import type { MaasConnection, MaasGlobalBindingStatus } from '@shared/maas';
+import type {
+  MaasConnection,
+  MaasGlobalBindingStatus,
+  MaasManagedGatewayStarSnapshot,
+} from '@shared/maas';
 import type { NewApiManagedStatus } from '@shared/new-api-managed';
 import type { MaasGatewayAvailability } from '@renderer/features/maas/maas-gateway-availability';
 
@@ -67,6 +71,53 @@ const mocks = vi.hoisted(() => ({
     effective: false,
     runtimeIds: [],
   } as MaasGlobalBindingStatus,
+  managedGatewayStars: [
+    {
+      platformId: 'litellm',
+      repositoryUrl: 'https://github.com/BerriAI/litellm',
+      starCount: 12_345,
+      fetchedAt: '2026-08-10T00:00:00.000Z',
+      trend: {
+        points: [
+          { date: '2023-08-14', starCount: 10_000 },
+          { date: '2026-08-03', starCount: 12_345 },
+        ],
+        source: 'ossinsight',
+        calibratedToCurrent: true,
+        fetchedAt: '2026-08-10T00:00:00.000Z',
+      },
+    },
+    {
+      platformId: 'cliproxyapi',
+      repositoryUrl: 'https://github.com/router-for-me/CLIProxyAPI',
+      starCount: 6_789,
+      fetchedAt: '2026-08-10T00:00:00.000Z',
+      trend: {
+        points: [
+          { date: '2023-08-14', starCount: 4_321 },
+          { date: '2026-08-03', starCount: 6_789 },
+        ],
+        source: 'ossinsight',
+        calibratedToCurrent: true,
+        fetchedAt: '2026-08-10T00:00:00.000Z',
+      },
+    },
+    {
+      platformId: 'newapi',
+      repositoryUrl: 'https://github.com/QuantumNous/new-api',
+      starCount: 456,
+      fetchedAt: '2026-08-10T00:00:00.000Z',
+      trend: {
+        points: [
+          { date: '2023-08-14', starCount: 123 },
+          { date: '2026-08-03', starCount: 456 },
+        ],
+        source: 'ossinsight',
+        calibratedToCurrent: true,
+        fetchedAt: '2026-08-10T00:00:00.000Z',
+      },
+    },
+  ] as MaasManagedGatewayStarSnapshot[],
 }));
 
 vi.mock('react-i18next', async (importOriginal) => ({
@@ -80,6 +131,7 @@ vi.mock('@renderer/features/maas/useMaas', () => ({
   useDisconnectMaasPlatform: () => ({ isPending: false, mutate: vi.fn() }),
   useMaasConnections: () => ({ data: mocks.connections, isLoading: false }),
   useMaasGlobalBinding: () => ({ data: mocks.globalBinding, isLoading: false }),
+  useMaasManagedGatewayStars: () => ({ data: mocks.managedGatewayStars, isPending: false }),
   useMaasPlatformDescriptions: () => ({ data: [] }),
   useSetMaasGlobalBinding: () => ({
     isPending: false,
@@ -209,6 +261,11 @@ describe('MaaS platform menu', () => {
     expect(localCards?.textContent?.indexOf('CLIProxyAPI')).toBeLessThan(
       localCards?.textContent?.indexOf('New API') ?? 0
     );
+    expect(localCards?.textContent).toContain('12,345');
+    expect(localCards?.textContent).toContain('6,789');
+    expect(localCards?.textContent).toContain('456');
+    expect(host.querySelector('[data-testid="maas-managed-gateway-star-trend"]')).not.toBeNull();
+    expect(host.querySelectorAll('polyline[data-maas-star-trend]')).toHaveLength(3);
 
     await act(async () => addButton?.click());
 

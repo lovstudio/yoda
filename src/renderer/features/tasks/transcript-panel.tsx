@@ -33,32 +33,77 @@ export function useConversationTranscript(active: boolean): {
 
   useEffect(() => {
     // Reset on conversation switch so a stale transcript never flashes.
-    setTranscript(undefined); // eslint-disable-line react-hooks/set-state-in-effect
+    setTranscript(undefined);
   }, [conversationId]);
 
   useEffect(() => {
     if (!active || !conversationId || !projectId || !taskId) return;
     let cancelled = false;
-    const refetch = () =>
-      rpc.conversations
-        .getConversationTranscript(projectId, taskId, conversationId)
-        .then((result) => {
+    let refetchInFlight = false;
+    let trailingRefetchRequested = false;
+    const refetch = () => {
+      if (cancelled) return;
+      if (refetchInFlight) {
+        trailingRefetchRequested = true;
+        return;
+      }
+
+      refetchInFlight = true;
+      void (async () => {
+        try {
+          const result = await rpc.conversations.getConversationTranscript(
+            projectId,
+            taskId,
+            conversationId
+          );
           if (!cancelled) setTranscript(normalizeConversationTranscript(result));
-        })
-        .catch(() => {
+        } catch {
           if (!cancelled) setTranscript(normalizeConversationTranscript(null));
-        });
-    void refetch();
-    void rpc.conversations.subscribeConversationTranscript(projectId, taskId, conversationId);
+        } finally {
+          refetchInFlight = false;
+          if (cancelled) {
+            trailingRefetchRequested = false;
+          } else if (trailingRefetchRequested) {
+            trailingRefetchRequested = false;
+            refetch();
+          }
+        }
+      })();
+    };
+    // Listen before attaching the watcher so a write between the initial read
+    // and watch setup cannot be lost. Cleanup waits for a deferred subscribe
+    // before releasing it, which prevents rapid open/close from leaking refs.
     const off = events.on(
       conversationTranscriptChangedChannel,
       () => void refetch(),
       conversationId
     );
+    const subscribed = rpc.conversations.subscribeConversationTranscript(
+      projectId,
+      taskId,
+      conversationId
+    );
+    // Attach the watcher before the initial read. Otherwise an append that
+    // lands after the read but before watch setup can leave the panel stale
+    // until the next write.
+    void subscribed.then(
+      () => {
+        if (!cancelled) void refetch();
+      },
+      () => {
+        // A failed watch must not prevent the user from reading the snapshot.
+        if (!cancelled) void refetch();
+      }
+    );
     return () => {
       cancelled = true;
+      trailingRefetchRequested = false;
       off();
-      void rpc.conversations.unsubscribeConversationTranscript(projectId, taskId, conversationId);
+      void subscribed
+        .then(() =>
+          rpc.conversations.unsubscribeConversationTranscript(projectId, taskId, conversationId)
+        )
+        .catch(() => {});
     };
   }, [active, conversationId, projectId, taskId]);
 

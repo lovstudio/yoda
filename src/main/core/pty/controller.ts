@@ -56,7 +56,16 @@ export const ptyController = createRPCController({
    */
   subscribe: async (sessionId: string, consumerId: string) => {
     const initialSnapshot = ptySessionRegistry.subscribe(sessionId, consumerId);
-    if (initialSnapshot.buffer || ptySessionRegistry.get(sessionId)) return ok(initialSnapshot);
+    const hasPendingRegistration = () =>
+      ptySessionRegistry.getDiagnostics(sessionId)?.registering === true;
+    // A live snapshot is terminal protocol, not transcript text. It remains the
+    // only source that can reconstruct the CLI's cursor, colors, and input UI;
+    // rollout history is a fallback only while no backend PTY exists.
+    // A session that is already being restored will provide its own live screen;
+    // returning transcript text here would append that old screen to the new PTY.
+    if (initialSnapshot.buffer || ptySessionRegistry.get(sessionId) || hasPendingRegistration()) {
+      return ok(initialSnapshot);
+    }
 
     const historicalBuffer = await loadHistoricalConversationBuffer(sessionId);
     // The history lookup crosses an async boundary. Re-subscribe atomically so
@@ -68,7 +77,8 @@ export const ptyController = createRPCController({
       latestSnapshot.generation !== initialSnapshot.generation ||
       latestSnapshot.sequence !== initialSnapshot.sequence ||
       latestSnapshot.buffer ||
-      ptySessionRegistry.get(sessionId)
+      ptySessionRegistry.get(sessionId) ||
+      hasPendingRegistration()
     ) {
       return ok(latestSnapshot);
     }
@@ -76,6 +86,7 @@ export const ptyController = createRPCController({
       buffer: historicalBuffer,
       generation: latestSnapshot.generation,
       sequence: latestSnapshot.sequence,
+      replayedFromHistory: Boolean(historicalBuffer),
     });
   },
 

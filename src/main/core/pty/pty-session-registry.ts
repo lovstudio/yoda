@@ -77,6 +77,8 @@ export type PtySubscriptionSnapshot = {
   buffer: string;
   generation: number;
   sequence: number;
+  /** The buffer came from transcript history and must be replaced by a live generation. */
+  replayedFromHistory?: boolean;
 };
 
 export type PtySessionDiagnostics = {
@@ -378,8 +380,8 @@ export class PtySessionRegistry {
       state.inputOff = null;
       state.pendingExit = { info, preserveBuffer: preserveBufferOnExit };
       // The producer is gone, so transport backpressure no longer protects
-      // anything. Drain the finite tail in fairness-bounded IPC batches without
-      // waiting for renderer ACKs or calling resume on an exited PTY.
+      // anything. Drain a consumed session's finite tail in fairness-bounded IPC
+      // batches; a cold tail is already complete in the replay ring.
       this.clearResumeRetry(state);
       state.paused = false;
       state.inflightBatches = [];
@@ -390,6 +392,19 @@ export class PtySessionRegistry {
       }
       if (state.pendingByteLength > 0) {
         this.flushOne(sessionId, state);
+      }
+      const shouldDeferColdFinalization =
+        !preserveBufferOnExit &&
+        !this.hasCurrentConsumers(sessionId, state.generation) &&
+        state.ringBuffer.sizeBytes > 0 &&
+        state.pendingByteLength === 0;
+      if (shouldDeferColdFinalization) {
+        // Keep the replay ring alive through the current tick. A renderer that
+        // installed its listener immediately before subscribe can still take
+        // the final snapshot; without a subscriber, the zero-delay task cleans
+        // up the non-persistent session promptly.
+        this.scheduleFinalExit(sessionId, state);
+        return;
       }
       if (!this.finalizeExitIfDrained(sessionId, state)) {
         this.scheduleFlush(sessionId, state, 0);
@@ -613,12 +628,31 @@ export class PtySessionRegistry {
     }, delay);
   }
 
+  private scheduleFinalExit(sessionId: string, state: SessionState): void {
+    if (state.flushTimer !== null || !state.pendingExit) return;
+    state.flushTimer = setTimeout(() => {
+      state.flushTimer = null;
+      this.finalizeExitIfDrained(sessionId, state);
+    }, 0);
+    state.flushTimer.unref?.();
+  }
+
   /** Emit one fairness-bounded batch. Returns true while more output remains. */
   private flushOne(sessionId: string, state: SessionState): boolean {
     if (this.sessions.get(sessionId) !== state || state.pendingByteLength === 0) return false;
 
-    const tracksConsumerBacklog =
-      !state.pendingExit && this.hasCurrentConsumers(sessionId, state.generation);
+    const hasCurrentConsumers = this.hasCurrentConsumers(sessionId, state.generation);
+    if (!hasCurrentConsumers) {
+      // onData already appended the complete string to the replay ring. pending
+      // only exists to produce live IPC batches, so a cold session can discard
+      // the duplicate buffers in O(1). A later subscriber receives the ring at
+      // the unchanged watermark, then its first live event starts at sequence+1.
+      state.pendingData = [];
+      state.pendingDataHead = 0;
+      state.pendingByteLength = 0;
+      return false;
+    }
+    const tracksConsumerBacklog = !state.pendingExit && hasCurrentConsumers;
     const remainingFlowControlBudget = tracksConsumerBacklog
       ? PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES - state.inflightByteLength
       : PTY_OUTPUT_BATCH_MAX_BYTES;
@@ -637,6 +671,7 @@ export class PtySessionRegistry {
       if (tracksConsumerBacklog) this.setPaused(sessionId, state, true);
       return false;
     }
+
     state.sequence += 1;
 
     const payload: PtyDataEvent = {

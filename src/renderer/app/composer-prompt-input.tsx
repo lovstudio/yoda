@@ -78,6 +78,7 @@ import {
   findTokenRanges,
   snapSelectionToTokens,
   tokenAtPoint,
+  tokenRectLayoutKey,
   tokenText,
   uniqueTokenLabel,
   type PromptToken,
@@ -456,6 +457,8 @@ export function ComposerPromptInput({
   );
 
   const tokenRanges = useMemo(() => findTokenRanges(value, tokens), [value, tokens]);
+  const tokenLayoutKey = tokenRectLayoutKey(value, tokenRanges);
+  const hasTokenRanges = tokenLayoutKey !== null;
   const tokenRangesRef = useRef(tokenRanges);
   tokenRangesRef.current = tokenRanges;
   const [tokenRects, setTokenRects] = useState<Map<string, TokenRect[]>>(new Map());
@@ -469,7 +472,21 @@ export function ComposerPromptInput({
     top: number;
   } | null>(null);
 
+  const clearTokenRectMeasurement = useCallback(() => {
+    if (tokenRectFrameRef.current !== null) {
+      cancelAnimationFrame(tokenRectFrameRef.current);
+      tokenRectFrameRef.current = null;
+    }
+    tokenRectMeasurerRef.current?.dispose();
+    tokenRectMeasurerRef.current = null;
+    setTokenRects((current) => (current.size === 0 ? current : new Map()));
+  }, []);
+
   const scheduleTokenRectMeasurement = useCallback(() => {
+    if (tokenRangesRef.current.length === 0) {
+      clearTokenRectMeasurement();
+      return;
+    }
     if (tokenRectFrameRef.current !== null) {
       cancelAnimationFrame(tokenRectFrameRef.current);
     }
@@ -479,9 +496,7 @@ export function ComposerPromptInput({
       if (!textarea) return;
       const ranges = findTokenRanges(textarea.value, tokensRef.current);
       if (ranges.length === 0) {
-        tokenRectMeasurerRef.current?.dispose();
-        tokenRectMeasurerRef.current = null;
-        setTokenRects(new Map());
+        clearTokenRectMeasurement();
         return;
       }
       const measurer =
@@ -489,24 +504,30 @@ export function ComposerPromptInput({
         (tokenRectMeasurerRef.current = createTokenRectMeasurer(textarea));
       setTokenRects(measurer.measure(ranges));
     });
-  }, []);
+  }, [clearTokenRectMeasurement]);
 
   useEffect(() => {
+    if (!hasTokenRanges) {
+      clearTokenRectMeasurement();
+      return undefined;
+    }
+
     scheduleTokenRectMeasurement();
     return () => {
       if (tokenRectFrameRef.current === null) return;
       cancelAnimationFrame(tokenRectFrameRef.current);
       tokenRectFrameRef.current = null;
     };
-  }, [scheduleTokenRectMeasurement, tokenRanges]);
+  }, [clearTokenRectMeasurement, hasTokenRanges, scheduleTokenRectMeasurement, tokenLayoutKey]);
 
   useEffect(() => {
+    if (!hasTokenRanges) return undefined;
     const textarea = textareaRef.current;
-    if (!textarea) return;
+    if (!textarea) return undefined;
     const observer = new ResizeObserver(scheduleTokenRectMeasurement);
     observer.observe(textarea);
     return () => observer.disconnect();
-  }, [scheduleTokenRectMeasurement]);
+  }, [hasTokenRanges, scheduleTokenRectMeasurement]);
 
   useEffect(
     () => () => {

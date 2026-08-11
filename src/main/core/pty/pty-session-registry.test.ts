@@ -100,7 +100,7 @@ beforeEach(() => {
 });
 
 describe('PtySessionRegistry', () => {
-  it('returns a sequence watermark after synchronously flushing pending output', () => {
+  it('commits pending cold output without broadcasting or advancing the watermark', () => {
     const registry = new PtySessionRegistry();
     const pty = new FakePty();
     registry.register('session', pty);
@@ -111,18 +111,41 @@ describe('PtySessionRegistry', () => {
     expect(snapshot).toEqual({
       buffer: 'BEFORE',
       generation: 1,
-      sequence: 1,
+      sequence: 0,
     });
-    expect(eventMocks.emit).toHaveBeenCalledWith(
-      ptyDataChannel,
-      {
-        generation: 1,
-        sequence: 1,
-        byteLength: 6,
-        data: 'BEFORE',
-      },
-      'session'
+    expect(eventMocks.emit).not.toHaveBeenCalledWith(ptyDataChannel, expect.anything(), 'session');
+  });
+
+  it('returns all cold output in the snapshot then emits live output exactly once', () => {
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    const coldOutput = 'cold-中😀'.repeat(
+      Math.ceil((PTY_OUTPUT_BATCH_MAX_BYTES * 2.5) / Buffer.byteLength('cold-中😀', 'utf8'))
     );
+    registry.register('session', pty);
+
+    pty.emitData(coldOutput);
+    expect(eventMocks.emit).not.toHaveBeenCalledWith(ptyDataChannel, expect.anything(), 'session');
+
+    const snapshot = registry.subscribe('session', 'consumer');
+    expect(snapshot).toEqual({ buffer: coldOutput, generation: 1, sequence: 0 });
+
+    eventMocks.emit.mockClear();
+    pty.emitData('live-😀');
+    vi.advanceTimersByTime(16);
+
+    expect(eventMocks.emit.mock.calls).toEqual([
+      [
+        ptyDataChannel,
+        {
+          generation: 1,
+          sequence: 1,
+          byteLength: Buffer.byteLength('live-😀', 'utf8'),
+          data: 'live-😀',
+        },
+        'session',
+      ],
+    ]);
   });
 
   it('cancels stale output and input subscriptions when a session respawns', () => {
@@ -348,6 +371,7 @@ describe('PtySessionRegistry', () => {
     const pty = new FakePty();
     const onFinalExit = vi.fn();
     registry.register('session', pty, { onFinalExit });
+    registry.subscribe('session', 'consumer');
     pty.emitData('tail');
     pty.emitExit({ exitCode: 7 });
     vi.advanceTimersByTime(16);
@@ -517,9 +541,12 @@ describe('PtySessionRegistry', () => {
     const emittedByteLength = eventMocks.emit.mock.calls
       .filter(([event]) => event === ptyDataChannel)
       .reduce((total, [, payload]) => total + (payload as { byteLength: number }).byteLength, 0);
-    expect(emittedByteLength).toBe(
-      PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES + PTY_OUTPUT_BATCH_MAX_BYTES
-    );
+    expect(emittedByteLength).toBe(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES);
+    expect(registry.subscribe('session', 'next-consumer')).toMatchObject({
+      buffer: 'x'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES + PTY_OUTPUT_BATCH_MAX_BYTES),
+      generation: 1,
+      sequence: PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES / PTY_OUTPUT_BATCH_MAX_BYTES,
+    });
   });
 
   it('does not recreate a consumer when heartbeat arrives after unsubscribe', () => {
@@ -579,7 +606,7 @@ describe('PtySessionRegistry', () => {
     expect(pty.resume).toHaveBeenCalledTimes(1);
   });
 
-  it('yields after one high-watermark budget when a background session has no consumer', () => {
+  it('clears a large cold IPC queue without broadcasting while preserving replay', () => {
     const registry = new PtySessionRegistry();
     const pty = new FakePty();
     const outputByteLength = PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES * 8;
@@ -587,18 +614,18 @@ describe('PtySessionRegistry', () => {
 
     pty.emitData('x'.repeat(outputByteLength));
 
-    const emittedByteLength = (): number =>
-      eventMocks.emit.mock.calls
-        .filter(([event]) => event === ptyDataChannel)
-        .reduce((total, [, payload]) => total + (payload as { byteLength: number }).byteLength, 0);
-    expect(emittedByteLength()).toBe(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES);
-
-    vi.runAllTimers();
-
-    expect(emittedByteLength()).toBe(outputByteLength);
+    const emittedData = (): unknown[][] =>
+      eventMocks.emit.mock.calls.filter(([event]) => event === ptyDataChannel);
+    expect(emittedData()).toHaveLength(0);
+    expect(registry.getDiagnostics('session')?.pendingOutputBytes).toBe(0);
+    expect(registry.subscribe('session', 'consumer')).toMatchObject({
+      buffer: 'x'.repeat(outputByteLength),
+      generation: 1,
+      sequence: 0,
+    });
   });
 
-  it('keeps draining when a consumer subscribes between background output batches', () => {
+  it('does not rebroadcast cold output after returning it in the subscribe snapshot', () => {
     const registry = new PtySessionRegistry();
     const pty = new FakePty();
     const outputByteLength = PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES + PTY_OUTPUT_BATCH_MAX_BYTES * 2;
@@ -610,13 +637,13 @@ describe('PtySessionRegistry', () => {
 
     const dataBatches = eventMocks.emit.mock.calls
       .filter(([event]) => event === ptyDataChannel)
-      .map(([, payload]) => payload as { byteLength: number });
-    expect(snapshot.sequence).toBe(
-      PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES / PTY_OUTPUT_BATCH_MAX_BYTES + 1
-    );
-    expect(dataBatches.reduce((total, batch) => total + batch.byteLength, 0)).toBe(
-      outputByteLength
-    );
+      .map(([, payload]) => {
+        const batch = payload as { byteLength: number; sequence: number };
+        return { byteLength: batch.byteLength, sequence: batch.sequence };
+      });
+    expect(snapshot.sequence).toBe(0);
+    expect(Buffer.byteLength(snapshot.buffer, 'utf8')).toBe(outputByteLength);
+    expect(dataBatches).toEqual([]);
   });
 
   it('finalizes exactly once when subscribe drains the final exit batch', () => {
@@ -635,6 +662,7 @@ describe('PtySessionRegistry', () => {
     const snapshot = registry.subscribe('session', 'consumer');
 
     expect(snapshot.buffer).toBe(output);
+    expect(snapshot.sequence).toBe(0);
     expect(eventMocks.emit.mock.calls.filter(([event]) => event === ptyExitChannel)).toHaveLength(
       1
     );
@@ -643,6 +671,25 @@ describe('PtySessionRegistry', () => {
     expect(eventMocks.emit.mock.calls.filter(([event]) => event === ptyExitChannel)).toHaveLength(
       1
     );
+  });
+
+  it('finalizes a non-persistent cold exit on the next tick without a subscriber', () => {
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    registry.register('session', pty);
+    pty.emitData('cold tail');
+
+    pty.emitExit({ exitCode: 7 });
+    expect(eventMocks.emit.mock.calls.filter(([event]) => event === ptyExitChannel)).toHaveLength(
+      0
+    );
+
+    vi.advanceTimersByTime(0);
+
+    expect(eventMocks.emit.mock.calls.filter(([event]) => event === ptyExitChannel)).toEqual([
+      [ptyExitChannel, { exitCode: 7 }, 'session'],
+    ]);
+    expect(registry.getDiagnostics('session')).toBeNull();
   });
 
   it('never emits past the high watermark for one huge tick or a subscribe while paused', () => {

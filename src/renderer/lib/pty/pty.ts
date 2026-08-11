@@ -39,6 +39,9 @@ export const TERMINAL_LINE_HEIGHT = 1.0;
  */
 export const XTERM_WRITE_CHUNK_CODE_UNITS = 64 * 1024;
 
+/** Reset a stale transcript screen before the first live PTY generation paints. */
+const RESET_TERMINAL_SEQUENCE = '\x1bc';
+
 type ConnectOutcome = 'connected' | 'cancelled';
 
 type PendingConnectAttempt = {
@@ -176,6 +179,8 @@ export class FrontendPty {
   private replayToken = 0;
   private outputGeneration = 0;
   private lastOutputSequence = 0;
+  /** A history fallback is replaced wholesale when its live PTY generation arrives. */
+  private resetBeforeNextLiveGeneration = false;
   private acknowledgedGeneration = 0;
   private acknowledgedSequence = 0;
   private consumerHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -438,6 +443,7 @@ export class FrontendPty {
     const snapshot = result.data;
     this.outputGeneration = snapshot.generation;
     this.lastOutputSequence = snapshot.sequence;
+    this.resetBeforeNextLiveGeneration = snapshot.replayedFromHistory === true;
     this.acknowledgedGeneration = snapshot.generation;
     this.acknowledgedSequence = 0;
     this.startConsumerHeartbeat();
@@ -477,15 +483,19 @@ export class FrontendPty {
 
   private acceptOutputEvent(event: PtyDataEvent): void {
     if (event.generation < this.outputGeneration) return;
+    const isNewGeneration = event.generation > this.outputGeneration;
+    const shouldResetStaleHistory = isNewGeneration && this.resetBeforeNextLiveGeneration;
     if (event.generation > this.outputGeneration) {
       this.outputGeneration = event.generation;
       this.lastOutputSequence = 0;
       this.acknowledgedGeneration = event.generation;
       this.acknowledgedSequence = 0;
+      this.resetBeforeNextLiveGeneration = false;
     }
     if (event.sequence <= this.lastOutputSequence) return;
 
     this.lastOutputSequence = event.sequence;
+    if (shouldResetStaleHistory) this.writeTerminalData(RESET_TERMINAL_SEQUENCE);
     this.writeOrBuffer(event.data, {
       generation: event.generation,
       sequence: event.sequence,

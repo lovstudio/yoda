@@ -4,11 +4,13 @@ import { promptsUpdatedChannel } from '@shared/events/appEvents';
 import {
   incrementPromptVersion,
   normalizePromptTags,
+  promptBindingsSchema,
   promptCreateInputSchema,
   promptSourceSchema,
   promptTagSchema,
   promptUpdateInputSchema,
   type Prompt,
+  type PromptBindings,
   type PromptCreateInput,
   type PromptSource,
   type PromptUpdateInput,
@@ -46,6 +48,16 @@ function parseTags(value: string | null): string[] {
   }
 }
 
+function parseBindings(value: string | null): PromptBindings {
+  if (!value) return promptBindingsSchema.parse({});
+  try {
+    const parsed = promptBindingsSchema.safeParse(JSON.parse(value));
+    return parsed.success ? parsed.data : promptBindingsSchema.parse({});
+  } catch {
+    return promptBindingsSchema.parse({});
+  }
+}
+
 function toPrompt(row: PromptRow): Prompt {
   return {
     id: row.id,
@@ -56,6 +68,7 @@ function toPrompt(row: PromptRow): Prompt {
     extraInfo: row.extraInfo,
     injectionEnabled: row.injectionEnabled,
     injectionOrder: row.injectionOrder,
+    bindings: parseBindings(row.bindingsJson),
     version: row.version,
     source: parseSource(row.sourceJson),
     createdAt: row.createdAt,
@@ -192,6 +205,7 @@ export class PromptLibraryService {
             extraInfo: '',
             injectionEnabled: item.enabled,
             injectionOrder: (nextInjectionOrder ?? 0) + index,
+            bindingsJson: JSON.stringify({ global: true, workspaceIds: [], projectIds: [] }),
             sortOrder: (nextSortOrder ?? 0) + index,
             version: '1.0.0',
             sourceJson: item.source ? JSON.stringify(item.source) : null,
@@ -256,6 +270,7 @@ export class PromptLibraryService {
       extraInfo: parsed.extraInfo,
       injectionEnabled: parsed.injectionEnabled,
       injectionOrder: 0,
+      bindingsJson: JSON.stringify(parsed.bindings),
       version: '1.0.0',
       sourceJson: parsed.source ? JSON.stringify(parsed.source) : null,
       sortOrder: next ?? 0,
@@ -277,7 +292,7 @@ export class PromptLibraryService {
     if (Object.keys(parsed).length > 0) {
       const [current] = await db.select().from(prompts).where(eq(prompts.id, id)).limit(1);
       if (!current) return null;
-      const { source, tags, versionBump, ...fields } = parsed;
+      const { source, tags, bindings, versionBump, ...fields } = parsed;
       const authoredContentChanged =
         (parsed.title !== undefined && parsed.title !== current.title) ||
         (parsed.description !== undefined && parsed.description !== current.description) ||
@@ -289,6 +304,7 @@ export class PromptLibraryService {
       const update = {
         ...fields,
         ...(tags !== undefined ? { tagsJson: JSON.stringify(normalizePromptTags(tags)) } : {}),
+        ...(bindings !== undefined ? { bindingsJson: JSON.stringify(bindings) } : {}),
         ...(source !== undefined ? { sourceJson: source ? JSON.stringify(source) : null } : {}),
         ...(authoredContentChanged ? { version: nextVersion } : {}),
       };
