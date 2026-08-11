@@ -27,6 +27,8 @@ describe('new task modal responsive contract', () => {
     expect(modal).not.toContain('onProjectRevealed');
     expect(home).toContain('data-yoda-surface="home-composer-session-settings"');
     expect(home).toContain('data-yoda-surface="home-composer-compare-action"');
+    expect(home).toContain('data-yoda-surface="home-composer-environment"');
+    expect(home).toContain('branchConfiguration={environmentBranchConfiguration}');
     expect(home).toContain(
       "{!taskScopedTarget && runMode === 'normal' && renderAddCompareButton()}"
     );
