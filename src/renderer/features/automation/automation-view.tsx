@@ -40,7 +40,6 @@ import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
-import { appState } from '@renderer/lib/stores/app-state';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
 import {
@@ -61,6 +60,7 @@ import {
 } from '@renderer/lib/ui/select';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import {
   buildFriendlyCron,
@@ -187,16 +187,6 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
     }
     return map;
   }, [history]);
-  const nextAutomation = useMemo(
-    () =>
-      activeItems
-        .filter((entry) => entry.nextRunAt)
-        .sort(
-          (left, right) =>
-            new Date(left.nextRunAt ?? 0).getTime() - new Date(right.nextRunAt ?? 0).getTime()
-        )[0],
-    [activeItems]
-  );
   const runningId = runAutomation.isPending ? (runAutomation.variables ?? null) : null;
   const updatingId = updateAutomation.isPending ? (updateAutomation.variables?.id ?? null) : null;
   const editorOpen = editingId !== null;
@@ -339,13 +329,6 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
           </Button>
         </header>
 
-        <AutomationSummary
-          className={cn(embedded ? 'mt-5' : 'mt-6')}
-          activeCount={activeItems.length}
-          pausedCount={pausedItems.length}
-          nextAutomation={nextAutomation}
-        />
-
         {editorOpen && (
           <div ref={editorRef} className="scroll-mt-4">
             <AutomationEditor
@@ -360,7 +343,7 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
           </div>
         )}
 
-        <section className="mt-6 min-w-0">
+        <section className="mt-5 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-medium text-foreground-muted">
               {t('automation.listCount', { count: items.length })}
@@ -413,47 +396,6 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
     </div>
   );
 });
-
-function AutomationSummary({
-  className,
-  activeCount,
-  pausedCount,
-  nextAutomation,
-}: {
-  className?: string;
-  activeCount: number;
-  pausedCount: number;
-  nextAutomation: Automation | undefined;
-}) {
-  const { t, i18n } = useTranslation();
-  const locale = i18n.resolvedLanguage ?? i18n.language;
-
-  return (
-    <section
-      aria-label={t('automation.overview.label')}
-      className={cn(
-        'flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-border/70 py-3 text-xs text-foreground-muted',
-        className
-      )}
-    >
-      <span className="inline-flex items-center gap-2 font-medium text-foreground">
-        <span className="size-1.5 rounded-full bg-emerald-500" />
-        {t('automation.summary.status', { active: activeCount, paused: pausedCount })}
-      </span>
-      <span className="inline-flex min-w-0 items-center gap-1.5">
-        <CalendarClock className="size-3.5 shrink-0" />
-        <span className="truncate">
-          {nextAutomation?.nextRunAt
-            ? t('automation.summary.next', {
-                name: nextAutomation.title,
-                time: formatTime(nextAutomation.nextRunAt, locale),
-              })
-            : t('automation.summary.noSchedule')}
-        </span>
-      </span>
-    </section>
-  );
-}
 
 function AutomationFilterControl({
   value,
@@ -554,19 +496,19 @@ const RUN_STATUS_STYLES: Record<AutomationRun['status'], { icon: LucideIcon; cla
   {
     running: {
       icon: Loader2,
-      className: 'border-amber-500/15 bg-amber-500/10 text-amber-600 dark:text-amber-400',
+      className: 'text-amber-600 dark:text-amber-400',
     },
     success: {
       icon: CheckCircle2,
-      className: 'border-emerald-500/15 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+      className: 'text-emerald-600 dark:text-emerald-400',
     },
     failed: {
       icon: XCircle,
-      className: 'border-red-500/15 bg-red-500/10 text-red-600 dark:text-red-400',
+      className: 'text-red-600 dark:text-red-400',
     },
     skipped: {
       icon: CircleDashed,
-      className: 'border-border bg-background-2 text-foreground-muted',
+      className: 'text-foreground-muted',
     },
   };
 
@@ -594,7 +536,6 @@ const AutomationCard = observer(function AutomationCard({
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language;
   const runtime = RUNTIMES.find((item) => item.id === entry.runtime);
-  const detected = appState.dependencies.agentStatuses[entry.runtime]?.status === 'available';
   const syncedFromCodex = entry.source === 'codex';
   const scheduleLabel =
     entry.triggerKind === 'cron'
@@ -607,25 +548,21 @@ const AutomationCard = observer(function AutomationCard({
   const lastRunAt = lastRun?.startedAt ?? entry.lastRunAt;
 
   return (
-    <article className="group overflow-hidden rounded-xl border border-border/80 bg-background-secondary transition-[border-color,box-shadow] hover:border-border-strong">
-      <div className="p-4">
+    <article className="group overflow-hidden rounded-lg border border-border bg-background transition-colors hover:border-border-strong">
+      <div className="px-4 py-3.5">
         <div className="flex items-start gap-3">
-          <span
-            className={cn(
-              'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg border',
-              entry.status === 'active'
-                ? 'border-blue-500/15 bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                : 'border-border bg-background text-foreground-muted'
-            )}
-          >
-            <Workflow className="size-4" />
+          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background-1 text-foreground-muted">
+            <Workflow className="size-3.5" />
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h3 className="min-w-0 truncate text-[15px] font-semibold">{entry.title}</h3>
+              <h3 className="min-w-0 truncate text-sm font-semibold tracking-tight">
+                {entry.title}
+              </h3>
               <Badge
                 variant="secondary"
                 className={cn(
+                  'rounded-md px-1.5 py-0.5 text-[11px]',
                   entry.status === 'active'
                     ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
                     : 'text-foreground-muted'
@@ -635,28 +572,29 @@ const AutomationCard = observer(function AutomationCard({
                   ? t('automation.status.active')
                   : t('automation.status.paused')}
               </Badge>
-              {lastRun && runStyle && RunStatusIcon && (
-                <Badge variant="outline" className={runStyle.className}>
-                  <RunStatusIcon
-                    className={cn('size-3', lastRun.status === 'running' && 'animate-spin')}
-                  />
-                  {t(`automation.runStatus.${lastRun.status}`)}
-                </Badge>
-              )}
             </div>
-            <p className="mt-1 line-clamp-1 text-xs leading-5 text-foreground-muted">
+            <p className="mt-1.5 line-clamp-2 text-sm leading-5 text-foreground-muted">
               {entry.prompt}
             </p>
           </div>
 
           {!syncedFromCodex && (
             <DropdownMenu>
-              <DropdownMenuTrigger
-                aria-label={t('automation.actions.more', { name: entry.title })}
-                className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted outline-none transition-colors hover:bg-background-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-              >
-                <MoreHorizontal className="size-4" />
-              </DropdownMenuTrigger>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <DropdownMenuTrigger
+                      aria-label={t('automation.actions.more', { name: entry.title })}
+                      className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted outline-none transition-colors hover:bg-background-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                    />
+                  }
+                >
+                  <MoreHorizontal className="size-4" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  {t('automation.actions.more', { name: entry.title })}
+                </TooltipContent>
+              </Tooltip>
               <DropdownMenuContent align="end" className="w-44">
                 <DropdownMenuItem onClick={() => onEdit(entry)}>
                   <Pencil className="size-4" />
@@ -682,86 +620,96 @@ const AutomationCard = observer(function AutomationCard({
           )}
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-foreground-muted">
+        <div className="mt-3 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-xs text-foreground-muted">
           <span className="inline-flex min-w-0 items-center gap-1.5">
-            <CalendarClock className="size-3.5 shrink-0" />
+            <CalendarClock className="size-3 shrink-0" />
             <span className="truncate">{scheduleLabel}</span>
           </span>
           <span className="inline-flex min-w-0 items-center gap-1.5">
-            <Folder className="size-3.5 shrink-0" />
+            <Folder className="size-3 shrink-0" />
             <span className="truncate">{entry.workspaceName}</span>
           </span>
-          <span
-            className={cn(
-              'inline-flex items-center gap-1.5',
-              detected ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground-muted'
-            )}
-          >
-            <Bot className="size-3.5" />
+          <span className="inline-flex items-center gap-1.5">
+            <Bot className="size-3" />
             {t('automation.card.runner', { name: runtime?.name ?? entry.runtime })}
           </span>
-          {lastRunAt &&
-            (lastRun?.taskId ? (
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-                aria-label={t('automation.card.openLastRun', { name: entry.title })}
-                onClick={() => onOpenRun(lastRun)}
-              >
-                <History className="size-3.5" />
-                {t('automation.card.lastRun')} <RelativeTime value={lastRunAt} />
-                <span className="inline-flex items-center gap-1 text-foreground">
-                  <MessageSquare className="size-3" />
-                  {t('automation.card.continueSession')}
-                </span>
-              </button>
-            ) : (
-              <span className="inline-flex items-center gap-1.5">
-                <History className="size-3.5" />
+          {lastRunAt && (
+            <span className="inline-flex items-center gap-1.5">
+              <History className="size-3 shrink-0" />
+              <span>
                 {t('automation.card.lastRun')} <RelativeTime value={lastRunAt} />
               </span>
-            ))}
+              {lastRun && runStyle && RunStatusIcon && (
+                <span className={cn('inline-flex items-center gap-1', runStyle.className)}>
+                  <RunStatusIcon
+                    className={cn('size-3', lastRun.status === 'running' && 'animate-spin')}
+                  />
+                  {t(`automation.runStatus.${lastRun.status}`)}
+                </span>
+              )}
+            </span>
+          )}
         </div>
       </div>
 
-      <footer className="flex min-h-12 flex-wrap items-center justify-between gap-3 border-t border-border/70 bg-background/40 px-4 py-2">
-        <span
-          className="inline-flex items-center gap-1.5 text-xs text-foreground-muted"
-          title={syncedFromCodex ? t('automation.source.codexHint') : undefined}
-        >
-          {syncedFromCodex ? (
-            <RefreshCw className="size-3.5" />
-          ) : (
-            <Settings2 className="size-3.5" />
-          )}
-          {syncedFromCodex
-            ? t('automation.source.codexManaged')
-            : t('automation.source.yodaManaged')}
-        </span>
+      <footer className="flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border/70 bg-background/40 px-4 py-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span
+            className="inline-flex items-center gap-1.5 text-xs text-foreground-muted"
+            title={syncedFromCodex ? t('automation.source.codexHint') : undefined}
+          >
+            {syncedFromCodex ? (
+              <RefreshCw className="size-3.5" />
+            ) : (
+              <Settings2 className="size-3.5" />
+            )}
+            {syncedFromCodex
+              ? t('automation.source.codexManaged')
+              : t('automation.source.yodaManaged')}
+          </span>
 
-        {syncedFromCodex ? (
-          <Badge variant="outline" className="gap-1.5 text-foreground-muted">
-            <Lock className="size-3" />
-            {t('automation.source.readOnly')}
-          </Badge>
-        ) : (
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-2 text-xs text-foreground-muted">
-              {entry.status === 'active'
-                ? t('automation.actions.enabled')
-                : t('automation.actions.disabled')}
-              <Switch
-                size="sm"
-                checked={entry.status === 'active'}
-                disabled={isUpdating}
-                onCheckedChange={() => onToggle(entry)}
-                aria-label={
-                  entry.status === 'active'
-                    ? t('automation.actions.pause')
-                    : t('automation.actions.resume')
-                }
-              />
-            </span>
+          {syncedFromCodex ? (
+            <Badge variant="outline" className="gap-1.5 text-foreground-muted">
+              <Lock className="size-3" />
+              {t('automation.source.readOnly')}
+            </Badge>
+          ) : (
+            <>
+              <span aria-hidden="true" className="h-3.5 w-px bg-border/70" />
+              <span className="inline-flex items-center gap-2 text-xs text-foreground-muted">
+                {entry.status === 'active'
+                  ? t('automation.actions.enabled')
+                  : t('automation.actions.disabled')}
+                <Switch
+                  size="sm"
+                  checked={entry.status === 'active'}
+                  disabled={isUpdating}
+                  onCheckedChange={() => onToggle(entry)}
+                  aria-label={
+                    entry.status === 'active'
+                      ? t('automation.actions.pause')
+                      : t('automation.actions.resume')
+                  }
+                />
+              </span>
+            </>
+          )}
+        </div>
+
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+          {lastRun?.taskId && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={t('automation.card.openLastRun', { name: entry.title })}
+              onClick={() => onOpenRun(lastRun)}
+            >
+              <MessageSquare className="size-3.5" />
+              {t('automation.card.continueSession')}
+            </Button>
+          )}
+          {!syncedFromCodex && (
             <Button
               type="button"
               variant="outline"
@@ -776,8 +724,8 @@ const AutomationCard = observer(function AutomationCard({
               )}
               {isRunning ? t('automation.actions.running') : t('automation.actions.runNow')}
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </footer>
     </article>
   );
