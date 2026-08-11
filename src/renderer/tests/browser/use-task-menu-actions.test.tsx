@@ -5,6 +5,8 @@ import type { TaskMenuActions } from '@renderer/features/tasks/components/task-c
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
+  archiveTask: vi.fn<(taskId: string, options?: { skipPreCommand?: boolean }) => Promise<void>>(),
+  showModal: vi.fn(),
   task: {
     state: 'unprovisioned' as const,
     phase: 'idle' as const,
@@ -37,7 +39,7 @@ vi.mock('@renderer/features/projects/stores/project-selectors', () => ({
   getRepositoryStore: () => undefined,
 }));
 vi.mock('@renderer/features/tasks/archive-task', () => ({
-  useArchiveTask: () => ({ archiveTask: vi.fn() }),
+  useArchiveTask: () => ({ archiveTask: mocks.archiveTask }),
 }));
 vi.mock('@renderer/features/tasks/components/task-context-menu', () => ({
   copyTaskLink: vi.fn(),
@@ -68,7 +70,7 @@ vi.mock('@renderer/lib/ipc', () => ({ rpc: { conversations: {} } }));
 vi.mock('@renderer/lib/layout/navigation-provider', () => ({
   useNavigate: () => ({ navigate: mocks.navigate }),
 }));
-vi.mock('@renderer/lib/modal/modal-provider', () => ({ useShowModal: () => vi.fn() }));
+vi.mock('@renderer/lib/modal/modal-provider', () => ({ useShowModal: () => mocks.showModal }));
 vi.mock('@renderer/utils/logger', () => ({ log: { warn: vi.fn() } }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -79,6 +81,8 @@ describe('useTaskMenuActions', () => {
 
   beforeEach(() => {
     mocks.navigate.mockReset();
+    mocks.archiveTask.mockReset();
+    mocks.showModal.mockReset();
     mocks.task.setNeedsReview.mockReset();
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -129,5 +133,48 @@ describe('useTaskMenuActions', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('home');
 
     resolveRequest?.();
+  });
+
+  it('archives directly without opening configuration, then immediately returns home', async () => {
+    const { useTaskMenuActions } = await import(
+      '@renderer/features/tasks/components/use-task-menu-actions'
+    );
+    let resolveActions: (actions: TaskMenuActions | null) => void;
+    const actionsReady = new Promise<TaskMenuActions | null>((resolve) => {
+      resolveActions = resolve;
+    });
+    let resolveArchive: (() => void) | undefined;
+    mocks.archiveTask.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveArchive = resolve;
+        })
+    );
+
+    function Probe() {
+      const actions = useTaskMenuActions('project-1', 'task-1');
+      useEffect(() => {
+        resolveActions(actions);
+      }, [actions]);
+      return null;
+    }
+
+    await act(async () => {
+      root.render(createElement(Probe));
+    });
+
+    const actions = await actionsReady;
+    expect(actions).not.toBeNull();
+    expect(actions?.onArchive).toBe(actions?.onArchiveQuick);
+
+    await act(async () => {
+      actions?.onArchive();
+    });
+
+    expect(mocks.archiveTask).toHaveBeenCalledWith('task-1', { skipPreCommand: true });
+    expect(mocks.showModal).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledWith('home');
+
+    resolveArchive?.();
   });
 });

@@ -124,6 +124,16 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
     navigate('home');
   };
 
+  // Direct archive follows the same immediate-exit behavior from every task
+  // surface. The configurable archive action below owns notes and commands.
+  const handleArchiveDirect = () => {
+    if (isArchiving) return;
+    void archiveTask(taskId, { skipPreCommand: true }).catch((error: unknown) => {
+      log.warn('useTaskMenuActions: direct archive failed', { projectId, taskId, error });
+    });
+    navigate('home');
+  };
+
   return {
     projectId,
     projectName,
@@ -154,17 +164,10 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
     onMarkNeedsReview: handleMarkNeedsReview,
     onUnmarkNeedsReview: () => void task.setNeedsReview(false),
     onRename: () => showRename({ projectId, taskId, currentName: taskName }),
-    // Quick archive (sidebar icon): straight to archive, no skill, no dialog.
-    onArchiveQuick: () => {
-      if (isArchiving) return;
-      void archiveTask(taskId, { skipPreCommand: true }).catch((error: unknown) => {
-        log.warn('useTaskMenuActions: quick archive failed', { projectId, taskId, error });
-      });
-    },
-    // Direct archive: dialog for an optional note, no pre-archive skill.
-    onArchive: () => showArchiveWithNote({ projectId, taskId, taskName }),
-    // Open the archive dialog in skill mode: an editable command prefilled from
-    // the configured preset runs against every live session before archiving.
+    onArchiveQuick: handleArchiveDirect,
+    onArchive: handleArchiveDirect,
+    // Open the configurable archive dialog with an editable pre-archive
+    // command and optional note.
     onArchiveWithSkill: () => showArchiveWithNote({ projectId, taskId, taskName, withSkill: true }),
     onCopyYodaLink: () => void copyTaskLink(buildTaskDeepLink({ projectId, taskId }), t),
     onRestore: () => void taskManager?.restoreTask(taskId),

@@ -210,10 +210,9 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
       data-sidebar-task-hover-trigger={canShowHoverPreview || undefined}
       onClick={(e) => {
         e.stopPropagation();
-        // The sidebar icon archives immediately. The overflow menu
-        // retains the optional-note and pre-archive-command flows.
+        // The shared direct-archive action also returns to home. The overflow
+        // menu's “Archive…” entry retains the configurable flow.
         menuActions.onArchiveQuick();
-        navigate('home');
       }}
     >
       <Archive className="h-4 w-4" />

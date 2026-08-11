@@ -201,7 +201,7 @@ describe('TaskContextMenuItems grouping', () => {
       [
         'tasks.context.markForReview',
         'tasks.context.archiveDirect',
-        'tasks.context.archiveWithSkill',
+        'tasks.context.archiveOptions',
       ],
       [
         'tasks.context.createSubtask',

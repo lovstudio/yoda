@@ -244,7 +244,7 @@ describe('SidebarTaskItem long-term marker', () => {
     expect(mocks.provisionTask).toHaveBeenCalledWith('task-1');
   });
 
-  it('returns to home after quick-archiving from the sidebar', async () => {
+  it('delegates direct archive navigation to the shared task action', async () => {
     const { SidebarTaskItem } = await import('@renderer/features/sidebar/task-item');
 
     await act(async () => {
@@ -270,7 +270,7 @@ describe('SidebarTaskItem long-term marker', () => {
     });
 
     expect(mocks.archiveQuick).toHaveBeenCalledOnce();
-    expect(mocks.navigate).toHaveBeenCalledWith('home');
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
   it('opens the preview only after hovering the archive action', async () => {

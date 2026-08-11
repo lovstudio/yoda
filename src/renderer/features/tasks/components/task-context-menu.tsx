@@ -92,16 +92,13 @@ export interface TaskMenuActions extends TaskMenuInfoFields {
   onMarkNeedsReview: () => void;
   onUnmarkNeedsReview: () => void;
   onRename: () => void;
-  /** Archive immediately with no skill and no dialog (sidebar quick action). */
+  /** Archive immediately with no skill, note, or dialog. */
   onArchiveQuick: () => void;
-  /**
-   * Archive the task directly (no pre-archive skill). Opens a dialog for an
-   * optional note; confirming there performs the archive.
-   */
+  /** Archive the task directly with no skill, note, or dialog. */
   onArchive: () => void;
   /**
-   * Open the archive dialog in skill mode: an editable command prefilled from
-   * the configured preset runs against every live session before archiving.
+   * Open the configurable archive dialog: optional note plus an editable
+   * pre-archive command that runs against every live session before archiving.
    */
   onArchiveWithSkill?: () => void;
   onCopyYodaLink?: () => void;
@@ -281,13 +278,13 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       onSelect: actions.onArchive,
     });
     if (actions.onArchiveWithSkill) {
-      // The skill dialog prefills/edits the command and links to settings, so
-      // it stays enabled even when no preset is configured yet.
+      // The configurable dialog owns the optional note and editable pre-archive
+      // command, so it stays enabled even when no preset exists yet.
       items.push({
         key: 'archive-with-skill',
         group: 2,
         icon: Sparkles,
-        label: t('tasks.context.archiveWithSkill'),
+        label: t('tasks.context.archiveOptions'),
         onSelect: actions.onArchiveWithSkill,
       });
     }
