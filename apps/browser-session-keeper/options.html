@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>会话健康</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Yoda 浏览器伴侣</p>
+          <h1>会话健康</h1>
+          <p class="lede">在当前 Chrome Profile 内访问你指定的只读页面，并在登录失效时提醒。</p>
+        </div>
+        <label class="master-switch">
+          <span>运行后台检查</span>
+          <input id="master-enabled" type="checkbox" />
+        </label>
+      </header>
+
+      <section class="panel" aria-labelledby="add-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">添加目标</p>
+            <h2 id="add-title">只读受保护页面</h2>
+          </div>
+          <p>选择登录后才能访问、刷新不会提交业务操作的页面。</p>
+        </div>
+
+        <form id="target-form" novalidate>
+          <div class="field-grid">
+            <label>
+              <span>名称</span>
+              <input
+                id="target-name"
+                name="name"
+                autocomplete="off"
+                placeholder="例如：腾讯云备案"
+                required
+              />
+            </label>
+            <label>
+              <span>检查间隔（分钟）</span>
+              <input
+                id="target-interval"
+                name="interval"
+                type="number"
+                min="1"
+                step="0.5"
+                value="15"
+                required
+              />
+            </label>
+          </div>
+          <label>
+            <span>只读页面网址</span>
+            <input
+              id="target-url"
+              name="url"
+              type="url"
+              inputmode="url"
+              placeholder="https://example.com/account"
+              required
+            />
+          </label>
+          <label>
+            <span>登录页标记</span>
+            <textarea
+              id="target-patterns"
+              name="patterns"
+              rows="3"
+              placeholder="每行一个，例如：/login 或 passport.example.com"
+              required
+            ></textarea>
+            <small>后台页最终网址包含任一标记时，会保留该标签供你接管。</small>
+          </label>
+          <div class="form-footer">
+            <p id="form-error" class="form-error" role="alert"></p>
+            <button class="primary" type="submit">添加</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="targets-section" aria-labelledby="targets-title">
+        <div class="section-heading compact">
+          <div>
+            <p class="eyebrow">监测目标</p>
+            <h2 id="targets-title">当前配置</h2>
+          </div>
+          <p id="target-count">0 个</p>
+        </div>
+        <div id="target-list" class="target-list"></div>
+        <div id="empty-state" class="empty-state">
+          <p>还没有目标</p>
+          <span>添加后仍需打开总开关，扩展才会开始后台检查。</span>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

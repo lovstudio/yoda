@@ -1,0 +1,432 @@
+:root {
+  color-scheme: light dark;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  color: #202322;
+  background: #f4f5f2;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 680px;
+  min-height: 100vh;
+  background: radial-gradient(circle at 85% 0%, rgb(217 249 157 / 24%), transparent 30rem), #f4f5f2;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.shell {
+  width: min(880px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 56px 0 80px;
+}
+
+.hero,
+.section-heading,
+.target-top,
+.form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.hero {
+  margin-bottom: 32px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #747a76;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 10px;
+  font-size: 36px;
+  letter-spacing: -0.035em;
+}
+
+h2 {
+  margin-bottom: 0;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+h3 {
+  margin-bottom: 4px;
+  font-size: 16px;
+}
+
+.lede,
+.section-heading > p,
+.target-identity p,
+.target-detail,
+.empty-state span {
+  color: #6b716d;
+}
+
+.lede {
+  margin-bottom: 0;
+  font-size: 15px;
+}
+
+.master-switch,
+.row-switch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+input[type='checkbox'] {
+  width: 38px;
+  height: 22px;
+  margin: 0;
+  accent-color: #4e6f1f;
+}
+
+.row-switch input {
+  width: 32px;
+  height: 18px;
+}
+
+.panel,
+.target-card {
+  border: 1px solid #dfe2dc;
+  border-radius: 18px;
+  background: rgb(255 255 255 / 88%);
+  box-shadow: 0 12px 40px rgb(32 35 34 / 5%);
+}
+
+.panel {
+  padding: 24px;
+}
+
+.section-heading {
+  align-items: flex-end;
+  margin-bottom: 24px;
+}
+
+.section-heading.compact {
+  margin: 40px 2px 16px;
+}
+
+.section-heading > p {
+  max-width: 360px;
+  margin-bottom: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: right;
+}
+
+form,
+label {
+  display: grid;
+  gap: 8px;
+}
+
+form {
+  gap: 18px;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 16px;
+}
+
+label > span {
+  color: #4e5350;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid #d7dbd4;
+  border-radius: 10px;
+  outline: none;
+  background: #fafbf8;
+  color: #202322;
+}
+
+input {
+  height: 42px;
+  padding: 0 12px;
+}
+
+textarea {
+  resize: vertical;
+  padding: 11px 12px;
+  line-height: 1.45;
+}
+
+input:focus,
+textarea:focus {
+  border-color: #7d9b4d;
+  box-shadow: 0 0 0 3px rgb(125 155 77 / 14%);
+}
+
+small {
+  color: #858b86;
+  font-size: 11px;
+}
+
+.form-footer {
+  min-height: 38px;
+}
+
+.form-error {
+  margin: 0;
+  color: #a83b36;
+  font-size: 12px;
+}
+
+.primary,
+.handoff {
+  border: 0;
+  border-radius: 10px;
+  background: #202322;
+  color: #fff;
+  font-weight: 700;
+}
+
+.primary {
+  min-width: 88px;
+  height: 38px;
+  padding: 0 18px;
+}
+
+.target-list {
+  display: grid;
+  gap: 12px;
+}
+
+.target-card {
+  padding: 18px 20px;
+}
+
+.target-identity p,
+.target-detail {
+  margin-bottom: 0;
+  font-size: 12px;
+}
+
+.target-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.badge {
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #eceeeb;
+  color: #626762;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.badge.fresh {
+  background: #e8f3d5;
+  color: #456316;
+}
+
+.badge.auth_required {
+  background: #fff0ce;
+  color: #895f0b;
+}
+
+.badge.network_error {
+  background: #f7dfdc;
+  color: #963e37;
+}
+
+.target-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 14px;
+  color: #858b86;
+  font-size: 11px;
+}
+
+.target-detail {
+  margin-top: 10px;
+}
+
+.handoff {
+  margin-top: 14px;
+  padding: 9px 12px;
+}
+
+.menu {
+  position: relative;
+}
+
+.menu summary {
+  display: grid;
+  width: 32px;
+  height: 30px;
+  border-radius: 8px;
+  color: #5e635f;
+  cursor: pointer;
+  list-style: none;
+  place-items: center;
+}
+
+.menu summary:hover,
+.menu[open] summary {
+  background: #ecefeb;
+}
+
+.menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu-body {
+  position: absolute;
+  z-index: 3;
+  top: 36px;
+  right: 0;
+  display: grid;
+  width: 132px;
+  overflow: hidden;
+  border: 1px solid #dfe2dc;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgb(32 35 34 / 15%);
+}
+
+.menu-body button {
+  border: 0;
+  border-bottom: 1px solid #eef0ec;
+  padding: 10px 12px;
+  background: transparent;
+  color: #3d423f;
+  font-size: 12px;
+  text-align: left;
+}
+
+.menu-body button:last-child {
+  border-bottom: 0;
+}
+
+.menu-body button:hover {
+  background: #f4f6f2;
+}
+
+.menu-body button.danger {
+  color: #a53d37;
+}
+
+.empty-state {
+  border: 1px dashed #ccd1c8;
+  border-radius: 16px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.empty-state p {
+  margin-bottom: 6px;
+  font-weight: 750;
+}
+
+.empty-state span {
+  font-size: 12px;
+}
+
+.toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  transform: translateY(12px);
+  border-radius: 10px;
+  padding: 11px 14px;
+  background: #202322;
+  color: #fff;
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: 160ms ease;
+}
+
+.toast.visible {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #eef0ec;
+    background: #111312;
+  }
+
+  body {
+    background:
+      radial-gradient(circle at 85% 0%, rgb(112 143 64 / 16%), transparent 30rem), #111312;
+  }
+
+  .panel,
+  .target-card {
+    border-color: #303431;
+    background: rgb(28 31 29 / 92%);
+  }
+
+  input,
+  textarea,
+  .menu-body {
+    border-color: #3b403c;
+    background: #202421;
+    color: #eef0ec;
+  }
+
+  .menu-body button {
+    border-color: #353a36;
+    color: #dfe2dd;
+  }
+
+  .menu-body button:hover,
+  .menu summary:hover,
+  .menu[open] summary {
+    background: #2b302c;
+  }
+
+  .primary,
+  .handoff,
+  .toast {
+    background: #d9f99d;
+    color: #18200e;
+  }
+}

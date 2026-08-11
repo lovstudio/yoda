@@ -52,6 +52,20 @@ export default tseslint.config(
     },
   },
 
+  // Browser-session companion: MV3 worker/options code and its Node tests.
+  {
+    files: ['apps/browser-session-keeper/*.js'],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.es2020, chrome: 'readonly' },
+    },
+  },
+  {
+    files: ['apps/browser-session-keeper/tests/**/*.mjs'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.es2020 },
+    },
+  },
+
   // Type-aware rules scoped to src/ only (config files like vitest.config.ts are not in tsconfig)
   {
     files: ['src/**/*.{ts,tsx}'],
