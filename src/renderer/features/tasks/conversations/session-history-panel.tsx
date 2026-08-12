@@ -8,7 +8,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ClaudeSessionPrompt, Conversation } from '@shared/conversations';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
@@ -398,6 +398,7 @@ function SessionPromptRow({
   restoringPromptId?: string | null;
 }) {
   const { t } = useTranslation();
+  const [pointerPosition, setPointerPosition] = useState<{ x: number; y: number } | null>(null);
   const text = displaySessionPromptText(prompt.text).trim();
   const promptDate = parsePromptTimestamp(prompt.timestamp);
   const timestamp = promptDate?.toLocaleTimeString() ?? null;
@@ -412,6 +413,24 @@ function SessionPromptRow({
   const selectedIsRestoring = restoringPromptId === selectedPrompt.id;
   const promptLengths = prompts.map((item) => displaySessionPromptText(item.text).trim().length);
   const maxPromptLength = Math.max(1, ...promptLengths);
+  const tooltipAnchor = useMemo(
+    () =>
+      pointerPosition
+        ? {
+            getBoundingClientRect: () => ({
+              x: pointerPosition.x,
+              y: pointerPosition.y,
+              top: pointerPosition.y,
+              right: pointerPosition.x,
+              bottom: pointerPosition.y,
+              left: pointerPosition.x,
+              width: 0,
+              height: 0,
+            }),
+          }
+        : undefined,
+    [pointerPosition]
+  );
   const handleClick =
     onClick ?? (canRestore && onRestore ? () => onRestore(prompt, index) : undefined);
   const className = 'flex h-6 min-w-0 flex-1 items-center gap-2 text-left';
@@ -426,20 +445,29 @@ function SessionPromptRow({
           render={
             <span className="min-w-0 flex-1 truncate text-xs leading-5 text-foreground-muted" />
           }
+          onPointerEnter={(event: PointerEvent) =>
+            setPointerPosition({ x: event.clientX, y: event.clientY })
+          }
+          onPointerMove={(event: PointerEvent) =>
+            setPointerPosition({ x: event.clientX, y: event.clientY })
+          }
         >
           {text}
         </TooltipTrigger>
         <TooltipContent
-          align="start"
+          side="right"
+          align="center"
+          sideOffset={10}
           showArrow={false}
+          anchor={tooltipAnchor}
           className="block w-[min(28rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border-primary/70 bg-background-quaternary p-0 text-foreground shadow-lg"
         >
           <div data-session-prompt-preview className="flex min-w-0">
             <aside
               data-session-prompt-history-bars
-              className="flex w-14 shrink-0 items-center justify-center border-r border-border-primary/60 bg-background-1/55 px-2 py-3"
+              className="flex w-14 shrink-0 items-center justify-center bg-transparent px-2 py-3"
             >
-              <div className="flex max-h-60 w-9 flex-col items-center gap-1.5 overflow-y-auto rounded-full border border-border-primary/45 bg-background px-1.5 py-2 shadow-sm">
+              <div className="flex max-h-60 w-9 flex-col items-center gap-1.5 overflow-y-auto rounded-full bg-background px-1.5 py-2">
                 {prompts.map((historyPrompt, historyIndex) => {
                   const isSelected = historyPrompt.id === selectedPrompt.id;
                   const historyPromptLength = promptLengths[historyIndex] ?? 0;
