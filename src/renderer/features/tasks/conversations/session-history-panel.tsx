@@ -78,10 +78,11 @@ export const SessionPromptList = observer(function SessionPromptList({
       {prompts.map((prompt, index) => (
         <SessionPromptRow
           key={prompt.id || `prompt-${index}`}
+          prompts={prompts}
           prompt={prompt}
           index={index + 1}
           onRestore={onRestorePrompt}
-          isRestoring={restoringPromptId === prompt.id}
+          restoringPromptId={restoringPromptId}
         />
       ))}
     </div>
@@ -369,10 +370,11 @@ function DockedSessionPromptPreview({
         ) : (
           <SessionPromptRow
             key={item.prompt.id || `prompt-${item.promptIndex}`}
+            prompts={prompts}
             prompt={item.prompt}
             index={item.promptIndex}
             onRestore={onRestorePrompt}
-            isRestoring={restoringPromptId === item.prompt.id}
+            restoringPromptId={restoringPromptId}
           />
         )
       )}
@@ -381,23 +383,35 @@ function DockedSessionPromptPreview({
 }
 
 function SessionPromptRow({
+  prompts,
   prompt,
   index,
   onClick,
   onRestore,
-  isRestoring = false,
+  restoringPromptId,
 }: {
+  prompts: ClaudeSessionPrompt[];
   prompt: ClaudeSessionPrompt;
   index: number;
   onClick?: () => void;
   onRestore?: (prompt: ClaudeSessionPrompt, index: number) => void;
-  isRestoring?: boolean;
+  restoringPromptId?: string | null;
 }) {
   const { t } = useTranslation();
   const text = displaySessionPromptText(prompt.text).trim();
   const promptDate = parsePromptTimestamp(prompt.timestamp);
   const timestamp = promptDate?.toLocaleTimeString() ?? null;
   const canRestore = Boolean(onRestore && prompt.restoreTarget);
+  const [selectedPromptId, setSelectedPromptId] = useState(prompt.id);
+  const selectedPrompt = prompts.find((item) => item.id === selectedPromptId) ?? prompt;
+  const selectedPromptIndex = prompts.findIndex((item) => item.id === selectedPrompt.id);
+  const selectedIndex = selectedPromptIndex >= 0 ? selectedPromptIndex + 1 : index;
+  const selectedText = displaySessionPromptText(selectedPrompt.text).trim();
+  const selectedPromptDate = parsePromptTimestamp(selectedPrompt.timestamp);
+  const selectedCanRestore = Boolean(onRestore && selectedPrompt.restoreTarget);
+  const selectedIsRestoring = restoringPromptId === selectedPrompt.id;
+  const promptLengths = prompts.map((item) => displaySessionPromptText(item.text).trim().length);
+  const maxPromptLength = Math.max(1, ...promptLengths);
   const handleClick =
     onClick ?? (canRestore && onRestore ? () => onRestore(prompt, index) : undefined);
   const className = 'flex h-6 min-w-0 flex-1 items-center gap-2 text-left';
@@ -421,38 +435,75 @@ function SessionPromptRow({
           className="block w-[min(28rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border-primary/70 bg-background-quaternary p-0 text-foreground shadow-lg"
         >
           <div data-session-prompt-preview className="flex min-w-0">
-            {canRestore && onRestore ? (
-              <aside
-                data-session-prompt-fork-rail
-                className="flex w-32 shrink-0 flex-col justify-center border-r border-border-primary/60 bg-background-1/55 p-2.5"
-              >
-                <SessionPromptRestoreButton
-                  prompt={prompt}
-                  index={index}
-                  isRestoring={isRestoring}
-                  onRestore={onRestore}
-                  visibleLabel={t('tasks.bottomPanel.sessionBranchFromHere')}
-                  className="h-auto min-h-9 w-full justify-start rounded-md border border-primary/35 bg-primary/10 px-2.5 py-2 text-left text-[11px] font-medium text-primary shadow-sm hover:bg-primary/15 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60"
-                />
-              </aside>
-            ) : null}
+            <aside
+              data-session-prompt-history-bars
+              className="flex w-14 shrink-0 items-center justify-center border-r border-border-primary/60 bg-background-1/55 px-2 py-3"
+            >
+              <div className="flex max-h-60 w-9 flex-col items-center gap-1.5 overflow-y-auto rounded-full border border-border-primary/45 bg-background px-1.5 py-2 shadow-sm">
+                {prompts.map((historyPrompt, historyIndex) => {
+                  const isSelected = historyPrompt.id === selectedPrompt.id;
+                  const historyPromptLength = promptLengths[historyIndex] ?? 0;
+                  const barWidth = promptBarWidth(historyPromptLength, maxPromptLength);
+                  const promptLabel = t('tasks.sessionInfo.userMessageIndex', {
+                    index: historyIndex + 1,
+                  });
+
+                  return (
+                    <button
+                      key={historyPrompt.id || `history-prompt-${historyIndex}`}
+                      type="button"
+                      className="group flex h-3 w-full shrink-0 items-center justify-center rounded-full transition-colors hover:bg-background-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+                      aria-label={promptLabel}
+                      aria-pressed={isSelected}
+                      data-session-prompt-history-bar={historyIndex + 1}
+                      data-session-prompt-history-bar-active={isSelected ? 'true' : 'false'}
+                      title={promptLabel}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setSelectedPromptId(historyPrompt.id);
+                      }}
+                    >
+                      <span
+                        className={cn(
+                          'block h-0.5 max-w-full rounded-full transition-colors',
+                          isSelected
+                            ? 'bg-foreground'
+                            : 'bg-foreground-passive/45 group-hover:bg-foreground-muted'
+                        )}
+                        style={{ width: `${barWidth}%` }}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            </aside>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 border-b border-border-primary/60 px-3 py-2">
+              <div className="flex min-w-0 items-center gap-2 border-b border-border-primary/60 px-3 py-2">
                 <span className="text-[10px] font-medium text-foreground-passive">
                   {t('tasks.sessionInfo.createdAt')}
                 </span>
-                {promptDate ? (
+                {selectedPromptDate ? (
                   <RelativeTime
-                    value={promptDate}
+                    value={selectedPromptDate}
                     className="font-mono text-[11px] tabular-nums text-foreground-muted"
                   />
                 ) : (
                   <span className="font-mono text-[11px] text-foreground-passive">—</span>
                 )}
+                {selectedCanRestore && onRestore ? (
+                  <SessionPromptRestoreButton
+                    prompt={selectedPrompt}
+                    index={selectedIndex}
+                    isRestoring={selectedIsRestoring}
+                    onRestore={onRestore}
+                    visibleLabel={t('tasks.bottomPanel.sessionBranchFromHere')}
+                    className="ml-auto h-auto min-h-7 shrink-0 justify-start rounded-md border border-primary/35 bg-primary/10 px-2.5 py-1.5 text-left text-[11px] font-medium text-primary shadow-sm hover:bg-primary/15 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60"
+                  />
+                ) : null}
               </div>
               <div className="max-h-52 overflow-y-auto px-3 py-2.5">
                 <p className="whitespace-pre-wrap break-words text-left text-xs leading-5 text-foreground">
-                  {text || '—'}
+                  {selectedText || '—'}
                 </p>
               </div>
             </div>
@@ -491,4 +542,10 @@ function parsePromptTimestamp(timestamp: string | null): Date | null {
   if (!timestamp) return null;
   const date = new Date(timestamp);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function promptBarWidth(promptLength: number, maxPromptLength: number): number {
+  if (promptLength <= 0) return 30;
+  const ratio = Math.sqrt(promptLength / maxPromptLength);
+  return Math.round(30 + ratio * 58);
 }

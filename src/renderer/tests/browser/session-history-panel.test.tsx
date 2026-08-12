@@ -185,8 +185,14 @@ describe('DockedSessionHistory conversation tree menu', () => {
     const fullPrompt =
       'This is the complete prompt text that stays available even when the docked row truncates it.';
     const promptTimestamp = '2026-07-15T08:30:00.000Z';
+    const secondPrompt = {
+      id: 'prompt-2',
+      text: 'second path prompt',
+      timestamp: '2026-08-01T08:30:00.000Z',
+      restoreTarget: { kind: 'codex-turn' as const, turnId: 'turn-2' },
+    };
     mocks.useSessionPrompts.mockReturnValue({
-      prompts: [{ ...prompt, text: fullPrompt, timestamp: promptTimestamp }],
+      prompts: [{ ...prompt, text: fullPrompt, timestamp: promptTimestamp }, secondPrompt],
       isLoading: false,
       hasPrompts: true,
       hasConversation: true,
@@ -213,17 +219,38 @@ describe('DockedSessionHistory conversation tree menu', () => {
       expect(createdAt?.textContent).toMatch(/前$/);
       expect(preview?.textContent).toContain('tasks.bottomPanel.sessionBranchFromHere');
       expect(preview?.textContent).not.toContain('tasks.sessionInfo.restoreContextAtPrompt');
+
+      const historyBars = document.querySelectorAll<HTMLButtonElement>(
+        '[data-session-prompt-history-bar]'
+      );
+      expect(historyBars).toHaveLength(2);
+      expect(historyBars[0]?.getAttribute('data-session-prompt-history-bar-active')).toBe('true');
+      expect(historyBars[1]?.getAttribute('data-session-prompt-history-bar-active')).toBe('false');
+    });
+
+    const historyBars = document.querySelectorAll<HTMLButtonElement>(
+      '[data-session-prompt-history-bar]'
+    );
+    await act(async () => userEvent.click(historyBars[1]!));
+
+    await vi.waitFor(() => {
+      const preview = document.querySelector<HTMLElement>('[data-session-prompt-preview]');
+      const createdAt = preview?.querySelector('time');
+      expect(preview?.textContent).toContain(secondPrompt.text);
+      expect(preview?.textContent).not.toContain(fullPrompt);
+      expect(createdAt?.getAttribute('dateTime')).toBe(
+        new Date(secondPrompt.timestamp).toISOString()
+      );
+      expect(historyBars[0]?.getAttribute('data-session-prompt-history-bar-active')).toBe('false');
+      expect(historyBars[1]?.getAttribute('data-session-prompt-history-bar-active')).toBe('true');
     });
 
     const forkButton = document.querySelector<HTMLButtonElement>(
-      '[data-session-prompt-fork-rail] button'
+      '[data-session-prompt-preview] button[aria-label="tasks.sessionInfo.restoreContextAtPrompt"]'
     );
     expect(forkButton?.textContent).toContain('tasks.bottomPanel.sessionBranchFromHere');
     await act(async () => forkButton?.click());
-    expect(mocks.restoreCurrentPrompt).toHaveBeenCalledWith(
-      { ...prompt, text: fullPrompt, timestamp: promptTimestamp },
-      1
-    );
+    expect(mocks.restoreCurrentPrompt).toHaveBeenCalledWith(secondPrompt, 2);
   });
 
   it('keeps the tree icon available while the current-path list is collapsed', async () => {
