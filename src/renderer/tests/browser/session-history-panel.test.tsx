@@ -342,20 +342,37 @@ describe('DockedSessionHistory conversation tree menu', () => {
     const promptText = host.querySelector<HTMLElement>('[data-slot="tooltip-trigger"]');
     await act(async () => userEvent.hover(promptText!));
 
+    let pending: HTMLElement | null = null;
     await vi.waitFor(() => {
       const preview = document.querySelector<HTMLElement>('[data-session-prompt-preview]');
       expect(preview).not.toBeNull();
-      expect(
-        preview?.querySelector('[data-session-prompt-checkpoint-pending]')?.getAttribute('title')
-      ).toBe('tasks.bottomPanel.sessionCheckpointPending');
-      expect(
-        preview
-          ?.querySelector('[data-session-prompt-checkpoint-pending]')
-          ?.getAttribute('aria-label')
-      ).toBe('tasks.bottomPanel.sessionCheckpointPending');
+      pending =
+        preview?.querySelector<HTMLElement>('[data-session-prompt-checkpoint-pending]') ?? null;
+      expect(pending?.textContent).toBe('tasks.bottomPanel.sessionCheckpointUnavailableLabel');
+      expect(pending?.getAttribute('title')).toBe(
+        'tasks.bottomPanel.sessionCheckpointUnavailableHint'
+      );
+      expect(pending?.getAttribute('aria-label')).toBe(
+        'tasks.bottomPanel.sessionCheckpointUnavailableLabel'
+      );
+      const checkpointBubble = preview?.querySelector<HTMLElement>(
+        '[data-session-prompt-checkpoint-bubble]'
+      );
+      expect(checkpointBubble?.getAttribute('role')).toBe('tooltip');
+      expect(checkpointBubble?.textContent).toBe(
+        'tasks.bottomPanel.sessionCheckpointUnavailableHint'
+      );
+      expect(pending?.getAttribute('aria-describedby')).toBe(checkpointBubble?.id);
       expect(
         preview?.querySelector('button[aria-label="tasks.sessionInfo.restoreContextAtPrompt"]')
       ).toBeNull();
     });
+
+    await act(async () => userEvent.hover(pending!));
+    const checkpointBubble = document.querySelector<HTMLElement>(
+      '[data-session-prompt-checkpoint-bubble]'
+    );
+    expect(checkpointBubble?.className).toContain('group-hover/checkpoint:block');
+    expect(checkpointBubble?.className).toContain('group-focus-within/checkpoint:block');
   });
 });

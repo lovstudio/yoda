@@ -2447,6 +2447,8 @@
       "sessionBranchFromHere": "Continue from here",
       "sessionCurrentNode": "Current node",
       "sessionCheckpointPending": "This prompt does not have a restorable context checkpoint yet",
+      "sessionCheckpointUnavailableLabel": "No checkpoint for this prompt yet",
+      "sessionCheckpointUnavailableHint": "This message has no available checkpoint yet. Try the next one.",
       "sessionCurrentBranch": "Current branch",
       "sessionOpenBranch": "Switch to branch “{{title}}”",
       "sessionRestoreBranch": "Restore and switch to branch “{{title}}”",
