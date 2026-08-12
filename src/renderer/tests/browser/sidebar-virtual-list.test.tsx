@@ -167,6 +167,7 @@ describe('SidebarVirtualList', () => {
   let scrollRoot: HTMLDivElement;
   let root: Root;
   let scrollElementRef: RefObject<HTMLDivElement | null>;
+  let utilityStyles: HTMLStyleElement;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -175,7 +176,15 @@ describe('SidebarVirtualList', () => {
     host.style.height = '120px';
     scrollRoot = document.createElement('div');
     scrollRoot.style.height = '120px';
+    // SidebarContent is a vertical flex scroller. The virtual list must keep
+    // its full measured height instead of flex-shrinking and clipping itself.
+    scrollRoot.style.display = 'flex';
+    scrollRoot.style.flexDirection = 'column';
     scrollRoot.style.overflowY = 'auto';
+    utilityStyles = document.createElement('style');
+    utilityStyles.textContent =
+      '.shrink-0 { flex-shrink: 0; } .overflow-hidden { overflow: hidden; }';
+    document.head.appendChild(utilityStyles);
     host.appendChild(scrollRoot);
     document.body.appendChild(host);
     root = createRoot(scrollRoot);
@@ -199,6 +208,7 @@ describe('SidebarVirtualList', () => {
 
   afterEach(async () => {
     await act(async () => root.unmount());
+    utilityStyles.remove();
     host.remove();
   });
 

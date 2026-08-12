@@ -324,7 +324,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
   return (
     <SortableContext items={allDndIds} strategy={verticalListSortingStrategy}>
       <div
-        className="overflow-hidden"
+        className="shrink-0 overflow-hidden"
         onPointerEnter={() => {
           sidebarStore.holdTaskReflow('pinned-list');
           sidebarStore.holdTaskReflow('projects-list');
