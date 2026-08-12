@@ -492,6 +492,11 @@ function SessionPromptRow({
     setCopied(false);
   };
 
+  const selectHistoryPrompt = (historyPrompt: ClaudeSessionPrompt) => {
+    setSelectedPromptId(historyPrompt.id);
+    clearCopiedState();
+  };
+
   const handleCopyPrompt = async () => {
     if (!selectedText) return;
 
@@ -573,10 +578,11 @@ function SessionPromptRow({
                       data-session-prompt-history-bar={historyIndex + 1}
                       data-session-prompt-history-bar-active={isSelected ? 'true' : 'false'}
                       title={promptLabel}
+                      onFocus={() => selectHistoryPrompt(historyPrompt)}
+                      onPointerEnter={() => selectHistoryPrompt(historyPrompt)}
                       onClick={(event) => {
                         event.stopPropagation();
-                        setSelectedPromptId(historyPrompt.id);
-                        clearCopiedState();
+                        selectHistoryPrompt(historyPrompt);
                       }}
                     >
                       <span

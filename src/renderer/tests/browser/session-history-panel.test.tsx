@@ -253,6 +253,18 @@ describe('DockedSessionHistory conversation tree menu', () => {
       expect(magnifiedBarWidth).toBeGreaterThan(initialBarWidth + 10);
     });
 
+    await act(async () => userEvent.hover(historyBars[1]!));
+    await vi.waitFor(() => {
+      const preview = document.querySelector<HTMLElement>('[data-session-prompt-preview]');
+      const createdAt = preview?.querySelector('time');
+      expect(preview?.textContent).toContain(secondPrompt.text);
+      expect(createdAt?.getAttribute('dateTime')).toBe(
+        new Date(secondPrompt.timestamp).toISOString()
+      );
+      expect(historyBars[0]?.getAttribute('data-session-prompt-history-bar-active')).toBe('false');
+      expect(historyBars[1]?.getAttribute('data-session-prompt-history-bar-active')).toBe('true');
+    });
+
     await act(async () => userEvent.click(historyBars[1]!));
 
     await vi.waitFor(() => {
