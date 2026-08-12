@@ -3642,7 +3642,7 @@
     "noResults": "No agents match your search.",
     "noDescription": "No description",
     "noDescriptionShort": "No description",
-    "duplicate": "Duplicate",
+    "duplicate": "Duplicate agent",
     "anyRuntime": "Any client",
     "skillsCount": "{{count}} skills",
     "icon": "Icon",

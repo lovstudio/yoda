@@ -1,4 +1,4 @@
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { useMemo, useState, type PropsWithChildren } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Agent } from '@shared/agents';
@@ -49,28 +49,12 @@ function AgentCard({
           skillCount={agent.enabledSkillIds.length + agent.manualSkillIds.length}
         />
       }
+      onEdit={onEdit}
+      editLabel={t('common.edit')}
       onDuplicate={onDuplicate}
       duplicateLabel={t('agentManager.duplicate')}
-      trailing={
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-          <button
-            type="button"
-            aria-label={t('common.edit')}
-            onClick={onEdit}
-            className="flex size-7 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground"
-          >
-            <Pencil className="size-3.5" />
-          </button>
-          <button
-            type="button"
-            aria-label={t('common.delete')}
-            onClick={onDelete}
-            className="flex size-7 items-center justify-center rounded-md text-foreground-muted hover:bg-destructive/10 hover:text-destructive"
-          >
-            <Trash2 className="size-3.5" />
-          </button>
-        </div>
-      }
+      onDelete={onDelete}
+      deleteLabel={t('common.delete')}
     />
   );
 }

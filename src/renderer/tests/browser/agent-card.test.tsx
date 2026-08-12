@@ -23,25 +23,40 @@ describe('AgentCard', () => {
     host.remove();
   });
 
-  it('exposes the canonical duplicate action when requested', async () => {
+  it('keeps canonical actions visible, ordered, and right-aligned', async () => {
+    const onEdit = vi.fn();
     const onDuplicate = vi.fn();
+    const onDelete = vi.fn();
     await act(async () =>
       root.render(
         <TooltipProvider>
-          <AgentCard name="Researcher" onDuplicate={onDuplicate} duplicateLabel="Duplicate agent" />
+          <AgentCard
+            name="Researcher"
+            onEdit={onEdit}
+            editLabel="Edit agent"
+            onDuplicate={onDuplicate}
+            duplicateLabel="Duplicate agent"
+            onDelete={onDelete}
+            deleteLabel="Delete agent"
+          />
         </TooltipProvider>
       )
     );
 
-    const duplicateButton = host.querySelector<HTMLButtonElement>(
-      'button[aria-label="Duplicate agent"]'
+    const actions = host.querySelector<HTMLElement>('[data-testid="agent-card-actions"]');
+    const actionButtons = Array.from(actions?.querySelectorAll('button') ?? []);
+    expect(actionButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Edit agent',
+      'Duplicate agent',
+      'Delete agent',
+    ]);
+    expect(actions?.classList.contains('opacity-0')).toBe(false);
+    expect(actions?.classList.contains('ml-auto')).toBe(true);
+
+    const duplicateButton = actionButtons.find(
+      (button) => button.getAttribute('aria-label') === 'Duplicate agent'
     );
-    expect(duplicateButton).not.toBeNull();
-    expect(
-      host
-        .querySelector<HTMLElement>('[data-testid="agent-card-actions"]')
-        ?.classList.contains('opacity-0')
-    ).toBe(false);
+    expect(duplicateButton).toBeDefined();
 
     await act(async () => {
       await userEvent.click(duplicateButton!);

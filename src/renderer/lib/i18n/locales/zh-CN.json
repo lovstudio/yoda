@@ -3642,7 +3642,7 @@
     "noResults": "没有匹配的 Agent。",
     "noDescription": "暂无描述",
     "noDescriptionShort": "暂无描述",
-    "duplicate": "复制",
+    "duplicate": "创建副本",
     "anyRuntime": "任意客户端",
     "skillsCount": "{{count}} 个 skill",
     "icon": "图标",
