@@ -718,7 +718,7 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
     const restoredActive = restored.find((tab) => tab.id === snapshot.activeTabId) ?? restored[0];
     this.stripScope =
       typeof snapshot.stripScope === 'string' &&
-      !(snapshot.stripScope === 'view:library' && restoredActive.viewId === 'marketplace')
+      !(snapshot.stripScope === 'view:marketplace' && restoredActive.viewId === 'library')
         ? snapshot.stripScope
         : tabScopeKey(restoredActive.viewId, restoredActive.params);
     this.activationSeq = Math.max(0, ...restored.map((tab) => tab.seq ?? 0));

@@ -1717,7 +1717,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             <MaasGlobalSelector
               onManagePlatform={() => appState.navigation.navigate('maas')}
               onOpenMarketplace={() =>
-                appState.navigation.navigate('marketplace', { section: 'extensions' })
+                appState.navigation.navigate('library', { section: 'extensions' })
               }
             />
             <div className="flex gap-2">

@@ -6,32 +6,32 @@ describe('AppSidePaneStore view pins', () => {
     const store = new AppSidePaneStore();
     const params = { section: 'apps', appId: 'app-1' };
 
-    store.toggleView('marketplace', params);
+    store.toggleView('library', params);
 
-    const pin = store.findViewPin('marketplace', { appId: 'app-1', section: 'apps' });
+    const pin = store.findViewPin('library', { appId: 'app-1', section: 'apps' });
     expect(pin).toBeDefined();
     expect(store.activePinId).toBe(pin?.id);
 
-    store.toggleView('marketplace', { appId: 'app-1', section: 'apps' });
+    store.toggleView('library', { appId: 'app-1', section: 'apps' });
 
-    expect(store.findViewPin('marketplace', params)).toBeUndefined();
+    expect(store.findViewPin('library', params)).toBeUndefined();
     expect(store.pins).toHaveLength(0);
     expect(store.activePinId).toBeNull();
   });
 
   it('only unpins the matching route', () => {
     const store = new AppSidePaneStore();
-    store.pinView('marketplace', { section: 'apps', appId: 'app-1' });
+    store.pinView('library', { section: 'apps', appId: 'app-1' });
     store.pinView('settings', {});
 
-    store.toggleView('marketplace', { section: 'apps', appId: 'app-1' });
+    store.toggleView('library', { section: 'apps', appId: 'app-1' });
 
-    expect(store.findViewPin('marketplace', { section: 'apps', appId: 'app-1' })).toBeUndefined();
+    expect(store.findViewPin('library', { section: 'apps', appId: 'app-1' })).toBeUndefined();
     expect(store.findViewPin('settings', {})).toBeDefined();
     expect(store.pins).toHaveLength(1);
   });
 
-  it('migrates restored Library app pins into Marketplace', () => {
+  it('migrates restored Marketplace app pins into Library', () => {
     const store = new AppSidePaneStore();
 
     store.restoreSnapshot({
@@ -39,7 +39,7 @@ describe('AppSidePaneStore view pins', () => {
         {
           id: 'app-pin',
           kind: 'view',
-          viewId: 'library',
+          viewId: 'marketplace',
           params: { section: 'apps', appId: 'app-1' },
         },
       ],
@@ -50,7 +50,7 @@ describe('AppSidePaneStore view pins', () => {
       {
         id: 'app-pin',
         kind: 'view',
-        viewId: 'marketplace',
+        viewId: 'library',
         params: { section: 'apps', appId: 'app-1' },
       },
     ]);

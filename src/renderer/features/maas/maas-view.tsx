@@ -8,7 +8,7 @@ export function MaasTitlebar() {
 
 export function MaasMainPanel() {
   const { navigate } = useNavigate();
-  return <MaasView onOpenMarketplace={() => navigate('marketplace', { section: 'extensions' })} />;
+  return <MaasView onOpenMarketplace={() => navigate('library', { section: 'extensions' })} />;
 }
 
 export const maasView = {

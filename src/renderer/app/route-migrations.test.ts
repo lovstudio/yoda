@@ -2,26 +2,48 @@ import { describe, expect, it } from 'vitest';
 import { migratePersistedViewRoute } from './route-migrations';
 
 describe('persisted view route migrations', () => {
-  it('moves Apps from Library to Marketplace without losing the selected app', () => {
+  it('moves Marketplace Apps back into Library without losing the selected app', () => {
     expect(
       migratePersistedViewRoute({
-        viewId: 'library',
+        viewId: 'marketplace',
         params: { section: 'apps', appId: 'app-1' },
       })
     ).toEqual({
-      viewId: 'marketplace',
+      viewId: 'library',
       params: { section: 'apps', appId: 'app-1' },
     });
   });
 
-  it('moves the former Library extension catalog to Marketplace extensions', () => {
+  it('moves Marketplace Extensions back into the Library Extensions section', () => {
+    expect(
+      migratePersistedViewRoute({
+        viewId: 'marketplace',
+        params: { section: 'extensions' },
+      })
+    ).toEqual({
+      viewId: 'library',
+      params: { section: 'extensions' },
+    });
+  });
+
+  it('keeps legacy Library section aliases on the Library surface', () => {
+    expect(
+      migratePersistedViewRoute({
+        viewId: 'library',
+        params: { section: 'aiLab', appId: 'app-1' },
+      })
+    ).toEqual({
+      viewId: 'library',
+      params: { section: 'apps', appId: 'app-1' },
+    });
+
     expect(
       migratePersistedViewRoute({
         viewId: 'library',
         params: { section: 'marketplace', appId: 'stale-app' },
       })
     ).toEqual({
-      viewId: 'marketplace',
+      viewId: 'library',
       params: { section: 'extensions' },
     });
   });

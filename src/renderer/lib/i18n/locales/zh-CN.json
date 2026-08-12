@@ -2524,6 +2524,8 @@
       "prompts": "提示词",
       "agents": "智能体",
       "agentTeams": "智能体团队",
+      "extensions": "扩展",
+      "apps": "应用",
       "skills": "技能",
       "plugins": "插件",
       "mcp": "MCP",

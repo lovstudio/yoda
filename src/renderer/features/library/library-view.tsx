@@ -1,4 +1,5 @@
 import {
+  AppWindow,
   Bot,
   Boxes,
   Check,
@@ -6,6 +7,7 @@ import {
   Menu,
   Plug,
   Puzzle,
+  Store,
   Users,
   Workflow,
   type LucideIcon,
@@ -14,7 +16,9 @@ import { createContext, useCallback, useContext, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AgentTeamsMainPanel } from '@renderer/features/agent-teams/agent-teams-panel';
 import { AgentManagerMainPanel } from '@renderer/features/agents-config/agent-manager-view';
+import { AiLabView } from '@renderer/features/ai-lab/components/AiLabView';
 import { AutomationMainPanel } from '@renderer/features/automation/automation-view';
+import { ExtensionMarketplaceView } from '@renderer/features/extensions/ExtensionMarketplaceView';
 import { McpMainPanel } from '@renderer/features/mcp/mcp-view';
 import PluginsView from '@renderer/features/plugins/PluginsView';
 import { PromptLibraryPanel } from '@renderer/features/prompt-library/prompt-library-panel';
@@ -31,6 +35,8 @@ import { cn } from '@renderer/utils/utils';
 
 /** The Library groups the user's reusable resources behind one nav entry. */
 export type LibrarySection =
+  | 'extensions'
+  | 'apps'
   | 'prompts'
   | 'agents'
   | 'agentTeams'
@@ -44,6 +50,8 @@ const SECTIONS: {
   icon: LucideIcon;
   labelKey: string;
 }[] = [
+  { id: 'extensions', icon: Store, labelKey: 'library.sections.extensions' },
+  { id: 'apps', icon: AppWindow, labelKey: 'library.sections.apps' },
   { id: 'prompts', icon: FileText, labelKey: 'library.sections.prompts' },
   { id: 'agents', icon: Bot, labelKey: 'library.sections.agents' },
   { id: 'agentTeams', icon: Users, labelKey: 'library.sections.agentTeams' },
@@ -56,11 +64,15 @@ const SECTIONS: {
 const LibrarySectionContext = createContext<{
   section: LibrarySection;
   onSectionChange: (section: LibrarySection) => void;
+  appId: string | null;
+  onAppChange: (appId: string | null) => void;
   createPrompt: boolean;
   onCreatePromptConsumed: () => void;
 }>({
   section: 'prompts',
   onSectionChange: () => {},
+  appId: null,
+  onAppChange: () => {},
   createPrompt: false,
   onCreatePromptConsumed: () => {},
 });
@@ -68,10 +80,12 @@ const LibrarySectionContext = createContext<{
 export function LibraryViewWrapper({
   children,
   section = 'prompts',
+  appId,
   createPrompt = false,
 }: {
   children: ReactNode;
   section?: LibrarySection;
+  appId?: string;
   createPrompt?: boolean;
 }) {
   const { params, setParams } = useParams('library');
@@ -79,6 +93,10 @@ export function LibraryViewWrapper({
   const shouldCreatePrompt = createPrompt || params.createPrompt === true;
   const onSectionChange = useCallback(
     (next: LibrarySection) => setParams({ section: next }),
+    [setParams]
+  );
+  const onAppChange = useCallback(
+    (next: string | null) => setParams({ appId: next ?? undefined }),
     [setParams]
   );
   const onCreatePromptConsumed = useCallback(
@@ -90,6 +108,8 @@ export function LibraryViewWrapper({
       value={{
         section: resolvedSection,
         onSectionChange,
+        appId: appId ?? null,
+        onAppChange,
         createPrompt: shouldCreatePrompt,
         onCreatePromptConsumed,
       }}
@@ -113,14 +133,22 @@ export function LibraryTitlebar() {
 
 function LibrarySectionContent({
   section,
+  appId,
+  onAppChange,
   createPrompt,
   onCreatePromptConsumed,
 }: {
   section: LibrarySection;
+  appId: string | null;
+  onAppChange: (appId: string | null) => void;
   createPrompt: boolean;
   onCreatePromptConsumed: () => void;
 }) {
   switch (section) {
+    case 'extensions':
+      return <ExtensionMarketplaceView />;
+    case 'apps':
+      return <AiLabView embedded activeAppId={appId} onActiveAppChange={onAppChange} />;
     case 'prompts':
       return (
         <PromptLibraryPanel
@@ -188,7 +216,8 @@ export function LibraryPaneHeaderSlot() {
 
 export function LibraryMainPanel() {
   const { t } = useTranslation();
-  const { section, onSectionChange, createPrompt, onCreatePromptConsumed } = useLibrarySection();
+  const { section, onSectionChange, appId, onAppChange, createPrompt, onCreatePromptConsumed } =
+    useLibrarySection();
   // In the side pane the chip-strip row hosts the picker — don't double it.
   const isPinHosted = useIsPinHosted();
   return (
@@ -229,6 +258,8 @@ export function LibraryMainPanel() {
         <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
           <LibrarySectionContent
             section={section}
+            appId={appId}
+            onAppChange={onAppChange}
             createPrompt={createPrompt}
             onCreatePromptConsumed={onCreatePromptConsumed}
           />

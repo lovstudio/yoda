@@ -136,20 +136,16 @@ export class NavigationStore implements Snapshottable<NavigationSnapshot> {
       : null;
 
     if (snapshot.viewParams) {
-      const restoredParams = { ...snapshot.viewParams };
-      const legacyLibrary = migratePersistedViewRoute({
-        viewId: 'library',
-        params: asRouteParams(restoredParams.library),
-      });
-      if (legacyLibrary.viewId === 'marketplace') {
-        restoredParams.library = { section: 'prompts' };
-        if (restoredParams.marketplace === undefined || snapshot.currentViewId === 'library') {
-          restoredParams.marketplace = legacyLibrary.params;
-        }
-      }
-      if (restoredCurrent?.viewId === 'marketplace') {
-        restoredParams.marketplace = restoredCurrent.params;
-      }
+      const restoredParams = Object.fromEntries(
+        Object.entries(snapshot.viewParams).map(([viewId, params]) => {
+          const migrated = migratePersistedViewRoute({
+            viewId,
+            params: asRouteParams(params),
+          });
+          return [migrated.viewId, migrated.params];
+        })
+      );
+      if (restoredCurrent) restoredParams[restoredCurrent.viewId] = restoredCurrent.params;
       this.viewParamsStore = restoredParams as ViewParamsStore;
     }
 

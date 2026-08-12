@@ -403,7 +403,7 @@ export function SettingsPage({
       component: (
         <MaasView
           embedded
-          onOpenMarketplace={() => navigate('marketplace', { section: 'extensions' })}
+          onOpenMarketplace={() => navigate('library', { section: 'extensions' })}
         />
       ),
     },

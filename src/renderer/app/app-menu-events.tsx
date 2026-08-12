@@ -159,7 +159,7 @@ export function AppMenuEvents({ onOpenSettings }: { onOpenSettings?: () => boole
         return;
       }
       if (target.appId) {
-        navigate('marketplace', { section: 'apps', appId: target.appId });
+        navigate('library', { section: 'apps', appId: target.appId });
         return;
       }
       if (!target.projectId) {

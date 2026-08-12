@@ -1,4 +1,4 @@
-import { AppWindow, FolderInput, Library, Search, SquarePen, Store } from 'lucide-react';
+import { AppWindow, FolderInput, Library, Search, Settings, SquarePen } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -60,7 +60,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   const { params: taskParams } = useParams('task');
   const { params: projectParams } = useParams('project');
   const { params: libraryParams } = useParams('library');
-  const { params: marketplaceParams } = useParams('marketplace');
+  const { params: settingsParams } = useParams('settings');
   const aiLabApps = useAiLabApps();
   const updateAiLabApp = useUpdateAiLabApp();
   const sidebarContentRef = React.useRef<HTMLDivElement>(null);
@@ -262,28 +262,10 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 </span>
               </SidebarMenuButton>
             </GlobalSidePaneTarget>
-            <GlobalSidePaneTarget viewId="marketplace" params={marketplaceParams}>
-              <SidebarMenuButton
-                isActive={isCurrentView(currentView, 'marketplace')}
-                onClick={(event) =>
-                  event.altKey
-                    ? appState.sidePane.toggleView('marketplace', marketplaceParams)
-                    : navigate('marketplace')
-                }
-                aria-label={t('sidebar.marketplace')}
-                title={t('sidebar.marketplace')}
-                className="w-full justify-start"
-              >
-                <span className="flex min-w-0 w-full items-center gap-2">
-                  <Store className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
-                  <span className="min-w-0 truncate">{t('sidebar.marketplace')}</span>
-                </span>
-              </SidebarMenuButton>
-            </GlobalSidePaneTarget>
             {pinnedApps.map((app) => (
               <GlobalSidePaneTarget
                 key={app.id}
-                viewId="marketplace"
+                viewId="library"
                 params={{ section: 'apps', appId: app.id }}
                 unpinAction={{
                   label: t('aiLab.unpinFromNavigation'),
@@ -293,17 +275,17 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               >
                 <SidebarMenuButton
                   isActive={
-                    currentView === 'marketplace' &&
-                    marketplaceParams.section === 'apps' &&
-                    marketplaceParams.appId === app.id
+                    currentView === 'library' &&
+                    libraryParams.section === 'apps' &&
+                    libraryParams.appId === app.id
                   }
                   onClick={(event) =>
                     event.altKey
-                      ? appState.sidePane.toggleView('marketplace', {
+                      ? appState.sidePane.toggleView('library', {
                           section: 'apps',
                           appId: app.id,
                         })
-                      : navigate('marketplace', { section: 'apps', appId: app.id })
+                      : navigate('library', { section: 'apps', appId: app.id })
                   }
                   aria-label={app.name}
                   title={app.description}
@@ -316,6 +298,24 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 </SidebarMenuButton>
               </GlobalSidePaneTarget>
             ))}
+            <GlobalSidePaneTarget viewId="settings" params={settingsParams}>
+              <SidebarMenuButton
+                isActive={isCurrentView(currentView, 'settings')}
+                onClick={(event) =>
+                  event.altKey
+                    ? appState.sidePane.toggleView('settings', settingsParams)
+                    : navigate('settings')
+                }
+                aria-label={t('sidebar.settings')}
+                title={t('sidebar.settings')}
+                className="w-full justify-start"
+              >
+                <span className="flex min-w-0 w-full items-center gap-2">
+                  <Settings className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
+                  <span className="min-w-0 truncate">{t('sidebar.settings')}</span>
+                </span>
+              </SidebarMenuButton>
+            </GlobalSidePaneTarget>
             <div className="my-1 border-t border-border" />
           </SidebarMenu>
         </div>

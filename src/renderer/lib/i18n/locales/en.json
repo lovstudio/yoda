@@ -2524,6 +2524,8 @@
       "prompts": "Prompts",
       "agents": "Agents",
       "agentTeams": "Agent Teams",
+      "extensions": "Extensions",
+      "apps": "Apps",
       "skills": "Skills",
       "plugins": "Plugins",
       "mcp": "MCP",

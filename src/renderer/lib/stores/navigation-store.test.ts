@@ -62,25 +62,25 @@ describe('NavigationStore navigation side effects', () => {
 });
 
 describe('NavigationStore persisted route migration', () => {
-  it('restores a Library app route under Marketplace', () => {
+  it('restores a Marketplace app route under Library', () => {
     const store = new NavigationStore();
 
     store.restoreSnapshot({
-      currentViewId: 'library',
+      currentViewId: 'marketplace',
       viewParams: {
-        library: { section: 'apps', appId: 'app-1' },
+        marketplace: { section: 'apps', appId: 'app-1' },
       },
     });
 
-    expect(store.currentViewId).toBe('marketplace');
-    expect(store.viewParamsStore.marketplace).toEqual({
+    expect(store.currentViewId).toBe('library');
+    expect(store.viewParamsStore.library).toEqual({
       section: 'apps',
       appId: 'app-1',
     });
-    expect(store.viewParamsStore.library).toEqual({ section: 'prompts' });
+    expect(store.viewParamsStore.marketplace).toBeUndefined();
   });
 
-  it('restores the former Library extension catalog under Marketplace extensions', () => {
+  it('keeps legacy Library aliases under Library sections', () => {
     const store = new NavigationStore();
 
     store.restoreSnapshot({
@@ -90,7 +90,7 @@ describe('NavigationStore persisted route migration', () => {
       },
     });
 
-    expect(store.currentViewId).toBe('marketplace');
-    expect(store.viewParamsStore.marketplace).toEqual({ section: 'extensions' });
+    expect(store.currentViewId).toBe('library');
+    expect(store.viewParamsStore.library).toEqual({ section: 'extensions' });
   });
 });

@@ -62,6 +62,7 @@ const kanbanView = {
 type LibraryViewParams = {
   children: ReactNode;
   section?: LibrarySection;
+  appId?: string;
   createPrompt?: boolean;
 };
 const libraryModule = () => import('@renderer/features/library/library-view');

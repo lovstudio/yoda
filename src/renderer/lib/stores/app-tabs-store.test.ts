@@ -112,7 +112,7 @@ describe('AppTabsStore navigation history integration', () => {
 });
 
 describe('AppTabsStore persisted route migration', () => {
-  it('moves restored Library app tabs into the Marketplace scope', () => {
+  it('moves restored Marketplace app tabs into the Library scope', () => {
     const navigation = createNavigationStub();
     const tabs = new AppTabsStore(navigation);
 
@@ -120,7 +120,7 @@ describe('AppTabsStore persisted route migration', () => {
       tabs: [
         {
           id: 'app-tab',
-          viewId: 'library',
+          viewId: 'marketplace',
           params: { section: 'apps', appId: 'app-1' },
         },
       ],
@@ -131,11 +131,11 @@ describe('AppTabsStore persisted route migration', () => {
     expect(tabs.tabs).toEqual([
       {
         id: 'app-tab',
-        viewId: 'marketplace',
+        viewId: 'library',
         params: { section: 'apps', appId: 'app-1' },
       },
     ]);
-    expect(tabs.stripScope).toBe('view:marketplace');
+    expect(tabs.stripScope).toBe('view:library');
   });
 });
 

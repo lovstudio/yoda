@@ -31,7 +31,7 @@ export function AiLabBuildEvents() {
         title: t('home.buildCreated', { name: payload.appName }),
         action: {
           label: t('aiLab.openApp'),
-          onClick: () => navigate('marketplace', { section: 'apps', appId: payload.appId }),
+          onClick: () => navigate('library', { section: 'apps', appId: payload.appId }),
         },
       });
     });

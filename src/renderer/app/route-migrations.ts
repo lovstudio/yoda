@@ -3,24 +3,31 @@ export type PersistedViewRoute = {
   params: Record<string, unknown>;
 };
 
-/**
- * Apps and the extension catalog used to live inside Library. Keep restored
- * tabs, navigation, and side-pane pins attached to the same product surface
- * after both sections move under Marketplace.
- */
+/** Keep restored tabs, navigation, and side-pane pins on the Library surface
+ * after Marketplace's sections move back under its secondary navigation. */
 export function migratePersistedViewRoute(route: PersistedViewRoute): PersistedViewRoute {
+  if (route.viewId === 'marketplace') {
+    return {
+      viewId: 'library',
+      params: {
+        ...route.params,
+        section: route.params.section === 'apps' ? 'apps' : 'extensions',
+      },
+    };
+  }
+
   if (route.viewId !== 'library') return route;
 
-  if (route.params.section === 'apps' || route.params.section === 'aiLab') {
+  if (route.params.section === 'aiLab') {
     return {
-      viewId: 'marketplace',
+      viewId: 'library',
       params: { ...route.params, section: 'apps' },
     };
   }
 
   if (route.params.section === 'marketplace') {
     return {
-      viewId: 'marketplace',
+      viewId: 'library',
       params: { section: 'extensions' },
     };
   }
