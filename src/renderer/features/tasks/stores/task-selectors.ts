@@ -2,7 +2,10 @@ import type { RuntimeId } from '@shared/runtime-registry';
 import type { Task } from '@shared/tasks';
 import { isUnmountedProject } from '@renderer/features/projects/stores/project';
 import { getProjectManagerStore } from '@renderer/features/projects/stores/project-selectors';
-import type { AgentStatus } from '@renderer/features/tasks/conversations/conversation-manager';
+import type {
+  AgentStatus,
+  ConversationStore,
+} from '@renderer/features/tasks/conversations/conversation-manager';
 import type { DiffViewStore } from '@renderer/features/tasks/diff-view/stores/diff-view-store';
 import type { FileModelLifecycleStore } from '@renderer/features/tasks/editor/stores/file-model-lifecycle-store';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -113,6 +116,34 @@ export type TaskSessionStatusSummary = {
   workingCount: number;
   sessions: TaskSessionStatusItem[];
 };
+
+/**
+ * Read the session runtime through the mount-independent mirror first.
+ * ConversationStore remains a hydration fallback and metadata owner; it is
+ * not a competing live status source for rendered surfaces.
+ */
+export function getConversationRuntimeStatus(conversation: ConversationStore): AgentStatus {
+  return (
+    appState.agentRuntime.sessionStatus(
+      conversation.data.projectId,
+      conversation.data.taskId,
+      conversation.data.id
+    ) ?? conversation.status
+  );
+}
+
+/** Display status shared by every mounted conversation surface. */
+export function getConversationIndicatorStatus(
+  conversation: ConversationStore
+): AgentStatus | null {
+  return (
+    appState.agentRuntime.sessionStatus(
+      conversation.data.projectId,
+      conversation.data.taskId,
+      conversation.data.id
+    ) ?? conversation.indicatorStatus
+  );
+}
 
 const TASK_SESSION_STATUS_PRIORITY: Record<TaskSessionVisibleStatus, number> = {
   'awaiting-input': 0,

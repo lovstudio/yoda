@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { agentSessionStatusChangedChannel } from '@shared/events/agentEvents';
+import { publishAgentRuntimeStatusPreview } from './agent-runtime-status-bridge';
 import { AgentRuntimeStore } from './agent-runtime-store';
 
 const mocks = vi.hoisted(() => ({
@@ -54,6 +55,21 @@ describe('AgentRuntimeStore task session display state', () => {
     expect(store.taskSessionStatuses('project-1', 'task-1')).toEqual([
       { conversationId: 'working-1', status: 'working' },
     ]);
+  });
+
+  it('applies a renderer-local optimistic status before the main round trip', async () => {
+    const store = new AgentRuntimeStore();
+    await store.start();
+
+    publishAgentRuntimeStatusPreview({
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'conversation-1',
+      status: 'working',
+    });
+
+    expect(store.sessionStatus('project-1', 'task-1', 'conversation-1')).toBe('working');
+    store.dispose();
   });
 
   it('restores attention state when any session needs input', async () => {

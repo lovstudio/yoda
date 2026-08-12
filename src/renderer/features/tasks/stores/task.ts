@@ -161,6 +161,8 @@ export class TaskStore {
   errorMessage: string | undefined = undefined;
   provisionedTask: ProvisionedTask | null = null;
   provisionProgressMessage: string | null = null;
+  private statusMutationId = 0;
+  private statusAuthoritativeRevision = 0;
 
   get displayName(): string {
     return this.data.name;
@@ -297,6 +299,8 @@ export class TaskStore {
   }
 
   async updateStatus(status: TaskLifecycleStatus): Promise<void> {
+    const mutationId = ++this.statusMutationId;
+    const authoritativeRevision = this.statusAuthoritativeRevision;
     const previousStatus = this.data.status;
     const previousStatusChangedAt = this.data.statusChangedAt;
     const nextChangedAt = new Date().toISOString();
@@ -307,13 +311,30 @@ export class TaskStore {
     try {
       await rpc.tasks.updateTaskStatus(this.data.id, status);
     } catch (e) {
-      runInAction(() => {
-        this.data.status = previousStatus;
-        this.data.statusChangedAt = previousStatusChangedAt;
-      });
+      // An external status event may have arrived while the RPC was in
+      // flight. In that case the event is newer than this optimistic write;
+      // a late rollback would resurrect stale UI state.
+      if (
+        mutationId === this.statusMutationId &&
+        authoritativeRevision === this.statusAuthoritativeRevision &&
+        this.data.status === status
+      ) {
+        runInAction(() => {
+          this.data.status = previousStatus;
+          this.data.statusChangedAt = previousStatusChangedAt;
+        });
+      }
       log.error(e);
       throw e;
     }
+  }
+
+  /** Apply a status broadcast from the main process without optimistic rollback. */
+  applyAuthoritativeStatus(status: TaskLifecycleStatus): void {
+    this.statusAuthoritativeRevision += 1;
+    runInAction(() => {
+      this.data.status = status;
+    });
   }
 
   async setPinned(isPinned: boolean): Promise<void> {

@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   getTask: vi.fn(),
   getTasksByIds: vi.fn(),
   getTaskCounts: vi.fn().mockResolvedValue([{ projectId: 'project-1', active: 0, archived: 0 }]),
+  updateTaskStatus: vi.fn(),
   invalidatePageData: vi.fn(),
   listeners: new Map<string, (data: unknown) => void>(),
   unsubscribers: [] as Array<ReturnType<typeof vi.fn>>,
@@ -70,6 +71,7 @@ vi.mock('@renderer/lib/ipc', () => ({
       getTask: mocks.getTask,
       getTasksByIds: mocks.getTasksByIds,
       getTaskCounts: mocks.getTaskCounts,
+      updateTaskStatus: mocks.updateTaskStatus,
       provisionTask: mocks.provisionTask,
       restoreTask: mocks.restoreTask,
     },
@@ -134,6 +136,7 @@ beforeEach(() => {
   mocks.getTaskCounts
     .mockReset()
     .mockResolvedValue([{ projectId: 'project-1', active: 0, archived: 0 }]);
+  mocks.updateTaskStatus.mockReset();
   mocks.getPullRequestsForProjectTasks.mockReset().mockResolvedValue({
     success: true,
     data: { taskPullRequests: [] },
@@ -211,6 +214,26 @@ describe('TaskManagerStore task status events', () => {
     emitTaskStatusUpdated('review');
 
     expect(task.data.status).toBe('review');
+    manager.dispose();
+  });
+
+  it('does not let a late optimistic rollback overwrite a newer status event', async () => {
+    let rejectUpdate!: (error: Error) => void;
+    mocks.updateTaskStatus.mockReturnValue(
+      new Promise<void>((_resolve, reject) => {
+        rejectUpdate = reject;
+      })
+    );
+    const manager = createManager();
+    const task = createUnprovisionedTask(makeTask('Background task'));
+    manager.tasks.set('task-1', task);
+
+    const pending = task.updateStatus('review');
+    emitTaskStatusUpdated('done');
+    rejectUpdate(new Error('write failed'));
+
+    await expect(pending).rejects.toThrow('write failed');
+    expect(task.data.status).toBe('done');
     manager.dispose();
   });
 });

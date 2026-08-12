@@ -52,6 +52,7 @@ vi.mock('@renderer/features/projects/save-project-quick-action', () => ({
 
 vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
   getRegisteredTaskData: () => mocks.taskData,
+  getConversationRuntimeStatus: () => mocks.conversation.status,
 }));
 
 vi.mock('@renderer/features/tasks/task-view-context', () => ({

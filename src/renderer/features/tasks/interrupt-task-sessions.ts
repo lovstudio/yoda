@@ -1,4 +1,8 @@
-import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
+import {
+  asProvisioned,
+  getConversationRuntimeStatus,
+  getTaskStore,
+} from '@renderer/features/tasks/stores/task-selectors';
 import { rpc } from '@renderer/lib/ipc';
 import { appState } from '@renderer/lib/stores/app-state';
 
@@ -16,7 +20,9 @@ export function interruptTaskSessions(projectId: string, taskId: string): void {
   const manager = asProvisioned(getTaskStore(projectId, taskId))?.conversations;
   if (manager) {
     for (const conversation of manager.conversations.values()) {
-      if (conversation.status === 'working') conversationIds.add(conversation.data.id);
+      if (getConversationRuntimeStatus(conversation) === 'working') {
+        conversationIds.add(conversation.data.id);
+      }
     }
   }
   for (const conversationId of conversationIds) {

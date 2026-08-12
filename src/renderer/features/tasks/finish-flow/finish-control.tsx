@@ -22,7 +22,11 @@ import {
 } from '@renderer/features/tasks/finish-flow/finish-prompts';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import type { ProvisionedTask } from '@renderer/features/tasks/stores/task';
-import { getRegisteredTaskData } from '@renderer/features/tasks/stores/task-selectors';
+import {
+  getRegisteredTaskData,
+  getTaskStore,
+  taskSessionStatusSummary,
+} from '@renderer/features/tasks/stores/task-selectors';
 import {
   useRequireProvisionedTask,
   useTaskViewContext,
@@ -63,7 +67,8 @@ export const TaskFinishControl = observer(function TaskFinishControl() {
   if (!provisioned?.taskBranch || sourceBranch?.type !== 'local') return null;
 
   // Don't compete with a running agent for attention.
-  const agentStatus = provisioned.conversations.taskStatus;
+  const taskStore = getTaskStore(projectId, taskId);
+  const agentStatus = taskStore ? taskSessionStatusSummary(taskStore).primaryStatus : null;
   if (agentStatus === 'working' || agentStatus === 'awaiting-input') return null;
 
   const diff = stats?.diff;

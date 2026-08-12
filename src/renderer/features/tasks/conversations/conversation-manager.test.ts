@@ -461,6 +461,23 @@ describe('ConversationManagerStore', () => {
     });
   });
 
+  it('does not let runtime hydration overwrite a newer local status transition', async () => {
+    let resolveHydration!: (statuses: Record<string, 'idle' | 'working'>) => void;
+    mocks.getConversationRuntimeStatusesMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveHydration = resolve;
+      })
+    );
+
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    store.conversations.get('conversation-1')?.setWorking({ force: true });
+    resolveHydration({ 'conversation-1': 'idle' });
+    await flushPromises();
+
+    expect(store.conversations.get('conversation-1')?.status).toBe('working');
+    store.dispose();
+  });
+
   it('applies conversation rename events from session title sync', () => {
     const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
     const listener = mocks.listeners.get(conversationRenamedChannel.name);

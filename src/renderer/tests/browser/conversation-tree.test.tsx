@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
 import type { ConversationStore } from '@renderer/features/tasks/conversations/conversation-manager';
@@ -20,7 +21,8 @@ const mocks = vi.hoisted(() => ({
   provisioned: { conversations: { conversations: new Map() } },
 }));
 
-vi.mock('react-i18next', () => ({
+vi.mock('react-i18next', async (importOriginal) => ({
+  ...(await importOriginal<typeof ReactI18nextModule>()),
   useTranslation: () => ({
     t: (key: string, values?: { index?: number }) =>
       key === 'tasks.conversationTree.forkedFromPrompt' ? `fork-${values?.index}` : key,
@@ -52,6 +54,21 @@ vi.mock('@renderer/lib/components/tree-guide-slot', async () => {
 
 vi.mock('@renderer/lib/modal/modal-provider', () => ({
   useShowModal: () => mocks.showTranscript,
+  showModal: vi.fn(),
+}));
+
+vi.mock('@renderer/lib/ipc', () => ({
+  events: { on: vi.fn(() => () => undefined) },
+  rpc: {
+    dependencies: {
+      getAll: vi.fn().mockResolvedValue({}),
+      probeCategory: vi.fn().mockResolvedValue(undefined),
+    },
+    ssh: {
+      getConnections: vi.fn().mockResolvedValue([]),
+      getConnectionState: vi.fn().mockResolvedValue({}),
+    },
+  },
 }));
 
 vi.mock('@renderer/lib/ui/button', async () => {

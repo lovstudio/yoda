@@ -6,7 +6,10 @@ import type { QuickAction } from '@shared/project-settings';
 import type { CompiledQuickAction, CompileQuickActionInput } from '@shared/quick-actions';
 import { taskNameFromPrompt } from '@shared/task-name';
 import { saveProjectQuickAction } from '@renderer/features/projects/save-project-quick-action';
-import { getRegisteredTaskData } from '@renderer/features/tasks/stores/task-selectors';
+import {
+  getConversationRuntimeStatus,
+  getRegisteredTaskData,
+} from '@renderer/features/tasks/stores/task-selectors';
 import {
   useRequireProvisionedTask,
   useTaskViewContext,
@@ -68,7 +71,8 @@ export const QuickActionSuggestionControl = observer(function QuickActionSuggest
     ? `${taskId}:${source.conversationId}:${conversation?.data.lastInteractedAt ?? ''}`
     : null;
   const runtimeId = conversation?.data.runtimeId;
-  const sessionCompleted = conversation?.status === 'completed';
+  const sessionCompleted =
+    conversation !== undefined && getConversationRuntimeStatus(conversation) === 'completed';
 
   useEffect(() => {
     if (

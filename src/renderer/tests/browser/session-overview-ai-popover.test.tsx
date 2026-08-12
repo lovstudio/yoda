@@ -90,6 +90,10 @@ vi.mock('@renderer/features/tasks/task-view-context', () => ({
 vi.mock('@renderer/lib/ipc', () => ({
   events: { on: vi.fn(() => () => undefined) },
   rpc: {
+    ssh: {
+      getConnections: vi.fn().mockResolvedValue([]),
+      getConnectionState: vi.fn().mockResolvedValue({}),
+    },
     conversations: {
       getSessionSummary: mocks.getSessionSummary,
       getSessionSummarySnapshot: mocks.getSessionSummarySnapshot,

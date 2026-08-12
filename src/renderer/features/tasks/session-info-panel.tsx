@@ -56,6 +56,7 @@ import {
   sessionConversationQueryOptions,
   type SessionConversationData,
 } from '@renderer/features/tasks/session-prompts';
+import { getConversationRuntimeStatus } from '@renderer/features/tasks/stores/task-selectors';
 import {
   useRequireProvisionedTask,
   useTaskViewContext,
@@ -92,7 +93,9 @@ function useSessionInfoFields(active: boolean) {
     ? provisionedTask.conversations.conversations.get(conversation.id)
     : undefined;
   const sessionStatus = conversationStore?.session.status;
-  const agentRuntimeStatus = conversationStore?.status;
+  const agentRuntimeStatus = conversationStore
+    ? getConversationRuntimeStatus(conversationStore)
+    : undefined;
   const [isLoading, setIsLoading] = useState(false);
   const [resolvedFields, setResolvedFields] = useState<TaskMenuSessionFields | undefined>();
 

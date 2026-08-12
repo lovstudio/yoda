@@ -25,6 +25,7 @@ import { getAgentNotificationKind } from '@shared/notification-settings';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { events, rpc } from '@renderer/lib/ipc';
 import { PtySession } from '@renderer/lib/pty/pty-session';
+import { publishAgentRuntimeStatusPreview } from '@renderer/lib/stores/agent-runtime-status-bridge';
 import { log } from '@renderer/utils/logger';
 import { soundPlayer } from '@renderer/utils/soundPlayer';
 
@@ -69,6 +70,7 @@ export class ConversationManagerStore {
   private readonly pendingConversationTitles = new Map<string, string>();
   private readonly pendingContextForks = new Map<string, Promise<Conversation>>();
   private readonly pendingConversationForks = new Map<string, Promise<Conversation>>();
+  private readonly runtimeStatusRevisions = new Map<string, number>();
   conversations = observable.map<string, ConversationStore>();
 
   constructor(
@@ -87,7 +89,7 @@ export class ConversationManagerStore {
       this.hasAuthoritativeSnapshot = true;
       const owned = preloaded.filter((conversation) => this._belongsHere(conversation));
       for (const conversation of owned) {
-        const store = new ConversationStore(conversation);
+        const store = this.createConversationStore(conversation);
         this.conversations.set(conversation.id, store);
       }
       void this.hydrateRuntimeStatuses(owned.map((conversation) => conversation.id));
@@ -240,7 +242,7 @@ export class ConversationManagerStore {
           existing.data = event.conversation;
           return;
         }
-        const moved = new ConversationStore(event.conversation);
+        const moved = this.createConversationStore(event.conversation);
         this.conversations.set(event.conversation.id, moved);
       });
       void this.hydrateRuntimeStatuses([event.conversation.id]);
@@ -309,6 +311,19 @@ export class ConversationManagerStore {
     return owned;
   }
 
+  private createConversationStore(conversation: Conversation): ConversationStore {
+    return new ConversationStore(conversation, () =>
+      this.markRuntimeStatusChanged(conversation.id)
+    );
+  }
+
+  private markRuntimeStatusChanged(conversationId: string): void {
+    this.runtimeStatusRevisions.set(
+      conversationId,
+      (this.runtimeStatusRevisions.get(conversationId) ?? 0) + 1
+    );
+  }
+
   async ensureConversation(conversationId: string): Promise<boolean> {
     if (!this._loaded || this._loadPromise) {
       await this.load();
@@ -344,7 +359,7 @@ export class ConversationManagerStore {
         existing.data = nextConversation;
         continue;
       }
-      const store = new ConversationStore(nextConversation);
+      const store = this.createConversationStore(nextConversation);
       this.conversations.set(conversation.id, store);
       // All conversations stay renderer-lazy until a real terminal surface
       // explicitly requests their session. Status-only panels remain passive.
@@ -361,6 +376,12 @@ export class ConversationManagerStore {
 
   private async hydrateRuntimeStatuses(conversationIds: string[]): Promise<void> {
     if (conversationIds.length === 0) return;
+    const baselineRevisions = new Map(
+      conversationIds.map((conversationId) => [
+        conversationId,
+        this.runtimeStatusRevisions.get(conversationId) ?? 0,
+      ])
+    );
     try {
       const statuses = await rpc.conversations.getConversationRuntimeStatuses(
         this.projectId,
@@ -372,6 +393,12 @@ export class ConversationManagerStore {
           // The backend is the stateless authority (derived from the transcript),
           // so apply every verdict including `idle` — that's how a stale `working`
           // from before a restart gets corrected on cold load.
+          if (
+            (this.runtimeStatusRevisions.get(conversationId) ?? 0) !==
+            baselineRevisions.get(conversationId)
+          ) {
+            continue;
+          }
           this.conversations.get(conversationId)?.hydrateStatus(status);
         }
       });
@@ -389,7 +416,7 @@ export class ConversationManagerStore {
       await rpc.conversations.createConversation(params)
     );
     runInAction(() => {
-      const store = new ConversationStore(conversation);
+      const store = this.createConversationStore(conversation);
       this.conversations.set(conversation.id, store);
     });
     this.onUserPromptAt?.(conversation.lastInteractedAt ?? new Date().toISOString());
@@ -455,7 +482,7 @@ export class ConversationManagerStore {
 
   private addForkedConversation(conversation: Conversation): void {
     runInAction(() => {
-      const store = new ConversationStore(conversation);
+      const store = this.createConversationStore(conversation);
       this.conversations.set(conversation.id, store);
       if (conversation.resume) {
         store.setSessionExited(true);
@@ -645,6 +672,7 @@ export class ConversationManagerStore {
     this.pendingConversationTitles.clear();
     this.pendingContextForks.clear();
     this.pendingConversationForks.clear();
+    this.runtimeStatusRevisions.clear();
     for (const conversation of this.conversations.values()) {
       conversation.dispose();
     }
@@ -680,7 +708,10 @@ export class ConversationStore {
   pendingActionDescription: string | null = null;
   private lastForceWorkingAt = 0;
 
-  constructor(conversation: Conversation) {
+  constructor(
+    conversation: Conversation,
+    private readonly onStatusChanged?: () => void
+  ) {
     this.data = conversation;
     this.session = new PtySession(
       makePtySessionId(conversation.projectId, conversation.taskId, conversation.id)
@@ -734,6 +765,13 @@ export class ConversationStore {
       this.pendingActionDescription = null;
     }
     if (changed) {
+      this.onStatusChanged?.();
+      publishAgentRuntimeStatusPreview({
+        projectId: this.data.projectId,
+        taskId: this.data.taskId,
+        conversationId: this.data.id,
+        status,
+      });
       log.debug('[conversation-status] transition', {
         projectId: this.data.projectId,
         taskId: this.data.taskId,

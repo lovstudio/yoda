@@ -6,6 +6,7 @@ import {
 } from '@shared/events/agentEvents';
 import { events, rpc } from '@renderer/lib/ipc';
 import { log } from '@renderer/utils/logger';
+import { subscribeAgentRuntimeStatusPreview } from './agent-runtime-status-bridge';
 
 export type AgentRuntimeSnapshot = {
   /** Task ids the user has opened since their status last became attention-worthy. */
@@ -65,6 +66,7 @@ export class AgentRuntimeStore {
   /** Enabled only by the primary app window; warm/detached windows stay passive. */
   private projectHydrationEnabled = false;
   private off: (() => void) | null = null;
+  private offPreview: (() => void) | null = null;
 
   constructor() {
     makeAutoObservable(this);
@@ -73,6 +75,9 @@ export class AgentRuntimeStore {
   async start(): Promise<void> {
     if (this.off) return;
     this.off = events.on(agentSessionStatusChangedChannel, (event) => {
+      this.applyStatus(event.projectId, event.taskId, event.conversationId, event.status);
+    });
+    this.offPreview = subscribeAgentRuntimeStatusPreview((event) => {
       this.applyStatus(event.projectId, event.taskId, event.conversationId, event.status);
     });
   }
@@ -86,6 +91,8 @@ export class AgentRuntimeStore {
   dispose(): void {
     this.off?.();
     this.off = null;
+    this.offPreview?.();
+    this.offPreview = null;
     this.projectHydrationEnabled = false;
     this.statuses.clear();
     this.seenTaskIds.clear();

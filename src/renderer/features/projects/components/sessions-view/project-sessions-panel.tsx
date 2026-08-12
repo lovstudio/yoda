@@ -17,7 +17,11 @@ import {
 } from '@renderer/features/projects/project-task-query-events';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
-import { asProvisioned, getTaskManagerStore } from '@renderer/features/tasks/stores/task-selectors';
+import {
+  asProvisioned,
+  getConversationIndicatorStatus,
+  getTaskManagerStore,
+} from '@renderer/features/tasks/stores/task-selectors';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { events, rpc } from '@renderer/lib/ipc';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
@@ -45,6 +49,7 @@ const ProjectSessionRow = observer(function ProjectSessionRow({
   const { navigate } = useNavigate();
   const task = getTaskManagerStore(conversation.projectId)?.tasks.get(conversation.taskId);
   const liveConversation = asProvisioned(task)?.conversations.conversations.get(conversation.id);
+  const status = liveConversation ? getConversationIndicatorStatus(liveConversation) : null;
   const isArchived = Boolean(conversation.archivedAt || taskArchivedAt);
   const config = agentConfig[conversation.runtimeId];
   const title = conversation.title.trim() || conversation.id;
@@ -115,8 +120,8 @@ const ProjectSessionRow = observer(function ProjectSessionRow({
         {taskName}
       </span>
       <span className="flex min-w-12 shrink-0 justify-end text-xs text-foreground-passive">
-        {liveConversation?.indicatorStatus ? (
-          <AgentStatusIndicator status={liveConversation.indicatorStatus} disableTooltip />
+        {status ? (
+          <AgentStatusIndicator status={status} disableTooltip />
         ) : (
           <RelativeTime value={interactedAt} compact />
         )}

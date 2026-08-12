@@ -5,7 +5,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAttachImagesAsPaths } from '@renderer/features/tasks/hooks/use-attach-images-as-paths';
-import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
+import {
+  getConversationRuntimeStatus,
+  getTaskStore,
+} from '@renderer/features/tasks/stores/task-selectors';
 import {
   useRequireProvisionedTask,
   useTaskViewContext,
@@ -86,6 +89,7 @@ export const ConversationSession = observer(function ConversationSession({
   const sessionId = session?.sessionId ?? null;
   const sessionStatus = session?.status;
   const sessionPty = session?.pty ?? null;
+  const agentStatus = getConversationRuntimeStatus(conversation);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
@@ -106,7 +110,7 @@ export const ConversationSession = observer(function ConversationSession({
           sessionStatus ?? '',
           Boolean(sessionPty),
           Boolean(session?.connectionError),
-          conversation.status,
+          agentStatus,
           conversation.sessionExited,
         ].join('\u001f')
       : '';
@@ -125,14 +129,14 @@ export const ConversationSession = observer(function ConversationSession({
       ptyStatus: sessionStatus ?? null,
       hasFrontendPty: Boolean(sessionPty),
       hasPreparationError: Boolean(session?.connectionError),
-      agentStatus: conversation.status,
+      agentStatus,
       sessionExited: conversation.sessionExited,
     });
   }, [
     autoFocus,
     conversation.data.id,
     conversation.sessionExited,
-    conversation.status,
+    agentStatus,
     isVisible,
     projectId,
     session?.connectionError,
@@ -265,10 +269,10 @@ export const ConversationSession = observer(function ConversationSession({
     void getTaskStore(projectId, taskId)?.setNeedsReview(false);
   };
   const onSubmittedInput = (_message: string, isTaskInput: boolean) => {
-    if (isTaskInput || conversation.status !== 'awaiting-input') return;
+    if (isTaskInput || agentStatus !== 'awaiting-input') return;
     markConversationSubmitted(true);
   };
-  const onEnterPress = () => markConversationSubmitted(conversation.status === 'awaiting-input');
+  const onEnterPress = () => markConversationSubmitted(agentStatus === 'awaiting-input');
   const onInterruptPress = () => conversation.clearWorking();
 
   const [isRestarting, setIsRestarting] = useState(false);

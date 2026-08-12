@@ -18,6 +18,7 @@ import { cn } from '@renderer/utils/utils';
 import { AgentStatusIndicator } from '../components/agent-status-indicator';
 import { usePersistedDisclosure } from '../components/persisted-disclosure';
 import { SessionUsageChip } from '../components/session-usage-chip';
+import { getConversationIndicatorStatus } from '../stores/task-selectors';
 import { useRequireProvisionedTask, useTaskViewContext } from '../task-view-context';
 import { ConversationDragHandle } from './conversation-drag-handle';
 import type { ConversationStore } from './conversation-manager';
@@ -168,6 +169,7 @@ const ConversationTreeItem = observer(function ConversationTreeItem({
     conversation.id,
     t
   );
+  const status = activeStore ? getConversationIndicatorStatus(activeStore) : null;
 
   const handleRestore = async () => {
     if (!isArchived || busy) return;
@@ -284,8 +286,8 @@ const ConversationTreeItem = observer(function ConversationTreeItem({
               ) : null}
               {usage ? <SessionUsageChip usage={usage} /> : null}
               <span className="flex shrink-0 items-center text-xs text-foreground-passive">
-                {activeStore?.indicatorStatus ? (
-                  <AgentStatusIndicator status={activeStore.indicatorStatus} disableTooltip />
+                {status ? (
+                  <AgentStatusIndicator status={status} disableTooltip />
                 ) : (
                   <RelativeTime
                     value={

@@ -12,7 +12,10 @@ import { LeasedMonacoEditor } from '@renderer/features/tasks/editor/leased-monac
 import { MarkdownSourceToggleOverlay } from '@renderer/features/tasks/editor/markdown-editor-panel';
 import { useAttachImagesAsPaths } from '@renderer/features/tasks/hooks/use-attach-images-as-paths';
 import { useIsActiveTask } from '@renderer/features/tasks/hooks/use-is-active-task';
-import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
+import {
+  getConversationRuntimeStatus,
+  getTaskStore,
+} from '@renderer/features/tasks/stores/task-selectors';
 import type { FileTabStore } from '@renderer/features/tasks/tabs/file-tab-store';
 import type { TabEntry } from '@renderer/features/tasks/tabs/tab-manager-store';
 import {
@@ -131,6 +134,7 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
   const session = conversation.session;
   const sessionId = session.sessionId;
   const sessionStatus = session.status;
+  const agentStatus = getConversationRuntimeStatus(conversation);
   const sessionIds = useMemo(() => (sessionId ? [sessionId] : []), [sessionId]);
 
   const terminalContainerRef = useRef<HTMLDivElement>(null);
@@ -217,10 +221,10 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
               pty={session.pty}
               className="h-full w-full min-w-0"
               onEnterPress={() => {
-                markConversationSubmitted(conversation.status === 'awaiting-input');
+                markConversationSubmitted(agentStatus === 'awaiting-input');
               }}
               onSubmittedInput={(_message, isTaskInput) => {
-                if (isTaskInput || conversation.status !== 'awaiting-input') return;
+                if (isTaskInput || agentStatus !== 'awaiting-input') return;
                 markConversationSubmitted(true);
               }}
               onInterruptPress={() => conversation.clearWorking()}

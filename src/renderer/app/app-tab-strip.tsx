@@ -52,7 +52,11 @@ import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-
 import { archiveConversationFlow } from '@renderer/features/tasks/archive-task';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
-import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
+import {
+  asProvisioned,
+  getConversationIndicatorStatus,
+  getTaskStore,
+} from '@renderer/features/tasks/stores/task-selectors';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { FileIcon } from '@renderer/lib/editor/file-icon';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
@@ -544,11 +548,11 @@ function describeTaskTab(
       // as the conversations list — and falls back to the runtime logo. The
       // global mirror wins for live states so a tab does not wait for its task
       // conversation store to hydrate or catch up with the IPC event.
-      const runtimeStatus =
-        typeof projectId === 'string' && typeof taskId === 'string'
+      const status = conversation
+        ? getConversationIndicatorStatus(conversation)
+        : typeof projectId === 'string' && typeof taskId === 'string'
           ? appState.agentRuntime.sessionStatus(projectId, taskId, target.conversationId)
           : null;
-      const status = runtimeStatus ?? conversation?.indicatorStatus ?? null;
       return {
         label,
         icon: status ? (

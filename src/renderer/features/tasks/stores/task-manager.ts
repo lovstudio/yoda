@@ -312,9 +312,7 @@ export class TaskManagerStore {
         if (evtProjectId !== this.projectId) return;
         const store = this.tasks.get(taskId);
         if (store && isRegistered(store)) {
-          runInAction(() => {
-            store.data.status = status as TaskLifecycleStatus;
-          });
+          store.applyAuthoritativeStatus(status as TaskLifecycleStatus);
         }
       }
     );

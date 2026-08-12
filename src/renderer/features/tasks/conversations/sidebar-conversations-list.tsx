@@ -10,6 +10,7 @@ import {
   conversationTime,
   useArchivedConversations,
 } from '@renderer/features/tasks/conversations/use-archived-conversations';
+import { getConversationIndicatorStatus } from '@renderer/features/tasks/stores/task-selectors';
 import {
   useRequireProvisionedTask,
   useTaskViewContext,
@@ -54,6 +55,7 @@ const ConversationRow = observer(function ConversationRow({
     conversation.data.title
   );
   const rawTitle = conversation.data.title ?? '';
+  const status = getConversationIndicatorStatus(conversation);
 
   const handleRenameSubmit = (newTitle: string) => {
     setIsEditing(false);
@@ -126,8 +128,8 @@ const ConversationRow = observer(function ConversationRow({
           </span>
           <span className="min-w-0 flex-1 truncate">{displayTitle}</span>
           <span className="shrink-0">
-            {conversation.indicatorStatus ? (
-              <AgentStatusIndicator status={conversation.indicatorStatus} disableTooltip />
+            {status ? (
+              <AgentStatusIndicator status={status} disableTooltip />
             ) : (
               <RelativeTime
                 value={conversation.data.lastInteractedAt ?? ''}
