@@ -413,7 +413,8 @@ function SessionPromptRow({
   const selectedPromptDate = parsePromptTimestamp(selectedPrompt.timestamp);
   const selectedCanRestore = Boolean(onRestore && selectedPrompt.restoreTarget);
   const selectedIsRestoring = restoringPromptId === selectedPrompt.id;
-  const checkpointHintId = `session-checkpoint-hint-${selectedPrompt.id || selectedIndex}`;
+  const promptActionClassName =
+    'h-7 min-h-7 shrink-0 justify-start rounded-md border border-primary/35 bg-primary/10 px-2.5 py-0 text-left text-[11px] font-medium text-primary shadow-sm hover:bg-primary/15 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60 disabled:border-border-primary/60 disabled:bg-background-2/60 disabled:text-foreground-passive disabled:hover:bg-background-2/60 disabled:hover:text-foreground-passive';
   const promptLengths = prompts.map((item) => displaySessionPromptText(item.text).trim().length);
   const maxPromptLength = Math.max(1, ...promptLengths);
   const [pointerPosition, setPointerPosition] = useState<{ x: number; y: number } | null>(null);
@@ -624,30 +625,18 @@ function SessionPromptRow({
                     onRestore={onRestore}
                     visibleLabel={t('tasks.bottomPanel.sessionBranchFromHere')}
                     containerClassName="ml-auto"
-                    className="h-7 min-h-7 shrink-0 justify-start rounded-md border border-primary/35 bg-primary/10 px-2.5 py-0 text-left text-[11px] font-medium text-primary shadow-sm hover:bg-primary/15 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60"
+                    className={promptActionClassName}
                   />
                 ) : onRestore ? (
-                  <span className="group/checkpoint relative ml-auto max-w-[12rem] shrink-0">
-                    <span
-                      className="flex cursor-help items-center truncate text-[10px] leading-4 text-foreground-passive underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
-                      data-session-prompt-checkpoint-pending
-                      tabIndex={0}
-                      role="note"
-                      aria-label={t('tasks.bottomPanel.sessionCheckpointUnavailableLabel')}
-                      aria-describedby={checkpointHintId}
-                      title={t('tasks.bottomPanel.sessionCheckpointUnavailableHint')}
-                    >
-                      {t('tasks.bottomPanel.sessionCheckpointUnavailableLabel')}
-                    </span>
-                    <span
-                      id={checkpointHintId}
-                      data-session-prompt-checkpoint-bubble
-                      role="tooltip"
-                      className="pointer-events-none absolute right-0 top-full z-20 mt-1 hidden w-max max-w-64 rounded-md bg-foreground px-3 py-1.5 text-left text-xs leading-5 text-background shadow-lg group-hover/checkpoint:block group-focus-within/checkpoint:block"
-                    >
-                      {t('tasks.bottomPanel.sessionCheckpointUnavailableHint')}
-                    </span>
-                  </span>
+                  <SessionPromptRestoreButton
+                    prompt={selectedPrompt}
+                    index={selectedIndex}
+                    onRestore={onRestore}
+                    visibleLabel={t('tasks.bottomPanel.sessionCheckpointUnavailableLabel')}
+                    unavailableHint={t('tasks.bottomPanel.sessionCheckpointUnavailableHint')}
+                    containerClassName="ml-auto"
+                    className={promptActionClassName}
+                  />
                 ) : null}
               </div>
               <div

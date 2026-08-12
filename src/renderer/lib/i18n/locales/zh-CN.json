@@ -2449,7 +2449,7 @@
       "sessionCurrentNode": "当前节点",
       "sessionCheckpointPending": "此条尚无可切入的上下文检查点",
       "sessionCheckpointUnavailableLabel": "本条暂无 checkpoint",
-      "sessionCheckpointUnavailableHint": "这条消息暂无可用 checkpoint，可以尝试下一条。",
+      "sessionCheckpointUnavailableHint": "这条消息还没有独立的完成上下文 checkpoint：可能与后续消息共用了同一个 turn，或该 turn 尚未完成，因此暂时不能 fork。可以尝试下一条。",
       "sessionCurrentBranch": "当前分支",
       "sessionOpenBranch": "切入分支“{{title}}”",
       "sessionRestoreBranch": "恢复并切入分支“{{title}}”",

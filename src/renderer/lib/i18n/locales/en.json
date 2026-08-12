@@ -2449,7 +2449,7 @@
       "sessionCurrentNode": "Current node",
       "sessionCheckpointPending": "This prompt does not have a restorable context checkpoint yet",
       "sessionCheckpointUnavailableLabel": "No checkpoint for this prompt yet",
-      "sessionCheckpointUnavailableHint": "This message has no available checkpoint yet. Try the next one.",
+      "sessionCheckpointUnavailableHint": "This message has no independent completed context checkpoint yet. It may share a turn with a later message, or that turn may still be incomplete, so it cannot be forked yet. Try the next one.",
       "sessionCurrentBranch": "Current branch",
       "sessionOpenBranch": "Switch to branch “{{title}}”",
       "sessionRestoreBranch": "Restore and switch to branch “{{title}}”",

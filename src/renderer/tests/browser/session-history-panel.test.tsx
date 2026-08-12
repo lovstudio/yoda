@@ -334,7 +334,7 @@ describe('DockedSessionHistory conversation tree menu', () => {
     expect(mocks.useSessionPromptTree).toHaveBeenLastCalledWith(true);
   });
 
-  it('explains why a prompt without a restore checkpoint has no continue action', async () => {
+  it('renders an unavailable fork action with an explanation', async () => {
     const promptWithoutCheckpoint = { ...prompt, restoreTarget: undefined };
     mocks.useSessionPrompts.mockReturnValue({
       prompts: [promptWithoutCheckpoint],
@@ -354,12 +354,15 @@ describe('DockedSessionHistory conversation tree menu', () => {
     const promptText = host.querySelector<HTMLElement>('[data-slot="tooltip-trigger"]');
     await act(async () => userEvent.hover(promptText!));
 
-    let pending: HTMLElement | null = null;
     await vi.waitFor(() => {
       const preview = document.querySelector<HTMLElement>('[data-session-prompt-preview]');
       expect(preview).not.toBeNull();
-      pending =
-        preview?.querySelector<HTMLElement>('[data-session-prompt-checkpoint-pending]') ?? null;
+      const pending =
+        preview?.querySelector<HTMLButtonElement>('[data-session-prompt-checkpoint-pending]') ??
+        null;
+      expect(pending?.tagName).toBe('BUTTON');
+      expect(pending?.disabled).toBe(true);
+      expect(pending?.getAttribute('aria-disabled')).toBe('true');
       expect(pending?.textContent).toBe('tasks.bottomPanel.sessionCheckpointUnavailableLabel');
       expect(pending?.getAttribute('title')).toBe(
         'tasks.bottomPanel.sessionCheckpointUnavailableHint'
@@ -380,11 +383,21 @@ describe('DockedSessionHistory conversation tree menu', () => {
       ).toBeNull();
     });
 
-    await act(async () => userEvent.hover(pending!));
+    const pending = document.querySelector<HTMLButtonElement>(
+      '[data-session-prompt-checkpoint-pending]'
+    );
+    if (!pending) throw new Error('Expected the unavailable fork action');
+    const pendingContainer = pending.parentElement;
+    if (!pendingContainer) throw new Error('Expected the unavailable fork action container');
+
+    await act(async () => pending.click());
+    expect(mocks.restoreCurrentPrompt).not.toHaveBeenCalled();
+
+    await act(async () => userEvent.hover(pendingContainer));
     const checkpointBubble = document.querySelector<HTMLElement>(
       '[data-session-prompt-checkpoint-bubble]'
     );
-    expect(checkpointBubble?.className).toContain('group-hover/checkpoint:block');
-    expect(checkpointBubble?.className).toContain('group-focus-within/checkpoint:block');
+    expect(checkpointBubble?.className).toContain('group-hover/fork:block');
+    expect(checkpointBubble?.className).toContain('group-focus-within/fork:block');
   });
 });
