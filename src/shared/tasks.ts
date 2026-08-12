@@ -157,6 +157,10 @@ export type MoveTaskToProjectError =
   | { type: 'task-not-found' }
   | { type: 'project-not-found' }
   | { type: 'same-project' }
+  /** The requested parent is not a task in the destination project. */
+  | { type: 'parent-not-found' }
+  /** The requested parent is archived and cannot receive a subtask. */
+  | { type: 'parent-archived' }
   /** The task has subtasks — moving would split a cross-project parent/child tree. */
   | { type: 'has-subtasks' }
   /** A worktree task cannot be migrated across the selected project transports. */

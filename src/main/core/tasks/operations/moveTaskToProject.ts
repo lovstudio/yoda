@@ -40,6 +40,8 @@ function gitErrorDetail(e: unknown): string {
 /**
  * Re-home a task under a different project ("move", or "promote" a projectless
  * Default task into a real project).
+ * When `parentTaskId` is provided, the task is nested under that task after the
+ * project move; the parent must already belong to the destination project.
  *
  * Two paths:
  * - No-worktree leaf task: a lightweight DB re-home — just reassign `projectId`
@@ -57,7 +59,8 @@ function gitErrorDetail(e: unknown): string {
  */
 export async function moveTaskToProject(
   taskId: string,
-  targetProjectId: string
+  targetProjectId: string,
+  parentTaskId: string | null = null
 ): Promise<Result<Task, MoveTaskToProjectError>> {
   const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
   if (!task) return err({ type: 'task-not-found' });
@@ -65,6 +68,14 @@ export async function moveTaskToProject(
 
   const targetProject = await getProjectById(targetProjectId);
   if (!targetProject) return err({ type: 'project-not-found' });
+
+  if (parentTaskId !== null) {
+    const [parentTask] = await db.select().from(tasks).where(eq(tasks.id, parentTaskId)).limit(1);
+    if (!parentTask || parentTask.projectId !== targetProjectId) {
+      return err({ type: 'parent-not-found' });
+    }
+    if (parentTask.archivedAt) return err({ type: 'parent-archived' });
+  }
 
   // A subtree would straddle two projects — that's the heavier "split" not
   // covered here.
@@ -103,12 +114,12 @@ export async function moveTaskToProject(
   // Reassign the task and every task-scoped row that carries its own projectId,
   // so per-(project, task) lookups resolve under the new project. A migrated
   // worktree repoints its base at the destination's default branch; clear the
-  // old workspace/parent bindings either way.
+  // old workspace bindings while applying the requested destination parent.
   await db
     .update(tasks)
     .set({
       projectId: targetProjectId,
-      parentTaskId: null,
+      parentTaskId,
       sidebarWorkspaceId: null,
       workspaceId: null,
       workspaceProviderData: null,

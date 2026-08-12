@@ -19,7 +19,8 @@ import { useShowModal } from '@renderer/lib/modal/modal-provider';
 export type MoveTaskToProject = (
   projectId: string,
   taskId: string,
-  targetProjectId: string
+  targetProjectId: string,
+  parentTaskId?: string | null
 ) => void;
 
 /**
@@ -36,7 +37,7 @@ export function useMoveTaskToProject(): MoveTaskToProject {
   const showConfirmMove = useShowModal('confirmActionModal');
 
   return useCallback(
-    (projectId, taskId, targetProjectId) => {
+    (projectId, taskId, targetProjectId, parentTaskId = null) => {
       if (!targetProjectId || targetProjectId === projectId) return;
       const taskManager = getTaskManagerStore(projectId);
       const task = getTaskStore(projectId, taskId);
@@ -55,7 +56,7 @@ export function useMoveTaskToProject(): MoveTaskToProject {
         routeTaskParams.taskId === taskId;
 
       const runMove = async (): Promise<void> => {
-        const error = await taskManager.moveTaskToProject(taskId, targetProjectId);
+        const error = await taskManager.moveTaskToProject(taskId, targetProjectId, parentTaskId);
         if (error) {
           toast({ ...formatMoveError(error, t), variant: 'destructive' });
           return;
@@ -97,6 +98,10 @@ function formatMoveError(
   t: TFunction
 ): { title: string; description: string } {
   switch (error.type) {
+    case 'parent-not-found':
+      return { title: t('tasks.moveToProject.errorGeneric'), description: error.type };
+    case 'parent-archived':
+      return { title: t('tasks.moveToProject.errorGeneric'), description: error.type };
     case 'has-subtasks':
       return { title: t('tasks.moveToProject.errorHasSubtasks'), description: error.type };
     case 'unsupported-transport':

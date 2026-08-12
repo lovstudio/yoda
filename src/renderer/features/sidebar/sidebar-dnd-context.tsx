@@ -3,6 +3,7 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  pointerWithin,
   useSensor,
   useSensors,
   type CollisionDetection,
@@ -26,6 +27,7 @@ import {
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { SidebarProjectItem } from './project-item';
+import { isSidebarDndDropAllowed, normalizeSidebarDndId } from './sidebar-dnd-ids';
 import { type SidebarRow } from './sidebar-store';
 import {
   getTreeProjection,
@@ -35,8 +37,6 @@ import {
   type TreeProjection,
 } from './sidebar-tree-projection';
 import { SidebarTaskItem } from './task-item';
-
-const PINNED_DND_SOURCE_PREFIX = 'pinned::';
 
 type SidebarDndContextValue = {
   activeId: string | null;
@@ -96,18 +96,19 @@ export const SidebarDndProvider = observer(function SidebarDndProvider({
       }
 
       setDropTargetProjectId(null);
-      if (
-        !dragTreeRows ||
-        !overId ||
-        !overId.startsWith(`task::${currentDraggingTask.projectId}::`)
-      ) {
+      if (!dragTreeRows || !overId || !overId.startsWith('task::')) {
         setTaskProjection(null);
         return;
       }
 
-      const overTaskId = overId.slice(`task::${currentDraggingTask.projectId}::`.length);
+      const overTask = parseTaskDndId(overId);
+      if (!overTask || overTask.projectId !== currentDraggingTask.projectId) {
+        setTaskProjection(null);
+        return;
+      }
+
       setTaskProjection(
-        getTreeProjection(dragTreeRows, currentDraggingTask.taskId, overTaskId, event.delta.x)
+        getTreeProjection(dragTreeRows, currentDraggingTask.taskId, overTask.taskId, event.delta.x)
       );
     },
     [dragTreeRows]
@@ -131,7 +132,8 @@ export const SidebarDndProvider = observer(function SidebarDndProvider({
           moveTaskToProject(
             currentDraggingTask.projectId,
             currentDraggingTask.taskId,
-            targetProjectId
+            targetProjectId,
+            null
           );
         }
         return;
@@ -156,13 +158,23 @@ export const SidebarDndProvider = observer(function SidebarDndProvider({
         return;
       }
 
-      const [, overProjectId, overTaskId] = overId.split('::');
-      if (overProjectId !== currentDraggingTask.projectId) return;
+      const overTask = parseTaskDndId(overId);
+      if (!overTask) return;
+
+      if (overTask.projectId !== currentDraggingTask.projectId) {
+        moveTaskToProject(
+          currentDraggingTask.projectId,
+          currentDraggingTask.taskId,
+          overTask.projectId,
+          overTask.taskId
+        );
+        return;
+      }
 
       const projection = getTreeProjection(
         currentDragTreeRows,
         currentDraggingTask.taskId,
-        overTaskId,
+        overTask.taskId,
         event.delta.x
       );
       if (!projection) return;
@@ -171,7 +183,7 @@ export const SidebarDndProvider = observer(function SidebarDndProvider({
       const order = projectedSiblingOrder(
         currentDragTreeRows,
         currentDraggingTask.taskId,
-        overTaskId,
+        overTask.taskId,
         newParentId
       );
       const currentParentId =
@@ -240,16 +252,6 @@ export function useSidebarDnd(): SidebarDndContextValue {
   return context;
 }
 
-export function toSidebarPinnedDndId(dndId: string): string {
-  return `${PINNED_DND_SOURCE_PREFIX}${dndId}`;
-}
-
-function normalizeSidebarDndId(dndId: string): string {
-  return dndId.startsWith(PINNED_DND_SOURCE_PREFIX)
-    ? dndId.slice(PINNED_DND_SOURCE_PREFIX.length)
-    : dndId;
-}
-
 function parseTaskDndId(dndId: string | null): { projectId: string; taskId: string } | null {
   if (!dndId?.startsWith('task::')) return null;
   const [, projectId, taskId] = dndId.split('::');
@@ -311,25 +313,18 @@ function renderOverlayContent(id: string, teamRoomTaskKeys: ReadonlySet<string>)
   return null;
 }
 
-// A project drags only onto other projects (reorder). A task drags onto a task
-// in its own project (reparent) OR onto any OTHER project row (cross-project
-// move). Restricting the droppable set keeps drags that can't resolve in
-// onDragEnd from silently no-op'ing.
+// A project drags only onto other projects (reorder). A task drags onto any task
+// (same-project reparent or cross-project move-and-nest) OR onto any OTHER
+// project row (cross-project move to root). Restricting the droppable set keeps
+// drags that can't resolve in onDragEnd from silently no-op'ing.
 const typeRestrictedCollision: CollisionDetection = (args) => {
   const activeId = normalizeSidebarDndId(String(args.active.id));
-  const droppableContainers = activeId.startsWith('proj::')
-    ? args.droppableContainers.filter((container) => String(container.id).startsWith('proj::'))
-    : activeId.startsWith('task::')
-      ? (() => {
-          const sourceProjectId = activeId.split('::')[1];
-          const taskPrefix = `task::${sourceProjectId}::`;
-          const ownProjectId = `proj::${sourceProjectId}`;
-          return args.droppableContainers.filter((container) => {
-            const id = String(container.id);
-            return id.startsWith(taskPrefix) || (id.startsWith('proj::') && id !== ownProjectId);
-          });
-        })()
-      : args.droppableContainers;
+  const droppableContainers = args.droppableContainers.filter((container) =>
+    isSidebarDndDropAllowed(activeId, String(container.id))
+  );
+
+  const pointerMatches = pointerWithin({ ...args, droppableContainers });
+  if (pointerMatches.length > 0) return pointerMatches;
 
   return closestCenter({ ...args, droppableContainers });
 };

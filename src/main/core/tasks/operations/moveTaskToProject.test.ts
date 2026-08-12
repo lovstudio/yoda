@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   teardownTaskMock: vi.fn(),
   selectMock: vi.fn(),
   updateMock: vi.fn(),
+  updateSetMock: vi.fn(),
   taskUpdatedEmitMock: vi.fn(),
   telemetryCaptureMock: vi.fn(),
 }));
@@ -142,9 +143,12 @@ function setupDb(selectResults: SelectResult[]): void {
     }),
   }));
   mocks.updateMock.mockImplementation(() => ({
-    set: () => ({
-      where: async () => undefined,
-    }),
+    set: (values: unknown) => {
+      mocks.updateSetMock(values);
+      return {
+        where: async () => undefined,
+      };
+    },
   }));
 }
 
@@ -216,5 +220,33 @@ describe('moveTaskToProject', () => {
       sourceProjectId: 'source-project',
       targetProjectId: 'target-project',
     });
+  });
+
+  it('moves a no-worktree task under a parent in the destination project', async () => {
+    const sourceTask = { ...baseTaskRow, taskBranch: null };
+    const parentTask = {
+      ...baseTaskRow,
+      id: 'target-parent',
+      projectId: 'target-project',
+      taskBranch: null,
+    };
+    const movedTask = {
+      ...sourceTask,
+      projectId: 'target-project',
+      parentTaskId: 'target-parent',
+    };
+    setupDb([[sourceTask], [parentTask], [], [movedTask]]);
+
+    const result = await moveTaskToProject('task-1', 'target-project', 'target-parent');
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.projectId).toBe('target-project');
+      expect(result.data.parentTaskId).toBe('target-parent');
+    }
+    expect(mocks.updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'target-project', parentTaskId: 'target-parent' })
+    );
+    expect(mocks.teardownTaskMock).toHaveBeenCalledWith('task-1', 'terminate');
   });
 });

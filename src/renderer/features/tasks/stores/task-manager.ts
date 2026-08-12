@@ -1088,13 +1088,16 @@ export class TaskManagerStore {
 
   /**
    * Re-home this task under another project (move / "promote" a Default task).
+   * When `parentTaskId` is provided, the task is re-homed and nested under that
+   * destination-project task in the same RPC operation.
    * Tears down any live session, persists the move, then hands the task to the
    * destination project's manager so both sidebars reflect it without a reload.
    * Returns the error on failure, or null on success.
    */
   async moveTaskToProject(
     taskId: string,
-    targetProjectId: string
+    targetProjectId: string,
+    parentTaskId: string | null = null
   ): Promise<MoveTaskToProjectError | null> {
     const task = this.tasks.get(taskId);
     if (!task) return { type: 'task-not-found' };
