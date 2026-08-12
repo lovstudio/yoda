@@ -13,7 +13,15 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { observer } from 'mobx-react-lite';
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   teamRoomTaskKey,
@@ -73,6 +81,28 @@ export const SidebarDndProvider = observer(function SidebarDndProvider({
     setTaskProjection(null);
     setDropTargetProjectId(null);
   }, []);
+
+  // dnd-kit normally emits drag end/cancel, but a pointer can finish while
+  // Electron changes focus (for example when a native menu or DevTools opens).
+  // Keep the renderer's derived drag state from outliving the underlying drag.
+  useEffect(() => {
+    if (!activeId) return;
+
+    const clearOnVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') clearDragState();
+    };
+
+    window.addEventListener('pointerup', clearDragState, true);
+    window.addEventListener('pointercancel', clearDragState, true);
+    window.addEventListener('blur', clearDragState);
+    document.addEventListener('visibilitychange', clearOnVisibilityChange);
+    return () => {
+      window.removeEventListener('pointerup', clearDragState, true);
+      window.removeEventListener('pointercancel', clearDragState, true);
+      window.removeEventListener('blur', clearDragState);
+      document.removeEventListener('visibilitychange', clearOnVisibilityChange);
+    };
+  }, [activeId, clearDragState]);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const nextId = normalizeSidebarDndId(String(event.active.id));

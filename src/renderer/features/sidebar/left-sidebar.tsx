@@ -26,14 +26,10 @@ import { appState, sidebarStore, workspaceStore } from '@renderer/lib/stores/app
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { cn } from '@renderer/utils/utils';
 import { GlobalSidePaneTarget } from './global-side-pane-target';
-import { SidebarPinnedTaskList } from './pinned-task-list';
-import { ProjectsGroupLabel } from './projects-group-label';
 import { SidebarDndProvider } from './sidebar-dnd-context';
 import {
   SidebarContainer,
   SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
   SidebarMenu,
   SidebarMenuButton,
 } from './sidebar-primitives';
@@ -65,7 +61,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   const aiLabApps = useAiLabApps();
   const updateAiLabApp = useUpdateAiLabApp();
   const sidebarContentRef = React.useRef<HTMLDivElement>(null);
-  const sidebarFixedRegionRef = React.useRef<HTMLDivElement>(null);
   const lastScrolledSelectionRef = React.useRef<string | null>(null);
   const suppressedRouteScrollKeyRef = React.useRef<string | null>(null);
   const pinnedApps = (aiLabApps.data ?? []).filter((app) => app.pinned);
@@ -322,22 +317,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
         </div>
         <SidebarDndProvider>
           <SidebarContent ref={sidebarContentRef} className="flex flex-col overflow-y-auto">
-            <div ref={sidebarFixedRegionRef} className="shrink-0">
-              <SidebarPinnedTaskList />
-            </div>
-            <SidebarGroup className="mb-0 flex flex-col shrink-0">
-              <ProjectsGroupLabel />
-              {!sidebarStore.projectsCollapsed && (
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    <SidebarVirtualList
-                      scrollElementRef={sidebarContentRef}
-                      fixedRegionRef={sidebarFixedRegionRef}
-                    />
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              )}
-            </SidebarGroup>
+            <SidebarVirtualList scrollElementRef={sidebarContentRef} />
           </SidebarContent>
         </SidebarDndProvider>
       </SidebarContainer>

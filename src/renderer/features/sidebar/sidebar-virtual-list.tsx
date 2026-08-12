@@ -25,15 +25,20 @@ import {
   conversationTransferFromPayload,
 } from '@renderer/features/tasks/conversations/conversation-transfer';
 import { moveConversationToTask } from '@renderer/features/tasks/conversations/move-conversation-to-task';
-import {
-  getRegisteredTaskData,
-  getTaskStore,
-} from '@renderer/features/tasks/stores/task-selectors';
+import { getRegisteredTaskData } from '@renderer/features/tasks/stores/task-selectors';
 import { useParams, useWorkspaceSlots } from '@renderer/lib/layout/navigation-provider';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { cn } from '@renderer/utils/utils';
+import { PinnedRowContent, pinnedRowKey } from './pinned-task-list';
+import {
+  findHiddenPinnedTaskGroupId,
+  limitPinnedTaskListRows,
+  type PinnedTaskListRow,
+} from './pinned-task-list-model';
 import { SidebarProjectItem } from './project-item';
+import { ProjectsGroupLabel } from './projects-group-label';
 import { useSidebarDnd } from './sidebar-dnd-context';
+import { SidebarSectionHeader } from './sidebar-primitives';
 import {
   getSidebarTaskGroupDisclosure,
   hiddenSidebarTaskGroupItemsContain,
@@ -41,29 +46,31 @@ import {
 } from './sidebar-task-group';
 import { SidebarTaskGroupToggle } from './sidebar-task-group-toggle';
 import { type TreeProjection } from './sidebar-tree-projection';
-import { getSidebarVirtualRowOffset } from './sidebar-virtual-list-layout';
 import { SidebarTaskItem } from './task-item';
 
 export const SidebarVirtualList = observer(function SidebarVirtualList({
   scrollElementRef,
-  fixedRegionRef,
 }: {
   scrollElementRef: RefObject<HTMLDivElement | null>;
-  fixedRegionRef: RefObject<HTMLDivElement | null>;
 }) {
   const rows = sidebarStore.sidebarRows;
+  const pinnedEntries = sidebarStore.pinnedSidebarEntries;
   const teamRoomTaskKeys = useTeamRoomTaskKeys();
   const { currentView } = useWorkspaceSlots();
   const { params: taskParams } = useParams('task');
   const { params: projectParams } = useParams('project');
   const taskGroupVisibleLimit = sidebarStore.taskGroupVisibleLimit;
+  const pinnedCollapsed = sidebarStore.pinnedCollapsed;
+  const projectsCollapsed = sidebarStore.projectsCollapsed;
   const { activeId, dndEnabled, dropTargetProjectId, taskProjection } = useSidebarDnd();
 
   const autoExpandedActiveIdRef = useRef<string | null>(null);
-  const listContainerRef = useRef<HTMLDivElement>(null);
-  const [scrollMargin, setScrollMargin] = useState(0);
+  const autoExpandedPinnedTaskKeyRef = useRef<string | null>(null);
   const previousRowCountRef = useRef<number | null>(null);
   const [expandedTaskGroupIds, setExpandedTaskGroupIds] = useState<Set<string>>(() => new Set());
+  const [expandedPinnedTaskGroupIds, setExpandedPinnedTaskGroupIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
   // During a project drag, collapse its task children so the list is compact
   // and project rows are adjacent — making cross-project reorder easier.
@@ -83,60 +90,48 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     () => limitTaskGroupRows(displayRows, expandedTaskGroupIds, taskGroupVisibleLimit),
     [displayRows, expandedTaskGroupIds, taskGroupVisibleLimit]
   );
+  const pinnedRows = useMemo(
+    () => limitPinnedTaskListRows(pinnedEntries, expandedPinnedTaskGroupIds, taskGroupVisibleLimit),
+    [expandedPinnedTaskGroupIds, pinnedEntries, taskGroupVisibleLimit]
+  );
   const activeSidebarDndId = getActiveSidebarDndId(
     currentView,
     taskParams.projectId,
     taskParams.taskId,
     projectParams.projectId
   );
+  const activePinnedTaskKey =
+    taskParams.projectId && taskParams.taskId
+      ? `${taskParams.projectId}::${taskParams.taskId}`
+      : null;
+  const navigationRows = useMemo(() => {
+    const next: SidebarNavigationRow[] = [{ kind: 'pinned-header' }];
+    if (!pinnedCollapsed) {
+      next.push(...pinnedRows.map((row) => ({ kind: 'pinned-row' as const, row })));
+    }
+    next.push({ kind: 'projects-header' });
+    if (!projectsCollapsed) {
+      next.push(...renderRows.map((row) => ({ kind: 'project-row' as const, row })));
+    }
+    return next;
+  }, [pinnedCollapsed, pinnedRows, projectsCollapsed, renderRows]);
 
-  // Pinned tasks render above this list inside the same scroll root. The
-  // virtualizer's coordinates are relative to the scroll root, so keep the
-  // pinned region height in scrollMargin and refresh it when that region
-  // changes (for example, when a pinned group expands).
-  useLayoutEffect(() => {
-    const list = listContainerRef.current;
-    const scrollElement = scrollElementRef.current;
-    if (!list || !scrollElement) return;
-
-    const updateScrollMargin = () => {
-      const nextMargin = Math.max(
-        0,
-        list.getBoundingClientRect().top -
-          scrollElement.getBoundingClientRect().top +
-          scrollElement.scrollTop
-      );
-      setScrollMargin((current) => (current === nextMargin ? current : nextMargin));
-    };
-
-    updateScrollMargin();
-    const observer = new ResizeObserver(updateScrollMargin);
-    observer.observe(list);
-    observer.observe(scrollElement);
-    if (fixedRegionRef.current) observer.observe(fixedRegionRef.current);
-    return () => observer.disconnect();
-  }, [fixedRegionRef, scrollElementRef]);
-
-  // Keep the DnD surface complete while a drag is active, but only mount the
-  // viewport plus a small overscan window during normal interaction. The
-  // sidebar can contain thousands of rows, and mounting every row makes each
-  // task/PTY status update fan out into a full React subtree.
+  // Pinned and project rows share one virtualizer and one scroll coordinate
+  // system. Keeping separate virtualizers over the same scroll root lets one
+  // list retain height while the other temporarily has no rendered range.
   const virtualizer = useVirtualizer({
-    count: renderRows.length,
+    count: navigationRows.length,
     getScrollElement: () => scrollElementRef.current,
     // The browser moves the shared scroll root before React can schedule an
     // async range update. Flush the virtual range in the same scroll turn so
     // fast wheel movement never exposes an empty viewport between row batches.
     useFlushSync: true,
     estimateSize: () => 32,
-    gap: 2,
-    overscan: 8,
-    paddingStart: 4,
+    overscan: 16,
     paddingEnd: 12,
-    scrollMargin,
     getItemKey: (index) => {
-      const row = renderRows[index];
-      return row ? sidebarRenderableRowKey(row) : index;
+      const row = navigationRows[index];
+      return row ? sidebarNavigationRowKey(row) : index;
     },
     measureElement: (element) => element.getBoundingClientRect().height,
   });
@@ -148,19 +143,19 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
   // committed viewport instead of waiting for another sidebar interaction.
   useLayoutEffect(() => {
     const previousRowCount = previousRowCountRef.current;
-    previousRowCountRef.current = renderRows.length;
-    if (previousRowCount === null || previousRowCount === renderRows.length) return;
+    previousRowCountRef.current = navigationRows.length;
+    if (previousRowCount === null || previousRowCount === navigationRows.length) return;
     virtualizer.measure();
-  }, [renderRows.length, virtualizer]);
+  }, [navigationRows.length, virtualizer]);
 
   // Virtualizer state changes on every scroll frame. This scan only depends on
   // the row model, so keep it out of that frame-level render path.
   const activeRowIndex = useMemo(
     () =>
       activeSidebarDndId
-        ? renderRows.findIndex((row) => isSidebarRow(row) && rowToDndId(row) === activeSidebarDndId)
+        ? navigationRows.findIndex((row) => sidebarNavigationRowDndId(row) === activeSidebarDndId)
         : -1,
-    [activeSidebarDndId, renderRows]
+    [activeSidebarDndId, navigationRows]
   );
 
   useEffect(() => {
@@ -173,7 +168,45 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
   // Deferred reflow: keep needsReview demotion frozen while the pointer is
   // inside the list, so marking a task (or auto-clear on open) doesn't reorder
   // rows under the cursor. Release on leave/unmount lets the list reflow.
-  useEffect(() => () => sidebarStore.releaseTaskReflow('projects-list'), []);
+  useEffect(
+    () => () => {
+      sidebarStore.releaseTaskReflow('pinned-list');
+      sidebarStore.releaseTaskReflow('projects-list');
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!activePinnedTaskKey || !taskParams.projectId || !taskParams.taskId) {
+      autoExpandedPinnedTaskKeyRef.current = null;
+      return;
+    }
+    if (autoExpandedPinnedTaskKeyRef.current === activePinnedTaskKey) return;
+
+    const hiddenGroupId = findHiddenPinnedTaskGroupId(
+      pinnedEntries,
+      expandedPinnedTaskGroupIds,
+      taskParams.projectId,
+      taskParams.taskId,
+      taskGroupVisibleLimit
+    );
+    if (!hiddenGroupId) return;
+
+    autoExpandedPinnedTaskKeyRef.current = activePinnedTaskKey;
+    setExpandedPinnedTaskGroupIds((previous) => {
+      if (previous.has(hiddenGroupId)) return previous;
+      const next = new Set(previous);
+      next.add(hiddenGroupId);
+      return next;
+    });
+  }, [
+    activePinnedTaskKey,
+    expandedPinnedTaskGroupIds,
+    pinnedEntries,
+    taskGroupVisibleLimit,
+    taskParams.projectId,
+    taskParams.taskId,
+  ]);
 
   // Reveal the active project/task if navigation lands inside a truncated group.
   useEffect(() => {
@@ -232,10 +265,28 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     [activeSidebarDndId]
   );
 
-  const renderRow = (row: SidebarRenderableRow, virtualItem?: VirtualItem) => {
-    const rowKey = sidebarRenderableRowKey(row);
+  const togglePinnedTaskGroupExpanded = useCallback(
+    (groupId: string) => {
+      setExpandedPinnedTaskGroupIds((previous) => {
+        const next = new Set(previous);
+        if (next.has(groupId)) {
+          if (activePinnedTaskKey) {
+            autoExpandedPinnedTaskKeyRef.current = activePinnedTaskKey;
+          }
+          next.delete(groupId);
+        } else {
+          next.add(groupId);
+        }
+        return next;
+      });
+    },
+    [activePinnedTaskKey]
+  );
+
+  const renderRow = (row: SidebarNavigationRow, virtualItem?: VirtualItem) => {
+    const rowKey = sidebarNavigationRowKey(row);
     const rowContent = (
-      <SidebarRowContent
+      <SidebarNavigationRowContent
         row={row}
         dndEnabled={dndEnabled}
         dropTargetProjectId={dropTargetProjectId}
@@ -243,6 +294,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
         taskProjection={taskProjection}
         teamRoomTaskKeys={teamRoomTaskKeys}
         onToggleTaskGroup={toggleTaskGroupExpanded}
+        onTogglePinnedTaskGroup={togglePinnedTaskGroupExpanded}
       />
     );
 
@@ -261,9 +313,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
           top: 0,
           left: 0,
           width: '100%',
-          // TanStack includes scrollMargin in virtualItem.start. The row is
-          // already inside this list container, so remove it once here.
-          transform: `translateY(${getSidebarVirtualRowOffset(virtualItem.start, scrollMargin)}px)`,
+          transform: `translateY(${virtualItem.start}px)`,
         }}
       >
         {rowContent}
@@ -274,17 +324,22 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
   return (
     <SortableContext items={allDndIds} strategy={verticalListSortingStrategy}>
       <div
-        ref={listContainerRef}
-        className="px-3 overflow-hidden"
-        onPointerEnter={() => sidebarStore.holdTaskReflow('projects-list')}
-        onPointerLeave={() => sidebarStore.releaseTaskReflow('projects-list')}
+        className="overflow-hidden"
+        onPointerEnter={() => {
+          sidebarStore.holdTaskReflow('pinned-list');
+          sidebarStore.holdTaskReflow('projects-list');
+        }}
+        onPointerLeave={() => {
+          sidebarStore.releaseTaskReflow('pinned-list');
+          sidebarStore.releaseTaskReflow('projects-list');
+        }}
       >
         {activeId ? (
-          <div className="space-y-0.5 pt-1 pb-3">{renderRows.map((row) => renderRow(row))}</div>
+          <div className="pb-3">{navigationRows.map((row) => renderRow(row))}</div>
         ) : (
-          <div className="relative pt-1 pb-3" style={{ height: virtualizer.getTotalSize() }}>
+          <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
             {virtualItems.map((virtualItem) =>
-              renderRow(renderRows[virtualItem.index]!, virtualItem)
+              renderRow(navigationRows[virtualItem.index]!, virtualItem)
             )}
           </div>
         )}
@@ -303,6 +358,12 @@ type SidebarTaskGroupToggleRow = {
 
 type SidebarRenderableRow = SidebarRow | SidebarTaskGroupToggleRow;
 
+type SidebarNavigationRow =
+  | { kind: 'pinned-header' }
+  | { kind: 'pinned-row'; row: PinnedTaskListRow }
+  | { kind: 'projects-header' }
+  | { kind: 'project-row'; row: SidebarRenderableRow };
+
 const toProjectDndId = (id: string) => `proj::${id}`;
 const toTaskDndId = (projectId: string, taskId: string) => `task::${projectId}::${taskId}`;
 const toGroupDndId = (group: SidebarGroupKey) =>
@@ -318,6 +379,85 @@ function sidebarRenderableRowKey(row: SidebarRenderableRow): string {
   if (row.kind === 'task-group-toggle') return `toggle:${row.groupId}`;
   return rowToDndId(row);
 }
+
+function sidebarNavigationRowKey(row: SidebarNavigationRow): string {
+  if (row.kind === 'pinned-header' || row.kind === 'projects-header') return row.kind;
+  return row.kind === 'pinned-row'
+    ? `pinned:${pinnedRowKey(row.row)}`
+    : `projects:${sidebarRenderableRowKey(row.row)}`;
+}
+
+function sidebarNavigationRowDndId(row: SidebarNavigationRow): string | null {
+  if (row.kind === 'pinned-row') {
+    return row.row.kind === 'task-group-toggle'
+      ? null
+      : 'taskId' in row.row
+        ? toTaskDndId(row.row.projectId, row.row.taskId)
+        : toProjectDndId(row.row.projectId);
+  }
+  if (row.kind === 'project-row' && isSidebarRow(row.row)) return rowToDndId(row.row);
+  return null;
+}
+
+type SidebarNavigationRowContentProps = {
+  row: SidebarNavigationRow;
+  dndEnabled: boolean;
+  dropTargetProjectId: string | null;
+  activeId: string | null;
+  taskProjection: TreeProjection | null;
+  teamRoomTaskKeys: ReadonlySet<string>;
+  onToggleTaskGroup: (groupId: string) => void;
+  onTogglePinnedTaskGroup: (groupId: string) => void;
+};
+
+const SidebarNavigationRowContent = memo(function SidebarNavigationRowContent({
+  row,
+  dndEnabled,
+  dropTargetProjectId,
+  activeId,
+  taskProjection,
+  teamRoomTaskKeys,
+  onToggleTaskGroup,
+  onTogglePinnedTaskGroup,
+}: SidebarNavigationRowContentProps) {
+  const { t } = useTranslation();
+
+  if (row.kind === 'pinned-header') {
+    return (
+      <SidebarSectionHeader
+        label={t('sidebar.pinned')}
+        collapsed={sidebarStore.pinnedCollapsed}
+        onToggle={() => sidebarStore.togglePinnedCollapsed()}
+      />
+    );
+  }
+  if (row.kind === 'projects-header') return <ProjectsGroupLabel />;
+  if (row.kind === 'pinned-row') {
+    return (
+      <div className="min-w-0 overflow-hidden px-3">
+        <PinnedRowContent
+          row={row.row}
+          dndEnabled={dndEnabled}
+          teamRoomTaskKeys={teamRoomTaskKeys}
+          onToggleTaskGroup={onTogglePinnedTaskGroup}
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="min-w-0 overflow-hidden px-3 pb-0.5">
+      <SidebarRowContent
+        row={row.row}
+        dndEnabled={dndEnabled}
+        dropTargetProjectId={dropTargetProjectId}
+        activeId={activeId}
+        taskProjection={taskProjection}
+        teamRoomTaskKeys={teamRoomTaskKeys}
+        onToggleTaskGroup={onToggleTaskGroup}
+      />
+    </div>
+  );
+});
 
 type SidebarRowContentProps = {
   row: SidebarRenderableRow;
@@ -449,8 +589,6 @@ function getActiveSidebarDndId(
   projectId?: string
 ): string | null {
   if (currentView === 'task' && taskProjectId && taskId) {
-    const activeTask = getTaskStore(taskProjectId, taskId);
-    if (activeTask?.data.isPinned) return null;
     return toTaskDndId(taskProjectId, taskId);
   }
   if (currentView === 'project' && projectId) {

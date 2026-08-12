@@ -131,7 +131,7 @@ type PinnedRowContentProps = {
 
 // Keep task/project observers out of the pinned list reconciliation when the
 // row model is unchanged.
-const PinnedRowContent = memo(function PinnedRowContent({
+export const PinnedRowContent = memo(function PinnedRowContent({
   row,
   dndEnabled,
   teamRoomTaskKeys,
@@ -214,7 +214,7 @@ function PinnedDraggableRow({
   );
 }
 
-function pinnedRowKey(row: PinnedTaskListRow): string {
+export function pinnedRowKey(row: PinnedTaskListRow): string {
   if (row.kind === 'task-group-toggle') return `toggle:${row.groupId}`;
   return `${row.kind}:${row.projectId}:${'taskId' in row ? row.taskId : ''}`;
 }

@@ -35,4 +35,24 @@ describe('LeftSidebar app placement', () => {
     expect(source).not.toContain('openNewTaskFromCurrentContext');
     expect(source).not.toContain('createSubtaskAndRun');
   });
+
+  it('uses one virtual sidebar list inside the shared drag-and-drop provider', () => {
+    const source = readFileSync(new URL('./left-sidebar.tsx', import.meta.url), 'utf8');
+    const virtualListSource = readFileSync(
+      new URL('./sidebar-virtual-list.tsx', import.meta.url),
+      'utf8'
+    );
+    const providerStart = source.indexOf('<SidebarDndProvider>');
+    const virtualList = source.indexOf('<SidebarVirtualList', providerStart);
+    const providerEnd = source.indexOf('</SidebarDndProvider>', providerStart);
+
+    expect(providerStart).toBeGreaterThan(-1);
+    expect(virtualList).toBeGreaterThan(providerStart);
+    expect(providerEnd).toBeGreaterThan(virtualList);
+    expect(source).not.toContain('<SidebarPinnedTaskList');
+    expect(virtualListSource).toContain("{ kind: 'pinned-header' }");
+    expect(virtualListSource).toContain("{ kind: 'projects-header' }");
+    expect(virtualListSource).not.toContain('scrollMargin');
+    expect(virtualListSource).not.toContain('<DndContext');
+  });
 });

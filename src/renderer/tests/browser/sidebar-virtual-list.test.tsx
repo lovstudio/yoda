@@ -135,6 +135,9 @@ vi.mock('@renderer/features/sidebar/sidebar-task-group', () => ({
 vi.mock('@renderer/features/sidebar/sidebar-task-group-toggle', () => ({
   SidebarTaskGroupToggle: () => null,
 }));
+vi.mock('@renderer/features/sidebar/projects-group-label', () => ({
+  ProjectsGroupLabel: () => createElement('div', { style: { height: '32px' } }, 'projects'),
+}));
 
 const projectRow: SidebarRow = { kind: 'project', projectId: 'project-1' };
 const taskRow: SidebarRow = {
@@ -164,7 +167,6 @@ describe('SidebarVirtualList', () => {
   let scrollRoot: HTMLDivElement;
   let root: Root;
   let scrollElementRef: RefObject<HTMLDivElement | null>;
-  let fixedRegionRef: RefObject<HTMLDivElement | null>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -178,7 +180,6 @@ describe('SidebarVirtualList', () => {
     document.body.appendChild(host);
     root = createRoot(scrollRoot);
     scrollElementRef = { current: scrollRoot };
-    fixedRegionRef = { current: null };
     runInAction(() => {
       mocks.sidebarStore.sidebarRows = [projectRow];
       mocks.staleVirtualItemKey = null;
@@ -188,12 +189,7 @@ describe('SidebarVirtualList', () => {
       return createElement(
         SidebarDndProvider,
         null,
-        createElement(
-          'div',
-          null,
-          createElement('div', { ref: fixedRegionRef, style: { height: '40px' } }),
-          createElement(SidebarVirtualList, { scrollElementRef, fixedRegionRef })
-        )
+        createElement(SidebarVirtualList, { scrollElementRef })
       );
     }
     await act(async () => {
@@ -292,7 +288,7 @@ describe('SidebarVirtualList', () => {
     expect(document.querySelector('[data-testid="task-task-2"]')).not.toBeNull();
   });
 
-  it('keeps a shared scroll root covered while crossing the pinned region', async () => {
+  it('keeps one virtual coordinate system covered while crossing pinned rows', async () => {
     const pinnedEntries: PinnedSidebarEntry[] = Array.from({ length: 8 }, (_, index) => ({
       kind: 'project-task',
       projectId: `pinned-project-${index}`,
@@ -313,16 +309,7 @@ describe('SidebarVirtualList', () => {
         createElement(
           SidebarDndProvider,
           null,
-          createElement(
-            'div',
-            { style: { display: 'flex', flexDirection: 'column' } },
-            createElement(
-              'div',
-              { ref: fixedRegionRef, style: { flexShrink: 0 } },
-              createElement(SidebarPinnedTaskList)
-            ),
-            createElement(SidebarVirtualList, { scrollElementRef, fixedRegionRef })
-          )
+          createElement(SidebarVirtualList, { scrollElementRef })
         )
       );
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -343,11 +330,15 @@ describe('SidebarVirtualList', () => {
     expect(scrollRoot.scrollHeight).toBeGreaterThan(scrollRoot.clientHeight);
     expect(visibleRows.length).toBeGreaterThan(0);
     expect(Math.min(...visibleRows.map(({ rect }) => rect.top))).toBeLessThanOrEqual(
-      rootRect.top + 20
+      // The projects section header can occupy one 32px row at the viewport
+      // edge; the assertion protects against the former multi-row blank gap.
+      rootRect.top + 40
     );
+    expect(mocks.virtualizerOptions.length).toBeGreaterThan(0);
+    expect(mocks.virtualizerOptions.every((options) => !('scrollMargin' in options))).toBe(true);
   });
 
-  it('activates a pinned task as a draggable in the shared sidebar context', async () => {
+  it('clears the sidebar drag state when the window loses focus', async () => {
     runInAction(() => {
       mocks.sidebarStore.sidebarRows = [projectRow, taskRow];
       mocks.sidebarStore.pinnedSidebarEntries = [pinnedTaskEntry];
@@ -361,7 +352,7 @@ describe('SidebarVirtualList', () => {
             'div',
             null,
             createElement(SidebarPinnedTaskList),
-            createElement(SidebarVirtualList, { scrollElementRef, fixedRegionRef })
+            createElement(SidebarVirtualList, { scrollElementRef })
           )
         )
       );
@@ -397,6 +388,13 @@ describe('SidebarVirtualList', () => {
     });
 
     expect(source?.getAttribute('aria-pressed')).toBe('true');
+
+    await act(async () => {
+      window.dispatchEvent(new Event('blur'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(document.querySelector('[data-index]')).not.toBeNull();
 
     await act(async () => {
       document.dispatchEvent(
