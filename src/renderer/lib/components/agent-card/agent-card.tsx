@@ -63,13 +63,7 @@ export function AgentCard({
         {footer}
       </div>
       {onDuplicate || trailing ? (
-        <div
-          className={cn(
-            'flex shrink-0 items-center gap-0.5',
-            onDuplicate &&
-              'opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100'
-          )}
-        >
+        <div className="flex shrink-0 items-center gap-0.5" data-testid="agent-card-actions">
           {onDuplicate ? (
             <Tooltip>
               <TooltipTrigger

@@ -52,7 +52,7 @@ function AgentCard({
       onDuplicate={onDuplicate}
       duplicateLabel={t('agentManager.duplicate')}
       trailing={
-        <div className="flex shrink-0 items-center gap-0.5">
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
           <button
             type="button"
             aria-label={t('common.edit')}

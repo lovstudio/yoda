@@ -37,6 +37,11 @@ describe('AgentCard', () => {
       'button[aria-label="Duplicate agent"]'
     );
     expect(duplicateButton).not.toBeNull();
+    expect(
+      host
+        .querySelector<HTMLElement>('[data-testid="agent-card-actions"]')
+        ?.classList.contains('opacity-0')
+    ).toBe(false);
 
     await act(async () => {
       await userEvent.click(duplicateButton!);
