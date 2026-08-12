@@ -87,7 +87,7 @@ export const SidebarDndProvider = observer(function SidebarDndProvider({
       const currentDraggingTask = parseTaskDndId(normalizeSidebarDndId(String(event.active.id)));
       if (!currentDraggingTask) return;
 
-      const overId = event.over ? String(event.over.id) : null;
+      const overId = event.over ? normalizeSidebarDndId(String(event.over.id)) : null;
       if (overId && overId.startsWith('proj::')) {
         const projectId = overId.slice('proj::'.length);
         setDropTargetProjectId(projectId !== currentDraggingTask.projectId ? projectId : null);
@@ -117,7 +117,7 @@ export const SidebarDndProvider = observer(function SidebarDndProvider({
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const activeDndId = normalizeSidebarDndId(String(event.active.id));
-      const overId = event.over ? String(event.over.id) : null;
+      const overId = event.over ? normalizeSidebarDndId(String(event.over.id)) : null;
       const currentDraggingTask = parseTaskDndId(activeDndId);
       const currentDragTreeRows = currentDraggingTask
         ? getDragTreeRows(sidebarStore.sidebarRows, currentDraggingTask)

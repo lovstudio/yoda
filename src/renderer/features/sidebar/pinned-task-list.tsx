@@ -1,4 +1,4 @@
-import { useDraggable } from '@dnd-kit/core';
+import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { observer } from 'mobx-react-lite';
 import {
@@ -303,17 +303,37 @@ function PinnedDraggableRow({
   dndId: string;
   children: ReactNode;
 }) {
-  const { attributes, isDragging, listeners, setNodeRef } = useDraggable({
+  const {
+    attributes,
+    isDragging,
+    listeners,
+    setNodeRef: setDraggableNodeRef,
+  } = useDraggable({
     id: toSidebarPinnedDndId(dndId),
     disabled: !dndEnabled,
   });
+  const { isOver, setNodeRef: setDroppableNodeRef } = useDroppable({
+    id: toSidebarPinnedDndId(dndId),
+    disabled: !dndEnabled,
+  });
+  const setNodeRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      setDraggableNodeRef(node);
+      setDroppableNodeRef(node);
+    },
+    [setDraggableNodeRef, setDroppableNodeRef]
+  );
 
   return (
     <div
       ref={setNodeRef}
       data-sidebar-dnd-id={dndId}
       data-sidebar-row={dndId}
-      className={cn('min-w-0 overflow-hidden rounded-lg', isDragging && 'opacity-40')}
+      className={cn(
+        'min-w-0 overflow-hidden rounded-lg',
+        isDragging && 'opacity-40',
+        isOver && 'ring-2 ring-inset ring-primary bg-primary/10'
+      )}
       {...attributes}
       {...listeners}
     >
