@@ -124,9 +124,10 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
   const virtualizer = useVirtualizer({
     count: renderRows.length,
     getScrollElement: () => scrollElementRef.current,
-    // Scroll updates should yield to typing and pointer input instead of
-    // forcing a synchronous React commit for every native scroll event.
-    useFlushSync: false,
+    // The browser moves the shared scroll root before React can schedule an
+    // async range update. Flush the virtual range in the same scroll turn so
+    // fast wheel movement never exposes an empty viewport between row batches.
+    useFlushSync: true,
     estimateSize: () => 32,
     gap: 2,
     overscan: 8,

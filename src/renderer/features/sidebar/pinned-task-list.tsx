@@ -26,7 +26,8 @@ import {
   type PinnedTaskListRow,
 } from './pinned-task-list-model';
 import { SidebarProjectItem } from './project-item';
-import { toSidebarPinnedDndId, useSidebarDnd } from './sidebar-dnd-context';
+import { useSidebarDnd } from './sidebar-dnd-context';
+import { toSidebarPinnedDndId } from './sidebar-dnd-ids';
 import { SidebarGroup, SidebarMenu, SidebarSectionHeader } from './sidebar-primitives';
 import { SidebarTaskGroupToggle } from './sidebar-task-group-toggle';
 import { getSidebarVirtualRowOffset } from './sidebar-virtual-list-layout';
@@ -69,9 +70,10 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList({
   const virtualizer = useVirtualizer({
     count: showList ? rows.length : 0,
     getScrollElement: () => scrollElementRef.current,
-    // This list shares the sidebar scroll root with the projects list. Let
-    // scroll input yield to the browser instead of forcing a sync commit.
-    useFlushSync: false,
+    // This list shares the sidebar scroll root with the projects list. Keep
+    // its range update synchronous so fast wheel movement never exposes an
+    // empty viewport between virtual row batches.
+    useFlushSync: true,
     estimateSize: () => 32,
     overscan: 8,
     scrollMargin,

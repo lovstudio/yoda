@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
     setProjectOrder: ReturnType<typeof vi.fn>;
   },
   staleVirtualItemKey: null as string | null,
+  virtualizerOptions: [] as object[],
 }));
 
 type ReactVirtualizerModule = {
@@ -38,6 +39,7 @@ vi.mock('@tanstack/react-virtual', async (importOriginal) => {
   return {
     ...actual,
     useVirtualizer: (options: object) => {
+      mocks.virtualizerOptions.push(options);
       const virtualizer = actual.useVirtualizer(options);
       if (!mocks.staleVirtualItemKey) return virtualizer;
 
@@ -180,6 +182,7 @@ describe('SidebarVirtualList', () => {
     runInAction(() => {
       mocks.sidebarStore.sidebarRows = [projectRow];
       mocks.staleVirtualItemKey = null;
+      mocks.virtualizerOptions = [];
     });
     function Harness() {
       return createElement(
@@ -213,6 +216,13 @@ describe('SidebarVirtualList', () => {
 
     expect(document.querySelector('[data-testid="project-project-1"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="task-task-1"]')).not.toBeNull();
+  });
+
+  it('flushes shared scroll-root virtual ranges synchronously', () => {
+    expect(mocks.virtualizerOptions.length).toBeGreaterThan(0);
+    expect(mocks.virtualizerOptions).toEqual(
+      expect.arrayContaining([expect.objectContaining({ useFlushSync: true })])
+    );
   });
 
   it('does not reuse a task row while a stale virtual item key catches up to a reordered row', async () => {
