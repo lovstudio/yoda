@@ -217,7 +217,6 @@
     "reconnect": "Reconnect",
     "changeSshConnection": "Change SSH connection",
     "openProjectDetails": "Open project details",
-    "configureSystemPrompt": "Configure System Prompt",
     "openArchivedTasks": "View archived tasks",
     "openSessionDetails": "Open session details",
     "openTaskDetails": "Open task details",
