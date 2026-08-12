@@ -27,6 +27,7 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from '@renderer/lib/ui/popover';
+import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
@@ -396,7 +397,6 @@ function SessionPromptRow({
   const text = displaySessionPromptText(prompt.text).trim();
   const promptDate = parsePromptTimestamp(prompt.timestamp);
   const timestamp = promptDate?.toLocaleTimeString() ?? null;
-  const createdAt = promptDate?.toLocaleString() ?? null;
   const canRestore = Boolean(onRestore && prompt.restoreTarget);
   const handleClick =
     onClick ?? (canRestore && onRestore ? () => onRestore(prompt, index) : undefined);
@@ -420,36 +420,42 @@ function SessionPromptRow({
           showArrow={false}
           className="block w-[min(28rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border-primary/70 bg-background-quaternary p-0 text-foreground shadow-lg"
         >
-          <div data-session-prompt-preview className="min-w-0">
-            <div className="border-b border-border-primary/60 px-3 py-2">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground-passive">
-                  {t('tasks.sessionInfo.promptsModalTitle')}
+          <div data-session-prompt-preview className="flex min-w-0">
+            {canRestore && onRestore ? (
+              <aside
+                data-session-prompt-fork-rail
+                className="flex w-32 shrink-0 flex-col justify-center border-r border-border-primary/60 bg-background-1/55 p-2.5"
+              >
+                <SessionPromptRestoreButton
+                  prompt={prompt}
+                  index={index}
+                  isRestoring={isRestoring}
+                  onRestore={onRestore}
+                  visibleLabel={t('tasks.bottomPanel.sessionBranchFromHere')}
+                  className="h-auto min-h-9 w-full justify-start rounded-md border border-primary/35 bg-primary/10 px-2.5 py-2 text-left text-[11px] font-medium text-primary shadow-sm hover:bg-primary/15 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60"
+                />
+              </aside>
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 border-b border-border-primary/60 px-3 py-2">
+                <span className="text-[10px] font-medium text-foreground-passive">
+                  {t('tasks.sessionInfo.createdAt')}
                 </span>
-                <span className="shrink-0 font-mono text-[10px] tabular-nums text-foreground-passive">
-                  {t('tasks.sessionInfo.restoreContextAtPrompt', { index })}
-                </span>
+                {promptDate ? (
+                  <RelativeTime
+                    value={promptDate}
+                    className="font-mono text-[11px] tabular-nums text-foreground-muted"
+                  />
+                ) : (
+                  <span className="font-mono text-[11px] text-foreground-passive">—</span>
+                )}
+              </div>
+              <div className="max-h-52 overflow-y-auto px-3 py-2.5">
+                <p className="whitespace-pre-wrap break-words text-left text-xs leading-5 text-foreground">
+                  {text || '—'}
+                </p>
               </div>
             </div>
-            <div className="max-h-52 overflow-y-auto px-3 py-2.5">
-              <p className="whitespace-pre-wrap break-words text-left text-xs leading-5 text-foreground">
-                {text || '—'}
-              </p>
-            </div>
-            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 border-t border-border-primary/60 px-3 py-2 text-[10px]">
-              <dt className="py-1 text-foreground-passive">{t('tasks.sessionInfo.createdAt')}</dt>
-              <dd className="min-w-0 py-1 text-right font-mono tabular-nums text-foreground-muted">
-                {createdAt ?? '—'}
-              </dd>
-              <dt className="py-1 text-foreground-passive">{t('tasks.sessionInfo.status')}</dt>
-              <dd className="min-w-0 py-1 text-right text-foreground-muted">
-                {t(
-                  canRestore
-                    ? 'tasks.bottomPanel.sessionBranchFromHere'
-                    : 'tasks.bottomPanel.sessionCheckpointPending'
-                )}
-              </dd>
-            </dl>
           </div>
         </TooltipContent>
       </Tooltip>
@@ -477,15 +483,6 @@ function SessionPromptRow({
       ) : (
         <div className={className}>{content}</div>
       )}
-      {canRestore && onRestore ? (
-        <SessionPromptRestoreButton
-          prompt={prompt}
-          index={index}
-          isRestoring={isRestoring}
-          onRestore={onRestore}
-          className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-        />
-      ) : null}
     </div>
   );
 }

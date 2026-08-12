@@ -25,7 +25,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string) => key,
+    i18n: { language: 'zh-CN' },
+  }),
 }));
 
 vi.mock('@renderer/features/settings/use-app-settings-key', () => {
@@ -204,11 +207,23 @@ describe('DockedSessionHistory conversation tree menu', () => {
 
     await vi.waitFor(() => {
       const preview = document.querySelector<HTMLElement>('[data-session-prompt-preview]');
+      const createdAt = preview?.querySelector('time');
       expect(preview?.textContent).toContain(fullPrompt);
-      expect(preview?.textContent).toContain(new Date(promptTimestamp).toLocaleString());
-      expect(preview?.textContent).toContain('tasks.sessionInfo.restoreContextAtPrompt');
-      expect(preview?.textContent).toContain('tasks.sessionInfo.status');
+      expect(createdAt?.getAttribute('dateTime')).toBe(new Date(promptTimestamp).toISOString());
+      expect(createdAt?.textContent).toMatch(/前$/);
+      expect(preview?.textContent).toContain('tasks.bottomPanel.sessionBranchFromHere');
+      expect(preview?.textContent).not.toContain('tasks.sessionInfo.restoreContextAtPrompt');
     });
+
+    const forkButton = document.querySelector<HTMLButtonElement>(
+      '[data-session-prompt-fork-rail] button'
+    );
+    expect(forkButton?.textContent).toContain('tasks.bottomPanel.sessionBranchFromHere');
+    await act(async () => forkButton?.click());
+    expect(mocks.restoreCurrentPrompt).toHaveBeenCalledWith(
+      { ...prompt, text: fullPrompt, timestamp: promptTimestamp },
+      1
+    );
   });
 
   it('keeps the tree icon available while the current-path list is collapsed', async () => {
