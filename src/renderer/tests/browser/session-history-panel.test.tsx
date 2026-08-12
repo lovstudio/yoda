@@ -250,7 +250,7 @@ describe('DockedSessionHistory conversation tree menu', () => {
       const magnifiedBarWidth = Number.parseFloat(
         historyBars[0]?.querySelector('span')?.style.width ?? '0'
       );
-      expect(magnifiedBarWidth).toBeGreaterThan(initialBarWidth);
+      expect(magnifiedBarWidth).toBeGreaterThan(initialBarWidth + 10);
     });
 
     await act(async () => userEvent.click(historyBars[1]!));

@@ -541,11 +541,11 @@ function SessionPromptRow({
           <div data-session-prompt-preview className="flex min-w-0">
             <aside
               data-session-prompt-history-bars
-              className="flex w-14 shrink-0 items-center justify-center px-2 py-3"
+              className="flex w-16 shrink-0 items-center justify-center px-2 py-3"
             >
               <div
                 ref={barRailRef}
-                className="flex max-h-60 w-9 flex-col items-center gap-1.5 overflow-y-auto rounded-full px-1.5 py-2"
+                className="flex max-h-60 w-12 flex-col items-center gap-1.5 overflow-y-auto rounded-full px-1 py-2"
                 onPointerEnter={handleBarPointerMove}
                 onPointerLeave={handleBarPointerLeave}
                 onPointerMove={handleBarPointerMove}
@@ -581,7 +581,7 @@ function SessionPromptRow({
                     >
                       <span
                         className={cn(
-                          'block h-0.5 max-w-full rounded-full transition-[width] duration-150 ease-out',
+                          'block h-0.5 max-w-full rounded-full transition-[width] duration-200 ease-out',
                           isSelected
                             ? 'bg-foreground'
                             : 'bg-foreground-passive/45 group-hover:bg-foreground-muted'
@@ -683,9 +683,9 @@ function parsePromptTimestamp(timestamp: string | null): Date | null {
 }
 
 function promptBarWidth(promptLength: number, maxPromptLength: number): number {
-  if (promptLength <= 0) return 30;
+  if (promptLength <= 0) return 26;
   const ratio = Math.sqrt(promptLength / maxPromptLength);
-  return Math.round(30 + ratio * 58);
+  return Math.round(26 + ratio * 48);
 }
 
 function promptBarDockWidth(
@@ -696,7 +696,7 @@ function promptBarDockWidth(
   if (pointerY === null || barCenterY === undefined) return baseWidth;
 
   const distance = Math.abs(pointerY - barCenterY);
-  const proximity = Math.max(0, 1 - distance / 48);
+  const proximity = Math.max(0, 1 - distance / 56);
   const easedProximity = proximity * proximity * (3 - 2 * proximity);
-  return Math.round(baseWidth + (100 - baseWidth) * easedProximity * 0.82);
+  return Math.round(baseWidth + (100 - baseWidth) * easedProximity);
 }
