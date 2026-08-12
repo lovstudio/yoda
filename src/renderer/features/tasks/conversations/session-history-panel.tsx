@@ -392,8 +392,11 @@ function SessionPromptRow({
   onRestore?: (prompt: ClaudeSessionPrompt, index: number) => void;
   isRestoring?: boolean;
 }) {
+  const { t } = useTranslation();
   const text = displaySessionPromptText(prompt.text).trim();
-  const timestamp = prompt.timestamp ? new Date(prompt.timestamp).toLocaleTimeString() : null;
+  const promptDate = parsePromptTimestamp(prompt.timestamp);
+  const timestamp = promptDate?.toLocaleTimeString() ?? null;
+  const createdAt = promptDate?.toLocaleString() ?? null;
   const canRestore = Boolean(onRestore && prompt.restoreTarget);
   const handleClick =
     onClick ?? (canRestore && onRestore ? () => onRestore(prompt, index) : undefined);
@@ -414,9 +417,40 @@ function SessionPromptRow({
         </TooltipTrigger>
         <TooltipContent
           align="start"
-          className="block max-h-64 max-w-md overflow-auto whitespace-pre-wrap break-words text-left leading-relaxed"
+          showArrow={false}
+          className="block w-[min(28rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border-primary/70 bg-background-quaternary p-0 text-foreground shadow-lg"
         >
-          {text}
+          <div data-session-prompt-preview className="min-w-0">
+            <div className="border-b border-border-primary/60 px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground-passive">
+                  {t('tasks.sessionInfo.promptsModalTitle')}
+                </span>
+                <span className="shrink-0 font-mono text-[10px] tabular-nums text-foreground-passive">
+                  {t('tasks.sessionInfo.restoreContextAtPrompt', { index })}
+                </span>
+              </div>
+            </div>
+            <div className="max-h-52 overflow-y-auto px-3 py-2.5">
+              <p className="whitespace-pre-wrap break-words text-left text-xs leading-5 text-foreground">
+                {text || '—'}
+              </p>
+            </div>
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 border-t border-border-primary/60 px-3 py-2 text-[10px]">
+              <dt className="py-1 text-foreground-passive">{t('tasks.sessionInfo.createdAt')}</dt>
+              <dd className="min-w-0 py-1 text-right font-mono tabular-nums text-foreground-muted">
+                {createdAt ?? '—'}
+              </dd>
+              <dt className="py-1 text-foreground-passive">{t('tasks.sessionInfo.status')}</dt>
+              <dd className="min-w-0 py-1 text-right text-foreground-muted">
+                {t(
+                  canRestore
+                    ? 'tasks.bottomPanel.sessionBranchFromHere'
+                    : 'tasks.bottomPanel.sessionCheckpointPending'
+                )}
+              </dd>
+            </dl>
+          </div>
         </TooltipContent>
       </Tooltip>
       {timestamp && !canRestore ? (
@@ -454,4 +488,10 @@ function SessionPromptRow({
       ) : null}
     </div>
   );
+}
+
+function parsePromptTimestamp(timestamp: string | null): Date | null {
+  if (!timestamp) return null;
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? null : date;
 }

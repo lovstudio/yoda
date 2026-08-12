@@ -181,8 +181,9 @@ describe('DockedSessionHistory conversation tree menu', () => {
   it('shows the complete prompt in a tooltip when hovering a truncated row', async () => {
     const fullPrompt =
       'This is the complete prompt text that stays available even when the docked row truncates it.';
+    const promptTimestamp = '2026-07-15T08:30:00.000Z';
     mocks.useSessionPrompts.mockReturnValue({
-      prompts: [{ ...prompt, text: fullPrompt }],
+      prompts: [{ ...prompt, text: fullPrompt, timestamp: promptTimestamp }],
       isLoading: false,
       hasPrompts: true,
       hasConversation: true,
@@ -202,7 +203,11 @@ describe('DockedSessionHistory conversation tree menu', () => {
     await act(async () => userEvent.hover(promptText!));
 
     await vi.waitFor(() => {
-      expect(document.querySelector('[data-slot="tooltip-content"]')?.textContent).toBe(fullPrompt);
+      const preview = document.querySelector<HTMLElement>('[data-session-prompt-preview]');
+      expect(preview?.textContent).toContain(fullPrompt);
+      expect(preview?.textContent).toContain(new Date(promptTimestamp).toLocaleString());
+      expect(preview?.textContent).toContain('tasks.sessionInfo.restoreContextAtPrompt');
+      expect(preview?.textContent).toContain('tasks.sessionInfo.status');
     });
   });
 
