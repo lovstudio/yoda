@@ -601,7 +601,10 @@ function SessionPromptRow({
               </div>
             </aside>
             <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-2 border-b border-border-primary/60 px-3 py-2">
+              <div
+                data-session-prompt-preview-header
+                className="flex h-9 min-w-0 items-center gap-2 border-b border-border-primary/60 px-3"
+              >
                 <span className="text-[10px] font-medium text-foreground-passive">
                   {t('tasks.sessionInfo.createdAt')}
                 </span>
@@ -620,7 +623,7 @@ function SessionPromptRow({
                     isRestoring={selectedIsRestoring}
                     onRestore={onRestore}
                     visibleLabel={t('tasks.bottomPanel.sessionBranchFromHere')}
-                    className="ml-auto h-auto min-h-7 shrink-0 justify-start rounded-md border border-primary/35 bg-primary/10 px-2.5 py-1.5 text-left text-[11px] font-medium text-primary shadow-sm hover:bg-primary/15 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60"
+                    className="ml-auto h-7 min-h-7 shrink-0 justify-start rounded-md border border-primary/35 bg-primary/10 px-2.5 py-0 text-left text-[11px] font-medium text-primary shadow-sm hover:bg-primary/15 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60"
                   />
                 ) : onRestore ? (
                   <span
@@ -633,7 +636,10 @@ function SessionPromptRow({
                   </span>
                 ) : null}
               </div>
-              <div className="max-h-52 overflow-y-auto px-3 py-2.5">
+              <div
+                data-session-prompt-preview-body
+                className="h-52 min-h-0 overflow-y-auto px-3 py-2.5"
+              >
                 <div className="flex min-w-0 items-start gap-2">
                   <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-left text-xs leading-5 text-foreground">
                     {selectedText || '—'}

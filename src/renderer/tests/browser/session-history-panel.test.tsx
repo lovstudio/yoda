@@ -224,6 +224,12 @@ describe('DockedSessionHistory conversation tree menu', () => {
       expect(createdAt?.textContent).toMatch(/前$/);
       expect(preview?.textContent).toContain('tasks.bottomPanel.sessionBranchFromHere');
       expect(preview?.textContent).not.toContain('tasks.sessionInfo.restoreContextAtPrompt');
+      expect(
+        preview?.querySelector('[data-session-prompt-preview-header]')?.classList.contains('h-9')
+      ).toBe(true);
+      expect(
+        preview?.querySelector('[data-session-prompt-preview-body]')?.classList.contains('h-52')
+      ).toBe(true);
 
       const historyBars = document.querySelectorAll<HTMLButtonElement>(
         '[data-session-prompt-history-bar]'
@@ -261,6 +267,12 @@ describe('DockedSessionHistory conversation tree menu', () => {
       expect(createdAt?.getAttribute('dateTime')).toBe(
         new Date(secondPrompt.timestamp).toISOString()
       );
+      expect(
+        preview?.querySelector('[data-session-prompt-preview-header]')?.classList.contains('h-9')
+      ).toBe(true);
+      expect(
+        preview?.querySelector('[data-session-prompt-preview-body]')?.classList.contains('h-52')
+      ).toBe(true);
       expect(historyBars[0]?.getAttribute('data-session-prompt-history-bar-active')).toBe('false');
       expect(historyBars[1]?.getAttribute('data-session-prompt-history-bar-active')).toBe('true');
     });

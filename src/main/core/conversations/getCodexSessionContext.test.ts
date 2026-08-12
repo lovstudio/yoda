@@ -529,6 +529,35 @@ describe('getCodexSessionContext', () => {
     ]);
   });
 
+  it('binds a completed Codex checkpoint to only the last prompt in that turn', async () => {
+    writeFileSync(
+      rolloutPath,
+      [
+        codexRow('session_meta', { id: 'conversation-1', cwd }),
+        codexEvent('task_started', { turn_id: 'turn-shared' }),
+        codexResponse('user', 'First prompt in the turn', 'turn-shared'),
+        codexResponse('user', 'Follow-up prompt in the same turn', 'turn-shared'),
+        codexResponse('assistant', 'Completed response', 'turn-shared', 'final_answer'),
+        codexEvent('task_complete', { turn_id: 'turn-shared' }),
+      ]
+        .map((row) => JSON.stringify(row))
+        .join('\n')
+    );
+    insertThread(statePath, rolloutPath, {
+      id: 'conversation-1',
+      cwd,
+      title: 'Thread title',
+      firstUserMessage: 'First prompt in the turn',
+    });
+
+    const context = await getConfiguredCodexSessionContext(cwd, 'conversation-1');
+
+    expect(context?.prompts.map((prompt) => [prompt.text, prompt.restoreTarget])).toEqual([
+      ['First prompt in the turn', undefined],
+      ['Follow-up prompt in the same turn', { kind: 'codex-turn', turnId: 'turn-shared' }],
+    ]);
+  });
+
   it('excludes Codex harness injections from response-item prompt history', async () => {
     writeFileSync(
       rolloutPath,
