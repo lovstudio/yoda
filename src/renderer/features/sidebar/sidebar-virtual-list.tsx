@@ -1,21 +1,4 @@
-import {
-  closestCenter,
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type CollisionDetection,
-  type DragEndEvent,
-  type DragMoveEvent,
-  type DragStartEvent,
-} from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
 import { observer } from 'mobx-react-lite';
@@ -37,7 +20,6 @@ import {
   useTeamRoomTaskKeys,
 } from '@renderer/features/agent-room/team-room-queries';
 import { type SidebarGroupKey, type SidebarRow } from '@renderer/features/sidebar/sidebar-store';
-import { useMoveTaskToProject } from '@renderer/features/tasks/components/use-move-task-to-project';
 import {
   canMoveConversationToTask,
   conversationTransferFromPayload,
@@ -47,24 +29,18 @@ import {
   getRegisteredTaskData,
   getTaskStore,
 } from '@renderer/features/tasks/stores/task-selectors';
-import { toast } from '@renderer/lib/hooks/use-toast';
 import { useParams, useWorkspaceSlots } from '@renderer/lib/layout/navigation-provider';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { cn } from '@renderer/utils/utils';
 import { SidebarProjectItem } from './project-item';
+import { useSidebarDnd } from './sidebar-dnd-context';
 import {
   getSidebarTaskGroupDisclosure,
   hiddenSidebarTaskGroupItemsContain,
   type SidebarTaskGroupRowVariant,
 } from './sidebar-task-group';
 import { SidebarTaskGroupToggle } from './sidebar-task-group-toggle';
-import {
-  getTreeProjection,
-  projectedSiblingOrder,
-  withParents,
-  type TreeFlatRow,
-  type TreeProjection,
-} from './sidebar-tree-projection';
+import { type TreeProjection } from './sidebar-tree-projection';
 import { getSidebarVirtualRowOffset } from './sidebar-virtual-list-layout';
 import { SidebarTaskItem } from './task-item';
 
@@ -75,26 +51,19 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
   scrollElementRef: RefObject<HTMLDivElement | null>;
   fixedRegionRef: RefObject<HTMLDivElement | null>;
 }) {
-  const { t } = useTranslation();
   const rows = sidebarStore.sidebarRows;
   const teamRoomTaskKeys = useTeamRoomTaskKeys();
   const { currentView } = useWorkspaceSlots();
   const { params: taskParams } = useParams('task');
   const { params: projectParams } = useParams('project');
   const taskGroupVisibleLimit = sidebarStore.taskGroupVisibleLimit;
+  const { activeId, dndEnabled, dropTargetProjectId, taskProjection } = useSidebarDnd();
 
   const autoExpandedActiveIdRef = useRef<string | null>(null);
   const listContainerRef = useRef<HTMLDivElement>(null);
-  const [activeId, setActiveId] = useState<string | null>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
-  const [taskProjection, setTaskProjection] = useState<TreeProjection | null>(null);
   const previousRowCountRef = useRef<number | null>(null);
-  // Project a task is hovering over for a cross-project move (null = none).
-  const [dropTargetProjectId, setDropTargetProjectId] = useState<string | null>(null);
   const [expandedTaskGroupIds, setExpandedTaskGroupIds] = useState<Set<string>>(() => new Set());
-  const moveTaskToProject = useMoveTaskToProject();
-
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   // During a project drag, collapse its task children so the list is compact
   // and project rows are adjacent — making cross-project reorder easier.
@@ -110,23 +79,10 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     : draggingTask
       ? filterTaskDescendantRows(rows, draggingTask.projectId, draggingTask.taskId)
       : rows;
-  // Flat depth-annotated task rows of the dragged task's project, parents
-  // derived from the flatten order — the input to the drop projection.
-  const dragTreeRows: TreeFlatRow[] | null = draggingTask
-    ? withParents(
-        displayRows
-          .filter(
-            (r): r is Extract<SidebarRow, { kind: 'task' }> =>
-              r.kind === 'task' && r.projectId === draggingTask.projectId && !r.showProjectTag
-          )
-          .map((r) => ({ taskId: r.taskId, depth: r.depth ?? 0 }))
-      )
-    : null;
   const renderRows = useMemo(
     () => limitTaskGroupRows(displayRows, expandedTaskGroupIds, taskGroupVisibleLimit),
     [displayRows, expandedTaskGroupIds, taskGroupVisibleLimit]
   );
-  const dndEnabled = sidebarStore.taskGroupBy === 'project';
   const activeSidebarDndId = getActiveSidebarDndId(
     currentView,
     taskParams.projectId,
@@ -275,113 +231,6 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     [activeSidebarDndId]
   );
 
-  function handleDragStart(event: DragStartEvent) {
-    setActiveId(String(event.active.id));
-    setTaskProjection(null);
-    setDropTargetProjectId(null);
-  }
-
-  function handleDragMove(event: DragMoveEvent) {
-    if (!draggingTask) return;
-    const o = event.over ? String(event.over.id) : null;
-    // Hovering another project row = a cross-project move target.
-    if (o && o.startsWith('proj::')) {
-      const projId = o.slice(6);
-      setDropTargetProjectId(projId !== draggingTask.projectId ? projId : null);
-      setTaskProjection(null);
-      return;
-    }
-    setDropTargetProjectId(null);
-    if (!dragTreeRows || !o || !o.startsWith(`task::${draggingTask.projectId}::`)) {
-      setTaskProjection(null);
-      return;
-    }
-    const overTaskId = o.split('::')[2];
-    setTaskProjection(
-      getTreeProjection(dragTreeRows, draggingTask.taskId, overTaskId, event.delta.x)
-    );
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    setActiveId(null);
-    setTaskProjection(null);
-    setDropTargetProjectId(null);
-    const { active, over } = event;
-    if (!over) return;
-    const a = String(active.id);
-    const o = String(over.id);
-
-    if (a.startsWith('task::') && o.startsWith('proj::')) {
-      // Drop a task onto another project row to re-home it there.
-      const [, aProjId, aTaskId] = a.split('::');
-      const targetProjectId = o.slice(6);
-      if (targetProjectId !== aProjId) moveTaskToProject(aProjId, aTaskId, targetProjectId);
-      return;
-    }
-
-    if (a.startsWith('proj::') && o.startsWith('proj::')) {
-      if (a === o) return;
-      const ids = sidebarStore.orderedProjects
-        .map((p) => (p.state === 'unregistered' ? p.id : (p.data?.id ?? '')))
-        .filter(Boolean);
-      const oldIdx = ids.indexOf(a.slice(6));
-      const newIdx = ids.indexOf(o.slice(6));
-      if (oldIdx !== -1 && newIdx !== -1) {
-        sidebarStore.setProjectOrder(arrayMove(ids, oldIdx, newIdx));
-      }
-    } else if (a.startsWith('task::') && o.startsWith('task::')) {
-      // Dropping on itself is NOT a no-op here: a pure horizontal move changes
-      // the projected depth (indent in = nest under the row above, out = unnest).
-      const [, aProjId, aTaskId] = a.split('::');
-      const [, oProjId, oTaskId] = o.split('::');
-      if (aProjId !== oProjId || !dragTreeRows) return;
-
-      const projection = getTreeProjection(dragTreeRows, aTaskId, oTaskId, event.delta.x);
-      if (!projection) return;
-      const newParentId = projection.parentTaskId;
-      const order = projectedSiblingOrder(dragTreeRows, aTaskId, oTaskId, newParentId);
-
-      const currentParentId = getRegisteredTaskData(aProjId, aTaskId)?.parentTaskId ?? null;
-      if (newParentId !== currentParentId) {
-        const taskStore = getTaskStore(aProjId, aTaskId);
-        void taskStore
-          ?.setParentTask(newParentId)
-          .then((result) => {
-            if (result && !result.success) {
-              toast({ title: t('sidebar.setParentFailed'), variant: 'destructive' });
-            }
-          })
-          .catch(() => {
-            toast({ title: t('sidebar.setParentFailed'), variant: 'destructive' });
-          });
-      }
-      if (newParentId) {
-        sidebarStore.ensureTaskExpanded(newParentId);
-        sidebarStore.setChildTaskOrder(newParentId, order);
-      } else {
-        sidebarStore.setTaskOrder(aProjId, order);
-      }
-    }
-  }
-
-  function renderOverlayContent(id: string) {
-    if (id.startsWith('proj::')) {
-      return <SidebarProjectItem projectId={id.slice(6)} />;
-    }
-    if (id.startsWith('task::')) {
-      const [, projId, taskId] = id.split('::');
-      return (
-        <SidebarTaskItem
-          projectId={projId}
-          taskId={taskId}
-          isMultiAgent={teamRoomTaskKeys.has(teamRoomTaskKey(projId, taskId))}
-          disableHoverPreview
-        />
-      );
-    }
-    return null;
-  }
-
   const renderRow = (row: SidebarRenderableRow, virtualItem?: VirtualItem) => {
     const rowKey = sidebarRenderableRowKey(row);
     const rowContent = (
@@ -399,7 +248,11 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     if (!virtualItem) return <Fragment key={rowKey}>{rowContent}</Fragment>;
     return (
       <div
-        key={virtualItem.key}
+        // The row model can reorder while a virtualizer snapshot still refers
+        // to the previous row at this index. React identity must follow the
+        // current row, otherwise a stateful task row can briefly render the
+        // previous task before the virtualizer catches up.
+        key={rowKey}
         ref={virtualizer.measureElement}
         data-index={virtualItem.index}
         style={{
@@ -418,41 +271,24 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
   };
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={typeRestrictedCollision}
-      onDragStart={handleDragStart}
-      onDragMove={handleDragMove}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext items={allDndIds} strategy={verticalListSortingStrategy}>
-        <div
-          ref={listContainerRef}
-          className="px-3 overflow-hidden"
-          onPointerEnter={() => sidebarStore.holdTaskReflow('projects-list')}
-          onPointerLeave={() => sidebarStore.releaseTaskReflow('projects-list')}
-        >
-          {activeId ? (
-            <div className="space-y-0.5 pt-1 pb-3">{renderRows.map((row) => renderRow(row))}</div>
-          ) : (
-            <div className="relative pt-1 pb-3" style={{ height: virtualizer.getTotalSize() }}>
-              {virtualItems.map((virtualItem) =>
-                renderRow(renderRows[virtualItem.index]!, virtualItem)
-              )}
-            </div>
-          )}
-        </div>
-      </SortableContext>
-      <DragOverlay>
+    <SortableContext items={allDndIds} strategy={verticalListSortingStrategy}>
+      <div
+        ref={listContainerRef}
+        className="px-3 overflow-hidden"
+        onPointerEnter={() => sidebarStore.holdTaskReflow('projects-list')}
+        onPointerLeave={() => sidebarStore.releaseTaskReflow('projects-list')}
+      >
         {activeId ? (
-          <div className="px-3">
-            <div className="rounded-lg bg-background-tertiary-2 shadow-md">
-              {renderOverlayContent(activeId)}
-            </div>
+          <div className="space-y-0.5 pt-1 pb-3">{renderRows.map((row) => renderRow(row))}</div>
+        ) : (
+          <div className="relative pt-1 pb-3" style={{ height: virtualizer.getTotalSize() }}>
+            {virtualItems.map((virtualItem) =>
+              renderRow(renderRows[virtualItem.index]!, virtualItem)
+            )}
           </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+        )}
+      </div>
+    </SortableContext>
   );
 });
 
@@ -789,26 +625,6 @@ function SidebarGroupHeader({ group }: { group: SidebarGroupKey }) {
     </div>
   );
 }
-
-// A project drags only onto other projects (reorder). A task drags onto a task
-// in its own project (reparent) OR onto any OTHER project row (cross-project
-// move). Restricting the droppable set keeps drags that can't resolve in
-// onDragEnd from silently no-op'ing.
-const typeRestrictedCollision: CollisionDetection = (args) => {
-  const activeId = String(args.active.id);
-  const droppableContainers = activeId.startsWith('proj::')
-    ? args.droppableContainers.filter((c) => String(c.id).startsWith('proj::'))
-    : (() => {
-        const sourceProjectId = activeId.split('::')[1];
-        const taskPrefix = `task::${sourceProjectId}::`;
-        const ownProjectId = `proj::${sourceProjectId}`;
-        return args.droppableContainers.filter((c) => {
-          const id = String(c.id);
-          return id.startsWith(taskPrefix) || (id.startsWith('proj::') && id !== ownProjectId);
-        });
-      })();
-  return closestCenter({ ...args, droppableContainers });
-};
 
 interface SortableRowProps {
   dndId: string;

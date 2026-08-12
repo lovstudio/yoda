@@ -1,3 +1,4 @@
+import { useDraggable } from '@dnd-kit/core';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { observer } from 'mobx-react-lite';
 import {
@@ -8,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
   type RefObject,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -17,12 +19,14 @@ import {
 } from '@renderer/features/agent-room/team-room-queries';
 import { useParams, useWorkspaceSlots } from '@renderer/lib/layout/navigation-provider';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
+import { cn } from '@renderer/utils/utils';
 import {
   findHiddenPinnedTaskGroupId,
   limitPinnedTaskListRows,
   type PinnedTaskListRow,
 } from './pinned-task-list-model';
 import { SidebarProjectItem } from './project-item';
+import { toSidebarPinnedDndId, useSidebarDnd } from './sidebar-dnd-context';
 import { SidebarGroup, SidebarMenu, SidebarSectionHeader } from './sidebar-primitives';
 import { SidebarTaskGroupToggle } from './sidebar-task-group-toggle';
 import { getSidebarVirtualRowOffset } from './sidebar-virtual-list-layout';
@@ -60,6 +64,7 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList({
     () => limitPinnedTaskListRows(entries, expandedTaskGroupIds, taskGroupVisibleLimit),
     [entries, expandedTaskGroupIds, taskGroupVisibleLimit]
   );
+  const { dndEnabled } = useSidebarDnd();
 
   const virtualizer = useVirtualizer({
     count: showList ? rows.length : 0,
@@ -206,27 +211,36 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList({
             className="relative"
             style={{ height: virtualizer.getTotalSize() }}
           >
-            {virtualItems.map((virtualItem) => (
-              <div
-                key={virtualItem.key}
-                ref={virtualizer.measureElement}
-                data-index={virtualItem.index}
-                className="min-w-0 overflow-hidden"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${getSidebarVirtualRowOffset(virtualItem.start, scrollMargin)}px)`,
-                }}
-              >
-                <PinnedRowContent
-                  row={rows[virtualItem.index]!}
-                  teamRoomTaskKeys={teamRoomTaskKeys}
-                  onToggleTaskGroup={toggleTaskGroupExpanded}
-                />
-              </div>
-            ))}
+            {virtualItems.map((virtualItem) => {
+              const row = rows[virtualItem.index];
+              if (!row) return null;
+              return (
+                <div
+                  // The row model can change before the virtualizer publishes
+                  // its next item key. Keep React identity tied to the current
+                  // row so a moved task does not inherit the previous row's
+                  // menu and interaction state.
+                  key={pinnedRowKey(row)}
+                  ref={virtualizer.measureElement}
+                  data-index={virtualItem.index}
+                  className="min-w-0 overflow-hidden"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${getSidebarVirtualRowOffset(virtualItem.start, scrollMargin)}px)`,
+                  }}
+                >
+                  <PinnedRowContent
+                    row={row}
+                    dndEnabled={dndEnabled}
+                    teamRoomTaskKeys={teamRoomTaskKeys}
+                    onToggleTaskGroup={toggleTaskGroupExpanded}
+                  />
+                </div>
+              );
+            })}
           </div>
         </SidebarMenu>
       )}
@@ -236,6 +250,7 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList({
 
 type PinnedRowContentProps = {
   row: PinnedTaskListRow;
+  dndEnabled: boolean;
   teamRoomTaskKeys: ReadonlySet<string>;
   onToggleTaskGroup: (groupId: string) => void;
 };
@@ -244,6 +259,7 @@ type PinnedRowContentProps = {
 // observers out of that render path when the pinned row model is unchanged.
 const PinnedRowContent = memo(function PinnedRowContent({
   row,
+  dndEnabled,
   teamRoomTaskKeys,
   onToggleTaskGroup,
 }: PinnedRowContentProps) {
@@ -258,17 +274,51 @@ const PinnedRowContent = memo(function PinnedRowContent({
     );
   }
   if (row.kind === 'project') {
-    return <SidebarProjectItem projectId={row.projectId} />;
+    return (
+      <PinnedDraggableRow dndEnabled={dndEnabled} dndId={`proj::${row.projectId}`}>
+        <SidebarProjectItem projectId={row.projectId} />
+      </PinnedDraggableRow>
+    );
   }
   return (
-    <SidebarTaskItem
-      projectId={row.projectId}
-      taskId={row.taskId}
-      rowVariant={row.kind === 'project-task' ? 'underProject' : 'pinned'}
-      isMultiAgent={teamRoomTaskKeys.has(teamRoomTaskKey(row.projectId, row.taskId))}
-    />
+    <PinnedDraggableRow dndEnabled={dndEnabled} dndId={`task::${row.projectId}::${row.taskId}`}>
+      <SidebarTaskItem
+        projectId={row.projectId}
+        taskId={row.taskId}
+        rowVariant={row.kind === 'project-task' ? 'underProject' : 'pinned'}
+        isMultiAgent={teamRoomTaskKeys.has(teamRoomTaskKey(row.projectId, row.taskId))}
+      />
+    </PinnedDraggableRow>
   );
 });
+
+function PinnedDraggableRow({
+  dndEnabled,
+  dndId,
+  children,
+}: {
+  dndEnabled: boolean;
+  dndId: string;
+  children: ReactNode;
+}) {
+  const { attributes, isDragging, listeners, setNodeRef } = useDraggable({
+    id: toSidebarPinnedDndId(dndId),
+    disabled: !dndEnabled,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      data-sidebar-dnd-id={dndId}
+      data-sidebar-row={dndId}
+      className={cn('min-w-0 overflow-hidden rounded-lg', isDragging && 'opacity-40')}
+      {...attributes}
+      {...listeners}
+    >
+      {children}
+    </div>
+  );
+}
 
 function pinnedRowKey(row: PinnedTaskListRow): string {
   if (row.kind === 'task-group-toggle') return `toggle:${row.groupId}`;

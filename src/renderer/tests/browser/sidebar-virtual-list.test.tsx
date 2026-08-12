@@ -1,8 +1,9 @@
 import { runInAction } from 'mobx';
-import { act, createElement, type RefObject } from 'react';
+import { act, createElement, useState, type RefObject } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SidebarPinnedTaskList } from '@renderer/features/sidebar/pinned-task-list';
+import { SidebarDndProvider } from '@renderer/features/sidebar/sidebar-dnd-context';
 import type { PinnedSidebarEntry, SidebarRow } from '@renderer/features/sidebar/sidebar-store';
 import { SidebarVirtualList } from '@renderer/features/sidebar/sidebar-virtual-list';
 
@@ -18,8 +19,40 @@ const mocks = vi.hoisted(() => ({
     holdTaskReflow: ReturnType<typeof vi.fn>;
     releaseTaskReflow: ReturnType<typeof vi.fn>;
     togglePinnedCollapsed: ReturnType<typeof vi.fn>;
+    ensureTaskExpanded: ReturnType<typeof vi.fn>;
+    setChildTaskOrder: ReturnType<typeof vi.fn>;
+    setTaskOrder: ReturnType<typeof vi.fn>;
+    setProjectOrder: ReturnType<typeof vi.fn>;
   },
+  staleVirtualItemKey: null as string | null,
 }));
+
+type ReactVirtualizerModule = {
+  useVirtualizer: (options: object) => {
+    getVirtualItems: () => Array<{ index: number; key: string | number }>;
+  };
+};
+
+vi.mock('@tanstack/react-virtual', async (importOriginal) => {
+  const actual = await importOriginal<ReactVirtualizerModule>();
+  return {
+    ...actual,
+    useVirtualizer: (options: object) => {
+      const virtualizer = actual.useVirtualizer(options);
+      if (!mocks.staleVirtualItemKey) return virtualizer;
+
+      // Model the one render where a virtualizer has retained the previous
+      // item's key while the observable row model has already reordered.
+      const staleKey = mocks.staleVirtualItemKey;
+      const proxy = Object.create(virtualizer) as typeof virtualizer;
+      proxy.getVirtualItems = () =>
+        virtualizer
+          .getVirtualItems()
+          .map((item, index) => (index === 0 ? { ...item, key: staleKey } : item));
+      return proxy;
+    },
+  };
+});
 
 vi.mock('@renderer/lib/stores/app-state', async () => {
   const { observable } = (await vi.importActual('mobx')) as {
@@ -34,6 +67,10 @@ vi.mock('@renderer/lib/stores/app-state', async () => {
     holdTaskReflow: vi.fn(),
     releaseTaskReflow: vi.fn(),
     togglePinnedCollapsed: vi.fn(),
+    ensureTaskExpanded: vi.fn(),
+    setChildTaskOrder: vi.fn(),
+    setTaskOrder: vi.fn(),
+    setProjectOrder: vi.fn(),
   });
   mocks.sidebarStore = sidebarStore;
   return { sidebarStore };
@@ -78,8 +115,16 @@ vi.mock('@renderer/features/sidebar/project-item', () => ({
     ),
 }));
 vi.mock('@renderer/features/sidebar/task-item', () => ({
-  SidebarTaskItem: ({ taskId }: { taskId: string }) =>
-    createElement('div', { 'data-testid': `task-${taskId}`, style: { height: '48px' } }, taskId),
+  SidebarTaskItem: ({ taskId }: { taskId: string }) => {
+    // SidebarTaskItem owns popover/menu state. Hold on to the mounting task ID
+    // here so the test detects React reusing that state for another row.
+    const [mountedTaskId] = useState(taskId);
+    return createElement(
+      'div',
+      { 'data-testid': `task-${mountedTaskId}`, style: { height: '48px' } },
+      mountedTaskId
+    );
+  },
 }));
 vi.mock('@renderer/features/sidebar/sidebar-task-group', () => ({
   getSidebarTaskGroupDisclosure: (rows: SidebarRow[]) => ({ visibleItems: rows, hiddenCount: 0 }),
@@ -95,11 +140,21 @@ const taskRow: SidebarRow = {
   projectId: 'project-1',
   taskId: 'task-1',
 };
+const replacementTaskRow: SidebarRow = {
+  kind: 'task',
+  projectId: 'project-1',
+  taskId: 'task-2',
+};
 const pinnedProjectEntry: PinnedSidebarEntry = { kind: 'project', projectId: 'project-1' };
 const pinnedTaskEntry: PinnedSidebarEntry = {
   kind: 'project-task',
   projectId: 'project-1',
   taskId: 'task-1',
+};
+const replacementPinnedTaskEntry: PinnedSidebarEntry = {
+  kind: 'project-task',
+  projectId: 'project-1',
+  taskId: 'task-2',
 };
 
 describe('SidebarVirtualList', () => {
@@ -124,13 +179,18 @@ describe('SidebarVirtualList', () => {
     fixedRegionRef = { current: null };
     runInAction(() => {
       mocks.sidebarStore.sidebarRows = [projectRow];
+      mocks.staleVirtualItemKey = null;
     });
     function Harness() {
       return createElement(
-        'div',
+        SidebarDndProvider,
         null,
-        createElement('div', { ref: fixedRegionRef, style: { height: '40px' } }),
-        createElement(SidebarVirtualList, { scrollElementRef, fixedRegionRef })
+        createElement(
+          'div',
+          null,
+          createElement('div', { ref: fixedRegionRef, style: { height: '40px' } }),
+          createElement(SidebarVirtualList, { scrollElementRef, fixedRegionRef })
+        )
       );
     }
     await act(async () => {
@@ -155,6 +215,29 @@ describe('SidebarVirtualList', () => {
     expect(document.querySelector('[data-testid="task-task-1"]')).not.toBeNull();
   });
 
+  it('does not reuse a task row while a stale virtual item key catches up to a reordered row', async () => {
+    runInAction(() => {
+      mocks.sidebarStore.sidebarRows = [taskRow];
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(document.querySelector('[data-testid="task-task-1"]')).not.toBeNull();
+
+    runInAction(() => {
+      // A task opened from an older list position can surface at this visible
+      // index before the virtualizer's own snapshot updates.
+      mocks.staleVirtualItemKey = 'task::project-1::task-1';
+      mocks.sidebarStore.sidebarRows = [replacementTaskRow];
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(document.querySelector('[data-testid="task-task-1"]')).toBeNull();
+    expect(document.querySelector('[data-testid="task-task-2"]')).not.toBeNull();
+  });
+
   it('renders a task added under an expanded pinned project without another interaction', async () => {
     runInAction(() => {
       mocks.sidebarStore.sidebarRows = [];
@@ -162,9 +245,13 @@ describe('SidebarVirtualList', () => {
     });
     await act(async () => {
       root.render(
-        createElement(SidebarPinnedTaskList, {
-          scrollElementRef: { current: scrollRoot },
-        })
+        createElement(
+          SidebarDndProvider,
+          null,
+          createElement(SidebarPinnedTaskList, {
+            scrollElementRef: { current: scrollRoot },
+          })
+        )
       );
     });
 
@@ -177,5 +264,103 @@ describe('SidebarVirtualList', () => {
 
     expect(document.querySelector('[data-testid="project-project-1"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="task-task-1"]')).not.toBeNull();
+  });
+
+  it('does not reuse a pinned task row while a stale virtual item key catches up', async () => {
+    runInAction(() => {
+      mocks.sidebarStore.sidebarRows = [];
+      mocks.sidebarStore.pinnedSidebarEntries = [pinnedTaskEntry];
+      mocks.staleVirtualItemKey = null;
+    });
+    await act(async () => {
+      root.render(
+        createElement(
+          SidebarDndProvider,
+          null,
+          createElement(SidebarPinnedTaskList, {
+            scrollElementRef: { current: scrollRoot },
+          })
+        )
+      );
+    });
+    expect(document.querySelector('[data-testid="task-task-1"]')).not.toBeNull();
+    expect(
+      document.querySelector('[data-sidebar-dnd-id="task::project-1::task-1"]')
+    ).not.toBeNull();
+
+    runInAction(() => {
+      mocks.staleVirtualItemKey = 'project-task:project-1:task-1';
+      mocks.sidebarStore.pinnedSidebarEntries = [replacementPinnedTaskEntry];
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(document.querySelector('[data-testid="task-task-1"]')).toBeNull();
+    expect(document.querySelector('[data-testid="task-task-2"]')).not.toBeNull();
+  });
+
+  it('activates a pinned task as a draggable in the shared sidebar context', async () => {
+    runInAction(() => {
+      mocks.sidebarStore.sidebarRows = [projectRow, taskRow];
+      mocks.sidebarStore.pinnedSidebarEntries = [pinnedTaskEntry];
+    });
+    await act(async () => {
+      root.render(
+        createElement(
+          SidebarDndProvider,
+          null,
+          createElement(
+            'div',
+            null,
+            createElement(SidebarPinnedTaskList, { scrollElementRef }),
+            createElement(SidebarVirtualList, { scrollElementRef, fixedRegionRef })
+          )
+        )
+      );
+    });
+
+    const source = document.querySelector<HTMLElement>(
+      '[data-sidebar-dnd-id="task::project-1::task-1"]'
+    );
+    expect(source).not.toBeNull();
+    expect(source?.getAttribute('role')).toBe('button');
+
+    await act(async () => {
+      source?.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          bubbles: true,
+          button: 0,
+          isPrimary: true,
+          pointerId: 1,
+          clientX: 10,
+          clientY: 10,
+        })
+      );
+      document.dispatchEvent(
+        new PointerEvent('pointermove', {
+          bubbles: true,
+          isPrimary: true,
+          pointerId: 1,
+          clientX: 24,
+          clientY: 24,
+        })
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(source?.getAttribute('aria-pressed')).toBe('true');
+
+    await act(async () => {
+      document.dispatchEvent(
+        new PointerEvent('pointerup', {
+          bubbles: true,
+          isPrimary: true,
+          pointerId: 1,
+          clientX: 24,
+          clientY: 24,
+        })
+      );
+    });
   });
 });

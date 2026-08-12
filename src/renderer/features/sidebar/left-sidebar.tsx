@@ -28,6 +28,7 @@ import { cn } from '@renderer/utils/utils';
 import { GlobalSidePaneTarget } from './global-side-pane-target';
 import { SidebarPinnedTaskList } from './pinned-task-list';
 import { ProjectsGroupLabel } from './projects-group-label';
+import { SidebarDndProvider } from './sidebar-dnd-context';
 import {
   SidebarContainer,
   SidebarContent,
@@ -319,24 +320,26 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
             <div className="my-1 border-t border-border" />
           </SidebarMenu>
         </div>
-        <SidebarContent ref={sidebarContentRef} className="flex flex-col overflow-y-auto">
-          <div ref={sidebarFixedRegionRef} className="shrink-0">
-            <SidebarPinnedTaskList scrollElementRef={sidebarContentRef} />
-          </div>
-          <SidebarGroup className="mb-0 flex flex-col shrink-0">
-            <ProjectsGroupLabel />
-            {!sidebarStore.projectsCollapsed && (
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <SidebarVirtualList
-                    scrollElementRef={sidebarContentRef}
-                    fixedRegionRef={sidebarFixedRegionRef}
-                  />
-                </SidebarMenu>
-              </SidebarGroupContent>
-            )}
-          </SidebarGroup>
-        </SidebarContent>
+        <SidebarDndProvider>
+          <SidebarContent ref={sidebarContentRef} className="flex flex-col overflow-y-auto">
+            <div ref={sidebarFixedRegionRef} className="shrink-0">
+              <SidebarPinnedTaskList scrollElementRef={sidebarContentRef} />
+            </div>
+            <SidebarGroup className="mb-0 flex flex-col shrink-0">
+              <ProjectsGroupLabel />
+              {!sidebarStore.projectsCollapsed && (
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarVirtualList
+                      scrollElementRef={sidebarContentRef}
+                      fixedRegionRef={sidebarFixedRegionRef}
+                    />
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              )}
+            </SidebarGroup>
+          </SidebarContent>
+        </SidebarDndProvider>
       </SidebarContainer>
       <SidebarStatusBar />
     </div>
