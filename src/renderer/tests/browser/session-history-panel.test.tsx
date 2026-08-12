@@ -309,4 +309,41 @@ describe('DockedSessionHistory conversation tree menu', () => {
     expect(document.querySelector('[data-session-prompt-tree]')).not.toBeNull();
     expect(mocks.useSessionPromptTree).toHaveBeenLastCalledWith(true);
   });
+
+  it('explains why a prompt without a restore checkpoint has no continue action', async () => {
+    const promptWithoutCheckpoint = { ...prompt, restoreTarget: undefined };
+    mocks.useSessionPrompts.mockReturnValue({
+      prompts: [promptWithoutCheckpoint],
+      isLoading: false,
+      hasPrompts: true,
+      hasConversation: true,
+      restoringPromptId: null,
+      requestRestorePrompt: mocks.restoreCurrentPrompt,
+      openPromptsModal: vi.fn(),
+    });
+
+    const { DockedSessionHistory } = await import(
+      '@renderer/features/tasks/conversations/session-history-panel'
+    );
+    await act(async () => root.render(createElement(DockedSessionHistory)));
+
+    const promptText = host.querySelector<HTMLElement>('[data-slot="tooltip-trigger"]');
+    await act(async () => userEvent.hover(promptText!));
+
+    await vi.waitFor(() => {
+      const preview = document.querySelector<HTMLElement>('[data-session-prompt-preview]');
+      expect(preview).not.toBeNull();
+      expect(
+        preview?.querySelector('[data-session-prompt-checkpoint-pending]')?.getAttribute('title')
+      ).toBe('tasks.bottomPanel.sessionCheckpointPending');
+      expect(
+        preview
+          ?.querySelector('[data-session-prompt-checkpoint-pending]')
+          ?.getAttribute('aria-label')
+      ).toBe('tasks.bottomPanel.sessionCheckpointPending');
+      expect(
+        preview?.querySelector('button[aria-label="tasks.sessionInfo.restoreContextAtPrompt"]')
+      ).toBeNull();
+    });
+  });
 });

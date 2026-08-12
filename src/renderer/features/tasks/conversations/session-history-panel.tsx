@@ -2,6 +2,7 @@ import {
   Check,
   ChevronDown,
   Copy,
+  Info,
   ListTree,
   Loader2,
   MessageSquare,
@@ -621,6 +622,15 @@ function SessionPromptRow({
                     visibleLabel={t('tasks.bottomPanel.sessionBranchFromHere')}
                     className="ml-auto h-auto min-h-7 shrink-0 justify-start rounded-md border border-primary/35 bg-primary/10 px-2.5 py-1.5 text-left text-[11px] font-medium text-primary shadow-sm hover:bg-primary/15 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60"
                   />
+                ) : onRestore ? (
+                  <span
+                    className="ml-auto flex size-5 shrink-0 items-center justify-center text-foreground-passive/55"
+                    data-session-prompt-checkpoint-pending
+                    aria-label={t('tasks.bottomPanel.sessionCheckpointPending')}
+                    title={t('tasks.bottomPanel.sessionCheckpointPending')}
+                  >
+                    <Info className="size-3.5" aria-hidden="true" />
+                  </span>
                 ) : null}
               </div>
               <div className="max-h-52 overflow-y-auto px-3 py-2.5">
