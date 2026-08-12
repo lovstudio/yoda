@@ -92,11 +92,26 @@ describe('AgentRuntimeStore task session display state', () => {
     await store.start();
     emitStatus('working', 'conversation-1');
 
+    expect(store.sessionStatus('project-1', 'task-1', 'conversation-1')).toBe('working');
+
     emitStatus('idle', 'conversation-1');
 
     expect(store.taskStatus('project-1', 'task-1')).toBeNull();
     expect(store.taskSessionStatuses('project-1', 'task-1')).toEqual([]);
     expect(store.workingConversationIds('project-1', 'task-1')).toEqual([]);
+    expect(store.sessionStatus('project-1', 'task-1', 'conversation-1')).toBeNull();
+  });
+
+  it('hides terminal tab indicators after the task has been seen', async () => {
+    const store = new AgentRuntimeStore();
+    await store.start();
+    emitStatus('completed', 'conversation-1');
+
+    expect(store.sessionStatus('project-1', 'task-1', 'conversation-1')).toBe('completed');
+
+    store.markTaskSeen('project-1', 'task-1');
+
+    expect(store.sessionStatus('project-1', 'task-1', 'conversation-1')).toBeNull();
   });
 
   it('exposes routing identities for every globally running session', async () => {

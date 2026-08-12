@@ -235,6 +235,26 @@ export class AgentRuntimeStore {
     return ids;
   }
 
+  /**
+   * Return the mount-independent status for one conversation when it is still
+   * active or has an unread terminal notification. Idle sessions are removed
+   * from the active index, so callers can fall back to mounted conversation
+   * metadata when this returns null.
+   */
+  sessionStatus(
+    projectId: string,
+    taskId: string,
+    conversationId: string
+  ): Exclude<AgentSessionRuntimeStatus, 'idle'> | null {
+    const task = taskKey(projectId, taskId);
+    const status = this.statuses.get(`${task}\0${conversationId}`) ?? null;
+    if (!status || status === 'idle') return null;
+    if ((status === 'error' || status === 'completed') && this.seenTaskIds.has(task)) {
+      return null;
+    }
+    return status;
+  }
+
   /** Every globally tracked session that is currently working or waiting for user input. */
   runningSessions(): RunningAgentRuntimeSession[] {
     const sessions: RunningAgentRuntimeSession[] = [];

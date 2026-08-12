@@ -541,8 +541,14 @@ function describeTaskTab(
         : t('appTabs.task');
       // The session's run state takes over the icon slot while it has one
       // (working / awaiting-input / unread error/completed) — same indicator
-      // as the conversations list — and falls back to the runtime logo.
-      const status = conversation?.indicatorStatus ?? null;
+      // as the conversations list — and falls back to the runtime logo. The
+      // global mirror wins for live states so a tab does not wait for its task
+      // conversation store to hydrate or catch up with the IPC event.
+      const runtimeStatus =
+        typeof projectId === 'string' && typeof taskId === 'string'
+          ? appState.agentRuntime.sessionStatus(projectId, taskId, target.conversationId)
+          : null;
+      const status = runtimeStatus ?? conversation?.indicatorStatus ?? null;
       return {
         label,
         icon: status ? (
