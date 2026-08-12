@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   useSessionPrompts: vi.fn(),
   useSessionPromptTree: vi.fn(),
   restoreCurrentPrompt: vi.fn(),
+  copyTextToClipboard: vi.fn(),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -74,7 +75,10 @@ vi.mock('@renderer/features/tasks/conversations/use-archived-conversations', () 
   reopenArchivedConversation: vi.fn(async () => {}),
 }));
 
-vi.mock('@renderer/lib/hooks/use-toast', () => ({ toast: vi.fn() }));
+vi.mock('@renderer/lib/hooks/use-toast', () => ({
+  toast: vi.fn(),
+  copyTextToClipboard: mocks.copyTextToClipboard,
+}));
 vi.mock('@renderer/utils/logger', () => ({ log: { warn: vi.fn() } }));
 
 async function waitForElementToDisappear(selector: string): Promise<void> {
@@ -98,6 +102,7 @@ describe('DockedSessionHistory conversation tree menu', () => {
     };
     mocks.update.mockClear();
     mocks.restoreCurrentPrompt.mockClear();
+    mocks.copyTextToClipboard.mockReset().mockResolvedValue(undefined);
     mocks.useSessionPrompts.mockReset().mockReturnValue({
       prompts: [prompt],
       isLoading: false,
@@ -211,7 +216,7 @@ describe('DockedSessionHistory conversation tree menu', () => {
 
     await act(async () => userEvent.hover(promptText!));
 
-    await vi.waitFor(() => {
+    await vi.waitFor(async () => {
       const preview = document.querySelector<HTMLElement>('[data-session-prompt-preview]');
       const createdAt = preview?.querySelector('time');
       expect(preview?.textContent).toContain(fullPrompt);
@@ -226,11 +231,28 @@ describe('DockedSessionHistory conversation tree menu', () => {
       expect(historyBars).toHaveLength(2);
       expect(historyBars[0]?.getAttribute('data-session-prompt-history-bar-active')).toBe('true');
       expect(historyBars[1]?.getAttribute('data-session-prompt-history-bar-active')).toBe('false');
+
+      const copyButton = document.querySelector<HTMLButtonElement>('[data-session-prompt-copy]');
+      expect(copyButton?.getAttribute('aria-label')).toBe('common.copy');
+      await act(async () => copyButton?.click());
+      expect(mocks.copyTextToClipboard).toHaveBeenCalledWith(fullPrompt);
+      expect(copyButton?.getAttribute('aria-label')).toBe('common.copied');
     });
 
     const historyBars = document.querySelectorAll<HTMLButtonElement>(
       '[data-session-prompt-history-bar]'
     );
+    const initialBarWidth = Number.parseFloat(
+      historyBars[0]?.querySelector('span')?.style.width ?? '0'
+    );
+    await act(async () => userEvent.hover(historyBars[0]!));
+    await vi.waitFor(() => {
+      const magnifiedBarWidth = Number.parseFloat(
+        historyBars[0]?.querySelector('span')?.style.width ?? '0'
+      );
+      expect(magnifiedBarWidth).toBeGreaterThan(initialBarWidth);
+    });
+
     await act(async () => userEvent.click(historyBars[1]!));
 
     await vi.waitFor(() => {

@@ -1,5 +1,7 @@
 import {
+  Check,
   ChevronDown,
+  Copy,
   ListTree,
   Loader2,
   MessageSquare,
@@ -8,7 +10,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ClaudeSessionPrompt, Conversation } from '@shared/conversations';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
@@ -16,7 +18,8 @@ import { displaySessionPromptText } from '@renderer/features/tasks/context-panel
 import { useSessionPrompts } from '@renderer/features/tasks/session-info-panel';
 import { buildPromptPreviewItems } from '@renderer/features/tasks/session-prompts-preview';
 import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
-import { toast } from '@renderer/lib/hooks/use-toast';
+import { copyTextToClipboard, toast } from '@renderer/lib/hooks/use-toast';
+import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import {
   Popover,
@@ -412,9 +415,104 @@ function SessionPromptRow({
   const selectedIsRestoring = restoringPromptId === selectedPrompt.id;
   const promptLengths = prompts.map((item) => displaySessionPromptText(item.text).trim().length);
   const maxPromptLength = Math.max(1, ...promptLengths);
+  const [pointerPosition, setPointerPosition] = useState<{ x: number; y: number } | null>(null);
+  const [barPointer, setBarPointer] = useState<{
+    y: number;
+    centers: number[];
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const copyResetTimerRef = useRef<number | null>(null);
+  const barRailRef = useRef<HTMLDivElement>(null);
+  const barPointerFrameRef = useRef<number | null>(null);
+  const pendingBarPointerRef = useRef<{ y: number; centers: number[] } | null>(null);
+  const tooltipAnchor = useMemo(
+    () =>
+      pointerPosition
+        ? {
+            getBoundingClientRect: () => new DOMRect(pointerPosition.x, pointerPosition.y, 0, 0),
+          }
+        : undefined,
+    [pointerPosition]
+  );
   const handleClick =
     onClick ?? (canRestore && onRestore ? () => onRestore(prompt, index) : undefined);
   const className = 'flex h-6 min-w-0 flex-1 items-center gap-2 text-left';
+
+  useEffect(
+    () => () => {
+      if (copyResetTimerRef.current !== null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+      if (barPointerFrameRef.current !== null) {
+        window.cancelAnimationFrame(barPointerFrameRef.current);
+      }
+    },
+    []
+  );
+
+  const measureBarCenters = (): number[] => {
+    const rail = barRailRef.current;
+    if (!rail) return [];
+
+    return Array.from(
+      rail.querySelectorAll<HTMLButtonElement>('[data-session-prompt-history-bar]')
+    ).map((bar) => {
+      const rect = bar.getBoundingClientRect();
+      return rect.top + rect.height / 2;
+    });
+  };
+
+  const handleBarPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    pendingBarPointerRef.current = {
+      y: event.clientY,
+      centers: measureBarCenters(),
+    };
+    if (barPointerFrameRef.current !== null) return;
+
+    barPointerFrameRef.current = window.requestAnimationFrame(() => {
+      barPointerFrameRef.current = null;
+      setBarPointer(pendingBarPointerRef.current);
+    });
+  };
+
+  const handleBarPointerLeave = () => {
+    pendingBarPointerRef.current = null;
+    if (barPointerFrameRef.current !== null) {
+      window.cancelAnimationFrame(barPointerFrameRef.current);
+      barPointerFrameRef.current = null;
+    }
+    setBarPointer(null);
+  };
+
+  const clearCopiedState = () => {
+    if (copyResetTimerRef.current !== null) {
+      window.clearTimeout(copyResetTimerRef.current);
+      copyResetTimerRef.current = null;
+    }
+    setCopied(false);
+  };
+
+  const handleCopyPrompt = async () => {
+    if (!selectedText) return;
+
+    try {
+      await copyTextToClipboard(selectedText);
+      setCopied(true);
+      if (copyResetTimerRef.current !== null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+      copyResetTimerRef.current = window.setTimeout(() => {
+        copyResetTimerRef.current = null;
+        setCopied(false);
+      }, 1500);
+    } catch (error) {
+      toast({
+        title: t('common.copyFailed'),
+        variant: 'destructive',
+        debugInfo: error,
+      });
+    }
+  };
 
   const content = (
     <>
@@ -426,10 +524,14 @@ function SessionPromptRow({
           render={
             <span className="min-w-0 max-w-full truncate text-xs leading-5 text-foreground-muted" />
           }
+          onPointerEnter={(event: PointerEvent) => {
+            setPointerPosition({ x: event.clientX, y: event.clientY });
+          }}
         >
           {text}
         </TooltipTrigger>
         <TooltipContent
+          anchor={tooltipAnchor}
           side="right"
           align="center"
           sideOffset={10}
@@ -439,13 +541,24 @@ function SessionPromptRow({
           <div data-session-prompt-preview className="flex min-w-0">
             <aside
               data-session-prompt-history-bars
-              className="flex w-14 shrink-0 items-center justify-center bg-transparent px-2 py-3"
+              className="flex w-14 shrink-0 items-center justify-center px-2 py-3"
             >
-              <div className="flex max-h-60 w-9 flex-col items-center gap-1.5 overflow-y-auto rounded-full bg-background px-1.5 py-2">
+              <div
+                ref={barRailRef}
+                className="flex max-h-60 w-9 flex-col items-center gap-1.5 overflow-y-auto rounded-full px-1.5 py-2"
+                onPointerEnter={handleBarPointerMove}
+                onPointerLeave={handleBarPointerLeave}
+                onPointerMove={handleBarPointerMove}
+              >
                 {prompts.map((historyPrompt, historyIndex) => {
                   const isSelected = historyPrompt.id === selectedPrompt.id;
                   const historyPromptLength = promptLengths[historyIndex] ?? 0;
-                  const barWidth = promptBarWidth(historyPromptLength, maxPromptLength);
+                  const baseBarWidth = promptBarWidth(historyPromptLength, maxPromptLength);
+                  const barWidth = promptBarDockWidth(
+                    baseBarWidth,
+                    barPointer?.y ?? null,
+                    barPointer?.centers[historyIndex]
+                  );
                   const promptLabel = t('tasks.sessionInfo.userMessageIndex', {
                     index: historyIndex + 1,
                   });
@@ -463,11 +576,12 @@ function SessionPromptRow({
                       onClick={(event) => {
                         event.stopPropagation();
                         setSelectedPromptId(historyPrompt.id);
+                        clearCopiedState();
                       }}
                     >
                       <span
                         className={cn(
-                          'block h-0.5 max-w-full rounded-full transition-colors',
+                          'block h-0.5 max-w-full rounded-full transition-[width] duration-150 ease-out',
                           isSelected
                             ? 'bg-foreground'
                             : 'bg-foreground-passive/45 group-hover:bg-foreground-muted'
@@ -504,9 +618,31 @@ function SessionPromptRow({
                 ) : null}
               </div>
               <div className="max-h-52 overflow-y-auto px-3 py-2.5">
-                <p className="whitespace-pre-wrap break-words text-left text-xs leading-5 text-foreground">
-                  {selectedText || '—'}
-                </p>
+                <div className="flex min-w-0 items-start gap-2">
+                  <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-left text-xs leading-5 text-foreground">
+                    {selectedText || '—'}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    data-session-prompt-copy
+                    className="shrink-0 text-foreground-passive hover:text-foreground"
+                    aria-label={t(copied ? 'common.copied' : 'common.copy')}
+                    title={t(copied ? 'common.copied' : 'common.copy')}
+                    disabled={!selectedText}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void handleCopyPrompt();
+                    }}
+                  >
+                    {copied ? (
+                      <Check className="size-3.5 text-status-done" aria-hidden="true" />
+                    ) : (
+                      <Copy className="size-3.5" aria-hidden="true" />
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -550,4 +686,17 @@ function promptBarWidth(promptLength: number, maxPromptLength: number): number {
   if (promptLength <= 0) return 30;
   const ratio = Math.sqrt(promptLength / maxPromptLength);
   return Math.round(30 + ratio * 58);
+}
+
+function promptBarDockWidth(
+  baseWidth: number,
+  pointerY: number | null,
+  barCenterY: number | undefined
+): number {
+  if (pointerY === null || barCenterY === undefined) return baseWidth;
+
+  const distance = Math.abs(pointerY - barCenterY);
+  const proximity = Math.max(0, 1 - distance / 48);
+  const easedProximity = proximity * proximity * (3 - 2 * proximity);
+  return Math.round(baseWidth + (100 - baseWidth) * easedProximity * 0.82);
 }
