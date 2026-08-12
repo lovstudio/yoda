@@ -254,15 +254,7 @@ describe('SidebarVirtualList', () => {
       mocks.sidebarStore.pinnedSidebarEntries = [pinnedProjectEntry];
     });
     await act(async () => {
-      root.render(
-        createElement(
-          SidebarDndProvider,
-          null,
-          createElement(SidebarPinnedTaskList, {
-            scrollElementRef: { current: scrollRoot },
-          })
-        )
-      );
+      root.render(createElement(SidebarDndProvider, null, createElement(SidebarPinnedTaskList)));
     });
 
     runInAction(() => {
@@ -276,22 +268,13 @@ describe('SidebarVirtualList', () => {
     expect(document.querySelector('[data-testid="task-task-1"]')).not.toBeNull();
   });
 
-  it('does not reuse a pinned task row while a stale virtual item key catches up', async () => {
+  it('does not reuse a pinned task row when the row model changes', async () => {
     runInAction(() => {
       mocks.sidebarStore.sidebarRows = [];
       mocks.sidebarStore.pinnedSidebarEntries = [pinnedTaskEntry];
-      mocks.staleVirtualItemKey = null;
     });
     await act(async () => {
-      root.render(
-        createElement(
-          SidebarDndProvider,
-          null,
-          createElement(SidebarPinnedTaskList, {
-            scrollElementRef: { current: scrollRoot },
-          })
-        )
-      );
+      root.render(createElement(SidebarDndProvider, null, createElement(SidebarPinnedTaskList)));
     });
     expect(document.querySelector('[data-testid="task-task-1"]')).not.toBeNull();
     expect(
@@ -299,7 +282,6 @@ describe('SidebarVirtualList', () => {
     ).not.toBeNull();
 
     runInAction(() => {
-      mocks.staleVirtualItemKey = 'project-task:project-1:task-1';
       mocks.sidebarStore.pinnedSidebarEntries = [replacementPinnedTaskEntry];
     });
     await act(async () => {
@@ -308,6 +290,61 @@ describe('SidebarVirtualList', () => {
 
     expect(document.querySelector('[data-testid="task-task-1"]')).toBeNull();
     expect(document.querySelector('[data-testid="task-task-2"]')).not.toBeNull();
+  });
+
+  it('keeps a shared scroll root covered while crossing the pinned region', async () => {
+    const pinnedEntries: PinnedSidebarEntry[] = Array.from({ length: 8 }, (_, index) => ({
+      kind: 'project-task',
+      projectId: `pinned-project-${index}`,
+      taskId: `pinned-task-${index}`,
+    }));
+    const projectRows: SidebarRow[] = Array.from({ length: 40 }, (_, index) => ({
+      kind: 'project',
+      projectId: `project-${index}`,
+    }));
+
+    runInAction(() => {
+      mocks.sidebarStore.pinnedSidebarEntries = pinnedEntries;
+      mocks.sidebarStore.sidebarRows = projectRows;
+      mocks.staleVirtualItemKey = null;
+    });
+    await act(async () => {
+      root.render(
+        createElement(
+          SidebarDndProvider,
+          null,
+          createElement(
+            'div',
+            { style: { display: 'flex', flexDirection: 'column' } },
+            createElement(
+              'div',
+              { ref: fixedRegionRef, style: { flexShrink: 0 } },
+              createElement(SidebarPinnedTaskList)
+            ),
+            createElement(SidebarVirtualList, { scrollElementRef, fixedRegionRef })
+          )
+        )
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    await act(async () => {
+      scrollRoot.scrollTo({ top: 240, behavior: 'instant' });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    const rootRect = scrollRoot.getBoundingClientRect();
+    const visibleRows = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-testid^="project-"], [data-testid^="task-"]')
+    )
+      .map((element) => ({ element, rect: element.getBoundingClientRect() }))
+      .filter(({ rect }) => rect.bottom > rootRect.top && rect.top < rootRect.bottom);
+
+    expect(scrollRoot.scrollHeight).toBeGreaterThan(scrollRoot.clientHeight);
+    expect(visibleRows.length).toBeGreaterThan(0);
+    expect(Math.min(...visibleRows.map(({ rect }) => rect.top))).toBeLessThanOrEqual(
+      rootRect.top + 20
+    );
   });
 
   it('activates a pinned task as a draggable in the shared sidebar context', async () => {
@@ -323,7 +360,7 @@ describe('SidebarVirtualList', () => {
           createElement(
             'div',
             null,
-            createElement(SidebarPinnedTaskList, { scrollElementRef }),
+            createElement(SidebarPinnedTaskList),
             createElement(SidebarVirtualList, { scrollElementRef, fixedRegionRef })
           )
         )

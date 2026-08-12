@@ -1,23 +1,12 @@
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { observer } from 'mobx-react-lite';
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-  type RefObject,
-} from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   teamRoomTaskKey,
   useTeamRoomTaskKeys,
 } from '@renderer/features/agent-room/team-room-queries';
-import { useParams, useWorkspaceSlots } from '@renderer/lib/layout/navigation-provider';
+import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { cn } from '@renderer/utils/utils';
 import {
@@ -30,35 +19,20 @@ import { useSidebarDnd } from './sidebar-dnd-context';
 import { toSidebarPinnedDndId } from './sidebar-dnd-ids';
 import { SidebarGroup, SidebarMenu, SidebarSectionHeader } from './sidebar-primitives';
 import { SidebarTaskGroupToggle } from './sidebar-task-group-toggle';
-import { getSidebarVirtualRowOffset } from './sidebar-virtual-list-layout';
 import { SidebarTaskItem } from './task-item';
 
-export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList({
-  scrollElementRef,
-}: {
-  scrollElementRef: RefObject<HTMLDivElement | null>;
-}) {
+export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList() {
   const { t } = useTranslation();
   const entries = sidebarStore.pinnedSidebarEntries;
   const teamRoomTaskKeys = useTeamRoomTaskKeys();
-  const { currentView } = useWorkspaceSlots();
   const { params: taskParams } = useParams('task');
-  const { params: projectParams } = useParams('project');
   const collapsed = sidebarStore.pinnedCollapsed;
   const showList = !collapsed && entries.length > 0;
   const taskGroupVisibleLimit = sidebarStore.taskGroupVisibleLimit;
-  const listContainerRef = useRef<HTMLDivElement>(null);
-  const previousRowCountRef = useRef<number | null>(null);
-  const [scrollMargin, setScrollMargin] = useState(0);
-  const activeProjectId =
-    currentView === 'task'
-      ? taskParams.projectId
-      : currentView === 'project'
-        ? projectParams.projectId
-        : undefined;
-  const activeTaskId = currentView === 'task' ? taskParams.taskId : undefined;
   const activeTaskKey =
-    activeProjectId && activeTaskId ? `${activeProjectId}::${activeTaskId}` : null;
+    taskParams.projectId && taskParams.taskId
+      ? `${taskParams.projectId}::${taskParams.taskId}`
+      : null;
   const autoExpandedActiveTaskKeyRef = useRef<string | null>(null);
   const [expandedTaskGroupIds, setExpandedTaskGroupIds] = useState<Set<string>>(() => new Set());
   const rows = useMemo(
@@ -66,64 +40,6 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList({
     [entries, expandedTaskGroupIds, taskGroupVisibleLimit]
   );
   const { dndEnabled } = useSidebarDnd();
-
-  const virtualizer = useVirtualizer({
-    count: showList ? rows.length : 0,
-    getScrollElement: () => scrollElementRef.current,
-    // This list shares the sidebar scroll root with the projects list. Keep
-    // its range update synchronous so fast wheel movement never exposes an
-    // empty viewport between virtual row batches.
-    useFlushSync: true,
-    estimateSize: () => 32,
-    overscan: 8,
-    scrollMargin,
-    getItemKey: (index) => {
-      const row = rows[index];
-      return row ? pinnedRowKey(row) : index;
-    },
-    measureElement: (element) => element.getBoundingClientRect().height,
-  });
-  const virtualItems = virtualizer.getVirtualItems();
-
-  // Pinned task rows can be inserted while their project is already visible.
-  // Re-measure the structural change before paint so the shared scroll root
-  // does not keep the old project-only viewport for one extra interaction.
-  const virtualRowCount = showList ? rows.length : 0;
-  useLayoutEffect(() => {
-    const previousRowCount = previousRowCountRef.current;
-    previousRowCountRef.current = virtualRowCount;
-    if (previousRowCount === null || previousRowCount === virtualRowCount) return;
-    virtualizer.measure();
-  }, [virtualRowCount, virtualizer]);
-
-  // The section header sits above this list, so virtual rows need the same
-  // scroll-root coordinate adjustment as the projects list. The margin only
-  // depends on layout, not on individual task updates.
-  useLayoutEffect(() => {
-    if (!showList) {
-      setScrollMargin(0);
-      return;
-    }
-    const list = listContainerRef.current;
-    const scrollElement = scrollElementRef.current;
-    if (!list || !scrollElement) return;
-
-    const updateScrollMargin = () => {
-      const nextMargin = Math.max(
-        0,
-        list.getBoundingClientRect().top -
-          scrollElement.getBoundingClientRect().top +
-          scrollElement.scrollTop
-      );
-      setScrollMargin((current) => (current === nextMargin ? current : nextMargin));
-    };
-
-    updateScrollMargin();
-    const observer = new ResizeObserver(updateScrollMargin);
-    observer.observe(list);
-    observer.observe(scrollElement);
-    return () => observer.disconnect();
-  }, [scrollElementRef, showList]);
 
   useEffect(() => {
     if (!activeTaskKey || !taskParams.projectId || !taskParams.taskId) {
@@ -175,24 +91,6 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList({
     [activeTaskKey]
   );
 
-  const activeRowIndex = useMemo(
-    () =>
-      rows.findIndex((row) => {
-        if (!activeProjectId) return false;
-        if (row.kind === 'task-group-toggle') return false;
-        if (row.projectId !== activeProjectId) return false;
-        return activeTaskId
-          ? 'taskId' in row && row.taskId === activeTaskId
-          : row.kind === 'project';
-      }),
-    [activeProjectId, activeTaskId, rows]
-  );
-
-  useEffect(() => {
-    if (activeRowIndex < 0) return;
-    virtualizer.scrollToIndex(activeRowIndex, { align: 'auto' });
-  }, [activeRowIndex, virtualizer]);
-
   return (
     <SidebarGroup className="shrink-0 flex flex-col mb-0">
       <SidebarSectionHeader
@@ -208,42 +106,16 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList({
           onPointerEnter={() => sidebarStore.holdTaskReflow('pinned-list')}
           onPointerLeave={() => sidebarStore.releaseTaskReflow('pinned-list')}
         >
-          <div
-            ref={listContainerRef}
-            className="relative"
-            style={{ height: virtualizer.getTotalSize() }}
-          >
-            {virtualItems.map((virtualItem) => {
-              const row = rows[virtualItem.index];
-              if (!row) return null;
-              return (
-                <div
-                  // The row model can change before the virtualizer publishes
-                  // its next item key. Keep React identity tied to the current
-                  // row so a moved task does not inherit the previous row's
-                  // menu and interaction state.
-                  key={pinnedRowKey(row)}
-                  ref={virtualizer.measureElement}
-                  data-index={virtualItem.index}
-                  className="min-w-0 overflow-hidden"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    transform: `translateY(${getSidebarVirtualRowOffset(virtualItem.start, scrollMargin)}px)`,
-                  }}
-                >
-                  <PinnedRowContent
-                    row={row}
-                    dndEnabled={dndEnabled}
-                    teamRoomTaskKeys={teamRoomTaskKeys}
-                    onToggleTaskGroup={toggleTaskGroupExpanded}
-                  />
-                </div>
-              );
-            })}
-          </div>
+          {rows.map((row) => (
+            <div key={pinnedRowKey(row)} className="min-w-0 overflow-hidden">
+              <PinnedRowContent
+                row={row}
+                dndEnabled={dndEnabled}
+                teamRoomTaskKeys={teamRoomTaskKeys}
+                onToggleTaskGroup={toggleTaskGroupExpanded}
+              />
+            </div>
+          ))}
         </SidebarMenu>
       )}
     </SidebarGroup>
@@ -257,8 +129,8 @@ type PinnedRowContentProps = {
   onToggleTaskGroup: (groupId: string) => void;
 };
 
-// The virtualizer updates its parent on every scroll frame. Keep task/project
-// observers out of that render path when the pinned row model is unchanged.
+// Keep task/project observers out of the pinned list reconciliation when the
+// row model is unchanged.
 const PinnedRowContent = memo(function PinnedRowContent({
   row,
   dndEnabled,

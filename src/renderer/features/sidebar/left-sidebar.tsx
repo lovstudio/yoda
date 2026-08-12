@@ -323,7 +323,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
         <SidebarDndProvider>
           <SidebarContent ref={sidebarContentRef} className="flex flex-col overflow-y-auto">
             <div ref={sidebarFixedRegionRef} className="shrink-0">
-              <SidebarPinnedTaskList scrollElementRef={sidebarContentRef} />
+              <SidebarPinnedTaskList />
             </div>
             <SidebarGroup className="mb-0 flex flex-col shrink-0">
               <ProjectsGroupLabel />
