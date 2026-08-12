@@ -1,4 +1,6 @@
+import { Copy } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import { AgentAvatar } from './agent-avatar';
 
@@ -14,6 +16,10 @@ interface AgentCardProps {
   badges?: ReactNode;
   /** Quiet metadata under the description — usually an AgentMetaRow. */
   footer?: ReactNode;
+  /** Optional canonical duplicate action for Agent surfaces. */
+  onDuplicate?: () => void;
+  /** Accessible label and tooltip for the duplicate action. */
+  duplicateLabel?: string;
   /** Right-aligned controls (hover actions, editor inputs). */
   trailing?: ReactNode;
   className?: string;
@@ -32,6 +38,8 @@ export function AgentCard({
   eyebrow,
   badges,
   footer,
+  onDuplicate,
+  duplicateLabel = 'Duplicate',
   trailing,
   className,
 }: AgentCardProps) {
@@ -54,7 +62,34 @@ export function AgentCard({
         )}
         {footer}
       </div>
-      {trailing}
+      {onDuplicate || trailing ? (
+        <div
+          className={cn(
+            'flex shrink-0 items-center gap-0.5',
+            onDuplicate &&
+              'opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100'
+          )}
+        >
+          {onDuplicate ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={duplicateLabel}
+                    onClick={onDuplicate}
+                    className="flex size-7 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  />
+                }
+              >
+                <Copy className="size-3.5" aria-hidden="true" />
+              </TooltipTrigger>
+              <TooltipContent>{duplicateLabel}</TooltipContent>
+            </Tooltip>
+          ) : null}
+          {trailing}
+        </div>
+      ) : null}
     </div>
   );
 }

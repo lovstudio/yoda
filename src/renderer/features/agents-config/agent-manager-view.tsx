@@ -1,4 +1,4 @@
-import { Copy, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState, type PropsWithChildren } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Agent } from '@shared/agents';
@@ -49,8 +49,10 @@ function AgentCard({
           skillCount={agent.enabledSkillIds.length + agent.manualSkillIds.length}
         />
       }
+      onDuplicate={onDuplicate}
+      duplicateLabel={t('agentManager.duplicate')}
       trailing={
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="flex shrink-0 items-center gap-0.5">
           <button
             type="button"
             aria-label={t('common.edit')}
@@ -58,14 +60,6 @@ function AgentCard({
             className="flex size-7 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground"
           >
             <Pencil className="size-3.5" />
-          </button>
-          <button
-            type="button"
-            aria-label={t('agentManager.duplicate')}
-            onClick={onDuplicate}
-            className="flex size-7 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground"
-          >
-            <Copy className="size-3.5" />
           </button>
           <button
             type="button"
