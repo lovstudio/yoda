@@ -27,7 +27,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string) => {
+      if (key === 'tasks.bottomPanel.sessionBranchFromHere') return 'fork';
+      if (key === 'tasks.bottomPanel.sessionForkHint') return '包含此条回复及以上上下文';
+      return key;
+    },
     i18n: { language: 'zh-CN' },
   }),
 }));
@@ -222,7 +226,7 @@ describe('DockedSessionHistory conversation tree menu', () => {
       expect(preview?.textContent).toContain(fullPrompt);
       expect(createdAt?.getAttribute('dateTime')).toBe(new Date(promptTimestamp).toISOString());
       expect(createdAt?.textContent).toMatch(/前$/);
-      expect(preview?.textContent).toContain('tasks.bottomPanel.sessionBranchFromHere');
+      expect(preview?.textContent).toContain('fork');
       expect(preview?.textContent).not.toContain('tasks.sessionInfo.restoreContextAtPrompt');
       expect(
         preview?.querySelector('[data-session-prompt-preview-header]')?.classList.contains('h-9')
@@ -294,7 +298,15 @@ describe('DockedSessionHistory conversation tree menu', () => {
     const forkButton = document.querySelector<HTMLButtonElement>(
       '[data-session-prompt-preview] button[aria-label="tasks.sessionInfo.restoreContextAtPrompt"]'
     );
-    expect(forkButton?.textContent).toContain('tasks.bottomPanel.sessionBranchFromHere');
+    const forkBubble = document.querySelector<HTMLElement>(
+      '[data-session-prompt-preview] [data-session-prompt-fork-bubble]'
+    );
+    expect(forkButton?.textContent).toContain('fork');
+    expect(forkButton?.getAttribute('title')).toBe('包含此条回复及以上上下文');
+    expect(forkButton?.getAttribute('aria-describedby')).toBe(forkBubble?.id);
+    expect(forkBubble?.getAttribute('role')).toBe('tooltip');
+    expect(forkBubble?.textContent).toBe('包含此条回复及以上上下文');
+    expect(forkBubble?.className).toContain('group-hover/fork:block');
     await act(async () => forkButton?.click());
     expect(mocks.restoreCurrentPrompt).toHaveBeenCalledWith(secondPrompt, 2);
   });

@@ -623,7 +623,8 @@ function SessionPromptRow({
                     isRestoring={selectedIsRestoring}
                     onRestore={onRestore}
                     visibleLabel={t('tasks.bottomPanel.sessionBranchFromHere')}
-                    className="ml-auto h-7 min-h-7 shrink-0 justify-start rounded-md border border-primary/35 bg-primary/10 px-2.5 py-0 text-left text-[11px] font-medium text-primary shadow-sm hover:bg-primary/15 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60"
+                    containerClassName="ml-auto"
+                    className="h-7 min-h-7 shrink-0 justify-start rounded-md border border-primary/35 bg-primary/10 px-2.5 py-0 text-left text-[11px] font-medium text-primary shadow-sm hover:bg-primary/15 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60"
                   />
                 ) : onRestore ? (
                   <span className="group/checkpoint relative ml-auto max-w-[12rem] shrink-0">

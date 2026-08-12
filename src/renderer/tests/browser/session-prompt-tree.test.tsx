@@ -17,7 +17,8 @@ vi.mock('react-i18next', () => ({
         return `切入第 ${String(values?.index)} 条`;
       }
       if (key === 'tasks.bottomPanel.sessionTreeLabel') return '会话路径树';
-      if (key === 'tasks.bottomPanel.sessionBranchFromHere') return '从这里继续';
+      if (key === 'tasks.bottomPanel.sessionBranchFromHere') return 'fork';
+      if (key === 'tasks.bottomPanel.sessionForkHint') return '包含此条回复及以上上下文';
       if (key === 'tasks.bottomPanel.sessionCurrentNode') return '当前节点';
       if (key === 'tasks.bottomPanel.sessionCurrentBranch') return '当前分支';
       if (key === 'tasks.bottomPanel.sessionOpenBranch') {
@@ -189,7 +190,7 @@ describe('SessionPromptTreeView', () => {
   it('点击逻辑 prompt 时传出 preferredRestoreAlias 的显式会话和完整索引', async () => {
     const fixture = await renderFixture();
     const logicalPrompt = host.querySelector('[role="treeitem"][title="当前复制分叉点"]');
-    expect(logicalPrompt?.textContent).toContain('从这里继续');
+    expect(logicalPrompt?.textContent).toContain('fork');
     const restore = logicalPrompt?.querySelector<HTMLButtonElement>(
       'button[aria-label="切入第 2 条"]'
     );
