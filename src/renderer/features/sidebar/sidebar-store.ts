@@ -25,8 +25,10 @@ import {
   type TaskStore,
 } from '@renderer/features/tasks/stores/task';
 import type { WorkspaceStore } from '@renderer/features/workspaces/workspace-store';
+import { rpc } from '@renderer/lib/ipc';
 import type { AgentRuntimeStore } from '@renderer/lib/stores/agent-runtime-store';
 import type { Snapshottable } from '@renderer/lib/stores/snapshottable';
+import { log } from '@renderer/utils/logger';
 
 function parseSidebarTaskSortBy(value: unknown): SidebarTaskSortBy | undefined {
   return value === 'created-at' || value === 'updated-at' ? value : undefined;
@@ -222,6 +224,11 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   navSectionHidden = false;
   selectionRevealRequest: SidebarSelectionRevealRequest | null = null;
   private nextSelectionRevealRequestId = 1;
+  sidebarArchivedTaskLoadState: 'idle' | 'loading' | 'error' = 'idle';
+  private sidebarArchivedTaskIdsByProject = observable.map<string, Set<string>>();
+  private sidebarArchivedScopeKey = '';
+  private sidebarArchivedLoadPromise: Promise<number> | null = null;
+  private sidebarArchivedLoadGeneration = 0;
 
   constructor(
     private readonly projectManager: ProjectManagerStore,
@@ -282,6 +289,17 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
         });
       },
       { fireImmediately: true }
+    );
+
+    reaction(
+      () =>
+        this.taskPriorityMode
+          ? this.getSidebarArchivedProjectIds().join('\u0000')
+          : 'priority-mode-disabled',
+      (scopeKey, previousScopeKey) => {
+        if (scopeKey === previousScopeKey) return;
+        if (previousScopeKey !== undefined) this.resetSidebarArchivedTasks();
+      }
     );
   }
 
@@ -441,7 +459,16 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
         const includePinnedTask =
           task.data.isPinned &&
           this.workspaceStore.matchesActive(taskWorkspaceId ?? projectWorkspaceId);
-        if ((!includeWholeProject && !includePinnedTask) || !this.isVisibleSidebarTask(task)) {
+        if (!includeWholeProject && !includePinnedTask) {
+          continue;
+        }
+        const data = registeredTaskData(task);
+        const isSidebarArchivedTask = Boolean(
+          data?.archivedAt && this.sidebarArchivedTaskIdsByProject.get(projectId)?.has(data.id)
+        );
+        if (data?.archivedAt) {
+          if (!includeWholeProject || !isSidebarArchivedTask) continue;
+        } else if (!this.isVisibleSidebarTask(task)) {
           continue;
         }
         const priority = this.taskPriorityGroup(task);
@@ -464,7 +491,6 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       const count = priority === 'archived' ? archivedCount : tasks.length;
       if (count === 0) continue;
       rows.push({ kind: 'group', group: { kind: 'priority', priority, count } });
-      if (priority === 'archived') continue;
       tasks.sort((left, right) => this.compareSidebarTasks(left.task, right.task));
       for (const { projectId, task } of tasks) {
         rows.push({
@@ -1059,11 +1085,120 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   }
 
   setTaskPriorityMode(enabled: boolean): void {
+    if (!enabled) this.resetSidebarArchivedTasks();
     this.taskPriorityMode = enabled;
   }
 
   toggleTaskPriorityMode(): void {
-    this.taskPriorityMode = !this.taskPriorityMode;
+    this.setTaskPriorityMode(!this.taskPriorityMode);
+  }
+
+  async loadMoreSidebarArchivedTasks(limit: number): Promise<number> {
+    if (!this.taskPriorityMode || limit <= 0) return 0;
+    if (this.sidebarArchivedLoadPromise) return this.sidebarArchivedLoadPromise;
+
+    const projectIds = this.getSidebarArchivedProjectIds();
+    if (projectIds.length === 0) return 0;
+    const scopeKey = projectIds.join('\u0000');
+    if (this.sidebarArchivedScopeKey && this.sidebarArchivedScopeKey !== scopeKey) {
+      this.resetSidebarArchivedTasks();
+    }
+    this.sidebarArchivedScopeKey = scopeKey;
+    const generation = this.sidebarArchivedLoadGeneration;
+    const offset = Array.from(this.sidebarArchivedTaskIdsByProject.values()).reduce(
+      (total, taskIds) => total + taskIds.size,
+      0
+    );
+    this.sidebarArchivedTaskLoadState = 'loading';
+
+    const promise = rpc.tasks
+      .getArchivedTasksPage(projectIds, offset, limit)
+      .then((tasks) => {
+        if (
+          !this.taskPriorityMode ||
+          generation !== this.sidebarArchivedLoadGeneration ||
+          scopeKey !== this.sidebarArchivedScopeKey
+        ) {
+          return 0;
+        }
+
+        let addedCount = 0;
+        const tasksByProject = new Map<string, typeof tasks>();
+        for (const task of tasks) {
+          const projectTasks = tasksByProject.get(task.projectId) ?? [];
+          projectTasks.push(task);
+          tasksByProject.set(task.projectId, projectTasks);
+        }
+        runInAction(() => {
+          for (const [projectId, projectTasks] of tasksByProject) {
+            const project = this.projectManager.projects.get(projectId);
+            const taskManager = project?.mountedProject?.taskManager;
+            if (!taskManager) continue;
+            const hydratedTaskIds = taskManager.hydrateSidebarArchivedTasks(projectTasks);
+            const taskIds =
+              this.sidebarArchivedTaskIdsByProject.get(projectId) ?? new Set<string>();
+            for (const taskId of hydratedTaskIds) {
+              if (!taskIds.has(taskId)) addedCount += 1;
+              taskIds.add(taskId);
+            }
+            this.sidebarArchivedTaskIdsByProject.set(projectId, taskIds);
+          }
+          this.sidebarArchivedTaskLoadState = 'idle';
+        });
+        return addedCount;
+      })
+      .catch((error: unknown) => {
+        if (generation === this.sidebarArchivedLoadGeneration) {
+          runInAction(() => {
+            this.sidebarArchivedTaskLoadState = 'error';
+          });
+        }
+        log.warn('SidebarStore: failed to load archived task page', {
+          projectIds,
+          offset,
+          limit,
+          error,
+        });
+        return 0;
+      })
+      .finally(() => {
+        if (this.sidebarArchivedLoadPromise === promise) {
+          this.sidebarArchivedLoadPromise = null;
+        }
+      });
+    this.sidebarArchivedLoadPromise = promise;
+    return promise;
+  }
+
+  private getSidebarArchivedProjectIds(): string[] {
+    const orderedProjectIds = new Set(
+      this.orderedProjects.map((project) =>
+        project.state === 'unregistered' ? project.id : project.data!.id
+      )
+    );
+    const projectIds: string[] = [];
+    for (const project of this.projectManager.projects.values()) {
+      if (!project.mountedProject || project.state === 'unregistered' || !project.data) continue;
+      const projectId = project.data.id;
+      const included =
+        orderedProjectIds.has(projectId) ||
+        (this.isProjectPinned(projectId) && this.matchesActiveWorkspace(project));
+      if (included) projectIds.push(projectId);
+    }
+    return projectIds.sort();
+  }
+
+  private resetSidebarArchivedTasks(): void {
+    this.sidebarArchivedLoadGeneration += 1;
+    this.sidebarArchivedLoadPromise = null;
+    for (const [projectId, taskIds] of this.sidebarArchivedTaskIdsByProject) {
+      this.projectManager.projects
+        .get(projectId)
+        ?.mountedProject?.taskManager.releaseSidebarArchivedTasks([...taskIds]);
+    }
+    this.sidebarArchivedTaskIdsByProject.clear();
+    this.sidebarArchivedScopeKey = '';
+    this.sidebarArchivedTaskLoadState = 'idle';
   }
 
   moveTaskPriorityGroup(group: SidebarTaskPriorityGroup, direction: -1 | 1): void {

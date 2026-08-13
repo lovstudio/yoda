@@ -12,6 +12,7 @@ import { getTaskPreview } from './operations/getTaskPreview';
 import {
   getActiveTasks,
   getArchivedTasks,
+  getArchivedTasksPage,
   getTask,
   getTaskCounts,
   getTasks,
@@ -41,6 +42,7 @@ export const taskController = createRPCController({
   getTasks,
   getActiveTasks,
   getArchivedTasks,
+  getArchivedTasksPage,
   getTask,
   getTasksByIds,
   getTaskCounts,

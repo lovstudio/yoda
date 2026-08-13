@@ -100,6 +100,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   // Driven by the store so any archive entry point (sidebar, tabs, modal)
   // shows the same loading state while the archive flow is in flight.
   const isArchiving = taskManager?.archivingTaskIds.has(taskId) ?? false;
+  const isArchived = Boolean('archivedAt' in task.data && task.data.archivedAt);
 
   if (!menuActions) return null;
 
@@ -134,7 +135,8 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
       : [];
   const hasChildren = rowVariant === 'underProject' && childCount > 0;
   const isParentTask = childCount > 0;
-  const canQuickCreateSubtask = isParentTask && Boolean(menuActions.onCreateSubtaskAndRun);
+  const canQuickCreateSubtask =
+    !isArchived && isParentTask && Boolean(menuActions.onCreateSubtaskAndRun);
   const canShowHoverPreview = !disableHoverPreview && !canQuickCreateSubtask;
   const isCollapsed = hasChildren && sidebarStore.collapsedTaskIds.has(taskId);
   // Root-level parents swap pl-8 for a project-style mini-button slot (same 32px
@@ -400,9 +402,9 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           >
             <ListPlus className="h-4 w-4" />
           </SidebarItemMiniButton>
-        ) : (
+        ) : !isArchived ? (
           archiveControl
-        )}
+        ) : null}
       </div>
       <div
         className={cn(

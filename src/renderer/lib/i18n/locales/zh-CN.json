@@ -229,7 +229,7 @@
     "filterAllShort": "全部",
     "filterLocalShort": "本地",
     "filterSshShort": "SSH",
-    "showMoreGroupItems": "展开剩余 {{count}} 个任务",
+    "showMoreGroupItems": "再显示 {{count}} 个任务",
     "collapseGroupItems": "收起",
     "expandAll": "全部展开",
     "collapseAll": "全部折叠",

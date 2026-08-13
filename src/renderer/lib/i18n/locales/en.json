@@ -229,7 +229,7 @@
     "filterAllShort": "All",
     "filterLocalShort": "Local",
     "filterSshShort": "SSH",
-    "showMoreGroupItems": "Show {{count}} remaining tasks",
+    "showMoreGroupItems": "Show {{count}} more tasks",
     "collapseGroupItems": "Show less",
     "expandAll": "Expand all",
     "collapseAll": "Collapse all",
