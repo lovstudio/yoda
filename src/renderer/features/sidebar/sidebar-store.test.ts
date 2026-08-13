@@ -213,6 +213,44 @@ describe('SidebarStore task recency ordering', () => {
     expect(store.sidebarRows.filter((row) => row.kind === 'project')).toHaveLength(2);
   });
 
+  it('folds pinned projects and pinned tasks into priority groups until the mode is disabled', () => {
+    const pinnedTask = makeTask('pinned-task', {
+      createdAt: '2026-06-02T10:00:00.000Z',
+      isPinned: true,
+      projectId: 'project-1',
+    });
+    const pinnedProjectTask = makeTask('pinned-project-task', {
+      createdAt: '2026-06-02T11:00:00.000Z',
+      projectId: 'project-2',
+    });
+    const store = makeSidebarStore([
+      makeProject('project-1', [pinnedTask]),
+      makeProject('project-2', [pinnedProjectTask]),
+    ]);
+    store.pinnedProjectIds.add('project-2');
+
+    expect(store.pinnedSidebarEntries).toEqual([
+      { kind: 'project', projectId: 'project-2' },
+      { kind: 'task', projectId: 'project-1', taskId: 'pinned-task' },
+    ]);
+
+    store.setTaskPriorityMode(true);
+
+    expect(store.pinnedSidebarEntries).toEqual([]);
+    expect(taskIds(store.sidebarRows)).toEqual(['pinned-project-task', 'pinned-task']);
+    expect(
+      store.sidebarRows
+        .filter((row): row is Extract<SidebarRow, { kind: 'task' }> => row.kind === 'task')
+        .every((row) => row.showProjectTag)
+    ).toBe(true);
+
+    store.setTaskPriorityMode(false);
+    expect(store.pinnedSidebarEntries).toEqual([
+      { kind: 'project', projectId: 'project-2' },
+      { kind: 'task', projectId: 'project-1', taskId: 'pinned-task' },
+    ]);
+  });
+
   it('lets the user reorder priority groups while keeping archived last', () => {
     const store = makeSidebarStore([]);
 
