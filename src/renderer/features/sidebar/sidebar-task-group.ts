@@ -2,21 +2,25 @@ import { DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT } from '@shared/view-state';
 
 export type SidebarTaskGroupRowVariant = 'underProject' | 'pinned' | 'flat';
 
+export const SIDEBAR_TASK_GROUP_REVEAL_INCREMENT = 10;
+
 export function getSidebarTaskGroupDisclosure<T>(
   items: readonly T[],
-  expanded: boolean,
-  visibleLimit: number = DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT
+  visibleCount: number = DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT,
+  totalCount: number = items.length
 ): { visibleItems: T[]; hiddenCount: number } {
+  const normalizedVisibleCount = Math.max(0, visibleCount);
   return {
-    visibleItems: expanded ? [...items] : items.slice(0, visibleLimit),
-    hiddenCount: Math.max(0, items.length - visibleLimit),
+    visibleItems: items.slice(0, normalizedVisibleCount),
+    hiddenCount: Math.max(0, totalCount - Math.min(items.length, normalizedVisibleCount)),
   };
 }
 
-export function hiddenSidebarTaskGroupItemsContain<T>(
+export function visibleSidebarTaskGroupCountForItem<T>(
   items: readonly T[],
   predicate: (item: T) => boolean,
-  visibleLimit: number = DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT
-): boolean {
-  return items.slice(visibleLimit).some(predicate);
+  visibleCount: number = DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT
+): number | null {
+  const index = items.findIndex(predicate);
+  return index >= visibleCount ? index + 1 : null;
 }

@@ -41,7 +41,8 @@ import { useSidebarDnd } from './sidebar-dnd-context';
 import { SidebarSectionHeader } from './sidebar-primitives';
 import {
   getSidebarTaskGroupDisclosure,
-  hiddenSidebarTaskGroupItemsContain,
+  SIDEBAR_TASK_GROUP_REVEAL_INCREMENT,
+  visibleSidebarTaskGroupCountForItem,
   type SidebarTaskGroupRowVariant,
 } from './sidebar-task-group';
 import { SidebarTaskGroupToggle } from './sidebar-task-group-toggle';
@@ -68,10 +69,12 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
   const autoExpandedActiveIdRef = useRef<string | null>(null);
   const autoExpandedPinnedTaskKeyRef = useRef<string | null>(null);
   const previousRowCountRef = useRef<number | null>(null);
-  const [expandedTaskGroupIds, setExpandedTaskGroupIds] = useState<Set<string>>(() => new Set());
-  const [expandedPinnedTaskGroupIds, setExpandedPinnedTaskGroupIds] = useState<Set<string>>(
-    () => new Set()
+  const [visibleTaskCountByGroupId, setVisibleTaskCountByGroupId] = useState<Map<string, number>>(
+    () => new Map()
   );
+  const [visiblePinnedTaskCountByGroupId, setVisiblePinnedTaskCountByGroupId] = useState<
+    Map<string, number>
+  >(() => new Map());
 
   // During a project drag, collapse its task children so the list is compact
   // and project rows are adjacent — making cross-project reorder easier.
@@ -88,12 +91,17 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
       ? filterTaskDescendantRows(rows, draggingTask.projectId, draggingTask.taskId)
       : rows;
   const renderRows = useMemo(
-    () => limitTaskGroupRows(displayRows, expandedTaskGroupIds, taskGroupVisibleLimit),
-    [displayRows, expandedTaskGroupIds, taskGroupVisibleLimit]
+    () => limitTaskGroupRows(displayRows, visibleTaskCountByGroupId, taskGroupVisibleLimit),
+    [displayRows, taskGroupVisibleLimit, visibleTaskCountByGroupId]
   );
   const pinnedRows = useMemo(
-    () => limitPinnedTaskListRows(pinnedEntries, expandedPinnedTaskGroupIds, taskGroupVisibleLimit),
-    [expandedPinnedTaskGroupIds, pinnedEntries, taskGroupVisibleLimit]
+    () =>
+      limitPinnedTaskListRows(
+        pinnedEntries,
+        visiblePinnedTaskCountByGroupId,
+        taskGroupVisibleLimit
+      ),
+    [pinnedEntries, taskGroupVisibleLimit, visiblePinnedTaskCountByGroupId]
   );
   const activeSidebarDndId = getActiveSidebarDndId(
     currentView,
@@ -187,29 +195,33 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     }
     if (autoExpandedPinnedTaskKeyRef.current === activePinnedTaskKey) return;
 
-    const hiddenGroupId = findHiddenPinnedTaskGroupId(
+    const hiddenGroup = findHiddenPinnedTaskGroupId(
       pinnedEntries,
-      expandedPinnedTaskGroupIds,
+      visiblePinnedTaskCountByGroupId,
       taskParams.projectId,
       taskParams.taskId,
       taskGroupVisibleLimit
     );
-    if (!hiddenGroupId) return;
+    if (!hiddenGroup) return;
 
     autoExpandedPinnedTaskKeyRef.current = activePinnedTaskKey;
-    setExpandedPinnedTaskGroupIds((previous) => {
-      if (previous.has(hiddenGroupId)) return previous;
-      const next = new Set(previous);
-      next.add(hiddenGroupId);
+    setVisiblePinnedTaskCountByGroupId((previous) => {
+      if (
+        (previous.get(hiddenGroup.groupId) ?? taskGroupVisibleLimit) >= hiddenGroup.visibleCount
+      ) {
+        return previous;
+      }
+      const next = new Map(previous);
+      next.set(hiddenGroup.groupId, hiddenGroup.visibleCount);
       return next;
     });
   }, [
     activePinnedTaskKey,
-    expandedPinnedTaskGroupIds,
     pinnedEntries,
     taskGroupVisibleLimit,
     taskParams.projectId,
     taskParams.taskId,
+    visiblePinnedTaskCountByGroupId,
   ]);
 
   // Reveal the active project/task if navigation lands inside a truncated group.
@@ -226,65 +238,70 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     }
     if (autoExpandedActiveIdRef.current === activeSidebarDndId) return;
 
-    const hiddenGroupId = findHiddenTaskGroupId(
+    const hiddenGroup = findHiddenTaskGroup(
       displayRows,
-      expandedTaskGroupIds,
+      visibleTaskCountByGroupId,
       activeSidebarDndId,
       taskGroupVisibleLimit
     );
-    if (!hiddenGroupId) return;
+    if (!hiddenGroup) return;
 
     autoExpandedActiveIdRef.current = activeSidebarDndId;
-    setExpandedTaskGroupIds((prev) => {
-      if (prev.has(hiddenGroupId)) return prev;
-      const next = new Set(prev);
-      next.add(hiddenGroupId);
+    setVisibleTaskCountByGroupId((previous) => {
+      if (
+        (previous.get(hiddenGroup.groupId) ?? taskGroupVisibleLimit) >= hiddenGroup.visibleCount
+      ) {
+        return previous;
+      }
+      const next = new Map(previous);
+      next.set(hiddenGroup.groupId, hiddenGroup.visibleCount);
       return next;
     });
   }, [
     activeSidebarDndId,
     currentView,
     displayRows,
-    expandedTaskGroupIds,
     taskGroupVisibleLimit,
     taskParams.projectId,
     taskParams.taskId,
+    visibleTaskCountByGroupId,
   ]);
 
-  const toggleTaskGroupExpanded = useCallback(
+  const revealMoreTaskGroupItems = useCallback(
     (groupId: string) => {
-      setExpandedTaskGroupIds((prev) => {
-        const next = new Set(prev);
-        if (next.has(groupId)) {
-          if (activeSidebarDndId) {
-            autoExpandedActiveIdRef.current = activeSidebarDndId;
-          }
-          next.delete(groupId);
-        } else {
-          next.add(groupId);
-        }
+      if (groupId === ARCHIVED_PRIORITY_TASK_GROUP_ID) {
+        void sidebarStore
+          .loadMoreSidebarArchivedTasks(SIDEBAR_TASK_GROUP_REVEAL_INCREMENT)
+          .then((loadedCount) => {
+            if (loadedCount <= 0) return;
+            setVisibleTaskCountByGroupId((previous) => {
+              const next = new Map(previous);
+              next.set(groupId, (previous.get(groupId) ?? 0) + loadedCount);
+              return next;
+            });
+          });
+        return;
+      }
+      setVisibleTaskCountByGroupId((previous) => {
+        const next = new Map(previous);
+        const visibleCount = previous.get(groupId) ?? taskGroupVisibleLimit;
+        next.set(groupId, visibleCount + SIDEBAR_TASK_GROUP_REVEAL_INCREMENT);
         return next;
       });
     },
-    [activeSidebarDndId]
+    [taskGroupVisibleLimit]
   );
 
-  const togglePinnedTaskGroupExpanded = useCallback(
+  const revealMorePinnedTaskGroupItems = useCallback(
     (groupId: string) => {
-      setExpandedPinnedTaskGroupIds((previous) => {
-        const next = new Set(previous);
-        if (next.has(groupId)) {
-          if (activePinnedTaskKey) {
-            autoExpandedPinnedTaskKeyRef.current = activePinnedTaskKey;
-          }
-          next.delete(groupId);
-        } else {
-          next.add(groupId);
-        }
+      setVisiblePinnedTaskCountByGroupId((previous) => {
+        const next = new Map(previous);
+        const visibleCount = previous.get(groupId) ?? taskGroupVisibleLimit;
+        next.set(groupId, visibleCount + SIDEBAR_TASK_GROUP_REVEAL_INCREMENT);
         return next;
       });
     },
-    [activePinnedTaskKey]
+    [taskGroupVisibleLimit]
   );
 
   const renderRow = (row: SidebarNavigationRow, virtualItem?: VirtualItem) => {
@@ -297,8 +314,8 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
         activeId={activeId}
         taskProjection={taskProjection}
         teamRoomTaskKeys={teamRoomTaskKeys}
-        onToggleTaskGroup={toggleTaskGroupExpanded}
-        onTogglePinnedTaskGroup={togglePinnedTaskGroupExpanded}
+        onToggleTaskGroup={revealMoreTaskGroupItems}
+        onTogglePinnedTaskGroup={revealMorePinnedTaskGroupItems}
       />
     );
 
@@ -356,7 +373,7 @@ type SidebarTaskGroupToggleRow = {
   kind: 'task-group-toggle';
   groupId: string;
   hiddenCount: number;
-  expanded: boolean;
+  loading?: boolean;
   rowVariant: SidebarTaskGroupRowVariant;
 };
 
@@ -377,6 +394,11 @@ const toGroupDndId = (group: SidebarGroupKey) => {
 };
 const toProjectTaskGroupId = (projectId: string) => `project-tasks::${projectId}`;
 const toDirectTaskGroupId = (group: SidebarGroupKey) => `direct-tasks::${toGroupDndId(group)}`;
+const ARCHIVED_PRIORITY_TASK_GROUP_ID = toDirectTaskGroupId({
+  kind: 'priority',
+  priority: 'archived',
+  count: 0,
+});
 
 function isSidebarRow(row: SidebarRenderableRow): row is SidebarRow {
   return row.kind !== 'task-group-toggle';
@@ -492,8 +514,8 @@ const SidebarRowContent = memo(function SidebarRowContent({
     return (
       <div className="min-w-0 overflow-hidden">
         <SidebarTaskGroupToggle
-          expanded={row.expanded}
           hiddenCount={row.hiddenCount}
+          loading={row.loading}
           rowVariant={row.rowVariant}
           onToggle={() => onToggleTaskGroup(row.groupId)}
         />
@@ -606,7 +628,7 @@ function getActiveSidebarDndId(
 
 function limitTaskGroupRows(
   rows: SidebarRow[],
-  expandedTaskGroupIds: ReadonlySet<string>,
+  visibleTaskCountByGroupId: ReadonlyMap<string, number>,
   visibleLimit: number
 ) {
   const limitedRows: SidebarRenderableRow[] = [];
@@ -623,7 +645,7 @@ function limitTaskGroupRows(
         limitedRows,
         taskRows.rows,
         toProjectTaskGroupId(row.projectId),
-        expandedTaskGroupIds,
+        visibleTaskCountByGroupId,
         'underProject',
         visibleLimit
       );
@@ -638,9 +660,15 @@ function limitTaskGroupRows(
       limitedRows,
       taskRows.rows,
       toDirectTaskGroupId(row.group),
-      expandedTaskGroupIds,
+      visibleTaskCountByGroupId,
       'flat',
-      visibleLimit
+      visibleLimit,
+      row.group.kind === 'priority' && row.group.priority === 'archived'
+        ? row.group.count
+        : undefined,
+      row.group.kind === 'priority' && row.group.priority === 'archived'
+        ? sidebarStore.sidebarArchivedTaskLoadState === 'loading'
+        : false
     );
     index = taskRows.nextIndex;
   }
@@ -652,17 +680,20 @@ function appendLimitedTaskRows(
   target: SidebarRenderableRow[],
   taskRows: Extract<SidebarRow, { kind: 'task' }>[],
   groupId: string,
-  expandedTaskGroupIds: ReadonlySet<string>,
+  visibleTaskCountByGroupId: ReadonlyMap<string, number>,
   rowVariant: SidebarTaskGroupToggleRow['rowVariant'],
-  visibleLimit: number
+  visibleLimit: number,
+  totalCount = taskRows.length,
+  loading = false
 ) {
-  if (taskRows.length === 0) return;
+  if (totalCount === 0) return;
 
-  const expanded = expandedTaskGroupIds.has(groupId);
+  const initialVisibleCount = groupId === ARCHIVED_PRIORITY_TASK_GROUP_ID ? 0 : visibleLimit;
+  const visibleCount = visibleTaskCountByGroupId.get(groupId) ?? initialVisibleCount;
   const { visibleItems, hiddenCount } = getSidebarTaskGroupDisclosure(
     taskRows,
-    expanded,
-    visibleLimit
+    visibleCount,
+    totalCount
   );
   target.push(...visibleItems);
   if (hiddenCount > 0) {
@@ -670,7 +701,7 @@ function appendLimitedTaskRows(
       kind: 'task-group-toggle',
       groupId,
       hiddenCount,
-      expanded,
+      loading,
       rowVariant,
     });
   }
@@ -704,12 +735,12 @@ function takeDirectTaskRows(rows: SidebarRow[], startIndex: number) {
   return { rows: taskRows, nextIndex };
 }
 
-function findHiddenTaskGroupId(
+function findHiddenTaskGroup(
   rows: SidebarRow[],
-  expandedTaskGroupIds: ReadonlySet<string>,
+  visibleTaskCountByGroupId: ReadonlyMap<string, number>,
   targetDndId: string,
   visibleLimit: number
-) {
+): { groupId: string; visibleCount: number } | null {
   let index = 0;
 
   while (index < rows.length) {
@@ -719,11 +750,14 @@ function findHiddenTaskGroupId(
     if (row.kind === 'project') {
       const groupId = toProjectTaskGroupId(row.projectId);
       const taskRows = takeProjectTaskRows(rows, index, row.projectId);
-      if (
-        !expandedTaskGroupIds.has(groupId) &&
-        hiddenTaskRowsContain(taskRows.rows, targetDndId, visibleLimit)
-      ) {
-        return groupId;
+      const visibleCount = visibleTaskCountByGroupId.get(groupId) ?? visibleLimit;
+      const requiredVisibleCount = visibleTaskRowsCountForTarget(
+        taskRows.rows,
+        targetDndId,
+        visibleCount
+      );
+      if (requiredVisibleCount !== null) {
+        return { groupId, visibleCount: requiredVisibleCount };
       }
       index = taskRows.nextIndex;
       continue;
@@ -733,11 +767,16 @@ function findHiddenTaskGroupId(
 
     const groupId = toDirectTaskGroupId(row.group);
     const taskRows = takeDirectTaskRows(rows, index);
-    if (
-      !expandedTaskGroupIds.has(groupId) &&
-      hiddenTaskRowsContain(taskRows.rows, targetDndId, visibleLimit)
-    ) {
-      return groupId;
+    const visibleCount =
+      visibleTaskCountByGroupId.get(groupId) ??
+      (groupId === ARCHIVED_PRIORITY_TASK_GROUP_ID ? 0 : visibleLimit);
+    const requiredVisibleCount = visibleTaskRowsCountForTarget(
+      taskRows.rows,
+      targetDndId,
+      visibleCount
+    );
+    if (requiredVisibleCount !== null) {
+      return { groupId, visibleCount: requiredVisibleCount };
     }
     index = taskRows.nextIndex;
   }
@@ -745,15 +784,15 @@ function findHiddenTaskGroupId(
   return null;
 }
 
-function hiddenTaskRowsContain(
+function visibleTaskRowsCountForTarget(
   rows: Extract<SidebarRow, { kind: 'task' }>[],
   targetDndId: string,
-  visibleLimit: number
+  visibleCount: number
 ) {
-  return hiddenSidebarTaskGroupItemsContain(
+  return visibleSidebarTaskGroupCountForItem(
     rows,
     (row) => rowToDndId(row) === targetDndId,
-    visibleLimit
+    visibleCount
   );
 }
 

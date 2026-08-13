@@ -124,6 +124,29 @@ describe('task hydration queries', () => {
       { projectId: 'project-1', active: 33, archived: 883 },
     ]);
   });
+
+  it('pages archived tasks across selected projects with a stable strict limit', async () => {
+    sqlite.exec(`
+      INSERT INTO tasks (id, project_id, name, status, archived_at, updated_at)
+      VALUES
+        ('page-a', 'project-2', 'Page A', 'done', '2030-01-01', '2030-01-03'),
+        ('page-b', 'project-2', 'Page B', 'done', '2030-01-01', '2030-01-03'),
+        ('page-c', 'project-2', 'Page C', 'done', '2030-01-01', '2030-01-02'),
+        ('outside', 'project-3', 'Outside', 'done', '2030-01-01', '2031-01-01');
+    `);
+    const { getArchivedTasksPage } = await import('./getTasks');
+
+    const first = await getArchivedTasksPage(['project-1', 'project-2', 'project-2'], 0, 2);
+    const repeated = await getArchivedTasksPage(['project-2', 'project-1'], 0, 2);
+    const second = await getArchivedTasksPage(['project-1', 'project-2'], 2, 2);
+
+    expect(first.map((task) => task.id)).toEqual(['page-b', 'page-a']);
+    expect(repeated.map((task) => task.id)).toEqual(['page-b', 'page-a']);
+    expect(second).toHaveLength(2);
+    expect(second[0]?.id).toBe('page-c');
+    expect(second.some((task) => task.id === 'outside')).toBe(false);
+    expect(new Set([...first, ...second].map((task) => task.id)).size).toBe(4);
+  });
 });
 
 function createSchema(sqlite: Database.Database): void {

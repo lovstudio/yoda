@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
     pinnedSidebarEntries: PinnedSidebarEntry[];
     pinnedCollapsed: boolean;
     taskPriorityMode: boolean;
+    sidebarArchivedTaskLoadState: 'idle' | 'loading' | 'error';
     taskGroupVisibleLimit: number;
     taskGroupBy: 'project';
     holdTaskReflow: ReturnType<typeof vi.fn>;
@@ -24,9 +25,11 @@ const mocks = vi.hoisted(() => ({
     setChildTaskOrder: ReturnType<typeof vi.fn>;
     setTaskOrder: ReturnType<typeof vi.fn>;
     setProjectOrder: ReturnType<typeof vi.fn>;
+    loadMoreSidebarArchivedTasks: ReturnType<typeof vi.fn>;
   },
   staleVirtualItemKey: null as string | null,
   virtualizerOptions: [] as object[],
+  loadMoreSidebarArchivedTasks: vi.fn<(limit: number) => Promise<number>>(async () => 0),
 }));
 
 type ReactVirtualizerModule = {
@@ -66,6 +69,7 @@ vi.mock('@renderer/lib/stores/app-state', async () => {
     pinnedSidebarEntries: [] as PinnedSidebarEntry[],
     pinnedCollapsed: false,
     taskPriorityMode: false,
+    sidebarArchivedTaskLoadState: 'idle' as const,
     taskGroupVisibleLimit: 5,
     taskGroupBy: 'project' as const,
     holdTaskReflow: vi.fn(),
@@ -75,6 +79,7 @@ vi.mock('@renderer/lib/stores/app-state', async () => {
     setChildTaskOrder: vi.fn(),
     setTaskOrder: vi.fn(),
     setProjectOrder: vi.fn(),
+    loadMoreSidebarArchivedTasks: mocks.loadMoreSidebarArchivedTasks,
   });
   mocks.sidebarStore = sidebarStore;
   return { sidebarStore };
@@ -134,12 +139,21 @@ vi.mock('@renderer/features/sidebar/task-item', () => ({
     );
   },
 }));
-vi.mock('@renderer/features/sidebar/sidebar-task-group', () => ({
-  getSidebarTaskGroupDisclosure: (rows: SidebarRow[]) => ({ visibleItems: rows, hiddenCount: 0 }),
-  hiddenSidebarTaskGroupItemsContain: () => false,
-}));
 vi.mock('@renderer/features/sidebar/sidebar-task-group-toggle', () => ({
-  SidebarTaskGroupToggle: () => null,
+  SidebarTaskGroupToggle: ({
+    hiddenCount,
+    loading,
+    onToggle,
+  }: {
+    hiddenCount: number;
+    loading?: boolean;
+    onToggle: () => void;
+  }) =>
+    createElement(
+      'button',
+      { 'data-testid': 'show-more-tasks', disabled: loading, onClick: onToggle },
+      String(hiddenCount)
+    ),
 }));
 vi.mock('@renderer/features/sidebar/projects-group-label', () => ({
   ProjectsGroupLabel: () => createElement('div', { style: { height: '32px' } }, 'projects'),
@@ -200,6 +214,8 @@ describe('SidebarVirtualList', () => {
       mocks.sidebarStore.pinnedSidebarEntries = [];
       mocks.sidebarStore.pinnedCollapsed = false;
       mocks.sidebarStore.taskPriorityMode = false;
+      mocks.sidebarStore.sidebarArchivedTaskLoadState = 'idle';
+      mocks.loadMoreSidebarArchivedTasks.mockReset().mockResolvedValue(0);
       mocks.staleVirtualItemKey = null;
       mocks.virtualizerOptions = [];
     });
@@ -245,6 +261,71 @@ describe('SidebarVirtualList', () => {
 
     expect(document.body.textContent).not.toContain('sidebar.pinned');
     expect(document.querySelector('[data-testid="task-task-1"]')).not.toBeNull();
+  });
+
+  it('reveals ten additional rows per group click', async () => {
+    const taskRows: SidebarRow[] = Array.from({ length: 28 }, (_, index) => ({
+      kind: 'task',
+      projectId: 'project-1',
+      taskId: `task-${index + 1}`,
+    }));
+    runInAction(() => {
+      mocks.sidebarStore.sidebarRows = [projectRow, ...taskRows];
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(document.querySelectorAll('[data-testid^="task-"]')).toHaveLength(5);
+
+    await act(async () => {
+      document.querySelector<HTMLElement>('[data-testid="show-more-tasks"]')?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(document.querySelectorAll('[data-testid^="task-"]')).toHaveLength(15);
+    expect(document.querySelector('[data-testid="show-more-tasks"]')?.textContent).toBe('13');
+  });
+
+  it('hydrates archived priority rows ten at a time', async () => {
+    const archivedGroup: SidebarRow = {
+      kind: 'group',
+      group: { kind: 'priority', priority: 'archived', count: 25 },
+    };
+    let loadedCount = 0;
+    mocks.loadMoreSidebarArchivedTasks.mockImplementation(async (limit: number) => {
+      const count = Math.min(limit, 25 - loadedCount);
+      loadedCount += count;
+      runInAction(() => {
+        mocks.sidebarStore.sidebarRows = [
+          archivedGroup,
+          ...Array.from(
+            { length: loadedCount },
+            (_, index): SidebarRow => ({
+              kind: 'task',
+              projectId: 'project-1',
+              taskId: `archived-${index + 1}`,
+              showProjectTag: true,
+            })
+          ),
+        ];
+      });
+      return count;
+    });
+    runInAction(() => {
+      mocks.sidebarStore.taskPriorityMode = true;
+      mocks.sidebarStore.sidebarRows = [archivedGroup];
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(document.querySelectorAll('[data-testid^="task-"]')).toHaveLength(0);
+    await act(async () => {
+      document.querySelector<HTMLElement>('[data-testid="show-more-tasks"]')?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mocks.loadMoreSidebarArchivedTasks).toHaveBeenCalledWith(10);
+    expect(document.querySelectorAll('[data-testid^="task-"]')).toHaveLength(10);
   });
 
   it('flushes shared scroll-root virtual ranges synchronously', () => {

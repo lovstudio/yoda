@@ -561,6 +561,31 @@ describe('TaskManagerStore pull request snapshots', () => {
     manager.dispose();
   });
 
+  it('releases sidebar archive pages without disturbing an Archived tab lease', async () => {
+    const manager = createManager();
+    const first = makeTask('Archived first', undefined, 'archived-first');
+    first.archivedAt = '2026-06-06T10:00:00.000Z';
+    const second = makeTask('Archived second', undefined, 'archived-second');
+    second.archivedAt = '2026-06-06T09:00:00.000Z';
+
+    expect(manager.hydrateSidebarArchivedTasks([first, second])).toEqual([
+      'archived-first',
+      'archived-second',
+    ]);
+    manager.releaseSidebarArchivedTasks(['archived-first']);
+    expect(manager.tasks.has('archived-first')).toBe(false);
+    expect(manager.tasks.has('archived-second')).toBe(true);
+
+    mocks.getArchivedTasks.mockResolvedValue([second]);
+    await manager.loadArchivedTasks();
+    manager.releaseSidebarArchivedTasks(['archived-second']);
+    expect(manager.tasks.has('archived-second')).toBe(true);
+
+    manager.unloadArchivedTasks();
+    expect(manager.tasks.has('archived-second')).toBe(false);
+    manager.dispose();
+  });
+
   it('coalesces consecutive sync completions without concurrent refreshes', async () => {
     const repositoryUrl = 'https://github.com/lovstudio/yoda';
     const manager = createManager(repositoryUrl);

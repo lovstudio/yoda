@@ -32,7 +32,7 @@ describe('pinned task list disclosure', () => {
   ];
 
   it('limits each pinned task group while keeping project rows visible', () => {
-    const rows = limitPinnedTaskListRows(entries, new Set());
+    const rows = limitPinnedTaskListRows(entries, new Map());
 
     expect(rows).toEqual([
       { kind: 'project', projectId: 'project-a' },
@@ -41,7 +41,6 @@ describe('pinned task list disclosure', () => {
         kind: 'task-group-toggle',
         groupId: 'pinned-project-tasks::project-a',
         hiddenCount: 2,
-        expanded: false,
         rowVariant: 'underProject',
       },
       { kind: 'project', projectId: 'project-b' },
@@ -51,40 +50,31 @@ describe('pinned task list disclosure', () => {
         kind: 'task-group-toggle',
         groupId: 'pinned-tasks',
         hiddenCount: 1,
-        expanded: false,
         rowVariant: 'pinned',
       },
     ]);
   });
 
-  it('shows every task and retains the collapse control for expanded groups', () => {
+  it('increments pinned groups independently', () => {
     const rows = limitPinnedTaskListRows(
       entries,
-      new Set(['pinned-project-tasks::project-a', 'pinned-tasks'])
+      new Map([['pinned-project-tasks::project-a', 15]])
     );
 
     expect(rows.filter((row) => row.kind === 'project-task')).toHaveLength(8);
-    expect(rows.filter((row) => row.kind === 'task')).toHaveLength(6);
+    expect(rows.filter((row) => row.kind === 'task')).toHaveLength(5);
     expect(rows.filter((row) => row.kind === 'task-group-toggle')).toEqual([
-      {
-        kind: 'task-group-toggle',
-        groupId: 'pinned-project-tasks::project-a',
-        hiddenCount: 2,
-        expanded: true,
-        rowVariant: 'underProject',
-      },
       {
         kind: 'task-group-toggle',
         groupId: 'pinned-tasks',
         hiddenCount: 1,
-        expanded: true,
         rowVariant: 'pinned',
       },
     ]);
   });
 
   it('applies a custom visible threshold to every pinned task group', () => {
-    const rows = limitPinnedTaskListRows(entries, new Set(), 3);
+    const rows = limitPinnedTaskListRows(entries, new Map(), 3);
 
     expect(rows.filter((row) => row.kind === 'project-task')).toHaveLength(4);
     expect(rows.filter((row) => row.kind === 'task')).toHaveLength(3);
@@ -93,36 +83,33 @@ describe('pinned task list disclosure', () => {
         kind: 'task-group-toggle',
         groupId: 'pinned-project-tasks::project-a',
         hiddenCount: 4,
-        expanded: false,
         rowVariant: 'underProject',
       },
       {
         kind: 'task-group-toggle',
         groupId: 'pinned-tasks',
         hiddenCount: 3,
-        expanded: false,
         rowVariant: 'pinned',
       },
     ]);
   });
 
   it('identifies the collapsed group hiding the selected task', () => {
-    expect(findHiddenPinnedTaskGroupId(entries, new Set(), 'project-a', 'project-task-7')).toBe(
-      'pinned-project-tasks::project-a'
-    );
-    expect(findHiddenPinnedTaskGroupId(entries, new Set(), 'project-c', 'pinned-task-6')).toBe(
-      'pinned-tasks'
-    );
+    expect(findHiddenPinnedTaskGroupId(entries, new Map(), 'project-a', 'project-task-7')).toEqual({
+      groupId: 'pinned-project-tasks::project-a',
+      visibleCount: 7,
+    });
+    expect(findHiddenPinnedTaskGroupId(entries, new Map(), 'project-c', 'pinned-task-6')).toEqual({
+      groupId: 'pinned-tasks',
+      visibleCount: 6,
+    });
     expect(
-      findHiddenPinnedTaskGroupId(entries, new Set(), 'project-a', 'project-task-1')
+      findHiddenPinnedTaskGroupId(entries, new Map(), 'project-a', 'project-task-1')
     ).toBeNull();
-    expect(findHiddenPinnedTaskGroupId(entries, new Set(), 'project-a', 'project-task-4', 3)).toBe(
-      'pinned-project-tasks::project-a'
-    );
     expect(
       findHiddenPinnedTaskGroupId(
         entries,
-        new Set(['pinned-project-tasks::project-a']),
+        new Map([['pinned-project-tasks::project-a', 7]]),
         'project-a',
         'project-task-7'
       )

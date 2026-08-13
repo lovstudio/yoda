@@ -657,6 +657,32 @@ export class TaskManagerStore {
     for (const store of removed) store.dispose();
   }
 
+  /** Hydrate one bounded archive page owned by the sidebar priority view. */
+  hydrateSidebarArchivedTasks(tasks: Task[]): string[] {
+    const archivedTasks = tasks.filter(
+      (task) => task.projectId === this.projectId && Boolean(task.archivedAt)
+    );
+    this._mergeLoadedTasks(archivedTasks);
+    return archivedTasks.map((task) => task.id);
+  }
+
+  /** Release only sidebar-owned archive rows without disturbing the Archived tab lease. */
+  releaseSidebarArchivedTasks(taskIds: readonly string[]): void {
+    if (this.archivedTaskLoadState === 'loading' || this.archivedTaskLoadState === 'loaded') {
+      return;
+    }
+    const removed: TaskStore[] = [];
+    runInAction(() => {
+      for (const taskId of taskIds) {
+        const store = this.tasks.get(taskId);
+        if (!store || !isRegistered(store) || !store.data.archivedAt) continue;
+        this.tasks.delete(taskId);
+        removed.push(store);
+      }
+    });
+    for (const store of removed) store.dispose();
+  }
+
   /**
    * Reconciles a task inserted after the initial project load, such as a
    * session imported by another local app immediately before a deep link.

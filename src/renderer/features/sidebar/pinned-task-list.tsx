@@ -18,6 +18,7 @@ import { SidebarProjectItem } from './project-item';
 import { useSidebarDnd } from './sidebar-dnd-context';
 import { toSidebarPinnedDndId } from './sidebar-dnd-ids';
 import { SidebarGroup, SidebarMenu, SidebarSectionHeader } from './sidebar-primitives';
+import { SIDEBAR_TASK_GROUP_REVEAL_INCREMENT } from './sidebar-task-group';
 import { SidebarTaskGroupToggle } from './sidebar-task-group-toggle';
 import { SidebarTaskItem } from './task-item';
 
@@ -34,10 +35,12 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList() {
       ? `${taskParams.projectId}::${taskParams.taskId}`
       : null;
   const autoExpandedActiveTaskKeyRef = useRef<string | null>(null);
-  const [expandedTaskGroupIds, setExpandedTaskGroupIds] = useState<Set<string>>(() => new Set());
+  const [visibleTaskCountByGroupId, setVisibleTaskCountByGroupId] = useState<Map<string, number>>(
+    () => new Map()
+  );
   const rows = useMemo(
-    () => limitPinnedTaskListRows(entries, expandedTaskGroupIds, taskGroupVisibleLimit),
-    [entries, expandedTaskGroupIds, taskGroupVisibleLimit]
+    () => limitPinnedTaskListRows(entries, visibleTaskCountByGroupId, taskGroupVisibleLimit),
+    [entries, taskGroupVisibleLimit, visibleTaskCountByGroupId]
   );
   const { dndEnabled } = useSidebarDnd();
 
@@ -48,47 +51,45 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList() {
     }
     if (autoExpandedActiveTaskKeyRef.current === activeTaskKey) return;
 
-    const hiddenGroupId = findHiddenPinnedTaskGroupId(
+    const hiddenGroup = findHiddenPinnedTaskGroupId(
       entries,
-      expandedTaskGroupIds,
+      visibleTaskCountByGroupId,
       taskParams.projectId,
       taskParams.taskId,
       taskGroupVisibleLimit
     );
-    if (!hiddenGroupId) return;
+    if (!hiddenGroup) return;
 
     autoExpandedActiveTaskKeyRef.current = activeTaskKey;
-    setExpandedTaskGroupIds((previous) => {
-      if (previous.has(hiddenGroupId)) return previous;
-      const next = new Set(previous);
-      next.add(hiddenGroupId);
+    setVisibleTaskCountByGroupId((previous) => {
+      if (
+        (previous.get(hiddenGroup.groupId) ?? taskGroupVisibleLimit) >= hiddenGroup.visibleCount
+      ) {
+        return previous;
+      }
+      const next = new Map(previous);
+      next.set(hiddenGroup.groupId, hiddenGroup.visibleCount);
       return next;
     });
   }, [
     activeTaskKey,
     entries,
-    expandedTaskGroupIds,
     taskGroupVisibleLimit,
     taskParams.projectId,
     taskParams.taskId,
+    visibleTaskCountByGroupId,
   ]);
 
-  const toggleTaskGroupExpanded = useCallback(
+  const revealMoreTaskGroupItems = useCallback(
     (groupId: string): void => {
-      setExpandedTaskGroupIds((previous) => {
-        const next = new Set(previous);
-        if (next.has(groupId)) {
-          if (activeTaskKey) {
-            autoExpandedActiveTaskKeyRef.current = activeTaskKey;
-          }
-          next.delete(groupId);
-        } else {
-          next.add(groupId);
-        }
+      setVisibleTaskCountByGroupId((previous) => {
+        const next = new Map(previous);
+        const visibleCount = previous.get(groupId) ?? taskGroupVisibleLimit;
+        next.set(groupId, visibleCount + SIDEBAR_TASK_GROUP_REVEAL_INCREMENT);
         return next;
       });
     },
-    [activeTaskKey]
+    [taskGroupVisibleLimit]
   );
 
   return (
@@ -112,7 +113,7 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList() {
                 row={row}
                 dndEnabled={dndEnabled}
                 teamRoomTaskKeys={teamRoomTaskKeys}
-                onToggleTaskGroup={toggleTaskGroupExpanded}
+                onToggleTaskGroup={revealMoreTaskGroupItems}
               />
             </div>
           ))}
@@ -140,7 +141,6 @@ export const PinnedRowContent = memo(function PinnedRowContent({
   if (row.kind === 'task-group-toggle') {
     return (
       <SidebarTaskGroupToggle
-        expanded={row.expanded}
         hiddenCount={row.hiddenCount}
         rowVariant={row.rowVariant}
         onToggle={() => onToggleTaskGroup(row.groupId)}

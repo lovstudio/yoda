@@ -2,7 +2,7 @@ import { DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT } from '@shared/view-state';
 import { type PinnedSidebarEntry } from './sidebar-store';
 import {
   getSidebarTaskGroupDisclosure,
-  hiddenSidebarTaskGroupItemsContain,
+  visibleSidebarTaskGroupCountForItem,
   type SidebarTaskGroupRowVariant,
 } from './sidebar-task-group';
 
@@ -10,7 +10,6 @@ export type PinnedTaskGroupToggleRow = {
   kind: 'task-group-toggle';
   groupId: string;
   hiddenCount: number;
-  expanded: boolean;
   rowVariant: SidebarTaskGroupRowVariant;
 };
 
@@ -21,7 +20,7 @@ const pinnedProjectTaskGroupId = (projectId: string) => `pinned-project-tasks::$
 
 export function limitPinnedTaskListRows(
   entries: readonly PinnedSidebarEntry[],
-  expandedTaskGroupIds: ReadonlySet<string>,
+  visibleTaskCountByGroupId: ReadonlyMap<string, number>,
   visibleLimit = DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT
 ): PinnedTaskListRow[] {
   const rows: PinnedTaskListRow[] = [];
@@ -38,7 +37,7 @@ export function limitPinnedTaskListRows(
         rows,
         projectTasks.entries,
         pinnedProjectTaskGroupId(entry.projectId),
-        expandedTaskGroupIds,
+        visibleTaskCountByGroupId,
         'underProject',
         visibleLimit
       );
@@ -52,7 +51,7 @@ export function limitPinnedTaskListRows(
         rows,
         directTasks.entries,
         DIRECT_PINNED_TASK_GROUP_ID,
-        expandedTaskGroupIds,
+        visibleTaskCountByGroupId,
         'pinned',
         visibleLimit
       );
@@ -71,11 +70,11 @@ export function limitPinnedTaskListRows(
 
 export function findHiddenPinnedTaskGroupId(
   entries: readonly PinnedSidebarEntry[],
-  expandedTaskGroupIds: ReadonlySet<string>,
+  visibleTaskCountByGroupId: ReadonlyMap<string, number>,
   projectId: string,
   taskId: string,
   visibleLimit = DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT
-): string | null {
+): { groupId: string; visibleCount: number } | null {
   let index = 0;
 
   while (index < entries.length) {
@@ -85,15 +84,14 @@ export function findHiddenPinnedTaskGroupId(
       index += 1;
       const groupId = pinnedProjectTaskGroupId(entry.projectId);
       const projectTasks = takePinnedProjectTasks(entries, index, entry.projectId);
-      if (
-        !expandedTaskGroupIds.has(groupId) &&
-        hiddenSidebarTaskGroupItemsContain(
-          projectTasks.entries,
-          (task) => task.projectId === projectId && task.taskId === taskId,
-          visibleLimit
-        )
-      ) {
-        return groupId;
+      const visibleCount = visibleTaskCountByGroupId.get(groupId) ?? visibleLimit;
+      const requiredVisibleCount = visibleSidebarTaskGroupCountForItem(
+        projectTasks.entries,
+        (task) => task.projectId === projectId && task.taskId === taskId,
+        visibleCount
+      );
+      if (requiredVisibleCount !== null) {
+        return { groupId, visibleCount: requiredVisibleCount };
       }
       index = projectTasks.nextIndex;
       continue;
@@ -101,15 +99,18 @@ export function findHiddenPinnedTaskGroupId(
 
     if (entry.kind === 'task') {
       const directTasks = takeDirectPinnedTasks(entries, index);
-      if (
-        !expandedTaskGroupIds.has(DIRECT_PINNED_TASK_GROUP_ID) &&
-        hiddenSidebarTaskGroupItemsContain(
-          directTasks.entries,
-          (task) => task.projectId === projectId && task.taskId === taskId,
-          visibleLimit
-        )
-      ) {
-        return DIRECT_PINNED_TASK_GROUP_ID;
+      const visibleCount =
+        visibleTaskCountByGroupId.get(DIRECT_PINNED_TASK_GROUP_ID) ?? visibleLimit;
+      const requiredVisibleCount = visibleSidebarTaskGroupCountForItem(
+        directTasks.entries,
+        (task) => task.projectId === projectId && task.taskId === taskId,
+        visibleCount
+      );
+      if (requiredVisibleCount !== null) {
+        return {
+          groupId: DIRECT_PINNED_TASK_GROUP_ID,
+          visibleCount: requiredVisibleCount,
+        };
       }
       index = directTasks.nextIndex;
       continue;
@@ -125,18 +126,14 @@ function appendTaskGroupRows<T extends PinnedSidebarEntry>(
   target: PinnedTaskListRow[],
   entries: readonly T[],
   groupId: string,
-  expandedTaskGroupIds: ReadonlySet<string>,
+  visibleTaskCountByGroupId: ReadonlyMap<string, number>,
   rowVariant: SidebarTaskGroupRowVariant,
   visibleLimit: number
 ): void {
   if (entries.length === 0) return;
 
-  const expanded = expandedTaskGroupIds.has(groupId);
-  const { visibleItems, hiddenCount } = getSidebarTaskGroupDisclosure(
-    entries,
-    expanded,
-    visibleLimit
-  );
+  const visibleCount = visibleTaskCountByGroupId.get(groupId) ?? visibleLimit;
+  const { visibleItems, hiddenCount } = getSidebarTaskGroupDisclosure(entries, visibleCount);
   target.push(...visibleItems);
 
   if (hiddenCount > 0) {
@@ -144,7 +141,6 @@ function appendTaskGroupRows<T extends PinnedSidebarEntry>(
       kind: 'task-group-toggle',
       groupId,
       hiddenCount,
-      expanded,
       rowVariant,
     });
   }

@@ -46,6 +46,27 @@ export async function getArchivedTasks(projectId: string): Promise<Task[]> {
   return hydrateTaskRows(await selectTaskRows({ projectId, archived: true }));
 }
 
+/** Sidebar priority-mode archive page. Hydrates only the requested global slice. */
+export async function getArchivedTasksPage(
+  projectIds: string[],
+  offset: number,
+  limit: number
+): Promise<Task[]> {
+  const uniqueProjectIds = [...new Set(projectIds)];
+  if (uniqueProjectIds.length === 0) return [];
+  const normalizedOffset = Math.max(0, Math.floor(offset));
+  const normalizedLimit = Math.max(0, Math.floor(limit));
+  if (normalizedLimit === 0) return [];
+  return hydrateTaskRows(
+    await selectTaskRows({
+      projectIds: uniqueProjectIds,
+      archived: true,
+      offset: normalizedOffset,
+      limit: normalizedLimit,
+    })
+  );
+}
+
 /** Project-qualified point lookup for deep links and cross-renderer task events. */
 export async function getTask(projectId: string, taskId: string): Promise<Task | null> {
   const hydrated = await hydrateTaskRows(await selectTaskRows({ projectId, taskId }));
@@ -80,22 +101,30 @@ export async function getTaskCounts(projectId?: string): Promise<ProjectTaskCoun
 
 async function selectTaskRows(options: {
   projectId?: string;
+  projectIds?: string[];
   taskId?: string;
   taskIds?: string[];
   archived?: boolean;
+  offset?: number;
+  limit?: number;
 }): Promise<TaskRow[]> {
   const filters = [];
   if (options.projectId) filters.push(eq(tasks.projectId, options.projectId));
+  if (options.projectIds) filters.push(inArray(tasks.projectId, options.projectIds));
   if (options.taskId) filters.push(eq(tasks.id, options.taskId));
   if (options.taskIds) filters.push(inArray(tasks.id, options.taskIds));
   if (options.archived === true) filters.push(isNotNull(tasks.archivedAt));
   if (options.archived === false) filters.push(isNull(tasks.archivedAt));
 
-  return db
+  let query = db
     .select()
     .from(tasks)
     .where(filters.length > 0 ? and(...filters) : undefined)
-    .orderBy(desc(tasks.updatedAt));
+    .orderBy(desc(tasks.updatedAt), desc(tasks.id))
+    .$dynamic();
+  if (options.limit !== undefined) query = query.limit(options.limit);
+  if (options.offset !== undefined) query = query.offset(options.offset);
+  return query;
 }
 
 async function hydrateTaskRows(rows: TaskRow[]): Promise<Task[]> {

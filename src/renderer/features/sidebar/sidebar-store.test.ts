@@ -6,15 +6,26 @@ import type { SidebarTaskGroupVisibleLimit, SidebarTaskPriorityGroup } from '@sh
 import { DEFAULT_WORKSPACE_ID } from '@shared/workspaces';
 import type { ProjectStore } from '@renderer/features/projects/stores/project';
 import type { ProjectManagerStore } from '@renderer/features/projects/stores/project-manager';
-import { createUnprovisionedTask, type TaskStore } from '@renderer/features/tasks/stores/task';
+import {
+  createUnprovisionedTask,
+  registeredTaskData,
+  type TaskStore,
+} from '@renderer/features/tasks/stores/task';
 import type { WorkspaceStore } from '@renderer/features/workspaces/workspace-store';
 import { SidebarStore, type SidebarRow } from './sidebar-store';
+
+const mocks = vi.hoisted(() => ({
+  getArchivedTasksPage: vi.fn(),
+}));
 
 vi.mock('@renderer/lib/ipc', () => ({
   events: {
     on: vi.fn(() => () => {}),
   },
   rpc: {
+    tasks: {
+      getArchivedTasksPage: mocks.getArchivedTasksPage,
+    },
     viewState: {
       save: vi.fn(),
     },
@@ -40,6 +51,7 @@ vi.mock('@renderer/lib/pty/pty-session', () => ({
 describe('SidebarStore task recency ordering', () => {
   afterEach(() => {
     vi.useRealTimers();
+    mocks.getArchivedTasksPage.mockReset();
   });
 
   it('sorts no-group recent rows by parsed time when timestamp formats differ', () => {
@@ -211,6 +223,47 @@ describe('SidebarStore task recency ordering', () => {
 
     store.setTaskPriorityMode(false);
     expect(store.sidebarRows.filter((row) => row.kind === 'project')).toHaveLength(2);
+  });
+
+  it('hydrates and releases bounded archived pages for priority mode', async () => {
+    const project = makeProject('project-1', [
+      makeTask('active', {
+        createdAt: '2026-06-02T10:00:00.000Z',
+      }),
+    ]);
+    if (!project.mountedProject) throw new Error('Expected mounted project');
+    project.mountedProject.taskManager.taskCounts.archived = 25;
+    const archivedTasks = Array.from({ length: 20 }, (_, index) => {
+      const store = makeTask(`archived-${index + 1}`, {
+        archivedAt: '2026-06-03T11:00:00.000Z',
+        createdAt: `2026-06-02T${String(20 - index).padStart(2, '0')}:00:00.000Z`,
+      });
+      const task = registeredTaskData(store);
+      if (!task) throw new Error('Expected registered archived task');
+      return { ...task };
+    });
+    mocks.getArchivedTasksPage.mockImplementation(
+      async (_projectIds: string[], offset: number, limit: number) =>
+        archivedTasks.slice(offset, offset + limit)
+    );
+    const store = makeSidebarStore([project]);
+    store.setTaskPriorityMode(true);
+
+    await expect(store.loadMoreSidebarArchivedTasks(10)).resolves.toBe(10);
+    expect(mocks.getArchivedTasksPage).toHaveBeenNthCalledWith(1, ['project-1'], 0, 10);
+    expect(taskIds(store.sidebarRows)).toEqual([
+      'active',
+      ...archivedTasks.slice(0, 10).map((task) => task.id),
+    ]);
+
+    await expect(store.loadMoreSidebarArchivedTasks(10)).resolves.toBe(10);
+    expect(mocks.getArchivedTasksPage).toHaveBeenNthCalledWith(2, ['project-1'], 10, 10);
+    expect(
+      taskIds(store.sidebarRows).filter((taskId) => taskId.startsWith('archived-'))
+    ).toHaveLength(20);
+
+    store.setTaskPriorityMode(false);
+    expect(project.mountedProject.taskManager.tasks.size).toBe(1);
   });
 
   it('folds pinned projects and pinned tasks into priority groups until the mode is disabled', () => {
@@ -724,6 +777,7 @@ function makeProject(
     createdAt: '2026-01-01 00:00:00',
     updatedAt: '2026-01-01 00:00:00',
   };
+  const taskMap = observable.map(tasks.map((task) => [task.data.id, task]));
   return {
     state: 'mounted',
     id: projectId,
@@ -736,13 +790,22 @@ function makeProject(
     mode: null,
     mountedProject: {
       taskManager: observable({
-        tasks: observable.map(tasks.map((task) => [task.data.id, task])),
+        tasks: taskMap,
         taskLoadState,
         taskCounts: {
           active: tasks.filter((task) => !('archivedAt' in task.data) || !task.data.archivedAt)
             .length,
           archived: tasks.filter((task) => 'archivedAt' in task.data && task.data.archivedAt)
             .length,
+        },
+        hydrateSidebarArchivedTasks: (archivedTasks: Task[]) => {
+          for (const task of archivedTasks) {
+            if (!taskMap.has(task.id)) taskMap.set(task.id, createUnprovisionedTask(task));
+          }
+          return archivedTasks.map((task) => task.id);
+        },
+        releaseSidebarArchivedTasks: (taskIds: readonly string[]) => {
+          for (const taskId of taskIds) taskMap.delete(taskId);
         },
       }),
     },
