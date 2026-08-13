@@ -510,7 +510,7 @@ export function buildConversationSections(
       <ContextMenuItem
         key="reload"
         className="whitespace-nowrap"
-        onClick={() => void provisioned.conversations.restartConversation(conversationId)}
+        onClick={() => void provisioned.conversations.reloadConversationView(conversationId)}
       >
         <RefreshCw className="size-4" />
         {t('tasks.tabs.reloadConversation')}

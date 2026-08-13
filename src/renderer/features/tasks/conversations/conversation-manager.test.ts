@@ -682,6 +682,16 @@ describe('ConversationManagerStore', () => {
     expect(mocks.ptyResizeMock).toHaveBeenCalledWith('project-1:task-1:conversation-1', 120, 30);
   });
 
+  it('reloads the conversation view without restarting the Agent session', async () => {
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+
+    await store.reloadConversationView('conversation-1');
+
+    expect(mocks.ptyReconnectMock).toHaveBeenCalledOnce();
+    expect(mocks.restartConversationMock).not.toHaveBeenCalled();
+    expect(mocks.resumeConversationMock).not.toHaveBeenCalled();
+  });
+
   it('dismisses the exited state as soon as a restart begins', async () => {
     let finishRestart: ((result: { generation: number }) => void) | undefined;
     mocks.restartConversationMock.mockReturnValueOnce(

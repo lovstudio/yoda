@@ -204,8 +204,8 @@ export const TaskSidebar = observer(function TaskSidebar() {
     );
 
     if (tab.kind === 'conversation') {
-      // Same ordering as the top strip: management (rename / archive / reload)
-      // first, copy second, open modes last.
+      // Same ordering as the top strip: management (rename / archive /
+      // renderer-only reload) first, copy second, open modes last.
       const [management, copy] = buildConversationSections(
         provisioned,
         projectId,
