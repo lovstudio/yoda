@@ -28,7 +28,10 @@ import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-r
 import { createClaudeInterruptSniffer } from '@main/core/conversations/claude-interrupt-sniffer';
 import { watchClaudeRunState } from '@main/core/conversations/claude-run-state-source';
 import { watchClaudeSessionActivity } from '@main/core/conversations/claude-session-activity-source';
-import { repairCodexThreadHistoryProjection } from '@main/core/conversations/codex-history-projection-repair';
+import {
+  repairCodexDuplicatedSessionMetaBoundary,
+  repairCodexThreadHistoryProjection,
+} from '@main/core/conversations/codex-history-projection-repair';
 import { watchCodexRunState } from '@main/core/conversations/codex-run-state-source';
 import { runtimeStatusMonitorRegistry } from '@main/core/conversations/runtime-status-monitor-registry';
 import type {
@@ -424,10 +427,29 @@ export class LocalConversationProvider implements ConversationProvider {
           });
         }
 
+        const statePath = resolveCodexStatePath(
+          resolveRuntimeStateDirectory('codex', sessionProviderConfig)
+        );
+        const duplicateBoundaryRepair = repairCodexDuplicatedSessionMetaBoundary({
+          statePath,
+          threadId: agentSessionId,
+        });
+        if (duplicateBoundaryRepair.status === 'repaired') {
+          log.info('LocalConversationProvider: restored portable Codex resume history', {
+            conversationId: conversation.id,
+            threadId: agentSessionId,
+            ...duplicateBoundaryRepair,
+          });
+        } else if (duplicateBoundaryRepair.status === 'failed') {
+          log.warn('LocalConversationProvider: could not restore portable Codex resume history', {
+            conversationId: conversation.id,
+            threadId: agentSessionId,
+            reason: duplicateBoundaryRepair.reason,
+          });
+        }
+
         const projectionRepair = repairCodexThreadHistoryProjection({
-          statePath: resolveCodexStatePath(
-            resolveRuntimeStateDirectory('codex', sessionProviderConfig)
-          ),
+          statePath,
           threadId: agentSessionId,
         });
         if (projectionRepair.status === 'repaired') {

@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
-import { repairCodexThreadHistoryProjection } from './codex-history-projection-repair';
+import {
+  repairCodexDuplicatedSessionMetaBoundary,
+  repairCodexThreadHistoryProjection,
+} from './codex-history-projection-repair';
 
 const THREAD_ID = '019feaee-f733-7f73-b1bf-7a1162d8af79';
 
@@ -79,6 +82,90 @@ describe('repairCodexThreadHistoryProjection', () => {
       repairCodexThreadHistoryProjection({ statePath: fixture.statePath, threadId: THREAD_ID })
     ).toEqual({ status: 'unchanged', reason: 'unsupported-regression' });
     expect(readCheckpointOrdinal(fixture.historyPath)).toBe(3);
+  });
+
+  it('falls back to full replay for the duplicate SessionMeta boundary written by older Yoda', () => {
+    directory = mkdtempSync(join(tmpdir(), 'yoda-codex-duplicate-meta-'));
+    const rolloutPath = join(directory, 'rollout.jsonl');
+    const firstMeta = {
+      ordinal: 0,
+      timestamp: '2026-08-13T04:01:42.194Z',
+      type: 'session_meta',
+      payload: {
+        id: THREAD_ID,
+        timestamp: '2026-08-13T04:00:58.818Z',
+        model_provider: 'openai',
+        history_mode: 'paginated',
+        session_id: THREAD_ID,
+      },
+    };
+    const lines = [
+      JSON.stringify(firstMeta),
+      rolloutLine(1, 'task_started'),
+      rolloutLine(44, 'turn_aborted'),
+      JSON.stringify({ ...firstMeta, timestamp: '2026-08-13T04:03:06.579Z' }),
+      rolloutLine(1, 'thread_settings_applied'),
+    ];
+    writeFileSync(rolloutPath, `${lines.join('\n')}\n`);
+    const originalBytes = readFileSync(rolloutPath).byteLength;
+    const checkpointOffset = Buffer.byteLength(`${lines.slice(0, 3).join('\n')}\n`);
+
+    const statePath = join(directory, 'state_5.sqlite');
+    const db = new Database(statePath);
+    db.exec('CREATE TABLE threads (id TEXT PRIMARY KEY, history_mode TEXT, rollout_path TEXT)');
+    db.prepare('INSERT INTO threads (id, history_mode, rollout_path) VALUES (?, ?, ?)').run(
+      THREAD_ID,
+      'paginated',
+      rolloutPath
+    );
+    db.close();
+
+    const historyDb = new Database(join(directory, 'thread_history_1.sqlite'));
+    historyDb.exec(`
+      CREATE TABLE thread_history_projection_state (
+        thread_id TEXT PRIMARY KEY,
+        next_rollout_byte_offset INTEGER NOT NULL,
+        next_rollout_ordinal INTEGER NOT NULL
+      )
+    `);
+    historyDb
+      .prepare('INSERT INTO thread_history_projection_state VALUES (?, ?, ?)')
+      .run(THREAD_ID, checkpointOffset, 45);
+    historyDb.close();
+
+    expect(repairCodexDuplicatedSessionMetaBoundary({ statePath, threadId: THREAD_ID })).toEqual({
+      status: 'repaired',
+      fromHistoryMode: 'paginated',
+      toHistoryMode: 'legacy',
+    });
+    expect(readFileSync(rolloutPath).byteLength).toBe(originalBytes);
+    const repairedFirstMeta = JSON.parse(
+      readFileSync(rolloutPath, 'utf8').split('\n')[0] ?? '{}'
+    ) as {
+      payload?: { history_mode?: string };
+    };
+    expect(repairedFirstMeta.payload?.history_mode).toBe('legacy');
+    const repairedDb = new Database(statePath, { readonly: true });
+    expect(
+      repairedDb.prepare('SELECT history_mode FROM threads WHERE id = ?').get(THREAD_ID)
+    ).toEqual({ history_mode: 'legacy' });
+    repairedDb.close();
+
+    const interruptedDb = new Database(statePath);
+    interruptedDb
+      .prepare("UPDATE threads SET history_mode = 'paginated' WHERE id = ?")
+      .run(THREAD_ID);
+    interruptedDb.close();
+    expect(repairCodexDuplicatedSessionMetaBoundary({ statePath, threadId: THREAD_ID })).toEqual({
+      status: 'repaired',
+      fromHistoryMode: 'paginated',
+      toHistoryMode: 'legacy',
+    });
+
+    expect(repairCodexDuplicatedSessionMetaBoundary({ statePath, threadId: THREAD_ID })).toEqual({
+      status: 'unchanged',
+      reason: 'not-paginated',
+    });
   });
 
   function createFixture(lines: string[]): {

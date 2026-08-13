@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   killTmuxSession: vi.fn(),
   listTmuxSessionMarkersStrict: vi.fn(),
   repairCodexThreadHistoryProjection: vi.fn(),
+  repairCodexDuplicatedSessionMetaBoundary: vi.fn(),
   migrateLegacyCodexMaasHistory: vi.fn(),
   logDebug: vi.fn(),
   logError: vi.fn(),
@@ -139,6 +140,7 @@ vi.mock('@main/core/conversations/codex-run-state-source', () => ({
 }));
 
 vi.mock('@main/core/conversations/codex-history-projection-repair', () => ({
+  repairCodexDuplicatedSessionMetaBoundary: mocks.repairCodexDuplicatedSessionMetaBoundary,
   repairCodexThreadHistoryProjection: mocks.repairCodexThreadHistoryProjection,
 }));
 
@@ -379,6 +381,10 @@ describe('LocalConversationProvider', () => {
     mocks.repairCodexThreadHistoryProjection.mockReturnValue({
       status: 'unchanged',
       reason: 'checkpoint-current',
+    });
+    mocks.repairCodexDuplicatedSessionMetaBoundary.mockReturnValue({
+      status: 'unchanged',
+      reason: 'no-duplicate-boundary',
     });
     mocks.migrateLegacyCodexMaasHistory.mockReturnValue({ rows: 0, files: 0 });
     mocks.getProviderConfig.mockResolvedValue({
@@ -897,6 +903,10 @@ describe('LocalConversationProvider', () => {
       statePath: '/state/codex-account-a/state_5.sqlite',
     });
     expect(mocks.repairCodexThreadHistoryProjection).toHaveBeenCalledWith({
+      statePath: '/state/codex-account-a/state_5.sqlite',
+      threadId: 'native-thread-1',
+    });
+    expect(mocks.repairCodexDuplicatedSessionMetaBoundary).toHaveBeenCalledWith({
       statePath: '/state/codex-account-a/state_5.sqlite',
       threadId: 'native-thread-1',
     });

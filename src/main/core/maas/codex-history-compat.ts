@@ -336,36 +336,18 @@ function migrateRolloutProvider(
 ): boolean {
   const content = readFileSync(path, 'utf8');
   const lines = content.split('\n');
-  const latest = findLatestSessionMeta(lines);
-  if (!latest || latest.payload.id !== expectedId) return false;
-  if (
-    latest.payload.model_provider !== fromProviderId &&
-    latest.payload.model_provider !== toProviderId
-  ) {
-    return false;
-  }
-
   const firstLine = lines[0];
+  if (!firstLine) return false;
+  const firstMeta = parseSessionMeta(firstLine);
+  if (!firstMeta || firstMeta.payload.id !== expectedId) return false;
   if (
-    !firstLine ||
-    !patchFirstLineProvider(path, firstLine, expectedId, fromProviderId, toProviderId)
+    firstMeta.payload.model_provider !== fromProviderId &&
+    firstMeta.payload.model_provider !== toProviderId
   ) {
     return false;
   }
-  if (latest.payload.model_provider === toProviderId) return true;
 
-  latest.payload.model_provider = toProviderId;
-  latest.timestamp = new Date().toISOString();
-  appendRolloutLine(path, JSON.stringify(latest));
-  return true;
-}
-
-function findLatestSessionMeta(lines: string[]): SessionMeta | undefined {
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const parsed = parseSessionMeta(lines[index]);
-    if (parsed) return parsed;
-  }
-  return undefined;
+  return patchRolloutProvidersInPlace(path, lines, expectedId, fromProviderId, toProviderId);
 }
 
 function parseSessionMeta(line: string | undefined): SessionMeta | undefined {
@@ -383,37 +365,53 @@ function parseSessionMeta(line: string | undefined): SessionMeta | undefined {
   }
 }
 
-function patchFirstLineProvider(
+/**
+ * Keep every JSONL record at the same byte offset. Codex's paginated history
+ * stores byte cursors in thread_history_1.sqlite, so appending a replacement
+ * SessionMeta creates a new history boundary and makes model-context replay
+ * stop before the original conversation.
+ */
+function patchRolloutProvidersInPlace(
   path: string,
-  firstLine: string,
+  lines: string[],
   expectedId: string,
   fromProviderId: string,
   toProviderId: string
 ): boolean {
-  const firstMeta = parseSessionMeta(firstLine);
-  if (!firstMeta || firstMeta.payload.id !== expectedId) return false;
-  if (firstMeta.payload.model_provider === toProviderId) return true;
-  if (firstMeta.payload.model_provider !== fromProviderId) return false;
-
   const encodedFromProvider = JSON.stringify(fromProviderId);
   const providerPattern = new RegExp(
     `("model_provider"\\s*:\\s*)${escapeRegExp(encodedFromProvider)}`
   );
-  const match = firstLine.match(providerPattern);
-  if (!match || match.index === undefined) return false;
-  const replacementCore = `${match[1]}${JSON.stringify(toProviderId)}`;
-  const paddingBytes =
-    Buffer.byteLength(match[0], 'utf8') - Buffer.byteLength(replacementCore, 'utf8');
-  if (paddingBytes < 0) return false;
-  const replacement = `${replacementCore}${' '.repeat(paddingBytes)}`;
-  const patched =
-    firstLine.slice(0, match.index) + replacement + firstLine.slice(match.index + match[0].length);
-  if (Buffer.byteLength(patched, 'utf8') !== Buffer.byteLength(firstLine, 'utf8')) return false;
-  if (parseSessionMeta(patched)?.payload.model_provider !== toProviderId) return false;
+  const patches: Array<{ offset: number; line: string }> = [];
+  let byteOffset = 0;
+  for (const line of lines) {
+    const meta = parseSessionMeta(line);
+    if (meta?.payload.id === expectedId && meta.payload.model_provider === fromProviderId) {
+      const match = line.match(providerPattern);
+      if (!match || match.index === undefined) return false;
+      const replacementCore = `${match[1]}${JSON.stringify(toProviderId)}`;
+      const paddingBytes =
+        Buffer.byteLength(match[0], 'utf8') - Buffer.byteLength(replacementCore, 'utf8');
+      if (paddingBytes < 0) return false;
+      const replacement = `${replacementCore}${' '.repeat(paddingBytes)}`;
+      const patched =
+        line.slice(0, match.index) + replacement + line.slice(match.index + match[0].length);
+      if (Buffer.byteLength(patched, 'utf8') !== Buffer.byteLength(line, 'utf8')) return false;
+      if (parseSessionMeta(patched)?.payload.model_provider !== toProviderId) return false;
+      patches.push({ offset: byteOffset, line: patched });
+    }
+    byteOffset += Buffer.byteLength(line, 'utf8') + 1;
+  }
+
+  const firstProvider = parseSessionMeta(lines[0])?.payload.model_provider;
+  if (firstProvider === fromProviderId && patches.length === 0) return false;
+  if (patches.length === 0) return firstProvider === toProviderId;
 
   const fd = openSync(path, 'r+');
   try {
-    writeBuffer(fd, Buffer.from(patched, 'utf8'), 0);
+    for (const patch of patches) {
+      writeBuffer(fd, Buffer.from(patch.line, 'utf8'), patch.offset);
+    }
     try {
       fsyncSync(fd);
     } catch {
@@ -427,20 +425,6 @@ function patchFirstLineProvider(
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function appendRolloutLine(path: string, line: string): void {
-  const fd = openSync(path, 'a');
-  try {
-    writeBuffer(fd, Buffer.from(line.endsWith('\n') ? line : `${line}\n`, 'utf8'), null);
-    try {
-      fsyncSync(fd);
-    } catch {
-      // Best-effort durability; O_APPEND keeps the record atomic for this writer.
-    }
-  } finally {
-    closeSync(fd);
-  }
 }
 
 function writeBuffer(fd: number, buffer: Buffer, position: number | null): void {

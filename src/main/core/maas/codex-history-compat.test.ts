@@ -81,6 +81,7 @@ describe('legacy Codex MaaS history compatibility', () => {
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line) as { type: string; payload: Record<string, unknown> });
+    expect(records).toHaveLength(3);
     expect(records[0]?.payload.model_provider).toBe('openai');
     expect(records.at(-1)?.payload).toMatchObject({
       id: 'legacy-thread',
@@ -154,8 +155,9 @@ describe('legacy Codex MaaS history compatibility', () => {
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line) as { type: string; payload: Record<string, unknown> });
+    expect(records).toHaveLength(2);
     expect(records[0]?.payload.model_provider).toBe('openai');
-    expect(records.at(-1)?.payload.model_provider).toBe('openai');
+    expect(records.at(-1)?.type).toBe('event_msg');
   });
 
   it('preserves a historical provider that is still present in Codex config', () => {
