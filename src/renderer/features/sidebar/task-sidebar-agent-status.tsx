@@ -25,23 +25,25 @@ import { getSortInstant } from './sidebar-store';
  */
 export const TaskSidebarAgentStatus = observer(function TaskSidebarAgentStatus({
   task,
+  opening = false,
   needsReview = false,
   summary,
 }: {
   task: TaskStore;
+  opening?: boolean;
   needsReview?: boolean;
   summary?: TaskSessionStatusSummary;
 }) {
   const { t } = useTranslation();
   const isBootstrapping =
-    isUnregistered(task) ||
-    (isUnprovisioned(task) && (task.phase === 'provision' || task.phase === 'provision-error'));
+    isUnregistered(task) || (isUnprovisioned(task) && task.phase === 'provision');
 
   const delayedIsBootstrapping = useDelayedBoolean(isBootstrapping, 500);
+  const delayedIsOpening = useDelayedBoolean(opening, 150);
   const statusSummary = summary ?? taskSessionStatusSummary(task);
   const status = statusSummary.primaryStatus;
 
-  if (delayedIsBootstrapping) {
+  if (delayedIsBootstrapping || delayedIsOpening) {
     return (
       <Tooltip>
         <TooltipTrigger>
@@ -49,7 +51,11 @@ export const TaskSidebarAgentStatus = observer(function TaskSidebarAgentStatus({
             <CLISpinner variant="2" />
           </span>
         </TooltipTrigger>
-        <TooltipContent>{t('sidebar.creatingWorkspace')}</TooltipContent>
+        <TooltipContent>
+          {delayedIsOpening
+            ? t('tasks.conversations.startingDescription')
+            : t('sidebar.creatingWorkspace')}
+        </TooltipContent>
       </Tooltip>
     );
   }

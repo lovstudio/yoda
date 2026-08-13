@@ -1,13 +1,16 @@
 import { Buffer } from 'node:buffer';
+import { randomUUID } from 'node:crypto';
 import {
   ptyDataChannel,
   ptyExitChannel,
   ptyInputChannel,
   type PtyDataEvent,
 } from '@shared/events/ptyEvents';
-import type {
-  PtyRenderCheckpoint,
-  PtyRenderCheckpointDimensions,
+import {
+  PTY_RENDER_CHECKPOINT_MAX_BYTES,
+  PTY_RENDER_CHECKPOINT_SCROLLBACK_LINES,
+  type PtyRenderCheckpoint,
+  type PtyRenderCheckpointDimensions,
 } from '@shared/pty-render-checkpoint';
 import {
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
@@ -30,13 +33,19 @@ export const PTY_OUTPUT_BATCH_MAX_BYTES = 64 * 1024;
 export const PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES = 384 * 1024;
 export const PTY_FLOW_CONTROL_LOW_WATERMARK_BYTES = 96 * 1024;
 export const PTY_CONSUMER_LEASE_TIMEOUT_MS = 90_000;
+/** Bound a generation reveal across route commit and the browser's painted-frame ACK. */
+export const PTY_GENERATION_REVEAL_CLAIM_TIMEOUT_MS = 6_000;
+/**
+ * Keep the attached tmux client around briefly so a rapid LRU bounce can reuse
+ * the renderer-authored checkpoint without paying for another tmux attach.
+ */
+export const PTY_RENDERER_DETACH_GRACE_MS = 1_000;
 const PTY_IMMEDIATE_FLUSH_MAX_BATCHES =
   PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES / PTY_OUTPUT_BATCH_MAX_BYTES;
 const PTY_RESUME_RETRY_BASE_MS = 25;
 const PTY_RESUME_RETRY_MAX_DELAY_MS = 1_000;
 const PTY_PENDING_INPUT_CAP_BYTES = 64 * 1024;
 const PTY_PENDING_INPUT_TTL_MS = 30_000;
-const PTY_RENDER_CHECKPOINT_MAX_BYTES = 512 * 1024;
 export const PTY_PENDING_INPUT_MAX_SESSIONS = 128;
 export const PTY_PENDING_INPUT_MAX_CHUNKS = 128;
 
@@ -49,6 +58,7 @@ type ConsumerState = {
   generation: number;
   acknowledgedSequence: number;
   expiresAt: number;
+  ownerWebContentsId: number | null;
 };
 
 type SessionState = {
@@ -57,7 +67,10 @@ type SessionState = {
   readonly registrationEpoch: number;
   readonly ringBuffer: Utf8RingBuffer;
   readonly tmuxInputFilter: TmuxTerminalReplyFilter | null;
+  readonly tmuxBacked: boolean;
+  readonly onRendererIdle: ((generation: number) => void) | undefined;
   renderCheckpoint: PtyRenderCheckpointTracker | null;
+  rendererDetachTimer: ReturnType<typeof setTimeout> | null;
   live: boolean;
   sequence: number;
   pendingData: Buffer[];
@@ -67,6 +80,8 @@ type SessionState = {
   inputOff: (() => void) | null;
   inflightBatches: InflightBatch[];
   inflightByteLength: number;
+  rendererBackpressured: boolean;
+  checkpointBackpressured: boolean;
   paused: boolean;
   resumeRetryTimer: ReturnType<typeof setTimeout> | null;
   resumeRetryAttempt: number;
@@ -88,6 +103,8 @@ export type PtySubscriptionSnapshot = {
   replayedFromHistory?: boolean;
   /** Original grid for a compact serialized framebuffer. */
   checkpointDimensions?: PtyRenderCheckpointDimensions;
+  /** Whether a compact checkpoint is safe to reveal without a stability heuristic. */
+  checkpointCanonical?: boolean;
 };
 
 export type PtySessionDiagnostics = {
@@ -114,6 +131,16 @@ type PendingInput = {
 
 type RegistrationIntent = {
   epoch: number;
+  expiresAt: number;
+  timer: ReturnType<typeof setTimeout>;
+};
+
+type GenerationRevealClaim = {
+  token: string;
+  sessionId: string;
+  consumerId: string;
+  generation: number;
+  ownerWebContentsId: number;
   expiresAt: number;
   timer: ReturnType<typeof setTimeout>;
 };
@@ -256,6 +283,9 @@ export class PtySessionRegistry {
   private readonly pendingInputs = new Map<string, PendingInput>();
   private readonly registrationEpochCounters = new Map<string, number>();
   private readonly registrationIntents = new Map<string, RegistrationIntent>();
+  private readonly revealClaims = new Map<string, GenerationRevealClaim>();
+  private readonly revealClaimTokensBySession = new Map<string, Set<string>>();
+  private readonly revealClaimWaiters = new Map<string, Set<() => void>>();
   private consumerLeaseTimer: ReturnType<typeof setTimeout> | null = null;
   private ringBufferCapBytes = getTerminalRingBufferCapBytes(DEFAULT_TERMINAL_SCROLLBACK_LINES);
 
@@ -292,6 +322,97 @@ export class PtySessionRegistry {
     return intent?.epoch === epoch && intent.expiresAt > Date.now();
   }
 
+  /**
+   * Whether an operation still owns either the pending registration intent or
+   * the live PTY that consumed that exact epoch. Startup hydration can register
+   * while an explicit resume waits on its barrier, so intent-only checks would
+   * reject the successful same-owner handoff.
+   */
+  ownsRegistration(sessionId: string, epoch: number): boolean {
+    const intent = this.registrationIntents.get(sessionId);
+    if (intent && intent.expiresAt > Date.now()) return intent.epoch === epoch;
+    const state = this.sessions.get(sessionId);
+    return state?.live === true && state.registrationEpoch === epoch;
+  }
+
+  /**
+   * Atomically reserve the exact backend generation while a renderer crosses
+   * route commit and browser paint. A registration intent and a reveal claim
+   * cannot overtake one another in the single main-process turn: intent-first
+   * denies the claim; claim-first makes the provider wait before spawning.
+   */
+  claimGenerationReveal(
+    sessionId: string,
+    consumerId: string,
+    expectedGeneration: number,
+    ownerWebContentsId: number
+  ): { token: string; generation: number; expiresAt: number } | null {
+    const state = this.sessions.get(sessionId);
+    const consumer = this.consumers.get(sessionId)?.get(consumerId);
+    const registration = this.registrationIntents.get(sessionId);
+    if (
+      !state?.live ||
+      state.generation !== expectedGeneration ||
+      (registration !== undefined && registration.expiresAt > Date.now()) ||
+      !consumer ||
+      consumer.generation !== expectedGeneration ||
+      consumer.ownerWebContentsId !== ownerWebContentsId
+    ) {
+      return null;
+    }
+
+    const token = randomUUID();
+    const expiresAt = Date.now() + PTY_GENERATION_REVEAL_CLAIM_TIMEOUT_MS;
+    const claim = {
+      token,
+      sessionId,
+      consumerId,
+      generation: expectedGeneration,
+      ownerWebContentsId,
+      expiresAt,
+      timer: setTimeout(
+        () => this.releaseGenerationReveal(token, ownerWebContentsId),
+        PTY_GENERATION_REVEAL_CLAIM_TIMEOUT_MS
+      ),
+    } satisfies GenerationRevealClaim;
+    claim.timer.unref?.();
+    this.revealClaims.set(token, claim);
+    const tokens = this.revealClaimTokensBySession.get(sessionId) ?? new Set<string>();
+    tokens.add(token);
+    this.revealClaimTokensBySession.set(sessionId, tokens);
+    return { token, generation: expectedGeneration, expiresAt };
+  }
+
+  /** Owner-bound and idempotent; renderer reload cleanup uses the same path. */
+  releaseGenerationReveal(token: string, ownerWebContentsId: number): boolean {
+    const claim = this.revealClaims.get(token);
+    if (!claim || claim.ownerWebContentsId !== ownerWebContentsId) return false;
+    this.releaseGenerationRevealClaim(claim);
+    return true;
+  }
+
+  /**
+   * Providers call this immediately before opening the replacement PTY. The
+   * registration intent already blocks new claims, so once this resolves true
+   * no later reveal can slip ahead of this epoch's spawn.
+   */
+  async waitForRevealClaims(sessionId: string, registrationEpoch: number): Promise<boolean> {
+    while (this.hasGenerationRevealClaims(sessionId)) {
+      if (!this.isRegistrationCurrent(sessionId, registrationEpoch)) return false;
+      await new Promise<void>((resolve) => {
+        const waiters = this.revealClaimWaiters.get(sessionId) ?? new Set<() => void>();
+        waiters.add(resolve);
+        this.revealClaimWaiters.set(sessionId, waiters);
+        // Close release-between-check-and-listener without polling.
+        if (!this.hasGenerationRevealClaims(sessionId)) {
+          waiters.delete(resolve);
+          resolve();
+        }
+      });
+    }
+    return this.isRegistrationCurrent(sessionId, registrationEpoch);
+  }
+
   cancelRegistration(sessionId: string, epoch: number): void {
     const intent = this.registrationIntents.get(sessionId);
     if (!intent || intent.epoch !== epoch) return;
@@ -307,8 +428,12 @@ export class PtySessionRegistry {
       preserveBufferOnExit?: boolean;
       registrationEpoch?: number;
       tmuxBacked?: boolean;
+      onRendererIdle?: (generation: number) => void;
     }
   ): void {
+    if (this.hasGenerationRevealClaims(sessionId)) {
+      throw new Error(`Cannot replace PTY ${sessionId} while its generation reveal is claimed`);
+    }
     const preserveBufferOnExit = options?.preserveBufferOnExit ?? false;
     const previousState = this.sessions.get(sessionId);
     if (previousState?.pendingExit) {
@@ -325,7 +450,10 @@ export class PtySessionRegistry {
       registrationEpoch: registration.epoch,
       ringBuffer: new Utf8RingBuffer(this.ringBufferCapBytes),
       tmuxInputFilter: options?.tmuxBacked ? new TmuxTerminalReplyFilter() : null,
+      tmuxBacked: options?.tmuxBacked === true,
+      onRendererIdle: options?.onRendererIdle,
       renderCheckpoint: null,
+      rendererDetachTimer: null,
       live: true,
       sequence: 0,
       pendingData: [],
@@ -335,6 +463,8 @@ export class PtySessionRegistry {
       inputOff: null,
       inflightBatches: [],
       inflightByteLength: 0,
+      rendererBackpressured: false,
+      checkpointBackpressured: false,
       paused: false,
       resumeRetryTimer: null,
       resumeRetryAttempt: 0,
@@ -352,6 +482,13 @@ export class PtySessionRegistry {
       consumer.generation = generation;
       consumer.acknowledgedSequence = 0;
     }
+    // Invalidate an attached renderer's previous generation before the new
+    // backend has produced its first visible byte. This sentinel carries no
+    // output/backlog cost and is intentionally excluded from inflight flow
+    // control; the first real batch still starts at sequence 1.
+    if (this.hasCurrentConsumers(sessionId, generation)) {
+      events.emit(ptyDataChannel, { generation, sequence: 0, byteLength: 0, data: '' }, sessionId);
+    }
 
     pty.onData((data) => {
       if (this.sessions.get(sessionId) !== state) return;
@@ -362,7 +499,12 @@ export class PtySessionRegistry {
       state.outputBytesTotal += encoded.length;
       state.lastOutputAt = Date.now();
       state.ringBuffer.append(data, encoded.length);
-      state.renderCheckpoint?.write(data, state.sequence);
+      if (state.renderCheckpoint && !this.hasCurrentConsumers(sessionId, state.generation)) {
+        // With no live renderer, the checkpoint becomes the sole owner of raw
+        // output at the current watermark. While a renderer exists, bytes must
+        // first receive a sequence in flushOne before the tracker can parse them.
+        this.transferPendingOutputToCheckpoint(state);
+      }
       if (state.flushTimer !== null && state.pendingByteLength >= PTY_OUTPUT_BATCH_MAX_BYTES) {
         clearTimeout(state.flushTimer);
         state.flushTimer = null;
@@ -386,6 +528,7 @@ export class PtySessionRegistry {
 
     pty.onExit((info) => {
       if (this.sessions.get(sessionId) !== state || state.pendingExit) return;
+      this.releaseGenerationRevealClaimsForSession(sessionId);
       state.live = false;
       state.inputOff?.();
       state.inputOff = null;
@@ -394,6 +537,8 @@ export class PtySessionRegistry {
       // anything. Drain a consumed session's finite tail in fairness-bounded IPC
       // batches; a cold tail is already complete in the replay ring.
       this.clearResumeRetry(state);
+      state.rendererBackpressured = false;
+      state.checkpointBackpressured = false;
       state.paused = false;
       state.inflightBatches = [];
       state.inflightByteLength = 0;
@@ -425,7 +570,10 @@ export class PtySessionRegistry {
     state.inputOff = events.on(
       ptyInputChannel,
       (data) => {
-        if (this.sessions.get(sessionId) === state) this.writeInput(state, data);
+        if (this.sessions.get(sessionId) === state) {
+          this.cancelRendererDetach(state);
+          this.writeInput(state, data);
+        }
       },
       sessionId
     );
@@ -443,9 +591,78 @@ export class PtySessionRegistry {
     this.cleanupLiveState(sessionId, { deleteState: true, deleteBuffer: true });
   }
 
+  /**
+   * Release exactly one renderer-idle tmux transport without publishing a PTY
+   * or agent exit. The caller owns the provider-side identity and kills only
+   * the already-validated attach wrapper after this synchronous handoff.
+   */
+  detachRendererTransport(
+    sessionId: string,
+    expectedGeneration: number,
+    expectedPty: Pty
+  ): boolean {
+    const state = this.sessions.get(sessionId);
+    if (
+      !state?.live ||
+      !state.tmuxBacked ||
+      state.pty !== expectedPty ||
+      state.generation !== expectedGeneration ||
+      !state.renderCheckpoint ||
+      this.hasCurrentConsumers(sessionId, expectedGeneration)
+    ) {
+      return false;
+    }
+
+    // This is an intentional transport detach, not a producer exit. Mark it
+    // offline before shared cleanup so a paused PTY is not resumed immediately
+    // before its tmux attach wrapper is killed.
+    state.live = false;
+    this.cleanupLiveState(sessionId, { deleteState: true, deleteBuffer: true });
+    return true;
+  }
+
   get(sessionId: string): Pty | undefined {
     const state = this.sessions.get(sessionId);
     return state?.live ? state.pty : undefined;
+  }
+
+  /**
+   * Resize exactly the renderer-owned PTY generation. The generation check,
+   * backend resize, and checkpoint update are synchronous so a stale renderer
+   * cannot mutate a replacement session's terminal grid.
+   */
+  resizeForRenderer(
+    sessionId: string,
+    expectedGeneration: number,
+    cols: number,
+    rows: number
+  ): { generation: number; changed: boolean } | null {
+    const state = this.sessions.get(sessionId);
+    const registration = this.registrationIntents.get(sessionId);
+    if (
+      !state?.live ||
+      (registration !== undefined && registration.expiresAt > Date.now()) ||
+      state.generation !== expectedGeneration ||
+      !Number.isSafeInteger(cols) ||
+      cols < 2 ||
+      !Number.isSafeInteger(rows) ||
+      rows < 1
+    ) {
+      return null;
+    }
+
+    const resized = state.pty.resize(cols, rows);
+    if (
+      resized === false ||
+      this.sessions.get(sessionId) !== state ||
+      !state.live ||
+      state.generation !== expectedGeneration
+    ) {
+      return null;
+    }
+
+    state.renderCheckpoint?.resize(cols, rows);
+    return { generation: state.generation, changed: true };
   }
 
   /**
@@ -457,6 +674,7 @@ export class PtySessionRegistry {
   writeOrQueue(sessionId: string, data: string): 'written' | 'queued' | 'full' | 'unavailable' {
     const state = this.sessions.get(sessionId);
     if (state?.live) {
+      this.cancelRendererDetach(state);
       this.writeInput(state, data);
       return 'written';
     }
@@ -546,10 +764,16 @@ export class PtySessionRegistry {
   subscribe(
     sessionId: string,
     consumerId: string,
-    options?: { materializeBuffer?: boolean }
+    options?: { materializeBuffer?: boolean; ownerWebContentsId?: number | null }
   ): PtySubscriptionSnapshot {
     const state = this.sessions.get(sessionId);
+    if (state) this.cancelRendererDetach(state);
     const currentGeneration = state?.generation ?? this.generationCounters.get(sessionId) ?? 0;
+    if (state?.renderCheckpoint && !this.hasCurrentConsumers(sessionId, state.generation)) {
+      // Close the last-consumer/raw-output boundary before choosing the compact
+      // snapshot watermark. These bytes will not also enter the live stream.
+      this.transferPendingOutputToCheckpoint(state);
+    }
     if (state && !state.paused && state.pendingByteLength > 0) {
       if (state.flushTimer !== null) {
         clearTimeout(state.flushTimer);
@@ -563,6 +787,7 @@ export class PtySessionRegistry {
       generation: currentGeneration,
       acknowledgedSequence: 0,
       expiresAt: Date.now() + PTY_CONSUMER_LEASE_TIMEOUT_MS,
+      ownerWebContentsId: options?.ownerWebContentsId ?? null,
     });
     this.consumers.set(sessionId, consumers);
     this.scheduleConsumerLeaseSweep();
@@ -590,16 +815,25 @@ export class PtySessionRegistry {
    */
   async subscribeForRenderer(
     sessionId: string,
-    consumerId: string
+    consumerId: string,
+    ownerWebContentsId: number | null = null
   ): Promise<PtySubscriptionSnapshot> {
-    const checkpointAvailable = Boolean(this.sessions.get(sessionId)?.renderCheckpoint);
-    const subscription = this.subscribe(sessionId, consumerId, {
-      materializeBuffer: !checkpointAvailable,
-    });
+    const initialState = this.sessions.get(sessionId);
+    const initialTracker = initialState?.renderCheckpoint ?? null;
+    // The tracker contains either exact numbered batches or raw bytes whose
+    // ownership was transferred after the final consumer left. It can therefore
+    // provide a compact snapshot even if another renderer has since subscribed.
+    const checkpointAvailable = Boolean(initialTracker);
+    const subscribeWithOwner = (materializeBuffer: boolean) =>
+      this.subscribe(sessionId, consumerId, {
+        materializeBuffer,
+        ownerWebContentsId,
+      });
+    const subscription = subscribeWithOwner(!checkpointAvailable);
     const state = this.sessions.get(sessionId);
     const tracker = state?.renderCheckpoint;
     if (!state || !tracker || state.generation !== subscription.generation) {
-      return checkpointAvailable ? this.subscribe(sessionId, consumerId) : subscription;
+      return checkpointAvailable ? subscribeWithOwner(true) : subscription;
     }
 
     try {
@@ -610,29 +844,27 @@ export class PtySessionRegistry {
         compactSnapshot.generation !== state.generation ||
         compactSnapshot.sequence !== subscription.sequence
       ) {
-        if (state.renderCheckpoint === tracker) state.renderCheckpoint = null;
-        tracker.dispose();
-        return this.subscribe(sessionId, consumerId);
+        this.releaseRenderCheckpoint(sessionId, state, tracker);
+        return subscribeWithOwner(true);
       }
-      state.renderCheckpoint = null;
-      tracker.dispose();
+      this.releaseRenderCheckpoint(sessionId, state, tracker);
       return {
         buffer: compactSnapshot.buffer,
         generation: compactSnapshot.generation,
         sequence: compactSnapshot.sequence,
+        checkpointCanonical: compactSnapshot.canonical,
         checkpointDimensions: {
           cols: compactSnapshot.cols,
           rows: compactSnapshot.rows,
         },
       };
     } catch (error) {
-      if (state.renderCheckpoint === tracker) state.renderCheckpoint = null;
-      tracker.dispose();
+      this.releaseRenderCheckpoint(sessionId, state, tracker);
       log.debug('[pty-checkpoint] compact snapshot unavailable', {
         sessionId,
         error: String(error),
       });
-      return this.subscribe(sessionId, consumerId);
+      return subscribeWithOwner(true);
     }
   }
 
@@ -650,6 +882,10 @@ export class PtySessionRegistry {
       checkpoint.cols < 2 ||
       !Number.isSafeInteger(checkpoint.rows) ||
       checkpoint.rows < 1 ||
+      typeof checkpoint.canonical !== 'boolean' ||
+      !Number.isSafeInteger(checkpoint.scrollbackLines) ||
+      checkpoint.scrollbackLines < 0 ||
+      checkpoint.scrollbackLines > PTY_RENDER_CHECKPOINT_SCROLLBACK_LINES ||
       Buffer.byteLength(checkpoint.buffer, 'utf8') > PTY_RENDER_CHECKPOINT_MAX_BYTES
     ) {
       return false;
@@ -674,16 +910,16 @@ export class PtySessionRegistry {
       catchup = utf8Tail(committed, catchupBytes);
     }
 
-    const tracker = new PtyRenderCheckpointTracker(checkpoint);
-    if (catchup) tracker.write(catchup, state.sequence);
-    if (state.pendingByteLength > 0) {
-      const pending = Buffer.concat(state.pendingData.slice(state.pendingDataHead)).toString(
-        'utf8'
-      );
-      if (pending) tracker.write(pending, state.sequence);
-    }
-    state.renderCheckpoint?.dispose();
+    const previousTracker = state.renderCheckpoint;
+    if (previousTracker) this.releaseRenderCheckpoint(sessionId, state, previousTracker);
+    const tracker = new PtyRenderCheckpointTracker(checkpoint, {
+      onBackpressureChange: (backpressured) => {
+        if (this.sessions.get(sessionId) !== state || state.renderCheckpoint !== tracker) return;
+        this.setCheckpointBackpressured(sessionId, state, backpressured);
+      },
+    });
     state.renderCheckpoint = tracker;
+    if (catchup) tracker.write(catchup, state.sequence);
     return true;
   }
 
@@ -726,6 +962,7 @@ export class PtySessionRegistry {
       generation: currentGeneration,
       acknowledgedSequence: nextAcknowledgedSequence,
       expiresAt: Date.now() + PTY_CONSUMER_LEASE_TIMEOUT_MS,
+      ownerWebContentsId: current.ownerWebContentsId,
     });
     if (state) this.pruneAcknowledgedBatches(sessionId, state);
     this.scheduleConsumerLeaseSweep();
@@ -734,12 +971,110 @@ export class PtySessionRegistry {
   unsubscribe(sessionId: string, consumerId: string): void {
     const consumers = this.consumers.get(sessionId);
     if (!consumers?.delete(consumerId)) return;
+    this.releaseGenerationRevealClaimsForConsumer(sessionId, consumerId);
     if (consumers.size === 0) {
       this.consumers.delete(sessionId);
     }
     const state = this.sessions.get(sessionId);
-    if (state) this.pruneAcknowledgedBatches(sessionId, state);
+    if (state) {
+      if (!this.hasCurrentConsumers(sessionId, state.generation)) {
+        // Transfer before pruning ACK state can resume the transport. The
+        // checkpoint parser's independent pause reason remains in force if this
+        // finite tail itself crosses its high-water mark.
+        this.transferPendingOutputToCheckpoint(state);
+      }
+      this.pruneAcknowledgedBatches(sessionId, state);
+    }
     this.scheduleConsumerLeaseSweep();
+  }
+
+  /** Release every consumer owned by a renderer that reloaded or crashed. */
+  unsubscribeOwner(ownerWebContentsId: number): void {
+    const owned: Array<{ sessionId: string; consumerId: string }> = [];
+    for (const [sessionId, consumers] of this.consumers) {
+      for (const [consumerId, consumer] of consumers) {
+        if (consumer.ownerWebContentsId === ownerWebContentsId) {
+          owned.push({ sessionId, consumerId });
+        }
+      }
+    }
+    for (const { sessionId, consumerId } of owned) this.unsubscribe(sessionId, consumerId);
+    for (const claim of [...this.revealClaims.values()]) {
+      if (claim.ownerWebContentsId === ownerWebContentsId) {
+        this.releaseGenerationRevealClaim(claim);
+      }
+    }
+  }
+
+  /**
+   * Save a cold checkpoint only when this is the generation's final consumer,
+   * then release that consumer in the same main-process turn.
+   */
+  checkpointAndUnsubscribe(
+    sessionId: string,
+    consumerId: string,
+    checkpoint: PtyRenderCheckpoint
+  ): boolean {
+    const state = this.sessions.get(sessionId);
+    const consumers = this.consumers.get(sessionId);
+    const consumer = consumers?.get(consumerId);
+    const ownsCurrentGeneration = Boolean(
+      state && consumer && consumer.generation === state.generation
+    );
+    let currentConsumerCount = 0;
+    if (state) {
+      for (const candidate of consumers?.values() ?? []) {
+        if (candidate.generation === state.generation) currentConsumerCount += 1;
+      }
+    }
+    const saved =
+      ownsCurrentGeneration && currentConsumerCount === 1
+        ? this.saveRenderCheckpoint(sessionId, checkpoint)
+        : false;
+    this.unsubscribe(sessionId, consumerId);
+    if (saved && state) this.scheduleRendererDetach(sessionId, state);
+    return saved;
+  }
+
+  private scheduleRendererDetach(sessionId: string, state: SessionState): void {
+    if (
+      !state.tmuxBacked ||
+      !state.onRendererIdle ||
+      !state.live ||
+      !state.renderCheckpoint ||
+      state.rendererDetachTimer !== null ||
+      this.hasCurrentConsumers(sessionId, state.generation)
+    ) {
+      return;
+    }
+
+    state.rendererDetachTimer = setTimeout(() => {
+      state.rendererDetachTimer = null;
+      if (
+        this.sessions.get(sessionId) !== state ||
+        !state.live ||
+        !state.renderCheckpoint ||
+        this.hasCurrentConsumers(sessionId, state.generation)
+      ) {
+        return;
+      }
+      try {
+        state.onRendererIdle?.(state.generation);
+      } catch (error) {
+        log.warn('PtySessionRegistry: renderer-idle detach callback failed', {
+          sessionId,
+          generation: state.generation,
+          error: String(error),
+        });
+      }
+    }, PTY_RENDERER_DETACH_GRACE_MS);
+    state.rendererDetachTimer.unref?.();
+  }
+
+  private cancelRendererDetach(state: SessionState): void {
+    if (state.rendererDetachTimer === null) return;
+    clearTimeout(state.rendererDetachTimer);
+    state.rendererDetachTimer = null;
   }
 
   private scheduleFlush(sessionId: string, state: SessionState, delay: number): void {
@@ -767,13 +1102,10 @@ export class PtySessionRegistry {
 
     const hasCurrentConsumers = this.hasCurrentConsumers(sessionId, state.generation);
     if (!hasCurrentConsumers) {
-      // onData already appended the complete string to the replay ring. pending
-      // only exists to produce live IPC batches, so a cold session can discard
-      // the duplicate buffers in O(1). A later subscriber receives the ring at
-      // the unchanged watermark, then its first live event starts at sequence+1.
-      state.pendingData = [];
-      state.pendingDataHead = 0;
-      state.pendingByteLength = 0;
+      // A compact checkpoint, when present, becomes the canonical owner of this
+      // raw tail. Otherwise the replay ring already owns it. In either case no
+      // renderer may later receive the same bytes as a numbered live batch.
+      if (!this.transferPendingOutputToCheckpoint(state)) this.discardPendingOutput(state);
       return false;
     }
     const tracksConsumerBacklog = !state.pendingExit && hasCurrentConsumers;
@@ -781,7 +1113,6 @@ export class PtySessionRegistry {
       ? PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES - state.inflightByteLength
       : PTY_OUTPUT_BATCH_MAX_BYTES;
     if (remainingFlowControlBudget <= 0) {
-      this.setPaused(sessionId, state, true);
       return false;
     }
 
@@ -792,7 +1123,7 @@ export class PtySessionRegistry {
     if (byteLength === 0) {
       // The remaining budget can be smaller than one UTF-8 code point. Pause a
       // few bytes early instead of splitting that character or overshooting.
-      if (tracksConsumerBacklog) this.setPaused(sessionId, state, true);
+      if (tracksConsumerBacklog) this.setRendererBackpressured(sessionId, state, true);
       return false;
     }
 
@@ -804,14 +1135,23 @@ export class PtySessionRegistry {
       byteLength,
       data,
     };
-    state.renderCheckpoint?.markSequence(state.sequence);
+    // The tracker must observe the same byte/sequence boundary as renderers.
+    // Feeding raw onData first would include pending bytes in the checkpoint and
+    // then replay those bytes again when they receive a later sequence.
+    state.renderCheckpoint?.write(data, state.sequence, byteLength);
+    // A checkpoint high-water transition can synchronously fail to pause and
+    // terminate this state. Never publish a data batch after that fatal exit.
+    if (this.sessions.get(sessionId) !== state) return false;
     events.emit(ptyDataChannel, payload, sessionId);
 
     if (tracksConsumerBacklog) {
       state.inflightBatches.push({ sequence: state.sequence, byteLength });
       state.inflightByteLength += byteLength;
-      if (!state.paused && state.inflightByteLength >= PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES) {
-        this.setPaused(sessionId, state, true);
+      if (
+        !state.rendererBackpressured &&
+        state.inflightByteLength >= PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES
+      ) {
+        this.setRendererBackpressured(sessionId, state, true);
       }
     }
     return state.pendingByteLength > 0;
@@ -823,6 +1163,44 @@ export class PtySessionRegistry {
     const bytes = Buffer.from(snapshot, 'utf8');
     if (state.pendingByteLength >= bytes.length) return '';
     return bytes.subarray(0, bytes.length - state.pendingByteLength).toString('utf8');
+  }
+
+  private discardPendingOutput(state: SessionState): void {
+    state.pendingData = [];
+    state.pendingDataHead = 0;
+    state.pendingByteLength = 0;
+  }
+
+  /**
+   * Atomically move every unsequenced pending byte into the cold checkpoint.
+   * Returns false when no tracker owns the cold terminal state.
+   */
+  private transferPendingOutputToCheckpoint(state: SessionState): boolean {
+    const tracker = state.renderCheckpoint;
+    if (!tracker) return false;
+    if (state.pendingByteLength === 0) return true;
+
+    for (let index = state.pendingDataHead; index < state.pendingData.length; index += 1) {
+      const chunk = state.pendingData[index];
+      if (chunk.length === 0) continue;
+      tracker.write(chunk.toString('utf8'), state.sequence, chunk.length);
+    }
+    this.discardPendingOutput(state);
+    return true;
+  }
+
+  private releaseRenderCheckpoint(
+    sessionId: string,
+    state: SessionState,
+    tracker: PtyRenderCheckpointTracker
+  ): void {
+    if (state.renderCheckpoint !== tracker) {
+      tracker.dispose();
+      return;
+    }
+    state.renderCheckpoint = null;
+    tracker.dispose();
+    this.setCheckpointBackpressured(sessionId, state, false);
   }
 
   private finalizeExitIfDrained(sessionId: string, state: SessionState): boolean {
@@ -860,6 +1238,8 @@ export class PtySessionRegistry {
       clearTimeout(state.flushTimer);
       state.flushTimer = null;
     }
+    state.rendererBackpressured = false;
+    state.checkpointBackpressured = false;
     state.paused = false;
     while (state.pendingByteLength > 0 && this.flushOne(sessionId, state)) {
       // Drain the already-finite tail in fairness-bounded event payloads.
@@ -894,9 +1274,11 @@ export class PtySessionRegistry {
       state.inflightByteLength = Math.max(0, state.inflightByteLength);
     }
 
-    if (state.paused && state.inflightByteLength <= PTY_FLOW_CONTROL_LOW_WATERMARK_BYTES) {
-      this.setPaused(sessionId, state, false);
-      this.scheduleFlush(sessionId, state, 0);
+    if (
+      state.rendererBackpressured &&
+      state.inflightByteLength <= PTY_FLOW_CONTROL_LOW_WATERMARK_BYTES
+    ) {
+      this.setRendererBackpressured(sessionId, state, false);
     }
   }
 
@@ -907,7 +1289,28 @@ export class PtySessionRegistry {
     return false;
   }
 
-  private setPaused(sessionId: string, state: SessionState, paused: boolean): void {
+  private setRendererBackpressured(
+    sessionId: string,
+    state: SessionState,
+    backpressured: boolean
+  ): void {
+    if (state.rendererBackpressured === backpressured) return;
+    state.rendererBackpressured = backpressured;
+    this.updateTransportPause(sessionId, state);
+  }
+
+  private setCheckpointBackpressured(
+    sessionId: string,
+    state: SessionState,
+    backpressured: boolean
+  ): void {
+    if (state.checkpointBackpressured === backpressured) return;
+    state.checkpointBackpressured = backpressured;
+    this.updateTransportPause(sessionId, state);
+  }
+
+  private updateTransportPause(sessionId: string, state: SessionState): void {
+    const paused = state.rendererBackpressured || state.checkpointBackpressured;
     if (state.paused === paused) return;
     // Once the backend has exited there is no producer left to resume. The
     // remaining work is only draining already-buffered output to renderers, so
@@ -917,20 +1320,46 @@ export class PtySessionRegistry {
       return;
     }
     const method = paused ? state.pty.pause : state.pty.resume;
-    if (!method) {
-      state.paused = paused;
-      return;
-    }
     try {
       method.call(state.pty);
       state.paused = paused;
-      if (!paused) this.clearResumeRetry(state);
+      if (!paused) {
+        this.clearResumeRetry(state);
+        this.scheduleFlush(sessionId, state, 0);
+      }
     } catch (error) {
-      // Even when the transport cannot be paused, keep renderer delivery
-      // bounded in main-process memory. A failed live resume stays paused so a
-      // later ACK/heartbeat can retry it.
+      // A backend that cannot pause can continue producing after renderer and
+      // checkpoint queues reach their hard bounds. Detach it immediately so
+      // main-process memory cannot grow without limit. A failed live resume is
+      // different: the transport is still paused, so retrying is safe.
       if (paused) {
-        state.paused = true;
+        log.warn('PtySessionRegistry: PTY pause failed; terminating session', {
+          sessionId,
+          error: String(error),
+        });
+        try {
+          state.pty.kill();
+        } catch (killError) {
+          log.warn('PtySessionRegistry: failed to terminate PTY after pause failure', {
+            sessionId,
+            error: String(killError),
+          });
+        }
+        if (this.sessions.get(sessionId) === state) {
+          // These tokens can no longer ACK or observe this generation. Keeping
+          // them alive would leave an offline diagnostics entry until the
+          // 90-second lease sweep and could poison flow control after a later
+          // same-id registration.
+          this.consumers.delete(sessionId);
+          state.live = false;
+          this.discardPendingOutput(state);
+          state.pendingExit = {
+            info: { signal: 'PTY_FLOW_CONTROL_FAILURE' },
+            preserveBuffer: false,
+          };
+          this.finalizeExit(sessionId, state);
+        }
+        return;
       } else {
         this.scheduleResumeRetry(sessionId, state);
       }
@@ -943,7 +1372,13 @@ export class PtySessionRegistry {
   }
 
   private scheduleResumeRetry(sessionId: string, state: SessionState): void {
-    if (state.resumeRetryTimer !== null || !state.live || !state.paused) {
+    if (
+      state.resumeRetryTimer !== null ||
+      !state.live ||
+      !state.paused ||
+      state.rendererBackpressured ||
+      state.checkpointBackpressured
+    ) {
       return;
     }
 
@@ -955,8 +1390,7 @@ export class PtySessionRegistry {
     state.resumeRetryTimer = setTimeout(() => {
       state.resumeRetryTimer = null;
       if (this.sessions.get(sessionId) !== state || !state.live || !state.paused) return;
-      this.setPaused(sessionId, state, false);
-      if (!state.paused) this.scheduleFlush(sessionId, state, 0);
+      this.updateTransportPause(sessionId, state);
     }, delay);
     (
       state.resumeRetryTimer as ReturnType<typeof setTimeout> & {
@@ -1039,6 +1473,7 @@ export class PtySessionRegistry {
     if (this.registrationIntents.get(sessionId) !== intent) return;
     clearTimeout(intent.timer);
     this.registrationIntents.delete(sessionId);
+    this.notifyRevealClaimWaiters(sessionId);
   }
 
   private endRegistrationThroughEpoch(sessionId: string, epoch: number): void {
@@ -1084,6 +1519,7 @@ export class PtySessionRegistry {
       for (const [consumerId, consumer] of consumers) {
         if (consumer.expiresAt <= now) {
           consumers.delete(consumerId);
+          this.releaseGenerationRevealClaimsForConsumer(sessionId, consumerId);
           changedSessions.add(sessionId);
         }
       }
@@ -1091,7 +1527,12 @@ export class PtySessionRegistry {
     }
     for (const sessionId of changedSessions) {
       const state = this.sessions.get(sessionId);
-      if (state) this.pruneAcknowledgedBatches(sessionId, state);
+      if (state) {
+        if (!this.hasCurrentConsumers(sessionId, state.generation)) {
+          this.transferPendingOutputToCheckpoint(state);
+        }
+        this.pruneAcknowledgedBatches(sessionId, state);
+      }
     }
     this.scheduleConsumerLeaseSweep();
   }
@@ -1102,6 +1543,10 @@ export class PtySessionRegistry {
   ): void {
     const state = this.sessions.get(sessionId);
     if (!state) return;
+
+    this.releaseGenerationRevealClaimsForSession(sessionId);
+
+    this.cancelRendererDetach(state);
 
     if (state.flushTimer !== null) {
       clearTimeout(state.flushTimer);
@@ -1115,15 +1560,52 @@ export class PtySessionRegistry {
     state.inflightBatches = [];
     state.inflightByteLength = 0;
     state.pendingExit = null;
-    this.setPaused(sessionId, state, false);
+    state.rendererBackpressured = false;
+    state.checkpointBackpressured = false;
+    this.updateTransportPause(sessionId, state);
     this.clearResumeRetry(state);
 
     if (options.deleteBuffer) state.ringBuffer.clear();
     if (options.deleteState) {
-      state.renderCheckpoint?.dispose();
-      state.renderCheckpoint = null;
+      const tracker = state.renderCheckpoint;
+      if (tracker) this.releaseRenderCheckpoint(sessionId, state, tracker);
       this.sessions.delete(sessionId);
     }
+  }
+
+  private hasGenerationRevealClaims(sessionId: string): boolean {
+    return (this.revealClaimTokensBySession.get(sessionId)?.size ?? 0) > 0;
+  }
+
+  private releaseGenerationRevealClaim(claim: GenerationRevealClaim): void {
+    if (this.revealClaims.get(claim.token) !== claim) return;
+    clearTimeout(claim.timer);
+    this.revealClaims.delete(claim.token);
+    const tokens = this.revealClaimTokensBySession.get(claim.sessionId);
+    tokens?.delete(claim.token);
+    if (tokens?.size === 0) this.revealClaimTokensBySession.delete(claim.sessionId);
+    this.notifyRevealClaimWaiters(claim.sessionId);
+  }
+
+  private releaseGenerationRevealClaimsForConsumer(sessionId: string, consumerId: string): void {
+    for (const token of [...(this.revealClaimTokensBySession.get(sessionId) ?? [])]) {
+      const claim = this.revealClaims.get(token);
+      if (claim?.consumerId === consumerId) this.releaseGenerationRevealClaim(claim);
+    }
+  }
+
+  private releaseGenerationRevealClaimsForSession(sessionId: string): void {
+    for (const token of [...(this.revealClaimTokensBySession.get(sessionId) ?? [])]) {
+      const claim = this.revealClaims.get(token);
+      if (claim) this.releaseGenerationRevealClaim(claim);
+    }
+  }
+
+  private notifyRevealClaimWaiters(sessionId: string): void {
+    const waiters = this.revealClaimWaiters.get(sessionId);
+    if (!waiters) return;
+    this.revealClaimWaiters.delete(sessionId);
+    for (const resolve of waiters) resolve();
   }
 }
 

@@ -1,6 +1,5 @@
 import { type Terminal } from '@xterm/xterm';
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
-import type { AppSettings } from '@shared/app-settings';
 import { appPasteChannel } from '@shared/events/appEvents';
 import { ptyDataChannel, ptyExitChannel, type PtyExitEvent } from '@shared/events/ptyEvents';
 import { DEFAULT_TERMINAL_SCROLLBACK_LINES } from '@shared/terminal-settings';
@@ -39,6 +38,7 @@ import {
 } from './terminal-link-resolver';
 import type { TerminalLinkTarget } from './terminal-link-target';
 import { TERMINAL_RELAYOUT_EVENT } from './terminal-relayout';
+import { loadTerminalSettings } from './terminal-settings-cache';
 import type { TerminalWebLinkOptions } from './terminal-web-links';
 
 const MIN_TERMINAL_COLS = 2;
@@ -539,8 +539,8 @@ export function usePty(
 
       // ── Load settings ──────────────────────────────────────────────────────
       let customFontFamily = '';
-      void (rpc.appSettings.get('terminal') as Promise<AppSettings['terminal']>).then(
-        (terminalSettings) => {
+      void loadTerminalSettings()
+        .then((terminalSettings) => {
           if (terminalSettings?.fontFamily) {
             customFontFamily = terminalSettings.fontFamily.trim();
             if (customFontFamily) {
@@ -559,8 +559,13 @@ export function usePty(
             terminalSettings?.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK_LINES
           );
           autoCopyOnSelectionRef.current = terminalSettings?.autoCopyOnSelection ?? true;
-        }
-      );
+        })
+        .catch((error: unknown) => {
+          log.warn('useTerminal: terminal settings unavailable, keeping defaults', {
+            sessionId,
+            error,
+          });
+        });
 
       const terminal = frontendPty.terminal;
 

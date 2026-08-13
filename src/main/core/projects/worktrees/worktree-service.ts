@@ -400,15 +400,42 @@ export class WorktreeService {
     }
   }
 
-  async getWorktree(branchName: string): Promise<string | undefined> {
+  async getWorktree(
+    branchName: string,
+    options: { includeProjectRoot?: boolean } = {}
+  ): Promise<string | undefined> {
     // Worktree directories are not derivable from the branch name alone
     // (leaf naming with collision fallback, plus legacy nested layouts), so
     // resolve through `git worktree list` and keep only pool-resident paths.
     const checkedOutPath = await this.findCheckedOutPathForBranch(branchName);
     if (!checkedOutPath) return undefined;
     try {
-      const realPoolPath = await this.host.realPathAbsolute(this.worktreePoolPath);
-      return normalizePoolResidentPath(this.pathApi, realPoolPath, checkedOutPath);
+      // A root-only project may not have created its per-project worktree pool
+      // yet. Treat that pool as optional so its missing realpath cannot skip
+      // the explicit project-root reuse path below.
+      try {
+        const realPoolPath = await this.host.realPathAbsolute(this.worktreePoolPath);
+        const poolResidentPath = normalizePoolResidentPath(
+          this.pathApi,
+          realPoolPath,
+          checkedOutPath
+        );
+        if (poolResidentPath) return poolResidentPath;
+      } catch {}
+      if (!options.includeProjectRoot) return undefined;
+
+      // A successfully provisioned checkout-existing task can point at the
+      // project's root worktree (most commonly `main`). Re-opening it must not
+      // repeat the remote-sync/fetch path merely to rediscover the same local
+      // directory. Keep this opt-in so callers performing worktree lifecycle
+      // operations can never mistake the project root for a pool entry.
+      const [realProjectPath, realCheckedOutPath] = await Promise.all([
+        this.host.realPathAbsolute(this.repoPath),
+        this.host.realPathAbsolute(checkedOutPath),
+      ]);
+      return this.pathApi.relative(realProjectPath, realCheckedOutPath) === ''
+        ? realCheckedOutPath
+        : undefined;
     } catch {}
     return undefined;
   }

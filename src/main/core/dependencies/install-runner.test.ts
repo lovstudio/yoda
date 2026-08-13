@@ -39,6 +39,8 @@ function createSuccessfulPty(): Pty {
   return {
     write: vi.fn(),
     resize: vi.fn(),
+    pause: vi.fn(),
+    resume: vi.fn(),
     kill: vi.fn(),
     onData: vi.fn(),
     onExit: vi.fn((handler) => handler({ exitCode: 0 })),

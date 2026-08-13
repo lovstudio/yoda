@@ -78,6 +78,7 @@ function createProvisionedTask(ensureConversationResult: boolean): ProvisionedTa
     projectId: 'project-1',
     taskId: 'task-1',
     conversations: {
+      conversations: new Map(),
       ensureConversation: vi.fn().mockResolvedValue(ensureConversationResult),
     },
     taskView: {
@@ -150,6 +151,138 @@ describe('openProvisionedTaskTab', () => {
       'conversation-1'
     );
     expect(provisioned.taskView.setFocusedRegion).not.toHaveBeenCalled();
+  });
+
+  it('hydrates a deferred target without a provisional tab, then selects it internally', async () => {
+    const provisioned = createProvisionedTask(true);
+    const tabManager = provisioned.taskView.tabManager;
+    const openTopLevel = vi.fn();
+    const bridge = {
+      applying: null as { key: string; token: symbol } | null,
+      open: openTopLevel,
+    };
+    tabManager.topLevelBridge = bridge;
+    vi.mocked(tabManager.openConversation).mockImplementation((conversationId: string) => {
+      if (!bridge.applying) bridge.open({ kind: 'conversation', conversationId });
+    });
+    let finishEnsure!: (found: boolean) => void;
+    vi.mocked(provisioned.conversations.ensureConversation).mockReturnValue(
+      new Promise((resolve) => {
+        finishEnsure = resolve;
+      })
+    );
+
+    const opened = openProvisionedTaskTab(
+      provisioned,
+      { kind: 'conversation', conversationId: 'conversation-1' },
+      { topLevelMode: 'internal', deferSelection: true }
+    );
+
+    expect(openTopLevel).not.toHaveBeenCalled();
+    expect(tabManager.openConversation).not.toHaveBeenCalled();
+    expect(bridge.applying).toBeNull();
+
+    finishEnsure(true);
+    const prepared = await opened;
+    expect(prepared.found).toBe(true);
+    expect(tabManager.openConversation).not.toHaveBeenCalled();
+
+    expect(prepared.activate()).toBe(true);
+    expect(tabManager.openConversation).toHaveBeenCalledWith('conversation-1');
+    expect(openTopLevel).not.toHaveBeenCalled();
+    expect(bridge.applying).toBeNull();
+
+    // The guard covers only the synchronous commit. A real user action after
+    // hydration still reaches the top-level bridge.
+    tabManager.openConversation('conversation-user');
+    expect(openTopLevel).toHaveBeenCalledWith({
+      kind: 'conversation',
+      conversationId: 'conversation-user',
+    });
+  });
+
+  it('leaves no provisional conversation when deferred hydration is cancelled', async () => {
+    let finishEnsure!: (found: boolean) => void;
+    const provisioned = createProvisionedTask(true);
+    vi.mocked(provisioned.conversations.ensureConversation).mockReturnValue(
+      new Promise((resolve) => {
+        finishEnsure = resolve;
+      })
+    );
+    let current = true;
+
+    const opened = openProvisionedTaskTab(
+      provisioned,
+      { kind: 'conversation', conversationId: 'conversation-1' },
+      { deferSelection: true, shouldApply: () => current }
+    );
+
+    expect(provisioned.taskView.tabManager.openConversation).not.toHaveBeenCalled();
+    current = false;
+    finishEnsure(true);
+
+    const prepared = await opened;
+    expect(prepared.found).toBe(true);
+    expect(prepared.activate()).toBe(false);
+    expect(provisioned.taskView.tabManager.openConversation).not.toHaveBeenCalled();
+    expect(provisioned.taskView.tabManager.closeConversation).not.toHaveBeenCalled();
+  });
+
+  it('does not let an older deferred miss close a tab adopted by a newer request', async () => {
+    let finishOlderEnsure!: (found: boolean) => void;
+    const provisioned = createProvisionedTask(true);
+    vi.mocked(provisioned.conversations.ensureConversation).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishOlderEnsure = resolve;
+      })
+    );
+
+    const older = openProvisionedTaskTab(
+      provisioned,
+      { kind: 'conversation', conversationId: 'conversation-1' },
+      { deferSelection: true }
+    );
+    // A newer request adopts the same identity while the older authoritative
+    // lookup is still in flight.
+    provisioned.taskView.tabManager.openConversation('conversation-1');
+    finishOlderEnsure(false);
+
+    const olderPrepared = await older;
+    expect(olderPrepared.found).toBe(false);
+    expect(provisioned.taskView.tabManager.openConversation).toHaveBeenCalledTimes(1);
+    expect(provisioned.taskView.tabManager.closeConversation).not.toHaveBeenCalled();
+  });
+
+  it('revokes an older provisional cleanup when a deferred commit adopts its tab', async () => {
+    let finishOlderEnsure!: (found: boolean) => void;
+    const provisioned = createProvisionedTask(true);
+    vi.mocked(provisioned.conversations.ensureConversation)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishOlderEnsure = resolve;
+        })
+      )
+      .mockResolvedValueOnce(true);
+    let olderCurrent = true;
+
+    const older = openProvisionedTaskTab(
+      provisioned,
+      { kind: 'conversation', conversationId: 'conversation-1' },
+      { shouldApply: () => olderCurrent }
+    );
+    const newer = await openProvisionedTaskTab(
+      provisioned,
+      { kind: 'conversation', conversationId: 'conversation-1' },
+      { deferSelection: true }
+    );
+    expect(newer.activate()).toBe(true);
+
+    olderCurrent = false;
+    finishOlderEnsure(false);
+    await expect(older).resolves.toBe(true);
+
+    expect(provisioned.taskView.tabManager.openConversation).toHaveBeenCalledTimes(2);
+    expect(provisioned.taskView.tabManager.closeConversation).not.toHaveBeenCalled();
   });
 
   it('opens the archived transcript modal when a deep-linked conversation is archived', async () => {

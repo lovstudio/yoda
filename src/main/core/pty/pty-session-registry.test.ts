@@ -3,12 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ptyDataChannel, ptyExitChannel, ptyInputChannel } from '@shared/events/ptyEvents';
 import { getTerminalRingBufferCapBytes } from '@shared/terminal-settings';
 import type { Pty, PtyExitInfo } from './pty';
+import { PTY_CHECKPOINT_PARSER_HIGH_WATERMARK_BYTES } from './pty-render-checkpoint';
 import {
   PTY_CONSUMER_LEASE_TIMEOUT_MS,
   PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES,
+  PTY_GENERATION_REVEAL_CLAIM_TIMEOUT_MS,
   PTY_OUTPUT_BATCH_MAX_BYTES,
   PTY_PENDING_INPUT_MAX_CHUNKS,
   PTY_PENDING_INPUT_MAX_SESSIONS,
+  PTY_RENDERER_DETACH_GRACE_MS,
   PtySessionRegistry,
 } from './pty-session-registry';
 
@@ -46,14 +49,13 @@ class FakePty implements Pty {
   readonly pause = vi.fn();
   readonly resume = vi.fn();
   readonly kill = vi.fn();
+  readonly resize = vi.fn<(cols: number, rows: number) => void | boolean>();
   private dataHandler: ((data: string) => void) | null = null;
   private exitHandler: ((info: PtyExitInfo) => void) | null = null;
 
   write(data: string): void {
     this.writes.push(data);
   }
-
-  resize(): void {}
 
   onData(handler: (data: string) => void): void {
     this.dataHandler = handler;
@@ -120,6 +122,8 @@ describe('PtySessionRegistry', () => {
         sequence: 0,
         cols: 120,
         rows: 32,
+        canonical: true,
+        scrollbackLines: 1_234,
       })
     ).toBe(true);
     registry.unsubscribe('session', 'old-renderer');
@@ -138,6 +142,7 @@ describe('PtySessionRegistry', () => {
     expect(compact).toMatchObject({
       generation: 1,
       sequence: 0,
+      checkpointCanonical: false,
       checkpointDimensions: { cols: 120, rows: 32 },
     });
     expect(compact.buffer).toContain('NEWEST FRAME');
@@ -147,6 +152,413 @@ describe('PtySessionRegistry', () => {
     expect(Buffer.byteLength(registry.snapshot('session'), 'utf8')).toBeGreaterThan(300_000);
 
     registry.unsubscribe('session', 'new-renderer');
+  });
+
+  it('passes through trusted idle checkpoint provenance and its actual scrollback capacity', async () => {
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    registry.register('session', pty);
+    pty.emitData('raw history that must not replace the canonical frame');
+    registry.subscribe('session', 'old-renderer');
+
+    const checkpoint = {
+      buffer: '\x1bcTRUSTED FRAME',
+      generation: 1,
+      sequence: 0,
+      cols: 100,
+      rows: 30,
+      canonical: true,
+      scrollbackLines: 777,
+    } as const;
+    expect(registry.saveRenderCheckpoint('session', checkpoint)).toBe(true);
+    registry.unsubscribe('session', 'old-renderer');
+
+    await expect(registry.subscribeForRenderer('session', 'new-renderer')).resolves.toEqual({
+      buffer: checkpoint.buffer,
+      generation: 1,
+      sequence: 0,
+      checkpointCanonical: true,
+      checkpointDimensions: { cols: 100, rows: 30 },
+    });
+    registry.unsubscribe('session', 'new-renderer');
+  });
+
+  it('retains an exact non-canonical checkpoint for recovery without granting fast reveal', async () => {
+    const registry = new PtySessionRegistry();
+    registry.register('session', new FakePty());
+
+    const checkpoint = {
+      buffer: '\x1bcUNTRUSTED FRAME',
+      generation: 1,
+      sequence: 0,
+      cols: 80,
+      rows: 24,
+      canonical: false,
+      scrollbackLines: 500,
+    } as const;
+    expect(registry.saveRenderCheckpoint('session', checkpoint)).toBe(true);
+
+    await expect(registry.subscribeForRenderer('session', 'new-renderer')).resolves.toEqual({
+      buffer: checkpoint.buffer,
+      generation: 1,
+      sequence: 0,
+      checkpointCanonical: false,
+      checkpointDimensions: { cols: 80, rows: 24 },
+    });
+    registry.unsubscribe('session', 'new-renderer');
+  });
+
+  it('atomically resizes the expected live generation and its compact checkpoint', async () => {
+    vi.useRealTimers();
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    registry.register('session', pty);
+    expect(
+      registry.saveRenderCheckpoint('session', {
+        buffer: '\x1bcOLD GRID',
+        generation: 1,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 500,
+      })
+    ).toBe(true);
+
+    expect(registry.resizeForRenderer('session', 1, 140, 42)).toEqual({
+      generation: 1,
+      changed: true,
+    });
+    expect(pty.resize).toHaveBeenCalledWith(140, 42);
+
+    await expect(registry.subscribeForRenderer('session', 'renderer')).resolves.toMatchObject({
+      generation: 1,
+      sequence: 0,
+      checkpointCanonical: false,
+      checkpointDimensions: { cols: 140, rows: 42 },
+    });
+    registry.unsubscribe('session', 'renderer');
+  });
+
+  it('rejects stale or failed renderer resizes without changing checkpoint dimensions', async () => {
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    registry.register('session', pty);
+    expect(
+      registry.saveRenderCheckpoint('session', {
+        buffer: '\x1bcSTABLE GRID',
+        generation: 1,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 500,
+      })
+    ).toBe(true);
+
+    expect(registry.resizeForRenderer('session', 0, 120, 30)).toBeNull();
+    expect(pty.resize).not.toHaveBeenCalled();
+    expect(registry.resizeForRenderer('session', 1, 1, 30)).toBeNull();
+    expect(pty.resize).not.toHaveBeenCalled();
+    pty.resize.mockReturnValue(false);
+    expect(registry.resizeForRenderer('session', 1, 120, 30)).toBeNull();
+
+    await expect(registry.subscribeForRenderer('session', 'renderer')).resolves.toMatchObject({
+      checkpointCanonical: true,
+      checkpointDimensions: { cols: 80, rows: 24 },
+    });
+    registry.unsubscribe('session', 'renderer');
+  });
+
+  it('rejects the old live generation while its replacement is registering', () => {
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    registry.register('session', pty);
+    registry.beginRegistration('session');
+
+    expect(registry.resizeForRenderer('session', 1, 120, 30)).toBeNull();
+    expect(pty.resize).not.toHaveBeenCalled();
+  });
+
+  it('pauses a hidden producer for checkpoint parser backlog without replaying pending bytes twice', async () => {
+    vi.useRealTimers();
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    registry.register('session', pty);
+    registry.subscribe('session', 'old-renderer');
+    expect(
+      registry.saveRenderCheckpoint('session', {
+        buffer: '\x1bcBASE FRAME',
+        generation: 1,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 100,
+      })
+    ).toBe(true);
+    registry.unsubscribe('session', 'old-renderer');
+    eventMocks.emit.mockClear();
+
+    pty.emitData('H'.repeat(PTY_CHECKPOINT_PARSER_HIGH_WATERMARK_BYTES));
+
+    expect(pty.pause).toHaveBeenCalledTimes(1);
+    expect(registry.getDiagnostics('session')?.pendingOutputBytes).toBe(0);
+
+    const snapshot = await registry.subscribeForRenderer('session', 'new-renderer');
+
+    expect(snapshot.checkpointCanonical).toBe(false);
+    expect(pty.resume).toHaveBeenCalledTimes(1);
+    expect(
+      eventMocks.emit.mock.calls.filter(([event]) => event === ptyDataChannel),
+      'bytes returned by the checkpoint must not be emitted again after resume'
+    ).toEqual([]);
+    registry.unsubscribe('session', 'new-renderer');
+  });
+
+  it('does not let renderer ACK release checkpoint parser backpressure', async () => {
+    vi.useRealTimers();
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    registry.register('session', pty);
+    registry.subscribe('session', 'old-renderer');
+    pty.emitData('R'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES));
+    expect(pty.pause).toHaveBeenCalledTimes(1);
+
+    expect(
+      registry.saveRenderCheckpoint('session', {
+        buffer: '\x1bcBASE FRAME',
+        generation: 1,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 100,
+      })
+    ).toBe(true);
+    registry.unsubscribe('session', 'old-renderer');
+
+    // Unsubscribe prunes the renderer inflight window, but the independent
+    // checkpoint parser reason must keep the transport paused.
+    expect(pty.resume).not.toHaveBeenCalled();
+
+    await registry.subscribeForRenderer('session', 'new-renderer');
+    expect(pty.resume).toHaveBeenCalledTimes(1);
+    registry.unsubscribe('session', 'new-renderer');
+  });
+
+  it('does not include a paused multi-consumer tail in both checkpoint and live output', async () => {
+    vi.useRealTimers();
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    const sequenceAtPause = PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES / PTY_OUTPUT_BATCH_MAX_BYTES;
+    const pendingTail = '\r\nDUPLICATE-MARKER\r\n';
+    registry.register('session', pty);
+    registry.subscribe('session', 'consumer-a');
+    registry.subscribe('session', 'consumer-b');
+
+    pty.emitData('X'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES));
+    pty.emitData(pendingTail);
+    expect(pty.pause).toHaveBeenCalledTimes(1);
+    expect(
+      registry.saveRenderCheckpoint('session', {
+        buffer: '\x1bcFRAME THROUGH SEQUENCE SIX',
+        generation: 1,
+        sequence: sequenceAtPause,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 100,
+      })
+    ).toBe(true);
+    registry.unsubscribe('session', 'consumer-a');
+    eventMocks.emit.mockClear();
+
+    const snapshot = await registry.subscribeForRenderer('session', 'consumer-c');
+
+    expect(snapshot).toMatchObject({
+      generation: 1,
+      sequence: sequenceAtPause,
+      checkpointDimensions: { cols: 80, rows: 24 },
+    });
+    expect(snapshot.buffer).not.toContain('DUPLICATE-MARKER');
+
+    registry.acknowledge('session', 'consumer-c', 1, sequenceAtPause);
+    registry.acknowledge('session', 'consumer-b', 1, sequenceAtPause);
+    await vi.waitFor(() => {
+      const liveTail = eventMocks.emit.mock.calls
+        .filter(([event]) => event === ptyDataChannel)
+        .map(([, payload]) => (payload as { data: string }).data)
+        .join('');
+      expect(liveTail).toBe(pendingTail);
+    });
+
+    registry.unsubscribe('session', 'consumer-b');
+    registry.unsubscribe('session', 'consumer-c');
+  });
+
+  it('atomically transfers pending output when the final checkpoint consumer leaves', async () => {
+    vi.useRealTimers();
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    const pendingTail = '\r\nFINAL-COLD-MARKER\r\n';
+    registry.register('session', pty);
+    registry.subscribe('session', 'old-renderer');
+    pty.emitData('Y'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES));
+    pty.emitData(pendingTail);
+    eventMocks.emit.mockClear();
+
+    expect(
+      registry.checkpointAndUnsubscribe('session', 'old-renderer', {
+        buffer: '\x1bcBASE FRAME',
+        generation: 1,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 100,
+      })
+    ).toBe(true);
+    expect(registry.getDiagnostics('session')?.pendingOutputBytes).toBe(0);
+
+    const snapshot = await registry.subscribeForRenderer('session', 'new-renderer');
+
+    expect(snapshot.sequence).toBe(
+      PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES / PTY_OUTPUT_BATCH_MAX_BYTES
+    );
+    expect(snapshot.buffer).toContain('FINAL-COLD-MARKER');
+    expect(eventMocks.emit.mock.calls.filter(([event]) => event === ptyDataChannel)).toEqual([]);
+    expect(pty.resume).toHaveBeenCalledTimes(1);
+    registry.unsubscribe('session', 'new-renderer');
+  });
+
+  it('notifies a tmux-backed session after its final checkpoint consumer stays idle', () => {
+    const registry = new PtySessionRegistry();
+    const onRendererIdle = vi.fn();
+    registry.register('session', new FakePty(), { tmuxBacked: true, onRendererIdle });
+    registry.subscribe('session', 'renderer');
+
+    expect(
+      registry.checkpointAndUnsubscribe('session', 'renderer', {
+        buffer: '\x1bcIDLE FRAME',
+        generation: 1,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 100,
+      })
+    ).toBe(true);
+
+    vi.advanceTimersByTime(PTY_RENDERER_DETACH_GRACE_MS - 1);
+    expect(onRendererIdle).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onRendererIdle).toHaveBeenCalledOnce();
+    expect(onRendererIdle).toHaveBeenCalledWith(1);
+  });
+
+  it('cancels a pending tmux renderer-idle notification when a new consumer subscribes', () => {
+    const registry = new PtySessionRegistry();
+    const onRendererIdle = vi.fn();
+    registry.register('session', new FakePty(), { tmuxBacked: true, onRendererIdle });
+    registry.subscribe('session', 'old-renderer');
+    expect(
+      registry.checkpointAndUnsubscribe('session', 'old-renderer', {
+        buffer: '\x1bcIDLE FRAME',
+        generation: 1,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 100,
+      })
+    ).toBe(true);
+
+    vi.advanceTimersByTime(PTY_RENDERER_DETACH_GRACE_MS - 1);
+    registry.subscribe('session', 'new-renderer');
+    vi.advanceTimersByTime(PTY_RENDERER_DETACH_GRACE_MS + 1);
+
+    expect(onRendererIdle).not.toHaveBeenCalled();
+    expect(registry.getDiagnostics('session')?.consumerCount).toBe(1);
+  });
+
+  it('does not run a stale renderer-idle notification after the session re-registers', () => {
+    const registry = new PtySessionRegistry();
+    const onOldRendererIdle = vi.fn();
+    const onNewRendererIdle = vi.fn();
+    registry.register('session', new FakePty(), {
+      tmuxBacked: true,
+      onRendererIdle: onOldRendererIdle,
+    });
+    registry.subscribe('session', 'renderer');
+    expect(
+      registry.checkpointAndUnsubscribe('session', 'renderer', {
+        buffer: '\x1bcOLD FRAME',
+        generation: 1,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 100,
+      })
+    ).toBe(true);
+
+    registry.register('session', new FakePty(), {
+      tmuxBacked: true,
+      onRendererIdle: onNewRendererIdle,
+    });
+    vi.advanceTimersByTime(PTY_RENDERER_DETACH_GRACE_MS);
+
+    expect(onOldRendererIdle).not.toHaveBeenCalled();
+    expect(onNewRendererIdle).not.toHaveBeenCalled();
+    expect(registry.getGeneration('session')).toBe(2);
+  });
+
+  it('never notifies renderer idle for a non-tmux session', () => {
+    const registry = new PtySessionRegistry();
+    const onRendererIdle = vi.fn();
+    registry.register('session', new FakePty(), { onRendererIdle });
+    registry.subscribe('session', 'renderer');
+    expect(
+      registry.checkpointAndUnsubscribe('session', 'renderer', {
+        buffer: '\x1bcDIRECT FRAME',
+        generation: 1,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 100,
+      })
+    ).toBe(true);
+
+    vi.advanceTimersByTime(PTY_RENDERER_DETACH_GRACE_MS * 2);
+
+    expect(onRendererIdle).not.toHaveBeenCalled();
+  });
+
+  it('preserves the WebContents owner when a compact subscription falls back', async () => {
+    const registry = new PtySessionRegistry();
+    registry.register('session', new FakePty());
+    expect(
+      registry.saveRenderCheckpoint('session', {
+        buffer: '\x1bcOLD GENERATION',
+        generation: 1,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 100,
+      })
+    ).toBe(true);
+
+    const subscription = registry.subscribeForRenderer('session', 'renderer', 42);
+    registry.register('session', new FakePty());
+    await subscription;
+
+    expect(registry.getDiagnostics('session')?.consumerCount).toBe(1);
+    registry.unsubscribeOwner(42);
+    expect(registry.getDiagnostics('session')?.consumerCount).toBe(0);
+    registry.unregister('session');
   });
 
   it('commits pending cold output without broadcasting or advancing the watermark', () => {
@@ -223,6 +635,106 @@ describe('PtySessionRegistry', () => {
       generation: 2,
       sequence: 0,
     });
+  });
+
+  it('invalidates an attached consumer at generation start before the first output byte', () => {
+    const registry = new PtySessionRegistry();
+    registry.register('session', new FakePty());
+    registry.subscribe('session', 'attached-renderer');
+    eventMocks.emit.mockClear();
+
+    registry.register('session', new FakePty());
+
+    expect(eventMocks.emit.mock.calls).toContainEqual([
+      ptyDataChannel,
+      { generation: 2, sequence: 0, byteLength: 0, data: '' },
+      'session',
+    ]);
+  });
+
+  it('serializes exact-generation reveal claims against backend replacement', async () => {
+    const registry = new PtySessionRegistry();
+    registry.register('session', new FakePty());
+    registry.subscribe('session', 'renderer', { ownerWebContentsId: 41 });
+
+    const claim = registry.claimGenerationReveal('session', 'renderer', 1, 41);
+    expect(claim).toMatchObject({ generation: 1 });
+    if (!claim) throw new Error('Expected exact-generation reveal claim');
+
+    const replacementEpoch = registry.beginRegistration('session');
+    expect(registry.claimGenerationReveal('session', 'renderer', 1, 41)).toBeNull();
+
+    let replacementUnblocked = false;
+    const replacementFence = registry
+      .waitForRevealClaims('session', replacementEpoch)
+      .then((owned) => {
+        replacementUnblocked = true;
+        return owned;
+      });
+    await Promise.resolve();
+    expect(replacementUnblocked).toBe(false);
+    expect(() =>
+      registry.register('session', new FakePty(), { registrationEpoch: replacementEpoch })
+    ).toThrow(/generation reveal is claimed/);
+
+    expect(registry.releaseGenerationReveal(claim.token, 99)).toBe(false);
+    expect(replacementUnblocked).toBe(false);
+    expect(registry.releaseGenerationReveal(claim.token, 41)).toBe(true);
+    await expect(replacementFence).resolves.toBe(true);
+
+    registry.register('session', new FakePty(), { registrationEpoch: replacementEpoch });
+    expect(registry.getGeneration('session')).toBe(2);
+  });
+
+  it('expires a reveal claim so a waiting replacement can register', async () => {
+    const registry = new PtySessionRegistry();
+    registry.register('session', new FakePty());
+    registry.subscribe('session', 'renderer', { ownerWebContentsId: 41 });
+
+    const claim = registry.claimGenerationReveal('session', 'renderer', 1, 41);
+    if (!claim) throw new Error('Expected exact-generation reveal claim');
+
+    const replacementEpoch = registry.beginRegistration('session');
+    let replacementUnblocked = false;
+    const replacementFence = registry
+      .waitForRevealClaims('session', replacementEpoch)
+      .then((owned) => {
+        replacementUnblocked = true;
+        return owned;
+      });
+    await Promise.resolve();
+    expect(replacementUnblocked).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(PTY_GENERATION_REVEAL_CLAIM_TIMEOUT_MS - 1);
+    expect(replacementUnblocked).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(replacementFence).resolves.toBe(true);
+    expect(registry.releaseGenerationReveal(claim.token, 41)).toBe(false);
+
+    const replacement = new FakePty();
+    registry.register('session', replacement, { registrationEpoch: replacementEpoch });
+    expect(registry.getGeneration('session')).toBe(2);
+    expect(registry.get('session')).toBe(replacement);
+  });
+
+  it('releases a reveal claim with its renderer consumer and owner lifecycle', () => {
+    const registry = new PtySessionRegistry();
+    registry.register('consumer-session', new FakePty());
+    registry.subscribe('consumer-session', 'renderer', { ownerWebContentsId: 41 });
+    const consumerClaim = registry.claimGenerationReveal('consumer-session', 'renderer', 1, 41);
+    if (!consumerClaim) throw new Error('Expected consumer reveal claim');
+
+    registry.unsubscribe('consumer-session', 'renderer');
+    expect(registry.releaseGenerationReveal(consumerClaim.token, 41)).toBe(false);
+
+    registry.register('owner-session', new FakePty());
+    registry.subscribe('owner-session', 'renderer', { ownerWebContentsId: 41 });
+    const ownerClaim = registry.claimGenerationReveal('owner-session', 'renderer', 1, 41);
+    if (!ownerClaim) throw new Error('Expected owner reveal claim');
+
+    registry.unsubscribeOwner(41);
+    expect(registry.releaseGenerationReveal(ownerClaim.token, 41)).toBe(false);
   });
 
   it('replays ordered input typed just before the backend PTY registers', () => {
@@ -485,6 +997,43 @@ describe('PtySessionRegistry', () => {
     expect(pty.resume).toHaveBeenCalledTimes(1);
   });
 
+  it('terminates and detaches a producer when transport pause fails', () => {
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    const onFinalExit = vi.fn();
+    pty.pause.mockImplementation(() => {
+      throw new Error('pause failed');
+    });
+    registry.register('session', pty, { onFinalExit });
+    registry.subscribe('session', 'consumer');
+    expect(
+      registry.saveRenderCheckpoint('session', {
+        buffer: '\x1bcFRAME',
+        generation: 1,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 100,
+      })
+    ).toBe(true);
+    eventMocks.emit.mockClear();
+
+    pty.emitData('x'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES));
+
+    expect(pty.pause).toHaveBeenCalledTimes(1);
+    expect(pty.kill).toHaveBeenCalledTimes(1);
+    expect(pty.resume).not.toHaveBeenCalled();
+    expect(onFinalExit).toHaveBeenCalledWith({ signal: 'PTY_FLOW_CONTROL_FAILURE' }, 1);
+    expect(eventMocks.emit.mock.calls.at(-1)?.[0]).toBe(ptyExitChannel);
+    expect(registry.getDiagnostics('session')).toBeNull();
+
+    // Even a broken backend that emits after kill is detached from the
+    // registry, so it cannot refill an unbounded pending queue.
+    pty.emitData('y'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES));
+    expect(registry.getDiagnostics('session')).toBeNull();
+  });
+
   it('waits for the slowest consumer ACK before releasing flow control', () => {
     const registry = new PtySessionRegistry();
     const pty = new FakePty();
@@ -501,6 +1050,25 @@ describe('PtySessionRegistry', () => {
 
     registry.acknowledge('session', 'slow-consumer', 1, finalSequence);
     expect(pty.resume).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases a crashed WebContents owner from flow control in the same turn', () => {
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    const finalSequence = PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES / PTY_OUTPUT_BATCH_MAX_BYTES;
+    registry.register('session', pty);
+    registry.subscribe('session', 'crashed-consumer', { ownerWebContentsId: 11 });
+    registry.subscribe('session', 'live-consumer', { ownerWebContentsId: 12 });
+    pty.emitData('x'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES));
+    registry.acknowledge('session', 'live-consumer', 1, finalSequence);
+    expect(pty.pause).toHaveBeenCalledTimes(1);
+    expect(pty.resume).not.toHaveBeenCalled();
+
+    registry.unsubscribeOwner(11);
+
+    expect(pty.resume).toHaveBeenCalledTimes(1);
+    expect(registry.getDiagnostics('session')?.consumerCount).toBe(1);
+    registry.unsubscribeOwner(12);
   });
 
   it('rejects invalid ACK watermarks without poisoning a later valid ACK', () => {
@@ -810,18 +1378,29 @@ describe('PtySessionRegistry', () => {
       .map(
         ([, payload]) => payload as { byteLength: number; generation: number; sequence: number }
       );
-    expect(dataBatches.every((batch) => batch.byteLength <= PTY_OUTPUT_BATCH_MAX_BYTES)).toBe(true);
-    expect(dataBatches.every((batch) => batch.generation === 1)).toBe(true);
-    expect(dataBatches.reduce((total, batch) => total + batch.byteLength, 0)).toBe(
+    const oldGenerationBatches = dataBatches.filter((batch) => batch.generation === 1);
+    expect(
+      oldGenerationBatches.every((batch) => batch.byteLength <= PTY_OUTPUT_BATCH_MAX_BYTES)
+    ).toBe(true);
+    expect(oldGenerationBatches.reduce((total, batch) => total + batch.byteLength, 0)).toBe(
       outputByteLength
     );
     const exitCallIndex = eventMocks.emit.mock.calls.findIndex(
       ([event]) => event === ptyExitChannel
     );
-    const finalDataCallIndex = eventMocks.emit.mock.calls
-      .map(([event]) => event)
-      .lastIndexOf(ptyDataChannel);
-    expect(exitCallIndex).toBe(finalDataCallIndex + 1);
+    const finalOldDataCallIndex = eventMocks.emit.mock.calls
+      .map(([event, payload], index) =>
+        event === ptyDataChannel && (payload as { generation?: number }).generation === 1
+          ? index
+          : -1
+      )
+      .reduce((latest, index) => Math.max(latest, index), -1);
+    const generationStartCallIndex = eventMocks.emit.mock.calls.findIndex(
+      ([event, payload]) =>
+        event === ptyDataChannel && (payload as { generation?: number }).generation === 2
+    );
+    expect(exitCallIndex).toBe(finalOldDataCallIndex + 1);
+    expect(generationStartCallIndex).toBe(exitCallIndex + 1);
     expect(eventMocks.emit.mock.calls[exitCallIndex]).toEqual([
       ptyExitChannel,
       { exitCode: 7, generation: 1 },

@@ -21,6 +21,7 @@ import {
   useTaskViewContext,
   useTaskViewKind,
 } from '@renderer/features/tasks/task-view-context';
+import { writeTextToClipboard } from '@renderer/lib/pty/terminal-clipboard';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
@@ -35,6 +36,7 @@ import { DiffView } from './diff-view/main-panel/diff-view';
 import { EditorMainPanel } from './editor/editor-main-panel';
 import { useEditorContext } from './editor/editor-provider';
 import { MarkdownEditorPanel } from './editor/markdown-editor-panel';
+import { openTaskWhenReady } from './open-task-when-ready';
 import { completeTaskOpenTrace, markTaskOpenTrace } from './task-open-performance';
 import { taskOpenTransitionStore } from './task-open-transition-store';
 import { TaskRendererActivity } from './task-renderer-activity';
@@ -55,6 +57,9 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
     isTaskLoadPending: taskManager?.taskLoadPendingIds?.has(taskId) ?? false,
     isTargetPending: taskOpenTransitionStore.isPending(projectId, taskId),
   });
+  const isReadyTargetStaging = kind === 'ready' && Boolean(openingMessageKey);
+  const didReadyTargetStagingFail = taskOpenTransitionStore.hasFailed(projectId, taskId);
+  const [debugCopied, setDebugCopied] = useState(false);
 
   useLayoutEffect(() => {
     markTaskOpenTrace(projectId, taskId, 'main-panel-committed', {
@@ -66,7 +71,7 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
   // Never put historical task content or step-by-step provision updates in the
   // main area while entering a task. A cold task may cross several store states
   // before it is usable; one fixed surface prevents A -> B -> C repainting.
-  if (openingMessageKey) {
+  if (openingMessageKey && !isReadyTargetStaging) {
     const openingMessage = t(openingMessageKey);
     return (
       <SessionOpeningSurface
@@ -128,7 +133,71 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
     return null;
   }
 
-  return <ReadyTaskMainPanel />;
+  const openingMessage = openingMessageKey
+    ? t(didReadyTargetStagingFail ? 'tasks.conversations.startingErrorTitle' : openingMessageKey)
+    : null;
+  const openingDescription = didReadyTargetStagingFail
+    ? t('tasks.conversations.startingErrorDescription')
+    : openingMessage;
+  return (
+    <div className="relative h-full min-h-0 w-full min-w-0 overflow-hidden">
+      {/*
+       * This wrapper and ReadyTaskMainPanel keep the same identity across
+       * staging and reveal. Opacity preserves destination geometry while the
+       * opaque semantic surface prevents any internal PTY frame from painting.
+       */}
+      <div
+        aria-hidden={isReadyTargetStaging || undefined}
+        inert={isReadyTargetStaging || undefined}
+        data-task-ready-staging={isReadyTargetStaging || undefined}
+        className={cn('absolute inset-0', isReadyTargetStaging && 'pointer-events-none opacity-0')}
+      >
+        <ReadyTaskMainPanel />
+      </div>
+      {isReadyTargetStaging && openingMessage ? (
+        <div className="absolute inset-0 z-10">
+          <SessionOpeningSurface
+            heading={openingMessage}
+            description={openingDescription ?? openingMessage}
+            progressMessage={openingDescription ?? openingMessage}
+            statusIcon={
+              didReadyTargetStagingFail ? (
+                <span className="ml-auto font-mono text-xs text-foreground-destructive">!</span>
+              ) : undefined
+            }
+            actions={
+              didReadyTargetStagingFail ? (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      taskOpenTransitionStore.dismissFailure(projectId, taskId);
+                      void openTaskWhenReady(projectId, taskId, () => {});
+                    }}
+                  >
+                    {t('common.retry')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      writeTextToClipboard(
+                        taskOpenTransitionStore.failureDebugInfo(projectId, taskId) ??
+                          'Yoda — task session staging failed'
+                      );
+                      setDebugCopied(true);
+                    }}
+                  >
+                    {t(debugCopied ? 'common.debugInfoCopied' : 'common.copyDebugInfo')}
+                  </Button>
+                </>
+              ) : undefined
+            }
+          />
+        </div>
+      ) : null}
+    </div>
+  );
 });
 
 const TaskSetupRecovery = observer(function TaskSetupRecovery({
@@ -528,6 +597,9 @@ export const TaskActiveTabContent = observer(function TaskActiveTabContent({
   }, [projectId, renderer, taskId]);
 
   useEffect(() => {
+    // Agent views finish only after their canonical xterm frame is painted and
+    // focusable. A React commit is not a user-visible session readiness ACK.
+    if (renderer === 'agents') return;
     const frame = requestAnimationFrame(() => {
       completeTaskOpenTrace(projectId, taskId, { renderer });
     });

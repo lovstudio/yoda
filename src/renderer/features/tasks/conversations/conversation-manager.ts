@@ -25,6 +25,14 @@ import {
 import { getAgentNotificationKind } from '@shared/notification-settings';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { events, rpc } from '@renderer/lib/ipc';
+import { getPaneContainer } from '@renderer/lib/pty/pane-sizing-context';
+import type { FrontendPty } from '@renderer/lib/pty/pty';
+import {
+  getCellMetrics,
+  getTerminalFitScrollbarWidth,
+  measureDimensions,
+  TERMINAL_FIT_GUARD_COLUMNS,
+} from '@renderer/lib/pty/pty-dimensions';
 import { PtySession } from '@renderer/lib/pty/pty-session';
 import { publishAgentRuntimeStatusPreview } from '@renderer/lib/stores/agent-runtime-status-bridge';
 import { log } from '@renderer/utils/logger';
@@ -33,7 +41,101 @@ import { soundPlayer } from '@renderer/utils/soundPlayer';
 export type AgentStatus = AgentSessionRuntimeStatus;
 
 const SOUND_DEDUPE_WINDOW_MS = 3_000;
+const STAGING_CANCELLATION_POLL_MS = 25;
 const recentSoundEvents = new Map<string, number>();
+
+type StagingWaitOutcome<T> =
+  | { readonly status: 'resolved'; readonly value: T }
+  | { readonly status: 'stopped' };
+
+/** Bound an arbitrary IPC step by the task-open deadline and cancellation lease. */
+function waitForStagingStep<T>(
+  promise: Promise<T>,
+  shouldContinue: () => boolean,
+  deadline: number
+): Promise<StagingWaitOutcome<T>> {
+  if (!shouldContinue() || performance.now() >= deadline) {
+    return Promise.resolve({ status: 'stopped' });
+  }
+
+  return new Promise((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let settled = false;
+    const cleanup = () => {
+      if (timer !== null) clearTimeout(timer);
+    };
+    const finish = (outcome: StagingWaitOutcome<T>) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(outcome);
+    };
+    const poll = () => {
+      if (settled) return;
+      const remainingMs = deadline - performance.now();
+      if (!shouldContinue() || remainingMs <= 0) {
+        finish({ status: 'stopped' });
+        return;
+      }
+      timer = setTimeout(poll, Math.min(STAGING_CANCELLATION_POLL_MS, remainingMs));
+    };
+
+    promise.then(
+      (value) => finish({ status: 'resolved', value }),
+      (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      }
+    );
+    poll();
+  });
+}
+
+function getConversationPaneDimensions(
+  pty: FrontendPty,
+  projectId: string,
+  taskId: string
+): { cols: number; rows: number } | null {
+  const pane = getPaneContainer(`conversations:${projectId}:${taskId}`);
+  const cell = getCellMetrics(pty.terminal);
+  if (pane && cell) {
+    const measured = measureDimensions(
+      pane,
+      cell.width,
+      cell.height,
+      getTerminalFitScrollbarWidth(pty.terminal),
+      TERMINAL_FIT_GUARD_COLUMNS
+    );
+    if (measured) return measured;
+  }
+  return null;
+}
+
+async function waitForConversationPaneDimensions(
+  pty: FrontendPty,
+  projectId: string,
+  taskId: string,
+  shouldContinue: () => boolean,
+  deadline: number
+): Promise<{ cols: number; rows: number } | null> {
+  while (shouldContinue() && performance.now() < deadline) {
+    const dimensions = getConversationPaneDimensions(pty, projectId, taskId);
+    if (dimensions) return dimensions;
+
+    const nextLayout = new Promise<void>((resolve) => {
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => resolve());
+      } else {
+        setTimeout(resolve, 0);
+      }
+    });
+    const advanced = await waitForStagingStep(nextLayout, shouldContinue, deadline);
+    if (advanced.status !== 'resolved') return null;
+  }
+  return null;
+}
 
 function shouldPlayNotificationSound(event: AgentEvent): boolean {
   if (!event.source) return true;
@@ -72,6 +174,7 @@ export class ConversationManagerStore {
   private readonly pendingContextForks = new Map<string, Promise<Conversation>>();
   private readonly pendingConversationForks = new Map<string, Promise<Conversation>>();
   private readonly resumeLeases = new WeakMap<ConversationStore, object>();
+  private readonly openPreparationLeases = new WeakMap<ConversationStore, object>();
   private readonly runtimeStatusRevisions = new Map<string, number>();
   conversations = observable.map<string, ConversationStore>();
 
@@ -672,7 +775,12 @@ export class ConversationManagerStore {
 
   async resumeConversation(
     conversationId: string,
-    initialSize?: { cols: number; rows: number }
+    initialSize?: { cols: number; rows: number },
+    options: {
+      skipLiveProbe?: boolean;
+      requireGenerationBoundResize?: boolean;
+      shouldContinue?: () => boolean;
+    } = {}
   ): Promise<boolean> {
     const store = this.conversations.get(conversationId);
     if (!store) return false;
@@ -681,26 +789,55 @@ export class ConversationManagerStore {
     this.resumeLeases.set(store, resumeLease);
     const ownsResumeLease = () =>
       this.conversations.get(conversationId) === store &&
-      this.resumeLeases.get(store) === resumeLease;
+      this.resumeLeases.get(store) === resumeLease &&
+      (options.shouldContinue?.() ?? true);
     const ownsUngeneratedFailureLease = () =>
       ownsResumeLease() && store.getSessionGeneration() === sessionGenerationAtStart;
-    store.setSessionExited(false);
+    if (!options.requireGenerationBoundResize) store.setSessionExited(false);
     try {
       const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
+      const confirmGenerationBoundResize = async (
+        generation: number,
+        dimensions: { cols: number; rows: number }
+      ): Promise<boolean> => {
+        const resized = await rpc.pty.resizeForRenderer(
+          sessionId,
+          generation,
+          dimensions.cols,
+          dimensions.rows
+        );
+        if (!resized.success || resized.data.generation !== generation || !ownsResumeLease()) {
+          return false;
+        }
+        const currentPty = store.session.pty;
+        if (currentPty) currentPty.lastSentDims = dimensions;
+        return true;
+      };
       // The common task-switch path already has a live backend/tmux session.
       // Avoid the heavier resume controller (DB lookup, permission reconcile,
       // operation lock) and simply attach the renderer to the current PTY
       // generation. If this lightweight probe is unavailable during a
       // renderer-only update, fall through to the compatible resume RPC.
-      const existingState = store.session.pty
-        ? await rpc.pty.getSessionState(sessionId).catch(() => null)
-        : null;
+      const existingState =
+        store.session.pty && !options.skipLiveProbe
+          ? await rpc.pty.getSessionState(sessionId).catch(() => null)
+          : null;
       if (existingState?.live) {
+        if (!ownsResumeLease()) return true;
+        const mountedSize = options.requireGenerationBoundResize
+          ? (initialSize ?? store.session.pty?.lastSentDims)
+          : (store.session.pty?.lastSentDims ?? initialSize);
+        if (
+          options.requireGenerationBoundResize &&
+          mountedSize &&
+          !(await confirmGenerationBoundResize(existingState.generation, mountedSize))
+        ) {
+          return false;
+        }
         if (!ownsResumeLease()) return true;
         store.session.pty?.expectCanonicalGeneration(existingState.generation);
         store.markSessionRunning(existingState.generation);
-        const mountedSize = store.session.pty?.lastSentDims ?? initialSize;
-        if (mountedSize) {
+        if (mountedSize && !options.requireGenerationBoundResize) {
           void rpc.pty.resize(sessionId, mountedSize.cols, mountedSize.rows);
         }
         return true;
@@ -725,22 +862,36 @@ export class ConversationManagerStore {
         return false;
       }
       if (!ownsResumeLease()) return true;
-      if (generation !== undefined) {
-        store.session.pty?.expectCanonicalGeneration(generation);
-      }
-      store.markSessionRunning(generation ?? 0);
       // Mount-time measurement can finish while the main process is still
       // creating the backend PTY. That early resize sees no registered PTY,
       // while initialSize may still be xterm's 80x24 fallback. Reapply the
       // latest measured grid after spawn so the TUI paints the full pane on
       // first launch instead of waiting for a reload.
-      const mountedSize = store.session.pty?.lastSentDims ?? initialSize;
-      if (mountedSize) {
+      const mountedSize = options.requireGenerationBoundResize
+        ? (initialSize ?? store.session.pty?.lastSentDims)
+        : (store.session.pty?.lastSentDims ?? initialSize);
+      if (options.requireGenerationBoundResize) {
+        if (
+          generation === undefined ||
+          !mountedSize ||
+          !(await confirmGenerationBoundResize(generation, mountedSize))
+        ) {
+          return false;
+        }
+      }
+      if (!ownsResumeLease()) return true;
+      if (generation !== undefined) {
+        store.session.pty?.expectCanonicalGeneration(generation);
+      }
+      store.markSessionRunning(generation ?? 0);
+      if (mountedSize && !options.requireGenerationBoundResize) {
         void rpc.pty.resize(sessionId, mountedSize.cols, mountedSize.rows);
       }
       return true;
     } catch (error) {
-      if (ownsUngeneratedFailureLease()) store.markSessionExited();
+      if (!options.requireGenerationBoundResize && ownsUngeneratedFailureLease()) {
+        store.markSessionExited();
+      }
       log.warn('ConversationManagerStore: failed to resume conversation', {
         projectId: this.projectId,
         taskId: this.taskId,
@@ -748,6 +899,267 @@ export class ConversationManagerStore {
         error,
       });
       return false;
+    }
+  }
+
+  /** Prepare a final live terminal frame while its task route is still hidden. */
+  async prepareConversationForOpen(
+    conversationId: string,
+    shouldContinue: () => boolean,
+    timeoutMs = 1_000
+  ): Promise<boolean> {
+    const store = this.conversations.get(conversationId);
+    const deadline = performance.now() + Math.max(0, timeoutMs);
+    const canContinue = () => shouldContinue() && performance.now() < deadline;
+    if (!store || !canContinue()) return false;
+
+    const preparationLease = {};
+    this.openPreparationLeases.set(store, preparationLease);
+    const ownsPreparationLease = () =>
+      this.conversations.get(conversationId) === store &&
+      this.openPreparationLeases.get(store) === preparationLease;
+    const rendererBeforePreparation = store.session.pty;
+    let connectPromise: Promise<void> | null = null;
+    let preparedPty: FrontendPty | null = null;
+    let delivered = false;
+    let cleanupDeferredUntilConnect = false;
+    const discardCreatedRenderer = () => {
+      if (rendererBeforePreparation || !ownsPreparationLease()) return;
+      const candidate = preparedPty ?? store.session.pty;
+      if (candidate) store.session.discardUnconnectedRenderer(candidate);
+    };
+
+    try {
+      connectPromise = store.session.connect();
+      const connected = await waitForStagingStep(connectPromise, canContinue, deadline);
+      if (connected.status !== 'resolved' || !canContinue()) return false;
+
+      const pty = store.session.pty;
+      preparedPty = pty;
+      if (!pty || !canContinue()) return false;
+      const shouldHoldRevealClaim = () =>
+        shouldContinue() &&
+        this.conversations.get(conversationId) === store &&
+        store.session.pty === pty &&
+        (delivered || (ownsPreparationLease() && performance.now() < deadline));
+
+      // Wait for the opaque destination layout to register its task-keyed pane,
+      // then measure it with this terminal's own cell metrics. A source task,
+      // sidebar pin, or stale 80x24 fallback is never a valid canonical grid.
+      const initialSize = await waitForConversationPaneDimensions(
+        pty,
+        this.projectId,
+        this.taskId,
+        canContinue,
+        deadline
+      );
+      if (!initialSize || !canContinue()) return false;
+      const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
+      const probe = () =>
+        waitForStagingStep(
+          rpc.pty.getSessionState(sessionId).catch(() => null),
+          canContinue,
+          deadline
+        );
+      const probeSettledRegistration = async () => {
+        let outcome = await probe();
+        while (
+          outcome.status === 'resolved' &&
+          outcome.value?.registering === true &&
+          canContinue()
+        ) {
+          // The currently live generation is explicitly stale once a newer
+          // registration intent exists. Wait within the same absolute task-open
+          // budget; never resize or canonicalize that outgoing framebuffer.
+          const registrationSettled = await waitForStagingStep(
+            new Promise<void>((resolve) => setTimeout(resolve, STAGING_CANCELLATION_POLL_MS)),
+            canContinue,
+            deadline
+          );
+          if (registrationSettled.status !== 'resolved') return registrationSettled;
+          outcome = await probe();
+        }
+        return outcome;
+      };
+      const resizeGeneration = async (
+        generation: number
+      ): Promise<'ready' | 'retry' | 'stopped'> => {
+        const resized = await waitForStagingStep(
+          rpc.pty.resizeForRenderer(sessionId, generation, initialSize.cols, initialSize.rows),
+          canContinue,
+          deadline
+        );
+        if (resized.status !== 'resolved' || !canContinue()) return 'stopped';
+        if (!resized.value.success || resized.value.data.generation !== generation) return 'retry';
+        if (store.session.pty !== pty || !ownsPreparationLease()) return 'stopped';
+        pty.lastSentDims = initialSize;
+        pty.expectCanonicalGeneration(generation);
+        store.markSessionRunning(generation);
+        return 'ready';
+      };
+
+      // Probe + generation-bound resize is retried at most once. A disappeared
+      // generation falls through to the genuine stopped-session resume path.
+      let stateOutcome = await probeSettledRegistration();
+      if (stateOutcome.status !== 'resolved' || !canContinue()) return false;
+      let state = stateOutcome.value;
+      let running = false;
+      let runningGeneration: number | null = null;
+      if (state?.live) {
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const resized = await resizeGeneration(state.generation);
+          if (resized === 'ready') {
+            running = true;
+            runningGeneration = state.generation;
+            break;
+          }
+          if (resized === 'stopped' || attempt === 1) return false;
+
+          stateOutcome = await probeSettledRegistration();
+          if (stateOutcome.status !== 'resolved' || !canContinue()) return false;
+          state = stateOutcome.value;
+          if (!state?.live) break;
+        }
+      }
+
+      if (!running) {
+        // With transcript fallback removed, the registry ring safely captures
+        // startup output. Wait for resume to confirm the new generation before
+        // subscribing, so an old final snapshot cannot satisfy first-frame prep.
+        const resumed = await waitForStagingStep(
+          this.resumeConversation(conversationId, initialSize, {
+            skipLiveProbe: true,
+            requireGenerationBoundResize: true,
+            shouldContinue: canContinue,
+          }),
+          canContinue,
+          deadline
+        );
+        if (resumed.status !== 'resolved' || !resumed.value || !canContinue()) return false;
+        running = true;
+        runningGeneration = store.getSessionGeneration();
+      }
+
+      if (!running || store.session.pty !== pty || !ownsPreparationLease()) return false;
+      let needsFirstFrame = true;
+      while (canContinue()) {
+        let frameReady = true;
+        if (needsFirstFrame) {
+          const remainingMs = Math.max(0, deadline - performance.now());
+          if (remainingMs <= 0) return false;
+          const prepared = await waitForStagingStep(
+            store.session.prepareFirstFrame(initialSize, canContinue, {
+              waitForCanonicalOutput: true,
+              timeoutMs: remainingMs,
+            }),
+            canContinue,
+            deadline
+          );
+          if (prepared.status !== 'resolved' || !canContinue()) return false;
+          frameReady = prepared.value;
+        }
+
+        if (frameReady) {
+          const claimReady = await waitForStagingStep(
+            pty.acquireCanonicalRevealClaim(
+              shouldHoldRevealClaim,
+              Math.max(0, deadline - performance.now())
+            ),
+            canContinue,
+            deadline
+          );
+          if (claimReady.status !== 'resolved' || !canContinue()) return false;
+          if (claimReady.value) {
+            delivered = true;
+            return true;
+          }
+        }
+
+        // `prepareFirstFrame(G)` and the exact-generation reveal claim are one
+        // atomic staging transaction. A G+1 registration can begin between
+        // them, making the claim correctly fail. Re-probe under the original
+        // absolute deadline, wait for registration to settle, and rebuild the
+        // hidden frame for the replacement generation instead of surfacing a
+        // false task-open failure.
+        stateOutcome = await probeSettledRegistration();
+        if (stateOutcome.status !== 'resolved' || !canContinue()) return false;
+        state = stateOutcome.value;
+        if (!state?.live) return false;
+
+        if (runningGeneration !== state.generation || !frameReady) {
+          while (canContinue()) {
+            const resized = await resizeGeneration(state.generation);
+            if (resized === 'stopped') return false;
+            if (resized === 'ready') {
+              runningGeneration = state.generation;
+              needsFirstFrame = true;
+              break;
+            }
+
+            const retryDelay = await waitForStagingStep(
+              new Promise<void>((resolve) => setTimeout(resolve, STAGING_CANCELLATION_POLL_MS)),
+              canContinue,
+              deadline
+            );
+            if (retryDelay.status !== 'resolved') return false;
+
+            stateOutcome = await probeSettledRegistration();
+            if (stateOutcome.status !== 'resolved' || !canContinue()) return false;
+            state = stateOutcome.value;
+            if (!state?.live) return false;
+          }
+          continue;
+        }
+
+        // A same-generation denial can be a short owner/IPC handoff. Keep the
+        // already prepared frame, but throttle retries so an immediately
+        // rejected claim cannot spin beyond the task-open budget.
+        const retryDelay = await waitForStagingStep(
+          new Promise<void>((resolve) => setTimeout(resolve, STAGING_CANCELLATION_POLL_MS)),
+          canContinue,
+          deadline
+        );
+        if (retryDelay.status !== 'resolved') return false;
+        needsFirstFrame = false;
+      }
+      return false;
+    } catch (error) {
+      log.warn('ConversationManagerStore: failed to stage conversation for open', {
+        projectId: this.projectId,
+        taskId: this.taskId,
+        conversationId,
+        error,
+      });
+      return false;
+    } finally {
+      if (!delivered) discardCreatedRenderer();
+      if (
+        !delivered &&
+        !rendererBeforePreparation &&
+        !preparedPty &&
+        connectPromise &&
+        ownsPreparationLease()
+      ) {
+        // connect() can itself be waiting on an eviction/settings barrier when
+        // the absolute task-open deadline expires. Reclaim only if this request
+        // still owns the preparation lease after that shared promise settles.
+        cleanupDeferredUntilConnect = true;
+        void connectPromise.then(
+          () => {
+            discardCreatedRenderer();
+            if (ownsPreparationLease()) this.openPreparationLeases.delete(store);
+          },
+          () => {
+            if (ownsPreparationLease()) this.openPreparationLeases.delete(store);
+          }
+        );
+      }
+      // Once delivered, the claim predicate no longer depends on this internal
+      // preparation lease; it remains fenced by the caller's navigation lease
+      // and exact PTY/store identity until React's visible paint ACK.
+      if (!cleanupDeferredUntilConnect && ownsPreparationLease()) {
+        this.openPreparationLeases.delete(store);
+      }
     }
   }
 

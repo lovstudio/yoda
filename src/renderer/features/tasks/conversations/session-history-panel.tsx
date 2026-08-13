@@ -137,6 +137,32 @@ export const SessionHistoryPanel = observer(function SessionHistoryPanel({
 const MIN_DOCK_ROWS = 1;
 const MAX_DOCK_ROWS = 20;
 const DOCK_PROMPT_HEAD_COUNT = 1;
+const DOCK_HEADER_HEIGHT_PX = 28;
+const DOCK_PREVIEW_ITEM_HEIGHT_PX = 24;
+const DOCK_PREVIEW_VERTICAL_PADDING_PX = 8;
+const DOCK_TOP_BORDER_HEIGHT_PX = 1;
+/** Preserve a usable terminal viewport even with the maximum prompt-row setting. */
+const MIN_TERMINAL_VIEWPORT_HEIGHT_PX = 160;
+
+function clampDockRows(rows: number): number {
+  return Math.min(MAX_DOCK_ROWS, Math.max(MIN_DOCK_ROWS, rows));
+}
+
+/**
+ * `buildPromptPreviewItems(prompts, 1, rows)` renders at most the first prompt,
+ * one truncation row, and `rows` tail prompts. Keep that maximum geometry even
+ * when the query is cold or contains fewer prompts so transcript hydration
+ * cannot resize the terminal pane.
+ */
+function getDockedSessionHistoryHeight(rows: number, collapsed = false): number {
+  const headerHeight = DOCK_TOP_BORDER_HEIGHT_PX + DOCK_HEADER_HEIGHT_PX;
+  if (collapsed) return headerHeight;
+
+  const maxPreviewItems = DOCK_PROMPT_HEAD_COUNT + 1 + clampDockRows(rows);
+  return (
+    headerHeight + DOCK_PREVIEW_VERTICAL_PADDING_PX + maxPreviewItems * DOCK_PREVIEW_ITEM_HEIGHT_PX
+  );
+}
 
 /**
  * The same prompt history docked at the bottom of the conversation pane, gated
@@ -154,18 +180,36 @@ export const DockedSessionHistory = observer(function DockedSessionHistory({
   const { t } = useTranslation();
   const { value: ui, update } = useAppSettingsKey('interface');
   const enabled = ui?.dockSessionHistory ?? true;
-  const rows = Math.min(MAX_DOCK_ROWS, Math.max(MIN_DOCK_ROWS, ui?.dockSessionHistoryRows ?? 3));
+  const rows = clampDockRows(ui?.dockSessionHistoryRows ?? 3);
   const [collapsed, setCollapsed] = useState(false);
   const [treeOpen, setTreeOpen] = useState(false);
   const prompts = useSessionPrompts(active && enabled && !collapsed);
-  const promptTree = useSessionPromptTree(enabled && treeOpen);
+  const promptTree = useSessionPromptTree(active && enabled && treeOpen);
   const { restoringPrompt, requestRestorePrompt } = useConversationPromptRestore();
   const provisionedTask = useRequireProvisionedTask();
 
-  if (!enabled || !prompts.hasConversation) return null;
+  if (!enabled) return null;
 
-  const setRows = (next: number) =>
-    update({ dockSessionHistoryRows: Math.min(MAX_DOCK_ROWS, Math.max(MIN_DOCK_ROWS, next)) });
+  const dockHeight = getDockedSessionHistoryHeight(rows, collapsed);
+  const dockStyle = {
+    height: dockHeight,
+    maxHeight: `calc(100% - ${MIN_TERMINAL_VIEWPORT_HEIGHT_PX}px)`,
+  };
+  if (!active) {
+    return (
+      <div
+        aria-hidden="true"
+        data-session-history-dock
+        data-session-history-ready="false"
+        className="shrink-0 overflow-hidden border-t border-border-primary/60 bg-background"
+        style={dockStyle}
+      />
+    );
+  }
+
+  if (!prompts.hasConversation) return null;
+
+  const setRows = (next: number) => update({ dockSessionHistoryRows: clampDockRows(next) });
 
   const openConversation = async (conversation: Conversation): Promise<boolean> => {
     if (provisionedTask.conversations.conversations.has(conversation.id)) {
@@ -206,7 +250,12 @@ export const DockedSessionHistory = observer(function DockedSessionHistory({
 
   return (
     <Popover open={treeOpen} onOpenChange={setTreeOpen}>
-      <div className="flex shrink-0 flex-col border-t border-border-primary/60 bg-background">
+      <div
+        data-session-history-dock
+        data-session-history-ready="true"
+        className="flex shrink-0 flex-col overflow-hidden border-t border-border-primary/60 bg-background"
+        style={dockStyle}
+      >
         <div className="flex h-7 shrink-0 items-center gap-1.5 px-3 text-foreground-passive">
           <button
             type="button"
@@ -356,7 +405,7 @@ function DockedSessionPromptPreview({
   );
 
   return (
-    <div className="py-1">
+    <div data-session-history-preview className="py-1">
       {previewItems.map((item) =>
         item.type === 'truncated' ? (
           <button

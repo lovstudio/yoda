@@ -114,6 +114,8 @@ interface PaneSizingProviderProps {
   sessionIds: string[];
   /** The only session whose xterm and backend PTY may be resized by this pane. */
   activeSessionId: string | null;
+  /** Delay external measurement until layout-affecting settings are authoritative. */
+  registrationEnabled?: boolean;
   children: ReactNode;
 }
 
@@ -121,6 +123,7 @@ export function PaneSizingProvider({
   paneId,
   sessionIds,
   activeSessionId,
+  registrationEnabled = true,
   children,
 }: PaneSizingProviderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -130,13 +133,14 @@ export function PaneSizingProvider({
 
   // Register/unregister this pane in the module-level registry.
   useEffect(() => {
+    if (!registrationEnabled) return;
     const el = containerRef.current;
     if (!el) return;
     paneRegistry.set(paneId, el);
     return () => {
       paneRegistry.delete(paneId);
     };
-  }, [paneId]);
+  }, [paneId, registrationEnabled]);
 
   const reportDimensions = useCallback(
     (reportSessionId: string, cols: number, rows: number) => {

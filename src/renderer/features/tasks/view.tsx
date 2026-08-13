@@ -26,7 +26,9 @@ import { EditorProvider } from './editor/editor-provider';
 import { useIsActiveTask } from './hooks/use-is-active-task';
 import { TaskMainPanel } from './main-panel';
 import { markTaskOpenTrace } from './task-open-performance';
+import { taskOpenTransitionStore } from './task-open-transition-store';
 import { TaskTitlebar } from './task-titlebar';
+import { shouldResolveTaskScopeEntry } from './task-view-opening';
 
 /**
  * Syncs TabManagerStore.isVisible with the active task state.
@@ -90,6 +92,8 @@ const TopLevelTabSync = observer(function TopLevelTabSync({
   // Re-run the replay on every openTab, even for an unchanged route — clicking
   // the same session again must re-align internal state.
   const replayNonce = appState.appTabs.replayNonce;
+  const isTargetPending = taskOpenTransitionStore.isPending(projectId, taskId);
+  const failedTarget = taskOpenTransitionStore.failedTarget(projectId, taskId);
 
   // The route's target only applies while this task IS the routed task. A
   // tab-less route is a scope entry — resolved by the effect below to the
@@ -116,13 +120,27 @@ const TopLevelTabSync = observer(function TopLevelTabSync({
   useLayoutEffect(() => {
     if (!isRoutedTask) return;
 
+    // A failed conversation opener owns only that route target. A deliberate
+    // switch to another tab in the same task is a new user intent and must
+    // immediately release the failed overlay instead of being suppressed.
+    if (failedTarget && target && JSON.stringify(failedTarget) !== JSON.stringify(target)) {
+      taskOpenTransitionStore.dismissFailure(projectId, taskId);
+    }
+
     // One owner resolves the route intent. An explicit route always wins and
     // discards pre-bridge intents. A target-less scope entry consumes the
     // pending initial conversation exactly once, then falls back to the task's
     // restored active tab. Keeping this in one effect prevents scope restore
     // and bridge mount from opening the same session twice.
+    const shouldResolveScopeEntry = shouldResolveTaskScopeEntry(target, isTargetPending);
+    // The explicit opener owns every loader route, including one whose final
+    // target is already known. It has synchronously selected the internal tab;
+    // replaying it here would forward through the bridge and invalidate the
+    // opener's navigation lease before canonical-frame staging completes.
+    if (isTargetPending) return;
+
     const pending = tabManager.flushPendingTopLevelTarget();
-    if (!target || !targetKey) {
+    if (shouldResolveScopeEntry) {
       openTaskTopTab(
         projectId,
         taskId,
@@ -132,6 +150,7 @@ const TopLevelTabSync = observer(function TopLevelTabSync({
       );
       return;
     }
+    if (!target || !targetKey) return;
 
     log.debug('[tab-sync] replay: applying route target', { projectId, taskId, target });
     let cancelled = false;
@@ -195,7 +214,17 @@ const TopLevelTabSync = observer(function TopLevelTabSync({
     };
     // targetKey is the stable identity of `target`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRoutedTask, targetKey, replayNonce, provisioned, tabManager, projectId, taskId]);
+  }, [
+    failedTarget,
+    isRoutedTask,
+    isTargetPending,
+    targetKey,
+    replayNonce,
+    provisioned,
+    tabManager,
+    projectId,
+    taskId,
+  ]);
 
   // Lifecycle: close top-level tabs whose conversation was archived/deleted.
   // An unhydrated manager starts with an empty map, so wait for a completed

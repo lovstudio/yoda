@@ -1,8 +1,9 @@
 import { MessageSquare } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Conversation } from '@shared/conversations';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { DockedSessionHistory } from '@renderer/features/tasks/conversations/session-history-panel';
 import { useIsActiveTask } from '@renderer/features/tasks/hooks/use-is-active-task';
 import { splitViewStore } from '@renderer/features/tasks/split-view/split-view-store';
@@ -13,11 +14,13 @@ import {
 import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
+import type { FrontendPty } from '@renderer/lib/pty/pty';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { log } from '@renderer/utils/logger';
 import { SessionOpeningSurface } from '../components/session-opening-surface';
+import { taskOpenTransitionStore } from '../task-open-transition-store';
 import type { ConversationStore } from './conversation-manager';
 import { ConversationSession } from './conversation-session';
 import { isConversationSurfaceVisible } from './conversation-surface-visibility';
@@ -38,16 +41,19 @@ export const ConversationsPanel = observer(function ConversationsPanel({
   const { conversations } = provisioned;
   const { tabManager: tm } = provisioned.taskView;
   const isActive = useIsActiveTask(taskId);
+  const isTaskOpenStaging = taskOpenTransitionStore.isPending(projectId, taskId);
+  const { isLoading: isInterfaceSettingsLoading } = useAppSettingsKey('interface');
   // Split-view extra panes are visible but not the routed (active) task. They
   // still need their PTY session resumed so input can be sent — gating resume on
   // isActive alone leaves comparison panes dead (can't send). Focus, however,
   // stays tied to isActive so extra panes don't steal the keyboard.
-  const isVisible = isConversationSurfaceVisible({
-    isActiveTask: isActive,
-    isSplitView: splitViewStore.has(taskId),
-    forceVisible,
-  });
-  const autoFocus = isActive && provisioned.taskView.focusedRegion === 'main';
+  const isVisible =
+    isConversationSurfaceVisible({
+      isActiveTask: isActive,
+      isSplitView: splitViewStore.has(taskId),
+      forceVisible,
+    }) && !isTaskOpenStaging;
+  const autoFocus = isActive && !isTaskOpenStaging && provisioned.taskView.focusedRegion === 'main';
 
   const activeConversation: ConversationStore | undefined = tm.activeConversation;
   const activeDescriptor = tm.activeDescriptor;
@@ -192,9 +198,10 @@ export const ConversationsPanel = observer(function ConversationsPanel({
           }}
         >
           <PaneSizingProvider
-            paneId="conversations"
+            paneId={`conversations:${projectId}:${taskId}`}
             sessionIds={paneSessionIds}
             activeSessionId={activeSessionId}
+            registrationEnabled={!isInterfaceSettingsLoading}
           >
             {isResolvingConversation ? (
               <ConversationOpeningSurface />
@@ -215,7 +222,11 @@ export const ConversationsPanel = observer(function ConversationsPanel({
         </div>
       </div>
       {!isResolvingConversation && activeConversation ? (
-        <PostPaintSessionHistory key={`${taskId}:${activeConversation.data.id}`} />
+        <PostPaintSessionHistory
+          key={`${taskId}:${activeConversation.data.id}`}
+          enabled={!isTaskOpenStaging}
+          pty={activeConversation.session.pty ?? null}
+        />
       ) : null}
     </div>
   );
@@ -234,26 +245,52 @@ function ConversationOpeningSurface() {
 }
 
 /**
- * Keep the entire transcript dock, including cached-query reads and empty
- * states, outside the terminal's first browser paint. Mounting the component
- * with `active=false` still exposed a transient "0 / no prompts" dock before
- * the target session had painted.
+ * Reserve the final transcript-dock geometry in the destination's first
+ * layout, but keep its query and native content inactive until after the
+ * terminal's canonical browser paint.
  */
-function PostPaintSessionHistory() {
-  const [canLoad, setCanLoad] = useState(false);
+function PostPaintSessionHistory({ enabled, pty }: { enabled: boolean; pty: FrontendPty | null }) {
+  const reveal = useMemo(
+    () => ({ enabled, pty, token: Symbol('session-history-reveal') }),
+    [enabled, pty]
+  );
+  const revealToken = reveal.token;
+  const [paintedToken, setPaintedToken] = useState<symbol | null>(null);
 
-  useEffect(() => {
-    let secondFrame: number | null = null;
-    const firstFrame = requestAnimationFrame(() => {
-      secondFrame = requestAnimationFrame(() => setCanLoad(true));
+  useLayoutEffect(() => {
+    let subscribed = true;
+    let revealFrame: number | null = null;
+    let revealed = false;
+    if (!enabled || !pty) return;
+
+    const unsubscribe = pty.subscribeVisibleFrameState((ready) => {
+      if (!subscribed) return;
+      if (revealFrame !== null) {
+        cancelAnimationFrame(revealFrame);
+        revealFrame = null;
+      }
+      if (!ready) {
+        revealed = false;
+        setPaintedToken(null);
+        return;
+      }
+      if (revealed) return;
+      revealFrame = requestAnimationFrame(() => {
+        revealFrame = null;
+        if (!subscribed) return;
+        revealed = true;
+        setPaintedToken(revealToken);
+      });
     });
-    return () => {
-      cancelAnimationFrame(firstFrame);
-      if (secondFrame !== null) cancelAnimationFrame(secondFrame);
-    };
-  }, []);
 
-  return canLoad ? <DockedSessionHistory active /> : null;
+    return () => {
+      subscribed = false;
+      if (revealFrame !== null) cancelAnimationFrame(revealFrame);
+      unsubscribe();
+    };
+  }, [enabled, pty, revealToken]);
+
+  return <DockedSessionHistory active={enabled && pty !== null && paintedToken === revealToken} />;
 }
 
 const ConversationLandingSurface = observer(function ConversationLandingSurface({

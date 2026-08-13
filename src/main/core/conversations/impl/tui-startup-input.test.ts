@@ -13,6 +13,10 @@ class FakePty implements Pty {
 
   resize(): void {}
 
+  pause(): void {}
+
+  resume(): void {}
+
   kill(): void {}
 
   onData(handler: (data: string) => void): void {

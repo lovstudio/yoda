@@ -30,6 +30,7 @@ import {
   taskTitleStyleClassName,
 } from '@renderer/features/tasks/task-appearance-classes';
 import { beginTaskOpenTrace } from '@renderer/features/tasks/task-open-performance';
+import { taskOpenTransitionStore } from '@renderer/features/tasks/task-open-transition-store';
 import { TreeGuideSlot } from '@renderer/lib/components/tree-guide-slot';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
 import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
@@ -103,15 +104,16 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   if (!menuActions) return null;
 
   const isBootstrapping =
-    task.state === 'unregistered' ||
-    (task.state === 'unprovisioned' &&
-      (task.phase === 'provision' || task.phase === 'provision-error'));
+    task.state === 'unregistered' || (task.state === 'unprovisioned' && task.phase === 'provision');
+  const isOpening =
+    taskOpenTransitionStore.isPending(projectId, taskId) &&
+    !taskOpenTransitionStore.hasFailed(projectId, taskId);
   // Any displayed agent status pins the status slot: notifications are a
   // click target (jump to the pending session) and the working spinner keeps
   // its hover-to-interrupt affordance.
   const statusSummary = taskSessionStatusSummary(task);
   const hasAgentNotification = statusSummary.primaryStatus !== null;
-  const isIdle = !isBootstrapping && !hasAgentNotification;
+  const isIdle = !isBootstrapping && !isOpening && !hasAgentNotification;
   const appearance = resolveTaskAppearance(
     interfaceSettings?.taskAppearance ?? DEFAULT_TASK_APPEARANCE_SETTINGS,
     {
@@ -298,7 +300,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
             style={{ backgroundColor: branchRailColor }}
             className={cn(
               'absolute inset-y-1.5 left-0.5 w-[3px] rounded-full',
-              (isBootstrapping || isArchiving) && 'opacity-40'
+              (isBootstrapping || isOpening || isArchiving) && 'opacity-40'
             )}
           />
         )}
@@ -330,7 +332,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               className={cn(
                 'min-w-0 truncate text-left transition-colors',
                 taskTitleStyleClassName(appearance.titleStyle),
-                (isBootstrapping || isArchiving) && 'text-foreground/40'
+                (isBootstrapping || isOpening || isArchiving) && 'text-foreground/40'
               )}
             >
               {taskName}
@@ -351,7 +353,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
             <div
               className={cn(
                 'flex min-w-0 items-center gap-1 text-foreground-tertiary-passive',
-                (isBootstrapping || isArchiving) && 'opacity-40'
+                (isBootstrapping || isOpening || isArchiving) && 'opacity-40'
               )}
             >
               <GitBranch className="size-3 shrink-0" />
@@ -412,7 +414,12 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               : 'flex group-hover/row:hidden'
         )}
       >
-        <TaskSidebarAgentStatus task={task} needsReview={needsReview} summary={statusSummary} />
+        <TaskSidebarAgentStatus
+          task={task}
+          opening={isOpening}
+          needsReview={needsReview}
+          summary={statusSummary}
+        />
       </div>
     </SidebarMenuRow>
   );

@@ -200,6 +200,12 @@ export class LocalTerminalProvider implements TerminalProvider {
         sessionId,
       });
 
+      if (
+        !(await ptySessionRegistry.waitForRevealClaims(sessionId, operation.registrationEpoch)) ||
+        !this.isCurrentStart(sessionId, operation)
+      ) {
+        return;
+      }
       if (!this.isCurrentStart(sessionId, operation)) return;
       pty = spawnLocalPty({
         id: sessionId,

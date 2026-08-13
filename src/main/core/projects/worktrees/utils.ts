@@ -38,13 +38,20 @@ export const ensureSshWorktreeDirectory = async ({
 };
 
 export async function resolveTaskWorkDir(
-  task: Pick<Task, 'taskBranch' | 'sourceBranch'>,
+  task: Pick<Task, 'taskBranch' | 'sourceBranch' | 'workspaceId'>,
   projectPath: string,
   worktreeService: WorktreeService
 ): Promise<string> {
   if (!task.taskBranch) return projectPath;
 
-  const existing = await worktreeService.getWorktree(task.taskBranch);
+  // workspaceId is written only after a task has provisioned successfully.
+  // On a later renderer-cold open, allow that persisted task to reuse the
+  // project-root checkout too. Otherwise a task on `main` falls through to
+  // checkoutExistingBranch(), whose best-effort remote fetch can add seconds
+  // to every task switch despite the local checkout already being ready.
+  const existing = task.workspaceId
+    ? await worktreeService.getWorktree(task.taskBranch, { includeProjectRoot: true })
+    : await worktreeService.getWorktree(task.taskBranch);
   if (existing) return existing;
 
   if (!task.sourceBranch || task.taskBranch === task.sourceBranch.branch) {

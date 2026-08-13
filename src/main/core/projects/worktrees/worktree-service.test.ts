@@ -95,6 +95,27 @@ describe('WorktreeService', () => {
     });
   }
 
+  describe('getWorktree', () => {
+    it('only returns the project root when a persisted task explicitly allows it', async () => {
+      const svc = makeService();
+
+      await expect(svc.getWorktree('main')).resolves.toBeUndefined();
+      await expect(svc.getWorktree('main', { includeProjectRoot: true })).resolves.toBe(
+        fs.realpathSync(repoDir)
+      );
+    });
+
+    it('returns an allowed project root before its optional pool directory exists', async () => {
+      const missingPool = path.join(poolDir, 'project-without-linked-worktrees');
+      const svc = makeService({ worktreePoolPath: missingPool });
+
+      await expect(svc.getWorktree('main', { includeProjectRoot: true })).resolves.toBe(
+        fs.realpathSync(repoDir)
+      );
+      expect(fs.existsSync(missingPool)).toBe(false);
+    });
+  });
+
   describe('checkoutBranchWorktree', () => {
     it('creates a worktree from an existing local source branch', async () => {
       await git(['branch', 'task/local-checkout'], { cwd: repoDir });

@@ -22,6 +22,8 @@ const ipcMocks = vi.hoisted(() => {
       (_sessionId: string, _consumerId: string, _checkpoint: unknown) =>
         Promise.resolve({ success: true, data: { saved: true } })
     ),
+    claimGenerationReveal: vi.fn(),
+    releaseGenerationReveal: vi.fn(),
     subscribe: vi.fn(),
     listenerDisposals: [] as Array<ReturnType<typeof vi.fn>>,
     setDataListener(listener: (event: PtyDataEvent) => void) {
@@ -57,6 +59,8 @@ vi.mock('@renderer/lib/ipc', () => ({
       heartbeatConsumer: ipcMocks.heartbeatConsumer,
       unsubscribe: ipcMocks.unsubscribe,
       checkpointAndUnsubscribe: ipcMocks.checkpointAndUnsubscribe,
+      claimGenerationReveal: ipcMocks.claimGenerationReveal,
+      releaseGenerationReveal: ipcMocks.releaseGenerationReveal,
     },
   },
 }));
@@ -116,6 +120,8 @@ describe('FrontendPty stream ordering', () => {
     ipcMocks.heartbeatConsumer.mockClear();
     ipcMocks.unsubscribe.mockClear();
     ipcMocks.checkpointAndUnsubscribe.mockClear();
+    ipcMocks.claimGenerationReveal.mockReset();
+    ipcMocks.releaseGenerationReveal.mockReset();
     ipcMocks.listenerDisposals.length = 0;
     ipcMocks.clearDataListener();
   });
@@ -165,7 +171,7 @@ describe('FrontendPty stream ordering', () => {
     writeSpy.mockRestore();
   });
 
-  it('captures a compact current-frame checkpoint before cache eviction', async () => {
+  it('captures a bounded checkpoint with recent scrollback before cache eviction', async () => {
     ipcMocks.subscribe.mockResolvedValue({
       success: true,
       data: {
@@ -180,7 +186,7 @@ describe('FrontendPty stream ordering', () => {
     await pty.connect();
     await vi.waitFor(() => expect(ipcMocks.acknowledgeOutput).toHaveBeenCalled());
     pty.unmount(lease);
-    pty.dispose({ checkpoint: true });
+    await pty.disposeAndWait({ checkpoint: true });
 
     expect(ipcMocks.checkpointAndUnsubscribe).toHaveBeenCalledWith(
       'checkpoint-session',
@@ -194,11 +200,77 @@ describe('FrontendPty stream ordering', () => {
     );
     const checkpoint = ipcMocks.checkpointAndUnsubscribe.mock.calls[0]?.[2] as {
       buffer: string;
+      scrollbackLines: number;
     };
     expect(checkpoint.buffer).toContain('CURRENT FRAME');
-    expect(checkpoint.buffer.length).toBeLessThan(1_024);
-    expect(checkpoint.buffer.match(/old history/g)?.length ?? 0).toBeLessThanOrEqual(32);
+    expect(checkpoint.buffer.match(/old history/g)?.length ?? 0).toBeGreaterThan(1_000);
+    expect(checkpoint.buffer.length).toBeLessThan(1024 * 1024);
+    expect(checkpoint.scrollbackLines).toBe(5_000);
     expect(ipcMocks.unsubscribe).not.toHaveBeenCalled();
+  });
+
+  it('drains an active parser tail before checkpointing a continuously writing session', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer:
+          '\x1b[?2026h\x1b[2J\x1b[H╭─ Live frame ─╮\r\n│ Ready for input │\r\n╰─ Idle ────────╯\x1b[?25h\x1b[?2026l',
+        generation: 1,
+        sequence: 1,
+      },
+    });
+    pty = new FrontendPty('checkpoint-active-parser-session');
+    const lease = mountAndOpenFlushGate(pty);
+    await pty.connect();
+    await vi.waitFor(() => expect(ipcMocks.acknowledgeOutput).toHaveBeenCalled());
+    pty.unmount(lease);
+
+    const writes: Array<{ callback?: () => void }> = [];
+    const writeSpy = vi.spyOn(pty.terminal, 'write').mockImplementation((_data, callback) => {
+      writes.push({ callback });
+    });
+    ipcMocks.emitData(output(2, 'live tail still crossing the xterm parser'));
+    expect(writes).toHaveLength(1);
+    expect(pty.hasRecoverableSnapshot).toBe(true);
+
+    const disposal = pty.disposeAndWait({ checkpoint: true });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(ipcMocks.checkpointAndUnsubscribe).not.toHaveBeenCalled();
+
+    writes[0]?.callback?.();
+    await disposal;
+    expect(ipcMocks.checkpointAndUnsubscribe).toHaveBeenCalledWith(
+      'checkpoint-active-parser-session',
+      expect.any(String),
+      expect.objectContaining({ generation: 1, sequence: 2 })
+    );
+    writeSpy.mockRestore();
+    pty = null;
+  });
+
+  it('never marks a checkpoint canonical in the middle of synchronized output', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer:
+          '\x1b[?2026h\x1b[2J\x1b[H╭─ Partial frame ─╮\r\n│ Still repainting │\r\n╰─ Not committed ──╯',
+        generation: 1,
+        sequence: 1,
+      },
+    });
+    pty = new FrontendPty('checkpoint-open-sync-transaction-session');
+    const lease = mountAndOpenFlushGate(pty);
+
+    await pty.connect();
+    await vi.waitFor(() => expect(ipcMocks.acknowledgeOutput).toHaveBeenCalled());
+    pty.unmount(lease);
+    await pty.disposeAndWait({ checkpoint: true });
+
+    expect(ipcMocks.checkpointAndUnsubscribe).toHaveBeenCalledWith(
+      'checkpoint-open-sync-transaction-session',
+      expect.any(String),
+      expect.objectContaining({ canonical: false })
+    );
   });
 
   it('restores a compact checkpoint at its source grid before fitting the visible pane', async () => {
@@ -222,6 +294,99 @@ describe('FrontendPty stream ordering', () => {
     expect(pty.terminal.buffer.active.getLine(0)?.translateToString(true)).toContain(
       'COMPACT CURRENT FRAME'
     );
+  });
+
+  it('accepts a parsed compact checkpoint without an additional quiet-window delay', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer: '\x1bc╭─ Saved session ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯',
+        generation: 3,
+        sequence: 19,
+        checkpointCanonical: true,
+        checkpointDimensions: { cols: 120, rows: 32 },
+      },
+    });
+    pty = new FrontendPty('checkpoint-canonical-fast-path-session');
+
+    const preparation = pty.prepareFirstFrame({ cols: 120, rows: 32 }, () => true, {
+      waitForCanonicalOutput: true,
+    });
+    const timeout = new Promise<never>((_resolve, reject) => {
+      setTimeout(() => reject(new Error('compact checkpoint used the fallback quiet window')), 250);
+    });
+
+    await expect(Promise.race([preparation, timeout])).resolves.toBe(true);
+  });
+
+  it('requires a backend redraw before accepting a checkpoint from another grid', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer: '\x1bc╭─ 80x24 frame ─╮\r\n│ Missing lower rows │\r\n╰─ Old grid ────────╯',
+        generation: 1,
+        sequence: 19,
+        checkpointCanonical: true,
+        checkpointDimensions: { cols: 80, rows: 24 },
+      },
+    });
+    pty = new FrontendPty('checkpoint-grid-mismatch-session');
+    let prepared = false;
+    const preparation = pty
+      .prepareFirstFrame({ cols: 120, rows: 32 }, () => true, {
+        waitForCanonicalOutput: true,
+      })
+      .then((result) => {
+        prepared = result;
+        return result;
+      });
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(prepared).toBe(false);
+    ipcMocks.emitData(
+      output(
+        20,
+        '\x1b[?2026h\x1b[2J\x1b[H╭─ 120x32 frame ─╮\r\n│ Complete redraw │\r\n╰─ New grid ────────╯\x1b[?25h\x1b[?2026l'
+      )
+    );
+
+    await expect(preparation).resolves.toBe(true);
+  });
+
+  it('does not trust a checkpoint-sized intermediate frame without canonical provenance', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer: '\x1bcLoading workspace\r\nRestoring context\r\nPreparing terminal',
+        generation: 3,
+        sequence: 20,
+        checkpointCanonical: false,
+        checkpointDimensions: { cols: 120, rows: 32 },
+      },
+    });
+    pty = new FrontendPty('checkpoint-intermediate-frame-session');
+    let prepared = false;
+    const preparation = pty
+      .prepareFirstFrame({ cols: 120, rows: 32 }, () => true, {
+        waitForCanonicalOutput: true,
+      })
+      .then((result) => {
+        prepared = result;
+        return result;
+      });
+
+    // Even after the legacy 700 ms quiet heuristic, an untrusted compact
+    // checkpoint must remain staged until newer live terminal output arrives.
+    await new Promise((resolve) => setTimeout(resolve, 850));
+    expect(prepared).toBe(false);
+    ipcMocks.emitData({
+      ...output(
+        21,
+        '\x1b[?2026h\x1b[2J\x1b[H╭─ Final frame ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l'
+      ),
+      generation: 3,
+    });
+    await expect(preparation).resolves.toBe(true);
   });
 
   it('keeps a cold visible snapshot hidden until the parser reaches its final tail', async () => {
@@ -478,6 +643,27 @@ describe('FrontendPty stream ordering', () => {
     await expect(preparation).resolves.toBe(true);
   });
 
+  it('promotes a stale expected generation to a newer subscription snapshot', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer:
+          '\x1b[?2026h\x1b[2J\x1b[H╭─ Generation two ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l',
+        generation: 2,
+        sequence: 3,
+      },
+    });
+    pty = new FrontendPty('snapshot-promotes-generation-session');
+    pty.expectCanonicalGeneration(1);
+
+    await expect(
+      pty.prepareFirstFrame({ cols: 120, rows: 32 }, () => true, {
+        waitForCanonicalOutput: true,
+        timeoutMs: 1_000,
+      })
+    ).resolves.toBe(true);
+  });
+
   it('joins snapshot and live output exactly once across the subscribe race', async () => {
     ipcMocks.subscribe.mockImplementation(async () => {
       // seq=1 is already represented by the returned snapshot. seq=2 arrives
@@ -645,6 +831,50 @@ describe('FrontendPty stream ordering', () => {
     pty.unmount(remountLease);
   });
 
+  it('reveals a previously painted live terminal as soon as its active parser write drains', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer:
+          '\x1b[?2026h\x1b[2J\x1b[H╭─ Live session ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l',
+        generation: 1,
+        sequence: 1,
+      },
+    });
+    pty = new FrontendPty('continuously-streaming-hot-session');
+    const firstLease = mountAndOpenFlushGate(pty);
+    await pty.connect();
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+    pty.unmount(firstLease);
+
+    const writes: Array<{ callback?: () => void }> = [];
+    const writeSpy = vi.spyOn(pty.terminal, 'write').mockImplementation((_data, callback) => {
+      writes.push({ callback });
+    });
+    ipcMocks.emitData(output(2, 'streaming output that has not reached the parser tail'));
+    expect(writes).toHaveLength(1);
+    expect(pty.canRevealImmediately).toBe(false);
+
+    mountTarget = document.createElement('div');
+    document.body.appendChild(mountTarget);
+    const remountLease = pty.mount(mountTarget, { cols: 120, rows: 32 });
+    const visibleFrame = pty.waitForVisibleFrame();
+    let visible = false;
+    void visibleFrame.then((ready) => {
+      visible = ready;
+    });
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(visible).toBe(false);
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+
+    writes[0]?.callback?.();
+    await expect(visibleFrame).resolves.toBe(true);
+    expect(pty.ownedContainer.style.visibility).toBe('');
+
+    writeSpy.mockRestore();
+    pty.unmount(remountLease);
+  });
+
   it('keeps a hot remount hidden while its off-screen parser queue drains', async () => {
     ipcMocks.subscribe.mockResolvedValue({
       success: true,
@@ -723,6 +953,57 @@ describe('FrontendPty stream ordering', () => {
     expect(pty.ownedContainer.style.visibility).toBe('');
     expect(pty.terminal.cols).toBe(96);
     expect(pty.terminal.rows).toBe(24);
+  });
+
+  it('hides an old process at generation start and recovers after a late canonical frame', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer:
+          '\x1b[?2026h\x1b[2J\x1b[H╭─ Generation one ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l',
+        generation: 1,
+        sequence: 1,
+      },
+    });
+    pty = new FrontendPty('generation-visibility-session');
+    mountAndOpenFlushGate(pty);
+    await pty.connect();
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+
+    const frameStates: boolean[] = [];
+    const unsubscribeFrameState = pty.subscribeVisibleFrameState((ready) => {
+      frameStates.push(ready);
+    });
+
+    // Main publishes this empty sentinel synchronously when it registers the
+    // replacement PTY, before the replacement has emitted its first byte.
+    ipcMocks.emitData({ generation: 2, sequence: 0, byteLength: 0, data: '' });
+    // A late generation-bound resize result from G1 must not downgrade the
+    // authoritative G2 sentinel and strand the next canonical wait.
+    pty.expectCanonicalGeneration(1);
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+    expect(frameStates.at(-1)).toBe(false);
+
+    // A timed-out browser paint wait must not expose the reset/empty terminal.
+    await expect(pty.waitForVisibleFrame(() => true, 50)).resolves.toBe(false);
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+
+    ipcMocks.emitData({
+      generation: 2,
+      sequence: 1,
+      byteLength: 120,
+      data: '\x1b[?2026h\x1b[2J\x1b[H╭─ Generation two ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l',
+    });
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+    expect(pty.ownedContainer.style.visibility).toBe('');
+    expect(frameStates.at(-1)).toBe(true);
+    expect(
+      Array.from({ length: pty.terminal.rows }, (_, index) =>
+        pty?.terminal.buffer.active.getLine(index)?.translateToString(true)
+      ).join('\n')
+    ).toContain('Generation two');
+
+    unsubscribeFrameState();
   });
 
   it('reveals an unchanged prepared frame only after its DOM rows commit', async () => {
@@ -850,7 +1131,7 @@ describe('FrontendPty stream ordering', () => {
     expect(pty.ownedContainer.style.visibility).toBe('');
   });
 
-  it('chunks a 25 MiB snapshot and large live batch without advancing ACKs early', async () => {
+  it('chunks a 25 MiB snapshot without revealing or advancing ACKs early', async () => {
     const snapshot = `S${'x'.repeat(25 * 1024 * 1024 - 2)}E`;
     ipcMocks.subscribe.mockResolvedValue({
       success: true,
@@ -887,7 +1168,9 @@ describe('FrontendPty stream ordering', () => {
       nextWriteIndex += 1;
       write.callback();
       if (snapshotChunks.length === 1) {
-        expect(pty.ownedContainer.style.visibility).toBe('');
+        // A partial terminal protocol stream is never a valid frame. Keep the
+        // xterm hidden until the full parser queue and visible-frame ACK settle.
+        expect(pty.ownedContainer.style.visibility).toBe('hidden');
         expect(ipcMocks.acknowledgeOutput).not.toHaveBeenCalled();
       }
     }
@@ -965,10 +1248,182 @@ describe('FrontendPty stream ordering', () => {
     const consumerId = ipcMocks.subscribe.mock.calls[0]?.[1];
     expect(consumerId).toEqual(expect.any(String));
 
-    pty.dispose();
-    pty.dispose();
+    const firstDispose = pty.disposeAndWait();
+    const repeatedDispose = pty.disposeAndWait();
+    expect(repeatedDispose).toBe(firstDispose);
+    await firstDispose;
 
     expect(ipcMocks.unsubscribe).toHaveBeenCalledTimes(1);
     expect(ipcMocks.unsubscribe).toHaveBeenCalledWith('consumer-session', consumerId);
+  });
+
+  it('holds an exact-generation reveal claim until visible-frame acknowledgement', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer:
+          '\x1b[?2026h\x1b[2J\x1b[H╭─ Claimed frame ─╮\r\n│ Ready for input │\r\n╰─ Idle ─────────╯\x1b[?25h\x1b[?2026l',
+        generation: 1,
+        sequence: 1,
+        checkpointCanonical: true,
+        checkpointDimensions: { cols: 120, rows: 32 },
+      },
+    });
+    ipcMocks.claimGenerationReveal.mockResolvedValue({
+      success: true,
+      data: { token: 'claim-1', generation: 1, expiresAt: Date.now() + 6_000 },
+    });
+    ipcMocks.releaseGenerationReveal.mockResolvedValue({
+      success: true,
+      data: { released: true },
+    });
+    pty = new FrontendPty('generation-claim-session');
+    const firstLease = mountAndOpenFlushGate(pty);
+    await pty.connect();
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+    pty.unmount(firstLease);
+
+    await expect(pty.acquireCanonicalRevealClaim()).resolves.toBe(true);
+    const consumerId = ipcMocks.subscribe.mock.calls[0]?.[1];
+    expect(ipcMocks.claimGenerationReveal).toHaveBeenCalledWith(
+      'generation-claim-session',
+      consumerId,
+      1
+    );
+    expect(ipcMocks.releaseGenerationReveal).not.toHaveBeenCalled();
+
+    mountAndOpenFlushGate(pty);
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+    // xterm's paint alone does not release. ConversationSession releases after
+    // React has consumed the visible-frame=true state.
+    expect(ipcMocks.releaseGenerationReveal).not.toHaveBeenCalled();
+
+    pty.releaseCanonicalRevealClaim();
+    expect(ipcMocks.releaseGenerationReveal).toHaveBeenCalledWith('claim-1');
+  });
+
+  it('keeps an exact-generation claim when the same PTY streams during acquisition', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer:
+          '\x1b[?2026h\x1b[2J\x1b[H╭─ Streaming frame ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l',
+        generation: 1,
+        sequence: 1,
+      },
+    });
+    const claimResult = deferred<{
+      success: true;
+      data: { token: string; generation: number; expiresAt: number };
+    }>();
+    ipcMocks.claimGenerationReveal.mockReturnValueOnce(claimResult.promise);
+    ipcMocks.releaseGenerationReveal.mockResolvedValue({
+      success: true,
+      data: { released: true },
+    });
+    pty = new FrontendPty('generation-claim-streaming-session');
+    const lease = mountAndOpenFlushGate(pty);
+    await pty.connect();
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+    pty.unmount(lease);
+
+    const claim = pty.acquireCanonicalRevealClaim();
+    await vi.waitFor(() => expect(ipcMocks.claimGenerationReveal).toHaveBeenCalledOnce());
+    const parserCallbacks: Array<() => void> = [];
+    const writeSpy = vi.spyOn(pty.terminal, 'write').mockImplementation((_data, callback) => {
+      if (callback) parserCallbacks.push(callback);
+    });
+    ipcMocks.emitData(output(2, 'same-generation streaming update'));
+    claimResult.resolve({
+      success: true,
+      data: { token: 'claim-streaming', generation: 1, expiresAt: Date.now() + 6_000 },
+    });
+
+    await expect(claim).resolves.toBe(true);
+    await expect(pty.acquireCanonicalRevealClaim()).resolves.toBe(true);
+    expect(ipcMocks.claimGenerationReveal).toHaveBeenCalledOnce();
+    expect(ipcMocks.releaseGenerationReveal).not.toHaveBeenCalled();
+
+    parserCallbacks[0]?.();
+    writeSpy.mockRestore();
+    pty.releaseCanonicalRevealClaim();
+  });
+
+  it('releases a claimed old generation before accepting a replacement sentinel', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer:
+          '\x1b[?2026h\x1b[2J\x1b[H╭─ Generation one ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l',
+        generation: 1,
+        sequence: 1,
+        checkpointCanonical: true,
+        checkpointDimensions: { cols: 120, rows: 32 },
+      },
+    });
+    ipcMocks.claimGenerationReveal.mockResolvedValue({
+      success: true,
+      data: { token: 'claim-old', generation: 1, expiresAt: Date.now() + 6_000 },
+    });
+    ipcMocks.releaseGenerationReveal.mockResolvedValue({
+      success: true,
+      data: { released: true },
+    });
+    pty = new FrontendPty('generation-claim-replacement-session');
+    const lease = mountAndOpenFlushGate(pty);
+    await pty.connect();
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+    pty.unmount(lease);
+    await expect(pty.acquireCanonicalRevealClaim()).resolves.toBe(true);
+
+    ipcMocks.emitData({ generation: 2, sequence: 0, byteLength: 0, data: '' });
+
+    expect(ipcMocks.releaseGenerationReveal).toHaveBeenCalledWith('claim-old');
+    expect(pty.canonicalGeneration).toBe(2);
+  });
+
+  it('never paints an expired claim and renews it before revealing the same generation', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer:
+          '\x1b[?2026h\x1b[2J\x1b[H╭─ Expiring frame ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l',
+        generation: 1,
+        sequence: 1,
+        checkpointCanonical: true,
+        checkpointDimensions: { cols: 120, rows: 32 },
+      },
+    });
+    ipcMocks.claimGenerationReveal
+      .mockResolvedValueOnce({
+        success: true,
+        data: { token: 'claim-expiring', generation: 1, expiresAt: Date.now() + 1 },
+      })
+      .mockResolvedValueOnce({ success: false, error: { type: 'not_claimable' } })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { token: 'claim-renewed', generation: 1, expiresAt: Date.now() + 6_000 },
+      });
+    ipcMocks.releaseGenerationReveal.mockResolvedValue({
+      success: true,
+      data: { released: true },
+    });
+    pty = new FrontendPty('generation-claim-expiry-session');
+    const firstLease = mountAndOpenFlushGate(pty);
+    await pty.connect();
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+    pty.unmount(firstLease);
+
+    await expect(pty.acquireCanonicalRevealClaim()).resolves.toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(ipcMocks.releaseGenerationReveal).toHaveBeenCalledWith('claim-expiring');
+
+    mountAndOpenFlushGate(pty);
+    await expect(pty.waitForVisibleFrame(() => true, 100)).resolves.toBe(false);
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+    expect(ipcMocks.claimGenerationReveal).toHaveBeenCalledTimes(3);
+    expect(pty.ownedContainer.style.visibility).toBe('');
   });
 });

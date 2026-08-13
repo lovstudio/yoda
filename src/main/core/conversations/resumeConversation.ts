@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
+import { TmuxReattachMissError } from '@main/core/pty/tmux-reattach';
 import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
 import { log } from '@main/lib/logger';
@@ -31,25 +32,31 @@ export async function resumeConversation(
   const existing = inFlightResumes.get(sessionKey);
   if (existing) return existing;
 
+  // Publish the explicit resume intent before crossing the startup hydration
+  // barrier. A visible renderer can subscribe while the tmux-marker decision
+  // is still pending; without this intent the PTY controller mistakes that
+  // window for an offline session and replays the rollout transcript into the
+  // live terminal. The later backend generation then has to reset that text,
+  // producing the raw-history -> blank -> TUI transition on every cold open.
+  const registrationEpoch = ptySessionRegistry.beginRegistration(
+    makePtySessionId(projectId, taskId, conversationId)
+  );
   const operation = (async () => {
-    const hydration = getConversationHydrationBarrier(projectId, taskId, conversationId);
-    if (hydration) {
-      try {
-        await hydration;
-      } catch (error) {
-        log.warn('resumeConversation: startup hydration failed before explicit resume', {
-          projectId,
-          taskId,
-          conversationId,
-          error: String(error),
-        });
-      }
-      if (wasConversationHydrationCancelled(hydration)) return false;
-    }
-    const registrationEpoch = ptySessionRegistry.beginRegistration(
-      makePtySessionId(projectId, taskId, conversationId)
-    );
     try {
+      const hydration = getConversationHydrationBarrier(projectId, taskId, conversationId);
+      if (hydration) {
+        try {
+          await hydration;
+        } catch (error) {
+          log.warn('resumeConversation: startup hydration failed before explicit resume', {
+            projectId,
+            taskId,
+            conversationId,
+            error: String(error),
+          });
+        }
+        if (wasConversationHydrationCancelled(hydration)) return false;
+      }
       return await withConversationOperation({ projectId, id: conversationId }, async () => {
         const [row] = await db
           .select()
@@ -70,19 +77,24 @@ export async function resumeConversation(
           throw new Error(`Task not provisioned: ${taskId}`);
         }
 
-        if (!ptySessionRegistry.isRegistrationCurrent(sessionKey, registrationEpoch)) return false;
+        if (!ptySessionRegistry.ownsRegistration(sessionKey, registrationEpoch)) return false;
         const conversation = await reconcileConversationPermission(
           mapConversationRowToConversation(row, true),
           row.config
         );
-        if (
-          task.conversations
-            .getActiveSessions()
-            .some((session) => session.conversationId === conversationId)
-        ) {
+        const activeSession = task.conversations
+          .getActiveSessions()
+          .find((session) => session.conversationId === conversationId);
+        const detachedTmuxSession = Boolean(
+          activeSession?.detachable && activeSession.transportAttached === false
+        );
+        if (activeSession && !detachedTmuxSession) {
           return true;
         }
-        if (await hasExternalCodexThreadWriter(conversation.sessionSource)) {
+        if (
+          !detachedTmuxSession &&
+          (await hasExternalCodexThreadWriter(conversation.sessionSource))
+        ) {
           log.info('resumeConversation: imported Codex thread is active in another process', {
             projectId,
             taskId,
@@ -91,18 +103,37 @@ export async function resumeConversation(
           });
           return false;
         }
-        if (!ptySessionRegistry.isRegistrationCurrent(sessionKey, registrationEpoch)) return false;
+        if (!ptySessionRegistry.ownsRegistration(sessionKey, registrationEpoch)) return false;
         const pending = conversation.pendingInitialPrompt;
         const start = hydratedConversationStart(conversation);
-        await task.conversations.startSession(
-          conversation,
-          initialSize,
-          start.isResuming,
-          start.initialPrompt,
-          undefined,
-          start.imagePaths,
-          { model: start.model, reasoningEffort: start.reasoningEffort }
-        );
+        const startSession = (reattachExistingTmuxSession: boolean): Promise<void> => {
+          const args = [
+            conversation,
+            initialSize,
+            start.isResuming,
+            start.initialPrompt,
+            undefined,
+            start.imagePaths,
+            { model: start.model, reasoningEffort: start.reasoningEffort },
+          ] as const;
+          return reattachExistingTmuxSession
+            ? task.conversations.startSession(...args, { reattachExistingTmuxSession: true })
+            : task.conversations.startSession(...args);
+        };
+        try {
+          await startSession(detachedTmuxSession);
+        } catch (error) {
+          if (!(detachedTmuxSession && error instanceof TmuxReattachMissError)) throw error;
+          // The detached tmux pane can finish during its headless interval. A
+          // strict attach miss is therefore safe to downgrade to the ordinary
+          // provider resume path, which recreates the pane from durable history.
+          log.info('resumeConversation: detached tmux pane ended; resuming normally', {
+            projectId,
+            taskId,
+            conversationId,
+          });
+          await startSession(false);
+        }
         if (
           pending &&
           shouldClearPendingInitialPromptAfterStart(task.conversations, conversation.runtimeId)
@@ -115,7 +146,10 @@ export async function resumeConversation(
         }
         return task.conversations
           .getActiveSessions()
-          .some((session) => session.conversationId === conversationId);
+          .some(
+            (session) =>
+              session.conversationId === conversationId && session.transportAttached !== false
+          );
       });
     } finally {
       ptySessionRegistry.cancelRegistration(sessionKey, registrationEpoch);

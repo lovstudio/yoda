@@ -17,10 +17,14 @@ const mocks = vi.hoisted(() => ({
   eventEmitMock: vi.fn(),
   eventOnMock: vi.fn(),
   expectCanonicalGenerationMock: vi.fn(),
+  acquireCanonicalRevealClaimMock: vi.fn(),
   ptyConnectMock: vi.fn(),
+  ptyDiscardUnconnectedRendererMock: vi.fn(),
   ptyDisposeMock: vi.fn(),
+  ptyPrepareFirstFrameMock: vi.fn(),
   ptyReconnectMock: vi.fn(),
   ptyResizeMock: vi.fn(),
+  resizeForRendererMock: vi.fn(),
   archiveConversationMock: vi.fn(),
   createConversationMock: vi.fn(),
   forkConversationMock: vi.fn(),
@@ -34,6 +38,10 @@ const mocks = vi.hoisted(() => ({
   restartConversationMock: vi.fn(),
   soundPlayMock: vi.fn(),
   touchConversationMock: vi.fn(),
+  getPaneContainerMock: vi.fn(),
+  getCellMetricsMock: vi.fn(),
+  getTerminalFitScrollbarWidthMock: vi.fn(),
+  measureDimensionsMock: vi.fn(),
 }));
 
 vi.mock('@renderer/lib/ipc', () => ({
@@ -57,6 +65,7 @@ vi.mock('@renderer/lib/ipc', () => ({
     pty: {
       getSessionState: mocks.getSessionStateMock,
       resize: mocks.ptyResizeMock,
+      resizeForRenderer: mocks.resizeForRendererMock,
     },
   },
 }));
@@ -69,9 +78,22 @@ vi.mock('@renderer/lib/pty/pty-session', () => ({
     constructor(readonly sessionId: string) {}
 
     connect = mocks.ptyConnectMock;
+    discardUnconnectedRenderer = mocks.ptyDiscardUnconnectedRendererMock;
     reconnect = mocks.ptyReconnectMock;
     dispose = mocks.ptyDisposeMock;
+    prepareFirstFrame = mocks.ptyPrepareFirstFrameMock;
   },
+}));
+
+vi.mock('@renderer/lib/pty/pane-sizing-context', () => ({
+  getPaneContainer: mocks.getPaneContainerMock,
+}));
+
+vi.mock('@renderer/lib/pty/pty-dimensions', () => ({
+  getCellMetrics: mocks.getCellMetricsMock,
+  getTerminalFitScrollbarWidth: mocks.getTerminalFitScrollbarWidthMock,
+  measureDimensions: mocks.measureDimensionsMock,
+  TERMINAL_FIT_GUARD_COLUMNS: 2,
 }));
 
 vi.mock('@renderer/utils/soundPlayer', () => ({
@@ -89,10 +111,10 @@ const conversation: Conversation = {
   lastInteractedAt: '2026-05-01T00:00:00.000Z',
   isInitialConversation: true,
 };
+const STAGING_CANCELLATION_POLL_MS_FOR_TEST = 25;
 
 async function flushPromises(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let index = 0; index < 8; index += 1) await Promise.resolve();
 }
 
 describe('ConversationManagerStore', () => {
@@ -132,6 +154,19 @@ describe('ConversationManagerStore', () => {
       live: false,
       registering: false,
     });
+    mocks.ptyConnectMock.mockResolvedValue(undefined);
+    mocks.resizeForRendererMock.mockImplementation((_sessionId: string, generation: number) =>
+      Promise.resolve({
+        success: true,
+        data: { generation, changed: true },
+      })
+    );
+    mocks.ptyPrepareFirstFrameMock.mockResolvedValue(true);
+    mocks.acquireCanonicalRevealClaimMock.mockResolvedValue(true);
+    mocks.getPaneContainerMock.mockReturnValue({ id: 'conversations-pane' });
+    mocks.getCellMetricsMock.mockReturnValue({ width: 8, height: 16 });
+    mocks.getTerminalFitScrollbarWidthMock.mockReturnValue(10);
+    mocks.measureDimensionsMock.mockReturnValue({ cols: 144, rows: 45 });
   });
 
   it('does not eagerly connect a preloaded historical conversation PTY', () => {
@@ -301,6 +336,492 @@ describe('ConversationManagerStore', () => {
     expect(mocks.ptyResizeMock).toHaveBeenCalledWith('project-1:task-1:conversation-1', 132, 37);
   });
 
+  it('waits for a stopped resume generation before staging its canonical first frame', async () => {
+    let finishResume!: (result: { running: boolean; generation: number }) => void;
+    mocks.resumeConversationMock.mockImplementationOnce(
+      () =>
+        new Promise<{ running: boolean; generation: number }>((resolve) => {
+          finishResume = resolve;
+        })
+    );
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    const shouldContinue = vi.fn(() => true);
+    if (item) {
+      item.session.pty = {
+        acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
+        expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
+        lastSentDims: null,
+        terminal: { cols: 80, rows: 24 },
+      } as unknown as FrontendPty;
+    }
+
+    const opening = store.prepareConversationForOpen('conversation-1', shouldContinue, 900);
+
+    await vi.waitFor(() => expect(mocks.resumeConversationMock).toHaveBeenCalledOnce());
+    expect(mocks.ptyPrepareFirstFrameMock).not.toHaveBeenCalled();
+    finishResume({ running: true, generation: 2 });
+    await expect(opening).resolves.toBe(true);
+
+    expect(mocks.ptyConnectMock).toHaveBeenCalledTimes(1);
+    expect(mocks.getSessionStateMock).toHaveBeenCalledWith('project-1:task-1:conversation-1');
+    expect(mocks.resumeConversationMock).toHaveBeenCalledWith(
+      'project-1',
+      'task-1',
+      'conversation-1',
+      { cols: 144, rows: 45 }
+    );
+    expect(mocks.resizeForRendererMock).toHaveBeenCalledWith(
+      'project-1:task-1:conversation-1',
+      2,
+      144,
+      45
+    );
+    expect(mocks.ptyPrepareFirstFrameMock).toHaveBeenCalledWith(
+      { cols: 144, rows: 45 },
+      expect.any(Function),
+      { waitForCanonicalOutput: true, timeoutMs: expect.any(Number) }
+    );
+    expect(mocks.resizeForRendererMock.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.ptyPrepareFirstFrameMock.mock.invocationCallOrder[0]
+    );
+    expect(mocks.expectCanonicalGenerationMock).toHaveBeenCalledWith(2);
+    expect(mocks.getPaneContainerMock).toHaveBeenCalledWith('conversations:project-1:task-1');
+    expect(mocks.measureDimensionsMock).toHaveBeenCalledWith(
+      { id: 'conversations-pane' },
+      8,
+      16,
+      10,
+      2
+    );
+  });
+
+  it('discards a renderer created for a task open cancelled before subscription', async () => {
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    const preparedPty = {
+      acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
+      lastSentDims: null,
+      terminal: { cols: 80, rows: 24 },
+    } as unknown as FrontendPty;
+    let keepOpening = true;
+    mocks.ptyConnectMock.mockImplementationOnce(() => {
+      if (item) item.session.pty = preparedPty;
+      keepOpening = false;
+      return Promise.resolve();
+    });
+
+    await expect(
+      store.prepareConversationForOpen('conversation-1', () => keepOpening, 900)
+    ).resolves.toBe(false);
+
+    expect(mocks.ptyDiscardUnconnectedRendererMock).toHaveBeenCalledWith(preparedPty);
+    expect(mocks.resumeConversationMock).not.toHaveBeenCalled();
+    expect(mocks.ptyPrepareFirstFrameMock).not.toHaveBeenCalled();
+  });
+
+  it('stages an already-live PTY without entering the resume controller', async () => {
+    mocks.getSessionStateMock.mockResolvedValueOnce({
+      generation: 7,
+      live: true,
+      registering: false,
+    });
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    const shouldContinue = vi.fn(() => true);
+    if (item) {
+      item.session.pty = {
+        acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
+        expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
+        lastSentDims: { cols: 132, rows: 37 },
+        terminal: { cols: 80, rows: 24 },
+      } as unknown as FrontendPty;
+    }
+
+    await expect(
+      store.prepareConversationForOpen('conversation-1', shouldContinue, 900)
+    ).resolves.toBe(true);
+
+    expect(mocks.resumeConversationMock).not.toHaveBeenCalled();
+    expect(mocks.expectCanonicalGenerationMock).toHaveBeenCalledWith(7);
+    expect(mocks.ptyPrepareFirstFrameMock).toHaveBeenCalledWith(
+      { cols: 144, rows: 45 },
+      expect.any(Function),
+      { waitForCanonicalOutput: true, timeoutMs: expect.any(Number) }
+    );
+    expect(mocks.resizeForRendererMock).toHaveBeenCalledWith(
+      'project-1:task-1:conversation-1',
+      7,
+      144,
+      45
+    );
+    expect(mocks.ptyResizeMock).not.toHaveBeenCalled();
+  });
+
+  it('waits for replacement registration and never prepares the outgoing generation', async () => {
+    mocks.getSessionStateMock
+      .mockResolvedValueOnce({ generation: 7, live: true, registering: true })
+      .mockResolvedValueOnce({ generation: 8, live: true, registering: false });
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    if (item) {
+      item.session.pty = {
+        acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
+        expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
+        lastSentDims: { cols: 132, rows: 37 },
+        terminal: { cols: 80, rows: 24 },
+      } as unknown as FrontendPty;
+    }
+
+    await expect(store.prepareConversationForOpen('conversation-1', () => true, 900)).resolves.toBe(
+      true
+    );
+
+    expect(mocks.resizeForRendererMock).toHaveBeenCalledOnce();
+    expect(mocks.resizeForRendererMock).toHaveBeenCalledWith(
+      'project-1:task-1:conversation-1',
+      8,
+      144,
+      45
+    );
+    expect(mocks.expectCanonicalGenerationMock).toHaveBeenCalledOnce();
+    expect(mocks.expectCanonicalGenerationMock).toHaveBeenCalledWith(8);
+    expect(mocks.ptyPrepareFirstFrameMock).toHaveBeenCalledOnce();
+  });
+
+  it('rebuilds the staged frame when replacement registration races the reveal claim', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.getSessionStateMock
+        .mockResolvedValueOnce({ generation: 7, live: true, registering: false })
+        .mockResolvedValueOnce({ generation: 7, live: true, registering: true })
+        .mockResolvedValueOnce({ generation: 8, live: true, registering: false });
+      mocks.acquireCanonicalRevealClaimMock
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true);
+      const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+      const item = store.conversations.get('conversation-1');
+      if (item) {
+        item.session.pty = {
+          acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
+          expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
+          lastSentDims: { cols: 132, rows: 37 },
+          terminal: { cols: 80, rows: 24 },
+        } as unknown as FrontendPty;
+      }
+
+      const opening = store.prepareConversationForOpen('conversation-1', () => true, 900);
+      await vi.waitFor(() => expect(mocks.acquireCanonicalRevealClaimMock).toHaveBeenCalledOnce(), {
+        interval: 1,
+        timeout: 100,
+      });
+      await vi.advanceTimersByTimeAsync(STAGING_CANCELLATION_POLL_MS_FOR_TEST);
+      await expect(opening).resolves.toBe(true);
+
+      expect(mocks.resizeForRendererMock).toHaveBeenNthCalledWith(
+        1,
+        'project-1:task-1:conversation-1',
+        7,
+        144,
+        45
+      );
+      expect(mocks.resizeForRendererMock).toHaveBeenNthCalledWith(
+        2,
+        'project-1:task-1:conversation-1',
+        8,
+        144,
+        45
+      );
+      expect(mocks.expectCanonicalGenerationMock).toHaveBeenNthCalledWith(1, 7);
+      expect(mocks.expectCanonicalGenerationMock).toHaveBeenNthCalledWith(2, 8);
+      expect(mocks.ptyPrepareFirstFrameMock).toHaveBeenCalledTimes(2);
+      expect(mocks.acquireCanonicalRevealClaimMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('holds a successful reveal claim past the preparation deadline until navigation cancels', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.getSessionStateMock.mockResolvedValueOnce({
+        generation: 7,
+        live: true,
+        registering: false,
+      });
+      let keepOpening = true;
+      let claimShouldContinue: (() => boolean) | undefined;
+      mocks.acquireCanonicalRevealClaimMock.mockImplementationOnce(
+        async (shouldContinue: () => boolean) => {
+          claimShouldContinue = shouldContinue;
+          return true;
+        }
+      );
+      const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+      const item = store.conversations.get('conversation-1');
+      if (item) {
+        item.session.pty = {
+          acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
+          expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
+          lastSentDims: { cols: 132, rows: 37 },
+          terminal: { cols: 80, rows: 24 },
+        } as unknown as FrontendPty;
+      }
+
+      await expect(
+        store.prepareConversationForOpen('conversation-1', () => keepOpening, 100)
+      ).resolves.toBe(true);
+
+      expect(claimShouldContinue?.()).toBe(true);
+      await vi.advanceTimersByTimeAsync(101);
+      expect(claimShouldContinue?.()).toBe(true);
+
+      keepOpening = false;
+      expect(claimShouldContinue?.()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops reveal-claim retries at the original deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.getSessionStateMock
+        .mockResolvedValueOnce({ generation: 7, live: true, registering: false })
+        .mockResolvedValue({ generation: 7, live: true, registering: true });
+      mocks.acquireCanonicalRevealClaimMock.mockResolvedValue(false);
+      const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+      const item = store.conversations.get('conversation-1');
+      if (item) {
+        item.session.pty = {
+          acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
+          expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
+          lastSentDims: { cols: 132, rows: 37 },
+          terminal: { cols: 80, rows: 24 },
+        } as unknown as FrontendPty;
+      }
+
+      const opening = store.prepareConversationForOpen('conversation-1', () => true, 100);
+      await vi.waitFor(() => expect(mocks.acquireCanonicalRevealClaimMock).toHaveBeenCalledOnce(), {
+        interval: 1,
+        timeout: 50,
+      });
+      await vi.advanceTimersByTimeAsync(101);
+
+      await expect(opening).resolves.toBe(false);
+      expect(mocks.ptyPrepareFirstFrameMock).toHaveBeenCalledOnce();
+      expect(mocks.acquireCanonicalRevealClaimMock).toHaveBeenCalledOnce();
+      expect(mocks.getSessionStateMock.mock.calls.length).toBeLessThanOrEqual(6);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels reveal-claim recovery before starting another generation probe', async () => {
+    let keepOpening = true;
+    mocks.getSessionStateMock.mockResolvedValueOnce({
+      generation: 7,
+      live: true,
+      registering: false,
+    });
+    mocks.acquireCanonicalRevealClaimMock.mockImplementationOnce(async () => {
+      keepOpening = false;
+      return false;
+    });
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    if (item) {
+      item.session.pty = {
+        acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
+        expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
+        lastSentDims: { cols: 132, rows: 37 },
+        terminal: { cols: 80, rows: 24 },
+      } as unknown as FrontendPty;
+    }
+
+    await expect(
+      store.prepareConversationForOpen('conversation-1', () => keepOpening, 900)
+    ).resolves.toBe(false);
+
+    expect(mocks.getSessionStateMock).toHaveBeenCalledOnce();
+    expect(mocks.ptyPrepareFirstFrameMock).toHaveBeenCalledOnce();
+    expect(mocks.acquireCanonicalRevealClaimMock).toHaveBeenCalledOnce();
+  });
+
+  it('does not mark or stage a live session when generation-bound resize fails', async () => {
+    mocks.getSessionStateMock.mockResolvedValue({
+      generation: 7,
+      live: true,
+      registering: false,
+    });
+    mocks.resizeForRendererMock.mockResolvedValue({
+      success: false,
+      error: { type: 'not_found' },
+    });
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    const markSessionRunning = item ? vi.spyOn(item, 'markSessionRunning') : undefined;
+    if (item) {
+      item.session.pty = {
+        acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
+        expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
+        lastSentDims: { cols: 132, rows: 37 },
+        terminal: { cols: 80, rows: 24 },
+      } as unknown as FrontendPty;
+    }
+
+    await expect(store.prepareConversationForOpen('conversation-1', () => true, 900)).resolves.toBe(
+      false
+    );
+
+    expect(mocks.getSessionStateMock).toHaveBeenCalledTimes(2);
+    expect(mocks.resizeForRendererMock).toHaveBeenCalledTimes(2);
+    expect(markSessionRunning).not.toHaveBeenCalled();
+    expect(mocks.expectCanonicalGenerationMock).not.toHaveBeenCalled();
+    expect(mocks.resumeConversationMock).not.toHaveBeenCalled();
+    expect(mocks.ptyPrepareFirstFrameMock).not.toHaveBeenCalled();
+  });
+
+  it('re-probes once and binds the replacement generation before staging', async () => {
+    mocks.getSessionStateMock
+      .mockResolvedValueOnce({ generation: 7, live: true, registering: false })
+      .mockResolvedValueOnce({ generation: 8, live: true, registering: false });
+    mocks.resizeForRendererMock
+      .mockResolvedValueOnce({
+        success: true,
+        data: { generation: 8, changed: true },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { generation: 8, changed: true },
+      });
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    if (item) {
+      item.session.pty = {
+        acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
+        expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
+        lastSentDims: { cols: 132, rows: 37 },
+        terminal: { cols: 80, rows: 24 },
+      } as unknown as FrontendPty;
+    }
+
+    await expect(store.prepareConversationForOpen('conversation-1', () => true, 900)).resolves.toBe(
+      true
+    );
+
+    expect(mocks.resizeForRendererMock).toHaveBeenNthCalledWith(
+      1,
+      'project-1:task-1:conversation-1',
+      7,
+      144,
+      45
+    );
+    expect(mocks.resizeForRendererMock).toHaveBeenNthCalledWith(
+      2,
+      'project-1:task-1:conversation-1',
+      8,
+      144,
+      45
+    );
+    expect(mocks.expectCanonicalGenerationMock).toHaveBeenCalledOnce();
+    expect(mocks.expectCanonicalGenerationMock).toHaveBeenCalledWith(8);
+  });
+
+  it('returns at the absolute deadline without subscribing when stopped resume hangs', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.resumeConversationMock.mockReturnValueOnce(new Promise(() => {}));
+      const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+      const item = store.conversations.get('conversation-1');
+      if (item) {
+        item.session.pty = {
+          acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
+          expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
+          lastSentDims: null,
+          terminal: { cols: 80, rows: 24 },
+        } as unknown as FrontendPty;
+      }
+
+      const opening = store.prepareConversationForOpen('conversation-1', () => true, 100);
+      await flushPromises();
+      expect(mocks.resumeConversationMock).toHaveBeenCalledOnce();
+
+      await vi.advanceTimersByTimeAsync(101);
+      await expect(opening).resolves.toBe(false);
+      expect(mocks.ptyPrepareFirstFrameMock).not.toHaveBeenCalled();
+      expect(mocks.expectCanonicalGenerationMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('returns at the deadline when a background window never delivers a layout frame', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn(() => 1)
+    );
+    try {
+      mocks.getPaneContainerMock.mockReturnValue(null);
+      const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+      const item = store.conversations.get('conversation-1');
+      if (item) {
+        item.session.pty = {
+          acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
+          expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
+          lastSentDims: null,
+          terminal: { cols: 80, rows: 24 },
+        } as unknown as FrontendPty;
+      }
+
+      const opening = store.prepareConversationForOpen('conversation-1', () => true, 100);
+      await flushPromises();
+      expect(mocks.getSessionStateMock).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(101);
+      await expect(opening).resolves.toBe(false);
+      expect(mocks.resizeForRendererMock).not.toHaveBeenCalled();
+      expect(mocks.ptyPrepareFirstFrameMock).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels a late live probe and reclaims the renderer created by that open', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+      const item = store.conversations.get('conversation-1');
+      const preparedPty = {
+        acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
+        expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
+        lastSentDims: null,
+        terminal: { cols: 80, rows: 24 },
+      } as unknown as FrontendPty;
+      mocks.ptyConnectMock.mockImplementationOnce(() => {
+        if (item) item.session.pty = preparedPty;
+        return Promise.resolve();
+      });
+      mocks.getSessionStateMock.mockReturnValueOnce(new Promise(() => {}));
+      let keepOpening = true;
+
+      const opening = store.prepareConversationForOpen('conversation-1', () => keepOpening, 900);
+      await flushPromises();
+      expect(mocks.getSessionStateMock).toHaveBeenCalledOnce();
+      keepOpening = false;
+
+      await vi.advanceTimersByTimeAsync(25);
+      await expect(opening).resolves.toBe(false);
+      expect(mocks.ptyDiscardUnconnectedRendererMock).toHaveBeenCalledWith(preparedPty);
+      expect(mocks.resizeForRendererMock).not.toHaveBeenCalled();
+      expect(mocks.ptyPrepareFirstFrameMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('attaches to an already-live PTY without calling the resume controller', async () => {
     mocks.getSessionStateMock.mockResolvedValueOnce({
       generation: 7,
@@ -311,6 +832,7 @@ describe('ConversationManagerStore', () => {
     const item = store.conversations.get('conversation-1');
     if (item) {
       item.session.pty = {
+        acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
         expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
         lastSentDims: { cols: 132, rows: 37 },
       } as unknown as FrontendPty;
@@ -340,6 +862,7 @@ describe('ConversationManagerStore', () => {
     const resume = store.resumeConversation('conversation-1', { cols: 80, rows: 24 });
     if (item) {
       item.session.pty = {
+        acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
         expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
         lastSentDims: { cols: 132, rows: 61 },
       } as unknown as FrontendPty;
@@ -366,6 +889,7 @@ describe('ConversationManagerStore', () => {
     item?.setWorking();
     if (item) {
       item.session.pty = {
+        acquireCanonicalRevealClaim: mocks.acquireCanonicalRevealClaimMock,
         expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
       } as unknown as FrontendPty;
     }

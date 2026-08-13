@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makePtySessionId } from '@shared/ptySessionId';
+import type { Pty } from '@main/core/pty/pty';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
+import { TmuxReattachMissError } from '@main/core/pty/tmux-reattach';
 import {
   cancelConversationHydrationBarrier,
   registerConversationHydrationBarrier,
@@ -30,6 +32,13 @@ vi.mock('@main/db/schema', () => ({
   conversations: {},
 }));
 
+vi.mock('@main/lib/events', () => ({
+  events: {
+    emit: vi.fn(),
+    on: vi.fn(() => vi.fn()),
+  },
+}));
+
 vi.mock('../projects/utils', () => ({
   resolveTask: mocks.resolveTask,
 }));
@@ -48,6 +57,19 @@ vi.mock('./utils', () => ({
 
 describe('resumeConversation', () => {
   const sessionId = makePtySessionId('project-1', 'task-1', 'conv-1');
+
+  function registerTestPty(registrationEpoch: number): void {
+    const pty: Pty = {
+      write: vi.fn(),
+      resize: vi.fn(),
+      pause: vi.fn(),
+      resume: vi.fn(),
+      kill: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+    };
+    ptySessionRegistry.register(sessionId, pty, { registrationEpoch });
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -76,6 +98,7 @@ describe('resumeConversation', () => {
   });
 
   afterEach(async () => {
+    ptySessionRegistry.unsubscribe(sessionId, 'renderer-1');
     ptySessionRegistry.unregister(sessionId);
     await registerConversationHydrationBarrier(
       { id: 'conv-1', projectId: 'project-1', taskId: 'task-1' },
@@ -107,12 +130,119 @@ describe('resumeConversation', () => {
     const resumed = resumeConversation('project-1', 'task-1', 'conv-1');
     await Promise.resolve();
     expect(mocks.resolveTask).not.toHaveBeenCalled();
+    expect(ptySessionRegistry.getDiagnostics(sessionId)?.registering).toBe(true);
 
     mocks.getActiveSessions.mockReturnValue([{ conversationId: 'conv-1' }]);
     finishHydration();
     await expect(resumed).resolves.toBe(true);
 
     expect(mocks.startSession).not.toHaveBeenCalled();
+  });
+
+  it('accepts a live PTY that consumed the same registration epoch during hydration', async () => {
+    let finishHydration!: () => void;
+    const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    void registerConversationHydrationBarrier(
+      { id: 'conv-1', projectId: 'project-1', taskId: 'task-1' },
+      new Promise<void>((resolve) => {
+        finishHydration = resolve;
+      })
+    );
+
+    const resumed = resumeConversation('project-1', 'task-1', 'conv-1');
+    await Promise.resolve();
+    registerTestPty(registrationEpoch);
+    mocks.getActiveSessions.mockReturnValue([{ conversationId: 'conv-1' }]);
+    finishHydration();
+
+    await expect(resumed).resolves.toBe(true);
+    expect(mocks.startSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects a resume whose same-epoch PTY was unregistered during hydration', async () => {
+    let finishHydration!: () => void;
+    const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    void registerConversationHydrationBarrier(
+      { id: 'conv-1', projectId: 'project-1', taskId: 'task-1' },
+      new Promise<void>((resolve) => {
+        finishHydration = resolve;
+      })
+    );
+
+    const resumed = resumeConversation('project-1', 'task-1', 'conv-1');
+    await Promise.resolve();
+    registerTestPty(registrationEpoch);
+    ptySessionRegistry.unregister(sessionId);
+    finishHydration();
+
+    await expect(resumed).resolves.toBe(false);
+    expect(mocks.startSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects a resume after a replacement registration advances the epoch', async () => {
+    let finishHydration!: () => void;
+    const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    void registerConversationHydrationBarrier(
+      { id: 'conv-1', projectId: 'project-1', taskId: 'task-1' },
+      new Promise<void>((resolve) => {
+        finishHydration = resolve;
+      })
+    );
+
+    const resumed = resumeConversation('project-1', 'task-1', 'conv-1');
+    await Promise.resolve();
+    registerTestPty(registrationEpoch);
+    const replacementEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    registerTestPty(replacementEpoch);
+    finishHydration();
+
+    await expect(resumed).resolves.toBe(false);
+    expect(mocks.startSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects an old live registration once a newer epoch is pending', async () => {
+    let finishHydration!: () => void;
+    const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    void registerConversationHydrationBarrier(
+      { id: 'conv-1', projectId: 'project-1', taskId: 'task-1' },
+      new Promise<void>((resolve) => {
+        finishHydration = resolve;
+      })
+    );
+
+    const resumed = resumeConversation('project-1', 'task-1', 'conv-1');
+    await Promise.resolve();
+    registerTestPty(registrationEpoch);
+    expect(ptySessionRegistry.beginRegistration(sessionId)).toBeGreaterThan(registrationEpoch);
+    finishHydration();
+
+    await expect(resumed).resolves.toBe(false);
+    expect(mocks.startSession).not.toHaveBeenCalled();
+  });
+
+  it('suppresses transcript fallback while explicit resume waits for startup hydration', async () => {
+    let finishHydration!: () => void;
+    void registerConversationHydrationBarrier(
+      { id: 'conv-1', projectId: 'project-1', taskId: 'task-1' },
+      new Promise<void>((resolve) => {
+        finishHydration = resolve;
+      })
+    );
+
+    const resumed = resumeConversation('project-1', 'task-1', 'conv-1');
+    const snapshot = await ptySessionRegistry.subscribeForRenderer(sessionId, 'renderer-1');
+
+    expect(snapshot).toMatchObject({
+      buffer: '',
+      generation: ptySessionRegistry.getGeneration(sessionId),
+      sequence: 0,
+    });
+    expect(ptySessionRegistry.getDiagnostics(sessionId)?.registering).toBe(true);
+
+    mocks.getActiveSessions.mockReturnValue([{ conversationId: 'conv-1' }]);
+    finishHydration();
+    await expect(resumed).resolves.toBe(true);
+    expect(ptySessionRegistry.getDiagnostics(sessionId)?.registering).not.toBe(true);
   });
 
   it('reports when startup completes without a live provider session', async () => {
@@ -239,5 +369,39 @@ describe('resumeConversation', () => {
 
     expect(mocks.hasExternalCodexThreadWriter).not.toHaveBeenCalled();
     expect(mocks.startSession).not.toHaveBeenCalled();
+  });
+
+  it('strictly reattaches a detached active tmux session', async () => {
+    mocks.getActiveSessions.mockReturnValue([
+      { conversationId: 'conv-1', detachable: true, transportAttached: false },
+    ]);
+
+    await expect(resumeConversation('project-1', 'task-1', 'conv-1')).resolves.toBe(true);
+
+    expect(mocks.startSession).toHaveBeenCalledTimes(1);
+    expect(mocks.startSession.mock.calls[0]?.[7]).toEqual({
+      reattachExistingTmuxSession: true,
+    });
+    expect(mocks.getActiveSessions()).toEqual([{ conversationId: 'conv-1' }]);
+  });
+
+  it('falls back to a normal start when a detached tmux pane disappears before reattach', async () => {
+    mocks.getActiveSessions.mockReturnValue([
+      { conversationId: 'conv-1', detachable: true, transportAttached: false },
+    ]);
+    mocks.startSession
+      .mockRejectedValueOnce(new TmuxReattachMissError())
+      .mockImplementationOnce(async () => {
+        mocks.getActiveSessions.mockReturnValue([{ conversationId: 'conv-1' }]);
+      });
+
+    await expect(resumeConversation('project-1', 'task-1', 'conv-1')).resolves.toBe(true);
+
+    expect(mocks.startSession).toHaveBeenCalledTimes(2);
+    expect(mocks.startSession.mock.calls[0]?.[7]).toEqual({
+      reattachExistingTmuxSession: true,
+    });
+    expect(mocks.startSession.mock.calls[1]?.[7]).toBeUndefined();
+    expect(mocks.getActiveSessions()).toEqual([{ conversationId: 'conv-1' }]);
   });
 });

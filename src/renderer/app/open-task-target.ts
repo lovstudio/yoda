@@ -1,4 +1,5 @@
 import { when } from 'mobx';
+import type { Conversation } from '@shared/conversations';
 import type { DeepLinkTarget } from '@shared/deep-links';
 import type { TaskWindowTabTarget, TaskWindowTarget } from '@shared/task-window';
 import type { ActiveFile } from '@shared/view-state';
@@ -20,6 +21,22 @@ import { showModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { tabScopeKey, type AppTabEntry } from '@renderer/lib/stores/app-tabs-store';
 import { log } from '@renderer/utils/logger';
+
+/**
+ * Tracks only unresolved shells created by immediate callers. A newer opener
+ * can adopt the same entity by replacing/clearing the token, so an older async
+ * lookup never rolls that newer tab back by identity alone.
+ */
+const provisionalConversationOwners = new WeakMap<TabManagerStore, Map<string, symbol>>();
+
+function conversationOwnerMap(tabManager: TabManagerStore): Map<string, symbol> {
+  let owners = provisionalConversationOwners.get(tabManager);
+  if (!owners) {
+    owners = new Map();
+    provisionalConversationOwners.set(tabManager, owners);
+  }
+  return owners;
+}
 
 /**
  * Opens (or focuses — routes are deduplicated) a top-level app tab for an
@@ -239,76 +256,189 @@ export function openTaskWindowTarget(
   );
 }
 
+type OpenProvisionedTaskTabOptions = {
+  shouldApply?: () => boolean;
+  /**
+   * Selects an already-owned route target without forwarding the same intent
+   * back through the top-level tab bridge. The guard is deliberately scoped
+   * to each synchronous TabManager mutation; it never spans hydration awaits,
+   * so a real user tab click can still supersede a staged task open.
+   */
+  topLevelMode?: 'normal' | 'internal';
+};
+
+export type DeferredTaskTabSelection = {
+  /** Whether the active or archived target exists. */
+  found: boolean;
+  /**
+   * Applies the prepared target synchronously. Returns false when the request
+   * was superseded before commit or the target did not exist.
+   */
+  activate: () => boolean;
+};
+
+type DeferredTaskTabOptions = OpenProvisionedTaskTabOptions & {
+  /** Hydrate and validate the target without changing the selected tab. */
+  deferSelection: true;
+};
+
+type ImmediateTaskTabOptions = OpenProvisionedTaskTabOptions & {
+  deferSelection?: false;
+};
+
+export function openProvisionedTaskTab(
+  provisioned: ProvisionedTask,
+  tabTarget: TaskWindowTabTarget,
+  options: DeferredTaskTabOptions
+): Promise<DeferredTaskTabSelection>;
+export function openProvisionedTaskTab(
+  provisioned: ProvisionedTask,
+  tabTarget: TaskWindowTabTarget,
+  options?: ImmediateTaskTabOptions
+): Promise<boolean>;
 export async function openProvisionedTaskTab(
   provisioned: ProvisionedTask,
   tabTarget: TaskWindowTabTarget,
-  options?: { shouldApply?: () => boolean }
-): Promise<boolean> {
+  options?: DeferredTaskTabOptions | ImmediateTaskTabOptions
+): Promise<boolean | DeferredTaskTabSelection> {
   const shouldApply = options?.shouldApply ?? (() => true);
+  const deferSelection = options?.deferSelection === true;
+  const applyTabMutation = <T>(mutation: () => T): T => {
+    if (options?.topLevelMode !== 'internal') return mutation();
+
+    const bridge = provisioned.taskView.tabManager.topLevelBridge;
+    if (!bridge) return mutation();
+
+    const previous = bridge.applying;
+    const token = Symbol('staged-task-target');
+    bridge.applying = { key: JSON.stringify(tabTarget), token };
+    try {
+      return mutation();
+    } finally {
+      if (bridge.applying?.token === token) bridge.applying = previous;
+    }
+  };
+  const deferredSelection = (
+    found: boolean,
+    activateTarget?: () => void
+  ): DeferredTaskTabSelection => ({
+    found,
+    activate: () => {
+      if (!found || !activateTarget || !shouldApply()) return false;
+      activateTarget();
+      return true;
+    },
+  });
+  const cancelledResult = (): boolean | DeferredTaskTabSelection =>
+    deferSelection ? deferredSelection(true) : true;
+  const applyOrDefer = (activateTarget: () => void): boolean | DeferredTaskTabSelection => {
+    if (deferSelection) return deferredSelection(true, activateTarget);
+    activateTarget();
+    return true;
+  };
   // A cancelled replay is already superseded, not a missing target. Report a
   // successful no-op so its caller never removes the newer route as dangling.
-  if (!shouldApply()) return true;
+  if (!shouldApply()) return cancelledResult();
 
   switch (tabTarget.kind) {
     case 'overview':
-      provisioned.taskView.tabManager.setActiveTab(OVERVIEW_TAB_ID);
-      provisioned.taskView.setFocusedRegion('main');
-      return true;
+      return applyOrDefer(() => {
+        applyTabMutation(() => provisioned.taskView.tabManager.setActiveTab(OVERVIEW_TAB_ID));
+        provisioned.taskView.setFocusedRegion('main');
+      });
     case 'conversation': {
       const { tabManager } = provisioned.taskView;
       const hadTab = tabManager.hasConversationTab(tabTarget.conversationId);
-      // Select the target before hydration. The panel can now render its stable
-      // opening surface immediately instead of showing the previous renderer
-      // while ensureConversation performs its RPC work.
-      tabManager.openConversation(tabTarget.conversationId);
+      const owners = conversationOwnerMap(tabManager);
+      const existingOwner = owners.get(tabTarget.conversationId);
+      const hasHydratedConversation = provisioned.conversations.conversations.has(
+        tabTarget.conversationId
+      );
+      const provisionalToken =
+        !deferSelection && (!hadTab || !hasHydratedConversation || existingOwner) ? Symbol() : null;
+      const releaseProvisional = (close: boolean): void => {
+        if (!provisionalToken || owners.get(tabTarget.conversationId) !== provisionalToken) return;
+        owners.delete(tabTarget.conversationId);
+        if (close) tabManager.closeConversation(tabTarget.conversationId);
+      };
+      // Direct deep-link and replay callers retain their immediate stable shell.
+      // Explicit task opening defers this mutation until its hot/staging commit,
+      // so the source task remains completely intact during target hydration.
+      if (!deferSelection) {
+        if (provisionalToken) owners.set(tabTarget.conversationId, provisionalToken);
+        applyTabMutation(() => tabManager.openConversation(tabTarget.conversationId));
+      }
       const found = await provisioned.conversations.ensureConversation(tabTarget.conversationId);
       if (!shouldApply()) {
-        if (!hadTab) tabManager.closeConversation(tabTarget.conversationId);
-        return true;
+        releaseProvisional(true);
+        return cancelledResult();
       }
       if (!found) {
-        // The entry above is only provisional until the active snapshot proves
-        // that the conversation exists. Remove it before opening an archived
-        // transcript or closing a dangling target.
-        tabManager.closeConversation(tabTarget.conversationId);
-        return openArchivedConversationFallback(provisioned, tabTarget.conversationId, shouldApply);
+        if (!deferSelection) {
+          // The entry above is only provisional until the active snapshot proves
+          // that the conversation exists. Remove it before opening an archived
+          // transcript or closing a dangling target.
+          releaseProvisional(true);
+        }
+        const archived = await findArchivedConversation(provisioned, tabTarget.conversationId);
+        if (!shouldApply()) return cancelledResult();
+        if (!archived) return deferSelection ? deferredSelection(false) : false;
+        return applyOrDefer(() => openArchivedConversationFallback(provisioned, archived));
       }
-      provisioned.taskView.setFocusedRegion('main');
-      return true;
+      return applyOrDefer(() => {
+        if (deferSelection) {
+          // The final commit adopts any unresolved immediate shell for this
+          // entity before opening it, revoking an older request's cleanup right.
+          owners.delete(tabTarget.conversationId);
+          applyTabMutation(() => tabManager.openConversation(tabTarget.conversationId));
+        } else {
+          releaseProvisional(false);
+        }
+        provisioned.taskView.setFocusedRegion('main');
+      });
     }
     case 'room-member':
-      provisioned.taskView.tabManager.openRoomMember(tabTarget.memberId);
-      provisioned.taskView.setFocusedRegion('main');
-      return true;
+      return applyOrDefer(() => {
+        applyTabMutation(() => provisioned.taskView.tabManager.openRoomMember(tabTarget.memberId));
+        provisioned.taskView.setFocusedRegion('main');
+      });
     case 'file':
-      provisioned.taskView.tabManager.openFile(tabTarget.path);
-      provisioned.taskView.setFocusedRegion('main');
-      return true;
+      return applyOrDefer(() => {
+        applyTabMutation(() => provisioned.taskView.tabManager.openFile(tabTarget.path));
+        provisioned.taskView.setFocusedRegion('main');
+      });
     case 'diff':
-      provisioned.taskView.tabManager.openDiff(diffTargetToActiveFile(tabTarget), tabTarget.status);
-      provisioned.taskView.setFocusedRegion('main');
-      return true;
+      return applyOrDefer(() => {
+        applyTabMutation(() =>
+          provisioned.taskView.tabManager.openDiff(
+            diffTargetToActiveFile(tabTarget),
+            tabTarget.status
+          )
+        );
+        provisioned.taskView.setFocusedRegion('main');
+      });
   }
 }
 
-async function openArchivedConversationFallback(
+async function findArchivedConversation(
   provisioned: ProvisionedTask,
-  conversationId: string,
-  shouldApply: () => boolean
-): Promise<boolean> {
+  conversationId: string
+): Promise<Conversation | undefined> {
   const archived = await rpc.conversations.getArchivedConversationsForTask(
     provisioned.projectId,
     provisioned.taskId
   );
-  if (!shouldApply()) return true;
-  const conversation = archived.find((row) => row.id === conversationId);
-  if (!conversation) return false;
+  return archived.find((row) => row.id === conversationId);
+}
 
+function openArchivedConversationFallback(
+  provisioned: ProvisionedTask,
+  conversation: Conversation
+): void {
   provisioned.taskView.setSidebarCollapsed(false);
   provisioned.taskView.setSidebarTab('conversations');
   provisioned.taskView.setFocusedRegion('main');
   showModal('archivedSessionTranscriptModal', { conversation });
-  return true;
 }
 
 function diffTargetToActiveFile(

@@ -58,22 +58,41 @@ allocate scrollback buffers or subscribe as flow-control consumers.
 - `pty-pane.tsx` — shared terminal component
 
 **Lifecycle:** active surface requests preparation → backend-ready gate → create/configure
-xterm → mount lease → measure + flush gate → subscribe listener-first → apply snapshot
-watermark → unmount/off-screen with subscription retained → dispose
+xterm → mount lease → measure + flush gate → subscribe listener-first → apply a
+PTY-only snapshot/checkpoint watermark → unmount/off-screen with subscription retained →
+checkpoint + unsubscribe on eviction → dispose
 
-The default cache is adaptive rather than count-bounded: hidden xterms keep parsing into
-their canonical buffers while xterm pauses the off-screen DOM renderer. Only repeated app
-memory pressure or sustained hidden output may evict the oldest unmounted, non-connecting,
-snapshot-backed frontend renderers. This never terminates tmux or an Agent session.
+The warm frontend cache is always count-bounded. Hidden xterms inside the window keep
+parsing into their canonical buffers while xterm pauses the off-screen DOM renderer. Auto
+mode uses the default bound and may shrink it further after repeated app-memory pressure or
+sustained hidden output; fixed mode changes the bound. Mounted, connecting, and
+not-yet-recoverable renderers are protected, so they may temporarily exceed it. Eviction
+waits for the atomic checkpoint/unsubscribe handoff and never terminates tmux or an Agent
+session.
+
+Explicit task opens use the real destination layout as a hidden staging host. Keep the
+semantic opening surface opaque while `prepareConversationForOpen()` measures that
+task-keyed pane, resizes the exact backend generation with `resizeForRenderer`, parses its
+canonical PTY frame, and returns the xterm to its off-screen host. On the real mount, keep
+the terminal hidden until `waitForVisibleFrame()` observes its refreshed rows and browser
+paint; only then reveal and focus it. A cached hot reveal must first match
+`getSessionState().generation`; a mismatch invalidates the frame and returns to staging.
+Route state must not become a progress channel for mount, provision, resume, snapshot
+parsing, or resize internals.
 
 **Rules:**
 - Output uses `{ generation, sequence }`; never revert to snapshot-first or
   listener-first without watermark deduplication.
+- Subscription snapshots are committed PTY VT data or renderer-authored compact
+  checkpoints only. Never feed transcript/session-history text into xterm.
 - `term.write(..., callback)` acknowledgement drives main-process PTY
   pause/resume. Do not add a second renderer-side frame batch in front of
   xterm's own write queue.
 - Only the active session receives live pane resizes. A background xterm and
   its backend PTY must never parse the same stream at different grids.
+- During task-open staging, derive dimensions from the destination pane and bind
+  resize plus canonical reveal to the same main-process generation. Never use a
+  source task, sidebar pin, or 80x24 fallback as the destination's canonical grid.
 - `mount()` returns a lease. React cleanup must pass that lease to `unmount()`
   and mount-scoped handlers so an older cleanup cannot detach a newer host.
 - The core DOM renderer is the single visual scene. Resize from the live

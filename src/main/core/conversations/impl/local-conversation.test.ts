@@ -6,7 +6,10 @@ import { makePtySessionId } from '@shared/ptySessionId';
 import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-reconciler';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { Pty, PtyExitInfo } from '@main/core/pty/pty';
-import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
+import {
+  PTY_RENDERER_DETACH_GRACE_MS,
+  ptySessionRegistry,
+} from '@main/core/pty/pty-session-registry';
 import type * as ImageAttachments from './image-attachments';
 import { LocalConversationProvider } from './local-conversation';
 
@@ -312,6 +315,10 @@ class FakePty implements Pty {
 
   resize(): void {}
 
+  pause(): void {}
+
+  resume(): void {}
+
   kill(): void {
     this.killCalls += 1;
   }
@@ -475,6 +482,33 @@ describe('LocalConversationProvider', () => {
     await vi.advanceTimersByTimeAsync(1_000);
 
     expect(spawned).toHaveLength(1);
+  });
+
+  it('waits for an exact-generation reveal before spawning a replacement agent PTY', async () => {
+    const oldPty = new FakePty();
+    ptySessionRegistry.register(sessionId, oldPty);
+    ptySessionRegistry.subscribe(sessionId, 'renderer', { ownerWebContentsId: 71 });
+    const oldGeneration = ptySessionRegistry.getGeneration(sessionId);
+    const claim = ptySessionRegistry.claimGenerationReveal(
+      sessionId,
+      'renderer',
+      oldGeneration,
+      71
+    );
+    if (!claim) throw new Error('Expected reveal claim');
+    const provider = createProvider();
+    const waitForClaim = vi.spyOn(ptySessionRegistry, 'waitForRevealClaims');
+
+    const start = provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+    await vi.waitFor(() => expect(waitForClaim).toHaveBeenCalledOnce());
+    expect(mocks.spawnLocalPty).not.toHaveBeenCalled();
+
+    expect(ptySessionRegistry.releaseGenerationReveal(claim.token, 71)).toBe(true);
+    await start;
+
+    expect(mocks.spawnLocalPty).toHaveBeenCalledOnce();
+    expect(ptySessionRegistry.getGeneration(sessionId)).toBe(oldGeneration + 1);
+    waitForClaim.mockRestore();
   });
 
   it('waits for clipboard image and prompt delivery before startup resolves', async () => {
@@ -1243,6 +1277,156 @@ describe('LocalConversationProvider', () => {
     expect(provider.getActiveSessions()).toEqual([]);
   });
 
+  it('detaches only the tmux attach wrapper after the final renderer checkpoint goes idle', async () => {
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    const provider = createProvider();
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+    const pty = spawned[0].pty;
+    const generation = ptySessionRegistry.getGeneration(sessionId);
+    ptySessionRegistry.subscribe(sessionId, 'renderer');
+
+    expect(
+      ptySessionRegistry.checkpointAndUnsubscribe(sessionId, 'renderer', {
+        buffer: '\x1bcCURRENT TMUX FRAME',
+        generation,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 500,
+      })
+    ).toBe(true);
+    await vi.advanceTimersByTimeAsync(PTY_RENDERER_DETACH_GRACE_MS);
+
+    expect(pty.killCalls).toBe(1);
+    expect(mocks.killTmuxSession).not.toHaveBeenCalled();
+    expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
+    expect(provider.getActiveSessions()).toEqual([
+      expect.objectContaining({
+        sessionId,
+        conversationId: conversation.id,
+        detachable: true,
+        transportAttached: false,
+      }),
+    ]);
+
+    mocks.dispatchRuntimeStatus.mockClear();
+    mocks.emitEvent.mockClear();
+    pty.emitExit({ exitCode: 0 });
+
+    expect(mocks.dispatchRuntimeStatus).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ kind: 'process-exited' }),
+      'process-exited'
+    );
+    expect(mocks.emitEvent).not.toHaveBeenCalledWith(agentSessionExitedChannel, expect.anything());
+    expect(provider.getActiveSessions()[0]).toMatchObject({
+      detachable: true,
+      transportAttached: false,
+    });
+  });
+
+  it('keeps a non-tmux provider transport attached after the renderer goes idle', async () => {
+    const provider = createProvider();
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+    const pty = spawned[0].pty;
+    const generation = ptySessionRegistry.getGeneration(sessionId);
+    ptySessionRegistry.subscribe(sessionId, 'renderer');
+
+    expect(
+      ptySessionRegistry.checkpointAndUnsubscribe(sessionId, 'renderer', {
+        buffer: '\x1bcDIRECT FRAME',
+        generation,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 500,
+      })
+    ).toBe(true);
+    await vi.advanceTimersByTimeAsync(PTY_RENDERER_DETACH_GRACE_MS * 2);
+
+    expect(pty.killCalls).toBe(0);
+    expect(ptySessionRegistry.get(sessionId)).toBe(pty);
+    expect(provider.getActiveSessions()[0]).toMatchObject({
+      detachable: false,
+    });
+    expect(provider.getActiveSessions()[0]).not.toHaveProperty('transportAttached');
+  });
+
+  it('strictly reattaches the retained tmux identity from a one-off override', async () => {
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValueOnce('one-off-tmux');
+    const provider = createProvider();
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this', true);
+    const generation = ptySessionRegistry.getGeneration(sessionId);
+    ptySessionRegistry.subscribe(sessionId, 'renderer');
+    expect(
+      ptySessionRegistry.checkpointAndUnsubscribe(sessionId, 'renderer', {
+        buffer: '\x1bcONE OFF FRAME',
+        generation,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 500,
+      })
+    ).toBe(true);
+    await vi.advanceTimersByTimeAsync(PTY_RENDERER_DETACH_GRACE_MS);
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue(undefined);
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([
+      { sessionName: 'one-off-tmux', cwd: '/workspace', attachedClients: 0 },
+    ]);
+
+    await provider.startSession(
+      conversation,
+      { cols: 80, rows: 24 },
+      true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { reattachExistingTmuxSession: true }
+    );
+
+    expect(mocks.resolveAvailableTmuxSessionName).toHaveBeenCalledTimes(1);
+    expect(mocks.resolveLocalPtySpawn).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        intent: expect.objectContaining({
+          tmuxSessionName: 'one-off-tmux',
+          tmuxReattachExistingSession: true,
+        }),
+      })
+    );
+  });
+
+  it('cleans retained title and run-state watchers when a detached provider tears down', async () => {
+    const stopWatcher = vi.fn();
+    mocks.watchClaudeSessionActivity.mockReturnValueOnce({ stop: stopWatcher });
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    const provider = createProvider();
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+    const generation = ptySessionRegistry.getGeneration(sessionId);
+    ptySessionRegistry.subscribe(sessionId, 'renderer');
+    expect(
+      ptySessionRegistry.checkpointAndUnsubscribe(sessionId, 'renderer', {
+        buffer: '\x1bcDETACHED FRAME',
+        generation,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 500,
+      })
+    ).toBe(true);
+    await vi.advanceTimersByTimeAsync(PTY_RENDERER_DETACH_GRACE_MS);
+
+    expect(stopWatcher).not.toHaveBeenCalled();
+    await provider.detachAll();
+
+    expect(stopWatcher).toHaveBeenCalledOnce();
+    expect(mocks.stopTitle).toHaveBeenCalledWith(conversation.id);
+  });
+
   it('sends input to an active PTY session', async () => {
     const provider = createProvider();
 
@@ -1270,6 +1454,47 @@ describe('LocalConversationProvider', () => {
       'tmux-session',
       'mobile follow-up'
     );
+    expect(provider.getActiveSessions()).toEqual([
+      expect.objectContaining({
+        sessionId,
+        transportAttached: false,
+        transportDetachedAt: Date.now(),
+      }),
+    ]);
+  });
+
+  it('preserves input order while detached tmux delivery is asynchronous', async () => {
+    let releaseFirst!: () => void;
+    mocks.sendLiteralToTmuxSession
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseFirst = resolve;
+          })
+      )
+      .mockResolvedValueOnce(undefined);
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    const provider = createProvider();
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+    (
+      provider as unknown as {
+        sessions: Map<string, Pty>;
+      }
+    ).sessions.delete(sessionId);
+
+    const first = provider.sendInput(conversation.id, 'first');
+    const second = provider.sendInput(conversation.id, 'second');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mocks.sendLiteralToTmuxSession).toHaveBeenCalledTimes(1);
+    expect(mocks.sendLiteralToTmuxSession.mock.calls[0]?.[2]).toBe('first');
+
+    releaseFirst();
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+    expect(mocks.sendLiteralToTmuxSession.mock.calls.map((call) => call[2])).toEqual([
+      'first',
+      'second',
+    ]);
   });
 
   it('tracks runtime status separately from PTY presence', async () => {

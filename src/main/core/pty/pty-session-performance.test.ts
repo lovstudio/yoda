@@ -25,6 +25,8 @@ class PerformanceFixturePty implements Pty {
     this.writes.push(data);
   }
   resize(): void {}
+  pause(): void {}
+  resume(): void {}
   kill(): void {}
   onData(handler: (data: string) => void): void {
     this.dataHandler = handler;

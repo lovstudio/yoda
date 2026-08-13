@@ -6,6 +6,7 @@ describe('selectTerminalLruEvictions', () => {
     const entries = Array.from({ length: 20 }, (_, index) => ({
       sessionId: `session-${index + 1}`,
       mounted: index === 19,
+      recoverable: true,
     }));
     expect(selectTerminalLruEvictions(entries, 4, 'session-20')).toEqual(
       Array.from({ length: 16 }, (_, index) => `session-${index + 1}`)
@@ -16,9 +17,9 @@ describe('selectTerminalLruEvictions', () => {
     expect(
       selectTerminalLruEvictions(
         [
-          { sessionId: 'visible-a', mounted: true },
-          { sessionId: 'hidden', mounted: false },
-          { sessionId: 'visible-b', mounted: true },
+          { sessionId: 'visible-a', mounted: true, recoverable: true },
+          { sessionId: 'hidden', mounted: false, recoverable: true },
+          { sessionId: 'visible-b', mounted: true, recoverable: true },
         ],
         1,
         'visible-b'
@@ -30,28 +31,32 @@ describe('selectTerminalLruEvictions', () => {
     expect(
       selectTerminalLruEvictions(
         [
-          { sessionId: 'old', mounted: false },
-          { sessionId: 'connecting', mounted: false, connecting: true },
-          { sessionId: 'current', mounted: false },
+          { sessionId: 'old', mounted: false, recoverable: true },
+          { sessionId: 'connecting', mounted: false, connecting: true, recoverable: true },
+          { sessionId: 'current', mounted: false, recoverable: true },
         ],
         1,
         'current'
       )
     ).toEqual(['old']);
   });
+
+  it('retains a not-yet-recoverable renderer even when it exceeds the limit', () => {
+    expect(
+      selectTerminalLruEvictions(
+        [
+          { sessionId: 'awaiting-snapshot', mounted: false, recoverable: false },
+          { sessionId: 'safe-old', mounted: false, recoverable: true },
+          { sessionId: 'current', mounted: false, recoverable: true },
+        ],
+        1,
+        'current'
+      )
+    ).toEqual(['safe-old']);
+  });
 });
 
 describe('selectTerminalPressureEvictions', () => {
-  it('does not evict any of 20 idle terminals without a pressure decision', () => {
-    const entries = Array.from({ length: 20 }, (_, index) => ({
-      sessionId: `session-${index + 1}`,
-      mounted: false,
-      recoverable: true,
-    }));
-
-    expect(selectTerminalLruEvictions(entries, Number.POSITIVE_INFINITY)).toEqual([]);
-  });
-
   it('evicts the oldest quarter of safe frontend renderers under pressure', () => {
     const entries = Array.from({ length: 20 }, (_, index) => ({
       sessionId: `session-${index + 1}`,
@@ -80,13 +85,13 @@ describe('selectTerminalPressureEvictions', () => {
     ).toEqual(['safe-old']);
   });
 
-  it('does not collapse the recent warm window under repeated pressure', () => {
+  it('can shrink the normal warm window while retaining a pressure floor', () => {
     const entries = Array.from({ length: 4 }, (_, index) => ({
       sessionId: `session-${index + 1}`,
       mounted: index === 3,
       recoverable: true,
     }));
 
-    expect(selectTerminalPressureEvictions(entries, 'session-4', 4)).toEqual([]);
+    expect(selectTerminalPressureEvictions(entries, 'session-4', 1)).toEqual(['session-1']);
   });
 });

@@ -15,6 +15,8 @@ class FakePty implements Pty {
   private readonly exitHandlers: Array<(info: PtyExitInfo) => void> = [];
   write(): void {}
   resize(): void {}
+  pause(): void {}
+  resume(): void {}
   kill(): void {}
   onData(): void {}
   onExit(handler: (info: PtyExitInfo) => void): void {

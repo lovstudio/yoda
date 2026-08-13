@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Check, Copy, Loader2, Power, RotateCcw, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAttachImagesAsPaths } from '@renderer/features/tasks/hooks/use-attach-images-as-paths';
@@ -32,6 +32,7 @@ import { Button } from '@renderer/lib/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { log } from '@renderer/utils/logger';
+import { completeTaskOpenTrace } from '../task-open-performance';
 import type { ConversationStore } from './conversation-manager';
 import { ConversationSessionPendingState } from './conversation-session-pending-state';
 import {
@@ -98,8 +99,24 @@ export const ConversationSession = observer(function ConversationSession({
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<{ focus: () => void }>(null);
   const focusPendingRef = useRef(false);
+  const [visibleFrame, setVisibleFrame] = useState<{
+    pty: FrontendPty | null;
+    ready: boolean;
+  }>({ pty: null, ready: false });
   const lastAutoResumePtyRef = useRef<FrontendPty | null>(null);
   const suppressNextAutoResumeRef = useRef(false);
+
+  // An inactive task can remain mounted in a hosted/split pane. Revoke its
+  // semantic frame during the layout phase so returning to that route starts
+  // with the stable overlay already present; a passive reset leaves one paint
+  // where xterm is intentionally hidden but the old ready state removes the
+  // overlay, producing the blank flash reported during rapid task switches.
+  useLayoutEffect(() => {
+    if (isVisible) return;
+    setVisibleFrame((current) =>
+      current.pty === null && !current.ready ? current : { pty: null, ready: false }
+    );
+  }, [isVisible]);
 
   const sessionStateTraceKey =
     log.level === 'debug'
@@ -172,24 +189,131 @@ export const ConversationSession = observer(function ConversationSession({
     onCloseFocus: () => terminalRef.current?.focus(),
   });
 
-  // Focus the terminal when asked; fall back to the wrapper until it's ready.
+  // Keep keyboard navigation anchored in the destination shell while its
+  // terminal is staged. The xterm itself is focused only after its canonical
+  // frame crosses the visible paint ACK below.
   useEffect(() => {
     if (!autoFocus) return;
-    if (terminalRef.current) {
-      terminalRef.current.focus();
-      focusPendingRef.current = false;
-    } else {
+    focusPendingRef.current = true;
+    if (!document.querySelector('[role="dialog"]')) {
       containerRef.current?.focus();
-      focusPendingRef.current = true;
     }
   }, [autoFocus, sessionId]);
 
   useEffect(() => {
-    if (sessionStatus === 'ready' && focusPendingRef.current) {
-      focusPendingRef.current = false;
+    if (!isVisible || !sessionPty || sessionStatus !== 'ready') return;
+    let active = true;
+    let frameReportedReady = false;
+    let dialogObserver: MutationObserver | null = null;
+    let focusFrame: number | null = null;
+    let focusAttempts = 0;
+    let frameRetryRunning = false;
+    let ensureFrameRetry = () => {};
+    const shouldContinue = () => active && isVisible;
+    const completeReadyTrace = () => {
+      completeTaskOpenTrace(projectId, taskId, {
+        renderer: 'agents',
+        canonicalFrame: true,
+        inputFocused: sessionPty.terminal.textarea === document.activeElement,
+      });
+    };
+    const focusCanonicalTerminal = () => {
+      if (!active || !autoFocus || !focusPendingRef.current) {
+        if (active && !autoFocus) completeReadyTrace();
+        return;
+      }
+      if (document.querySelector('[role="dialog"]')) {
+        dialogObserver ??= new MutationObserver(() => {
+          if (document.querySelector('[role="dialog"]')) return;
+          dialogObserver?.disconnect();
+          dialogObserver = null;
+          requestAnimationFrame(focusCanonicalTerminal);
+        });
+        dialogObserver.observe(document.body, { childList: true, subtree: true });
+        return;
+      }
       terminalRef.current?.focus();
-    }
-  }, [sessionStatus]);
+      focusPendingRef.current = sessionPty.terminal.textarea !== document.activeElement;
+      if (!focusPendingRef.current) {
+        completeReadyTrace();
+        return;
+      }
+      // React ref attachment, browser focus ownership and xterm's hidden
+      // textarea can settle on adjacent frames even without a dialog. Retry a
+      // small bounded number of paints instead of permanently abandoning input
+      // focus after one unlucky frame.
+      if (focusAttempts < 8) {
+        focusAttempts += 1;
+        focusFrame = requestAnimationFrame(focusCanonicalTerminal);
+      }
+    };
+
+    setVisibleFrame({ pty: sessionPty, ready: false });
+    const publishFrameState = (frameReady: boolean) => {
+      if (!active) return;
+      if (frameReady !== frameReportedReady) {
+        frameReportedReady = frameReady;
+        setVisibleFrame({ pty: sessionPty, ready: frameReady });
+        if (frameReady) {
+          focusCanonicalTerminal();
+        } else if (autoFocus) {
+          focusPendingRef.current = true;
+          focusAttempts = 0;
+        }
+      }
+      // The same FrontendPty can advance to a later backend generation after
+      // its first frame was already reported. Restart the single-flight ACK
+      // loop whenever that authoritative generation-start signal invalidates
+      // the old frame; otherwise a background-window timeout can leave the
+      // semantic loading surface in place forever after the final bytes arrive.
+      if (!frameReady) ensureFrameRetry();
+    };
+    const unsubscribeFrameState = sessionPty.subscribeVisibleFrameState(publishFrameState);
+
+    // A browser paint can be temporarily unavailable (background window,
+    // resize transaction, or a generation that has not produced its complete
+    // TUI yet). Keep retrying the ACK while this route owns the session. Later
+    // PTY output also schedules an immediate retry, so a five-second miss can
+    // never strand the loading surface over a subsequently valid terminal.
+    ensureFrameRetry = () => {
+      if (!shouldContinue() || frameReportedReady || frameRetryRunning) return;
+      frameRetryRunning = true;
+      void (async () => {
+        try {
+          while (shouldContinue() && !frameReportedReady) {
+            const frameReady = await sessionPty.waitForVisibleFrame(shouldContinue);
+            if (!shouldContinue()) return;
+            publishFrameState(frameReady);
+            if (frameReady) return;
+            await new Promise<void>((resolve) => setTimeout(resolve, 100));
+          }
+        } finally {
+          frameRetryRunning = false;
+          // Cover a false transition delivered between the loop's final
+          // condition and its cleanup without starting concurrent waiters.
+          if (shouldContinue() && !frameReportedReady) ensureFrameRetry();
+        }
+      })();
+    };
+    ensureFrameRetry();
+
+    return () => {
+      active = false;
+      unsubscribeFrameState();
+      if (focusFrame !== null) cancelAnimationFrame(focusFrame);
+      dialogObserver?.disconnect();
+    };
+  }, [autoFocus, isVisible, projectId, sessionPty, sessionStatus, taskId]);
+
+  // The xterm callback above proves its rows painted, but setVisibleFrame is
+  // still only a queued React update at that point. Keep the main-process
+  // generation claim until React has committed removal of the semantic opening
+  // surface and the browser crosses the following paint boundary.
+  useLayoutEffect(() => {
+    if (!isVisible || visibleFrame.pty !== sessionPty || !visibleFrame.ready || !sessionPty) return;
+    const paint = requestAnimationFrame(() => sessionPty.releaseCanonicalRevealClaim());
+    return () => cancelAnimationFrame(paint);
+  }, [isVisible, sessionPty, visibleFrame]);
 
   // The renderer store can survive while the main process replaces a PTY.
   // Ask the main-process registry once this exact visible terminal is ready so
@@ -378,6 +502,7 @@ export const ConversationSession = observer(function ConversationSession({
     [provisioned.path, provisioned.taskView, projectRoot, remoteConnectionId, homeDir]
   );
   const webLinks = useWorkspaceWebLinks();
+  const canonicalFrameVisible = visibleFrame.pty === sessionPty && visibleFrame.ready;
 
   const [startDebugCopied, setStartDebugCopied] = useState(false);
   const startDebugCopyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -484,6 +609,15 @@ export const ConversationSession = observer(function ConversationSession({
           fileLinks={fileLinks}
           webLinks={webLinks}
         />
+        {!canonicalFrameVisible ? (
+          <div className="absolute inset-0 z-10 flex bg-background">
+            <ConversationSessionPendingState
+              title={conversation.data.title}
+              heading={t('tasks.conversations.startingTitle')}
+              description={t('tasks.conversations.startingDescription')}
+            />
+          </div>
+        ) : null}
         {conversation.sessionExited && !conversation.sessionExitNoticeDismissed ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-3 duration-300 animate-in fade-in-0 slide-in-from-bottom-2">
             <div className="pointer-events-auto flex items-center gap-2.5 rounded-lg border border-border-primary/70 bg-background/85 py-1.5 pr-1.5 pl-3 shadow-sm ring-1 ring-foreground/5 backdrop-blur-md">

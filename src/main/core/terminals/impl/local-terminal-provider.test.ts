@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   killTmuxSession: vi.fn(),
   logError: vi.fn(),
   register: vi.fn(),
+  waitForRevealClaims: vi.fn(),
   resolveLocalPtySpawn: vi.fn(),
   resolveTmuxSessionName: vi.fn(),
   spawnLocalPty: vi.fn(),
@@ -36,6 +37,7 @@ vi.mock('@main/core/pty/pty-session-registry', () => ({
     beginRegistration: mocks.beginRegistration,
     cancelRegistration: mocks.cancelRegistration,
     register: mocks.register,
+    waitForRevealClaims: mocks.waitForRevealClaims,
     unregister: mocks.unregister,
   },
 }));
@@ -65,6 +67,8 @@ vi.mock('../dev-server-watcher', () => ({
 
 class FakePty implements Pty {
   readonly kill = vi.fn();
+  readonly pause = vi.fn();
+  readonly resume = vi.fn();
   private exitHandler: ((info: PtyExitInfo) => void) | null = null;
 
   write(): void {}
@@ -132,6 +136,7 @@ describe('LocalTerminalProvider start lifecycle', () => {
       warnings: [],
     });
     mocks.resolveTmuxSessionName.mockResolvedValue(undefined);
+    mocks.waitForRevealClaims.mockResolvedValue(true);
     mocks.spawnLocalPty.mockImplementation(() => {
       const pty = new FakePty();
       spawned.push(pty);

@@ -176,18 +176,82 @@ describe('DockedSessionHistory conversation tree menu', () => {
     expect(mocks.useSessionPromptTree).toHaveBeenLastCalledWith(false);
   });
 
-  it('keeps cold transcript loading paused until its owner activates it', async () => {
+  it('reserves final geometry without showing or loading transcript content before activation', async () => {
     const { DockedSessionHistory } = await import(
       '@renderer/features/tasks/conversations/session-history-panel'
     );
     await act(async () => root.render(createElement(DockedSessionHistory, { active: false })));
 
     expect(mocks.useSessionPrompts).toHaveBeenLastCalledWith(false);
-    expect(host.textContent).toContain('current path prompt');
+    expect(mocks.useSessionPromptTree).toHaveBeenLastCalledWith(false);
+    const reservedDock = host.querySelector<HTMLElement>('[data-session-history-dock]');
+    expect(reservedDock?.dataset.sessionHistoryReady).toBe('false');
+    expect(reservedDock?.style.height).toBe('157px');
+    const reservedHeight = reservedDock?.getBoundingClientRect().height;
+    expect(reservedHeight).toBe(157);
+    expect(host.textContent).not.toContain('current path prompt');
+    expect(host.textContent).not.toContain('0');
 
     await act(async () => root.render(createElement(DockedSessionHistory, { active: true })));
 
     expect(mocks.useSessionPrompts).toHaveBeenLastCalledWith(true);
+    const loadedDock = host.querySelector<HTMLElement>('[data-session-history-dock]');
+    expect(loadedDock?.dataset.sessionHistoryReady).toBe('true');
+    expect(loadedDock?.style.height).toBe(reservedDock?.style.height);
+    expect(loadedDock?.getBoundingClientRect().height).toBe(reservedHeight);
+    expect(host.textContent).toContain('current path prompt');
+  });
+
+  it('uses the rows-plus-two preview bound without changing dock height', async () => {
+    const prompts = Array.from({ length: 10 }, (_, index) => ({
+      ...prompt,
+      id: `prompt-${index + 1}`,
+      text: `path prompt ${index + 1}`,
+    }));
+    mocks.useSessionPrompts.mockReturnValue({
+      prompts,
+      isLoading: false,
+      hasPrompts: true,
+      hasConversation: true,
+      restoringPromptId: null,
+      requestRestorePrompt: mocks.restoreCurrentPrompt,
+      openPromptsModal: vi.fn(),
+    });
+    const { DockedSessionHistory } = await import(
+      '@renderer/features/tasks/conversations/session-history-panel'
+    );
+
+    await act(async () => root.render(createElement(DockedSessionHistory)));
+
+    const dock = host.querySelector<HTMLElement>('[data-session-history-dock]');
+    const preview = host.querySelector<HTMLElement>('[data-session-history-preview]');
+    expect(dock?.style.height).toBe('157px');
+    expect(preview?.children).toHaveLength(5);
+  });
+
+  it('does not reserve dock space when session history is disabled', async () => {
+    mocks.settings.dockSessionHistory = false;
+    const { DockedSessionHistory } = await import(
+      '@renderer/features/tasks/conversations/session-history-panel'
+    );
+
+    await act(async () => root.render(createElement(DockedSessionHistory, { active: false })));
+
+    expect(host.querySelector('[data-session-history-dock]')).toBeNull();
+    expect(mocks.useSessionPrompts).toHaveBeenLastCalledWith(false);
+  });
+
+  it('keeps a minimum terminal viewport when the prompt dock uses 20 rows', async () => {
+    mocks.settings.dockSessionHistoryRows = 20;
+    const { DockedSessionHistory } = await import(
+      '@renderer/features/tasks/conversations/session-history-panel'
+    );
+
+    await act(async () => root.render(createElement(DockedSessionHistory, { active: false })));
+
+    const dock = host.querySelector<HTMLElement>('[data-session-history-dock]');
+    expect(dock?.style.height).toBe('565px');
+    expect(dock?.style.maxHeight).toBe('calc(100% - 160px)');
   });
 
   it('shows the complete prompt in a tooltip when hovering a truncated row', async () => {
@@ -321,6 +385,9 @@ describe('DockedSessionHistory conversation tree menu', () => {
     await act(async () => collapse?.click());
 
     expect(host.textContent).not.toContain('current path prompt');
+    expect(host.querySelector<HTMLElement>('[data-session-history-dock]')?.style.height).toBe(
+      '29px'
+    );
     const viewTree = host.querySelector<HTMLButtonElement>(
       'button[aria-label="tasks.bottomPanel.sessionViewTree"]'
     );

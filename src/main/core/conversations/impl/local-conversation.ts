@@ -118,6 +118,7 @@ type RunStateWatcher = { stop(): void };
 export class LocalConversationProvider implements ConversationProvider {
   private sessions = new Map<string, Pty>();
   private knownSessionIds = new Set<string>();
+  private readonly intentionallyDetachedPtys = new WeakSet<Pty>();
   private readonly pendingStarts = new Map<string, { token: symbol; completion: Promise<void> }>();
   private readonly projectId: string;
   private readonly sidebarWorkspaceId?: string | null;
@@ -133,6 +134,8 @@ export class LocalConversationProvider implements ConversationProvider {
   private readonly hookConfigWriter: HookConfigWriter;
   private readonly preparedHookProviders = new Map<string, boolean>();
   private readonly tmuxSessionNames = new Map<string, string>();
+  private readonly transportDetachedAt = new Map<string, number>();
+  private readonly inputTails = new Map<string, Promise<void>>();
   private readonly sessionInfos = new Map<string, Omit<ActiveConversationSession, 'detachable'>>();
   private readonly runStateWatchers = new Map<string, RunStateWatcher[]>();
   private readonly sessionArtifactCleanups = new Map<string, { pty: Pty; cleanup: () => void }>();
@@ -562,7 +565,11 @@ export class LocalConversationProvider implements ConversationProvider {
           : baseArgs;
       const argsWithNotify = withCodexRuntimeNotifyArgs(conversation.runtimeId, argsWithMaas, port);
 
-      const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
+      const retainedTmuxSessionName = reattachExistingTmuxSession
+        ? this.tmuxSessionNames.get(sessionId)
+        : undefined;
+      const tmuxSessionName =
+        retainedTmuxSessionName ?? (await this.resolveTmuxSessionName(sessionId, tmuxOverride));
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       if (reattachExistingTmuxSession && !tmuxSessionName) {
         throw new TmuxReattachMissError();
@@ -673,6 +680,12 @@ export class LocalConversationProvider implements ConversationProvider {
             return;
           }
         }
+      }
+      if (
+        !(await ptySessionRegistry.waitForRevealClaims(sessionId, registrationEpoch)) ||
+        !this.ownsPendingStart(sessionId, startToken)
+      ) {
+        return;
       }
       const pty = (() => {
         try {
@@ -811,6 +824,17 @@ export class LocalConversationProvider implements ConversationProvider {
 
       let shouldEmitAgentSessionExited = false;
       pty.onExit(({ exitCode, signal }) => {
+        if (this.intentionallyDetachedPtys.delete(pty)) {
+          this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
+          if (!invocationLogFinished) {
+            invocationLogFinished = true;
+            void aiLogService.finish(invocationLogId, {
+              status: 'succeeded',
+              output: 'Detached Yoda renderer transport; tmux agent remains running.',
+            });
+          }
+          return;
+        }
         this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
         const exitedBySignal = signal !== undefined && signal !== 0;
         const failed = exitedBySignal || (typeof exitCode === 'number' && exitCode !== 0);
@@ -865,6 +889,9 @@ export class LocalConversationProvider implements ConversationProvider {
         },
         registrationEpoch,
         tmuxBacked: Boolean(tmuxSessionName),
+        onRendererIdle: tmuxSessionName
+          ? (generation) => this.detachRendererTransport(sessionId, pty, generation)
+          : undefined,
       });
       registrationCompleted = true;
       if (!this.ownsPendingStart(sessionId, startToken)) {
@@ -902,7 +929,12 @@ export class LocalConversationProvider implements ConversationProvider {
         await clipboardInputPromise;
         if (!this.ownsPendingStart(sessionId, startToken)) return;
       }
-      if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
+      if (tmuxSessionName) {
+        this.tmuxSessionNames.set(sessionId, tmuxSessionName);
+      } else {
+        this.tmuxSessionNames.delete(sessionId);
+      }
+      this.transportDetachedAt.delete(sessionId);
       sessionTitleManager.start({
         runtimeId: conversation.runtimeId,
         conversationId: conversation.id,
@@ -1088,26 +1120,82 @@ export class LocalConversationProvider implements ConversationProvider {
   }
 
   getActiveSessions(): ActiveConversationSession[] {
-    return Array.from(this.sessions.keys()).flatMap((sessionId) => {
-      const info = this.sessionInfos.get(sessionId);
-      if (!info) return [];
-      return [{ ...info, detachable: this.tmuxSessionNames.has(sessionId) }];
+    return Array.from(this.sessionInfos.entries()).map(([sessionId, info]) => {
+      const transportAttached = this.sessions.has(sessionId);
+      const { pid, ...base } = info;
+      return {
+        ...base,
+        ...(transportAttached && pid !== undefined ? { pid } : {}),
+        detachable: this.tmuxSessionNames.has(sessionId),
+        ...(transportAttached
+          ? {}
+          : {
+              transportAttached: false as const,
+              transportDetachedAt: this.transportDetachedAt.get(sessionId),
+            }),
+      };
     });
+  }
+
+  /** Release only the current tmux attach wrapper after registry revalidation. */
+  private detachRendererTransport(sessionId: string, pty: Pty, generation: number): void {
+    if (this.sessions.get(sessionId) !== pty || !this.tmuxSessionNames.has(sessionId)) return;
+    if (!ptySessionRegistry.detachRendererTransport(sessionId, generation, pty)) return;
+
+    this.intentionallyDetachedPtys.add(pty);
+    this.sessions.delete(sessionId);
+    this.transportDetachedAt.set(sessionId, Date.now());
+    this.releaseSilenceReconciler(sessionId);
+    this.cleanupSessionArtifacts(sessionId, pty);
+    try {
+      pty.kill();
+    } catch (error) {
+      log.warn('LocalConversation: failed to detach idle tmux transport', {
+        sessionId,
+        generation,
+        error: String(error),
+      });
+    }
   }
 
   async sendInput(conversationId: string, data: string): Promise<boolean> {
     const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
-    const pty = this.sessions.get(sessionId);
-    if (pty) {
-      pty.write(data);
-      return true;
+    // Protect newly queued headless input from the idle-session sweep before
+    // the asynchronous tmux send-keys process reaches the head of its queue.
+    if (!this.sessions.has(sessionId) && this.tmuxSessionNames.has(sessionId)) {
+      this.transportDetachedAt.set(sessionId, Date.now());
     }
-
-    const tmuxSessionName = this.tmuxSessionNames.get(sessionId);
-    if (!tmuxSessionName) return false;
-
-    await sendLiteralToTmuxSession(this.ctx, tmuxSessionName, data);
-    return true;
+    let delivered = false;
+    const previous = this.inputTails.get(sessionId) ?? Promise.resolve();
+    const delivery = previous
+      .catch(() => {})
+      .then(async () => {
+        // Resolve the transport when this turn reaches the head of the queue. A
+        // reattach can finish while an earlier send-keys process is in flight;
+        // checking here preserves byte order across that handoff.
+        const pty = this.sessions.get(sessionId);
+        if (pty) {
+          pty.write(data);
+          delivered = true;
+          return;
+        }
+        const tmuxSessionName = this.tmuxSessionNames.get(sessionId);
+        if (!tmuxSessionName) return;
+        this.transportDetachedAt.set(sessionId, Date.now());
+        await sendLiteralToTmuxSession(this.ctx, tmuxSessionName, data);
+        delivered = true;
+      });
+    const tail = delivery.then(
+      () => {},
+      () => {}
+    );
+    this.inputTails.set(sessionId, tail);
+    try {
+      await delivery;
+      return delivered;
+    } finally {
+      if (this.inputTails.get(sessionId) === tail) this.inputTails.delete(sessionId);
+    }
   }
 
   private async prepareHookConfig(
@@ -1199,6 +1287,8 @@ export class LocalConversationProvider implements ConversationProvider {
     ptySessionRegistry.unregister(sessionId);
     this.cleanupSessionArtifacts(sessionId, pty);
     this.sessionInfos.delete(sessionId);
+    this.transportDetachedAt.delete(sessionId);
+    this.inputTails.delete(sessionId);
     markRuntimeSessionExited({
       projectId: this.projectId,
       taskId: this.taskId,
@@ -1221,6 +1311,8 @@ export class LocalConversationProvider implements ConversationProvider {
     await Promise.all(tmuxSessionNames.map((name) => killTmuxSession(this.ctx, name)));
     this.knownSessionIds.clear();
     this.tmuxSessionNames.clear();
+    this.transportDetachedAt.clear();
+    this.inputTails.clear();
     this.sessionInfos.clear();
   }
 
@@ -1231,11 +1323,6 @@ export class LocalConversationProvider implements ConversationProvider {
       this.releaseSilenceReconciler(sessionId);
     }
     for (const [sessionId, pty] of this.sessions) {
-      const conversationId = sessionId.split(':').pop();
-      if (conversationId) {
-        sessionTitleManager.stop(conversationId);
-        this.stopRunStateWatcher(conversationId);
-      }
       try {
         pty.kill();
       } catch {}
@@ -1246,9 +1333,13 @@ export class LocalConversationProvider implements ConversationProvider {
       this.cleanupSessionArtifacts(sessionId);
     }
     for (const info of this.sessionInfos.values()) {
+      sessionTitleManager.stop(info.conversationId);
+      this.stopRunStateWatcher(info.conversationId);
       agentSessionRuntimeStore.remove(info);
     }
     this.sessions.clear();
+    this.transportDetachedAt.clear();
+    this.inputTails.clear();
     this.sessionInfos.clear();
   }
 }

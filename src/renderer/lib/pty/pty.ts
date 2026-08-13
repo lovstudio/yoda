@@ -6,7 +6,12 @@ import {
   ptyDataChannel,
   type PtyDataEvent,
 } from '@shared/events/ptyEvents';
-import type { PtyRenderCheckpoint } from '@shared/pty-render-checkpoint';
+import {
+  PTY_RENDER_CHECKPOINT_MAX_BYTES,
+  PTY_RENDER_CHECKPOINT_SCROLLBACK_LINES,
+  type PtyRenderCheckpoint,
+} from '@shared/pty-render-checkpoint';
+import { withTimeout } from '@shared/result';
 import {
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
   normalizeTerminalScrollbackLines,
@@ -44,6 +49,7 @@ const FIRST_FRAME_TIMEOUT_MS = 5_000;
 const SYNCHRONIZED_FIRST_FRAME_QUIET_MS = 120;
 const FALLBACK_FIRST_FRAME_QUIET_MS = 700;
 const FIRST_FRAME_CANCELLATION_POLL_MS = 25;
+const PTY_CONSUMER_RELEASE_TIMEOUT_MS = 250;
 const MIN_FIRST_FRAME_NON_EMPTY_LINES = 3;
 const MIN_FIRST_FRAME_VISIBLE_CHARACTERS = 24;
 
@@ -86,6 +92,42 @@ type ViewportContent = {
 };
 
 type OutputActivityOutcome = 'activity' | 'elapsed' | 'cancelled';
+
+type CanonicalRevealClaim = {
+  readonly token: string;
+  readonly generation: number;
+  readonly expiresAt: number;
+  shouldContinue: () => boolean;
+  cancellationTimer: ReturnType<typeof setInterval>;
+  expiryTimer: ReturnType<typeof setTimeout>;
+};
+
+// Serialize one evicted renderer per browser idle slice. SerializeAddon must
+// read xterm's in-memory buffer on this thread, but a policy change can evict
+// many sessions at once; running those synchronous scans back-to-back would
+// block input and navigation for seconds. The queue yields between snapshots
+// and keeps the task being opened out of the eviction call stack.
+let checkpointSerializationTail: Promise<void> = Promise.resolve();
+
+function serializeCheckpointWhenIdle<T>(serialize: () => T): Promise<T> {
+  const waitForIdle = () =>
+    new Promise<void>((resolve) => {
+      if (typeof globalThis.requestIdleCallback === 'function') {
+        globalThis.requestIdleCallback(() => resolve(), { timeout: 250 });
+      } else {
+        setTimeout(resolve, 0);
+      }
+    });
+  const result = checkpointSerializationTail
+    .catch(() => {})
+    .then(waitForIdle)
+    .then(serialize);
+  checkpointSerializationTail = result.then(
+    () => {},
+    () => {}
+  );
+  return result;
+}
 
 export const DEFAULT_TERMINAL_FONT_FAMILY = [
   'Menlo',
@@ -215,8 +257,12 @@ export class FrontendPty {
   private canonicalGenerationBaseline = '';
   private canonicalGenerationHasPayload = false;
   private expectedCanonicalGeneration: number | null = null;
+  /** A source-grid checkpoint needs backend output after being fit to another grid. */
+  private canonicalOutputRequiredAfterRevision: number | null = null;
   private preparedCanonicalGeneration: number | null = null;
   private preparedCanonicalRevision: number | null = null;
+  /** This exact live generation has already crossed a visible canonical paint. */
+  private hasShownCanonicalFrame = false;
   private synchronizedOutputOpen = false;
   private synchronizedOutputCursorShown = false;
   private synchronizedOutputCompletedRevision: number | null = null;
@@ -239,6 +285,7 @@ export class FrontendPty {
   private visibleFrameMountGeneration = 0;
   private visibleFrameAckMountGenerationInFlight = 0;
   private visibleFrameWaiters = new Set<(ready: boolean) => void>();
+  private visibleFrameStateListeners = new Set<(ready: boolean) => void>();
   /** Explicit parser suspension; normal hot-cache unmounts continue parsing off-screen. */
   private renderingSuspended = false;
   /** Token protecting a newer mount from an older replay completion callback. */
@@ -251,7 +298,18 @@ export class FrontendPty {
   private acknowledgedSequence = 0;
   private consumerHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private consumerHeartbeatInFlight = false;
+  /**
+   * Main-process lease that prevents this exact backend generation from being
+   * replaced between off-screen preparation and the routed browser paint.
+   * The owning ConversationSession releases it only after the task is visible
+   * and the canonical-frame signal has crossed React's commit boundary.
+   */
+  private canonicalRevealClaim: CanonicalRevealClaim | null = null;
+  /** An expired delivery lease must be renewed before this generation can paint. */
+  private canonicalRevealClaimRequiredGeneration: number | null = null;
   private isDisposed = false;
+  private isDisposing = false;
+  private disposePromise: Promise<void> | null = null;
   private savedViewportY: number | null = null;
   /**
    * Whether the viewport was pinned to the tail (following live output) when
@@ -280,9 +338,183 @@ export class FrontendPty {
     return this.isMounted;
   }
 
+  /** Backend generation represented by the currently parsed xterm scene. */
+  get canonicalGeneration(): number {
+    return this.outputGeneration;
+  }
+
+  /** Whether this off-screen cache already owns a fully parsed canonical frame. */
+  get canRevealImmediately(): boolean {
+    return (
+      this.hasRecoverableSnapshot &&
+      !this.terminalWriteActive &&
+      this.terminalWriteQueue.length === 0 &&
+      this.hasShownCanonicalFrame &&
+      !this.synchronizedOutputOpen &&
+      !this.resetBeforeNextLiveGeneration
+    );
+  }
+
+  /** Revoke the synchronous hot route after a failed main-generation fence. */
+  invalidateHotReveal(): void {
+    this.releaseCanonicalRevealClaim();
+    this.invalidateVisibleFrame({ hide: this.isMounted });
+    this.hasShownCanonicalFrame = false;
+    this.preparedCanonicalGeneration = null;
+    this.preparedCanonicalRevision = null;
+  }
+
+  /**
+   * Atomically reserve the currently parsed canonical generation in main.
+   *
+   * A one-shot getSessionState probe cannot order an Electron invoke reply
+   * against a later generation-start event and browser paint. This claim is
+   * tied to the subscribed consumer and exact generation instead: a provider
+   * that has already announced replacement makes the claim fail, while a
+   * later provider waits until the visible route has painted or been aborted.
+   */
+  async acquireCanonicalRevealClaim(
+    shouldContinue: () => boolean = () => true,
+    timeoutMs = 250
+  ): Promise<boolean> {
+    const existing = this.canonicalRevealClaim;
+    if (existing) {
+      if (
+        Date.now() < existing.expiresAt &&
+        existing.generation === this.outputGeneration &&
+        existing.shouldContinue() &&
+        shouldContinue()
+      ) {
+        existing.shouldContinue = shouldContinue;
+        return true;
+      }
+      this.releaseCanonicalRevealClaim();
+    }
+
+    const consumerId = this.connectedConsumerId;
+    const generation = this.outputGeneration;
+    if (!consumerId || !shouldContinue() || !this.hasClaimableCanonicalFrame()) return false;
+
+    const request = rpc.pty.claimGenerationReveal(this.sessionId, consumerId, generation);
+    const result = await new Promise<Awaited<typeof request> | null>((resolve) => {
+      let settled = false;
+      let cancellationTimer: ReturnType<typeof setInterval> | null = null;
+      let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+      const cleanup = () => {
+        if (cancellationTimer !== null) clearInterval(cancellationTimer);
+        if (timeoutTimer !== null) clearTimeout(timeoutTimer);
+      };
+      const finish = (value: Awaited<typeof request> | null) => {
+        if (settled) {
+          if (value?.success)
+            void rpc.pty.releaseGenerationReveal(value.data.token).catch(() => {});
+          return;
+        }
+        settled = true;
+        cleanup();
+        resolve(value);
+      };
+
+      cancellationTimer = setInterval(() => {
+        if (this.isDisposed || this.isDisposing || !shouldContinue()) finish(null);
+      }, FIRST_FRAME_CANCELLATION_POLL_MS);
+      timeoutTimer = setTimeout(() => finish(null), Math.max(0, timeoutMs));
+      request.then(finish, () => finish(null));
+    });
+
+    if (!result?.success) return false;
+    if (
+      this.isDisposed ||
+      this.isDisposing ||
+      !shouldContinue() ||
+      this.connectedConsumerId !== consumerId ||
+      this.outputGeneration !== generation
+    ) {
+      void rpc.pty.releaseGenerationReveal(result.data.token).catch(() => {});
+      return false;
+    }
+
+    const claim: CanonicalRevealClaim = {
+      token: result.data.token,
+      generation,
+      expiresAt: result.data.expiresAt,
+      shouldContinue,
+      cancellationTimer: setInterval(() => {
+        if (
+          this.isDisposed ||
+          this.isDisposing ||
+          !claim.shouldContinue() ||
+          this.outputGeneration !== claim.generation
+        ) {
+          this.releaseCanonicalRevealClaim();
+        }
+      }, FIRST_FRAME_CANCELLATION_POLL_MS),
+      expiryTimer: setTimeout(
+        () => this.expireCanonicalRevealClaim(claim),
+        // Invalidate slightly before main's timer so browser/main scheduling
+        // jitter cannot leave a nominally-held but already-unlocked old frame.
+        Math.max(0, result.data.expiresAt - Date.now() - FIRST_FRAME_CANCELLATION_POLL_MS)
+      ),
+    };
+    this.canonicalRevealClaim = claim;
+    this.canonicalRevealClaimRequiredGeneration = null;
+    return true;
+  }
+
+  /** Release the exact-generation lease after visible paint or abort. */
+  releaseCanonicalRevealClaim(): void {
+    const claim = this.canonicalRevealClaim;
+    if (!claim) return;
+    this.canonicalRevealClaim = null;
+    clearInterval(claim.cancellationTimer);
+    clearTimeout(claim.expiryTimer);
+    this.canonicalRevealClaimRequiredGeneration = null;
+    void rpc.pty.releaseGenerationReveal(claim.token).catch(() => {});
+  }
+
+  private expireCanonicalRevealClaim(claim: CanonicalRevealClaim): void {
+    if (this.canonicalRevealClaim !== claim) return;
+    this.canonicalRevealClaim = null;
+    clearInterval(claim.cancellationTimer);
+    clearTimeout(claim.expiryTimer);
+    this.canonicalRevealClaimRequiredGeneration = claim.generation;
+    void rpc.pty.releaseGenerationReveal(claim.token).catch(() => {});
+    this.invalidateVisibleFrame({ hide: this.isMounted });
+    for (const resolve of this.visibleFrameWaiters) resolve(false);
+    this.visibleFrameWaiters.clear();
+  }
+
+  private hasClaimableCanonicalFrame(): boolean {
+    if (
+      this.connectedConsumerId === null ||
+      this.isDisposed ||
+      this.isDisposing ||
+      this.terminalWriteActive ||
+      this.terminalWriteQueue.length > 0 ||
+      this.pendingWrites.length > 0 ||
+      this.suspendedWrites.length > 0 ||
+      this.synchronizedOutputOpen ||
+      this.resetBeforeNextLiveGeneration ||
+      !this.hasCanonicalViewport()
+    ) {
+      return false;
+    }
+    return (
+      this.canRevealImmediately ||
+      (this.preparedCanonicalGeneration === this.outputGeneration &&
+        this.preparedCanonicalRevision === this.outputRevision)
+    );
+  }
+
   /** A pressure eviction is safe only after main owns a snapshot/watermark for this consumer. */
   get hasRecoverableSnapshot(): boolean {
-    return this.connectedConsumerId !== null && this.hasResolvedInitialSnapshot;
+    return (
+      this.connectedConsumerId !== null &&
+      this.hasResolvedInitialSnapshot &&
+      this.initialSnapshotParserDrained &&
+      this.pendingWrites.length === 0 &&
+      this.suspendedWrites.length === 0
+    );
   }
 
   /** Read and reset hidden live-output work for the adaptive cache pressure sampler. */
@@ -474,6 +706,7 @@ export class FrontendPty {
   async connect(): Promise<void> {
     if (
       this.isDisposed ||
+      this.isDisposing ||
       this.connectedConsumerId !== null ||
       !this.isMounted ||
       !this.hasFlushed
@@ -530,7 +763,7 @@ export class FrontendPty {
 
     await previousPreparation;
     try {
-      if (this.isDisposed || !shouldContinue()) return false;
+      if (this.isDisposed || this.isDisposing || !shouldContinue()) return false;
       return await this.prepareFirstFrameOnce(targetDims, shouldContinue, options);
     } finally {
       releasePreparation();
@@ -548,7 +781,23 @@ export class FrontendPty {
     shouldContinue: () => boolean = () => true,
     timeoutMs: number = FIRST_FRAME_TIMEOUT_MS
   ): Promise<boolean> {
-    if (this.isDisposed || !shouldContinue()) return Promise.resolve(false);
+    if (this.isDisposed || this.isDisposing || !shouldContinue()) return Promise.resolve(false);
+    if (
+      this.canonicalRevealClaimRequiredGeneration !== null &&
+      this.canonicalRevealClaimRequiredGeneration === this.outputGeneration &&
+      this.canonicalRevealClaim === null
+    ) {
+      const startedAt = performance.now();
+      return this.acquireCanonicalRevealClaim(shouldContinue, Math.min(timeoutMs, 250)).then(
+        (claimed) => {
+          if (!claimed || !shouldContinue()) return false;
+          return this.waitForVisibleFrame(
+            shouldContinue,
+            Math.max(0, timeoutMs - (performance.now() - startedAt))
+          );
+        }
+      );
+    }
     if (this.isVisibleFrameReady()) return Promise.resolve(true);
 
     const boundedTimeoutMs = Math.max(0, timeoutMs);
@@ -570,10 +819,7 @@ export class FrontendPty {
       pollTimer = setInterval(() => {
         if (this.isDisposed || !shouldContinue()) finish(false);
       }, FIRST_FRAME_CANCELLATION_POLL_MS);
-      timeoutTimer = setTimeout(() => {
-        this.revealVisibleMountWithoutAck(this.mountGeneration);
-        finish(false);
-      }, boundedTimeoutMs);
+      timeoutTimer = setTimeout(() => finish(false), boundedTimeoutMs);
       if (this.isVisibleMountLease(this.mountGeneration)) {
         this.scheduleVisibleFrameAck(this.mountGeneration);
       }
@@ -581,7 +827,25 @@ export class FrontendPty {
     });
   }
 
-  /** Require the next canonical-frame wait to represent this backend generation or newer. */
+  /**
+   * Observe semantic first-frame readiness across backend generations.
+   *
+   * React keeps the stable session-opening surface above xterm until this
+   * signal becomes true. A generation-start sentinel publishes false before
+   * the previous process is reset, so the same FrontendPty instance cannot
+   * leave React believing that an old process frame is still safe to expose.
+   */
+  subscribeVisibleFrameState(listener: (ready: boolean) => void): () => void {
+    if (this.isDisposed) {
+      listener(false);
+      return () => {};
+    }
+    this.visibleFrameStateListeners.add(listener);
+    listener(this.isVisibleFrameReady());
+    return () => this.visibleFrameStateListeners.delete(listener);
+  }
+
+  /** Require the next canonical-frame wait to represent this exact backend generation. */
   expectCanonicalGeneration(generation: number): void {
     if (!Number.isSafeInteger(generation) || generation < 0) return;
     if (
@@ -591,7 +855,14 @@ export class FrontendPty {
       this.preparedCanonicalGeneration = null;
       this.preparedCanonicalRevision = null;
     }
-    this.expectedCanonicalGeneration = generation;
+    // Backend generations are monotonic. A late resize/probe completion from
+    // G must never lower the expectation after a G+1 sentinel or subscription
+    // snapshot has already become authoritative.
+    this.expectedCanonicalGeneration = Math.max(
+      this.expectedCanonicalGeneration ?? 0,
+      this.outputGeneration,
+      generation
+    );
   }
 
   private async prepareFirstFrameOnce(
@@ -729,10 +1000,13 @@ export class FrontendPty {
     });
     this.startConsumerHeartbeat();
     if (snapshot.buffer) {
-      const initialSnapshotMountLease = this.mountGeneration;
       const mountedDimensions = { cols: this.terminal.cols, rows: this.terminal.rows };
       const checkpointDimensions =
         'checkpointDimensions' in snapshot ? snapshot.checkpointDimensions : undefined;
+      const checkpointGridMatchesTarget =
+        !checkpointDimensions ||
+        (checkpointDimensions.cols === mountedDimensions.cols &&
+          checkpointDimensions.rows === mountedDimensions.rows);
       if (
         checkpointDimensions &&
         (checkpointDimensions.cols !== mountedDimensions.cols ||
@@ -741,6 +1015,7 @@ export class FrontendPty {
         this.terminal.resize(checkpointDimensions.cols, checkpointDimensions.rows);
       }
       this.noteOutputActivity();
+      const initialSnapshotRevision = this.outputRevision;
       this.observeCanonicalPayload(snapshot.buffer, this.outputRevision);
       this.writeOrBuffer(
         snapshot.buffer,
@@ -756,6 +1031,36 @@ export class FrontendPty {
             this.terminal.resize(mountedDimensions.cols, mountedDimensions.rows);
           }
           this.initialSnapshotParserDrained = true;
+          // A compact checkpoint was serialized from a fully parsed xterm at
+          // this exact generation/sequence watermark. Requiring another
+          // 700 ms output-quiet heuristic after parsing it adds latency but no
+          // correctness: subsequent live events advance outputRevision and
+          // invalidate this prepared revision before it can be revealed.
+          if (
+            snapshot.checkpointCanonical === true &&
+            checkpointGridMatchesTarget &&
+            this.outputGeneration === snapshot.generation &&
+            this.outputRevision === initialSnapshotRevision &&
+            this.hasCanonicalViewport()
+          ) {
+            this.preparedCanonicalGeneration = snapshot.generation;
+            this.preparedCanonicalRevision = initialSnapshotRevision;
+          }
+          if (!checkpointGridMatchesTarget) {
+            // Resizing serialized alternate-screen cells cannot invent the
+            // backend's newly exposed rows and columns. Wait for the SIGWINCH
+            // redraw issued by generation-bound staging instead of treating a
+            // stretched 80x24 framebuffer as a complete 144x45 frame.
+            this.canonicalOutputRequiredAfterRevision = initialSnapshotRevision;
+          }
+          if (checkpointDimensions && snapshot.checkpointCanonical !== true) {
+            // A compact checkpoint with downgraded provenance may be an exact
+            // parser state in the middle of "Loading workspace" or a partial
+            // synchronized repaint. Quiet time alone cannot upgrade it. Main's
+            // tracker will mark a later complete DEC transaction canonical;
+            // otherwise require live output beyond this checkpoint revision.
+            this.canonicalOutputRequiredAfterRevision = initialSnapshotRevision;
+          }
           console.log('[DEBUG][agent-session-load] snapshot parser drained:', {
             sessionId: this.sessionId,
             snapshotCharacters: snapshot.buffer.length,
@@ -766,16 +1071,7 @@ export class FrontendPty {
           if (this.hasResolvedInitialSnapshot && this.isVisibleMountLease(this.mountGeneration)) {
             this.scheduleVisibleFrameAck(this.mountGeneration);
           }
-        },
-        snapshot.buffer.length > XTERM_WRITE_CHUNK_CODE_UNITS
-          ? () => {
-              this.revealInitialSnapshotProgress(
-                initialSnapshotMountLease,
-                snapshot.buffer.length,
-                subscriptionStartedAt
-              );
-            }
-          : undefined
+        }
       );
     } else if (snapshot.sequence > 0) {
       this.noteOutputActivity();
@@ -824,21 +1120,42 @@ export class FrontendPty {
       });
       return;
     }
-    const isNewGeneration = event.generation > this.outputGeneration;
-    const shouldResetStaleHistory = isNewGeneration && this.resetBeforeNextLiveGeneration;
     if (event.generation > this.outputGeneration) {
       const previousGeneration = this.outputGeneration;
+      this.releaseCanonicalRevealClaim();
+      this.canonicalRevealClaimRequiredGeneration = null;
+      // Invalidate the old process while its complete frame is still present.
+      // The empty seq=0 generation-start event must never clear a terminal that
+      // React still considers visible-frame ready.
+      this.invalidateVisibleFrame({ hide: true });
       this.beginCanonicalGeneration(event.generation);
+      // Main's generation-start event is authoritative. A staging lease for a
+      // process that was replaced between preparation and route commit must
+      // follow the replacement instead of waiting forever for the old number.
+      this.expectedCanonicalGeneration = event.generation;
       this.lastOutputSequence = 0;
       this.acknowledgedGeneration = event.generation;
       this.acknowledgedSequence = 0;
       this.resetBeforeNextLiveGeneration = false;
+      // A backend generation is a new terminal process, not an append to the
+      // previous process's framebuffer. Invalidate and clear the old scene as
+      // soon as main publishes generation start (before its first output
+      // batch), while the owned container is hidden. This prevents a partial
+      // G+1 repaint from being composited over G's cursor/grid.
+      this.visibleFrameSettlementPending = true;
+      this.visibleFrameSettlementOutputRevision = this.outputRevision;
+      this.noteOutputActivity();
+      this.writeTerminalData(RESET_TERMINAL_SEQUENCE, () => {
+        if (this.isVisibleMountLease(this.mountGeneration)) {
+          this.scheduleVisibleFrameAck(this.mountGeneration);
+        }
+      });
       log.debug('[pty-renderer] live generation changed', {
         sessionId: this.sessionId,
         previousGeneration,
         generation: event.generation,
         firstSequence: event.sequence,
-        resetHistoricalScreen: shouldResetStaleHistory,
+        resetHistoricalScreen: true,
       });
     }
     if (event.sequence <= this.lastOutputSequence) return;
@@ -846,12 +1163,19 @@ export class FrontendPty {
     this.lastOutputSequence = event.sequence;
     if (!this.isMounted) this.hiddenOutputCodeUnits += event.data.length;
     this.noteOutputActivity();
-    if (shouldResetStaleHistory) this.writeTerminalData(RESET_TERMINAL_SEQUENCE);
     this.observeCanonicalPayload(event.data, this.outputRevision);
-    this.writeOrBuffer(event.data, {
-      generation: event.generation,
-      sequence: event.sequence,
-    });
+    this.writeOrBuffer(
+      event.data,
+      {
+        generation: event.generation,
+        sequence: event.sequence,
+      },
+      () => {
+        if (this.isVisibleMountLease(this.mountGeneration)) {
+          this.scheduleVisibleFrameAck(this.mountGeneration);
+        }
+      }
+    );
   }
 
   private writeOrBuffer(
@@ -885,7 +1209,7 @@ export class FrontendPty {
     onWritten?: () => void,
     onFirstChunkWritten?: () => void
   ): void {
-    if (this.isDisposed) return;
+    if (this.isDisposed || this.isDisposing) return;
     this.terminalWriteQueue.push({ data, onWritten, onFirstChunkWritten, offset: 0 });
     this.pumpTerminalWriteQueue();
   }
@@ -953,7 +1277,16 @@ export class FrontendPty {
 
   private beginCanonicalGeneration(generation: number): void {
     this.outputGeneration = generation;
+    if (
+      this.expectedCanonicalGeneration !== null &&
+      generation > this.expectedCanonicalGeneration
+    ) {
+      this.expectedCanonicalGeneration = generation;
+    }
     if (this.canonicalStateGeneration === generation) return;
+    this.hasShownCanonicalFrame = false;
+    this.preparedCanonicalGeneration = null;
+    this.preparedCanonicalRevision = null;
     this.canonicalStateGeneration = generation;
     this.canonicalGenerationBaseline = this.readViewportContent().signature;
     this.canonicalGenerationHasPayload = false;
@@ -962,6 +1295,7 @@ export class FrontendPty {
     this.synchronizedOutputCompletedRevision = null;
     this.synchronizedOutputCompletedWithCursorRevision = null;
     this.synchronizedOutputScanTail = '';
+    this.canonicalOutputRequiredAfterRevision = null;
   }
 
   private observeCanonicalPayload(data: string, revision: number): void {
@@ -1016,7 +1350,17 @@ export class FrontendPty {
     }
     this.outputRevision += 1;
     this.visualFrameRevision += 1;
-    this.visibleFrameMountGeneration = 0;
+    // Once a live generation has crossed its first canonical paint, normal
+    // streaming output is terminal content rather than another loading phase.
+    // Keep React's semantic-ready signal stable; explicit generation changes
+    // call invalidateVisibleFrame() before clearing the old process instead.
+    if (
+      !this.hasShownCanonicalFrame ||
+      this.preparedCanonicalRevision !== null ||
+      this.visibleFrameSettlementPending
+    ) {
+      this.visibleFrameMountGeneration = 0;
+    }
     for (const resolve of this.outputActivityWaiters) resolve();
     this.outputActivityWaiters.clear();
   }
@@ -1047,7 +1391,9 @@ export class FrontendPty {
       this.canonicalStateGeneration !== this.outputGeneration ||
       !this.canonicalGenerationHasPayload ||
       (this.expectedCanonicalGeneration !== null &&
-        this.outputGeneration < this.expectedCanonicalGeneration)
+        this.outputGeneration !== this.expectedCanonicalGeneration) ||
+      (this.canonicalOutputRequiredAfterRevision !== null &&
+        this.outputRevision <= this.canonicalOutputRequiredAfterRevision)
     ) {
       return false;
     }
@@ -1309,6 +1655,37 @@ export class FrontendPty {
     );
   }
 
+  private publishVisibleFrameState(ready: boolean): void {
+    for (const listener of this.visibleFrameStateListeners) listener(ready);
+  }
+
+  private invalidateVisibleFrame(options: { hide: boolean }): void {
+    this.visibleFrameMountGeneration = 0;
+    if (options.hide && this.isVisibleMountLease(this.mountGeneration)) {
+      this.ownedContainer.style.visibility = 'hidden';
+    }
+    this.publishVisibleFrameState(false);
+  }
+
+  private commitVisibleFrame(mountLease: number): boolean {
+    const claim = this.canonicalRevealClaim;
+    if (claim && Date.now() >= claim.expiresAt) {
+      this.expireCanonicalRevealClaim(claim);
+      return false;
+    }
+    if (
+      this.canonicalRevealClaimRequiredGeneration !== null &&
+      this.canonicalRevealClaimRequiredGeneration === this.outputGeneration &&
+      claim === null
+    ) {
+      this.invalidateVisibleFrame({ hide: true });
+      return false;
+    }
+    this.visibleFrameMountGeneration = mountLease;
+    this.publishVisibleFrameState(true);
+    return true;
+  }
+
   private scheduleVisibleFrameAck(mountLease: number): void {
     if (
       !this.isVisibleMountLease(mountLease) ||
@@ -1334,6 +1711,58 @@ export class FrontendPty {
       if (!this.hasResolvedInitialSnapshot) return;
 
       const preparedRevision = this.preparedCanonicalRevision;
+      // A terminal generation that has already been shown is a live terminal,
+      // not a startup transaction. It may be continuously producing output,
+      // so waiting for a 120/700 ms quiet window can starve until the five-
+      // second fallback. Refresh its existing canonical DOM scene once and
+      // reveal it; xterm then continues streaming normally, exactly as a
+      // standalone terminal does.
+      if (
+        this.hasShownCanonicalFrame &&
+        preparedRevision === null &&
+        !this.visibleFrameSettlementPending &&
+        !this.synchronizedOutputOpen &&
+        !this.terminalWriteActive &&
+        this.terminalWriteQueue.length === 0 &&
+        this.pendingWrites.length === 0 &&
+        this.suspendedWrites.length === 0
+      ) {
+        const renderRevision = this.terminalRenderRevision;
+        this.redrawViewportFromBuffer();
+        const rendered = await this.waitForTerminalRenderAfter(
+          renderRevision,
+          isCurrentMount,
+          deadline
+        );
+        if (!rendered) break;
+        const rowsCommitted = await this.waitForPromiseWithin(
+          new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+          isCurrentMount,
+          deadline
+        );
+        if (!rowsCommitted || !isCurrentMount()) break;
+        this.ownedContainer.style.visibility = '';
+        const painted = await this.waitForPromiseWithin(
+          new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+          isCurrentMount,
+          deadline
+        );
+        if (!painted || !isCurrentMount()) break;
+        if (!this.commitVisibleFrame(mountLease)) break;
+        for (const resolve of this.visibleFrameWaiters) resolve(true);
+        this.visibleFrameWaiters.clear();
+        const visibleMount =
+          this.debugVisibleMount?.lease === mountLease ? this.debugVisibleMount : null;
+        console.log('[DEBUG][agent-session-load] hot visible frame painted:', {
+          sessionId: this.sessionId,
+          elapsedMs: visibleMount
+            ? Math.round((performance.now() - visibleMount.startedAt) * 10) / 10
+            : null,
+        });
+        if (visibleMount) this.debugVisibleMount = null;
+        return;
+      }
+
       if (preparedRevision !== null && this.outputRevision !== preparedRevision) {
         // Output changed after off-screen preparation. Keep the routed terminal
         // hidden until the new generation/frame reaches canonical readiness too.
@@ -1385,6 +1814,26 @@ export class FrontendPty {
         }
       }
 
+      // Parser-idle is not equivalent to a complete process frame. In
+      // particular, a generation-start sentinel contains no payload and a TUI
+      // repaint can be split across several PTY chunks. Keep the terminal
+      // hidden until this exact generation owns a non-trivial, transaction-
+      // complete viewport; later output wakes this wait and retries the ACK.
+      const canonicalFrameRequired =
+        this.expectedCanonicalGeneration !== null ||
+        this.canonicalOutputRequiredAfterRevision !== null ||
+        this.preparedCanonicalGeneration !== null;
+      if (this.synchronizedOutputOpen || (canonicalFrameRequired && !this.hasCanonicalViewport())) {
+        const activity = await this.waitForOutputActivityOrDelay(
+          stableRevision,
+          Math.max(0, deadline - performance.now()),
+          isCurrentMount,
+          deadline
+        );
+        if (activity === 'activity') continue;
+        break;
+      }
+
       const renderRevision = this.terminalRenderRevision;
       this.redrawViewportFromBuffer();
       const rendered = await this.waitForTerminalRenderAfter(
@@ -1430,8 +1879,11 @@ export class FrontendPty {
         continue;
       }
 
-      this.visibleFrameMountGeneration = mountLease;
+      if (!this.commitVisibleFrame(mountLease)) break;
       this.visibleFrameSettlementPending = false;
+      this.hasShownCanonicalFrame =
+        !this.resetBeforeNextLiveGeneration && this.hasCanonicalViewport();
+      if (this.hasShownCanonicalFrame) this.expectedCanonicalGeneration = null;
       this.preparedCanonicalGeneration = null;
       this.preparedCanonicalRevision = null;
       for (const resolve of this.visibleFrameWaiters) resolve(true);
@@ -1457,19 +1909,17 @@ export class FrontendPty {
       return;
     }
 
-    // A false ACK lets the route owner choose its explicit fallback. Restore
-    // the DOM scene so that fallback cannot leave a permanently blank terminal.
-    this.revealVisibleMountWithoutAck(mountLease);
-  }
-
-  private revealVisibleMountWithoutAck(mountLease: number): void {
-    if (!this.isVisibleMountLease(mountLease)) return;
-    this.visibleFrameSettlementPending = false;
-    this.ownedContainer.style.visibility = '';
-    this.redrawViewportFromBuffer();
+    // Never reveal an unacknowledged terminal scene. The React owner keeps its
+    // semantic session-opening surface visible and may retry; exposing this DOM
+    // would turn a timeout back into the raw/blank/partial frame sequence that
+    // staging exists to prevent.
+    // Do not reject callers merely because one scheduled ACK attempt lost a
+    // render/rAF race. Their own bounded wait remains registered so a second
+    // ACK already queued by the final parser callback can complete it without
+    // forcing React through an avoidable timeout/retry cycle.
     const visibleMount =
       this.debugVisibleMount?.lease === mountLease ? this.debugVisibleMount : null;
-    console.log('[DEBUG][agent-session-load] visible frame fallback:', {
+    console.log('[DEBUG][agent-session-load] visible frame unavailable:', {
       sessionId: this.sessionId,
       elapsedMs: visibleMount
         ? Math.round((performance.now() - visibleMount.startedAt) * 10) / 10
@@ -1480,34 +1930,6 @@ export class FrontendPty {
       pendingWriteCount: this.pendingWrites.length,
     });
     if (visibleMount) this.debugVisibleMount = null;
-  }
-
-  /**
-   * A newly-created xterm has no stale DOM scene to protect. For a multi-chunk
-   * cold snapshot, reveal the first parsed chunk instead of presenting a blank
-   * panel until the entire scrollback and a quiet window have drained. The
-   * ordered parser queue and backend ACK still complete at the final chunk.
-   */
-  private revealInitialSnapshotProgress(
-    mountLease: number,
-    snapshotCharacters: number,
-    subscriptionStartedAt: number
-  ): void {
-    if (!this.isVisibleMountLease(mountLease)) return;
-    this.visibleFrameSettlementPending = false;
-    this.ownedContainer.style.visibility = '';
-    this.redrawViewportFromBuffer();
-    const visibleMount =
-      this.debugVisibleMount?.lease === mountLease ? this.debugVisibleMount : null;
-    console.log('[DEBUG][agent-session-load] progressive snapshot painted:', {
-      sessionId: this.sessionId,
-      elapsedMs: visibleMount
-        ? Math.round((performance.now() - visibleMount.startedAt) * 10) / 10
-        : null,
-      subscriptionElapsedMs: Math.round((performance.now() - subscriptionStartedAt) * 10) / 10,
-      snapshotCharacters,
-      parsedCharacters: Math.min(snapshotCharacters, XTERM_WRITE_CHUNK_CODE_UNITS),
-    });
   }
 
   /**
@@ -1618,7 +2040,7 @@ export class FrontendPty {
         queuedWriteCount: this.terminalWriteQueue.length,
       });
     }
-    this.visibleFrameMountGeneration = 0;
+    this.invalidateVisibleFrame({ hide: false });
     this.renderingSuspended = false;
     // A hot-cache terminal keeps its parser current while off-screen. An
     // already-running parser queue is therefore the canonical live frame, not
@@ -1685,6 +2107,7 @@ export class FrontendPty {
    */
   unmount(mountLease?: number): void {
     if (mountLease !== undefined && mountLease !== this.mountGeneration) return;
+    this.invalidateVisibleFrame({ hide: false });
     this.mountGeneration += 1;
     this.replayToken += 1;
     this.visibleFrameSettlementPending = false;
@@ -1707,9 +2130,29 @@ export class FrontendPty {
    * disposes the xterm Terminal, and removes the owned container from the DOM.
    */
   dispose(options?: { checkpoint?: boolean }): void {
-    if (this.isDisposed) return;
-    const checkpoint = options?.checkpoint ? this.createRenderCheckpoint() : null;
-    this.isDisposed = true;
+    void this.disposeAndWait(options);
+  }
+
+  /**
+   * Dispose and wait until main has atomically accepted the checkpoint and
+   * released this consumer. Renderer LRU uses this as a reopen barrier so a
+   * rapid fifth-task round trip cannot subscribe to the raw ring in the small
+   * IPC window before its canonical checkpoint arrives.
+   */
+  disposeAndWait(options?: { checkpoint?: boolean }): Promise<void> {
+    if (this.disposePromise) return this.disposePromise;
+    const promise = this.disposeOnce(options);
+    this.disposePromise = promise;
+    return promise;
+  }
+
+  private async disposeOnce(options?: { checkpoint?: boolean }): Promise<void> {
+    if (this.isDisposed || this.isDisposing) return;
+    this.isDisposing = true;
+    this.releaseCanonicalRevealClaim();
+    const connectedConsumerId = this.connectedConsumerId;
+    const shouldCheckpoint = Boolean(options?.checkpoint && this.hasRecoverableSnapshot);
+    let checkpoint: PtyRenderCheckpoint | null = null;
     this.cancelPendingConnect();
     this.connectPromise = null;
     if (this.consumerHeartbeatTimer !== null) {
@@ -1720,25 +2163,62 @@ export class FrontendPty {
     FrontendPty.all.delete(this);
     this.isMounted = false;
     this.replayToken += 1;
-    this.renderingSuspended = true;
-    this.suspendedWrites = [];
-    this.terminalWriteQueue = [];
-    this.terminalWriteActive = false;
-    for (const resolve of this.terminalWriteWaiters) resolve();
-    this.terminalWriteWaiters.clear();
+    // Stop accepting IPC first, then let every batch that already crossed the
+    // renderer boundary finish parsing and ACK its exact sequence. This makes
+    // an actively-writing hidden terminal evictable without dropping the tail
+    // or serializing a half-parsed xterm buffer. Main retains all later bytes
+    // after the detached consumer watermark.
+    this.offData?.();
+    this.offData = null;
     for (const resolve of this.outputActivityWaiters) resolve();
     this.outputActivityWaiters.clear();
     for (const resolve of this.terminalRenderWaiters) resolve();
     this.terminalRenderWaiters.clear();
     for (const resolve of this.visibleFrameWaiters) resolve(false);
     this.visibleFrameWaiters.clear();
+    this.publishVisibleFrameState(false);
+    this.visibleFrameStateListeners.clear();
     this.visibleFrameMountGeneration = 0;
-    this.offData?.();
-    this.offData = null;
-    const connectedConsumerId = this.connectedConsumerId;
-    this.connectedConsumerId = null;
     this.scrollDisposable.dispose();
     this.renderDisposable.dispose();
+
+    if (shouldCheckpoint) {
+      const writesDrained = await withTimeout(
+        this.waitForTerminalWrites(),
+        PTY_CONSUMER_RELEASE_TIMEOUT_MS
+      ).then(
+        () => true,
+        () => false
+      );
+      if (writesDrained) {
+        try {
+          checkpoint = await serializeCheckpointWhenIdle(() => this.createRenderCheckpoint());
+        } catch (error) {
+          // Eviction must still release the main-process consumer even if a
+          // renderer/addon bug prevents serialization. The caller's barrier
+          // falls back to a fresh PTY snapshot instead of leaking the lease.
+          log.warn('[pty-renderer] failed to create render checkpoint', {
+            sessionId: this.sessionId,
+            error,
+          });
+        }
+      } else {
+        log.warn('[pty-renderer] parser did not drain before eviction checkpoint', {
+          sessionId: this.sessionId,
+        });
+      }
+    }
+
+    this.isDisposed = true;
+    this.isDisposing = false;
+    this.renderingSuspended = true;
+    this.suspendedWrites = [];
+    this.terminalWriteQueue = [];
+    this.terminalWriteActive = false;
+    for (const resolve of this.terminalWriteWaiters) resolve();
+    this.terminalWriteWaiters.clear();
+    this.connectedConsumerId = null;
+    let consumerRelease: Promise<unknown> = Promise.resolve();
     if (connectedConsumerId) {
       if (checkpoint) {
         console.log('[DEBUG][agent-session-load] compact checkpoint captured:', {
@@ -1749,11 +2229,20 @@ export class FrontendPty {
           cols: checkpoint.cols,
           rows: checkpoint.rows,
         });
-        void rpc.pty
-          .checkpointAndUnsubscribe(this.sessionId, connectedConsumerId, checkpoint)
-          .catch(() => rpc.pty.unsubscribe(this.sessionId, connectedConsumerId).catch(() => {}));
+        consumerRelease = withTimeout(
+          rpc.pty.checkpointAndUnsubscribe(this.sessionId, connectedConsumerId, checkpoint),
+          PTY_CONSUMER_RELEASE_TIMEOUT_MS
+        ).catch(() =>
+          withTimeout(
+            rpc.pty.unsubscribe(this.sessionId, connectedConsumerId),
+            PTY_CONSUMER_RELEASE_TIMEOUT_MS
+          ).catch(() => {})
+        );
       } else {
-        void rpc.pty.unsubscribe(this.sessionId, connectedConsumerId).catch(() => {});
+        consumerRelease = withTimeout(
+          rpc.pty.unsubscribe(this.sessionId, connectedConsumerId),
+          PTY_CONSUMER_RELEASE_TIMEOUT_MS
+        ).catch(() => {});
       }
     }
     try {
@@ -1762,6 +2251,7 @@ export class FrontendPty {
     try {
       this.ownedContainer.remove();
     } catch {}
+    await consumerRelease;
   }
 
   private createRenderCheckpoint(): PtyRenderCheckpoint | null {
@@ -1776,12 +2266,39 @@ export class FrontendPty {
     ) {
       return null;
     }
+    const configuredScrollback = normalizeTerminalScrollbackLines(this.terminal.options.scrollback);
+    const checkpointScrollbackCapacity = Math.min(
+      PTY_RENDER_CHECKPOINT_SCROLLBACK_LINES,
+      configuredScrollback
+    );
+    let scrollback = Math.min(checkpointScrollbackCapacity, this.terminal.buffer.active.baseY);
+    let buffer = this.serializeAddon.serialize({ scrollback });
+    let byteLength = new TextEncoder().encode(buffer).byteLength;
+    // Very wide terminals can make 5,000 lines exceed the checkpoint IPC cap.
+    // Reduce only the oldest context; never truncate serialized VT bytes.
+    while (byteLength > PTY_RENDER_CHECKPOINT_MAX_BYTES && scrollback > 0) {
+      scrollback = Math.max(
+        0,
+        Math.min(
+          scrollback - 1,
+          Math.floor((scrollback * PTY_RENDER_CHECKPOINT_MAX_BYTES) / byteLength)
+        )
+      );
+      buffer = this.serializeAddon.serialize({ scrollback });
+      byteLength = new TextEncoder().encode(buffer).byteLength;
+    }
     return {
-      buffer: this.serializeAddon.serialize({ scrollback: 0 }),
+      buffer,
       generation: this.acknowledgedGeneration,
       sequence: this.acknowledgedSequence,
       cols: this.terminal.cols,
       rows: this.terminal.rows,
+      // A viewport can already contain enough text while a DEC synchronized
+      // output transaction is only half parsed. That is not a frame boundary:
+      // marking it trusted would let an LRU checkpoint reveal the exact
+      // partial TUI state we otherwise keep hidden during first-frame staging.
+      canonical: !this.synchronizedOutputOpen && this.hasCanonicalViewport(),
+      scrollbackLines: checkpointScrollbackCapacity,
     };
   }
 }

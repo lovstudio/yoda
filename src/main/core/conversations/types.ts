@@ -30,6 +30,10 @@ export type ActiveConversationSession = {
   runtimeId: Conversation['runtimeId'];
   title: string;
   detachable: boolean;
+  /** The agent still runs in tmux, but Yoda has released its PTY attach client. */
+  transportAttached?: boolean;
+  /** Most recent detach or headless-input time used to age a detached tmux transport. */
+  transportDetachedAt?: number;
 };
 
 export interface ConversationProvider {

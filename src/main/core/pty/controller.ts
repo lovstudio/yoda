@@ -1,31 +1,63 @@
 import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
-import { and, eq } from 'drizzle-orm';
-import { createRPCController } from '@shared/ipc/rpc';
+import type { WebContents } from 'electron';
+import { createEventRPCProcedure, createRPCController } from '@shared/ipc/rpc';
 import type { PtyRenderCheckpoint } from '@shared/pty-render-checkpoint';
 import { parsePtySessionId } from '@shared/ptySessionId';
 import { err, ok } from '@shared/result';
-import { loadCodexRolloutTerminalHistoryForConversation } from '@main/core/conversations/codex-rollout-terminal-history';
 import { resumeConversation } from '@main/core/conversations/resumeConversation';
-import { mapConversationRowToConversation } from '@main/core/conversations/utils';
-import { db } from '@main/db/client';
-import { conversations, projects } from '@main/db/schema';
 import { log } from '@main/lib/logger';
 import { taskManager } from '../tasks/task-manager';
 import { workspaceRegistry } from '../workspaces/workspace-registry';
 import { exportTerminalLog } from './export-terminal-log';
 import { ptySessionRegistry } from './pty-session-registry';
-import { normalizePlainTextTerminalEol } from './terminal-history-eol';
+
+const trackedConsumerOwners = new WeakSet<WebContents>();
+
+function trackConsumerOwner(sender: WebContents | undefined): number | null {
+  if (!sender || sender.isDestroyed()) return null;
+  if (!trackedConsumerOwners.has(sender)) {
+    trackedConsumerOwners.add(sender);
+    const releaseOwnedConsumers = () => ptySessionRegistry.unsubscribeOwner(sender.id);
+    sender.on('did-start-loading', releaseOwnedConsumers);
+    sender.on('render-process-gone', releaseOwnedConsumers);
+    sender.on('destroyed', releaseOwnedConsumers);
+  }
+  return sender.id;
+}
 
 export const ptyController = createRPCController({
   exportTerminalLog,
 
   /** Send raw input data to a PTY session. */
-  sendInput: (sessionId: string, data: string) => {
+  sendInput: async (sessionId: string, data: string) => {
     let status = ptySessionRegistry.writeOrQueue(sessionId, data);
     if (status === 'unavailable') {
       const parsed = parsePtySessionId(sessionId);
       if (parsed) {
+        const conversationProvider = taskManager.getTask(parsed.scopeId)?.conversations;
+        const detachedTmuxSession = conversationProvider
+          ?.getActiveSessions()
+          .some(
+            (session) =>
+              session.conversationId === parsed.leafId &&
+              session.detachable &&
+              session.transportAttached === false
+          );
+        if (detachedTmuxSession && conversationProvider) {
+          try {
+            if (await conversationProvider.sendInput(parsed.leafId, data)) {
+              return ok({ queued: false });
+            }
+          } catch (error) {
+            // The pane may have ended during its headless interval. Fall through
+            // to durable resume with the original bytes still available below.
+            log.debug('ptyController.sendInput: detached tmux delivery missed', {
+              sessionId,
+              error: String(error),
+            });
+          }
+        }
         const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
         status = ptySessionRegistry.writeOrQueue(sessionId, data);
         void resumeConversation(parsed.projectId, parsed.scopeId, parsed.leafId).catch((error) => {
@@ -46,8 +78,26 @@ export const ptyController = createRPCController({
   resize: (sessionId: string, cols: number, rows: number) => {
     const pty = ptySessionRegistry.get(sessionId);
     if (!pty) return err({ type: 'not_found' as const });
-    pty.resize(cols, rows);
+    if (pty.resize(cols, rows) === false) return err({ type: 'resize_failed' as const });
     return ok();
+  },
+
+  /** Resize only when the renderer still owns the live PTY generation. */
+  resizeForRenderer: (
+    sessionId: string,
+    expectedGeneration: number,
+    cols: number,
+    rows: number
+  ) => {
+    const resized = ptySessionRegistry.resizeForRenderer(sessionId, expectedGeneration, cols, rows);
+    if (resized) return ok(resized);
+
+    const diagnostics = ptySessionRegistry.getDiagnostics(sessionId);
+    if (diagnostics?.live !== true) return err({ type: 'not_found' as const });
+    if (ptySessionRegistry.getGeneration(sessionId) !== expectedGeneration) {
+      return err({ type: 'generation_mismatch' as const });
+    }
+    return err({ type: 'resize_failed' as const });
   },
 
   /**
@@ -55,8 +105,12 @@ export const ptyController = createRPCController({
    * for future IPC delivery. Non-destructive — the ring buffer is kept intact.
    * Called once by the renderer when connecting a FrontendPty to a session.
    */
-  subscribe: async (sessionId: string, consumerId: string) => {
-    const initialSnapshot = await ptySessionRegistry.subscribeForRenderer(sessionId, consumerId);
+  subscribe: createEventRPCProcedure(async (event, sessionId: string, consumerId: string) => {
+    const initialSnapshot = await ptySessionRegistry.subscribeForRenderer(
+      sessionId,
+      consumerId,
+      trackConsumerOwner(event?.sender)
+    );
     const hasPendingRegistration = () =>
       ptySessionRegistry.getDiagnostics(sessionId)?.registering === true;
     const initialLive = ptySessionRegistry.get(sessionId) !== undefined;
@@ -71,8 +125,7 @@ export const ptyController = createRPCController({
       registering: initialRegistering,
     });
     // A live snapshot is terminal protocol, not transcript text. It remains the
-    // only source that can reconstruct the CLI's cursor, colors, and input UI;
-    // rollout history is a fallback only while no backend PTY exists.
+    // only source that can reconstruct the CLI's cursor, colors, and input UI.
     // A session that is already being restored will provide its own live screen;
     // returning transcript text here would append that old screen to the new PTY.
     if (initialSnapshot.buffer || initialLive || initialRegistering) {
@@ -83,44 +136,14 @@ export const ptyController = createRPCController({
       return ok(initialSnapshot);
     }
 
-    const historicalBuffer = await loadHistoricalConversationBuffer(sessionId);
-    // The history lookup crosses an async boundary. Re-subscribe atomically so
-    // a PTY that registered (and perhaps already exited) in the meantime wins
-    // over stale history. Its listener was installed before the first call, so
-    // live events remain queued and the returned watermark can deduplicate them.
-    const latestSnapshot = await ptySessionRegistry.subscribeForRenderer(sessionId, consumerId);
-    const latestLive = ptySessionRegistry.get(sessionId) !== undefined;
-    const latestRegistering = hasPendingRegistration();
-    if (
-      latestSnapshot.generation !== initialSnapshot.generation ||
-      latestSnapshot.sequence !== initialSnapshot.sequence ||
-      latestSnapshot.buffer ||
-      latestLive ||
-      latestRegistering
-    ) {
-      log.debug('[pty-subscribe] live state arrived during history lookup', {
-        sessionId,
-        generation: latestSnapshot.generation,
-        sequence: latestSnapshot.sequence,
-        snapshotCharacters: latestSnapshot.buffer.length,
-        live: latestLive,
-        registering: latestRegistering,
-      });
-      return ok(latestSnapshot);
-    }
-    log.debug('[pty-subscribe] using history fallback', {
-      sessionId,
-      generation: latestSnapshot.generation,
-      sequence: latestSnapshot.sequence,
-      historyCharacters: historicalBuffer.length,
-    });
-    return ok({
-      buffer: historicalBuffer,
-      generation: latestSnapshot.generation,
-      sequence: latestSnapshot.sequence,
-      replayedFromHistory: Boolean(historicalBuffer),
-    });
-  },
+    // A transcript is not terminal protocol. Feeding Codex rollout Markdown
+    // into xterm here made the same visible surface alternate between two
+    // incompatible representations (transcript text, then a reset/live TUI).
+    // Session history belongs to the dedicated history UI; the terminal waits
+    // for a real PTY generation or a renderer-authored checkpoint only.
+    log.debug('[pty-subscribe] no terminal snapshot available', { sessionId });
+    return ok(initialSnapshot);
+  }),
 
   /** Cumulative acknowledgement that xterm has parsed an output batch. */
   acknowledgeOutput: (
@@ -159,7 +182,7 @@ export const ptyController = createRPCController({
     consumerId: string,
     checkpoint: PtyRenderCheckpoint
   ) => {
-    const saved = ptySessionRegistry.saveRenderCheckpoint(sessionId, checkpoint);
+    const saved = ptySessionRegistry.checkpointAndUnsubscribe(sessionId, consumerId, checkpoint);
     log.debug('[DEBUG][agent-session-load] compact checkpoint saved', {
       sessionId,
       generation: checkpoint.generation,
@@ -167,7 +190,6 @@ export const ptyController = createRPCController({
       checkpointCharacters: checkpoint.buffer.length,
       saved,
     });
-    ptySessionRegistry.unsubscribe(sessionId, consumerId);
     return ok({ saved });
   },
 
@@ -186,6 +208,30 @@ export const ptyController = createRPCController({
       registering: diagnostics?.registering === true,
     };
   },
+
+  /** Reserve one exact live generation through renderer route commit + paint. */
+  claimGenerationReveal: createEventRPCProcedure(
+    (event, sessionId: string, consumerId: string, expectedGeneration: number) => {
+      const ownerWebContentsId = trackConsumerOwner(event?.sender);
+      if (ownerWebContentsId === null) return err({ type: 'owner_unavailable' as const });
+      const claim = ptySessionRegistry.claimGenerationReveal(
+        sessionId,
+        consumerId,
+        expectedGeneration,
+        ownerWebContentsId
+      );
+      return claim ? ok(claim) : err({ type: 'not_claimable' as const });
+    }
+  ),
+
+  /** Release is owner-bound and idempotent; owner teardown also releases it. */
+  releaseGenerationReveal: createEventRPCProcedure((event, token: string) => {
+    const ownerWebContentsId = event?.sender?.isDestroyed() === false ? event.sender.id : null;
+    if (ownerWebContentsId === null) return ok({ released: false });
+    return ok({
+      released: ptySessionRegistry.releaseGenerationReveal(token, ownerWebContentsId),
+    });
+  }),
 
   /** Kill a PTY session and clean it up immediately. */
   kill: (sessionId: string) => {
@@ -238,49 +284,3 @@ export const ptyController = createRPCController({
     }
   },
 });
-
-async function loadHistoricalConversationBuffer(sessionId: string): Promise<string> {
-  const parsed = parsePtySessionId(sessionId);
-  if (!parsed) return '';
-
-  const [row] = await db
-    .select({
-      conversation: conversations,
-      projectPath: projects.path,
-      projectWorkspaceProvider: projects.workspaceProvider,
-    })
-    .from(conversations)
-    .innerJoin(projects, eq(projects.id, conversations.projectId))
-    .where(
-      and(
-        eq(conversations.projectId, parsed.projectId),
-        eq(conversations.taskId, parsed.scopeId),
-        eq(conversations.id, parsed.leafId)
-      )
-    )
-    .limit(1);
-
-  if (!row || row.projectWorkspaceProvider !== 'local') return '';
-
-  const conversation = mapConversationRowToConversation(row.conversation);
-  if (conversation.runtimeId !== 'codex') return '';
-
-  const workspaceId = taskManager.getWorkspaceId(parsed.scopeId);
-  const cwd = (workspaceId ? workspaceRegistry.get(workspaceId)?.path : null) ?? row.projectPath;
-
-  try {
-    const history =
-      (await loadCodexRolloutTerminalHistoryForConversation({
-        conversation,
-        cwd,
-      })) ?? '';
-    return normalizePlainTextTerminalEol(history);
-  } catch (error) {
-    log.warn('ptyController.subscribe: failed to load Codex rollout history', {
-      sessionId,
-      conversationId: parsed.leafId,
-      error: String(error),
-    });
-    return '';
-  }
-}

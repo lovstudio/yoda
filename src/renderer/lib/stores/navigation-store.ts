@@ -59,6 +59,11 @@ export class NavigationStore implements Snapshottable<NavigationSnapshot> {
   currentViewId: ViewId = 'home';
   viewParamsStore: ViewParamsStore = {};
   isNavigating: boolean = false;
+  /**
+   * Runtime-only generation for navigation intent. Unlike comparing the
+   * current route, this distinguishes A -> B -> A from an uninterrupted A.
+   */
+  revision = 0;
 
   constructor() {
     makeAutoObservable(this);
@@ -82,6 +87,7 @@ export class NavigationStore implements Snapshottable<NavigationSnapshot> {
   }
 
   _applyNavigation<T extends ViewId>(viewId: T, params?: WrapParams<T>): void {
+    this.revision += 1;
     if (viewId !== this.currentViewId) {
       const transition = focusTracker.transition(
         viewId === 'task'
@@ -115,6 +121,7 @@ export class NavigationStore implements Snapshottable<NavigationSnapshot> {
     viewId: TId,
     update: Partial<WrapParams<TId>> | ((prev: WrapParams<TId>) => WrapParams<TId>)
   ): void {
+    this.revision += 1;
     const current = (this.viewParamsStore[viewId] ?? {}) as WrapParams<TId>;
     const next = typeof update === 'function' ? update(current) : { ...current, ...update };
     this.viewParamsStore = { ...this.viewParamsStore, [viewId]: next };
@@ -128,6 +135,8 @@ export class NavigationStore implements Snapshottable<NavigationSnapshot> {
   }
 
   restoreSnapshot(snapshot: Partial<NavigationSnapshot>): void {
+    const restoresNavigationState =
+      snapshot.currentViewId !== undefined || snapshot.viewParams !== undefined;
     const restoredCurrent = snapshot.currentViewId
       ? migratePersistedViewRoute({
           viewId: snapshot.currentViewId,
@@ -150,6 +159,7 @@ export class NavigationStore implements Snapshottable<NavigationSnapshot> {
     }
 
     if (restoredCurrent) this.currentViewId = restoredCurrent.viewId as ViewId;
+    if (restoresNavigationState) this.revision += 1;
   }
 }
 

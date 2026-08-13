@@ -7,6 +7,20 @@ export type TerminalLruEntry = {
   recoverable?: boolean;
 };
 
+function isSafeToEvict(entry: TerminalLruEntry, protectedSessionId?: string): boolean {
+  return (
+    !entry.mounted &&
+    !entry.connecting &&
+    entry.recoverable === true &&
+    entry.sessionId !== protectedSessionId
+  );
+}
+
+/**
+ * Bound the warm frontend cache while retaining any renderer that cannot yet
+ * be reconstructed from main-process state. Protected entries may temporarily
+ * make the resident set larger than the requested limit.
+ */
 export function selectTerminalLruEvictions(
   entriesOldestFirst: TerminalLruEntry[],
   limit: number,
@@ -15,9 +29,7 @@ export function selectTerminalLruEvictions(
   const retained = [...entriesOldestFirst];
   const evicted: string[] = [];
   while (retained.length > Math.max(1, limit)) {
-    const index = retained.findIndex(
-      (entry) => !entry.mounted && !entry.connecting && entry.sessionId !== protectedSessionId
-    );
+    const index = retained.findIndex((entry) => isSafeToEvict(entry, protectedSessionId));
     if (index < 0) break;
     evicted.push(retained[index].sessionId);
     retained.splice(index, 1);
@@ -37,13 +49,7 @@ export function selectTerminalPressureEvictions(
   protectedSessionId?: string,
   minimumRetained = 1
 ): string[] {
-  const eligible = entriesOldestFirst.filter(
-    (entry) =>
-      !entry.mounted &&
-      !entry.connecting &&
-      entry.recoverable === true &&
-      entry.sessionId !== protectedSessionId
-  );
+  const eligible = entriesOldestFirst.filter((entry) => isSafeToEvict(entry, protectedSessionId));
   const retentionBudget = Math.max(0, entriesOldestFirst.length - Math.max(1, minimumRetained));
   const evictionCount = Math.min(Math.ceil(eligible.length / 4), retentionBudget);
   if (evictionCount === 0) return [];

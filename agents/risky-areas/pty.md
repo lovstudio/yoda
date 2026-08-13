@@ -25,10 +25,17 @@
 - confirm renderer event flow if hook payload or notification behavior changes
 - preserve the output contract: generation isolates respawns, sequence joins
   snapshot/live data exactly once, and xterm write ACKs release PTY backpressure
-- keep renderer PTYs in the default adaptive cache so hidden xterms continue
-  parsing while their off-screen DOM renderer is paused; only measured memory
-  pressure or sustained hidden output may evict the oldest safe xterms, which
-  must unsubscribe and be reconstructed from the main-process snapshot
+- renderer subscription snapshots contain terminal protocol only: use the
+  committed PTY ring or a renderer-authored checkpoint, never transcript/history
+  text; session history belongs to its dedicated UI
+- keep the default renderer PTY warm set bounded; hidden xterms inside that
+  window continue parsing while their off-screen DOM renderer is paused, and
+  the oldest safe xterms checkpoint plus unsubscribe as the window advances;
+  measured memory pressure or sustained hidden output may shrink it further
+- a checkpoint-backed tmux transport detach releases only Yoda's current attach
+  wrapper; it must not publish PTY/Agent exit or mark the conversation stopped.
+  `transportAttached: false` remains a live, reattachable tmux session; only
+  explicit stop/destroy or idle-session hibernation terminates the tmux session
 - idle-session hibernation may terminate only detachable `idle`/`completed`
   sessions with zero renderer consumers; first reopen/input must transparently
   resume through the existing conversation registration epoch
@@ -36,7 +43,8 @@
   independently on arbitrary SSH/network chunks
 - keep replay buffers bounded by UTF-8 bytes without slicing inside a code point
 - resize only the mounted active session, and update frontend/backend to the same
-  dimension tuple
+  dimension tuple; task-open staging must use `resizeForRenderer` with the exact
+  live generation and keep the destination hidden on mismatch
 - provider startup is single-flight per session; stop/delete/detach must
   invalidate an in-flight start before unregistering, and any stale or failed
   spawn must kill its own PTY without touching a newer generation

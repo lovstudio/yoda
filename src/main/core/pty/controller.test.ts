@@ -1,30 +1,20 @@
+import type { IpcMain, IpcMainInvokeEvent, WebContents } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ptyDataChannel, ptyExitChannel } from '@shared/events/ptyEvents';
+import { registerRPCRouter } from '@shared/ipc/rpc';
 import { ptyController } from './controller';
 import type { Pty, PtyExitInfo } from './pty';
-import { ptySessionRegistry } from './pty-session-registry';
+import {
+  PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES,
+  PTY_OUTPUT_BATCH_MAX_BYTES,
+  ptySessionRegistry,
+} from './pty-session-registry';
 
 const mocks = vi.hoisted(() => ({
   emit: vi.fn(),
-  loadHistory: vi.fn(),
-  select: vi.fn(),
+  getActiveSessions: vi.fn(),
+  getTask: vi.fn(),
   resumeConversation: vi.fn(),
-}));
-
-vi.mock('drizzle-orm', () => ({
-  and: vi.fn(() => ({})),
-  eq: vi.fn(() => ({})),
-}));
-
-vi.mock('@main/core/conversations/codex-rollout-terminal-history', () => ({
-  loadCodexRolloutTerminalHistoryForConversation: mocks.loadHistory,
-}));
-
-vi.mock('@main/core/conversations/utils', () => ({
-  mapConversationRowToConversation: vi.fn(() => ({
-    id: 'conversation',
-    runtimeId: 'codex',
-  })),
+  sendProviderInput: vi.fn(),
 }));
 
 vi.mock('@main/core/conversations/resumeConversation', () => ({
@@ -33,7 +23,7 @@ vi.mock('@main/core/conversations/resumeConversation', () => ({
 
 vi.mock('@main/core/tasks/task-manager', () => ({
   taskManager: {
-    getTask: vi.fn(),
+    getTask: mocks.getTask,
     getWorkspaceId: vi.fn(() => undefined),
   },
 }));
@@ -41,25 +31,6 @@ vi.mock('@main/core/tasks/task-manager', () => ({
 vi.mock('@main/core/workspaces/workspace-registry', () => ({
   workspaceRegistry: {
     get: vi.fn(),
-  },
-}));
-
-vi.mock('@main/db/client', () => ({
-  db: {
-    select: mocks.select,
-  },
-}));
-
-vi.mock('@main/db/schema', () => ({
-  conversations: {
-    id: {},
-    projectId: {},
-    taskId: {},
-  },
-  projects: {
-    id: {},
-    path: {},
-    workspaceProvider: {},
   },
 }));
 
@@ -79,12 +50,13 @@ vi.mock('@main/lib/logger', () => ({
 }));
 
 class FakePty implements Pty {
+  readonly pause = vi.fn();
+  readonly resume = vi.fn();
+  readonly resize = vi.fn<(cols: number, rows: number) => void | boolean>();
   private dataHandler: ((data: string) => void) | null = null;
   private exitHandler: ((info: PtyExitInfo) => void) | null = null;
 
   write(): void {}
-
-  resize(): void {}
 
   kill(): void {}
 
@@ -105,45 +77,53 @@ class FakePty implements Pty {
   }
 }
 
-function deferred<T>(): {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
+function createFakeWebContents(id: number): {
+  sender: WebContents;
+  emit: (eventName: string) => void;
 } {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
+  const listeners = new Map<string, Set<() => void>>();
+  const sender = {
+    id,
+    isDestroyed: vi.fn(() => false),
+    on: vi.fn((eventName: string, listener: () => void) => {
+      const handlers = listeners.get(eventName) ?? new Set();
+      handlers.add(listener);
+      listeners.set(eventName, handlers);
+      return sender;
+    }),
+  } as unknown as WebContents;
+  return {
+    sender,
+    emit: (eventName) => {
+      for (const listener of listeners.get(eventName) ?? []) listener();
+    },
+  };
 }
 
-function mockConversationLookup(): void {
-  mocks.select.mockImplementation(() => {
-    const chain = {
-      innerJoin: () => chain,
-      where: () => chain,
-      limit: () =>
-        Promise.resolve([
-          {
-            conversation: { id: 'conversation' },
-            projectPath: '/workspace',
-            projectWorkspaceProvider: 'local',
-          },
-        ]),
-    };
-    return { from: () => chain };
-  });
+function registerPtyInvokeHandlers(): Map<
+  string,
+  (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown
+> {
+  const handlers = new Map<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>();
+  const ipcMain = {
+    handle: vi.fn(
+      (channel: string, handler: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler);
+      }
+    ),
+  } as unknown as IpcMain;
+  registerRPCRouter({ pty: ptyController }, ipcMain);
+  return handlers;
 }
 
-describe('ptyController.subscribe history handoff', () => {
+describe('ptyController.subscribe terminal snapshots', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockConversationLookup();
   });
 
-  it('keeps an interrupted live Codex terminal snapshot as the source of truth', async () => {
+  it('returns the exact live PTY snapshot as the only terminal source', async () => {
     const sessionId = 'project-interrupted:task-interrupted:conversation-interrupted';
     const consumerId = 'consumer-interrupted';
-    mocks.loadHistory.mockResolvedValue('current rollout with prompt 7 and prompt 8');
 
     const pty = new FakePty();
     ptySessionRegistry.register(sessionId, pty);
@@ -161,137 +141,15 @@ describe('ptyController.subscribe history handoff', () => {
         sequence: 0,
       },
     });
-    expect(mocks.loadHistory).not.toHaveBeenCalled();
 
     ptySessionRegistry.unregister(sessionId);
     ptySessionRegistry.unsubscribe(sessionId, consumerId);
   });
 
-  it('keeps a normal live Codex terminal snapshot as the source of truth', async () => {
-    const sessionId = 'project-live-normal:task-live-normal:conversation-live-normal';
-    const consumerId = 'consumer-live-normal';
-    const pty = new FakePty();
-    ptySessionRegistry.register(sessionId, pty);
-    pty.emitData('Codex is ready for the next prompt.\n');
-
-    await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
-      success: true,
-      data: {
-        buffer: 'Codex is ready for the next prompt.\n',
-        generation: 1,
-        sequence: 0,
-      },
-    });
-    expect(mocks.loadHistory).not.toHaveBeenCalled();
-
-    ptySessionRegistry.unregister(sessionId);
-    ptySessionRegistry.unsubscribe(sessionId, consumerId);
-  });
-
-  it('returns the new live snapshot when a PTY registers during history loading', async () => {
-    const sessionId = 'project-live:task-live:conversation-live';
-    const consumerId = 'consumer-live';
-    const history = deferred<string>();
-    const historyStarted = deferred<void>();
-    mocks.loadHistory.mockImplementation(() => {
-      historyStarted.resolve();
-      return history.promise;
-    });
-
-    const resultPromise = ptyController.subscribe(sessionId, consumerId);
-    await historyStarted.promise;
-
-    const pty = new FakePty();
-    ptySessionRegistry.register(sessionId, pty);
-    pty.emitData('live output');
-    history.resolve('stale history');
-
-    await expect(resultPromise).resolves.toEqual({
-      success: true,
-      data: {
-        buffer: 'live output',
-        generation: 1,
-        sequence: 1,
-      },
-    });
-    expect(mocks.emit.mock.calls.filter(([channel]) => channel === ptyDataChannel)).toHaveLength(1);
-
-    ptySessionRegistry.unregister(sessionId);
-    ptySessionRegistry.unsubscribe(sessionId, consumerId);
-  });
-
-  it('returns an interrupted live Codex PTY that registers during history loading', async () => {
-    const sessionId = 'project-raced:task-raced:conversation-raced';
-    const consumerId = 'consumer-raced';
-    const history = deferred<string>();
-    const historyStarted = deferred<void>();
-    mocks.loadHistory.mockImplementation(() => {
-      historyStarted.resolve();
-      return history.promise;
-    });
-
-    const resultPromise = ptyController.subscribe(sessionId, consumerId);
-    await historyStarted.promise;
-
-    const pty = new FakePty();
-    ptySessionRegistry.register(sessionId, pty);
-    const liveTerminalBuffer =
-      'Conversation interrupted - tell the model what to do differently.\n' +
-      '\x1b[2K› Improve documentation in @filename';
-    pty.emitData(liveTerminalBuffer);
-    history.resolve('current rollout with prompt 7 and prompt 8');
-
-    await expect(resultPromise).resolves.toEqual({
-      success: true,
-      data: {
-        buffer: liveTerminalBuffer,
-        generation: 1,
-        sequence: 1,
-      },
-    });
-
-    ptySessionRegistry.unregister(sessionId);
-    ptySessionRegistry.unsubscribe(sessionId, consumerId);
-  });
-
-  it('returns the latest tombstone and discards history after register plus exit', async () => {
-    const sessionId = 'project-exit:task-exit:conversation-exit';
-    const consumerId = 'consumer-exit';
-    const history = deferred<string>();
-    const historyStarted = deferred<void>();
-    mocks.loadHistory.mockImplementation(() => {
-      historyStarted.resolve();
-      return history.promise;
-    });
-
-    const resultPromise = ptyController.subscribe(sessionId, consumerId);
-    await historyStarted.promise;
-
-    const pty = new FakePty();
-    ptySessionRegistry.register(sessionId, pty);
-    pty.emitData('final output');
-    pty.emitExit({ exitCode: 0, signal: 'SIGTERM' });
-    history.resolve('stale history');
-
-    await expect(resultPromise).resolves.toEqual({
-      success: true,
-      data: {
-        buffer: '',
-        generation: 1,
-        sequence: 0,
-      },
-    });
-    expect(mocks.emit.mock.calls.filter(([channel]) => channel === ptyDataChannel)).toHaveLength(1);
-    expect(mocks.emit.mock.calls.filter(([channel]) => channel === ptyExitChannel)).toHaveLength(1);
-
-    ptySessionRegistry.unsubscribe(sessionId, consumerId);
-  });
-
-  it('does not mix history into a PTY that is already being restored', async () => {
+  it('returns an empty terminal snapshot while a PTY generation is registering', async () => {
     const sessionId = 'project-restoring:task-restoring:conversation-restoring';
     const consumerId = 'consumer-restoring';
     const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
-    mocks.loadHistory.mockResolvedValue('stale transcript fallback');
 
     await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
       success: true,
@@ -301,24 +159,21 @@ describe('ptyController.subscribe history handoff', () => {
         sequence: 0,
       },
     });
-    expect(mocks.loadHistory).not.toHaveBeenCalled();
 
     ptySessionRegistry.cancelRegistration(sessionId, registrationEpoch);
     ptySessionRegistry.unsubscribe(sessionId, consumerId);
   });
 
-  it('marks a historical fallback so a later PTY generation can replace it', async () => {
-    const sessionId = 'project-history:task-history:conversation-history';
-    const consumerId = 'consumer-history';
-    mocks.loadHistory.mockResolvedValue('historical terminal text');
+  it('returns an empty terminal snapshot for a fully offline session instead of transcript text', async () => {
+    const sessionId = 'project-offline:task-offline:conversation-offline';
+    const consumerId = 'consumer-offline';
 
     await expect(ptyController.subscribe(sessionId, consumerId)).resolves.toEqual({
       success: true,
       data: {
-        buffer: 'historical terminal text',
+        buffer: '',
         generation: 0,
         sequence: 0,
-        replayedFromHistory: true,
       },
     });
 
@@ -326,11 +181,75 @@ describe('ptyController.subscribe history handoff', () => {
   });
 });
 
+describe('ptyController.subscribe WebContents ownership', () => {
+  it('releases a crashed renderer consumer and flow control in the same turn', async () => {
+    const sessionId = 'project-owner:task-owner:conversation-owner';
+    const pty = new FakePty();
+    const crashedOwner = createFakeWebContents(41);
+    const liveOwner = createFakeWebContents(42);
+    const invokeHandlers = registerPtyInvokeHandlers();
+    const subscribe = invokeHandlers.get('pty.subscribe');
+    if (!subscribe) throw new Error('pty.subscribe RPC was not registered');
+
+    ptySessionRegistry.register(sessionId, pty);
+    await subscribe(
+      { sender: crashedOwner.sender } as IpcMainInvokeEvent,
+      sessionId,
+      'crashed-consumer'
+    );
+    await subscribe({ sender: liveOwner.sender } as IpcMainInvokeEvent, sessionId, 'live-consumer');
+    pty.emitData('x'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES));
+    const finalSequence = PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES / PTY_OUTPUT_BATCH_MAX_BYTES;
+    ptyController.acknowledgeOutput(sessionId, 'live-consumer', 1, finalSequence);
+    expect(pty.pause).toHaveBeenCalledTimes(1);
+    expect(pty.resume).not.toHaveBeenCalled();
+
+    crashedOwner.emit('render-process-gone');
+
+    expect(pty.resume).toHaveBeenCalledTimes(1);
+    expect(ptySessionRegistry.getDiagnostics(sessionId)?.consumerCount).toBe(1);
+
+    liveOwner.emit('destroyed');
+    ptySessionRegistry.unregister(sessionId);
+  });
+
+  it('releases an exact-generation reveal claim when its renderer crashes', async () => {
+    const sessionId = 'project-claim-owner:task-claim-owner:conversation-claim-owner';
+    const owner = createFakeWebContents(51);
+    const invokeHandlers = registerPtyInvokeHandlers();
+    const subscribe = invokeHandlers.get('pty.subscribe');
+    const claim = invokeHandlers.get('pty.claimGenerationReveal');
+    if (!subscribe || !claim) throw new Error('PTY owner RPCs were not registered');
+
+    ptySessionRegistry.register(sessionId, new FakePty());
+    await subscribe({ sender: owner.sender } as IpcMainInvokeEvent, sessionId, 'renderer');
+    expect(
+      claim({ sender: owner.sender } as IpcMainInvokeEvent, sessionId, 'renderer', 1)
+    ).toMatchObject({ success: true, data: { generation: 1 } });
+
+    const replacementEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    const replacementFence = ptySessionRegistry.waitForRevealClaims(sessionId, replacementEpoch);
+    owner.emit('render-process-gone');
+
+    await expect(replacementFence).resolves.toBe(true);
+    expect(ptySessionRegistry.getDiagnostics(sessionId)?.consumerCount).toBe(0);
+    ptySessionRegistry.cancelRegistration(sessionId, replacementEpoch);
+    ptySessionRegistry.unregister(sessionId);
+  });
+});
+
 describe('ptyController.sendInput registration gate', () => {
-  it('queues the first input and transparently resumes a cold agent session', () => {
+  beforeEach(() => {
+    mocks.resumeConversation.mockClear();
+    mocks.getActiveSessions.mockReturnValue([]);
+    mocks.getTask.mockReturnValue(undefined);
+    mocks.sendProviderInput.mockResolvedValue(false);
+  });
+
+  it('queues the first input and transparently resumes a cold agent session', async () => {
     mocks.resumeConversation.mockResolvedValue(undefined);
     const sessionId = 'project-none:task-none:conversation-none';
-    expect(ptyController.sendInput(sessionId, 'input')).toEqual({
+    await expect(ptyController.sendInput(sessionId, 'input')).resolves.toEqual({
       success: true,
       data: { queued: true },
     });
@@ -343,16 +262,40 @@ describe('ptyController.sendInput registration gate', () => {
     ptySessionRegistry.cancelRegistration(sessionId, epoch);
   });
 
-  it('accepts optimistic input during an explicit registration epoch', () => {
+  it('accepts optimistic input during an explicit registration epoch', async () => {
     const sessionId = 'project-pending:task-pending:conversation-pending';
     const epoch = ptySessionRegistry.beginRegistration(sessionId);
 
-    expect(ptyController.sendInput(sessionId, 'input')).toEqual({
+    await expect(ptyController.sendInput(sessionId, 'input')).resolves.toEqual({
       success: true,
       data: { queued: true },
     });
 
     ptySessionRegistry.cancelRegistration(sessionId, epoch);
+  });
+
+  it('delivers input directly to a detached tmux pane without attaching a headless PTY', async () => {
+    mocks.getTask.mockReturnValue({
+      conversations: {
+        getActiveSessions: mocks.getActiveSessions,
+        sendInput: mocks.sendProviderInput,
+      },
+    });
+    mocks.getActiveSessions.mockReturnValue([
+      {
+        conversationId: 'conversation-detached',
+        detachable: true,
+        transportAttached: false,
+      },
+    ]);
+    mocks.sendProviderInput.mockResolvedValue(true);
+
+    await expect(
+      ptyController.sendInput('project-detached:task-detached:conversation-detached', 'follow-up')
+    ).resolves.toEqual({ success: true, data: { queued: false } });
+
+    expect(mocks.sendProviderInput).toHaveBeenCalledWith('conversation-detached', 'follow-up');
+    expect(mocks.resumeConversation).not.toHaveBeenCalled();
   });
 });
 
@@ -382,5 +325,59 @@ describe('ptyController.getSessionState', () => {
       live: false,
       registering: false,
     });
+  });
+});
+
+describe('ptyController.resize', () => {
+  it('reports backend resize failure from the legacy endpoint', () => {
+    const sessionId = 'project-resize:task-resize:conversation-resize';
+    const pty = new FakePty();
+    pty.resize.mockReturnValue(false);
+    ptySessionRegistry.register(sessionId, pty);
+
+    expect(ptyController.resize(sessionId, 120, 30)).toEqual({
+      success: false,
+      error: { type: 'resize_failed' },
+    });
+
+    ptySessionRegistry.unregister(sessionId);
+  });
+
+  it('resizes only the expected live generation', () => {
+    const sessionId = 'project-owned-resize:task-owned-resize:conversation-owned-resize';
+    const pty = new FakePty();
+    ptySessionRegistry.register(sessionId, pty);
+
+    expect(ptyController.resizeForRenderer(sessionId, 0, 120, 30)).toEqual({
+      success: false,
+      error: { type: 'generation_mismatch' },
+    });
+    expect(pty.resize).not.toHaveBeenCalled();
+    expect(ptyController.resizeForRenderer(sessionId, 1, 120, 30)).toEqual({
+      success: true,
+      data: { generation: 1, changed: true },
+    });
+    expect(pty.resize).toHaveBeenCalledWith(120, 30);
+
+    ptySessionRegistry.unregister(sessionId);
+  });
+
+  it('distinguishes missing sessions from a live backend resize failure', () => {
+    const sessionId = 'project-failed-resize:task-failed-resize:conversation-failed-resize';
+
+    expect(ptyController.resizeForRenderer(sessionId, 1, 120, 30)).toEqual({
+      success: false,
+      error: { type: 'not_found' },
+    });
+
+    const pty = new FakePty();
+    pty.resize.mockReturnValue(false);
+    ptySessionRegistry.register(sessionId, pty);
+    expect(ptyController.resizeForRenderer(sessionId, 1, 120, 30)).toEqual({
+      success: false,
+      error: { type: 'resize_failed' },
+    });
+
+    ptySessionRegistry.unregister(sessionId);
   });
 });

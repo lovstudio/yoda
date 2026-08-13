@@ -143,6 +143,54 @@ describe('TaskManager idle agent hibernation revalidation', () => {
     expect(stopped).toBe(1);
   });
 
+  it('stops an aged completed tmux identity after its renderer transport detached', async () => {
+    const detachedSession: ActiveConversationSession = {
+      ...session,
+      transportAttached: false,
+      transportDetachedAt: 0,
+    };
+    const provider = makeProvider([detachedSession]);
+    mocks.getState.mockReturnValue({ status: 'completed', updatedAt: 0 });
+    mocks.getDiagnostics.mockReturnValue(null);
+
+    const stopped = await managerWith(provider).hibernateIdleAgentSessions(1);
+
+    expect(provider.stopSession).toHaveBeenCalledWith(session.conversationId);
+    expect(stopped).toBe(1);
+  });
+
+  it('does not hibernate a detached identity while its replacement transport is registering', async () => {
+    const detachedSession: ActiveConversationSession = {
+      ...session,
+      transportAttached: false,
+      transportDetachedAt: 0,
+    };
+    const provider = makeProvider([detachedSession]);
+    mocks.getState.mockReturnValue({ status: 'completed', updatedAt: 0 });
+    mocks.getDiagnostics.mockReturnValue({ consumerCount: 0, registering: true });
+
+    const stopped = await managerWith(provider).hibernateIdleAgentSessions(1);
+
+    expect(provider.stopSession).not.toHaveBeenCalled();
+    expect(stopped).toBe(0);
+  });
+
+  it('does not hibernate while a replacement PTY is live but provider attach has not committed', async () => {
+    const detachedSession: ActiveConversationSession = {
+      ...session,
+      transportAttached: false,
+      transportDetachedAt: 0,
+    };
+    const provider = makeProvider([detachedSession]);
+    mocks.getState.mockReturnValue({ status: 'completed', updatedAt: 0 });
+    mocks.getDiagnostics.mockReturnValue({ consumerCount: 0, live: true });
+
+    const stopped = await managerWith(provider).hibernateIdleAgentSessions(1);
+
+    expect(provider.stopSession).not.toHaveBeenCalled();
+    expect(stopped).toBe(0);
+  });
+
   it('stops authoritative idle sessions but keeps heuristic idle sessions alive', async () => {
     const authoritativeProvider = makeProvider();
     mocks.getState.mockReturnValue({ status: 'idle', updatedAt: 0 });

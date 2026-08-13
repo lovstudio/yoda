@@ -244,6 +244,12 @@ export class SshTerminalProvider implements TerminalProvider {
 
       if (!this.isCurrentStart(sessionId, operation)) return;
       const client = this.proxy.client;
+      if (
+        !(await ptySessionRegistry.waitForRevealClaims(sessionId, registrationEpoch)) ||
+        !this.isCurrentStart(sessionId, operation)
+      ) {
+        return;
+      }
       const releaseOpenSlot = await acquireSshTerminalOpenSlot(client);
       let result: Awaited<ReturnType<typeof openSsh2Pty>>;
       try {

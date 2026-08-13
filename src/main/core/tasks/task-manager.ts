@@ -489,20 +489,27 @@ export class TaskManager {
       for (const session of stored.taskProvider.conversations.getActiveSessions()) {
         const state = agentSessionRuntimeStore.getState(session);
         const diagnostics = ptySessionRegistry.getDiagnostics(session.sessionId);
+        const detachedAt =
+          session.transportAttached === false ? session.transportDetachedAt : undefined;
+        const transportReattaching =
+          session.transportAttached === false && diagnostics?.live === true;
         if (
-          !diagnostics ||
+          (!diagnostics && detachedAt === undefined) ||
+          diagnostics?.registering === true ||
+          transportReattaching ||
           !shouldHibernateIdleSession({
             detachable: session.detachable,
             status: state.status,
             idleStatusIsAuthoritative: idleStatusIsAuthoritative(session.conversationId),
             lastActivityAt: Math.max(
               state.updatedAt,
-              diagnostics.lastOutputAt ?? 0,
-              diagnostics.lastInputAt ?? 0
+              diagnostics?.lastOutputAt ?? 0,
+              diagnostics?.lastInputAt ?? 0,
+              detachedAt ?? 0
             ),
             now,
             timeoutMs,
-            rendererConsumers: diagnostics.consumerCount,
+            rendererConsumers: diagnostics?.consumerCount ?? 0,
           })
         ) {
           continue;
@@ -529,20 +536,27 @@ export class TaskManager {
           if (!current) continue;
           const state = agentSessionRuntimeStore.getState(current);
           const diagnostics = ptySessionRegistry.getDiagnostics(sessionId);
+          const detachedAt =
+            current.transportAttached === false ? current.transportDetachedAt : undefined;
+          const transportReattaching =
+            current.transportAttached === false && diagnostics?.live === true;
           if (
-            !diagnostics ||
+            (!diagnostics && detachedAt === undefined) ||
+            diagnostics?.registering === true ||
+            transportReattaching ||
             !shouldHibernateIdleSession({
               detachable: current.detachable,
               status: state.status,
               idleStatusIsAuthoritative: idleStatusIsAuthoritative(current.conversationId),
               lastActivityAt: Math.max(
                 state.updatedAt,
-                diagnostics.lastOutputAt ?? 0,
-                diagnostics.lastInputAt ?? 0
+                diagnostics?.lastOutputAt ?? 0,
+                diagnostics?.lastInputAt ?? 0,
+                detachedAt ?? 0
               ),
               now: Date.now(),
               timeoutMs,
-              rendererConsumers: diagnostics.consumerCount,
+              rendererConsumers: diagnostics?.consumerCount ?? 0,
             })
           ) {
             continue;

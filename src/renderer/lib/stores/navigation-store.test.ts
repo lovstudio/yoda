@@ -59,6 +59,33 @@ describe('NavigationStore navigation side effects', () => {
     expect(mocks.recordProjectActivity).not.toHaveBeenCalled();
     expect(mocks.markTaskSeen).toHaveBeenCalledWith('project-1', 'task-1');
   });
+
+  it('advances its revision once for each navigation intent', () => {
+    const store = new NavigationStore();
+
+    expect(store.revision).toBe(0);
+
+    store.navigate('project', { projectId: 'project-1' });
+    expect(store.revision).toBe(1);
+
+    // Re-selecting the same route is still an external navigation intent and
+    // must invalidate an older async navigation lease.
+    store.navigate('project', { projectId: 'project-1' });
+    expect(store.revision).toBe(2);
+
+    // History and tab activation deliberately bypass navigate().
+    store._applyNavigation('home');
+    expect(store.revision).toBe(3);
+  });
+
+  it('advances its revision when routed view params are updated', () => {
+    const store = new NavigationStore();
+
+    store.updateViewParams('home', { projectId: 'project-1' });
+
+    expect(store.revision).toBe(1);
+    expect(store.viewParamsStore.home).toEqual({ projectId: 'project-1' });
+  });
 });
 
 describe('NavigationStore persisted route migration', () => {
@@ -92,5 +119,19 @@ describe('NavigationStore persisted route migration', () => {
 
     expect(store.currentViewId).toBe('library');
     expect(store.viewParamsStore.library).toEqual({ section: 'extensions' });
+  });
+
+  it('advances its runtime revision once when restoring navigation state', () => {
+    const store = new NavigationStore();
+
+    store.restoreSnapshot({});
+    expect(store.revision).toBe(0);
+
+    store.restoreSnapshot({
+      currentViewId: 'settings',
+      viewParams: { settings: { section: 'general' } },
+    });
+
+    expect(store.revision).toBe(1);
   });
 });

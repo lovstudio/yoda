@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => {
       registeredSessions.set(sessionId, pty);
       registerHook.current?.(sessionId, pty);
     }),
+    waitForRevealClaims: vi.fn(),
     unregister: vi.fn((sessionId: string) => {
       registeredSessions.delete(sessionId);
     }),
@@ -44,6 +45,7 @@ vi.mock('@main/core/pty/pty-session-registry', () => ({
     beginRegistration: mocks.beginRegistration,
     cancelRegistration: mocks.cancelRegistration,
     register: mocks.register,
+    waitForRevealClaims: mocks.waitForRevealClaims,
     unregister: mocks.unregister,
     get: mocks.getRegistered,
   },
@@ -86,6 +88,8 @@ vi.mock('@main/lib/logger', () => ({
 class FakePty implements Pty {
   readonly write = vi.fn();
   readonly resize = vi.fn();
+  readonly pause = vi.fn();
+  readonly resume = vi.fn();
   readonly kill = vi.fn();
   private readonly exitHandlers: Array<(info: PtyExitInfo) => void> = [];
 
@@ -177,6 +181,7 @@ beforeEach(() => {
   mocks.registerHook.current = null;
   mocks.openSsh2Pty.mockReset();
   mocks.resolveTmuxSessionName.mockReset().mockResolvedValue(undefined);
+  mocks.waitForRevealClaims.mockReset().mockResolvedValue(true);
   mocks.killTmuxSession.mockReset().mockResolvedValue(undefined);
   mocks.wireTerminalDevServerWatcher.mockReset();
 });

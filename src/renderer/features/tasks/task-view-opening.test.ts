@@ -1,8 +1,24 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { stableTaskOpeningMessageKey, TASK_OPENING_MESSAGE_KEY } from './task-view-opening';
+import {
+  shouldResolveTaskScopeEntry,
+  stableTaskOpeningMessageKey,
+  TASK_OPENING_MESSAGE_KEY,
+  TASK_SESSION_OPENING_MESSAGE_KEY,
+} from './task-view-opening';
 
 describe('stableTaskOpeningMessageKey', () => {
+  it('does not let scope restoration supersede a staged task-open target', () => {
+    expect(shouldResolveTaskScopeEntry(null, true)).toBe(false);
+    expect(shouldResolveTaskScopeEntry(null, false)).toBe(true);
+    expect(shouldResolveTaskScopeEntry({ kind: 'overview' }, false)).toBe(false);
+
+    const taskViewSource = readFileSync(new URL('./view.tsx', import.meta.url), 'utf8');
+    expect(taskViewSource).toContain(
+      'const shouldResolveScopeEntry = shouldResolveTaskScopeEntry(target, isTargetPending)'
+    );
+  });
+
   it('keeps every transient task-entry phase on the same presentation', () => {
     for (const kind of [
       'project-mounting',
@@ -94,7 +110,7 @@ describe('stableTaskOpeningMessageKey', () => {
         isTaskLoadPending: false,
         isTargetPending: true,
       })
-    ).toBe(TASK_OPENING_MESSAGE_KEY);
+    ).toBe(TASK_SESSION_OPENING_MESSAGE_KEY);
     expect(
       stableTaskOpeningMessageKey('ready', {
         hasProject: true,

@@ -9,10 +9,14 @@ const mocks = vi.hoisted(() => ({
   getTaskStore: vi.fn(),
   logWarn: vi.fn(),
   openProvisionedTaskTab: vi.fn(),
+  activatePreparedTarget: vi.fn(),
   prepareExplicitTaskOpen: vi.fn(),
+  prepareConversationForOpen: vi.fn(),
   provisionTask: vi.fn(),
   resolveLastTaskSessionTarget: vi.fn(),
+  toast: vi.fn(),
   navigation: {
+    revision: 0,
     currentViewId: 'task',
     viewParamsStore: {
       task: {
@@ -41,6 +45,8 @@ vi.mock('@renderer/lib/stores/app-state', () => ({
     navigation: mocks.navigation,
   },
 }));
+vi.mock('@renderer/lib/hooks/use-toast', () => ({ toast: mocks.toast }));
+vi.mock('@renderer/lib/i18n', () => ({ default: { t: (key: string) => key } }));
 vi.mock('@renderer/utils/logger', () => ({ log: { warn: mocks.logWarn } }));
 vi.mock('./resolve-task-session-target', () => ({
   resolveLastTaskSessionTarget: mocks.resolveLastTaskSessionTarget,
@@ -48,40 +54,82 @@ vi.mock('./resolve-task-session-target', () => ({
 
 describe('openTaskWhenReady', () => {
   const navigate = vi.fn();
-  const provisioned = { taskView: { tabManager: {} } };
   const conversationTarget = {
     kind: 'conversation' as const,
     conversationId: 'conversation-1',
   };
+  const cachedPty = {
+    canRevealImmediately: true,
+    sessionId: 'project-1:task-1:conversation-1',
+    acquireCanonicalRevealClaim: vi.fn(),
+    invalidateHotReveal: vi.fn(),
+  };
+  const cachedSession: { pty: typeof cachedPty | null } = { pty: cachedPty };
+  const provisioned = {
+    taskView: { tabManager: {} },
+    conversations: {
+      conversations: new Map([
+        [
+          conversationTarget.conversationId,
+          {
+            data: { id: conversationTarget.conversationId },
+            session: cachedSession,
+          },
+        ],
+      ]),
+      prepareConversationForOpen: mocks.prepareConversationForOpen,
+    },
+  };
+  const preparedSelection = (found = true) => ({
+    found,
+    activate: () => {
+      if (!found) return false;
+      mocks.activatePreparedTarget();
+      return true;
+    },
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
+    taskOpenTransitionStore.dismissFailure('project-1', 'task-1');
+    taskOpenTransitionStore.dismissFailure('project-1', 'task-2');
+    taskOpenTransitionStore.dismissFailure('project-2', 'task-2');
+    cachedSession.pty = cachedPty;
+    mocks.navigation.revision = 0;
     mocks.navigation.currentViewId = 'task';
     mocks.navigation.viewParamsStore.task = {
       projectId: 'project-current',
       taskId: 'task-current',
     };
     mocks.prepareExplicitTaskOpen.mockResolvedValue(undefined);
+    mocks.prepareConversationForOpen.mockResolvedValue(true);
     mocks.provisionTask.mockResolvedValue(undefined);
     mocks.getTaskManagerStore.mockReturnValue({ provisionTask: mocks.provisionTask });
     mocks.getTaskStore.mockReturnValue(provisioned);
     mocks.resolveLastTaskSessionTarget.mockReturnValue(conversationTarget);
-    mocks.openProvisionedTaskTab.mockResolvedValue(true);
+    mocks.openProvisionedTaskTab.mockResolvedValue(preparedSelection());
+    cachedPty.canRevealImmediately = true;
+    cachedPty.acquireCanonicalRevealClaim.mockResolvedValue(true);
+    cachedPty.invalidateHotReveal.mockImplementation(() => {
+      cachedPty.canRevealImmediately = false;
+    });
     mocks.appTabsOpenTaskScope.mockImplementation((projectId, taskId, tab) => {
+      mocks.navigation.revision += 1;
       mocks.navigation.currentViewId = 'task';
       mocks.navigation.viewParamsStore.task = { projectId, taskId, tab };
       return true;
     });
     navigate.mockImplementation((_viewId, params) => {
+      mocks.navigation.revision += 1;
       mocks.navigation.currentViewId = 'task';
       mocks.navigation.viewParamsStore.task = params;
     });
   });
 
-  it('switches a provisioned task to its remembered session in the click turn', async () => {
-    let finishTarget!: (found: boolean) => void;
+  it('switches a provisioned task after its cached generation fence', async () => {
+    let finishTarget!: (selection: ReturnType<typeof preparedSelection>) => void;
     mocks.openProvisionedTaskTab.mockReturnValueOnce(
-      new Promise<boolean>((resolve) => {
+      new Promise<ReturnType<typeof preparedSelection>>((resolve) => {
         finishTarget = resolve;
       })
     );
@@ -90,22 +138,256 @@ describe('openTaskWhenReady', () => {
 
     expect(mocks.resolveLastTaskSessionTarget).toHaveBeenCalledOnce();
     expect(mocks.openProvisionedTaskTab).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(cachedPty.acquireCanonicalRevealClaim).toHaveBeenCalledOnce());
+    expect(mocks.activatePreparedTarget).not.toHaveBeenCalled();
+    expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
+    expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(mocks.prepareExplicitTaskOpen).not.toHaveBeenCalled();
+    expect(mocks.provisionTask).not.toHaveBeenCalled();
+
+    finishTarget(preparedSelection());
+    await expect(opening).resolves.toBe(true);
+    expect(mocks.activatePreparedTarget).toHaveBeenCalledOnce();
     expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledWith(
       'project-1',
       'task-1',
       conversationTarget
     );
-    expect(navigate).not.toHaveBeenCalled();
-    expect(mocks.prepareExplicitTaskOpen).not.toHaveBeenCalled();
-    expect(mocks.provisionTask).not.toHaveBeenCalled();
-
-    finishTarget(true);
-    await expect(opening).resolves.toBe(true);
   });
 
-  it('routes a cold task immediately, then commits its final session after provisioning', async () => {
+  it('keeps a same-task file selected while the conversation reveal claim is pending', async () => {
+    mocks.navigation.viewParamsStore.task = {
+      projectId: 'project-1',
+      taskId: 'task-1',
+      tab: { kind: 'file', path: 'src/current.ts' },
+    };
+    let finishClaim!: (claimed: boolean) => void;
+    cachedPty.acquireCanonicalRevealClaim.mockReturnValueOnce(
+      new Promise<boolean>((resolve) => {
+        finishClaim = resolve;
+      })
+    );
+
+    const opening = openTaskWhenReady('project-1', 'task-1', navigate);
+    await vi.waitFor(() => expect(mocks.openProvisionedTaskTab).toHaveBeenCalledOnce());
+
+    expect(mocks.openProvisionedTaskTab).toHaveBeenCalledWith(
+      provisioned,
+      conversationTarget,
+      expect.objectContaining({ deferSelection: true, topLevelMode: 'internal' })
+    );
+    expect(mocks.activatePreparedTarget).not.toHaveBeenCalled();
+    expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
+    expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(false);
+    expect(mocks.navigation.viewParamsStore.task.tab).toEqual({
+      kind: 'file',
+      path: 'src/current.ts',
+    });
+
+    finishClaim(true);
+    await expect(opening).resolves.toBe(true);
+    expect(mocks.activatePreparedTarget).toHaveBeenCalledOnce();
+    expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledWith(
+      'project-1',
+      'task-1',
+      conversationTarget
+    );
+  });
+
+  it('abandons a held hot claim for a target-less loader when hydration exceeds 900ms', async () => {
+    vi.useFakeTimers();
+    mocks.navigation.viewParamsStore.task = {
+      projectId: 'project-1',
+      taskId: 'task-1',
+      tab: { kind: 'file', path: 'src/current.ts' },
+    };
+    let finishHydration!: (selection: ReturnType<typeof preparedSelection>) => void;
+    mocks.openProvisionedTaskTab.mockReturnValueOnce(
+      new Promise<ReturnType<typeof preparedSelection>>((resolve) => {
+        finishHydration = resolve;
+      })
+    );
+
+    try {
+      const opening = openTaskWhenReady('project-1', 'task-1', navigate);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(cachedPty.acquireCanonicalRevealClaim).toHaveBeenCalledOnce();
+
+      await vi.advanceTimersByTimeAsync(899);
+      expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(false);
+      expect(cachedPty.invalidateHotReveal).not.toHaveBeenCalled();
+      expect(navigate).not.toHaveBeenCalled();
+      expect(mocks.navigation.viewParamsStore.task.tab).toEqual({
+        kind: 'file',
+        path: 'src/current.ts',
+      });
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(cachedPty.invalidateHotReveal).toHaveBeenCalledOnce();
+      expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(true);
+      expect(navigate).toHaveBeenCalledWith('task', {
+        projectId: 'project-1',
+        taskId: 'task-1',
+      });
+      expect(mocks.activatePreparedTarget).not.toHaveBeenCalled();
+      expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
+
+      finishHydration(preparedSelection());
+      await expect(opening).resolves.toBe(true);
+      expect(mocks.prepareConversationForOpen).toHaveBeenCalledWith(
+        conversationTarget.conversationId,
+        expect.any(Function),
+        expect.any(Number)
+      );
+      expect(mocks.activatePreparedTarget).toHaveBeenCalledOnce();
+      expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledWith(
+        'project-1',
+        'task-1',
+        conversationTarget
+      );
+      expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stages instead of exposing a stale hot frame when the reveal claim is rejected', async () => {
+    cachedPty.acquireCanonicalRevealClaim.mockResolvedValueOnce(false);
+    let finishFrame!: (ready: boolean) => void;
+    mocks.prepareConversationForOpen.mockReturnValueOnce(
+      new Promise<boolean>((resolve) => {
+        finishFrame = resolve;
+      })
+    );
+
+    const opening = openTaskWhenReady('project-1', 'task-1', navigate);
+    await vi.waitFor(() => expect(cachedPty.invalidateHotReveal).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(mocks.prepareConversationForOpen).toHaveBeenCalledOnce());
+    expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledOnce();
+
+    finishFrame(true);
+    await expect(opening).resolves.toBe(true);
+    expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledWith(
+      'project-1',
+      'task-1',
+      conversationTarget
+    );
+    // The staging route becomes the final route by removing its opaque overlay;
+    // reveal must not create a second navigation revision or tab replay.
+    expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledTimes(1);
+  });
+
+  it('stages instead of exposing the old frame while a replacement blocks the claim', async () => {
+    cachedPty.acquireCanonicalRevealClaim.mockResolvedValueOnce(false);
+
+    const opening = openTaskWhenReady('project-1', 'task-1', navigate);
+
+    await vi.waitFor(() => expect(cachedPty.invalidateHotReveal).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(mocks.prepareConversationForOpen).toHaveBeenCalledOnce());
+    await expect(opening).resolves.toBe(true);
+    expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledTimes(1);
+    expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledWith(
+      'project-1',
+      'task-1',
+      conversationTarget
+    );
+  });
+
+  it('falls back to hidden staging when the hot generation fence does not answer', async () => {
+    vi.useFakeTimers();
+    try {
+      cachedPty.acquireCanonicalRevealClaim.mockReturnValueOnce(
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100))
+      );
+      const opening = openTaskWhenReady('project-1', 'task-1', navigate);
+
+      await vi.advanceTimersByTimeAsync(99);
+      expect(mocks.prepareConversationForOpen).not.toHaveBeenCalled();
+      expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      await vi.waitFor(() => expect(mocks.prepareConversationForOpen).toHaveBeenCalledOnce());
+      await expect(opening).resolves.toBe(true);
+      expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledWith(
+        'project-1',
+        'task-1',
+        conversationTarget
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('captures target hydration failure while the hot generation fence is pending', async () => {
+    vi.useFakeTimers();
+    const failure = new Error('target hydration failed');
+    const unhandledRejections: unknown[] = [];
+    const onUnhandledRejection = (error: unknown) => unhandledRejections.push(error);
+    process.on('unhandledRejection', onUnhandledRejection);
+    try {
+      let finishClaim!: (claimed: boolean) => void;
+      mocks.openProvisionedTaskTab.mockRejectedValueOnce(failure);
+      cachedPty.acquireCanonicalRevealClaim.mockReturnValueOnce(
+        new Promise<boolean>((resolve) => {
+          finishClaim = resolve;
+        })
+      );
+
+      const opening = openTaskWhenReady('project-1', 'task-1', navigate);
+      await vi.waitFor(() => expect(mocks.openProvisionedTaskTab).toHaveBeenCalledOnce());
+      expect(unhandledRejections).toEqual([]);
+      finishClaim(false);
+
+      await expect(opening).resolves.toBe(false);
+      expect(unhandledRejections).toEqual([]);
+      expect(mocks.logWarn).toHaveBeenCalledWith(
+        'Failed to stage provisioned task target',
+        expect.objectContaining({ error: failure })
+      );
+      expect(mocks.toast).toHaveBeenCalledOnce();
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection);
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels a superseded hot generation fence without rejecting globally', async () => {
+    vi.useFakeTimers();
+    const unhandledRejections: unknown[] = [];
+    const onUnhandledRejection = (error: unknown) => unhandledRejections.push(error);
+    process.on('unhandledRejection', onUnhandledRejection);
+    try {
+      let finishFirstClaim!: (claimed: boolean) => void;
+      cachedPty.acquireCanonicalRevealClaim.mockReturnValueOnce(
+        new Promise<boolean>((resolve) => {
+          finishFirstClaim = resolve;
+        })
+      );
+
+      const firstOpening = openTaskWhenReady('project-1', 'task-1', navigate);
+      const secondOpening = openTaskWhenReady('project-2', 'task-2', navigate);
+      await expect(secondOpening).resolves.toBe(true);
+      finishFirstClaim(false);
+
+      await expect(firstOpening).resolves.toBe(false);
+      expect(unhandledRejections).toEqual([]);
+      expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalledWith(
+        'project-1',
+        'task-1',
+        conversationTarget
+      );
+      expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(false);
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection);
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the source visible until the sub-second loader boundary, then stages cold task', async () => {
+    vi.useFakeTimers();
     let finishProvision!: () => void;
-    let finishTarget!: (found: boolean) => void;
+    let finishTarget!: (selection: ReturnType<typeof preparedSelection>) => void;
     mocks.getTaskStore.mockReturnValueOnce(undefined).mockReturnValue(provisioned);
     mocks.provisionTask.mockReturnValueOnce(
       new Promise<void>((resolve) => {
@@ -113,48 +395,255 @@ describe('openTaskWhenReady', () => {
       })
     );
     mocks.openProvisionedTaskTab.mockReturnValueOnce(
-      new Promise<boolean>((resolve) => {
+      new Promise<ReturnType<typeof preparedSelection>>((resolve) => {
         finishTarget = resolve;
       })
     );
 
-    const opening = openTaskWhenReady('project-1', 'task-1', navigate);
+    try {
+      const opening = openTaskWhenReady('project-1', 'task-1', navigate);
 
-    expect(navigate).toHaveBeenCalledWith('task', {
-      projectId: 'project-1',
-      taskId: 'task-1',
-    });
-    expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
-    expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(true);
-    await vi.waitFor(() => expect(mocks.provisionTask).toHaveBeenCalledWith('task-1'));
+      expect(navigate).not.toHaveBeenCalled();
+      expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
+      expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(true);
+      await vi.waitFor(() => expect(mocks.provisionTask).toHaveBeenCalledWith('task-1'));
 
-    finishProvision();
-    await vi.waitFor(() =>
+      finishProvision();
+      await vi.waitFor(() => expect(mocks.openProvisionedTaskTab).toHaveBeenCalledOnce());
+      expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
+      finishTarget(preparedSelection());
+      await vi.advanceTimersByTimeAsync(900);
+      await vi.waitFor(() => expect(mocks.prepareConversationForOpen).toHaveBeenCalledOnce());
+
+      await expect(opening).resolves.toBe(true);
+      expect(mocks.openProvisionedTaskTab).toHaveBeenCalledWith(
+        provisioned,
+        conversationTarget,
+        expect.any(Object)
+      );
       expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledWith(
         'project-1',
         'task-1',
         conversationTarget
-      )
-    );
-    expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(true);
-    finishTarget(true);
-    await expect(opening).resolves.toBe(true);
+      );
+      expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-    expect(mocks.openProvisionedTaskTab).toHaveBeenCalledWith(
-      provisioned,
-      conversationTarget,
-      expect.any(Object)
+  it('stages a provisioned conversation whose frontend terminal was evicted', async () => {
+    const evictedConversation = provisioned.conversations.conversations.get(
+      conversationTarget.conversationId
+    );
+    if (!evictedConversation) throw new Error('missing conversation fixture');
+    evictedConversation.session.pty = null;
+
+    const opening = openTaskWhenReady('project-1', 'task-1', navigate);
+
+    expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
+    await expect(opening).resolves.toBe(true);
+    expect(mocks.prepareConversationForOpen).toHaveBeenCalledWith(
+      conversationTarget.conversationId,
+      expect.any(Function),
+      expect.any(Number)
     );
     expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledWith(
       'project-1',
       'task-1',
       conversationTarget
     );
-    expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(false);
+
+    evictedConversation.session.pty = cachedPty;
+  });
+
+  it('shows one stable destination loader only after the sub-second staging budget', async () => {
+    vi.useFakeTimers();
+    try {
+      const evictedConversation = provisioned.conversations.conversations.get(
+        conversationTarget.conversationId
+      );
+      if (!evictedConversation) throw new Error('missing conversation fixture');
+      evictedConversation.session.pty = null;
+      let finishFrame!: (ready: boolean) => void;
+      mocks.prepareConversationForOpen.mockReturnValueOnce(
+        new Promise<boolean>((resolve) => {
+          finishFrame = resolve;
+        })
+      );
+
+      const opening = openTaskWhenReady('project-1', 'task-1', navigate);
+      await vi.advanceTimersByTimeAsync(899);
+      expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
+      expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledWith(
+        'project-1',
+        'task-1',
+        conversationTarget
+      );
+      expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(true);
+
+      finishFrame(true);
+      await expect(opening).resolves.toBe(true);
+      expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(false);
+      evictedConversation.session.pty = cachedPty;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('uses a target-less provisioned loader when hydration is still pending at 900ms', async () => {
+    vi.useFakeTimers();
+    const evictedConversation = provisioned.conversations.conversations.get(
+      conversationTarget.conversationId
+    );
+    if (!evictedConversation) throw new Error('missing conversation fixture');
+    evictedConversation.session.pty = null;
+    mocks.navigation.viewParamsStore.task = {
+      projectId: 'project-1',
+      taskId: 'task-1',
+      tab: { kind: 'file', path: 'src/current.ts' },
+    };
+    let finishHydration!: (selection: ReturnType<typeof preparedSelection>) => void;
+    mocks.openProvisionedTaskTab.mockReturnValueOnce(
+      new Promise<ReturnType<typeof preparedSelection>>((resolve) => {
+        finishHydration = resolve;
+      })
+    );
+
+    try {
+      const opening = openTaskWhenReady('project-1', 'task-1', navigate);
+      await vi.advanceTimersByTimeAsync(899);
+
+      expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(false);
+      expect(mocks.activatePreparedTarget).not.toHaveBeenCalled();
+      expect(navigate).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(true);
+      expect(navigate).toHaveBeenCalledWith('task', {
+        projectId: 'project-1',
+        taskId: 'task-1',
+      });
+      expect(mocks.activatePreparedTarget).not.toHaveBeenCalled();
+      expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
+
+      finishHydration(preparedSelection());
+      await expect(opening).resolves.toBe(true);
+      expect(mocks.activatePreparedTarget).toHaveBeenCalledOnce();
+      expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledWith(
+        'project-1',
+        'task-1',
+        conversationTarget
+      );
+      expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(false);
+    } finally {
+      evictedConversation.session.pty = cachedPty;
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not create a provisioned transition when opening is cancelled before 900ms', async () => {
+    vi.useFakeTimers();
+    const evictedConversation = provisioned.conversations.conversations.get(
+      conversationTarget.conversationId
+    );
+    if (!evictedConversation) throw new Error('missing conversation fixture');
+    evictedConversation.session.pty = null;
+    mocks.openProvisionedTaskTab.mockReturnValueOnce(new Promise(() => {}));
+
+    try {
+      const opening = openTaskWhenReady('project-1', 'task-1', navigate);
+      await vi.advanceTimersByTimeAsync(400);
+      mocks.navigation.revision += 1;
+      mocks.navigation.currentViewId = 'settings';
+      await vi.advanceTimersByTimeAsync(25);
+
+      await expect(opening).resolves.toBe(false);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(false);
+      expect(navigate).not.toHaveBeenCalled();
+      expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
+      expect(mocks.activatePreparedTarget).not.toHaveBeenCalled();
+    } finally {
+      evictedConversation.session.pty = cachedPty;
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a target-less loader when provisioning becomes ready before history resolves', async () => {
+    vi.useFakeTimers();
+    try {
+      let finishPreparation!: () => void;
+      mocks.getTaskStore.mockReturnValueOnce(undefined).mockReturnValue(provisioned);
+      mocks.prepareExplicitTaskOpen.mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          finishPreparation = resolve;
+        })
+      );
+
+      const opening = openTaskWhenReady('project-1', 'task-1', navigate);
+      await vi.advanceTimersByTimeAsync(900);
+
+      expect(navigate).toHaveBeenCalledOnce();
+      expect(navigate).toHaveBeenCalledWith('task', {
+        projectId: 'project-1',
+        taskId: 'task-1',
+      });
+      expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
+      expect(mocks.resolveLastTaskSessionTarget).not.toHaveBeenCalled();
+
+      finishPreparation();
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(opening).resolves.toBe(true);
+
+      expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledOnce();
+      expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledWith(
+        'project-1',
+        'task-1',
+        conversationTarget
+      );
+      expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalledWith('project-1', 'task-1', {
+        kind: 'overview',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never routes a provisioned task when its canonical frame is unavailable', async () => {
+    const evictedConversation = provisioned.conversations.conversations.get(
+      conversationTarget.conversationId
+    );
+    if (!evictedConversation) throw new Error('missing conversation fixture');
+    evictedConversation.session.pty = null;
+    mocks.prepareConversationForOpen.mockResolvedValueOnce(false);
+
+    await expect(openTaskWhenReady('project-1', 'task-1', navigate)).resolves.toBe(false);
+
+    expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledOnce();
+    expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(true);
+    expect(taskOpenTransitionStore.hasFailed('project-1', 'task-1')).toBe(true);
+    evictedConversation.session.pty = cachedPty;
+  });
+
+  it('never routes a cold task when its canonical frame is unavailable', async () => {
+    mocks.getTaskStore.mockReturnValueOnce(undefined).mockReturnValue(provisioned);
+    mocks.prepareConversationForOpen.mockResolvedValueOnce(false);
+
+    await expect(openTaskWhenReady('project-1', 'task-1', navigate)).resolves.toBe(false);
+
+    expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledOnce();
+    expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(true);
+    expect(taskOpenTransitionStore.hasFailed('project-1', 'task-1')).toBe(true);
   });
 
   it('falls back to overview when the remembered session no longer exists', async () => {
-    mocks.openProvisionedTaskTab.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    mocks.openProvisionedTaskTab
+      .mockResolvedValueOnce(preparedSelection(false))
+      .mockResolvedValueOnce(preparedSelection());
 
     await expect(openTaskWhenReady('project-1', 'task-1', navigate)).resolves.toBe(true);
 
@@ -171,17 +660,14 @@ describe('openTaskWhenReady', () => {
 
   it('replaces a cold task route when its remembered session no longer exists', async () => {
     mocks.getTaskStore.mockReturnValueOnce(undefined).mockReturnValue(provisioned);
-    mocks.openProvisionedTaskTab.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    mocks.openProvisionedTaskTab
+      .mockResolvedValueOnce(preparedSelection(false))
+      .mockResolvedValueOnce(preparedSelection());
 
     await expect(openTaskWhenReady('project-1', 'task-1', navigate)).resolves.toBe(true);
 
-    expect(mocks.appTabsOpenTaskScope).toHaveBeenNthCalledWith(
-      1,
-      'project-1',
-      'task-1',
-      conversationTarget
-    );
-    expect(mocks.appTabsOpenTaskScope).toHaveBeenNthCalledWith(2, 'project-1', 'task-1', {
+    expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledOnce();
+    expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledWith('project-1', 'task-1', {
       kind: 'overview',
     });
     expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(false);
@@ -238,14 +724,100 @@ describe('openTaskWhenReady', () => {
     );
   });
 
-  it('keeps the stable target task route when cold preparation fails', async () => {
+  it('does not let a cold open regain its lease after navigation leaves and returns', async () => {
+    let finishPreparation!: () => void;
     mocks.getTaskStore.mockReturnValueOnce(undefined);
-    mocks.prepareExplicitTaskOpen.mockRejectedValueOnce(new Error('mount failed'));
+    mocks.prepareExplicitTaskOpen.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishPreparation = resolve;
+      })
+    );
+
+    const opening = openTaskWhenReady('project-1', 'task-1', navigate);
+
+    mocks.navigation.revision += 1;
+    mocks.navigation.currentViewId = 'settings';
+    mocks.navigation.revision += 1;
+    mocks.navigation.currentViewId = 'task';
+    mocks.navigation.viewParamsStore.task = {
+      projectId: 'project-current',
+      taskId: 'task-current',
+    };
+    finishPreparation();
+
+    await expect(opening).resolves.toBe(false);
+    expect(mocks.provisionTask).not.toHaveBeenCalled();
+    expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
+  });
+
+  it('shows copyable diagnostics when staging a provisioned target throws', async () => {
+    const evictedConversation = provisioned.conversations.conversations.get(
+      conversationTarget.conversationId
+    );
+    if (!evictedConversation) throw new Error('missing conversation fixture');
+    evictedConversation.session.pty = null;
+    const failure = new Error('snapshot failed');
+    mocks.openProvisionedTaskTab.mockRejectedValueOnce(failure);
 
     await expect(openTaskWhenReady('project-1', 'task-1', navigate)).resolves.toBe(false);
 
-    expect(navigate).toHaveBeenCalledOnce();
+    expect(mocks.toast).toHaveBeenCalledWith({
+      title: 'tasks.conversations.startingErrorTitle',
+      description: 'tasks.conversations.startingErrorDescription',
+      variant: 'destructive',
+      debugInfo: {
+        stage: 'stage-provisioned-target',
+        projectId: 'project-1',
+        taskId: 'task-1',
+        target: conversationTarget,
+        error: failure,
+      },
+    });
+  });
+
+  it('keeps the source route and shows diagnostics when hot target hydration throws', async () => {
+    const failure = new Error('conversation lookup failed');
+    mocks.openProvisionedTaskTab.mockRejectedValueOnce(failure);
+
+    await expect(openTaskWhenReady('project-1', 'task-1', navigate)).resolves.toBe(false);
+
+    expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
+    expect(mocks.activatePreparedTarget).not.toHaveBeenCalled();
+    expect(mocks.toast).toHaveBeenCalledWith({
+      title: 'tasks.conversations.startingErrorTitle',
+      description: 'tasks.conversations.startingErrorDescription',
+      variant: 'destructive',
+      debugInfo: {
+        stage: 'open-provisioned-target',
+        projectId: 'project-1',
+        taskId: 'task-1',
+        target: conversationTarget,
+        error: failure,
+      },
+    });
+  });
+
+  it('keeps the stable target task route when cold preparation fails', async () => {
+    mocks.getTaskStore.mockReturnValueOnce(undefined);
+    const failure = new Error('mount failed');
+    mocks.prepareExplicitTaskOpen.mockRejectedValueOnce(failure);
+
+    await expect(openTaskWhenReady('project-1', 'task-1', navigate)).resolves.toBe(false);
+
+    expect(navigate).not.toHaveBeenCalled();
     expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
     expect(mocks.logWarn).toHaveBeenCalledOnce();
+    expect(mocks.toast).toHaveBeenCalledWith({
+      title: 'tasks.conversations.startingErrorTitle',
+      description: 'tasks.conversations.startingErrorDescription',
+      variant: 'destructive',
+      debugInfo: {
+        stage: 'prepare-cold-task',
+        projectId: 'project-1',
+        taskId: 'task-1',
+        target: null,
+        error: failure,
+      },
+    });
   });
 });

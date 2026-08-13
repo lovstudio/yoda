@@ -1,5 +1,4 @@
 import { makeAutoObservable, runInAction } from 'mobx';
-import type { AppSettings } from '@shared/app-settings';
 import { ptyExitChannel } from '@shared/events/ptyEvents';
 import { withTimeout } from '@shared/result';
 import {
@@ -14,6 +13,7 @@ import { events, rpc } from '@renderer/lib/ipc';
 import { buildTerminalFontFamily, FrontendPty } from '@renderer/lib/pty/pty';
 import { log } from '@renderer/utils/logger';
 import { selectTerminalLruEvictions, selectTerminalPressureEvictions } from './terminal-lru';
+import { loadTerminalSettings } from './terminal-settings-cache';
 
 export type PtySessionStatus = 'disconnected' | 'connecting' | 'ready';
 export type PtySessionExecution = 'interactive' | 'command';
@@ -54,6 +54,8 @@ export class PtySession {
   private connectionEnabled: boolean;
   private connectionRequested = false;
   private connectPromise: Promise<void> | null = null;
+  private evictionBarrier: Promise<void> | null = null;
+  private disposed = false;
   private readonly disposeExitListener: (() => void) | null;
 
   constructor(
@@ -75,12 +77,19 @@ export class PtySession {
         : null;
     makeAutoObservable<
       this,
-      'connectionEnabled' | 'connectionRequested' | 'connectPromise' | 'disposeExitListener'
+      | 'connectionEnabled'
+      | 'connectionRequested'
+      | 'connectPromise'
+      | 'evictionBarrier'
+      | 'disposed'
+      | 'disposeExitListener'
     >(this, {
       pty: false,
       connectionEnabled: false,
       connectionRequested: false,
       connectPromise: false,
+      evictionBarrier: false,
+      disposed: false,
       disposeExitListener: false,
     });
   }
@@ -91,6 +100,7 @@ export class PtySession {
    * completes; connectionRequested carries that demand across this gate.
    */
   enableConnection(): void {
+    if (this.disposed) return;
     this.connectionEnabled = true;
     if (this.connectionRequested && this.status === 'disconnected') {
       void this.connect().catch(() => {});
@@ -98,6 +108,7 @@ export class PtySession {
   }
 
   async connect(): Promise<void> {
+    if (this.disposed) return;
     // Connection demand must come from a real terminal surface. This method
     // prepares xterm and its settings only; usePty starts the main-process
     // output subscription after the mounted terminal has real dimensions.
@@ -132,6 +143,8 @@ export class PtySession {
   private async connectInternal(preparationStartedAt: number): Promise<void> {
     let pty: FrontendPty | null = null;
     try {
+      if (this.evictionBarrier) await this.evictionBarrier;
+      if (this.disposed || !this.connectionRequested) return;
       pty = new FrontendPty(this.sessionId);
       this.pty = pty;
       PtySession.touchHotSession(this);
@@ -141,7 +154,7 @@ export class PtySession {
       log.debug('[pty-session] preparation started', { sessionId: this.sessionId });
 
       const terminalSettings = await withTimeout(
-        rpc.appSettings.get('terminal') as Promise<AppSettings['terminal']>,
+        loadTerminalSettings(),
         TERMINAL_SETTINGS_TIMEOUT_MS
       ).catch((error: unknown) => {
         log.warn('PtySession: terminal settings unavailable, using defaults', {
@@ -196,6 +209,7 @@ export class PtySession {
   }
 
   async reconnect() {
+    if (this.disposed) return;
     // Carry the last known size forward: the new FrontendPty starts with
     // lastSentDims=null, and the post-mount resize broadcast can be deduped when
     // the pane size is unchanged. Without seeding, a subsequent restart would
@@ -218,7 +232,45 @@ export class PtySession {
     }
   }
 
+  /**
+   * Stage this session's terminal protocol into the shared off-screen host.
+   * Explicit task navigation uses this to wait for a canonical live frame
+   * without exposing xterm's transcript/replay/parser intermediate states.
+   */
+  async prepareFirstFrame(
+    targetDims: { cols: number; rows: number } | undefined,
+    shouldContinue: () => boolean,
+    options: { waitForCanonicalOutput?: boolean; timeoutMs?: number } = {}
+  ): Promise<boolean> {
+    await this.connect();
+    const pty = this.pty;
+    if (!pty || this.status !== 'ready' || !shouldContinue()) return false;
+    PtySession.touchHotSession(this);
+    return pty.prepareFirstFrame(
+      targetDims ?? pty.lastSentDims ?? undefined,
+      shouldContinue,
+      options
+    );
+  }
+
+  /** Roll back a renderer created for a navigation request cancelled before subscription. */
+  discardUnconnectedRenderer(candidate: FrontendPty): void {
+    if (this.pty !== candidate || candidate.mounted || candidate.hasRecoverableSnapshot) {
+      return;
+    }
+    candidate.dispose();
+    PtySession.hotSessions = PtySession.hotSessions.filter((session) => session !== this);
+    PtySession.refreshAutoPressureMonitor();
+    runInAction(() => {
+      if (this.pty === candidate) this.pty = null;
+      this.status = 'disconnected';
+      this.connectionError = null;
+    });
+  }
+
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
     this.connectionRequested = false;
     this.connectPromise = null;
     this.disposeExitListener?.();
@@ -234,14 +286,16 @@ export class PtySession {
 
   static setHotTerminalPolicy(mode: TerminalCacheMode, limit: number): void {
     PtySession.hotMode = mode;
-    PtySession.hotLimit = Math.min(
-      MAX_HOT_TERMINAL_LIMIT,
-      Math.max(MIN_HOT_TERMINAL_LIMIT, Math.floor(limit))
-    );
+    PtySession.hotLimit =
+      mode === 'auto'
+        ? DEFAULT_HOT_TERMINAL_LIMIT
+        : Math.min(MAX_HOT_TERMINAL_LIMIT, Math.max(MIN_HOT_TERMINAL_LIMIT, Math.floor(limit)));
+    const protectedSessionId = PtySession.hotSessions.at(-1)?.sessionId;
     if (mode === 'fixed') {
       PtySession.stopAutoPressureMonitor();
-      PtySession.enforceHotLimit();
+      PtySession.enforceHotLimit(protectedSessionId);
     } else {
+      PtySession.enforceHotLimit(protectedSessionId);
       PtySession.ensureAutoPressureMonitor();
     }
   }
@@ -254,9 +308,8 @@ export class PtySession {
   private static touchHotSession(session: PtySession): void {
     PtySession.hotSessions = PtySession.hotSessions.filter((candidate) => candidate !== session);
     PtySession.hotSessions.push(session);
-    if (PtySession.hotMode === 'fixed') {
-      PtySession.enforceHotLimit(session.sessionId);
-    } else {
+    PtySession.enforceHotLimit(session.sessionId);
+    if (PtySession.hotMode === 'auto') {
       PtySession.ensureAutoPressureMonitor();
     }
   }
@@ -307,6 +360,11 @@ export class PtySession {
     }
     PtySession.autoPressureSampleInFlight = true;
     try {
+      // A renderer that was protected while its first snapshot was in flight
+      // may now be recoverable. Re-apply the normal bound without waiting for
+      // memory or output pressure to grant eviction permission.
+      PtySession.enforceHotLimit(PtySession.hotSessions.at(-1)?.sessionId);
+
       const now = performance.now();
       const elapsedSeconds = Math.max(0.001, (now - PtySession.lastOutputSampleAt) / 1_000);
       PtySession.lastOutputSampleAt = now;
@@ -375,7 +433,7 @@ export class PtySession {
           recoverable: session.pty?.hasRecoverableSnapshot ?? false,
         })),
         protectedSessionId,
-        DEFAULT_HOT_TERMINAL_LIMIT
+        MIN_HOT_TERMINAL_LIMIT
       )
     );
     if (evictions.size === 0) return;
@@ -401,6 +459,7 @@ export class PtySession {
           sessionId: session.sessionId,
           mounted: session.pty?.mounted ?? false,
           connecting: session.status === 'connecting',
+          recoverable: session.pty?.hasRecoverableSnapshot ?? false,
         })),
         PtySession.hotLimit,
         protectedSessionId
@@ -418,13 +477,25 @@ export class PtySession {
   private evictRenderer(): void {
     if (this.pty?.mounted) return;
     log.debug('[pty-session] frontend renderer cache evicted', { sessionId: this.sessionId });
+    const evictedPty = this.pty;
     this.connectionRequested = false;
     this.connectPromise = null;
-    this.pty?.dispose({ checkpoint: true });
     runInAction(() => {
       this.pty = null;
       this.status = 'disconnected';
       this.connectionError = null;
     });
+    if (evictedPty) {
+      const barrier = evictedPty.disposeAndWait({ checkpoint: true }).catch((error) => {
+        log.warn('[pty-session] renderer eviction checkpoint failed', {
+          sessionId: this.sessionId,
+          error,
+        });
+      });
+      const tracked = barrier.finally(() => {
+        if (this.evictionBarrier === tracked) this.evictionBarrier = null;
+      });
+      this.evictionBarrier = tracked;
+    }
   }
 }

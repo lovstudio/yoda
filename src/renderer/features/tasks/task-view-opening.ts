@@ -1,8 +1,22 @@
+import type { TaskWindowTabTarget } from '@shared/task-window';
 import type { TaskViewKind } from './stores/task-selectors';
 
 type TaskLoadState = 'idle' | 'loading' | 'loaded' | 'error' | undefined;
 
 export const TASK_OPENING_MESSAGE_KEY = 'tasks.settingUpWorkspace' as const;
+export const TASK_SESSION_OPENING_MESSAGE_KEY = 'tasks.openingSession' as const;
+
+/**
+ * A task-open transition owns target restoration until its staged terminal is
+ * ready. Letting TopLevelTabSync resolve a target-less loader route in the
+ * meantime creates a second navigation intent and cancels that staging lease.
+ */
+export function shouldResolveTaskScopeEntry(
+  target: TaskWindowTabTarget | null,
+  isTargetPending: boolean
+): boolean {
+  return target === null && !isTargetPending;
+}
 
 /**
  * All transient states of one task entry share one visual surface. In
@@ -23,11 +37,11 @@ export function stableTaskOpeningMessageKey(
     isTaskLoadPending: boolean;
     isTargetPending?: boolean;
   }
-): typeof TASK_OPENING_MESSAGE_KEY | null {
+): typeof TASK_OPENING_MESSAGE_KEY | typeof TASK_SESSION_OPENING_MESSAGE_KEY | null {
   // Provisioning publishes the ready store before the task opener can commit
   // its restored conversation target. Keep the same opening surface across
   // that boundary so the ready layout never paints a false overview/empty state.
-  if (isTargetPending) return TASK_OPENING_MESSAGE_KEY;
+  if (isTargetPending) return TASK_SESSION_OPENING_MESSAGE_KEY;
 
   switch (kind) {
     case 'project-mounting':

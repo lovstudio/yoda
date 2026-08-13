@@ -60,6 +60,7 @@ const DEFAULT_ROWS = 24;
 export class SshConversationProvider implements ConversationProvider {
   private sessions = new Map<string, Pty>();
   private knownSessionIds = new Set<string>();
+  private readonly intentionallyDetachedPtys = new WeakSet<Pty>();
   private readonly pendingStarts = new Map<string, { token: symbol; completion: Promise<void> }>();
   private readonly projectId: string;
   private readonly sidebarWorkspaceId?: string | null;
@@ -75,6 +76,8 @@ export class SshConversationProvider implements ConversationProvider {
     ProjectPromptPrinciples | undefined
   >;
   private readonly tmuxSessionNames = new Map<string, string>();
+  private readonly transportDetachedAt = new Map<string, number>();
+  private readonly inputTails = new Map<string, Promise<void>>();
   private readonly sessionInfos = new Map<string, Omit<ActiveConversationSession, 'detachable'>>();
   private readonly silenceReconcilerDetachers = new Map<string, () => void>();
 
@@ -220,7 +223,11 @@ export class SshConversationProvider implements ConversationProvider {
         executionMode: conversation.executionMode,
       });
 
-      const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
+      const retainedTmuxSessionName = reattachExistingTmuxSession
+        ? this.tmuxSessionNames.get(sessionId)
+        : undefined;
+      const tmuxSessionName =
+        retainedTmuxSessionName ?? (await this.resolveTmuxSessionName(sessionId, tmuxOverride));
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       if (reattachExistingTmuxSession) {
         if (!tmuxSessionName) throw new TmuxReattachMissError();
@@ -258,6 +265,13 @@ export class SshConversationProvider implements ConversationProvider {
         { ...providerEnv, ...this.taskEnvVars },
         profile
       );
+
+      if (
+        !(await ptySessionRegistry.waitForRevealClaims(sessionId, registrationEpoch)) ||
+        !this.ownsPendingStart(sessionId, startToken)
+      ) {
+        return;
+      }
 
       const result = await openSsh2Pty(this.proxy.client, {
         id: sessionId,
@@ -325,6 +339,10 @@ export class SshConversationProvider implements ConversationProvider {
       let shouldEmitAgentSessionExited = false;
       let exitedBeforeCommit = false;
       pty.onExit(({ exitCode }) => {
+        if (this.intentionallyDetachedPtys.delete(pty)) {
+          this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
+          return;
+        }
         if (!startCommitted) exitedBeforeCommit = true;
         this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
         if (this.sessions.get(sessionId) !== pty) return;
@@ -363,6 +381,9 @@ export class SshConversationProvider implements ConversationProvider {
         },
         registrationEpoch,
         tmuxBacked: Boolean(tmuxSessionName),
+        onRendererIdle: tmuxSessionName
+          ? (generation) => this.detachRendererTransport(sessionId, pty, generation)
+          : undefined,
       });
       registrationCompleted = true;
       if (!this.ownsPendingStart(sessionId, startToken)) {
@@ -403,7 +424,12 @@ export class SshConversationProvider implements ConversationProvider {
         if (!this.ownsPendingStart(sessionId, startToken)) return;
         if (!delivered) throw new Error(`${conversation.runtimeId} exited before startup input.`);
       }
-      if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
+      if (tmuxSessionName) {
+        this.tmuxSessionNames.set(sessionId, tmuxSessionName);
+      } else {
+        this.tmuxSessionNames.delete(sessionId);
+      }
+      this.transportDetachedAt.delete(sessionId);
       telemetryService.capture('agent_run_started', {
         provider: conversation.runtimeId,
         project_id: conversation.projectId,
@@ -464,26 +490,78 @@ export class SshConversationProvider implements ConversationProvider {
   }
 
   getActiveSessions(): ActiveConversationSession[] {
-    return Array.from(this.sessions.keys()).flatMap((sessionId) => {
-      const info = this.sessionInfos.get(sessionId);
-      if (!info) return [];
-      return [{ ...info, detachable: this.tmuxSessionNames.has(sessionId) }];
+    return Array.from(this.sessionInfos.entries()).map(([sessionId, info]) => {
+      const transportAttached = this.sessions.has(sessionId);
+      const { pid, ...base } = info;
+      return {
+        ...base,
+        ...(transportAttached && pid !== undefined ? { pid } : {}),
+        detachable: this.tmuxSessionNames.has(sessionId),
+        ...(transportAttached
+          ? {}
+          : {
+              transportAttached: false as const,
+              transportDetachedAt: this.transportDetachedAt.get(sessionId),
+            }),
+      };
     });
+  }
+
+  /** Release only the current SSH tmux attach channel after registry revalidation. */
+  private detachRendererTransport(sessionId: string, pty: Pty, generation: number): void {
+    if (this.sessions.get(sessionId) !== pty || !this.tmuxSessionNames.has(sessionId)) return;
+    if (!ptySessionRegistry.detachRendererTransport(sessionId, generation, pty)) return;
+
+    this.intentionallyDetachedPtys.add(pty);
+    this.sessions.delete(sessionId);
+    this.transportDetachedAt.set(sessionId, Date.now());
+    this.releaseSilenceReconciler(sessionId);
+    try {
+      pty.kill();
+    } catch (error) {
+      log.warn('SshConversation: failed to detach idle tmux transport', {
+        sessionId,
+        generation,
+        error: String(error),
+      });
+    }
   }
 
   async sendInput(conversationId: string, data: string): Promise<boolean> {
     const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
-    const pty = this.sessions.get(sessionId);
-    if (pty) {
-      pty.write(data);
-      return true;
+    // Protect newly queued headless input from the idle-session sweep before
+    // the asynchronous tmux send-keys process reaches the head of its queue.
+    if (!this.sessions.has(sessionId) && this.tmuxSessionNames.has(sessionId)) {
+      this.transportDetachedAt.set(sessionId, Date.now());
     }
-
-    const tmuxSessionName = this.tmuxSessionNames.get(sessionId);
-    if (!tmuxSessionName) return false;
-
-    await sendLiteralToTmuxSession(this.ctx, tmuxSessionName, data);
-    return true;
+    let delivered = false;
+    const previous = this.inputTails.get(sessionId) ?? Promise.resolve();
+    const delivery = previous
+      .catch(() => {})
+      .then(async () => {
+        const pty = this.sessions.get(sessionId);
+        if (pty) {
+          pty.write(data);
+          delivered = true;
+          return;
+        }
+        const tmuxSessionName = this.tmuxSessionNames.get(sessionId);
+        if (!tmuxSessionName) return;
+        this.transportDetachedAt.set(sessionId, Date.now());
+        await sendLiteralToTmuxSession(this.ctx, tmuxSessionName, data);
+        delivered = true;
+      });
+    const tail = delivery.then(
+      () => {},
+      () => {}
+    );
+    this.inputTails.set(sessionId, tail);
+    try {
+      await delivery;
+      return delivered;
+    } finally {
+      if (this.inputTails.get(sessionId) === tail) this.inputTails.delete(sessionId);
+    }
   }
 
   private ownsPendingStart(sessionId: string, token: symbol): boolean {
@@ -525,6 +603,8 @@ export class SshConversationProvider implements ConversationProvider {
     }
     ptySessionRegistry.unregister(sessionId);
     this.sessionInfos.delete(sessionId);
+    this.transportDetachedAt.delete(sessionId);
+    this.inputTails.delete(sessionId);
     markRuntimeSessionExited({
       projectId: this.projectId,
       taskId: this.taskId,
@@ -547,6 +627,8 @@ export class SshConversationProvider implements ConversationProvider {
     await Promise.all(tmuxSessionNames.map((name) => killTmuxSession(this.ctx, name)));
     this.knownSessionIds.clear();
     this.tmuxSessionNames.clear();
+    this.transportDetachedAt.clear();
+    this.inputTails.clear();
     this.sessionInfos.clear();
   }
 
@@ -566,6 +648,8 @@ export class SshConversationProvider implements ConversationProvider {
       agentSessionRuntimeStore.remove(info);
     }
     this.sessions.clear();
+    this.transportDetachedAt.clear();
+    this.inputTails.clear();
     this.sessionInfos.clear();
   }
 }

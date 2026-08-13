@@ -3,9 +3,9 @@ export const MIN_TERMINAL_SCROLLBACK_LINES = 1_000;
 export const MAX_TERMINAL_SCROLLBACK_LINES = 500_000;
 export const TERMINAL_CACHE_MODES = ['auto', 'fixed'] as const;
 export type TerminalCacheMode = (typeof TERMINAL_CACHE_MODES)[number];
-/** Auto keeps every frontend terminal until runtime pressure is observed. */
+/** Auto retains a bounded warm frontend cache and may shrink it further under pressure. */
 export const DEFAULT_TERMINAL_CACHE_MODE: TerminalCacheMode = 'auto';
-/** Used only when the user explicitly selects the fixed cache policy. */
+/** Default auto warm-cache size; fixed mode may override it. */
 export const DEFAULT_HOT_TERMINAL_LIMIT = 4;
 export const MIN_HOT_TERMINAL_LIMIT = 1;
 export const MAX_HOT_TERMINAL_LIMIT = 64;

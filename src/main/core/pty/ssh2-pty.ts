@@ -44,15 +44,17 @@ export class Ssh2PtySession implements Pty {
     this.channel.write(data);
   }
 
-  resize(cols: number, rows: number): void {
+  resize(cols: number, rows: number): boolean {
     try {
       this.channel.setWindow(rows, cols, 0, 0);
+      return true;
     } catch (err: unknown) {
       log.warn('Ssh2PtySession:resize failed', {
         cols,
         rows,
         error: String((err as Error)?.message ?? err),
       });
+      return false;
     }
   }
 

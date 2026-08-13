@@ -22,6 +22,10 @@ class FakePty implements Pty {
 
   resize(): void {}
 
+  pause(): void {}
+
+  resume(): void {}
+
   kill(): void {}
 
   onData(): void {}

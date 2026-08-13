@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
+import { agentSessionExitedChannel } from '@shared/events/agentEvents';
 import { makePtySessionId } from '@shared/ptySessionId';
 import {
   registerConversationHydrationBarrier,
@@ -7,7 +8,10 @@ import {
 } from '@main/core/conversations/conversation-hydration-barrier';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { Pty, PtyExitInfo } from '@main/core/pty/pty';
-import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
+import {
+  PTY_RENDERER_DETACH_GRACE_MS,
+  ptySessionRegistry,
+} from '@main/core/pty/pty-session-registry';
 import type { SshClientProxy } from '@main/core/ssh/ssh-client-proxy';
 import { SshConversationProvider } from './ssh-conversation';
 
@@ -22,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   getProviderConfig: vi.fn(),
   getRemoteShellProfile: vi.fn(),
   injectTuiStartupInput: vi.fn(),
+  killTmuxSession: vi.fn(),
   listTmuxSessionMarkersStrict: vi.fn(),
   maybeAutoTrustSsh: vi.fn(),
   maybeAutoTrustCodexSsh: vi.fn(),
@@ -33,6 +38,7 @@ const mocks = vi.hoisted(() => ({
   resolveRuntimeTmuxEnv: vi.fn(),
   resolveSshCommand: vi.fn(),
   resolveTerminalThemeMode: vi.fn(),
+  sendLiteralToTmuxSession: vi.fn(),
   setRuntimeStatus: vi.fn(),
   waitForTmuxReattach: vi.fn(),
   wireAgentClassifier: vi.fn(),
@@ -96,9 +102,9 @@ vi.mock('@main/core/pty/tmux-availability', () => ({
 }));
 
 vi.mock('@main/core/pty/tmux-session-name', () => ({
-  killTmuxSession: vi.fn(),
+  killTmuxSession: mocks.killTmuxSession,
   listTmuxSessionMarkersStrict: mocks.listTmuxSessionMarkersStrict,
-  sendLiteralToTmuxSession: vi.fn(),
+  sendLiteralToTmuxSession: mocks.sendLiteralToTmuxSession,
 }));
 
 vi.mock('@main/core/pty/tmux-reattach', () => ({
@@ -193,6 +199,12 @@ class FakePty implements Pty {
     this.exitHandlers.push(handler);
     if (this.bufferedExit) queueMicrotask(() => handler(this.bufferedExit as PtyExitInfo));
   }
+
+  emitExit(info: PtyExitInfo = { exitCode: 0 }): void {
+    for (const handler of this.exitHandlers) {
+      handler(info);
+    }
+  }
 }
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
@@ -264,6 +276,7 @@ describe('SshConversationProvider registration lifecycle', () => {
     await provider?.detachAll();
     provider = null;
     ptySessionRegistry.unregister(sessionId);
+    vi.useRealTimers();
   });
 
   it('kills and discards a PTY that resolves after stopSession cancels its pending start', async () => {
@@ -458,6 +471,136 @@ describe('SshConversationProvider registration lifecycle', () => {
 
     expect(provider.getActiveSessionCount()).toBe(0);
     expect(pty.killCalls).toBe(1);
+  });
+
+  it('detaches only the SSH tmux attach channel after the final renderer checkpoint goes idle', async () => {
+    vi.useFakeTimers();
+    const pty = new FakePty();
+    mocks.openSsh2Pty.mockResolvedValue({ success: true, data: pty });
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    provider = createProvider();
+    await provider.startSession(conversation);
+    const generation = ptySessionRegistry.getGeneration(sessionId);
+    ptySessionRegistry.subscribe(sessionId, 'renderer');
+
+    expect(
+      ptySessionRegistry.checkpointAndUnsubscribe(sessionId, 'renderer', {
+        buffer: '\x1bcCURRENT SSH TMUX FRAME',
+        generation,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 500,
+      })
+    ).toBe(true);
+    await vi.advanceTimersByTimeAsync(PTY_RENDERER_DETACH_GRACE_MS);
+
+    expect(pty.killCalls).toBe(1);
+    expect(mocks.killTmuxSession).not.toHaveBeenCalled();
+    expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
+    expect(provider.getActiveSessions()).toEqual([
+      expect.objectContaining({
+        sessionId,
+        conversationId: conversation.id,
+        detachable: true,
+        transportAttached: false,
+      }),
+    ]);
+
+    mocks.dispatchRuntimeStatus.mockClear();
+    mocks.emitEvent.mockClear();
+    pty.emitExit({ exitCode: 0 });
+
+    expect(mocks.dispatchRuntimeStatus).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ kind: 'process-exited' }),
+      'process-exited'
+    );
+    expect(mocks.emitEvent).not.toHaveBeenCalledWith(agentSessionExitedChannel, expect.anything());
+    expect(provider.getActiveSessions()[0]).toMatchObject({
+      detachable: true,
+      transportAttached: false,
+    });
+  });
+
+  it('strictly reattaches the retained SSH tmux identity from a one-off override', async () => {
+    vi.useFakeTimers();
+    const firstPty = new FakePty();
+    const secondPty = new FakePty();
+    mocks.openSsh2Pty
+      .mockResolvedValueOnce({ success: true, data: firstPty })
+      .mockResolvedValueOnce({ success: true, data: secondPty });
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValueOnce('one-off-tmux');
+    provider = createProvider();
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, undefined, true);
+    const generation = ptySessionRegistry.getGeneration(sessionId);
+    ptySessionRegistry.subscribe(sessionId, 'renderer');
+    expect(
+      ptySessionRegistry.checkpointAndUnsubscribe(sessionId, 'renderer', {
+        buffer: '\x1bcONE OFF SSH FRAME',
+        generation,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 500,
+      })
+    ).toBe(true);
+    await vi.advanceTimersByTimeAsync(PTY_RENDERER_DETACH_GRACE_MS);
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue(undefined);
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([
+      { sessionName: 'one-off-tmux', cwd: '/remote/workspace', attachedClients: 0 },
+    ]);
+
+    await provider.startSession(
+      conversation,
+      { cols: 80, rows: 24 },
+      true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { reattachExistingTmuxSession: true }
+    );
+
+    expect(mocks.resolveAvailableTmuxSessionName).toHaveBeenCalledTimes(1);
+    expect(mocks.resolveSshCommand).toHaveBeenLastCalledWith(
+      'agent',
+      expect.objectContaining({
+        tmuxSessionName: 'one-off-tmux',
+        tmuxReattachExistingSession: true,
+      }),
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
+  it('refreshes detached activity before sending input through SSH tmux', async () => {
+    const pty = new FakePty();
+    mocks.openSsh2Pty.mockResolvedValue({ success: true, data: pty });
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    provider = createProvider();
+    await provider.startSession(conversation);
+    (
+      provider as unknown as {
+        sessions: Map<string, Pty>;
+      }
+    ).sessions.delete(sessionId);
+    const queuedAt = Date.now();
+
+    await expect(provider.sendInput(conversation.id, 'mobile follow-up')).resolves.toBe(true);
+
+    expect(mocks.sendLiteralToTmuxSession).toHaveBeenCalledWith(
+      expect.anything(),
+      'tmux-session',
+      'mobile follow-up'
+    );
+    expect(provider.getActiveSessions()[0]).toMatchObject({
+      transportAttached: false,
+      transportDetachedAt: expect.any(Number),
+    });
+    expect(provider.getActiveSessions()[0]?.transportDetachedAt).toBeGreaterThanOrEqual(queuedAt);
   });
 
   it('detaches silence tracking when stop removes the live PTY', async () => {

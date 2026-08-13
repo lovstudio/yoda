@@ -22,6 +22,7 @@ import { codeEditorPool } from '@renderer/lib/monaco/monaco-code-pool';
 import { diffEditorPool } from '@renderer/lib/monaco/monaco-diff-pool';
 import { modelRegistry } from '@renderer/lib/monaco/monaco-model-registry';
 import { wirePrCacheInvalidation } from '@renderer/lib/pr-cache-invalidation';
+import { loadTerminalSettings } from '@renderer/lib/pty/terminal-settings-cache';
 import type { AgentRuntimeSnapshot } from '@renderer/lib/stores/agent-runtime-store';
 import { viewStateCache } from '@renderer/lib/stores/view-state-cache';
 import {
@@ -40,6 +41,12 @@ async function bootstrap() {
 
   appState.update.start();
   initSoundPlayer();
+  // Prime the shared terminal settings snapshot during shell bootstrap. The
+  // first task click must not be the event that starts a potentially multi-
+  // second settings IPC; every later PtySession joins or reads this cache.
+  void loadTerminalSettings().catch((error: unknown) => {
+    log.warn('[terminal-settings] bootstrap preload failed', { error });
+  });
   const isPrimaryAppWindow =
     !isTaskWindowLaunch && !isComparisonWindowLaunch && !isAiLabWindowLaunch;
   const launchTarget = getTaskWindowLaunchTarget();

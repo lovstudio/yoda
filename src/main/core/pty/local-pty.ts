@@ -62,17 +62,19 @@ export class LocalPtySession implements Pty {
     this.proc.write(data);
   }
 
-  resize(cols: number, rows: number): void {
+  resize(cols: number, rows: number): boolean {
     const c = Number.isFinite(cols) ? Math.max(MIN_COLS, Math.floor(cols)) : MIN_COLS;
     const r = Number.isFinite(rows) ? Math.max(MIN_ROWS, Math.floor(rows)) : MIN_ROWS;
     try {
       this.proc.resize(c, r);
+      return true;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/EBADF|ENOTTY|ioctl\(2\) failed|not open|Napi::Error/.test(msg)) {
-        return;
+        return false;
       }
       log.error('LocalPtySession:resize failed', { cols: c, rows: r, error: msg });
+      return false;
     }
   }
 
