@@ -2,7 +2,7 @@ import { observable, runInAction } from 'mobx';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LocalProject } from '@shared/projects';
 import type { Task } from '@shared/tasks';
-import type { SidebarTaskGroupVisibleLimit } from '@shared/view-state';
+import type { SidebarTaskGroupVisibleLimit, SidebarTaskPriorityGroup } from '@shared/view-state';
 import { DEFAULT_WORKSPACE_ID } from '@shared/workspaces';
 import type { ProjectStore } from '@renderer/features/projects/stores/project';
 import type { ProjectManagerStore } from '@renderer/features/projects/stores/project-manager';
@@ -95,6 +95,96 @@ describe('SidebarStore task recency ordering', () => {
 
     expect(taskIds(store.sidebarRows)).toEqual(['standard']);
     expect(store.pinnedSidebarEntries).toEqual([]);
+  });
+
+  it('groups tasks by live priority and keeps archived tasks behind a link-only group', () => {
+    const awaiting = makeTask('awaiting', {
+      createdAt: '2026-06-02T12:00:00.000Z',
+    });
+    const failed = makeTask('failed', {
+      createdAt: '2026-06-02T11:00:00.000Z',
+    });
+    const completed = makeTask('completed', {
+      createdAt: '2026-06-02T10:00:00.000Z',
+      status: 'done',
+    });
+    const working = makeTask('working', {
+      createdAt: '2026-06-02T09:00:00.000Z',
+    });
+    const review = makeTask('review', {
+      createdAt: '2026-06-02T08:00:00.000Z',
+      needsReview: true,
+    });
+    const longTerm = makeTask('long-term', {
+      createdAt: '2026-06-02T07:00:00.000Z',
+      isLongTerm: true,
+    });
+    const archived = makeTask('archived', {
+      createdAt: '2026-06-02T06:00:00.000Z',
+      archivedAt: '2026-06-03T06:00:00.000Z',
+    });
+    const runtimeStatuses = new Map([
+      ['awaiting', 'awaiting-input' as const],
+      ['failed', 'error' as const],
+    ]);
+    const store = makeSidebarStore(
+      [
+        makeProject('project-1', [
+          awaiting,
+          failed,
+          completed,
+          working,
+          review,
+          longTerm,
+          archived,
+        ]),
+      ],
+      {},
+      {
+        taskSessionStatuses: (_projectId: string, taskId: string) => {
+          const status = runtimeStatuses.get(taskId);
+          return status ? [{ conversationId: `${taskId}-conversation`, status }] : [];
+        },
+      }
+    );
+    store.expandAllProjects();
+    store.setTaskPriorityMode(true);
+
+    expect(priorityGroups(store.sidebarRows)).toEqual([
+      'awaiting-input',
+      'error',
+      'completed',
+      'working',
+      'pending-review',
+      'long-term',
+      'archived',
+    ]);
+    expect(taskIds(store.sidebarRows)).toEqual([
+      'awaiting',
+      'failed',
+      'completed',
+      'working',
+      'review',
+      'long-term',
+    ]);
+  });
+
+  it('lets the user reorder priority groups while keeping archived last', () => {
+    const store = makeSidebarStore([]);
+
+    store.moveTaskPriorityGroup('working', -1);
+
+    expect(store.taskPriorityOrder).toEqual([
+      'awaiting-input',
+      'error',
+      'working',
+      'completed',
+      'pending-review',
+      'long-term',
+      'archived',
+    ]);
+    store.moveTaskPriorityGroup('archived', -1);
+    expect(store.taskPriorityOrder.at(-1)).toBe('archived');
   });
 
   it('keeps a project in place when its most-recent task is archived (updated-at)', () => {
@@ -507,13 +597,15 @@ function makeTask(
     isPinned?: boolean;
     archivedAt?: string;
     needsReview?: boolean;
+    isLongTerm?: boolean;
+    status?: Task['status'];
   }
 ): TaskStore {
   const task: Task = {
     id,
     projectId: timestamps.projectId ?? 'project-1',
     name: id,
-    status: 'in_progress',
+    status: timestamps.status ?? 'in_progress',
     sourceBranch: undefined,
     createdAt: timestamps.createdAt,
     updatedAt: timestamps.createdAt,
@@ -523,7 +615,7 @@ function makeTask(
     archivedAt: timestamps.archivedAt,
     isPinned: timestamps.isPinned ?? false,
     isFavorite: false,
-    isLongTerm: false,
+    isLongTerm: timestamps.isLongTerm ?? false,
     needsReview: timestamps.needsReview ?? false,
     isUserNamed: false,
     setupStatus: 'ready',
@@ -564,6 +656,12 @@ function makeProject(
       taskManager: observable({
         tasks: observable.map(tasks.map((task) => [task.data.id, task])),
         taskLoadState,
+        taskCounts: {
+          active: tasks.filter((task) => !('archivedAt' in task.data) || !task.data.archivedAt)
+            .length,
+          archived: tasks.filter((task) => 'archivedAt' in task.data && task.data.archivedAt)
+            .length,
+        },
       }),
     },
   } as ProjectStore;
@@ -571,7 +669,13 @@ function makeProject(
 
 function makeSidebarStore(
   projects: ProjectStore[],
-  workspaceOverrides: Partial<WorkspaceStore> = {}
+  workspaceOverrides: Partial<WorkspaceStore> = {},
+  agentRuntime?: {
+    taskSessionStatuses: (
+      projectId: string,
+      taskId: string
+    ) => { conversationId: string; status: 'working' | 'awaiting-input' | 'error' | 'completed' }[];
+  }
 ): SidebarStore {
   return new SidebarStore(
     {
@@ -582,7 +686,8 @@ function makeSidebarStore(
       isFiltering: false,
       matchesActive: () => true,
       ...workspaceOverrides,
-    } as unknown as WorkspaceStore
+    } as unknown as WorkspaceStore,
+    agentRuntime
   );
 }
 
@@ -590,6 +695,12 @@ function taskIds(rows: SidebarRow[]): string[] {
   return rows
     .filter((row): row is Extract<SidebarRow, { kind: 'task' }> => row.kind === 'task')
     .map((row) => row.taskId);
+}
+
+function priorityGroups(rows: SidebarRow[]): SidebarTaskPriorityGroup[] {
+  return rows.flatMap((row) =>
+    row.kind === 'group' && row.group.kind === 'priority' ? [row.group.priority] : []
+  );
 }
 
 function projectIds(projects: ProjectStore[]): string[] {

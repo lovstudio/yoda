@@ -1,11 +1,15 @@
 import {
   Archive,
+  ArrowDown,
+  ArrowUp,
   ChevronsDownUp,
   ChevronsUpDown,
   EyeOff,
   FolderTree,
+  ListOrdered,
   ListRestart,
   MessageSquareOff,
+  MoreHorizontal,
   Settings2,
   Zap,
   type LucideIcon,
@@ -15,10 +19,12 @@ import type { ButtonHTMLAttributes, ReactElement, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT,
+  DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER,
   SIDEBAR_TASK_GROUP_VISIBLE_LIMIT_OPTIONS,
   type SidebarBranchDisplay,
   type SidebarTaskGroupBy,
   type SidebarTaskGroupVisibleLimit,
+  type SidebarTaskPriorityGroup,
   type SidebarTaskSortBy,
 } from '@shared/view-state';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
@@ -32,6 +38,12 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@renderer/lib/ui/context-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import {
   Select,
@@ -102,6 +114,10 @@ export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu({
     sidebarStore.projectTypeFilter !== 'all' ||
     sidebarStore.taskSortBy !== 'updated-at' ||
     sidebarStore.taskGroupBy !== 'project' ||
+    sidebarStore.taskPriorityMode ||
+    sidebarStore.taskPriorityOrder.some(
+      (group, index) => group !== DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER[index]
+    ) ||
     sidebarStore.taskGroupVisibleLimit !== DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT ||
     sidebarStore.taskBranchDisplay !== 'compact' ||
     sidebarStore.hideProjectsWithoutActiveTasks ||
@@ -159,6 +175,15 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
 
   return (
     <div className="flex flex-col">
+      <SwitchRow
+        icon={ListOrdered}
+        label={t('sidebar.priorityMode')}
+        description={t('sidebar.priorityModeDescription')}
+        checked={sidebarStore.taskPriorityMode}
+        onCheckedChange={(checked) => sidebarStore.setTaskPriorityMode(checked)}
+      />
+      {sidebarStore.taskPriorityMode && <PriorityOrderPanel />}
+      <PanelSeparator />
       <PanelRow label={t('sidebar.newTaskOpenMode')}>
         <ToggleGroup
           size="xs"
@@ -175,23 +200,25 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
         </ToggleGroup>
       </PanelRow>
       <PanelSeparator />
-      <PanelRow label={t('sidebar.groupBy')}>
-        <Select
-          value={sidebarStore.taskGroupBy}
-          onValueChange={(value) => sidebarStore.applyGroupBy(value as SidebarTaskGroupBy)}
-        >
-          <SelectTrigger size="sm" className="text-xs">
-            <SelectValue>{(value: SidebarTaskGroupBy) => groupByLabels[value]}</SelectValue>
-          </SelectTrigger>
-          <SelectContent align="end">
-            {(Object.keys(groupByLabels) as SidebarTaskGroupBy[]).map((value) => (
-              <SelectItem key={value} value={value}>
-                {groupByLabels[value]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </PanelRow>
+      {!sidebarStore.taskPriorityMode && (
+        <PanelRow label={t('sidebar.groupBy')}>
+          <Select
+            value={sidebarStore.taskGroupBy}
+            onValueChange={(value) => sidebarStore.applyGroupBy(value as SidebarTaskGroupBy)}
+          >
+            <SelectTrigger size="sm" className="text-xs">
+              <SelectValue>{(value: SidebarTaskGroupBy) => groupByLabels[value]}</SelectValue>
+            </SelectTrigger>
+            <SelectContent align="end">
+              {(Object.keys(groupByLabels) as SidebarTaskGroupBy[]).map((value) => (
+                <SelectItem key={value} value={value}>
+                  {groupByLabels[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </PanelRow>
+      )}
       <PanelRow label={t('sidebar.collapseThreshold')}>
         <Select
           value={sidebarStore.taskGroupVisibleLimit}
@@ -309,16 +336,94 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
           <ChevronsDownUp />
           {t('sidebar.collapseAll')}
         </Button>
+        {!sidebarStore.taskPriorityMode && (
+          <Button
+            variant="ghost"
+            size="xs"
+            className="col-span-2 justify-start text-foreground-muted hover:text-foreground"
+            onClick={() => sidebarStore.clearManualTaskOrder()}
+          >
+            <ListRestart />
+            {t('sidebar.clearManualOrder')}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+});
+
+const PriorityOrderPanel = observer(function PriorityOrderPanel() {
+  const { t } = useTranslation();
+  const movableGroups: SidebarTaskPriorityGroup[] = sidebarStore.taskPriorityOrder.filter(
+    (group) => group !== 'archived'
+  );
+
+  return (
+    <div className="mt-1 rounded-md bg-background-tertiary-1 p-1">
+      <div className="flex h-7 items-center justify-between px-1.5">
+        <span className="text-xs font-medium text-foreground-muted">
+          {t('sidebar.priorityOrder')}
+        </span>
         <Button
           variant="ghost"
           size="xs"
-          className="col-span-2 justify-start text-foreground-muted hover:text-foreground"
-          onClick={() => sidebarStore.clearManualTaskOrder()}
+          className="h-6 px-1.5 text-foreground-muted"
+          onClick={() => sidebarStore.resetTaskPriorityOrder()}
         >
-          <ListRestart />
-          {t('sidebar.clearManualOrder')}
+          <ListRestart className="size-3" />
+          {t('sidebar.priorityReset')}
         </Button>
       </div>
+      {sidebarStore.taskPriorityOrder.map((group) => {
+        const index = movableGroups.indexOf(group);
+        const archived = group === 'archived';
+        return (
+          <div key={group} className="flex h-7 items-center gap-2 rounded px-1.5 text-xs">
+            <span className="w-4 shrink-0 text-center font-mono text-foreground-passive">
+              {sidebarStore.taskPriorityOrder.indexOf(group) + 1}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{t(`sidebar.priorityGroups.${group}`)}</span>
+            {archived ? (
+              <span className="text-[10px] text-foreground-passive">
+                {t('sidebar.priorityArchivedLink')}
+              </span>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className="size-6 p-0 text-foreground-muted"
+                      aria-label={t('sidebar.priorityReorder', {
+                        group: t(`sidebar.priorityGroups.${group}`),
+                      })}
+                    />
+                  }
+                >
+                  <MoreHorizontal className="size-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-32">
+                  <DropdownMenuItem
+                    disabled={index <= 0}
+                    onClick={() => sidebarStore.moveTaskPriorityGroup(group, -1)}
+                  >
+                    <ArrowUp />
+                    {t('sidebar.priorityMoveUp')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={index < 0 || index >= movableGroups.length - 1}
+                    onClick={() => sidebarStore.moveTaskPriorityGroup(group, 1)}
+                  >
+                    <ArrowDown />
+                    {t('sidebar.priorityMoveDown')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 });

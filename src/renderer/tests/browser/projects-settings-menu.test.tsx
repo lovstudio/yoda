@@ -15,6 +15,16 @@ const mocks = vi.hoisted(() => ({
     projectTypeFilter: 'all',
     taskSortBy: 'updated-at',
     taskGroupBy: 'project',
+    taskPriorityMode: false,
+    taskPriorityOrder: [
+      'awaiting-input',
+      'error',
+      'completed',
+      'working',
+      'pending-review',
+      'long-term',
+      'archived',
+    ],
     taskGroupVisibleLimit: 5,
     taskBranchDisplay: 'compact',
     hideProjectsWithoutActiveTasks: false,
@@ -24,6 +34,9 @@ const mocks = vi.hoisted(() => ({
     setTaskGroupVisibleLimit: vi.fn(),
     applyGroupBy: vi.fn(),
     applySort: vi.fn(),
+    setTaskPriorityMode: vi.fn(),
+    moveTaskPriorityGroup: vi.fn(),
+    resetTaskPriorityOrder: vi.fn(),
     setTaskBranchDisplay: vi.fn(),
     setProjectTypeFilter: vi.fn(),
     setSortNeedsReviewLast: vi.fn(),
@@ -75,12 +88,31 @@ async function settle(): Promise<void> {
   });
 }
 
+async function click(element: HTMLElement): Promise<void> {
+  await act(async () => element.click());
+  await settle();
+}
+
+async function clickWithUserEvent(element: Element): Promise<void> {
+  await act(async () => userEvent.click(element));
+  await settle();
+}
+
+async function chooseSelectItem(element: HTMLElement): Promise<void> {
+  await act(async () => {
+    element.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+  });
+  await settle();
+  await click(element);
+}
+
 describe('ProjectsSettingsMenu', () => {
   let host: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.sidebarStore.taskPriorityMode = false;
     mocks.sidebarStore.setTaskGroupVisibleLimit = mocks.setTaskGroupVisibleLimit;
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -105,8 +137,7 @@ describe('ProjectsSettingsMenu', () => {
       'button[aria-label="workspaces.viewOptions"]'
     );
     if (!viewOptions) throw new Error('View options trigger is missing');
-    await userEvent.click(viewOptions);
-    await settle();
+    await click(viewOptions);
 
     const popover = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
     const thresholdLabel = Array.from(popover?.querySelectorAll('span') ?? []).find(
@@ -119,15 +150,13 @@ describe('ProjectsSettingsMenu', () => {
     expect(thresholdTrigger?.textContent).toContain('sidebar.collapseThresholdOption:5');
 
     if (!thresholdTrigger) throw new Error('Collapse threshold trigger is missing');
-    await userEvent.click(thresholdTrigger);
-    await settle();
+    await click(thresholdTrigger);
 
     const tenTaskOption = Array.from(
       document.querySelectorAll<HTMLElement>('[data-slot="select-item"]')
     ).find((node) => node.textContent?.includes('sidebar.collapseThresholdOption:10'));
     if (!tenTaskOption) throw new Error('Ten-task threshold option is missing');
-    await userEvent.click(tenTaskOption);
-    await settle();
+    await chooseSelectItem(tenTaskOption);
 
     expect(mocks.setTaskGroupVisibleLimit).toHaveBeenCalledWith(10);
   });
@@ -142,17 +171,34 @@ describe('ProjectsSettingsMenu', () => {
       'button[aria-label="workspaces.viewOptions"]'
     );
     if (!viewOptions) throw new Error('View options trigger is missing');
-    await userEvent.click(viewOptions);
-    await settle();
+    await click(viewOptions);
 
     const floatingOption = Array.from(
       document.querySelectorAll<HTMLButtonElement>('button[data-slot="toggle-group-item"]')
     ).find((button) => button.textContent === 'sidebar.newTaskOpenModal');
     if (!floatingOption) throw new Error('Floating-window option is missing');
 
-    await userEvent.click(floatingOption);
-    await settle();
+    await clickWithUserEvent(floatingOption);
 
     expect(mocks.updateInterface).toHaveBeenCalledWith({ newTaskOpenMode: 'modal' });
+  });
+
+  it('shows the adjustable priority order when priority mode is enabled', async () => {
+    mocks.sidebarStore.taskPriorityMode = true;
+    const { ProjectsSettingsMenu } = await import(
+      '@renderer/features/sidebar/projects-group-label'
+    );
+    await act(async () => root.render(createElement(ProjectsSettingsMenu, { renderTrigger })));
+
+    const viewOptions = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="workspaces.viewOptions"]'
+    );
+    if (!viewOptions) throw new Error('View options trigger is missing');
+    await click(viewOptions);
+
+    const popover = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
+    expect(popover?.textContent).toContain('sidebar.priorityGroups.awaiting-input');
+    expect(popover?.textContent).toContain('sidebar.priorityGroups.archived');
+    expect(popover?.textContent).not.toContain('sidebar.groupBy');
   });
 });

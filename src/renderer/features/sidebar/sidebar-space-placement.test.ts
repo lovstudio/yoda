@@ -8,11 +8,14 @@ describe('SidebarSpace button placement', () => {
     const navButtonsEnd = source.indexOf('</NavButtons>', navButtonsStart);
     const navButtons = source.slice(navButtonsStart, navButtonsEnd);
     const viewOptionsIndex = navButtons.indexOf('<ProjectsSettingsMenu');
+    const priorityModeIndex = navButtons.indexOf('<TaskPriorityModeButton');
     const sidebarToggleIndex = navButtons.indexOf("{t('navigation.toggleLeftSidebar')}");
 
     expect(navButtonsStart).toBeGreaterThan(-1);
     expect(navButtonsEnd).toBeGreaterThan(navButtonsStart);
     expect(viewOptionsIndex).toBeGreaterThan(-1);
+    expect(priorityModeIndex).toBeGreaterThan(-1);
+    expect(viewOptionsIndex).toBeGreaterThan(priorityModeIndex);
     expect(sidebarToggleIndex).toBeGreaterThan(viewOptionsIndex);
     expect(navButtons.match(/<ProjectsSettingsMenu/g)).toHaveLength(1);
   });

@@ -19,6 +19,7 @@ import {
   teamRoomTaskKey,
   useTeamRoomTaskKeys,
 } from '@renderer/features/agent-room/team-room-queries';
+import { openProjectArchivedTasks } from '@renderer/features/projects/open-project-archived-tasks';
 import { type SidebarGroupKey, type SidebarRow } from '@renderer/features/sidebar/sidebar-store';
 import {
   canMoveConversationToTask,
@@ -26,8 +27,13 @@ import {
 } from '@renderer/features/tasks/conversations/conversation-transfer';
 import { moveConversationToTask } from '@renderer/features/tasks/conversations/move-conversation-to-task';
 import { getRegisteredTaskData } from '@renderer/features/tasks/stores/task-selectors';
-import { useParams, useWorkspaceSlots } from '@renderer/lib/layout/navigation-provider';
+import {
+  useNavigate,
+  useParams,
+  useWorkspaceSlots,
+} from '@renderer/lib/layout/navigation-provider';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
+import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
 import { PinnedRowContent, pinnedRowKey } from './pinned-task-list';
 import {
@@ -366,8 +372,11 @@ type SidebarNavigationRow =
 
 const toProjectDndId = (id: string) => `proj::${id}`;
 const toTaskDndId = (projectId: string, taskId: string) => `task::${projectId}::${taskId}`;
-const toGroupDndId = (group: SidebarGroupKey) =>
-  group.kind === 'type' ? `group::type::${group.type}` : `group::activity::${group.bucket}`;
+const toGroupDndId = (group: SidebarGroupKey) => {
+  if (group.kind === 'type') return `group::type::${group.type}`;
+  if (group.kind === 'activity') return `group::activity::${group.bucket}`;
+  return `group::priority::${group.projectId}::${group.priority}`;
+};
 const toProjectTaskGroupId = (projectId: string) => `project-tasks::${projectId}`;
 const toDirectTaskGroupId = (group: SidebarGroupKey) => `direct-tasks::${toGroupDndId(group)}`;
 
@@ -632,7 +641,7 @@ function limitTaskGroupRows(
       taskRows.rows,
       toDirectTaskGroupId(row.group),
       expandedTaskGroupIds,
-      'flat',
+      row.group.kind === 'priority' ? 'underProject' : 'flat',
       visibleLimit
     );
     index = taskRows.nextIndex;
@@ -752,15 +761,47 @@ function hiddenTaskRowsContain(
 
 function SidebarGroupHeader({ group }: { group: SidebarGroupKey }) {
   const { t } = useTranslation();
+  const { navigate } = useNavigate();
   const label =
     group.kind === 'type'
       ? group.type === 'local'
         ? t('sidebar.filterLocal')
         : t('sidebar.filterSsh')
-      : t(`sidebar.activityBucket.${group.bucket}`);
+      : group.kind === 'activity'
+        ? t(`sidebar.activityBucket.${group.bucket}`)
+        : t(`sidebar.priorityGroups.${group.priority}`);
+
+  if (group.kind === 'priority' && group.priority === 'archived') {
+    return (
+      <button
+        type="button"
+        className="flex h-8 w-full items-center gap-2 rounded-md px-2 pl-7 text-left text-xs font-medium uppercase tracking-wide text-foreground-tertiary-muted transition-colors hover:bg-background-tertiary-2 hover:text-foreground-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        onClick={() => {
+          void openProjectArchivedTasks(group.projectId, navigate).catch((error: unknown) => {
+            log.warn('SidebarGroupHeader: failed to open archived tasks', {
+              projectId: group.projectId,
+              error: String(error),
+            });
+          });
+        }}
+      >
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className="font-mono text-[10px] text-foreground-passive">{group.count}</span>
+      </button>
+    );
+  }
+
   return (
-    <div className="flex h-8 items-center px-2 text-xs font-medium uppercase tracking-wide text-foreground-tertiary-muted select-none">
-      {label}
+    <div
+      className={cn(
+        'flex h-8 items-center gap-2 px-2 text-xs font-medium uppercase tracking-wide text-foreground-tertiary-muted select-none',
+        group.kind === 'priority' && 'pl-7'
+      )}
+    >
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {group.kind === 'priority' && (
+        <span className="font-mono text-[10px] text-foreground-passive">{group.count}</span>
+      )}
     </div>
   );
 }

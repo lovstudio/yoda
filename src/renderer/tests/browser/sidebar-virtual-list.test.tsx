@@ -83,8 +83,12 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('@renderer/lib/layout/navigation-provider', () => ({
+  useNavigate: () => ({ navigate: vi.fn() }),
   useParams: () => ({ params: {} }),
   useWorkspaceSlots: () => ({ currentView: 'home' }),
+}));
+vi.mock('@renderer/features/projects/open-project-archived-tasks', () => ({
+  openProjectArchivedTasks: vi.fn(),
 }));
 vi.mock('@renderer/features/agent-room/team-room-queries', () => ({
   teamRoomTaskKey: (projectId: string, taskId: string) => `${projectId}:${taskId}`,

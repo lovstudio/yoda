@@ -14,6 +14,7 @@ import { buildProjectDeepLink } from '@shared/deep-links';
 import type { QuickAction } from '@shared/project-settings';
 import { ensureUniqueTaskSlug } from '@shared/task-name';
 import { openNewTask, resolveNewTaskOpenMode } from '@renderer/app/open-new-task';
+import { openProjectArchivedTasks } from '@renderer/features/projects/open-project-archived-tasks';
 import { getProjectPathForNameRename } from '@renderer/features/projects/project-path';
 import {
   getRunningProjectQuickActionTarget,
@@ -107,9 +108,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
 
   const handleOpenArchivedTasks = useCallback(async () => {
     prefetchRepository();
-    await getProjectManagerStore().mountProject(projectId);
-    asMounted(getProjectStore(projectId))?.view.taskView.setTab('archived');
-    navigate('project', { projectId, view: 'tasks' });
+    await openProjectArchivedTasks(projectId, navigate);
   }, [navigate, prefetchRepository, projectId]);
 
   const handleToggleExpanded = useCallback(() => {

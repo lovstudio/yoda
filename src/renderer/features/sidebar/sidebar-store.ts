@@ -1,12 +1,16 @@
 import { computed, makeAutoObservable, observable, reaction, runInAction } from 'mobx';
+import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import { type LocalProject, type SshProject } from '@shared/projects';
 import {
   DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT,
+  DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER,
   SIDEBAR_TASK_GROUP_VISIBLE_LIMIT_OPTIONS,
+  SIDEBAR_TASK_PRIORITY_GROUPS,
   type SidebarBranchDisplay,
   type SidebarSnapshot,
   type SidebarTaskGroupBy,
   type SidebarTaskGroupVisibleLimit,
+  type SidebarTaskPriorityGroup,
   type SidebarTaskSortBy,
 } from '@shared/view-state';
 import { DEFAULT_WORKSPACE_ID } from '@shared/workspaces';
@@ -21,6 +25,7 @@ import {
   type TaskStore,
 } from '@renderer/features/tasks/stores/task';
 import type { WorkspaceStore } from '@renderer/features/workspaces/workspace-store';
+import type { AgentRuntimeStore } from '@renderer/lib/stores/agent-runtime-store';
 import type { Snapshottable } from '@renderer/lib/stores/snapshottable';
 
 function parseSidebarTaskSortBy(value: unknown): SidebarTaskSortBy | undefined {
@@ -44,6 +49,27 @@ function parseSidebarTaskGroupVisibleLimit(
 
 function parseSidebarBranchDisplay(value: unknown): SidebarBranchDisplay | undefined {
   return value === 'hidden' || value === 'compact' || value === 'full' ? value : undefined;
+}
+
+export function normalizeSidebarTaskPriorityOrder(value: unknown): SidebarTaskPriorityGroup[] {
+  const valid = new Set<SidebarTaskPriorityGroup>(SIDEBAR_TASK_PRIORITY_GROUPS);
+  const seen = new Set<SidebarTaskPriorityGroup>();
+  const normalized: SidebarTaskPriorityGroup[] = [];
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (typeof entry !== 'string' || !valid.has(entry as SidebarTaskPriorityGroup)) continue;
+      const group = entry as SidebarTaskPriorityGroup;
+      if (group === 'archived' || seen.has(group)) continue;
+      seen.add(group);
+      normalized.push(group);
+    }
+  }
+  for (const group of DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER) {
+    if (group === 'archived' || seen.has(group)) continue;
+    normalized.push(group);
+  }
+  normalized.push('archived');
+  return normalized;
 }
 
 export type ActivityBucket = 'today' | 'thisWeek' | 'thisMonth' | 'earlier';
@@ -99,7 +125,13 @@ export function getSortInstant(task: TaskStore, kind: 'created' | 'updated'): st
 
 export type SidebarGroupKey =
   | { kind: 'type'; type: 'local' | 'ssh' }
-  | { kind: 'activity'; bucket: ActivityBucket };
+  | { kind: 'activity'; bucket: ActivityBucket }
+  | {
+      kind: 'priority';
+      priority: SidebarTaskPriorityGroup;
+      projectId: string;
+      count: number;
+    };
 
 export type SidebarRow =
   | { kind: 'project'; projectId: string }
@@ -135,12 +167,6 @@ export interface SidebarSelectionRevealRequest {
   taskId?: string;
 }
 
-function isActiveSidebarTask(task: TaskStore): boolean {
-  if (task.state === 'unregistered') return true;
-  const data = registeredTaskData(task);
-  return Boolean(data && !data.archivedAt && !data.needsReview);
-}
-
 /** Archive in flight: requested but not yet completed (the row still shows while the saga runs). */
 function taskIsArchiving(task: TaskStore): boolean {
   const reg = registeredTaskData(task);
@@ -172,6 +198,8 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   pinnedProjectIds = observable.set<string>();
   taskSortBy: SidebarTaskSortBy = 'updated-at';
   taskGroupBy: SidebarTaskGroupBy = 'project';
+  taskPriorityMode = false;
+  taskPriorityOrder: SidebarTaskPriorityGroup[] = [...DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER];
   taskGroupVisibleLimit = DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT;
   taskBranchDisplay: SidebarBranchDisplay = 'compact';
   pinnedCollapsed = false;
@@ -198,7 +226,8 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   constructor(
     private readonly projectManager: ProjectManagerStore,
-    private readonly workspaceStore: WorkspaceStore
+    private readonly workspaceStore: WorkspaceStore,
+    private readonly agentRuntime?: Pick<AgentRuntimeStore, 'taskSessionStatuses'>
   ) {
     makeAutoObservable(this, {
       expandedProjectIds: false,
@@ -264,10 +293,70 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
    * initial conversation does not exist yet.
    */
   private isVisibleSidebarTask(task: TaskStore): boolean {
-    if (!isActiveSidebarTask(task)) return false;
+    if (!this.isTaskEligibleForSidebar(task)) return false;
     if (!this.hideTasksWithoutActiveConversations) return true;
     if (task.state === 'unregistered') return true;
     return Object.values(task.conversationStats).some((count) => count > 0);
+  }
+
+  private isTaskEligibleForSidebar(task: TaskStore): boolean {
+    if (task.state === 'unregistered') return true;
+    const data = registeredTaskData(task);
+    return Boolean(data && !data.archivedAt && (this.taskPriorityMode || !data.needsReview));
+  }
+
+  private taskRuntimePriorityStatus(
+    task: TaskStore
+  ): Exclude<AgentSessionRuntimeStatus, 'idle'> | null {
+    const data = registeredTaskData(task);
+    if (!data) return null;
+    const runtimeStatuses = new Map(
+      (this.agentRuntime?.taskSessionStatuses(data.projectId, data.id) ?? []).map(
+        ({ conversationId, status }) => [conversationId, status] as const
+      )
+    );
+    const statuses: Exclude<AgentSessionRuntimeStatus, 'idle'>[] = [];
+    if (task.state === 'provisioned' && task.provisionedTask) {
+      for (const conversation of task.provisionedTask.conversations.conversations.values()) {
+        const status = runtimeStatuses.get(conversation.data.id) ?? conversation.indicatorStatus;
+        if (status && status !== 'idle') statuses.push(status);
+        runtimeStatuses.delete(conversation.data.id);
+      }
+    }
+    statuses.push(...runtimeStatuses.values());
+    const priority: Record<Exclude<AgentSessionRuntimeStatus, 'idle'>, number> = {
+      'awaiting-input': 0,
+      error: 1,
+      completed: 2,
+      working: 3,
+    };
+    return statuses.sort((left, right) => priority[left] - priority[right])[0] ?? null;
+  }
+
+  private taskPriorityGroup(task: TaskStore): SidebarTaskPriorityGroup {
+    if (task.state === 'unregistered') return 'working';
+    const data = registeredTaskData(task);
+    if (!data) return 'working';
+    if (data.archivedAt) return 'archived';
+
+    const runtimeStatus = this.taskRuntimePriorityStatus(task);
+    if (runtimeStatus === 'awaiting-input') return 'awaiting-input';
+    if (
+      runtimeStatus === 'error' ||
+      task.phase?.endsWith('-error') === true ||
+      data.setupStatus === 'naming_failed' ||
+      data.setupStatus === 'branch_failed' ||
+      Boolean(data.setupError)
+    ) {
+      return 'error';
+    }
+    if (runtimeStatus === 'working') return 'working';
+    if (data.needsReview || data.status === 'review') return 'pending-review';
+    if (runtimeStatus === 'completed' || data.status === 'done' || data.status === 'cancelled') {
+      return 'completed';
+    }
+    if (data.isLongTerm) return 'long-term';
+    return 'working';
   }
 
   /**
@@ -311,6 +400,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   }
 
   get sidebarRows(): SidebarRow[] {
+    if (this.taskPriorityMode) return this.priorityGroupedRows();
     switch (this.taskGroupBy) {
       case 'none':
         return this.flatTaskRows();
@@ -322,6 +412,42 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       default:
         return this.projectGroupedRows();
     }
+  }
+
+  private priorityGroupedRows(): SidebarRow[] {
+    const rows: SidebarRow[] = [];
+    for (const project of this.orderedProjects) {
+      const projectId = project.state === 'unregistered' ? project.id : project.data!.id;
+      if (project.state !== 'unregistered' && this.isProjectPinned(projectId)) continue;
+      rows.push({ kind: 'project', projectId });
+      if (!this.expandedProjectIds.has(projectId) || !project.mountedProject) continue;
+
+      const buckets = new Map<SidebarTaskPriorityGroup, TaskStore[]>();
+      for (const task of project.mountedProject.taskManager.tasks.values()) {
+        if (!this.isVisibleSidebarTask(task) || task.data.isPinned) continue;
+        const priority = this.taskPriorityGroup(task);
+        const bucket = buckets.get(priority) ?? [];
+        bucket.push(task);
+        buckets.set(priority, bucket);
+      }
+
+      const archivedCount =
+        project.mountedProject.taskManager.taskCounts?.archived ??
+        Array.from(project.mountedProject.taskManager.tasks.values()).filter(
+          (task) => registeredTaskData(task)?.archivedAt
+        ).length;
+      for (const priority of this.taskPriorityOrder) {
+        const tasks = buckets.get(priority) ?? [];
+        const count = priority === 'archived' ? archivedCount : tasks.length;
+        if (count === 0) continue;
+        rows.push({ kind: 'group', group: { kind: 'priority', priority, projectId, count } });
+        if (priority === 'archived') continue;
+        for (const task of this.sortTasksForSidebar(tasks)) {
+          rows.push({ kind: 'task', projectId, taskId: task.data.id });
+        }
+      }
+    }
+    return rows;
   }
 
   private projectGroupedRows(): SidebarRow[] {
@@ -523,13 +649,14 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       entries.push({ kind: 'project', projectId });
       if (!this.expandedProjectIds.has(projectId) || !project.mountedProject) continue;
 
-      const tasks = Array.from(project.mountedProject.taskManager.tasks.values()).filter(
-        isActiveSidebarTask
+      const tasks = Array.from(project.mountedProject.taskManager.tasks.values()).filter((task) =>
+        this.isTaskEligibleForSidebar(task)
       );
       const manualOrder = this.taskOrderByProject[projectId];
-      const ordered = manualOrder?.length
-        ? this.mergeTaskOrder(projectId, tasks)
-        : this.sortTasksForSidebar(tasks);
+      const ordered =
+        !this.taskPriorityMode && manualOrder?.length
+          ? this.mergeTaskOrder(projectId, tasks)
+          : this.sortTasksForSidebar(tasks);
       for (const task of ordered) {
         entries.push({ kind: 'project-task', projectId, taskId: task.data.id });
       }
@@ -553,7 +680,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       const projectWorkspaceId =
         project.state === 'unregistered' ? null : (project.data?.workspaceId ?? null);
       for (const task of project.mountedProject.taskManager.tasks.values()) {
-        if (!isActiveSidebarTask(task) || !task.data.isPinned) continue;
+        if (!this.isTaskEligibleForSidebar(task) || !task.data.isPinned) continue;
         const taskWorkspaceId =
           'sidebarWorkspaceId' in task.data ? task.data.sidebarWorkspaceId : undefined;
         if (!this.workspaceStore.matchesActive(taskWorkspaceId ?? projectWorkspaceId)) continue;
@@ -589,6 +716,8 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       projectActivityById: { ...this.projectActivityById },
       taskSortBy: this.taskSortBy,
       taskGroupBy: this.taskGroupBy,
+      taskPriorityMode: this.taskPriorityMode,
+      taskPriorityOrder: [...this.taskPriorityOrder],
       taskGroupVisibleLimit: this.taskGroupVisibleLimit,
       taskBranchDisplay: this.taskBranchDisplay,
       pinnedProjectIds: [...this.pinnedProjectIds],
@@ -629,6 +758,12 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     if (snapshot.taskGroupBy !== undefined) {
       const v = parseSidebarTaskGroupBy(snapshot.taskGroupBy);
       if (v !== undefined) this.taskGroupBy = v;
+    }
+    if (snapshot.taskPriorityMode !== undefined) {
+      this.taskPriorityMode = snapshot.taskPriorityMode === true;
+    }
+    if (snapshot.taskPriorityOrder !== undefined) {
+      this.taskPriorityOrder = normalizeSidebarTaskPriorityOrder(snapshot.taskPriorityOrder);
     }
     if (snapshot.taskGroupVisibleLimit !== undefined) {
       const v = parseSidebarTaskGroupVisibleLimit(snapshot.taskGroupVisibleLimit);
@@ -894,6 +1029,28 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     }
   }
 
+  setTaskPriorityMode(enabled: boolean): void {
+    this.taskPriorityMode = enabled;
+  }
+
+  toggleTaskPriorityMode(): void {
+    this.taskPriorityMode = !this.taskPriorityMode;
+  }
+
+  moveTaskPriorityGroup(group: SidebarTaskPriorityGroup, direction: -1 | 1): void {
+    if (group === 'archived') return;
+    const movable = this.taskPriorityOrder.filter((entry) => entry !== 'archived');
+    const index = movable.indexOf(group);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= movable.length) return;
+    [movable[index], movable[target]] = [movable[target]!, movable[index]!];
+    this.taskPriorityOrder = [...movable, 'archived'];
+  }
+
+  resetTaskPriorityOrder(): void {
+    this.taskPriorityOrder = [...DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER];
+  }
+
   setTaskGroupVisibleLimit(limit: SidebarTaskGroupVisibleLimit): void {
     this.taskGroupVisibleLimit = limit;
   }
@@ -988,6 +1145,12 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   }
 
   private compareSidebarTasks(a: TaskStore, b: TaskStore): number {
+    if (this.taskPriorityMode) {
+      const priorityDifference =
+        this.taskPriorityOrder.indexOf(this.taskPriorityGroup(a)) -
+        this.taskPriorityOrder.indexOf(this.taskPriorityGroup(b));
+      if (priorityDifference !== 0) return priorityDifference;
+    }
     const kind: 'created' | 'updated' = this.taskSortBy === 'created-at' ? 'created' : 'updated';
     return this.compareSidebarTasksBy(a, b, kind);
   }
@@ -1044,7 +1207,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     if (!project.mountedProject) return '';
     let best = '';
     for (const task of project.mountedProject.taskManager.tasks.values()) {
-      if (!isActiveSidebarTask(task)) continue;
+      if (!this.isTaskEligibleForSidebar(task)) continue;
       const instant = getSortInstant(task, 'updated');
       if (instant && (!best || compareSidebarInstantsDesc(instant, best) < 0)) best = instant;
     }

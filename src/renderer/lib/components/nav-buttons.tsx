@@ -1,9 +1,9 @@
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ListOrdered } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { type ComponentProps, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getTaskView } from '@renderer/features/tasks/stores/task-selectors';
-import { appState } from '@renderer/lib/stores/app-state';
+import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
 import type { HistoryEntry } from '@renderer/lib/stores/navigation-history-store';
 import { Button } from '@renderer/lib/ui/button';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
@@ -41,6 +41,30 @@ export function applyHistoryEntry(entry: HistoryEntry): void {
     getTaskView(entry.projectId, entry.taskId)?.tabManager.setActiveTab(entry.tabId);
   }
 }
+
+export const TaskPriorityModeButton = observer(function TaskPriorityModeButton() {
+  const { t } = useTranslation();
+  const enabled = sidebarStore.taskPriorityMode;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <NavIconButton
+            aria-label={t('sidebar.priorityMode')}
+            aria-pressed={enabled}
+            className="aria-pressed:text-foreground aria-pressed:before:bg-background-tertiary-3"
+            onClick={() => sidebarStore.toggleTaskPriorityMode()}
+          />
+        }
+      >
+        <ListOrdered className="h-4 w-4" />
+      </TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={8}>
+        {enabled ? t('sidebar.priorityModeDisable') : t('sidebar.priorityModeEnable')}
+      </TooltipContent>
+    </Tooltip>
+  );
+});
 
 export const NavButtons = observer(function NavButtons({ children }: NavButtonsProps) {
   const { t } = useTranslation();

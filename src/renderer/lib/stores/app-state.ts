@@ -30,7 +30,8 @@ class AppState {
     this.update = new UpdateStore();
     this.projects = new ProjectManagerStore();
     this.workspaces = new WorkspaceStore();
-    this.sidebar = new SidebarStore(this.projects, this.workspaces);
+    this.agentRuntime = new AgentRuntimeStore();
+    this.sidebar = new SidebarStore(this.projects, this.workspaces, this.agentRuntime);
     this.history = new NavigationHistoryStore();
     this.navigation = new NavigationStore();
     this.appTabs = new AppTabsStore(this.navigation);
@@ -39,7 +40,6 @@ class AppState {
     this.sshConnections = new SshConnectionStore({
       onConnectionReady: (connectionId) => void this.dependencies.refreshAgents(connectionId),
     });
-    this.agentRuntime = new AgentRuntimeStore();
     snapshotRegistry.register('navigation', () => this.navigation.snapshot);
     snapshotRegistry.register('appTabs', () => this.appTabs.snapshot);
     snapshotRegistry.register('appSidePane', () => this.sidePane.snapshot);
@@ -58,7 +58,7 @@ type AppStateHotData = {
 const hotData = import.meta.hot?.data as AppStateHotData | undefined;
 
 function isReusableAppState(value: AppState | undefined): value is AppState {
-  return value?.workspaces !== undefined;
+  return value?.workspaces !== undefined && value.sidebar.taskPriorityMode !== undefined;
 }
 
 export const appState = isReusableAppState(hotData?.appState) ? hotData.appState : new AppState();

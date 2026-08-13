@@ -63,7 +63,7 @@ export const SidebarDndProvider = observer(function SidebarDndProvider({
   const { t } = useTranslation();
   const teamRoomTaskKeys = useTeamRoomTaskKeys();
   const rows = sidebarStore.sidebarRows;
-  const dndEnabled = sidebarStore.taskGroupBy === 'project';
+  const dndEnabled = sidebarStore.taskGroupBy === 'project' && !sidebarStore.taskPriorityMode;
   const [activeId, setActiveId] = useState<string | null>(null);
   const [taskProjection, setTaskProjection] = useState<TreeProjection | null>(null);
   const [dropTargetProjectId, setDropTargetProjectId] = useState<string | null>(null);

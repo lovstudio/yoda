@@ -174,6 +174,19 @@ export type SidebarTaskSortBy = 'created-at' | 'updated-at';
 
 export type SidebarTaskGroupBy = 'project' | 'none' | 'type' | 'activity';
 
+export const SIDEBAR_TASK_PRIORITY_GROUPS = [
+  'awaiting-input',
+  'error',
+  'completed',
+  'working',
+  'pending-review',
+  'long-term',
+  'archived',
+] as const;
+export type SidebarTaskPriorityGroup = (typeof SIDEBAR_TASK_PRIORITY_GROUPS)[number];
+export const DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER: readonly SidebarTaskPriorityGroup[] =
+  SIDEBAR_TASK_PRIORITY_GROUPS;
+
 export const SIDEBAR_TASK_GROUP_VISIBLE_LIMIT_OPTIONS = [3, 5, 10, 20] as const;
 export type SidebarTaskGroupVisibleLimit =
   (typeof SIDEBAR_TASK_GROUP_VISIBLE_LIMIT_OPTIONS)[number];
@@ -199,6 +212,10 @@ export type SidebarSnapshot = {
   projectActivityById?: Record<string, string>;
   taskSortBy?: SidebarTaskSortBy;
   taskGroupBy?: SidebarTaskGroupBy;
+  /** Groups tasks by user-adjustable action priority inside each project. */
+  taskPriorityMode?: boolean;
+  /** Priority group order. Archived is normalized to the final position. */
+  taskPriorityOrder?: SidebarTaskPriorityGroup[];
   taskGroupVisibleLimit?: SidebarTaskGroupVisibleLimit;
   taskBranchDisplay?: SidebarBranchDisplay;
   pinnedProjectIds?: string[];
