@@ -162,7 +162,10 @@ function UsageContent({ overview }: { overview: UsageOverview }) {
                       {entry.model ?? t('usage.modelUnknown')}
                     </span>
                   }
-                  meta={t('usage.sessionCount', { count: entry.sessionCount })}
+                  meta={t('usage.modelMeta', {
+                    count: entry.sessionCount,
+                    nonCached: formatCompactNumber(entry.tokens.input + entry.tokens.output),
+                  })}
                   tokens={entry.tokens}
                 />
               ))}
@@ -174,7 +177,7 @@ function UsageContent({ overview }: { overview: UsageOverview }) {
                 <BreakdownRow
                   key={entry.runtimeId}
                   leading={<RuntimeLabel runtimeId={entry.runtimeId} />}
-                  meta={t('usage.sessionCount', { count: entry.sessionCount })}
+                  meta={runtimeCoverageLabel(entry, t)}
                   tokens={entry.tokens}
                 />
               ))}
@@ -358,7 +361,10 @@ function TopTasks({ overview }: { overview: UsageOverview }) {
   return (
     <section className="flex flex-col gap-2 rounded-xl border border-border/70 p-5">
       <h2 className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-        {t('usage.topTasks')}
+        {t('usage.topTasksCount', {
+          shown: overview.topTasks.length,
+          total: overview.tokenTaskCount,
+        })}
         <CaliberHint text={t('usage.caliber.topTasks')} />
       </h2>
       <div className="flex flex-col">
@@ -399,6 +405,18 @@ function TopTasks({ overview }: { overview: UsageOverview }) {
       </div>
     </section>
   );
+}
+
+function runtimeCoverageLabel(
+  entry: UsageOverview['byRuntime'][number],
+  t: (key: string, options?: Record<string, unknown>) => string
+): string {
+  return entry.sessionCount === entry.trackedSessionCount
+    ? t('usage.sessionCount', { count: entry.sessionCount })
+    : t('usage.sessionCoverage', {
+        parsed: entry.sessionCount,
+        total: entry.trackedSessionCount,
+      });
 }
 
 function tokenBreakdownTitle(

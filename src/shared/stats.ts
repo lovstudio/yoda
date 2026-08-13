@@ -48,6 +48,8 @@ export type RuntimeUsage = {
   tokens: TokenBuckets;
   /** Sessions with parseable usage for this runtime. */
   sessionCount: number;
+  /** Yoda conversations / auxiliary sessions considered for this runtime. */
+  trackedSessionCount: number;
 };
 
 export type ModelUsage = {
@@ -86,6 +88,8 @@ export type TaskUsage = {
 /** Everything the Usage view renders, in one call. */
 export type UsageOverview = {
   tasksTotal: number;
+  /** Tasks with at least one uniquely attributed, parseable transcript. */
+  tokenTaskCount: number;
   /** Tasks archived, all time — archiving is the completion act in Yoda. */
   tasksArchived: number;
   /** Cumulative code delta across all tasks (live diff or archived snapshot). */

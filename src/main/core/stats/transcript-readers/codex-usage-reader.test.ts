@@ -1,6 +1,10 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import { formatLocalDateKey } from '../local-date';
-import { parseCodexUsage, parseCodexUsageLines } from './codex-usage-reader';
+import { codexUsageReader, parseCodexUsage, parseCodexUsageLines } from './codex-usage-reader';
 
 const DAY_ONE = '2026-03-01T12:00:00.000Z';
 const DAY_TWO = '2026-03-03T12:00:00.000Z';
@@ -42,6 +46,31 @@ function tokenCountRow(
 }
 
 describe('parseCodexUsage', () => {
+  it('uses the persisted provider session id and state root before legacy heuristics', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yoda-codex-usage-source-'));
+    const rolloutPath = join(root, 'exact.jsonl');
+    const database = new Database(join(root, 'state_5.sqlite'));
+    database.exec('CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL)');
+    database
+      .prepare('INSERT INTO threads (id, rollout_path) VALUES (?, ?)')
+      .run('provider-session', rolloutPath);
+    database.close();
+
+    try {
+      await expect(
+        codexUsageReader.resolveTranscriptPaths({
+          cwd: '/unrelated/cwd',
+          conversationId: 'yoda-conversation',
+          conversationTitle: 'unrelated title',
+          providerSessionId: 'provider-session',
+          providerStateRoot: root,
+        })
+      ).resolves.toEqual([rolloutPath]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('preserves usage semantics when transcript lines arrive asynchronously', async () => {
     const lines = [
       tokenCountRow({ input_tokens: 100, cached_input_tokens: 40, output_tokens: 10 }),

@@ -14,16 +14,18 @@ import {
   type TokenBuckets,
   type UsageOverview,
 } from '@shared/stats';
+import { parseConversationSessionSource } from '@main/core/conversations/conversation-session-source';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { db } from '@main/db/client';
 import { conversations, projects, projectSettings, tasks } from '@main/db/schema';
 import { log } from '@main/lib/logger';
 import { resolveTaskCwd } from './task-cwd';
 import { getStoredTaskDiffTotals, getTaskDiffTotals } from './task-diff-snapshot';
+import { dedupeTranscriptAttributions } from './transcript-attribution';
 import { listClaudeSessionsForDirectory } from './transcript-readers/claude-session-files';
 import { TRANSCRIPT_USAGE_PROVIDER_IDS } from './transcript-readers/registry';
 import type { SessionTokenUsage } from './transcript-readers/types';
-import { sessionUsageCache } from './usage-cache';
+import { sessionUsageCache, transcriptKey } from './usage-cache';
 
 const TOP_TASKS_LIMIT = 10;
 const LIVE_DIFF_CONCURRENCY = 4;
@@ -112,7 +114,7 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
   // Many conversations share a task — resolve each task's cwd once.
   const cwdByTask = new Map<string, Promise<string>>();
   const startedAtMs = Date.now();
-  const usages = await mapWithConcurrency(
+  const resolvedUsages = await mapWithConcurrency(
     rows,
     PARSE_CONCURRENCY,
     ({ conversation, task, projectPath }) => {
@@ -121,19 +123,25 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
         cwd = resolveTaskCwd(task, projectPath);
         cwdByTask.set(task.id, cwd);
       }
+      const sessionSource = parseConversationSessionSource(conversation.config);
+      const exactSource =
+        sessionSource?.runtimeId === conversation.runtime ? sessionSource : undefined;
       return cwd.then((resolvedCwd) =>
-        sessionUsageCache.getUsage(conversation.runtime, {
+        sessionUsageCache.getResolvedUsage(conversation.runtime, {
           cwd: resolvedCwd,
           conversationId: conversation.id,
           conversationTitle: conversation.title,
           conversationCreatedAt: conversation.createdAt,
+          providerSessionId: exactSource?.sessionId,
+          providerStateRoot: exactSource?.stateRoot,
         })
       );
     }
   );
   log.info('stats: usage overview transcripts parsed', {
     conversations: rows.length,
-    parsed: usages.filter(Boolean).length,
+    resolved: resolvedUsages.filter(Boolean).length,
+    parsed: resolvedUsages.filter((result) => result?.usage).length,
     ms: Date.now() - startedAtMs,
   });
 
@@ -153,6 +161,11 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
   const byRuntime = new Map<string, RuntimeUsage>();
   const byAuthProvider = new Map<string, AuthProviderUsage>();
   const tokensByTask = new Map<string, TokenBuckets>();
+  const trackedSessionsByRuntime = new Map<string, number>();
+  for (const { conversation } of rows) {
+    const runtimeId = conversation.runtime ?? 'unknown';
+    trackedSessionsByRuntime.set(runtimeId, (trackedSessionsByRuntime.get(runtimeId) ?? 0) + 1);
+  }
 
   const projectRows = await db
     .select({ id: projects.id, name: projects.name, path: projects.path })
@@ -215,6 +228,7 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
         runtimeId,
         tokens: { ...usage.total },
         sessionCount: 1,
+        trackedSessionCount: 0,
       });
     }
 
@@ -223,10 +237,25 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
     else byAuthProvider.set(authProvider, { authProvider, tokens: { ...usage.total } });
   };
 
-  for (let index = 0; index < rows.length; index++) {
+  const uniqueTrackedUsages = dedupeTranscriptAttributions(
+    rows.flatMap((row, index) => {
+      const resolved = resolvedUsages[index];
+      if (!resolved?.usage) return [];
+      const sessionSource = parseConversationSessionSource(row.conversation.config);
+      const exactSource = sessionSource?.runtimeId === row.conversation.runtime;
+      return [
+        {
+          transcriptKey: resolved.transcriptKey,
+          priority: exactSource ? 1 : 0,
+          value: { index, transcriptKey: resolved.transcriptKey, usage: resolved.usage },
+        },
+      ];
+    })
+  );
+  const attributedTranscriptKeys = new Set<string>();
+  for (const { index, transcriptKey, usage } of uniqueTrackedUsages) {
     const { conversation, task } = rows[index]!;
-    const usage = usages[index];
-    if (!usage) continue;
+    attributedTranscriptKeys.add(transcriptKey);
 
     const runtimeId = conversation.runtime ?? 'unknown';
     accumulate(
@@ -253,7 +282,6 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
   //   total never double-counts.
   const auxPaths = await loadStatsAuxiliaryPaths(projectId);
   if (auxPaths.length > 0) {
-    const trackedConversationIds = new Set(rows.map((row) => row.conversation.id));
     const auxSessions = (
       await Promise.all(
         auxPaths.map(async (path) => {
@@ -270,9 +298,11 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
           }));
         })
       )
-    )
-      .flat()
-      .filter((session) => !trackedConversationIds.has(session.sessionId));
+    ).flat();
+    trackedSessionsByRuntime.set(
+      'claude',
+      (trackedSessionsByRuntime.get('claude') ?? 0) + auxSessions.length
+    );
     const auxUsages = await mapWithConcurrency(auxSessions, PARSE_CONCURRENCY, (session) =>
       sessionUsageCache.getUsageForPaths('claude', session.paths)
     );
@@ -281,6 +311,9 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
       const usage = auxUsages[index];
       if (!usage) continue;
       const session = auxSessions[index]!;
+      const key = transcriptKey(session.paths);
+      if (attributedTranscriptKeys.has(key)) continue;
+      attributedTranscriptKeys.add(key);
       accumulate(usage, 'claude', claudeFallbackAuth);
       addProjectUsage(session.sourceId, usage, {
         name: session.sourceName,
@@ -292,6 +325,20 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
       sessions: auxSessions.length,
       parsed: auxUsages.filter(Boolean).length,
     });
+  }
+
+  for (const [runtimeId, trackedSessionCount] of trackedSessionsByRuntime) {
+    const entry = byRuntime.get(runtimeId);
+    if (entry) {
+      entry.trackedSessionCount = trackedSessionCount;
+    } else {
+      byRuntime.set(runtimeId, {
+        runtimeId,
+        tokens: emptyTokenBuckets(),
+        sessionCount: 0,
+        trackedSessionCount,
+      });
+    }
   }
 
   const taskById = new Map(allTasks.map((task) => [task.id, task]));
@@ -318,6 +365,7 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
 
   return {
     tasksTotal: allTasks.length,
+    tokenTaskCount: tokensByTask.size,
     tasksArchived,
     linesAdded,
     linesDeleted,

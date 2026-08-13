@@ -177,6 +177,10 @@ function TokenUsageContent({
                       {entry.model ?? t('usage.modelUnknown')}
                     </span>
                   }
+                  meta={t('usage.modelMeta', {
+                    count: entry.sessionCount,
+                    nonCached: formatCompactNumber(entry.tokens.input + entry.tokens.output),
+                  })}
                   total={entry.tokens.total}
                   maxTotal={overview.byModel[0]!.tokens.total}
                 />
@@ -189,7 +193,7 @@ function TokenUsageContent({
                 <BreakdownRow
                   key={entry.runtimeId}
                   leading={<RuntimeLabel runtimeId={entry.runtimeId} />}
-                  meta={t('usage.sessionCount', { count: entry.sessionCount })}
+                  meta={runtimeCoverageLabel(entry, t)}
                   total={entry.tokens.total}
                   maxTotal={overview.byRuntime[0]!.tokens.total}
                 />
@@ -197,7 +201,12 @@ function TokenUsageContent({
             </BreakdownList>
           )}
           {overview.topTasks.length > 0 && (
-            <BreakdownList title={t('projects.tokenUsage.topTasks')}>
+            <BreakdownList
+              title={t('projects.tokenUsage.topTasksCount', {
+                shown: Math.min(TOP_TASKS_LIMIT, overview.topTasks.length),
+                total: overview.tokenTaskCount,
+              })}
+            >
               {overview.topTasks.slice(0, TOP_TASKS_LIMIT).map((task) => (
                 <TopTaskRow
                   key={task.taskId}
@@ -468,6 +477,18 @@ function RuntimeLabel({ runtimeId }: { runtimeId: string }) {
       <span className="truncate text-xs">{info.name}</span>
     </>
   );
+}
+
+function runtimeCoverageLabel(
+  entry: UsageOverview['byRuntime'][number],
+  t: (key: string, options?: Record<string, unknown>) => string
+): string {
+  return entry.sessionCount === entry.trackedSessionCount
+    ? t('usage.sessionCount', { count: entry.sessionCount })
+    : t('usage.sessionCoverage', {
+        parsed: entry.sessionCount,
+        total: entry.trackedSessionCount,
+      });
 }
 
 function localDateKey(date: Date): string {

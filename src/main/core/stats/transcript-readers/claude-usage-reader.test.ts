@@ -1,6 +1,10 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { encodeClaudeProjectDir } from '@main/core/session-title/claude-title-source';
 import { formatLocalDateKey } from '../local-date';
-import { parseClaudeUsage, parseClaudeUsageLines } from './claude-usage-reader';
+import { claudeUsageReader, parseClaudeUsage, parseClaudeUsageLines } from './claude-usage-reader';
 
 const DAY_ONE = '2026-03-01T12:00:00.000Z';
 const DAY_TWO = '2026-03-03T12:00:00.000Z';
@@ -19,6 +23,28 @@ function assistantRow(
 }
 
 describe('parseClaudeUsage', () => {
+  it('uses the persisted provider session id and state root', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'yoda-claude-usage-source-'));
+    const cwd = '/workspace/from-provider';
+    const projectDir = join(root, 'projects', encodeClaudeProjectDir(cwd));
+    const transcriptPath = join(projectDir, 'provider-session.jsonl');
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(transcriptPath, '', 'utf8');
+
+    try {
+      await expect(
+        claudeUsageReader.resolveTranscriptPaths({
+          cwd,
+          conversationId: 'yoda-conversation',
+          providerSessionId: 'provider-session',
+          providerStateRoot: root,
+        })
+      ).resolves.toEqual([transcriptPath]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('preserves usage semantics when transcript lines arrive asynchronously', async () => {
     const lines = [
       assistantRow('msg-1', { input_tokens: 100, output_tokens: 50 }),

@@ -27,6 +27,12 @@ type PathEntry = {
   resolvedAtMs: number;
 };
 
+export type ResolvedSessionUsage = {
+  /** Stable identity for one provider transcript set, used to prevent double attribution. */
+  transcriptKey: string;
+  usage: SessionTokenUsage | null;
+};
+
 /**
  * Parsed transcript usage, keyed by transcript path and invalidated by file
  * mtime. A session can span several files (main transcript + subagent
@@ -43,17 +49,34 @@ class SessionUsageCache {
     runtimeId: string | null,
     ctx: UsageReaderContext
   ): Promise<SessionTokenUsage | null> {
+    return (await this.getResolvedUsage(runtimeId, ctx))?.usage ?? null;
+  }
+
+  async getResolvedUsage(
+    runtimeId: string | null,
+    ctx: UsageReaderContext
+  ): Promise<ResolvedSessionUsage | null> {
     const reader = getTranscriptUsageReader(runtimeId);
     if (!reader) return null;
 
     const now = Date.now();
-    let entry = this.pathsByConversation.get(ctx.conversationId);
+    const pathCacheKey = [
+      runtimeId ?? '',
+      ctx.conversationId,
+      ctx.providerSessionId ?? '',
+      ctx.providerStateRoot ?? '',
+    ].join('\u0000');
+    let entry = this.pathsByConversation.get(pathCacheKey);
     const ttl = entry && entry.paths.length === 0 ? NEGATIVE_PATH_TTL_MS : PATH_REFRESH_TTL_MS;
     if (!entry || now - entry.resolvedAtMs > ttl) {
       entry = { paths: await reader.resolveTranscriptPaths(ctx), resolvedAtMs: now };
-      this.pathsByConversation.set(ctx.conversationId, entry);
+      this.pathsByConversation.set(pathCacheKey, entry);
     }
-    return this.getUsageForPaths(runtimeId, entry.paths);
+    if (entry.paths.length === 0) return null;
+    return {
+      transcriptKey: transcriptKey(entry.paths),
+      usage: await this.getUsageForPaths(runtimeId, entry.paths),
+    };
   }
 
   /**
@@ -106,3 +129,7 @@ class SessionUsageCache {
 }
 
 export const sessionUsageCache = new SessionUsageCache();
+
+export function transcriptKey(paths: readonly string[]): string {
+  return [...new Set(paths)].sort().join('\u0000');
+}

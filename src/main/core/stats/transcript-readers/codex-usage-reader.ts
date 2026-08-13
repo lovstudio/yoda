@@ -27,8 +27,19 @@ import {
  * all conversations for usage rollups. Unresolved threads count as zero.
  */
 export const codexUsageReader: TranscriptUsageReader = {
-  resolveTranscriptPaths: ({ cwd, conversationId, conversationTitle, conversationCreatedAt }) => {
-    const statePath = resolveCodexStatePath();
+  resolveTranscriptPaths: ({
+    cwd,
+    conversationId,
+    conversationTitle,
+    conversationCreatedAt,
+    providerSessionId,
+    providerStateRoot,
+  }) => {
+    const statePath = resolveCodexStatePath(providerStateRoot);
+    if (providerSessionId) {
+      const path = readCodexThreadRolloutPath(statePath, providerSessionId);
+      return Promise.resolve(path ? [path] : []);
+    }
     const thread = resolveCodexThreadForConversation({
       conversationId,
       cwd,

@@ -28,6 +28,10 @@ export type UsageReaderContext = {
   conversationId: string;
   conversationTitle?: string;
   conversationCreatedAt?: string | null;
+  /** Exact provider-native session identity persisted after the CLI starts. */
+  providerSessionId?: string;
+  /** Provider state root (`CLAUDE_CONFIG_DIR` / `CODEX_HOME`) for that session. */
+  providerStateRoot?: string;
 };
 
 export interface TranscriptUsageReader {

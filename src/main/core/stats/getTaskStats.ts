@@ -1,5 +1,6 @@
 import { and, asc, eq } from 'drizzle-orm';
 import type { TaskStats } from '@shared/stats';
+import { parseConversationSessionSource } from '@main/core/conversations/conversation-session-source';
 import { db } from '@main/db/client';
 import { conversations, projects, tasks } from '@main/db/schema';
 import { resolveTaskCwd } from './task-cwd';
@@ -32,11 +33,16 @@ export async function getTaskStats(projectId: string, taskId: string): Promise<T
 
   const summaries = await Promise.all(
     conversationRows.map(async (conversation) => {
+      const sessionSource = parseConversationSessionSource(conversation.config);
+      const exactSource =
+        sessionSource?.runtimeId === conversation.runtime ? sessionSource : undefined;
       const usage = await sessionUsageCache.getUsage(conversation.runtime, {
         cwd,
         conversationId: conversation.id,
         conversationTitle: conversation.title,
         conversationCreatedAt: conversation.createdAt,
+        providerSessionId: exactSource?.sessionId,
+        providerStateRoot: exactSource?.stateRoot,
       });
       return {
         conversationId: conversation.id,
