@@ -1,7 +1,7 @@
 import { act } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { userEvent } from 'vitest/browser';
 import { AvatarInput } from '@renderer/lib/components/avatar-input';
 import '../../index.css';
 
@@ -51,7 +51,7 @@ describe('AvatarInput', () => {
     const onChange = vi.fn();
     await renderAvatar(onChange);
 
-    await act(async () => userEvent.click(host.querySelector('button')!));
+    openPicker();
     await settle();
 
     expect(document.body.textContent).toContain('common.chooseAvatar');
@@ -69,11 +69,16 @@ describe('AvatarInput', () => {
   it('generates a compact avatar through the assigned Yoda AI Profile', async () => {
     const onChange = vi.fn();
     await renderAvatar(onChange);
-    await act(async () => userEvent.click(host.querySelector('button')!));
+    openPicker();
     await settle();
 
     const textarea = document.querySelector<HTMLTextAreaElement>('[data-slot="textarea"]')!;
-    await act(async () => userEvent.fill(textarea, 'an orange robot with round glasses'));
+    act(() => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+      setValue?.call(textarea, 'an orange robot with round glasses');
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
     const generateButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
       (button) => button.textContent?.includes('common.avatarGenerate')
     )!;
@@ -89,7 +94,7 @@ describe('AvatarInput', () => {
   it('keeps custom local image upload support inside the picker', async () => {
     const onChange = vi.fn();
     await renderAvatar(onChange);
-    await act(async () => userEvent.click(host.querySelector('button')!));
+    openPicker();
     await settle();
 
     const input = host.querySelector<HTMLInputElement>('input[type="file"]')!;
@@ -103,21 +108,30 @@ describe('AvatarInput', () => {
   });
 
   async function renderAvatar(onChange: (value: string) => void) {
-    await act(async () =>
-      root.render(
-        <AvatarInput
-          id="avatar"
-          name="Yoda"
-          value=""
-          onChange={onChange}
-          inputLabel="Avatar"
-          placeholder="Emoji"
-          uploadTitle="Upload photo"
-          clearTitle="Clear avatar"
-          appearance="profile"
-        />
-      )
-    );
+    act(() => {
+      flushSync(() =>
+        root.render(
+          <AvatarInput
+            id="avatar"
+            name="Yoda"
+            value=""
+            onChange={onChange}
+            inputLabel="Avatar"
+            placeholder="Emoji"
+            uploadTitle="Upload photo"
+            clearTitle="Clear avatar"
+            appearance="profile"
+          />
+        )
+      );
+    });
+    await settle();
+  }
+
+  function openPicker(): void {
+    const trigger = host.querySelector<HTMLButtonElement>('button');
+    expect(trigger).not.toBeNull();
+    act(() => trigger?.click());
   }
 });
 
