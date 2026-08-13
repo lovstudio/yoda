@@ -60,6 +60,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
   const { params: taskParams } = useParams('task');
   const { params: projectParams } = useParams('project');
   const taskGroupVisibleLimit = sidebarStore.taskGroupVisibleLimit;
+  const taskPriorityMode = sidebarStore.taskPriorityMode;
   const pinnedCollapsed = sidebarStore.pinnedCollapsed;
   const projectsCollapsed = sidebarStore.projectsCollapsed;
   const { activeId, dndEnabled, dropTargetProjectId, taskProjection } = useSidebarDnd();
@@ -105,16 +106,19 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
       ? `${taskParams.projectId}::${taskParams.taskId}`
       : null;
   const navigationRows = useMemo(() => {
-    const next: SidebarNavigationRow[] = [{ kind: 'pinned-header' }];
-    if (!pinnedCollapsed) {
-      next.push(...pinnedRows.map((row) => ({ kind: 'pinned-row' as const, row })));
+    const next: SidebarNavigationRow[] = [];
+    if (!taskPriorityMode) {
+      next.push({ kind: 'pinned-header' });
+      if (!pinnedCollapsed) {
+        next.push(...pinnedRows.map((row) => ({ kind: 'pinned-row' as const, row })));
+      }
     }
     next.push({ kind: 'projects-header' });
     if (!projectsCollapsed) {
       next.push(...renderRows.map((row) => ({ kind: 'project-row' as const, row })));
     }
     return next;
-  }, [pinnedCollapsed, pinnedRows, projectsCollapsed, renderRows]);
+  }, [pinnedCollapsed, pinnedRows, projectsCollapsed, renderRows, taskPriorityMode]);
 
   // Pinned and project rows share one virtualizer and one scroll coordinate
   // system. Keeping separate virtualizers over the same scroll root lets one

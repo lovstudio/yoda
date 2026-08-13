@@ -416,26 +416,47 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   private priorityGroupedRows(): SidebarRow[] {
     const rows: SidebarRow[] = [];
     const buckets = new Map<SidebarTaskPriorityGroup, { projectId: string; task: TaskStore }[]>();
+    const orderedProjectIds = new Set(
+      this.orderedProjects.map((project) =>
+        project.state === 'unregistered' ? project.id : project.data!.id
+      )
+    );
     let archivedCount = 0;
 
-    for (const project of this.orderedProjects) {
-      const projectId = project.state === 'unregistered' ? project.id : project.data!.id;
-      if (project.state !== 'unregistered' && this.isProjectPinned(projectId)) continue;
+    for (const project of this.projectManager.projects.values()) {
+      const projectId = project.state === 'unregistered' ? project.id : project.data?.id;
+      if (!projectId) continue;
       if (!project.mountedProject) continue;
+      const includeWholeProject =
+        orderedProjectIds.has(projectId) ||
+        (project.state !== 'unregistered' &&
+          this.isProjectPinned(projectId) &&
+          this.matchesActiveWorkspace(project));
+      const projectWorkspaceId =
+        project.state === 'unregistered' ? null : (project.data?.workspaceId ?? null);
 
       for (const task of project.mountedProject.taskManager.tasks.values()) {
-        if (!this.isVisibleSidebarTask(task) || task.data.isPinned) continue;
+        const taskWorkspaceId =
+          'sidebarWorkspaceId' in task.data ? task.data.sidebarWorkspaceId : undefined;
+        const includePinnedTask =
+          task.data.isPinned &&
+          this.workspaceStore.matchesActive(taskWorkspaceId ?? projectWorkspaceId);
+        if ((!includeWholeProject && !includePinnedTask) || !this.isVisibleSidebarTask(task)) {
+          continue;
+        }
         const priority = this.taskPriorityGroup(task);
         const bucket = buckets.get(priority) ?? [];
         bucket.push({ projectId, task });
         buckets.set(priority, bucket);
       }
 
-      archivedCount +=
-        project.mountedProject.taskManager.taskCounts?.archived ??
-        Array.from(project.mountedProject.taskManager.tasks.values()).filter(
-          (task) => registeredTaskData(task)?.archivedAt
-        ).length;
+      if (includeWholeProject) {
+        archivedCount +=
+          project.mountedProject.taskManager.taskCounts?.archived ??
+          Array.from(project.mountedProject.taskManager.tasks.values()).filter(
+            (task) => registeredTaskData(task)?.archivedAt
+          ).length;
+      }
     }
 
     for (const priority of this.taskPriorityOrder) {
@@ -643,6 +664,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   /** Pinned projects plus pinned tasks that are not already under a pinned project. */
   get pinnedSidebarEntries(): PinnedSidebarEntry[] {
+    if (this.taskPriorityMode) return [];
     const entries: PinnedSidebarEntry[] = [];
     const pinnedProjectIds = new Set(this.pinnedProjectIds);
     const pinnedProjects = this.sortProjectsForSidebar(

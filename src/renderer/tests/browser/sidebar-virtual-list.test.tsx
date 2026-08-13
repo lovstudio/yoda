@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     sidebarRows: SidebarRow[];
     pinnedSidebarEntries: PinnedSidebarEntry[];
     pinnedCollapsed: boolean;
+    taskPriorityMode: boolean;
     taskGroupVisibleLimit: number;
     taskGroupBy: 'project';
     holdTaskReflow: ReturnType<typeof vi.fn>;
@@ -64,6 +65,7 @@ vi.mock('@renderer/lib/stores/app-state', async () => {
     sidebarRows: [] as SidebarRow[],
     pinnedSidebarEntries: [] as PinnedSidebarEntry[],
     pinnedCollapsed: false,
+    taskPriorityMode: false,
     taskGroupVisibleLimit: 5,
     taskGroupBy: 'project' as const,
     holdTaskReflow: vi.fn(),
@@ -195,6 +197,9 @@ describe('SidebarVirtualList', () => {
     scrollElementRef = { current: scrollRoot };
     runInAction(() => {
       mocks.sidebarStore.sidebarRows = [projectRow];
+      mocks.sidebarStore.pinnedSidebarEntries = [];
+      mocks.sidebarStore.pinnedCollapsed = false;
+      mocks.sidebarStore.taskPriorityMode = false;
       mocks.staleVirtualItemKey = null;
       mocks.virtualizerOptions = [];
     });
@@ -225,6 +230,20 @@ describe('SidebarVirtualList', () => {
     });
 
     expect(document.querySelector('[data-testid="project-project-1"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="task-task-1"]')).not.toBeNull();
+  });
+
+  it('hides the pinned section while priority mode owns all sidebar tasks', async () => {
+    runInAction(() => {
+      mocks.sidebarStore.taskPriorityMode = true;
+      mocks.sidebarStore.pinnedSidebarEntries = [pinnedTaskEntry];
+      mocks.sidebarStore.sidebarRows = [taskRow];
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(document.body.textContent).not.toContain('sidebar.pinned');
     expect(document.querySelector('[data-testid="task-task-1"]')).not.toBeNull();
   });
 
