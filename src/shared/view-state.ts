@@ -212,7 +212,7 @@ export type SidebarSnapshot = {
   projectActivityById?: Record<string, string>;
   taskSortBy?: SidebarTaskSortBy;
   taskGroupBy?: SidebarTaskGroupBy;
-  /** Groups tasks by user-adjustable action priority inside each project. */
+  /** Groups tasks across projects by user-adjustable action priority. */
   taskPriorityMode?: boolean;
   /** Priority group order. Archived is normalized to the final position. */
   taskPriorityOrder?: SidebarTaskPriorityGroup[];

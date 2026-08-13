@@ -97,7 +97,7 @@ describe('SidebarStore task recency ordering', () => {
     expect(store.pinnedSidebarEntries).toEqual([]);
   });
 
-  it('groups tasks by live priority and keeps archived tasks behind a link-only group', () => {
+  it('groups tasks by live priority and keeps archived tasks behind a count-only group', () => {
     const awaiting = makeTask('awaiting', {
       createdAt: '2026-06-02T12:00:00.000Z',
     });
@@ -167,6 +167,50 @@ describe('SidebarStore task recency ordering', () => {
       'review',
       'long-term',
     ]);
+  });
+
+  it('replaces project grouping with global priority groups across collapsed projects', () => {
+    const projectOneTask = makeTask('project-one-task', {
+      createdAt: '2026-06-02T10:00:00.000Z',
+      projectId: 'project-1',
+    });
+    const projectTwoTask = makeTask('project-two-task', {
+      createdAt: '2026-06-02T11:00:00.000Z',
+      projectId: 'project-2',
+    });
+    const archivedTask = makeTask('archived-task', {
+      archivedAt: '2026-06-03T11:00:00.000Z',
+      createdAt: '2026-06-02T09:00:00.000Z',
+      projectId: 'project-2',
+    });
+    const store = makeSidebarStore([
+      makeProject('project-1', [projectOneTask]),
+      makeProject('project-2', [projectTwoTask, archivedTask]),
+    ]);
+
+    store.setTaskPriorityMode(true);
+
+    expect(store.sidebarRows.some((row) => row.kind === 'project')).toBe(false);
+    expect(priorityGroups(store.sidebarRows)).toEqual(['working', 'archived']);
+    expect(
+      store.sidebarRows.flatMap((row) =>
+        row.kind === 'task'
+          ? [{ projectId: row.projectId, taskId: row.taskId, showProjectTag: row.showProjectTag }]
+          : []
+      )
+    ).toEqual([
+      { projectId: 'project-2', taskId: 'project-two-task', showProjectTag: true },
+      { projectId: 'project-1', taskId: 'project-one-task', showProjectTag: true },
+    ]);
+    expect(
+      store.sidebarRows.find(
+        (row) =>
+          row.kind === 'group' && row.group.kind === 'priority' && row.group.priority === 'archived'
+      )
+    ).toEqual({ kind: 'group', group: { kind: 'priority', priority: 'archived', count: 1 } });
+
+    store.setTaskPriorityMode(false);
+    expect(store.sidebarRows.filter((row) => row.kind === 'project')).toHaveLength(2);
   });
 
   it('lets the user reorder priority groups while keeping archived last', () => {
