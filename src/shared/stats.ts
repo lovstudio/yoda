@@ -46,8 +46,10 @@ export type DailyTokenUsage = {
 export type RuntimeUsage = {
   runtimeId: string;
   tokens: TokenBuckets;
-  /** Sessions with parseable usage for this runtime. */
+  /** Sessions with usage available from a transcript or durable snapshot. */
   sessionCount: number;
+  /** Sessions whose provider transcript is still readable on disk. */
+  transcriptSessionCount: number;
   /** Yoda conversations / auxiliary sessions considered for this runtime. */
   trackedSessionCount: number;
 };

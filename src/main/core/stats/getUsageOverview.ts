@@ -19,6 +19,7 @@ import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-se
 import { db } from '@main/db/client';
 import { conversations, projects, projectSettings, tasks } from '@main/db/schema';
 import { log } from '@main/lib/logger';
+import { getAllSessionUsageSnapshots, resolveConversationUsage } from './session-usage-snapshot';
 import { resolveTaskCwd } from './task-cwd';
 import { getStoredTaskDiffTotals, getTaskDiffTotals } from './task-diff-snapshot';
 import { dedupeTranscriptAttributions } from './transcript-attribution';
@@ -113,6 +114,7 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
 
   // Many conversations share a task — resolve each task's cwd once.
   const cwdByTask = new Map<string, Promise<string>>();
+  const storedUsageSnapshots = await getAllSessionUsageSnapshots();
   const startedAtMs = Date.now();
   const resolvedUsages = await mapWithConcurrency(
     rows,
@@ -127,21 +129,26 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
       const exactSource =
         sessionSource?.runtimeId === conversation.runtime ? sessionSource : undefined;
       return cwd.then((resolvedCwd) =>
-        sessionUsageCache.getResolvedUsage(conversation.runtime, {
-          cwd: resolvedCwd,
-          conversationId: conversation.id,
-          conversationTitle: conversation.title,
-          conversationCreatedAt: conversation.createdAt,
-          providerSessionId: exactSource?.sessionId,
-          providerStateRoot: exactSource?.stateRoot,
-        })
+        resolveConversationUsage(
+          conversation.runtime,
+          {
+            cwd: resolvedCwd,
+            conversationId: conversation.id,
+            conversationTitle: conversation.title,
+            conversationCreatedAt: conversation.createdAt,
+            providerSessionId: exactSource?.sessionId,
+            providerStateRoot: exactSource?.stateRoot,
+          },
+          storedUsageSnapshots.get(conversation.id) ?? null
+        )
       );
     }
   );
   log.info('stats: usage overview transcripts parsed', {
     conversations: rows.length,
     resolved: resolvedUsages.filter(Boolean).length,
-    parsed: resolvedUsages.filter((result) => result?.usage).length,
+    transcripts: resolvedUsages.filter((result) => result?.source === 'transcript').length,
+    snapshots: resolvedUsages.filter((result) => result?.source === 'snapshot').length,
     ms: Date.now() - startedAtMs,
   });
 
@@ -195,7 +202,8 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
   const accumulate = (
     usage: SessionTokenUsage,
     runtimeId: string,
-    authProvider: AgentAccountProviderId
+    authProvider: AgentAccountProviderId,
+    usageSource: 'transcript' | 'snapshot'
   ) => {
     tokens = addTokenBuckets(tokens ?? emptyTokenBuckets(), usage.total);
 
@@ -223,11 +231,13 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
     if (runtimeUsage) {
       addTokenBuckets(runtimeUsage.tokens, usage.total);
       runtimeUsage.sessionCount += 1;
+      if (usageSource === 'transcript') runtimeUsage.transcriptSessionCount += 1;
     } else {
       byRuntime.set(runtimeId, {
         runtimeId,
         tokens: { ...usage.total },
         sessionCount: 1,
+        transcriptSessionCount: usageSource === 'transcript' ? 1 : 0,
         trackedSessionCount: 0,
       });
     }
@@ -247,13 +257,18 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
         {
           transcriptKey: resolved.transcriptKey,
           priority: exactSource ? 1 : 0,
-          value: { index, transcriptKey: resolved.transcriptKey, usage: resolved.usage },
+          value: {
+            index,
+            transcriptKey: resolved.transcriptKey,
+            usage: resolved.usage,
+            source: resolved.source,
+          },
         },
       ];
     })
   );
   const attributedTranscriptKeys = new Set<string>();
-  for (const { index, transcriptKey, usage } of uniqueTrackedUsages) {
+  for (const { index, transcriptKey, usage, source } of uniqueTrackedUsages) {
     const { conversation, task } = rows[index]!;
     attributedTranscriptKeys.add(transcriptKey);
 
@@ -261,7 +276,8 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
     accumulate(
       usage,
       runtimeId,
-      conversation.authProvider ?? fallbackAuthByRuntime.get(runtimeId) ?? 'official-subscription'
+      conversation.authProvider ?? fallbackAuthByRuntime.get(runtimeId) ?? 'official-subscription',
+      source
     );
 
     addProjectUsage(task.projectId, usage);
@@ -314,7 +330,7 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
       const key = transcriptKey(session.paths);
       if (attributedTranscriptKeys.has(key)) continue;
       attributedTranscriptKeys.add(key);
-      accumulate(usage, 'claude', claudeFallbackAuth);
+      accumulate(usage, 'claude', claudeFallbackAuth, 'transcript');
       addProjectUsage(session.sourceId, usage, {
         name: session.sourceName,
         external: session.external,
@@ -336,6 +352,7 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
         runtimeId,
         tokens: emptyTokenBuckets(),
         sessionCount: 0,
+        transcriptSessionCount: 0,
         trackedSessionCount,
       });
     }

@@ -4517,22 +4517,22 @@
     "byRuntime": "按客户端",
     "bySource": "按来源",
     "sessionCount": "{{count}} 个会话",
-    "sessionCoverage": "已解析 {{parsed}} / {{total}}",
+    "sessionCoverage": "有用量 {{available}} / {{total}} · 当前记录 {{transcripts}}",
     "modelMeta": "{{count}} 会话 · 非缓存 {{nonCached}}",
     "sourceUnknown": "未记录",
     "topTasks": "Token 消耗 Top 任务",
     "topTasksCount": "Token 消耗 Top 任务（前 {{shown}} / {{total}}）",
     "caliber": {
       "tasks": "口径：归档时间非空的任务数（归档即完成）；副行为历史创建的全部任务数。",
-      "tokens": "口径：解析当前磁盘上可读取的 Claude / Codex 会话记录，按真实 transcript 去重，含 subagent 记录与项目设置中配置的辅助目录。总量 = 输入 + 输出 + 缓存读 + 缓存写；缓存读取通常占大头，不等同于新增输入或输出。其他客户端暂无解析器，计 0。",
+      "tokens": "口径：优先解析当前磁盘上的 Claude / Codex 会话记录，并为 Yoda 会话持久化用量快照；同一 transcript 只计一次。Claude Code 默认会清理超过 30 天的 transcript，快照启用前已经清理的历史不在本机数据中。总量 = 输入 + 输出 + 缓存读 + 缓存写；缓存读取通常占大头，不等同于新增输入或输出。其他客户端暂无解析器，计 0。",
       "lines": "口径：每任务 = 相对源分支的已提交差异（merge-base）+ 工作区未提交变更。活跃任务实时计算，归档任务取归档前快照（本功能上线前归档的任务无快照，计 0）。",
       "activeDays": "口径：会话记录中出现过 token 消耗的本地日历天数。",
       "dailyChart": "口径：默认展示最近 30 天，可切换最近 7、30 或 90 天；各会话 Token 按实际消耗时刻归入本地日期，柱高按所选区间内的单日峰值计算。",
       "byProject": "口径：每个会话归入其任务所属项目；辅助目录中未被追踪的会话归入配置该路径的项目（已被其他项目追踪的会话留在原项目，全局总量不重复计）。",
       "byModel": "口径：每条记录按 provider 上报的模型 id 归类（Claude 取 message.model；Codex 取当前 turn_context 的 model）；缺失时计入未知。",
-      "byRuntime": "口径：按会话所属客户端汇总；同时显示已解析会话数与 Yoda 中追踪的会话数，本地记录被清理或移动时两者会不同。",
+      "byRuntime": "口径：按会话所属客户端汇总；“有用量”包含当前 transcript 与已保存快照，“当前记录”表示磁盘上仍可读取的 transcript。",
       "bySource": "口径：会话启动时记录的账号模式；追踪上线前的历史会话按该客户端当前设置归类（估算）。",
-      "topTasks": "口径：任务内全部唯一 transcript token 求和后排序，取前 10；标题分母是有可解析 Token 的任务总数。"
+      "topTasks": "口径：任务内全部唯一 transcript 或快照 Token 求和后排序，取前 10；标题分母是有可用 Token 数据的任务总数。"
     }
   },
   "aiLogs": {

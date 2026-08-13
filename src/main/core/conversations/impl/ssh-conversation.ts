@@ -45,6 +45,7 @@ import {
 import { withExecutionModeInstructions } from '../execution-mode';
 import {
   recordConversationAuthProvider,
+  snapshotConversationUsageOnSessionExit,
   snapshotTaskDiffOnSessionExit,
 } from '../session-stats-hooks';
 import { buildAgentCommand } from './agent-command';
@@ -357,6 +358,7 @@ export class SshConversationProvider implements ConversationProvider {
             generation,
             exitCode: info.exitCode,
           });
+          snapshotConversationUsageOnSessionExit(conversation.id);
           snapshotTaskDiffOnSessionExit(conversation.taskId);
         },
         registrationEpoch,

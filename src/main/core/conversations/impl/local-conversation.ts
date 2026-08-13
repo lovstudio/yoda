@@ -94,6 +94,7 @@ import { recordPendingInitialPromptAttempt } from '../pending-initial-prompt-sto
 import { withRuntimeStateRoot } from '../session-state-roots';
 import {
   recordConversationAuthProvider,
+  snapshotConversationUsageOnSessionExit,
   snapshotTaskDiffOnSessionExit,
 } from '../session-stats-hooks';
 import { storeConversationSessionSource } from '../stored-conversation-session-source';
@@ -859,6 +860,7 @@ export class LocalConversationProvider implements ConversationProvider {
             generation,
             exitCode: info.exitCode,
           });
+          snapshotConversationUsageOnSessionExit(conversation.id);
           snapshotTaskDiffOnSessionExit(conversation.taskId);
         },
         registrationEpoch,

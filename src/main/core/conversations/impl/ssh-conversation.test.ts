@@ -75,6 +75,7 @@ vi.mock('@main/core/conversations/claude-interrupt-sniffer', () => ({
 
 vi.mock('@main/core/conversations/session-stats-hooks', () => ({
   recordConversationAuthProvider: vi.fn(),
+  snapshotConversationUsageOnSessionExit: vi.fn(),
   snapshotTaskDiffOnSessionExit: vi.fn(),
 }));
 

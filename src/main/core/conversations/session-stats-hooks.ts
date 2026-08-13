@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import type { RuntimeCustomConfig } from '@shared/app-settings';
+import { captureConversationUsageSnapshot } from '@main/core/stats/capture-session-usage-snapshot';
 import { snapshotTaskDiffTotals } from '@main/core/stats/task-diff-snapshot';
 import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
@@ -33,5 +34,15 @@ export function recordConversationAuthProvider(
 export function snapshotTaskDiffOnSessionExit(taskId: string): void {
   void snapshotTaskDiffTotals(taskId).catch((e: unknown) => {
     log.warn('snapshotTaskDiffOnSessionExit failed', { taskId, error: String(e) });
+  });
+}
+
+/** Persist final transcript usage before provider retention can remove the source file. */
+export function snapshotConversationUsageOnSessionExit(conversationId: string): void {
+  void captureConversationUsageSnapshot(conversationId).catch((e: unknown) => {
+    log.warn('snapshotConversationUsageOnSessionExit failed', {
+      conversationId,
+      error: String(e),
+    });
   });
 }

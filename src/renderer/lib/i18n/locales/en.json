@@ -4517,22 +4517,22 @@
     "byRuntime": "By client",
     "bySource": "By source",
     "sessionCount": "{{count}} sessions",
-    "sessionCoverage": "{{parsed}} / {{total}} parsed",
+    "sessionCoverage": "{{available}} / {{total}} with usage · {{transcripts}} transcripts",
     "modelMeta": "{{count}} sessions · {{nonCached}} non-cached",
     "sourceUnknown": "Untracked",
     "topTasks": "Top tasks by tokens",
     "topTasksCount": "Top tasks by tokens ({{shown}} of {{total}})",
     "caliber": {
       "tasks": "How it's counted: tasks with a non-null archive date (archiving is the completion act). The sub-line is all tasks ever created.",
-      "tokens": "How it's counted: parsed from Claude / Codex session transcripts currently readable on disk and deduplicated by the underlying transcript, including subagents and configured auxiliary directories. Total = input + output + cache read + cache write. Cache reads usually dominate and are not new input or output. Other clients have no transcript reader and count as zero.",
+      "tokens": "How it's counted: current Claude / Codex transcripts are parsed first and Yoda-session usage is persisted as a durable snapshot; each transcript counts once. Claude Code cleans up transcripts older than 30 days by default, so history removed before snapshots were enabled is absent from local data. Total = input + output + cache read + cache write. Cache reads usually dominate and are not new input or output. Other clients have no transcript reader and count as zero.",
       "lines": "How it's counted: per task = committed diff vs source branch (merge-base) + uncommitted working-tree changes. Live for active tasks; archived tasks use their last snapshot (tasks archived before this feature shipped have none and count as zero).",
       "activeDays": "How it's counted: local calendar days with any token usage in session transcripts.",
       "dailyChart": "How it's counted: the chart defaults to the last 30 days and can switch between 7, 30, or 90 days. Each session's tokens are bucketed into the local date they were consumed; bar height is relative to the selected period's single-day peak.",
       "byProject": "How it's counted: each session is attributed to its task's project; untracked auxiliary-directory sessions go to the project that configured the path (sessions tracked by another project stay there — the global total never double-counts).",
       "byModel": "How it's counted: each transcript row is attributed to its provider-reported model id (Claude: message.model; Codex: the active turn_context model). Rows without one count as unknown.",
-      "byRuntime": "How it's counted: grouped by client, showing parseable sessions against all sessions tracked by Yoda. The counts differ when local transcripts were moved or cleaned up.",
+      "byRuntime": "How it's counted: grouped by client. Sessions with usage include current transcripts and saved snapshots; the transcript count is what remains readable on disk.",
       "bySource": "How it's counted: the account mode recorded when each session was spawned. Sessions from before tracking landed are attributed to the client's current setting (estimate).",
-      "topTasks": "How it's counted: sum unique transcript tokens per task, top 10. The title denominator is the number of tasks with parseable token usage."
+      "topTasks": "How it's counted: sum unique transcript or snapshot tokens per task, top 10. The title denominator is the number of tasks with available token usage."
     }
   },
   "aiLogs": {

@@ -39,7 +39,8 @@ export type ResolvedSessionUsage = {
  * transcripts); each file is cached independently and merged per call.
  * Resolved path sets are cached per conversation with a refresh TTL.
  * Transcripts live under `~/.claude` / `~/.codex` and survive worktree
- * teardown, so no DB persistence is needed.
+ * teardown, but providers may later remove them through retention cleanup.
+ * Durable lifetime fallback is handled by `session-usage-snapshot.ts`.
  */
 class SessionUsageCache {
   private byPath = new Map<string, CacheEntry>();

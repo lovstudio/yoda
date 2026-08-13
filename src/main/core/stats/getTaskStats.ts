@@ -3,9 +3,9 @@ import type { TaskStats } from '@shared/stats';
 import { parseConversationSessionSource } from '@main/core/conversations/conversation-session-source';
 import { db } from '@main/db/client';
 import { conversations, projects, tasks } from '@main/db/schema';
+import { resolveConversationUsage } from './session-usage-snapshot';
 import { resolveTaskCwd } from './task-cwd';
 import { getTaskDiffTotals } from './task-diff-snapshot';
-import { sessionUsageCache } from './usage-cache';
 
 /**
  * Per-task stats: total code delta (live diff with snapshot fallback) and
@@ -36,7 +36,7 @@ export async function getTaskStats(projectId: string, taskId: string): Promise<T
       const sessionSource = parseConversationSessionSource(conversation.config);
       const exactSource =
         sessionSource?.runtimeId === conversation.runtime ? sessionSource : undefined;
-      const usage = await sessionUsageCache.getUsage(conversation.runtime, {
+      const resolved = await resolveConversationUsage(conversation.runtime, {
         cwd,
         conversationId: conversation.id,
         conversationTitle: conversation.title,
@@ -44,6 +44,7 @@ export async function getTaskStats(projectId: string, taskId: string): Promise<T
         providerSessionId: exactSource?.sessionId,
         providerStateRoot: exactSource?.stateRoot,
       });
+      const usage = resolved?.usage;
       return {
         conversationId: conversation.id,
         title: conversation.title,

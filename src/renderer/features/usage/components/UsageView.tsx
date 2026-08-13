@@ -411,11 +411,14 @@ function runtimeCoverageLabel(
   entry: UsageOverview['byRuntime'][number],
   t: (key: string, options?: Record<string, unknown>) => string
 ): string {
-  return entry.sessionCount === entry.trackedSessionCount
+  const transcriptSessionCount = entry.transcriptSessionCount ?? entry.sessionCount;
+  return entry.sessionCount === entry.trackedSessionCount &&
+    transcriptSessionCount === entry.trackedSessionCount
     ? t('usage.sessionCount', { count: entry.sessionCount })
     : t('usage.sessionCoverage', {
-        parsed: entry.sessionCount,
+        available: entry.sessionCount,
         total: entry.trackedSessionCount,
+        transcripts: transcriptSessionCount,
       });
 }
 

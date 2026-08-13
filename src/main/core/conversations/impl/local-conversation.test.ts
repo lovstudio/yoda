@@ -147,6 +147,7 @@ vi.mock('@main/core/conversations/codex-history-projection-repair', () => ({
 // Pulls in the DB client transitively; unit tests have no Electron app.
 vi.mock('@main/core/conversations/session-stats-hooks', () => ({
   recordConversationAuthProvider: vi.fn(),
+  snapshotConversationUsageOnSessionExit: vi.fn(),
   snapshotTaskDiffOnSessionExit: vi.fn(),
 }));
 
