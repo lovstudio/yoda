@@ -129,7 +129,6 @@ export type SidebarGroupKey =
   | {
       kind: 'priority';
       priority: SidebarTaskPriorityGroup;
-      projectId: string;
       count: number;
     };
 
@@ -416,35 +415,43 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   private priorityGroupedRows(): SidebarRow[] {
     const rows: SidebarRow[] = [];
+    const buckets = new Map<SidebarTaskPriorityGroup, { projectId: string; task: TaskStore }[]>();
+    let archivedCount = 0;
+
     for (const project of this.orderedProjects) {
       const projectId = project.state === 'unregistered' ? project.id : project.data!.id;
       if (project.state !== 'unregistered' && this.isProjectPinned(projectId)) continue;
-      rows.push({ kind: 'project', projectId });
-      if (!this.expandedProjectIds.has(projectId) || !project.mountedProject) continue;
+      if (!project.mountedProject) continue;
 
-      const buckets = new Map<SidebarTaskPriorityGroup, TaskStore[]>();
       for (const task of project.mountedProject.taskManager.tasks.values()) {
         if (!this.isVisibleSidebarTask(task) || task.data.isPinned) continue;
         const priority = this.taskPriorityGroup(task);
         const bucket = buckets.get(priority) ?? [];
-        bucket.push(task);
+        bucket.push({ projectId, task });
         buckets.set(priority, bucket);
       }
 
-      const archivedCount =
+      archivedCount +=
         project.mountedProject.taskManager.taskCounts?.archived ??
         Array.from(project.mountedProject.taskManager.tasks.values()).filter(
           (task) => registeredTaskData(task)?.archivedAt
         ).length;
-      for (const priority of this.taskPriorityOrder) {
-        const tasks = buckets.get(priority) ?? [];
-        const count = priority === 'archived' ? archivedCount : tasks.length;
-        if (count === 0) continue;
-        rows.push({ kind: 'group', group: { kind: 'priority', priority, projectId, count } });
-        if (priority === 'archived') continue;
-        for (const task of this.sortTasksForSidebar(tasks)) {
-          rows.push({ kind: 'task', projectId, taskId: task.data.id });
-        }
+    }
+
+    for (const priority of this.taskPriorityOrder) {
+      const tasks = buckets.get(priority) ?? [];
+      const count = priority === 'archived' ? archivedCount : tasks.length;
+      if (count === 0) continue;
+      rows.push({ kind: 'group', group: { kind: 'priority', priority, count } });
+      if (priority === 'archived') continue;
+      tasks.sort((left, right) => this.compareSidebarTasks(left.task, right.task));
+      for (const { projectId, task } of tasks) {
+        rows.push({
+          kind: 'task',
+          projectId,
+          taskId: task.data.id,
+          showProjectTag: true,
+        });
       }
     }
     return rows;

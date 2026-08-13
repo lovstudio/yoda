@@ -171,7 +171,7 @@
     "priorityMode": "任务优先级模式",
     "priorityModeEnable": "按优先级显示任务",
     "priorityModeDisable": "恢复正常任务顺序",
-    "priorityModeDescription": "在每个项目内按实时会话状态分组；关闭后恢复当前分组、手工排序与拖拽顺序。",
+    "priorityModeDescription": "跨项目按实时会话状态分组；关闭后恢复当前分组、手工排序与拖拽顺序。",
     "priorityOrder": "优先级顺序",
     "priorityReset": "重置",
     "priorityReorder": "调整“{{group}}”的位置",
