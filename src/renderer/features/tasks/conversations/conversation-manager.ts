@@ -800,6 +800,27 @@ export class ConversationManagerStore {
     }
   }
 
+  /**
+   * Rebuild the renderer-owned terminal for a conversation without restarting
+   * its Agent process or backend PTY. This is the user-facing "reload" path:
+   * the fresh frontend reattaches to the canonical main-process snapshot while
+   * the running session continues uninterrupted.
+   */
+  async reloadConversationView(conversationId: string): Promise<void> {
+    const store = this.conversations.get(conversationId);
+    if (!store) return;
+    try {
+      await store.session.reconnect();
+    } catch (error) {
+      log.warn('ConversationManagerStore: failed to reload conversation view', {
+        projectId: this.projectId,
+        taskId: this.taskId,
+        conversationId,
+        error,
+      });
+    }
+  }
+
   dispose(): void {
     this.offAgentEvents?.();
     this.offAgentEvents = null;

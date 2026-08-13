@@ -11,9 +11,17 @@ import '../../index.css';
 
 function makeSkill(index: number): CatalogSkill {
   const id =
-    index === 29
-      ? `skill-${'very-long-command-'.repeat(10)}29`
-      : `skill-${String(index).padStart(2, '0')}`;
+    index === 0
+      ? 'knowledge-update'
+      : index === 1
+        ? 'artifact-template-operating-review'
+        : index === 29
+          ? `skill-${'very-long-command-'.repeat(10)}29`
+          : `skill-${String(index).padStart(2, '0')}`;
+  const description =
+    index === 1
+      ? 'Create a presentation using the Operating Review template and its retained reference file. Use when the user selects Operating Review. Run weekly reviews with scorecards, functional updates, risks, decisions, and action items.'
+      : `Description for ${id}`;
   return {
     key: `user:${id}`,
     ref: {
@@ -24,11 +32,11 @@ function makeSkill(index: number): CatalogSkill {
     },
     id,
     displayName: `Skill ${String(index).padStart(2, '0')}`,
-    description: `Description for ${id}`,
+    description,
     source: 'local',
     scope: 'user',
     managed: false,
-    frontmatter: { name: id, description: `Description for ${id}` },
+    frontmatter: { name: id, description },
     installed: true,
     localPath: `/tmp/${id}`,
   };
@@ -145,5 +153,95 @@ describe('ComposerPromptInput skill shortcut menu', () => {
     });
 
     expect(menu.scrollTop).toBeGreaterThan(100);
+  });
+
+  it('keeps inline command completion scoped to invocable names', async () => {
+    const { ComposerPromptInput } = await import('@renderer/app/composer-prompt-input');
+
+    function Harness() {
+      const [value, setValue] = useState('$update');
+      const [tokens, setTokens] = useState<PromptToken[]>([]);
+      return (
+        <QueryClientProvider client={queryClient}>
+          <ComposerPromptInput
+            value={value}
+            onChange={setValue}
+            tokens={tokens}
+            onTokensChange={setTokens}
+            runtimeId="codex"
+            projectId="project-1"
+          />
+        </QueryClientProvider>
+      );
+    }
+
+    await act(async () => root.render(<Harness />));
+    const textarea = host.querySelector('textarea');
+    if (!textarea) throw new Error('Composer textarea is missing');
+
+    await act(async () => {
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      textarea.focus();
+    });
+
+    const menu = await vi.waitFor(() => {
+      const candidate = document.querySelector<HTMLElement>('[data-skill-shortcut-menu]');
+      expect(candidate).not.toBeNull();
+      return candidate as HTMLElement;
+    });
+    expect(menu.textContent).toContain('knowledge-update');
+    expect(menu.textContent).not.toContain('artifact-template-operating-review');
+  });
+
+  it('shows description match context for explicit skill search', async () => {
+    const { ComposerPromptInput } = await import('@renderer/app/composer-prompt-input');
+
+    function Harness() {
+      const [value, setValue] = useState('$');
+      const [tokens, setTokens] = useState<PromptToken[]>([]);
+      return (
+        <QueryClientProvider client={queryClient}>
+          <ComposerPromptInput
+            value={value}
+            onChange={setValue}
+            tokens={tokens}
+            onTokensChange={setTokens}
+            runtimeId="codex"
+            projectId="project-1"
+          />
+        </QueryClientProvider>
+      );
+    }
+
+    await act(async () => root.render(<Harness />));
+    const textarea = host.querySelector('textarea');
+    if (!textarea) throw new Error('Composer textarea is missing');
+
+    await act(async () => {
+      textarea.setSelectionRange(1, 1);
+      textarea.focus();
+    });
+
+    const searchInput = await vi.waitFor(() => {
+      const candidate = document.querySelector<HTMLInputElement>(
+        '[data-skill-shortcut-menu] input[type="search"]'
+      );
+      expect(candidate).not.toBeNull();
+      return candidate as HTMLInputElement;
+    });
+
+    await act(async () => {
+      searchInput.value = 'update';
+      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const artifactOption = await vi.waitFor(() => {
+      const candidate = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-skill-shortcut-menu] [role="option"]')
+      ).find((option) => option.textContent?.includes('artifact-template-operating-review'));
+      expect(candidate).not.toBeUndefined();
+      return candidate as HTMLElement;
+    });
+    expect(artifactOption.textContent).toContain('functional updates');
   });
 });

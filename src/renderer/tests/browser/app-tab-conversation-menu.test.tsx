@@ -57,4 +57,41 @@ describe('conversation tab context menu', () => {
     expect(copy.some((item) => isValidElement(item) && item.key === 'share-public')).toBe(true);
     expect(copy.some((item) => isValidElement(item) && item.key === 'copy-link')).toBe(true);
   });
+
+  it('reloads only the renderer view and leaves the Agent session running', () => {
+    const reloadConversationView = vi.fn();
+    const restartConversation = vi.fn();
+    const provisioned = {
+      conversations: {
+        conversations: new Map([
+          [
+            'conversation-1',
+            {
+              data: {
+                id: 'conversation-1',
+                runtimeId: 'codex',
+                title: 'Session',
+              },
+            },
+          ],
+        ]),
+        reloadConversationView,
+        restartConversation,
+      },
+    } as unknown as ProvisionedTask;
+    const [management] = buildConversationSections(
+      provisioned,
+      'project-1',
+      'task-1',
+      'conversation-1',
+      ((key: string) => key) as Parameters<typeof buildConversationSections>[4]
+    );
+    const reloadItem = management.find((item) => isValidElement(item) && item.key === 'reload');
+
+    expect(isValidElement<{ onClick: () => void }>(reloadItem)).toBe(true);
+    if (isValidElement<{ onClick: () => void }>(reloadItem)) reloadItem.props.onClick();
+
+    expect(reloadConversationView).toHaveBeenCalledWith('conversation-1');
+    expect(restartConversation).not.toHaveBeenCalled();
+  });
 });

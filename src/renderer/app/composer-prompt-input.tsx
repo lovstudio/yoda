@@ -94,7 +94,13 @@ interface SkillShortcutOption {
   value: string;
   label: string;
   description: string;
+  descriptionPreview?: string;
   command: string;
+}
+
+interface SkillShortcutMatch {
+  score: number;
+  descriptionPreview?: string;
 }
 
 interface ActiveSkillShortcut {
@@ -367,15 +373,52 @@ function fuzzyMatchScore(text: string, query: string): number | null {
   return 400 - gaps - text.length;
 }
 
-function skillShortcutOptionScore(item: SkillShortcutOption, query: string): number | null {
+function skillShortcutDescriptionPreview(description: string, query: string): string {
+  const matchIndex = description.toLowerCase().indexOf(query.toLowerCase());
+  if (matchIndex < 0) return description;
+
+  const contextBefore = 48;
+  const contextAfter = 72;
+  let start = Math.max(0, matchIndex - contextBefore);
+  let end = Math.min(description.length, matchIndex + query.length + contextAfter);
+
+  if (start > 0) {
+    const nextBoundary = description.indexOf(' ', start);
+    if (nextBoundary >= 0 && nextBoundary < matchIndex) start = nextBoundary + 1;
+  }
+  if (end < description.length) {
+    const previousBoundary = description.lastIndexOf(' ', end);
+    if (previousBoundary > matchIndex + query.length) end = previousBoundary;
+  }
+
+  return `${start > 0 ? '…' : ''}${description.slice(start, end).trim()}${
+    end < description.length ? '…' : ''
+  }`;
+}
+
+function matchSkillShortcutOption(
+  item: SkillShortcutOption,
+  query: string,
+  includeDescription: boolean
+): SkillShortcutMatch | null {
   const q = query.toLowerCase();
-  const scores = [
+  const directScores = [
     fuzzyMatchScore(item.label.toLowerCase(), q),
     fuzzyMatchScore(item.value.toLowerCase(), q),
     fuzzyMatchScore(item.command.toLowerCase(), q),
-    item.description.toLowerCase().includes(q) ? 200 : null,
   ].filter((s): s is number => s !== null);
-  return scores.length > 0 ? Math.max(...scores) : null;
+  const directScore = directScores.length > 0 ? Math.max(...directScores) : null;
+  const descriptionMatches = includeDescription && item.description.toLowerCase().includes(q);
+  const descriptionScore = descriptionMatches ? 200 : null;
+
+  if (directScore === null && descriptionScore === null) return null;
+  if (descriptionScore !== null && (directScore === null || descriptionScore > directScore)) {
+    return {
+      score: descriptionScore,
+      descriptionPreview: skillShortcutDescriptionPreview(item.description, query),
+    };
+  }
+  return { score: directScore ?? descriptionScore ?? 0 };
 }
 
 export function ComposerPromptInput({
@@ -661,12 +704,24 @@ export function ComposerPromptInput({
     const query = searchQuery || activeSkillShortcut.query.trim();
     if (!query) return skillShortcutOptions.slice(0, 50);
     const scored = skillShortcutOptions
-      .map((item) => ({ item, score: skillShortcutOptionScore(item, query) }))
+      .map((item) => ({
+        item,
+        match: matchSkillShortcutOption(item, query, searchQuery.length > 0),
+      }))
       .filter(
-        (entry): entry is { item: SkillShortcutOption; score: number } => entry.score !== null
+        (
+          entry
+        ): entry is {
+          item: SkillShortcutOption;
+          match: SkillShortcutMatch;
+        } => entry.match !== null
       )
-      .sort((a, b) => b.score - a.score);
-    return scored.slice(0, 50).map((entry) => entry.item);
+      .sort((a, b) => b.match.score - a.match.score);
+    return scored
+      .slice(0, 50)
+      .map(({ item, match }) =>
+        match.descriptionPreview ? { ...item, descriptionPreview: match.descriptionPreview } : item
+      );
   }, [activeSkillShortcut, skillShortcutOptions, skillShortcutSearchQuery]);
   const effectiveSkillShortcutIndex =
     filteredSkillShortcutOptions.length === 0
@@ -1788,9 +1843,9 @@ function SkillShortcutMenu({
                       {item.command}
                     </code>
                   </div>
-                  {item.description ? (
+                  {item.descriptionPreview || item.description ? (
                     <p className="mt-0.5 line-clamp-1 text-xs text-foreground-muted">
-                      {item.description}
+                      {item.descriptionPreview ?? item.description}
                     </p>
                   ) : null}
                 </div>
