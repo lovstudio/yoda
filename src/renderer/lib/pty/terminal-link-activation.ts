@@ -7,13 +7,21 @@ export function isTerminalLinkActivation(event: MouseEvent): boolean {
   return event.button === 0 && (IS_MAC_PLATFORM ? event.metaKey : event.ctrlKey);
 }
 
+/** Smart file paths behave like ordinary links; no keyboard modifier is required. */
+export function isTerminalFileLinkActivation(event: MouseEvent): boolean {
+  return event.button === 0;
+}
+
 export function getTerminalLinkActivationHint(): string {
   return IS_MAC_PLATFORM ? 'Hold Cmd and click to open' : 'Hold Ctrl and click to open';
 }
 
 const HOVER_TOOLTIP_DELAY_MS = 2000;
 
-export function createTerminalLinkHoverHandlers(terminal: Terminal): {
+export function createTerminalLinkHoverHandlers(
+  terminal: Terminal,
+  hint: string = getTerminalLinkActivationHint()
+): {
   hover: (event: MouseEvent) => void;
   leave: () => void;
   dispose: () => void;
@@ -37,7 +45,7 @@ export function createTerminalLinkHoverHandlers(terminal: Terminal): {
     tooltip = document.createElement('div');
     tooltip.className =
       'xterm-hover pointer-events-none absolute z-50 whitespace-nowrap rounded bg-foreground px-1.5 py-0.5 text-[11px] leading-4 text-background shadow-md';
-    tooltip.textContent = getTerminalLinkActivationHint();
+    tooltip.textContent = hint;
     tooltip.style.opacity = '0.95';
 
     const terminalRect = terminalElement.getBoundingClientRect();

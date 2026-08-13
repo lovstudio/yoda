@@ -1,7 +1,7 @@
 import type { IBufferLine, ILink, ILinkProvider, Terminal } from '@xterm/xterm';
 import {
   createTerminalLinkHoverHandlers,
-  isTerminalLinkActivation,
+  isTerminalFileLinkActivation,
 } from './terminal-link-activation';
 import { isTerminalLinkCellInRange, type TerminalLinkCellPosition } from './terminal-link-target';
 
@@ -801,7 +801,7 @@ class TerminalFileLinkProvider implements ILinkProvider {
 
     const links = getTerminalFileLinkMatches(this.terminal, bufferLineNumber, options).map(
       (match): ILink => {
-        const hoverHandlers = createTerminalLinkHoverHandlers(this.terminal);
+        const hoverHandlers = createTerminalLinkHoverHandlers(this.terminal, 'Click to open');
 
         return {
           range: match.range,
@@ -811,7 +811,7 @@ class TerminalFileLinkProvider implements ILinkProvider {
             underline: true,
           },
           activate: (event) => {
-            if (!isTerminalLinkActivation(event)) return;
+            if (!isTerminalFileLinkActivation(event)) return;
             event.preventDefault();
             event.stopPropagation();
             this.getOptions()?.onOpen(match.target);

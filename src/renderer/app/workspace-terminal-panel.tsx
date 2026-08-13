@@ -19,7 +19,11 @@ export const WorkspaceTerminalPanel = observer(function WorkspaceTerminalPanel()
     : undefined;
   const project = projectStore ? asMounted(projectStore) : undefined;
   const remoteConnectionId = project?.data.type === 'ssh' ? project.data.connectionId : undefined;
-  const fileLinks = useDefaultWorkspaceFileLinks(project?.data.path, remoteConnectionId);
+  const fileLinks = useDefaultWorkspaceFileLinks(
+    workspaceTerminalStore.activeProjectId,
+    project?.data.path,
+    remoteConnectionId
+  );
 
   if (!manager || !tabs) return null;
 

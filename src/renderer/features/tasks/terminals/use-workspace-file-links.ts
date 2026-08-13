@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import { openProjectFileTab } from '@renderer/features/project-file/project-file-session';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { buildFilePathDefaultOpenRequest } from '@renderer/lib/components/file-path-open';
@@ -53,11 +54,11 @@ export function useWorkspaceFileLinks(
 }
 
 /**
- * Context-free links for the shell-level project/global Terminal. Unlike the
- * task drawer, this surface outlives task routes and opens files through the
- * shared system action instead of a task sidebar.
+ * Links for the shell-level project/global Terminal. This surface outlives task
+ * routes, so files open in a project/global app tab instead of a task sidebar.
  */
 export function useDefaultWorkspaceFileLinks(
+  projectId: string | null,
   workspaceRoot: string | undefined,
   remoteConnectionId: string | undefined
 ): TerminalFileLinkOptions | null {
@@ -76,7 +77,15 @@ export function useDefaultWorkspaceFileLinks(
       workspaceRoot: resolvedWorkspaceRoot,
       homeDir: resolvedHomeDir,
       sshConnectionId: remoteConnectionId,
-      onOpen: ({ absolutePath, line, column, isDirectory }) => {
+      onOpen: ({ filePath, absolutePath, line, column, isDirectory }) => {
+        if (!isDirectory && projectId && filePath) {
+          openProjectFileTab(projectId, filePath);
+          return;
+        }
+        if (!isDirectory && !remoteConnectionId && absolutePath) {
+          openProjectFileTab(null, absolutePath);
+          return;
+        }
         if (!absolutePath) return;
         void rpc.app.openIn(
           buildFilePathDefaultOpenRequest({
@@ -89,5 +98,5 @@ export function useDefaultWorkspaceFileLinks(
         );
       },
     };
-  }, [remoteConnectionId, resolvedHomeDir, resolvedWorkspaceRoot]);
+  }, [projectId, remoteConnectionId, resolvedHomeDir, resolvedWorkspaceRoot]);
 }

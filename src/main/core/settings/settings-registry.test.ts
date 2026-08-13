@@ -17,6 +17,7 @@ describe('settings defaults', () => {
   it('uses stable terminal defaults without exposing a renderer switch', () => {
     expect(getDefaultForKey('terminal')).toMatchObject({
       autoCopyOnSelection: true,
+      smartPathOpenMode: 'internal',
       hotTerminalMode: 'auto',
       hotTerminalLimit: 4,
     });

@@ -82,6 +82,7 @@ describe('SettingsStore', () => {
 
     expect(result).toEqual({
       autoCopyOnSelection: false,
+      smartPathOpenMode: 'internal',
       scrollbackLines: 10_000,
       hotTerminalMode: 'auto',
       hotTerminalLimit: 4,

@@ -11,6 +11,9 @@ export const MIN_HOT_TERMINAL_LIMIT = 1;
 export const MAX_HOT_TERMINAL_LIMIT = 64;
 export const DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES = 5;
 export const MAX_IDLE_SESSION_TIMEOUT_MINUTES = 120;
+export const TERMINAL_SMART_PATH_OPEN_MODES = ['internal', 'external'] as const;
+export type TerminalSmartPathOpenMode = (typeof TERMINAL_SMART_PATH_OPEN_MODES)[number];
+export const DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE: TerminalSmartPathOpenMode = 'internal';
 
 const RING_BUFFER_BYTES_PER_LINE = 128;
 const MIN_TERMINAL_RING_BUFFER_BYTES = 1024 * 1024;

@@ -52,12 +52,14 @@ import {
   DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
   DEFAULT_TERMINAL_CACHE_MODE,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
+  DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE,
   MAX_HOT_TERMINAL_LIMIT,
   MAX_IDLE_SESSION_TIMEOUT_MINUTES,
   MAX_TERMINAL_SCROLLBACK_LINES,
   MIN_HOT_TERMINAL_LIMIT,
   MIN_TERMINAL_SCROLLBACK_LINES,
   TERMINAL_CACHE_MODES,
+  TERMINAL_SMART_PATH_OPEN_MODES,
 } from '@shared/terminal-settings';
 import { DEFAULT_RUNTIME_ID } from './settings-registry';
 
@@ -415,6 +417,10 @@ export const runtimeModelCandidatesSettingsSchema = z.preprocess(
 export const terminalSettingsSchema = z.object({
   fontFamily: z.string().optional(),
   autoCopyOnSelection: z.boolean(),
+  smartPathOpenMode: z
+    .enum(TERMINAL_SMART_PATH_OPEN_MODES)
+    .catch(DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE)
+    .default(DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE),
   scrollbackLines: z
     .number()
     .int()

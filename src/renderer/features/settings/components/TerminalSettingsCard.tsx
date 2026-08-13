@@ -5,12 +5,14 @@ import {
   DEFAULT_HOT_TERMINAL_LIMIT,
   DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
   DEFAULT_TERMINAL_CACHE_MODE,
+  DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE,
   MAX_HOT_TERMINAL_LIMIT,
   MAX_IDLE_SESSION_TIMEOUT_MINUTES,
   MAX_TERMINAL_SCROLLBACK_LINES,
   MIN_HOT_TERMINAL_LIMIT,
   MIN_TERMINAL_SCROLLBACK_LINES,
   normalizeTerminalScrollbackLines,
+  type TerminalSmartPathOpenMode,
 } from '@shared/terminal-settings';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { rpc } from '@renderer/lib/ipc';
@@ -71,6 +73,7 @@ const TerminalSettingsCard: React.FC = () => {
 
   const fontFamily = terminal?.fontFamily ?? '';
   const autoCopyOnSelection = terminal?.autoCopyOnSelection ?? true;
+  const smartPathOpenMode = terminal?.smartPathOpenMode ?? DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE;
   const hotTerminalMode = terminal?.hotTerminalMode ?? DEFAULT_TERMINAL_CACHE_MODE;
   const hotTerminalLimit = terminal?.hotTerminalLimit ?? DEFAULT_HOT_TERMINAL_LIMIT;
   const idleSessionTimeoutMinutes =
@@ -164,6 +167,18 @@ const TerminalSettingsCard: React.FC = () => {
       update({ autoCopyOnSelection: next });
       window.dispatchEvent(
         new CustomEvent('terminal-auto-copy-changed', { detail: { autoCopyOnSelection: next } })
+      );
+    },
+    [update]
+  );
+
+  const updateSmartPathOpenMode = useCallback(
+    (next: TerminalSmartPathOpenMode) => {
+      update({ smartPathOpenMode: next });
+      window.dispatchEvent(
+        new CustomEvent('terminal-smart-path-open-mode-changed', {
+          detail: { smartPathOpenMode: next },
+        })
       );
     },
     [update]
@@ -379,6 +394,32 @@ const TerminalSettingsCard: React.FC = () => {
             disabled={loading || saving}
             onCheckedChange={toggleAutoCopy}
           />
+        }
+      />
+      <SettingRow
+        title={t('settings.terminal.smartPathOpenMode')}
+        description={t('settings.terminal.smartPathOpenModeDescription')}
+        control={
+          <Select
+            value={smartPathOpenMode}
+            disabled={loading || saving}
+            onValueChange={(value) => updateSmartPathOpenMode(value as TerminalSmartPathOpenMode)}
+          >
+            <SelectTrigger
+              className="h-8 w-[183px]"
+              aria-label={t('settings.terminal.smartPathOpenMode')}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="internal">
+                {t('settings.terminal.smartPathOpenInternal')}
+              </SelectItem>
+              <SelectItem value="external">
+                {t('settings.terminal.smartPathOpenExternal')}
+              </SelectItem>
+            </SelectContent>
+          </Select>
         }
       />
       <SettingRow

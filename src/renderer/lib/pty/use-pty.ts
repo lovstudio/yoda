@@ -2,7 +2,11 @@ import { type Terminal } from '@xterm/xterm';
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { appPasteChannel } from '@shared/events/appEvents';
 import { ptyDataChannel, ptyExitChannel, type PtyExitEvent } from '@shared/events/ptyEvents';
-import { DEFAULT_TERMINAL_SCROLLBACK_LINES } from '@shared/terminal-settings';
+import {
+  DEFAULT_TERMINAL_SCROLLBACK_LINES,
+  DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE,
+  type TerminalSmartPathOpenMode,
+} from '@shared/terminal-settings';
 import { imagePathMention, isImagePath } from '@renderer/lib/image-path-mention';
 import { events, rpc } from '@renderer/lib/ipc';
 import { log } from '@renderer/utils/logger';
@@ -27,11 +31,12 @@ import {
   shouldPasteToTerminal,
 } from './pty-keybindings';
 import { writeTextToClipboard } from './terminal-clipboard';
-import type { TerminalFileLinkOptions } from './terminal-file-links';
+import { buildTerminalFileLinkExternalOpenRequest } from './terminal-file-link-open';
+import type { TerminalFileLinkOptions, TerminalFileLinkTarget } from './terminal-file-links';
 import { transformTerminalPasteText } from './terminal-image-paste';
 import { registerTerminalImeDiagnostics } from './terminal-ime-diagnostics';
 import { registerTerminalImeNativePunctuation } from './terminal-ime-native-punctuation';
-import { isTerminalLinkActivation } from './terminal-link-activation';
+import { isTerminalFileLinkActivation, isTerminalLinkActivation } from './terminal-link-activation';
 import {
   getTerminalLinkTargetAtCell,
   registerTerminalLinkProviders,
@@ -216,6 +221,9 @@ export function usePty(
   pasteImagesAsPathsRef.current = pasteImagesAsPaths ?? false;
   const fileLinksRef = useRef(fileLinks ?? null);
   fileLinksRef.current = fileLinks ?? null;
+  const smartPathOpenModeRef = useRef<TerminalSmartPathOpenMode>(
+    DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE
+  );
   const webLinksRef = useRef(webLinks ?? null);
   webLinksRef.current = webLinks ?? null;
   const themeRef = useRef(theme);
@@ -452,6 +460,38 @@ export function usePty(
     });
   }, []);
 
+  const openFileTarget = useCallback((target: TerminalFileLinkTarget) => {
+    const options = fileLinksRef.current;
+    if (!options) return;
+
+    const externalRequest = buildTerminalFileLinkExternalOpenRequest(
+      smartPathOpenModeRef.current,
+      target,
+      options
+    );
+    if (!externalRequest) {
+      options.onOpen(target);
+      return;
+    }
+
+    void rpc.app
+      .openIn(externalRequest)
+      .then((result) => {
+        if (!result.success) {
+          log.warn('Failed to open terminal smart path externally', {
+            path: target.absolutePath,
+            error: result.error,
+          });
+        }
+      })
+      .catch((error) => {
+        log.warn('Failed to open terminal smart path externally', {
+          path: target.absolutePath,
+          error,
+        });
+      });
+  }, []);
+
   const getLinkTargetAtEvent = useCallback((event: MouseEvent): TerminalLinkTarget | null => {
     const terminal = termRef.current;
     const terminalElement = (terminal as unknown as { element?: HTMLElement } | null)?.element;
@@ -559,6 +599,8 @@ export function usePty(
             terminalSettings?.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK_LINES
           );
           autoCopyOnSelectionRef.current = terminalSettings?.autoCopyOnSelection ?? true;
+          smartPathOpenModeRef.current =
+            terminalSettings?.smartPathOpenMode ?? DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE;
         })
         .catch((error: unknown) => {
           log.warn('useTerminal: terminal settings unavailable, keeping defaults', {
@@ -688,7 +730,10 @@ export function usePty(
 
       const terminalLinkProvidersDisposable = registerTerminalLinkProviders(
         terminal,
-        () => fileLinksRef.current,
+        () => {
+          const options = fileLinksRef.current;
+          return options ? { ...options, onOpen: openFileTarget } : null;
+        },
         () => ({ onOpen: openUrl })
       );
       cleanups.push(() => terminalLinkProvidersDisposable.dispose());
@@ -823,7 +868,7 @@ export function usePty(
 
         const openLinkTarget = (target: TerminalLinkTarget) => {
           if (target.kind === 'file') {
-            fileLinksRef.current?.onOpen(target.target);
+            openFileTarget(target.target);
             return;
           }
 
@@ -833,9 +878,13 @@ export function usePty(
         const handleSelectionGestureStart = (event: MouseEvent | TouchEvent) => {
           if (!(event.target instanceof Node)) return;
           if (!terminalElement.contains(event.target)) return;
-          if (event instanceof MouseEvent && isTerminalLinkActivation(event)) {
+          if (event instanceof MouseEvent) {
             const linkTarget = getLinkTargetAtEvent(event);
-            if (linkTarget) {
+            const shouldOpen =
+              linkTarget?.kind === 'file'
+                ? isTerminalFileLinkActivation(event)
+                : linkTarget?.kind === 'url' && isTerminalLinkActivation(event);
+            if (linkTarget && shouldOpen) {
               terminal.clearSelection();
               stopMouseModeEvent(event);
               openLinkTarget(linkTarget);
@@ -952,6 +1001,11 @@ export function usePty(
           detail?.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK_LINES
         );
       };
+      const handleSmartPathOpenModeChange = (e: Event) => {
+        const detail = (e as CustomEvent<{ smartPathOpenMode?: TerminalSmartPathOpenMode }>).detail;
+        const mode = detail?.smartPathOpenMode;
+        if (mode === 'internal' || mode === 'external') smartPathOpenModeRef.current = mode;
+      };
       // Host position changes (tab pin/unpin/reclaim between panes) only need a
       // measurement pass. FrontendPty.mount() owns the one canonical repaint;
       // sending another same-size SIGWINCH makes the TUI redraw its content.
@@ -962,10 +1016,19 @@ export function usePty(
       window.addEventListener('terminal-font-changed', handleFontChange);
       window.addEventListener('terminal-auto-copy-changed', handleAutoCopyChange);
       window.addEventListener('terminal-scrollback-lines-changed', handleScrollbackLinesChange);
+      window.addEventListener(
+        'terminal-smart-path-open-mode-changed',
+        handleSmartPathOpenModeChange
+      );
       cleanups.push(
         () => window.removeEventListener(TERMINAL_RELAYOUT_EVENT, handleRelayout),
         () => window.removeEventListener('terminal-font-changed', handleFontChange),
         () => window.removeEventListener('terminal-auto-copy-changed', handleAutoCopyChange),
+        () =>
+          window.removeEventListener(
+            'terminal-smart-path-open-mode-changed',
+            handleSmartPathOpenModeChange
+          ),
         () =>
           window.removeEventListener(
             'terminal-scrollback-lines-changed',
