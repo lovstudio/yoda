@@ -10,6 +10,7 @@ import { createRPCController } from '@shared/ipc/rpc';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { requestUtilityAgentText } from '@main/core/tasks/name-generation/task-naming-service';
 import { summarizeLlmDebugError } from './debug-error';
+import { generateGlobalLlmImage } from './image-generation-service';
 import { discoverGlobalLlmModels } from './model-discovery-service';
 import {
   createCustomModelProvider,
@@ -101,6 +102,7 @@ export const llmController = createRPCController({
   debug,
   deleteCustomModelProvider,
   discoverModels,
+  generateImage: generateGlobalLlmImage,
   listModelProviders,
   refreshModelProviders,
   setModelProviderAutomaticUpdates,

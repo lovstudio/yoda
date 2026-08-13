@@ -45,6 +45,12 @@ importers:
       '@changesets/cli':
         specifier: ^2.31.0
         version: 2.31.0(@types/node@20.19.32)
+      '@dicebear/core':
+        specifier: ^10.5.0
+        version: 10.5.0
+      '@dicebear/styles':
+        specifier: ^10.4.0
+        version: 10.4.0
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -1285,6 +1291,13 @@ packages:
   '@develar/schema-utils@2.6.5':
     resolution: {integrity: sha512-0cp4PsWQ/9avqTVMCtZ+GirikIA36ikvjtHweU4/j8yLtgObI0+JUPhYFScgwlteveGB1rt3Cm8UhN04XayDig==}
     engines: {node: '>= 8.9.0'}
+
+  '@dicebear/core@10.5.0':
+    resolution: {integrity: sha512-FaBohsNT+/8z2C2jowlzNVbx4B+x6wVLK4HeQT35bJTV4LeV6xXl4zyPvxCm4HvG6PoN+100hNBbnj7Bumo18Q==}
+    engines: {node: '>=22.0.0'}
+
+  '@dicebear/styles@10.4.0':
+    resolution: {integrity: sha512-Bx3HLdbUqAXhu6JqU9YaQoQwN+3g3l8uHmlOw2aI07cOtfoH1Z/Nlfok1r7zzdujJvvTBTPJSH568/bzns4MoQ==}
 
   '@dnd-kit/abstract@0.3.2':
     resolution: {integrity: sha512-uvPVK+SZYD6Viddn9M0K0JQdXknuVSxA/EbMlFRanve3P/XTc18oLa5zGftKSGjfQGmuzkZ34E26DSbly1zi3Q==}
@@ -10778,6 +10791,10 @@ snapshots:
     dependencies:
       ajv: 6.12.6
       ajv-keywords: 3.5.2(ajv@6.12.6)
+
+  '@dicebear/core@10.5.0': {}
+
+  '@dicebear/styles@10.4.0': {}
 
   '@dnd-kit/abstract@0.3.2':
     dependencies:

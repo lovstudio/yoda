@@ -14,6 +14,7 @@ describe('normalizeLlmSettings', () => {
     expect(settings.profiles).toHaveLength(1);
     expect(settings.defaultProfileId).toBe(DEFAULT_LLM_PROFILE_ID);
     expect(settings.namingProfileId).toBe(DEFAULT_LLM_PROFILE_ID);
+    expect(settings.imageGenerationProfileId).toBe(DEFAULT_LLM_PROFILE_ID);
     expect(settings.promptTranslationProfileId).toBe(DEFAULT_LLM_PROFILE_ID);
   });
 
@@ -53,12 +54,14 @@ describe('normalizeLlmSettings', () => {
       profileSettings({
         defaultProfileId: 'fast',
         namingProfileId: 'missing',
+        imageGenerationProfileId: 'missing-image',
         promptTranslationProfileId: 'also-missing',
       })
     );
 
     expect(settings.defaultProfileId).toBe('fast');
     expect(settings.namingProfileId).toBe('fast');
+    expect(settings.imageGenerationProfileId).toBe('fast');
     expect(settings.promptTranslationProfileId).toBe('fast');
   });
 });
@@ -89,6 +92,7 @@ function profileSettings(overrides: Partial<GlobalLlmSettingsShape> = {}): Globa
     ],
     defaultProfileId: 'fast',
     namingProfileId: 'fast',
+    imageGenerationProfileId: 'fast',
     promptTranslationEnabled: false,
     promptTranslationProfileId: 'fast',
     promptTranslationShowOriginal: true,

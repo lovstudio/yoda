@@ -293,6 +293,7 @@ export const llmProfileSchema = z.object({
   authProvider: z.enum(AGENT_ACCOUNT_PROVIDER_IDS).catch(DEFAULT_LLM_PROFILE_ACCESS_METHOD),
   maasPlatformId: maasPlatformIdSchema.catch(DEFAULT_LLM_PROFILE_MAAS_PLATFORM_ID),
   model: z.string().catch(''),
+  imageModel: z.string().catch(''),
   reasoningEffort: z.enum(LLM_REASONING_EFFORT_IDS).catch('default'),
   permissionMode: z.string().catch('default'),
 });
@@ -304,6 +305,7 @@ export const globalLlmSettingsSchema = z
       profiles: z.array(llmProfileSchema).min(1),
       defaultProfileId: z.string(),
       namingProfileId: z.string(),
+      imageGenerationProfileId: z.string(),
       promptTranslationEnabled: z.boolean().catch(false),
       promptTranslationProfileId: z.string(),
       promptTranslationShowOriginal: z.boolean().catch(true),

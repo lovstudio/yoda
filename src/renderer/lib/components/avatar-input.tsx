@@ -3,6 +3,7 @@ import { useRef, useState, type KeyboardEvent } from 'react';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { cn } from '@renderer/utils/utils';
+import { AvatarPickerDialog } from './avatar-picker-dialog';
 import { AvatarValue } from './avatar-value';
 
 export const MAX_AVATAR_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -58,6 +59,7 @@ export function AvatarInput({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const pickFile = async (file: File | undefined) => {
     if (!file) return;
@@ -72,6 +74,7 @@ export function AvatarInput({
     setReading(true);
     try {
       onChange(await readFileAsDataUrl(file));
+      setPickerOpen(false);
     } catch {
       onFileError?.('read-failed');
     } finally {
@@ -94,16 +97,32 @@ export function AvatarInput({
     />
   );
 
+  const pickerDialog = (
+    <AvatarPickerDialog
+      open={pickerOpen}
+      onOpenChange={setPickerOpen}
+      name={name}
+      value={value}
+      uploadTitle={uploadTitle}
+      clearTitle={clearTitle}
+      disabled={disabled}
+      reading={reading}
+      onUpload={() => inputRef.current?.click()}
+      onSelect={onChange}
+    />
+  );
+
   if (appearance === 'profile') {
     return (
       <div className={cn('shrink-0', className)}>
         {fileInput}
+        {pickerDialog}
         <button
           type="button"
           title={uploadTitle}
           aria-label={uploadTitle}
           disabled={disabled || reading}
-          onClick={() => inputRef.current?.click()}
+          onClick={() => setPickerOpen(true)}
           className="group relative block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-60"
         >
           <AvatarValue
@@ -138,6 +157,7 @@ export function AvatarInput({
           className={cn('h-8 min-w-0 text-xs', inputClassName)}
         />
         {fileInput}
+        {pickerDialog}
         <Button
           type="button"
           variant="outline"
@@ -145,7 +165,7 @@ export function AvatarInput({
           title={uploadTitle}
           aria-label={uploadTitle}
           disabled={disabled || reading}
-          onClick={() => inputRef.current?.click()}
+          onClick={() => setPickerOpen(true)}
         >
           {reading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
         </Button>

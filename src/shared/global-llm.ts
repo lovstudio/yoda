@@ -12,6 +12,7 @@ export const DEFAULT_LLM_PROFILE_NAME = 'Default profile';
 export const DEFAULT_LLM_PROFILE_RUNTIME_ID: RuntimeId = 'claude';
 export const DEFAULT_LLM_PROFILE_ACCESS_METHOD: AgentAccountProviderId = 'official-subscription';
 export const DEFAULT_LLM_PROFILE_MAAS_PLATFORM_ID: MaasPlatformId = 'zenmux';
+export const DEFAULT_LLM_PROFILE_IMAGE_MODEL = 'openai/gpt-image-2';
 
 export const LLM_REASONING_EFFORT_IDS = ['default', 'low', 'medium', 'high'] as const;
 
@@ -24,6 +25,7 @@ export type LlmProfile = {
   authProvider: AgentAccountProviderId;
   maasPlatformId: MaasPlatformId;
   model: string;
+  imageModel: string;
   reasoningEffort: LlmReasoningEffort;
   permissionMode: string;
 };
@@ -32,6 +34,7 @@ export type GlobalLlmSettingsShape = {
   profiles: LlmProfile[];
   defaultProfileId: string;
   namingProfileId: string;
+  imageGenerationProfileId: string;
   promptTranslationEnabled: boolean;
   promptTranslationProfileId: string;
   promptTranslationShowOriginal: boolean;
@@ -54,6 +57,17 @@ export type GlobalLlmDebugResult = {
   durationMs: number;
   error?: string;
   rawError?: string;
+};
+
+export type GlobalLlmImageGenerationInput = {
+  prompt: string;
+};
+
+export type GlobalLlmImageGenerationResult = {
+  imageDataUrl: string;
+  profileId: string;
+  profileName: string;
+  model: string;
 };
 
 export const GLOBAL_LLM_MODEL_DISCOVERY_SOURCE_IDS = [
@@ -121,6 +135,10 @@ export function createDefaultLlmProfile(overrides: Partial<LlmProfile> = {}): Ll
       ? overrides.maasPlatformId
       : DEFAULT_LLM_PROFILE_MAAS_PLATFORM_ID,
     model: typeof overrides.model === 'string' ? overrides.model.trim() : '',
+    imageModel:
+      typeof overrides.imageModel === 'string'
+        ? overrides.imageModel.trim()
+        : DEFAULT_LLM_PROFILE_IMAGE_MODEL,
     reasoningEffort: isLlmReasoningEffort(overrides.reasoningEffort)
       ? overrides.reasoningEffort
       : 'default',
@@ -155,6 +173,11 @@ export function normalizeLlmSettings(
     profiles: safeProfiles,
     defaultProfileId,
     namingProfileId: normalizeProfileSelection(raw.namingProfileId, safeProfiles, defaultProfileId),
+    imageGenerationProfileId: normalizeProfileSelection(
+      raw.imageGenerationProfileId,
+      safeProfiles,
+      defaultProfileId
+    ),
     promptTranslationEnabled:
       typeof raw.promptTranslationEnabled === 'boolean' ? raw.promptTranslationEnabled : false,
     promptTranslationProfileId: normalizeProfileSelection(
@@ -232,6 +255,7 @@ function normalizeProfile(value: PartialProfile, index: number): LlmProfile | nu
     authProvider: value.authProvider as AgentAccountProviderId,
     maasPlatformId: value.maasPlatformId as MaasPlatformId,
     model: value.model as string,
+    imageModel: value.imageModel as string,
     reasoningEffort: value.reasoningEffort as LlmReasoningEffort,
     permissionMode: value.permissionMode as string,
   });

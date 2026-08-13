@@ -163,6 +163,10 @@ export const LlmProfilesCard: React.FC = () => {
         settings.defaultProfileId === selectedProfile.id ? fallbackId : settings.defaultProfileId,
       namingProfileId:
         settings.namingProfileId === selectedProfile.id ? fallbackId : settings.namingProfileId,
+      imageGenerationProfileId:
+        settings.imageGenerationProfileId === selectedProfile.id
+          ? fallbackId
+          : settings.imageGenerationProfileId,
       promptTranslationProfileId:
         settings.promptTranslationProfileId === selectedProfile.id
           ? fallbackId
@@ -342,6 +346,30 @@ export const LlmProfilesCard: React.FC = () => {
                 sourceIssue={modelDiscoveryIssue}
                 onRefresh={() => setModelRefreshToken((current) => current + 1)}
                 onModelChange={(model) => updateProfile(selectedProfile.id, { model })}
+              />
+            }
+          />
+          <SettingRow
+            title={t('settings.llm.imageModel')}
+            description={t('settings.llm.imageModelDescription')}
+            control={
+              <Input
+                key={`${selectedProfile.id}-image-model`}
+                defaultValue={selectedProfile.imageModel}
+                placeholder={t('settings.llm.imageModelPlaceholder')}
+                disabled={disabled || selectedProfile.authProvider !== 'yoda-maas'}
+                className="h-8 w-56 max-w-full"
+                onBlur={(event) => {
+                  const imageModel = event.target.value.trim();
+                  if (imageModel !== selectedProfile.imageModel) {
+                    updateProfile(selectedProfile.id, { imageModel });
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !isImeComposing(event)) {
+                    event.currentTarget.blur();
+                  }
+                }}
               />
             }
           />
@@ -594,6 +622,18 @@ export const LlmProfileAssignmentsCard: React.FC = () => {
             disabled={disabled}
             value={settings.namingProfileId}
             onValueChange={(value) => updateLlm({ namingProfileId: value })}
+          />
+        }
+      />
+      <SettingRow
+        title={t('settings.llm.imageGenerationProfile')}
+        description={t('settings.llm.imageGenerationProfileDescription')}
+        control={
+          <ProfileSelect
+            settings={settings}
+            disabled={disabled}
+            value={settings.imageGenerationProfileId}
+            onValueChange={(value) => updateLlm({ imageGenerationProfileId: value })}
           />
         }
       />
