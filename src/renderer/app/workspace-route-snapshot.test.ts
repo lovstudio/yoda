@@ -16,6 +16,8 @@ describe('workspace route snapshot', () => {
       'const { WrapView, TitlebarSlot, MainPanel, currentView, wrapParams } = workspaceRouteSnapshot();'
     );
     expect(workspaceSource).toContain('<WrapView key={routeBoundaryKey} {...wrapParams}>');
+    expect(workspaceSource).not.toContain('TaskOpenTransitionOverlay');
+    expect(workspaceSource).not.toContain('taskOpenTransitionStore');
     expect(workspaceSource).toContain('key={routeBoundaryKey}');
     expect(workspaceSource).toContain('TitlebarSlot={TitlebarSlot}');
     expect(workspaceSource).toContain('MainPanel={MainPanel}');

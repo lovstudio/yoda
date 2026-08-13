@@ -416,9 +416,11 @@ describe('TaskManagerStore external task reconciliation', () => {
     const first = manager.ensureTaskLoaded('task-1');
     const second = manager.ensureTaskLoaded('task-1');
     await vi.waitFor(() => expect(mocks.getTask).toHaveBeenCalledOnce());
+    expect(manager.taskLoadPendingIds.has('task-1')).toBe(true);
     finishPointLoad(makeTask('Imported session'));
 
     await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+    expect(manager.taskLoadPendingIds.has('task-1')).toBe(false);
     expect(mocks.getActiveTasks).toHaveBeenCalledOnce();
     expect(mocks.getTask).toHaveBeenCalledWith('project-1', 'task-1');
     manager.dispose();

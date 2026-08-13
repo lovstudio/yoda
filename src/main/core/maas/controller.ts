@@ -4,6 +4,7 @@ import type {
   MaasCopyStoredApiKeyInput,
   MaasInvocationFilterKind,
   MaasPlatformId,
+  MaasSetCodexClientSyncInput,
   MaasSetGlobalBindingInput,
   MaasSetRuntimeBindingInput,
   MaasUsageSummaryInput,
@@ -16,6 +17,10 @@ import { newApiManagedService } from './new-api-managed-service';
 
 async function listConnections() {
   return maasService.listConnections();
+}
+
+async function inspectProfileWebsite(websiteUrl: string) {
+  return maasService.inspectProfileWebsite(websiteUrl);
 }
 
 async function listPlatformDescriptions(args?: { forceRefresh?: boolean }) {
@@ -75,8 +80,21 @@ async function setGlobalBinding(input: MaasSetGlobalBindingInput) {
   return maasService.setGlobalBinding(input);
 }
 
+async function getCodexClientSyncStatus() {
+  return maasService.getCodexClientSyncStatus();
+}
+
+async function setCodexClientSync(input: MaasSetCodexClientSyncInput) {
+  return maasService.setCodexClientSync(input);
+}
+
+async function clearCodexClientSync() {
+  return maasService.clearCodexClientSync();
+}
+
 export const maasController = createRPCController({
   listConnections,
+  inspectProfileWebsite,
   listPlatformDescriptions,
   getPlatformInfoSnapshot,
   connectPlatform,
@@ -89,6 +107,9 @@ export const maasController = createRPCController({
   setRuntimeBinding,
   getGlobalBinding,
   setGlobalBinding,
+  getCodexClientSyncStatus,
+  setCodexClientSync,
+  clearCodexClientSync,
   listManagedGatewayStars: (args?: { forceRefresh?: boolean }) =>
     maasManagedGatewayStarsService.list(!!args?.forceRefresh),
   getLiteLlmManagedStatus: () => liteLlmManagedService.getStatus(),

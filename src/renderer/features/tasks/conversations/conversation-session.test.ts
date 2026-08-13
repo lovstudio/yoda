@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { FrontendPty } from '@renderer/lib/pty/pty';
-import { shouldAutoResumeConversation } from './conversation-session-utils';
+import {
+  shouldAutoResumeConversation,
+  shouldProbeConversationSession,
+} from './conversation-session-utils';
 
 describe('shouldAutoResumeConversation', () => {
   it('resumes once for a ready visible PTY and skips the same PTY afterwards', () => {
@@ -64,5 +67,40 @@ describe('shouldAutoResumeConversation', () => {
         lastAutoResumePty: null,
       })
     ).toBe(false);
+  });
+
+  it('does not probe or resume a hot PTY with a retained output consumer', () => {
+    const pty = { hasRecoverableSnapshot: true } as FrontendPty;
+
+    expect(
+      shouldAutoResumeConversation({
+        isVisible: true,
+        sessionId: 'project:task:conversation',
+        sessionStatus: 'ready',
+        sessionPty: pty,
+        lastAutoResumePty: null,
+      })
+    ).toBe(false);
+    expect(
+      shouldProbeConversationSession({
+        isVisible: true,
+        sessionId: 'project:task:conversation',
+        sessionStatus: 'ready',
+        sessionPty: pty,
+      })
+    ).toBe(false);
+  });
+
+  it('probes a cold ready PTY before its output consumer is established', () => {
+    const pty = { hasRecoverableSnapshot: false } as FrontendPty;
+
+    expect(
+      shouldProbeConversationSession({
+        isVisible: true,
+        sessionId: 'project:task:conversation',
+        sessionStatus: 'ready',
+        sessionPty: pty,
+      })
+    ).toBe(true);
   });
 });

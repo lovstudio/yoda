@@ -25,7 +25,6 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { AppAgentSessionResource, TmuxReclamationSnapshot } from '@shared/app-resource';
 import type { Conversation } from '@shared/conversations';
-import { getMaasPlatformDefinition } from '@shared/maas';
 import type { ComposerDefaults } from '@shared/project-settings';
 import {
   getRuntime,
@@ -94,6 +93,10 @@ import {
   getNextAccountResetCredit,
   getQuotaWindowLabel,
 } from './workspace-runtime-bar-format';
+import {
+  getWorkspaceMaasAccountPresentation,
+  getWorkspaceMaasPresentation,
+} from './workspace-runtime-bar-maas';
 import { WorkspaceSkillPopover } from './workspace-skill-popover';
 
 type WorkspaceAgentSession = Omit<AppAgentSessionResource, 'runtimeId' | 'title' | 'taskTitle'> & {
@@ -224,9 +227,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     (isValidRuntimeId(defaultRuntime) ? defaultRuntime : 'claude');
   const activeConversation = provisionedTask?.taskView.tabManager.activeConversation?.data ?? null;
   const runtime = runtimeId ? getRuntime(runtimeId) : null;
-  const officialUsageUrl = runtimeId
-    ? getRuntimeAccountProfile(runtimeId).officialSubscription.usageUrl
-    : undefined;
   const runtimeConfig = runtimeId ? agentConfig[runtimeId] : null;
   const activeConversationId = provisionedTask?.taskView.tabManager.activeConversationId;
   const { data: taskStats } = useTaskStats(params?.projectId ?? '', params?.taskId ?? '', {
@@ -283,6 +283,23 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       ].join('\n')
     : null;
   const connectionId = provisionedTask?.workspace.sshConnectionId;
+  const globalMaasBinding = useMaasGlobalBinding();
+  const { data: maasConnections } = useMaasConnections();
+  const maasPresentation = useMemo(
+    () => getWorkspaceMaasPresentation(globalMaasBinding.data, maasConnections),
+    [globalMaasBinding.data, maasConnections]
+  );
+  const maasAccount = useMemo(
+    () => getWorkspaceMaasAccountPresentation(globalMaasBinding.data, maasConnections, runtimeId),
+    [globalMaasBinding.data, maasConnections, runtimeId]
+  );
+  const maasAccountActive = maasAccount !== null;
+  const officialCodexAccountAvailable =
+    runtimeId === 'codex' && !connectionId && !globalMaasBinding.isLoading && !maasAccountActive;
+  const officialUsageUrl =
+    runtimeId && !maasAccountActive
+      ? getRuntimeAccountProfile(runtimeId).officialSubscription.usageUrl
+      : undefined;
   const { data: sessionModelDetails } = useActiveSessionModelDetails({
     runtimeId,
     cwd: provisionedTask?.path,
@@ -322,17 +339,22 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       if (!runtimeId) throw new Error('A runtime is required to read account usage.');
       return rpc.runtimeSettings.getAccountUsage(runtimeId) as Promise<AgentAccountUsage>;
     },
-    enabled: runtimeId === 'codex' && !connectionId,
+    enabled: officialCodexAccountAvailable,
     staleTime: 60_000,
     refetchInterval: (notificationSettings?.accountUsageWarningEnabled ?? true) ? 60_000 : false,
     refetchOnWindowFocus: true,
   });
   const accountRateLimits = useMemo(
     () =>
-      accountUsage && !accountUsage.error && accountUsage.rateLimits.length > 0
+      !maasAccountActive &&
+      accountUsage &&
+      !accountUsage.error &&
+      accountUsage.rateLimits.length > 0
         ? accountUsage.rateLimits
-        : (sessionContext?.rateLimits ?? []),
-    [accountUsage, sessionContext?.rateLimits]
+        : !maasAccountActive
+          ? (sessionContext?.rateLimits ?? [])
+          : [],
+    [accountUsage, maasAccountActive, sessionContext?.rateLimits]
   );
   const shortAccountWindow = accountRateLimits[0] ?? null;
   const accountUsageSupportsResetCreditDetails =
@@ -344,19 +366,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     setAccountUsageWarningThresholdDraft(String(accountUsageWarningThreshold));
   }, [accountUsageWarningThreshold]);
   const sessionHistoryDocked = interfaceSettings?.dockSessionHistory ?? true;
-  const globalMaasBinding = useMaasGlobalBinding();
-  const { data: maasConnections } = useMaasConnections();
-  const selectedMaasPlatformId = globalMaasBinding.data?.enabled
-    ? globalMaasBinding.data.platformId
-    : null;
-  const selectedMaasConnection = maasConnections?.find(
-    (connection) => connection.platformId === selectedMaasPlatformId
-  );
-  const selectedMaasLabel = selectedMaasPlatformId
-    ? t('workspaceRuntime.maas.labelWithPlatform', {
-        platform:
-          selectedMaasConnection?.displayName ??
-          getMaasPlatformDefinition(selectedMaasPlatformId).name,
+  const maasTriggerLabel = maasPresentation.providerName
+    ? t('workspaceRuntime.maas.labelWithProvider', {
+        provider: maasPresentation.providerName,
       })
     : t('workspaceRuntime.maas.title');
   const { data: resourceSnapshot, refetch: refreshResourceSnapshot } = useQuery({
@@ -616,13 +628,13 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   };
 
   const handleAccountUsagePopoverOpen = (open: boolean) => {
-    if (open && runtimeId === 'codex' && !connectionId) {
+    if (open && officialCodexAccountAvailable) {
       void refreshAccountUsageQuery();
     }
   };
 
   const resetAccountUsage = useCallback(async () => {
-    if (!runtimeId || runtimeId !== 'codex' || connectionId) return;
+    if (!officialCodexAccountAvailable) return;
     setIsResettingAccountUsage(true);
     try {
       const result = await rpc.runtimeSettings.resetAccountUsage(runtimeId, {
@@ -648,7 +660,14 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     } finally {
       setIsResettingAccountUsage(false);
     }
-  }, [connectionId, nextAccountResetCredit?.id, refreshAccountUsageQuery, runtimeId, t, toast]);
+  }, [
+    nextAccountResetCredit?.id,
+    officialCodexAccountAvailable,
+    refreshAccountUsageQuery,
+    runtimeId,
+    t,
+    toast,
+  ]);
 
   const confirmAccountUsageReset = useCallback(() => {
     showConfirmActionModal({
@@ -676,8 +695,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   useEffect(() => {
     if (
       !accountUsageWarningEnabled ||
-      runtimeId !== 'codex' ||
-      connectionId ||
+      !officialCodexAccountAvailable ||
       !accountUsage ||
       accountUsage.error
     ) {
@@ -718,8 +736,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     accountUsageWarningEnabled,
     accountUsageWarningThreshold,
     confirmAccountUsageReset,
-    connectionId,
-    runtimeId,
+    officialCodexAccountAvailable,
     t,
     toast,
   ]);
@@ -896,6 +913,14 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                 selectedModel={activeSessionModel}
                 selectedModelSource="currentSession"
                 connectionId={connectionId}
+                authPresentation={
+                  maasAccount
+                    ? {
+                        value: maasAccount.providerName,
+                        detail: t('workspaceRuntime.maas.authenticationSource'),
+                      }
+                    : undefined
+                }
                 modelEditing={
                   activeConversation && runtime?.modelFlagOnResume
                     ? {
@@ -1056,7 +1081,100 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               </Popover>
             </>
           ) : null}
-          {shortAccountWindow || (runtimeId === 'codex' && !connectionId) ? (
+          {maasAccount ? (
+            <>
+              <span aria-hidden className="@max-[1120px]:hidden">
+                ·
+              </span>
+              <Popover>
+                <PopoverTrigger
+                  aria-label={t('workspaceRuntime.maas.accountTitle', {
+                    provider: maasAccount.providerName,
+                  })}
+                  className="flex h-5 min-w-0 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground transition-colors hover:bg-background-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+                  title={t('workspaceRuntime.maas.accountTitle', {
+                    provider: maasAccount.providerName,
+                  })}
+                >
+                  <Cloud className="size-3.5 shrink-0" />
+                  <span className="max-w-36 truncate @max-[1120px]:hidden">
+                    {maasAccount.providerName}
+                  </span>
+                  <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  side="top"
+                  sideOffset={8}
+                  className="w-[20rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+                >
+                  <div className="flex items-start gap-2.5 p-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background-2 text-foreground">
+                      <Cloud aria-hidden className="size-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">{maasAccount.providerName}</div>
+                      <div className="mt-0.5 text-xs text-foreground-passive">
+                        {t('workspaceRuntime.maas.accountDescription', {
+                          client: runtime?.name ?? runtimeId,
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="border-t border-border px-3 py-2.5 text-xs">
+                    <div className="flex items-start gap-3 py-1">
+                      <span className="w-20 shrink-0 text-foreground-passive">
+                        {t('workspaceRuntime.maas.profile')}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-right text-foreground">
+                        {maasAccount.providerName}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-3 py-1">
+                      <span className="w-20 shrink-0 text-foreground-passive">
+                        {t('workspaceRuntime.maas.endpoint')}
+                      </span>
+                      <span
+                        className="min-w-0 flex-1 truncate text-right font-mono text-[11px] text-foreground"
+                        title={maasAccount.endpoint ?? undefined}
+                      >
+                        {maasAccount.endpoint ?? '—'}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-3 py-1">
+                      <span className="w-20 shrink-0 text-foreground-passive">
+                        {t('workspaceRuntime.maas.environmentKey')}
+                      </span>
+                      <span
+                        className="min-w-0 flex-1 truncate text-right font-mono text-[11px] text-foreground"
+                        title={maasAccount.envKey ?? undefined}
+                      >
+                        {maasAccount.envKey ?? '—'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="border-t border-border px-3 py-2.5">
+                    <p className="rounded-md bg-background-2 px-2.5 py-2 text-[11px] leading-relaxed text-foreground-passive">
+                      {t('workspaceRuntime.maas.officialQuotaUnavailable', {
+                        provider: maasAccount.providerName,
+                      })}
+                    </p>
+                  </div>
+                  <div className="border-t border-border p-3">
+                    <Button
+                      type="button"
+                      className="w-full"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => appState.navigation.navigate('maas')}
+                    >
+                      {t('workspaceRuntime.maas.manageAccount')}
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </>
+          ) : shortAccountWindow || officialCodexAccountAvailable ? (
             <>
               <span aria-hidden className="@max-[1120px]:hidden">
                 ·
@@ -1653,22 +1771,21 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       </Popover>
       <Popover>
         <PopoverTrigger
-          aria-label={t('workspaceRuntime.maas.title')}
+          aria-label={maasTriggerLabel}
           className={cn(
             RUNTIME_BAR_ACTION_CLASS,
-            globalMaasBinding.data?.enabled ? 'text-foreground' : 'text-foreground-passive'
+            maasPresentation.active ? 'bg-background-2 text-foreground' : 'text-foreground-passive'
           )}
-          title={t('workspaceRuntime.maas.title')}
+          title={maasTriggerLabel}
         >
           <Cloud className="size-3.5" />
-          <span
-            className={cn(
-              RUNTIME_BAR_ACTION_LABEL_CLASS,
-              'max-w-48 truncate @min-[1441px]:inline-block'
-            )}
-          >
-            {selectedMaasLabel}
-          </span>
+          {maasPresentation.providerName ? (
+            <span className="inline-block max-w-48 truncate">
+              {t('workspaceRuntime.maas.providerSuffix', {
+                provider: maasPresentation.providerName,
+              })}
+            </span>
+          ) : null}
           <span
             aria-hidden
             className={cn(

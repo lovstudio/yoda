@@ -1,7 +1,6 @@
-import { QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useState } from 'react';
-import { MAAS_GATEWAY_EXTENSION_ID } from '@shared/extensions';
 import { AccountSessionEvents } from './app/account-session-events';
 import { AiLabBuildEvents } from './app/ai-lab-build-events';
 import { AppMenuEvents } from './app/app-menu-events';
@@ -11,10 +10,6 @@ import { SettingsSyncAgent } from './app/settings-sync-agent';
 import { WelcomeScreen } from './app/welcome';
 import { Workspace } from './app/workspace';
 import { AiLabAppWindow } from './features/ai-lab/ai-lab-window';
-import {
-  EXTENSION_MARKETPLACE_QUERY_KEY,
-  listMarketplaceExtensions,
-} from './features/extensions/extension-marketplace-query';
 import { IntegrationsProvider } from './features/integrations/integrations-provider';
 import { Onboarding } from './features/onboarding/onboarding';
 import { getOnboardingSteps, type OnboardingStep } from './features/onboarding/onboarding-steps';
@@ -48,13 +43,7 @@ const AppContent = observer(function AppContent() {
   );
 
   const { data: session, isLoading: sessionLoading } = useAccountSession();
-  const { data: extensions = [], isLoading: extensionsLoading } = useQuery({
-    queryKey: EXTENSION_MARKETPLACE_QUERY_KEY,
-    queryFn: listMarketplaceExtensions,
-    enabled: view === 'onboarding',
-  });
-
-  const isLoading = sessionLoading || (view === 'onboarding' && extensionsLoading);
+  const isLoading = sessionLoading;
 
   // Boot splash: main/full-app windows only — detached task/comparison/AI Lab windows
   // pop open instantly without the kernel boot screen.
@@ -69,18 +58,13 @@ const AppContent = observer(function AppContent() {
 
   useEffect(() => {
     if (!isLoading && view === 'onboarding' && frozenSteps === null) {
-      const gatewayInstalled = extensions.some(
-        (extension) =>
-          extension.manifest.id === MAAS_GATEWAY_EXTENSION_ID && extension.installation !== null
-      );
       setFrozenSteps(
         getOnboardingSteps({
           isSignedIn: session?.isSignedIn ?? false,
-          isMaasGatewayInstalled: gatewayInstalled,
         })
       );
     }
-  }, [view, isLoading, frozenSteps, session, extensions]);
+  }, [view, isLoading, frozenSteps, session]);
 
   const stepsNeeded = frozenSteps ?? [];
 

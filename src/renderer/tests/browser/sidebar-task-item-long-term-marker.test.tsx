@@ -71,6 +71,10 @@ vi.mock('@renderer/features/tasks/components/use-task-menu-actions', () => ({
   }),
 }));
 
+vi.mock('@renderer/features/tasks/open-task-when-ready', () => ({
+  openTaskWhenReady: vi.fn(),
+}));
+
 vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
   asProvisioned: () => undefined,
   getTaskManagerStore: () => ({

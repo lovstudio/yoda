@@ -13,20 +13,17 @@ import { TaskContextMenu } from '@renderer/features/tasks/components/task-contex
 import { TaskGitDiffStats } from '@renderer/features/tasks/components/task-git-diff-stats';
 import { TaskSessionStatusControl } from '@renderer/features/tasks/components/task-session-status-control';
 import { useTaskMenuActions } from '@renderer/features/tasks/components/use-task-menu-actions';
-import { resolveLastTaskSessionTarget } from '@renderer/features/tasks/resolve-task-session-target';
+import { openTaskWhenReady } from '@renderer/features/tasks/open-task-when-ready';
 import { type TaskStore } from '@renderer/features/tasks/stores/task';
 import {
-  asProvisioned,
   getTaskManagerStore,
   taskSessionStatusSummary,
 } from '@renderer/features/tasks/stores/task-selectors';
 import { PrBadge } from '@renderer/lib/components/pr-badge';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
-import { appState } from '@renderer/lib/stores/app-state';
 import { Checkbox } from '@renderer/lib/ui/checkbox';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { cn } from '@renderer/utils/utils';
-import { restoreArchivedTaskAndOpen } from './restore-archived-task-and-open';
 
 export type ReadyTask = TaskStore & { data: Task };
 
@@ -43,40 +40,16 @@ export const TaskRow = observer(function TaskRow({
 }) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
-  const taskManager = getTaskManagerStore(task.data.projectId);
   // Shared task-entity menu wiring (same items as every other task surface).
   const menuActions = useTaskMenuActions(task.data.projectId, task.data.id);
 
-  const isArchived = Boolean(task.data.archivedAt);
   const sessionStatus = taskSessionStatusSummary(task);
   const currentPr = task.data.prs ? selectCurrentPr(task.data.prs) : undefined;
-  const provisionedTask = asProvisioned(task);
-  const handleProvision = () => void taskManager?.provisionTask(task.data.id);
-  const preloadTaskView = () => void taskManager?.preloadTask(task.data.id);
+  const preloadTaskView = () =>
+    void getTaskManagerStore(task.data.projectId)?.preloadTask(task.data.id);
 
   const handleOpenTask = () => {
-    if (isArchived) {
-      void restoreArchivedTaskAndOpen(task.data.projectId, task.data.id, navigate);
-      return;
-    }
-
-    const sessionTarget = provisionedTask
-      ? resolveLastTaskSessionTarget(
-          appState.history,
-          provisionedTask.taskView.tabManager,
-          task.data.projectId,
-          task.data.id
-        )
-      : undefined;
-    if (
-      sessionTarget &&
-      appState.appTabs.openTaskScope(task.data.projectId, task.data.id, sessionTarget)
-    ) {
-      return;
-    }
-
-    handleProvision();
-    navigate('task', { projectId: task.data.projectId, taskId: task.data.id });
+    void openTaskWhenReady(task.data.projectId, task.data.id, navigate);
   };
 
   const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {

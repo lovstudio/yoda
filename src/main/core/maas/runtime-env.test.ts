@@ -1,19 +1,85 @@
 import { describe, expect, it } from 'vitest';
 import {
+  resolveCodexMaasModelId,
+  resolveCodexMaasRuntimeArgs,
+  resolveCodexNativeModelId,
   resolveMaasRuntimeEnv,
   resolveRestoredMaasRuntimeConfig,
+  rewriteCodexMaasModelArgs,
   supportsMaasRuntimeBinding,
 } from './runtime-env';
 
 describe('MaaS Agent Client runtime environment', () => {
-  it('keeps the upstream MaaS key out of Codex child processes', () => {
+  it('injects the encrypted MaaS key under the env_key referenced by Codex config', () => {
     expect(
       resolveMaasRuntimeEnv('codex', {
         platformId: 'zenmux',
         endpoint: 'https://maas.example.test/v1/',
         apiKey: 'secret',
       })
-    ).toBeUndefined();
+    ).toEqual({ ZENMUX_API_KEY: 'secret' });
+  });
+
+  it('builds invocation-scoped Codex provider args without putting the key on the command line', () => {
+    const args = resolveCodexMaasRuntimeArgs({
+      platformId: 'custom:lovstudio',
+      displayName: 'LovStudio LLM',
+      endpoint: 'https://llm.lovstudio.test/v1/',
+      envKey: 'LOVSTUDIO_LLM_API_KEY',
+      apiKey: 'super-secret',
+    });
+
+    expect(args.join(' ')).toMatch(
+      /model_providers\.custom-[a-f0-9]{12}\.env_key="LOVSTUDIO_LLM_API_KEY"/
+    );
+    expect(args.join(' ')).toMatch(
+      /model_providers\.custom-[a-f0-9]{12}\.base_url="https:\/\/llm\.lovstudio\.test\/v1"/
+    );
+    expect(args.join(' ')).not.toContain('super-secret');
+  });
+
+  it('restores the provider prefix required by the ZenMux model namespace', () => {
+    const credentials = {
+      platformId: 'profile:zenmux' as const,
+      displayName: 'ZenMux',
+      endpoint: 'https://zenmux.ai/api/v1',
+      apiKey: 'secret',
+    };
+
+    expect(resolveCodexMaasModelId(credentials, 'gpt-5.6-sol')).toBe('openai/gpt-5.6-sol');
+    expect(resolveCodexMaasModelId(credentials, 'openai/gpt-5.6-sol')).toBe('openai/gpt-5.6-sol');
+    expect(resolveCodexNativeModelId('openai/gpt-5.6-sol')).toBe('gpt-5.6-sol');
+    expect(
+      rewriteCodexMaasModelArgs(
+        ['--model', 'gpt-5.6-sol', '-c', 'model_reasoning_effort="high"'],
+        credentials
+      )
+    ).toEqual(['--model', 'openai/gpt-5.6-sol', '-c', 'model_reasoning_effort="high"']);
+  });
+
+  it('recognizes a newly created ZenMux Profile by endpoint without changing direct providers', () => {
+    expect(
+      resolveCodexMaasModelId(
+        {
+          platformId: 'profile:new-zenmux',
+          displayName: 'My route',
+          endpoint: 'https://zenmux.ai/api/v1',
+          apiKey: 'secret',
+        },
+        'gpt-5.6-sol'
+      )
+    ).toBe('openai/gpt-5.6-sol');
+    expect(
+      resolveCodexMaasModelId(
+        {
+          platformId: 'profile:direct-openai',
+          displayName: 'Direct OpenAI',
+          endpoint: 'https://api.openai.com/v1',
+          apiKey: 'secret',
+        },
+        'gpt-5.6-sol'
+      )
+    ).toBe('gpt-5.6-sol');
   });
 
   it('maps an Anthropic-compatible MaaS into Claude environment variables', () => {

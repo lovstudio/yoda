@@ -17,7 +17,7 @@ import {
   TaskContextMenu,
 } from '@renderer/features/tasks/components/task-context-menu';
 import { useTaskMenuActions } from '@renderer/features/tasks/components/use-task-menu-actions';
-import { resolveLastTaskSessionTarget } from '@renderer/features/tasks/resolve-task-session-target';
+import { openTaskWhenReady } from '@renderer/features/tasks/open-task-when-ready';
 import { type TaskStore } from '@renderer/features/tasks/stores/task';
 import {
   asProvisioned,
@@ -174,20 +174,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     project?.state === 'unregistered' ? projectId : (project?.displayName ?? projectId);
 
   const handleOpenTask = () => {
-    const sessionTarget = provisionedTask
-      ? resolveLastTaskSessionTarget(
-          appState.history,
-          provisionedTask.taskView.tabManager,
-          projectId,
-          taskId
-        )
-      : undefined;
-    if (sessionTarget && appState.appTabs.openTaskScope(projectId, taskId, sessionTarget)) return;
-
-    handleProvision();
-    // A task without a live session target is entering for the first time.
-    // Keep its route target-less so provisioning can establish the initial tab.
-    navigate('task', { projectId, taskId });
+    void openTaskWhenReady(projectId, taskId, navigate);
   };
 
   const handleToggleSubtasks = () => {

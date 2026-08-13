@@ -21,6 +21,8 @@ export type PtyDataEvent = {
 export const ptyDataChannel = defineEvent<PtyDataEvent>('pty:data');
 
 export type PtyExitEvent = {
+  /** Backend generation that exited; changes whenever this session id respawns. */
+  generation: number;
   exitCode?: number;
   signal?: number | string;
 };

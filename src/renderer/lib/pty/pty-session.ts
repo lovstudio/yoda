@@ -4,14 +4,16 @@ import { ptyExitChannel } from '@shared/events/ptyEvents';
 import { withTimeout } from '@shared/result';
 import {
   DEFAULT_HOT_TERMINAL_LIMIT,
+  DEFAULT_TERMINAL_CACHE_MODE,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
   MAX_HOT_TERMINAL_LIMIT,
   MIN_HOT_TERMINAL_LIMIT,
+  type TerminalCacheMode,
 } from '@shared/terminal-settings';
 import { events, rpc } from '@renderer/lib/ipc';
-import { FrontendPty } from '@renderer/lib/pty/pty';
+import { buildTerminalFontFamily, FrontendPty } from '@renderer/lib/pty/pty';
 import { log } from '@renderer/utils/logger';
-import { selectTerminalLruEvictions } from './terminal-lru';
+import { selectTerminalLruEvictions, selectTerminalPressureEvictions } from './terminal-lru';
 
 export type PtySessionStatus = 'disconnected' | 'connecting' | 'ready';
 export type PtySessionExecution = 'interactive' | 'command';
@@ -22,6 +24,12 @@ export type PtySessionOptions = {
 };
 
 const TERMINAL_SETTINGS_TIMEOUT_MS = 3_000;
+const AUTO_PRESSURE_SAMPLE_INTERVAL_MS = 10_000;
+const AUTO_MEMORY_PRESSURE_BYTES = 1_500_000_000;
+const AUTO_HIDDEN_OUTPUT_CODE_UNITS_PER_SECOND = 2_000_000;
+const AUTO_MEMORY_PRESSURE_SAMPLES = 2;
+const AUTO_OUTPUT_PRESSURE_SAMPLES = 3;
+const AUTO_PRESSURE_MIN_TERMINALS = 3;
 
 function getConnectionErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
@@ -30,8 +38,14 @@ function getConnectionErrorMessage(error: unknown): string {
 }
 
 export class PtySession {
+  private static hotMode: TerminalCacheMode = DEFAULT_TERMINAL_CACHE_MODE;
   private static hotLimit = DEFAULT_HOT_TERMINAL_LIMIT;
   private static hotSessions: PtySession[] = [];
+  private static autoPressureTimer: ReturnType<typeof setInterval> | null = null;
+  private static autoPressureSampleInFlight = false;
+  private static memoryPressureSamples = 0;
+  private static outputPressureSamples = 0;
+  private static lastOutputSampleAt = performance.now();
 
   pty: FrontendPty | null = null;
   status: PtySessionStatus = 'disconnected';
@@ -132,12 +146,17 @@ export class PtySession {
         });
         return null;
       });
-      PtySession.setHotTerminalLimit(
+      PtySession.setHotTerminalPolicy(
+        terminalSettings?.hotTerminalMode ?? DEFAULT_TERMINAL_CACHE_MODE,
         terminalSettings?.hotTerminalLimit ?? DEFAULT_HOT_TERMINAL_LIMIT
       );
       pty.setScrollbackLines(
         terminalSettings?.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK_LINES
       );
+      const customFontFamily = terminalSettings?.fontFamily?.trim();
+      if (customFontFamily) {
+        pty.terminal.options.fontFamily = buildTerminalFontFamily(customFontFamily);
+      }
       if (this.pty !== pty) {
         pty.dispose();
         return;
@@ -151,6 +170,7 @@ export class PtySession {
       if (this.pty === pty) {
         pty?.dispose();
         PtySession.hotSessions = PtySession.hotSessions.filter((session) => session !== this);
+        PtySession.refreshAutoPressureMonitor();
         runInAction(() => {
           this.pty = null;
           this.status = 'disconnected';
@@ -196,6 +216,7 @@ export class PtySession {
     this.disposeExitListener?.();
     this.pty?.dispose();
     PtySession.hotSessions = PtySession.hotSessions.filter((session) => session !== this);
+    PtySession.refreshAutoPressureMonitor();
     runInAction(() => {
       this.pty = null;
       this.status = 'disconnected';
@@ -203,18 +224,165 @@ export class PtySession {
     });
   }
 
-  static setHotTerminalLimit(limit: number): void {
+  static setHotTerminalPolicy(mode: TerminalCacheMode, limit: number): void {
+    PtySession.hotMode = mode;
     PtySession.hotLimit = Math.min(
       MAX_HOT_TERMINAL_LIMIT,
       Math.max(MIN_HOT_TERMINAL_LIMIT, Math.floor(limit))
     );
-    PtySession.enforceHotLimit();
+    if (mode === 'fixed') {
+      PtySession.stopAutoPressureMonitor();
+      PtySession.enforceHotLimit();
+    } else {
+      PtySession.ensureAutoPressureMonitor();
+    }
+  }
+
+  /** Compatibility entrypoint for callers intentionally selecting a fixed limit. */
+  static setHotTerminalLimit(limit: number): void {
+    PtySession.setHotTerminalPolicy('fixed', limit);
   }
 
   private static touchHotSession(session: PtySession): void {
     PtySession.hotSessions = PtySession.hotSessions.filter((candidate) => candidate !== session);
     PtySession.hotSessions.push(session);
-    PtySession.enforceHotLimit(session.sessionId);
+    if (PtySession.hotMode === 'fixed') {
+      PtySession.enforceHotLimit(session.sessionId);
+    } else {
+      PtySession.ensureAutoPressureMonitor();
+    }
+  }
+
+  private static ensureAutoPressureMonitor(): void {
+    if (
+      PtySession.hotMode !== 'auto' ||
+      PtySession.hotSessions.length < AUTO_PRESSURE_MIN_TERMINALS ||
+      PtySession.autoPressureTimer !== null
+    ) {
+      return;
+    }
+    PtySession.lastOutputSampleAt = performance.now();
+    PtySession.autoPressureTimer = setInterval(() => {
+      void PtySession.sampleAutoPressure();
+    }, AUTO_PRESSURE_SAMPLE_INTERVAL_MS);
+    (PtySession.autoPressureTimer as unknown as { unref?: () => void }).unref?.();
+  }
+
+  private static refreshAutoPressureMonitor(): void {
+    if (
+      PtySession.hotMode !== 'auto' ||
+      PtySession.hotSessions.length < AUTO_PRESSURE_MIN_TERMINALS
+    ) {
+      PtySession.stopAutoPressureMonitor();
+      return;
+    }
+    PtySession.ensureAutoPressureMonitor();
+  }
+
+  private static stopAutoPressureMonitor(): void {
+    if (PtySession.autoPressureTimer !== null) {
+      clearInterval(PtySession.autoPressureTimer);
+      PtySession.autoPressureTimer = null;
+    }
+    PtySession.autoPressureSampleInFlight = false;
+    PtySession.memoryPressureSamples = 0;
+    PtySession.outputPressureSamples = 0;
+  }
+
+  private static async sampleAutoPressure(): Promise<void> {
+    if (
+      PtySession.hotMode !== 'auto' ||
+      PtySession.hotSessions.length < AUTO_PRESSURE_MIN_TERMINALS ||
+      PtySession.autoPressureSampleInFlight
+    ) {
+      return;
+    }
+    PtySession.autoPressureSampleInFlight = true;
+    try {
+      const now = performance.now();
+      const elapsedSeconds = Math.max(0.001, (now - PtySession.lastOutputSampleAt) / 1_000);
+      PtySession.lastOutputSampleAt = now;
+      const hiddenOutputCodeUnits = PtySession.hotSessions.reduce(
+        (total, session) => total + (session.pty?.takeHiddenOutputCodeUnits() ?? 0),
+        0
+      );
+      const hiddenOutputRate = hiddenOutputCodeUnits / elapsedSeconds;
+      PtySession.outputPressureSamples =
+        hiddenOutputRate >= AUTO_HIDDEN_OUTPUT_CODE_UNITS_PER_SECOND
+          ? PtySession.outputPressureSamples + 1
+          : 0;
+
+      try {
+        const snapshot = await rpc.app.getResourceSnapshot();
+        // Match the warm-window precedent: pressure is the Electron working
+        // set only. External Agent/tmux process memory must not evict xterm
+        // caches merely because the user intentionally runs many sessions.
+        const electronMemoryBytes = snapshot.processes.reduce(
+          (total, process) => total + process.memoryBytes,
+          0
+        );
+        PtySession.memoryPressureSamples =
+          electronMemoryBytes >= AUTO_MEMORY_PRESSURE_BYTES
+            ? PtySession.memoryPressureSamples + 1
+            : 0;
+      } catch (error) {
+        // Unknown memory state is protection, never permission to evict.
+        PtySession.memoryPressureSamples = 0;
+        log.debug('[pty-session] adaptive cache pressure sample unavailable', { error });
+      }
+
+      if (
+        PtySession.hotMode !== 'auto' ||
+        PtySession.hotSessions.length < AUTO_PRESSURE_MIN_TERMINALS
+      ) {
+        return;
+      }
+
+      const reason =
+        PtySession.memoryPressureSamples >= AUTO_MEMORY_PRESSURE_SAMPLES
+          ? 'memory'
+          : PtySession.outputPressureSamples >= AUTO_OUTPUT_PRESSURE_SAMPLES
+            ? 'sustained-output'
+            : null;
+      if (!reason) return;
+      PtySession.evictUnderPressure(reason, hiddenOutputRate);
+      PtySession.memoryPressureSamples = 0;
+      PtySession.outputPressureSamples = 0;
+    } finally {
+      PtySession.autoPressureSampleInFlight = false;
+    }
+  }
+
+  private static evictUnderPressure(
+    reason: 'memory' | 'sustained-output',
+    hiddenOutputRate: number
+  ): void {
+    const protectedSessionId = PtySession.hotSessions.at(-1)?.sessionId;
+    const evictions = new Set(
+      selectTerminalPressureEvictions(
+        PtySession.hotSessions.map((session) => ({
+          sessionId: session.sessionId,
+          mounted: session.pty?.mounted ?? false,
+          connecting: session.status === 'connecting',
+          recoverable: session.pty?.hasRecoverableSnapshot ?? false,
+        })),
+        protectedSessionId
+      )
+    );
+    if (evictions.size === 0) return;
+    log.info('[pty-session] adaptive frontend cache eviction', {
+      reason,
+      count: evictions.size,
+      residentRenderers: PtySession.hotSessions.length,
+      hiddenOutputCodeUnitsPerSecond: Math.round(hiddenOutputRate),
+    });
+    for (const session of PtySession.hotSessions) {
+      if (evictions.has(session.sessionId)) session.evictRenderer();
+    }
+    PtySession.hotSessions = PtySession.hotSessions.filter(
+      (session) => !evictions.has(session.sessionId)
+    );
+    PtySession.refreshAutoPressureMonitor();
   }
 
   private static enforceHotLimit(protectedSessionId?: string): void {
@@ -240,7 +408,7 @@ export class PtySession {
 
   private evictRenderer(): void {
     if (this.pty?.mounted) return;
-    log.debug('[pty-session] renderer evicted by hot-session limit', { sessionId: this.sessionId });
+    log.debug('[pty-session] frontend renderer cache evicted', { sessionId: this.sessionId });
     this.connectionRequested = false;
     this.connectPromise = null;
     this.pty?.dispose();

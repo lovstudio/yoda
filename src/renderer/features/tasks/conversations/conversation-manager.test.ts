@@ -1,7 +1,10 @@
 import { autorun } from 'mobx';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
-import { agentSessionStatusChangedChannel } from '@shared/events/agentEvents';
+import {
+  agentSessionExitedChannel,
+  agentSessionStatusChangedChannel,
+} from '@shared/events/agentEvents';
 import {
   conversationArchivedChannel,
   conversationMovedChannel,
@@ -13,6 +16,7 @@ import { ConversationManagerStore } from './conversation-manager';
 const mocks = vi.hoisted(() => ({
   eventEmitMock: vi.fn(),
   eventOnMock: vi.fn(),
+  expectCanonicalGenerationMock: vi.fn(),
   ptyConnectMock: vi.fn(),
   ptyDisposeMock: vi.fn(),
   ptyReconnectMock: vi.fn(),
@@ -21,8 +25,10 @@ const mocks = vi.hoisted(() => ({
   createConversationMock: vi.fn(),
   forkConversationMock: vi.fn(),
   forkConversationAtPromptMock: vi.fn(),
+  getConversationSessionInfoMock: vi.fn(),
   getConversationRuntimeStatusesMock: vi.fn(),
   getConversationsForTaskMock: vi.fn(),
+  getSessionStateMock: vi.fn(),
   listeners: new Map<string, (data: unknown) => void>(),
   resumeConversationMock: vi.fn(),
   restartConversationMock: vi.fn(),
@@ -41,6 +47,7 @@ vi.mock('@renderer/lib/ipc', () => ({
       createConversation: mocks.createConversationMock,
       forkConversation: mocks.forkConversationMock,
       forkConversationAtPrompt: mocks.forkConversationAtPromptMock,
+      getConversationSessionInfo: mocks.getConversationSessionInfoMock,
       getConversationRuntimeStatuses: mocks.getConversationRuntimeStatusesMock,
       getConversationsForTask: mocks.getConversationsForTaskMock,
       resumeConversation: mocks.resumeConversationMock,
@@ -48,6 +55,7 @@ vi.mock('@renderer/lib/ipc', () => ({
       touchConversation: mocks.touchConversationMock,
     },
     pty: {
+      getSessionState: mocks.getSessionStateMock,
       resize: mocks.ptyResizeMock,
     },
   },
@@ -95,8 +103,8 @@ describe('ConversationManagerStore', () => {
       mocks.listeners.set(event.name, cb);
       return vi.fn();
     });
-    mocks.resumeConversationMock.mockResolvedValue(true);
-    mocks.restartConversationMock.mockResolvedValue(undefined);
+    mocks.resumeConversationMock.mockResolvedValue({ running: true, generation: 1 });
+    mocks.restartConversationMock.mockResolvedValue({ generation: 1 });
     mocks.archiveConversationMock.mockResolvedValue(undefined);
     mocks.createConversationMock.mockResolvedValue(conversation);
     mocks.forkConversationMock.mockResolvedValue({
@@ -116,8 +124,14 @@ describe('ConversationManagerStore', () => {
       forkedFromPromptIndex: 0,
     });
     mocks.touchConversationMock.mockResolvedValue(undefined);
+    mocks.getConversationSessionInfoMock.mockResolvedValue({ running: false });
     mocks.getConversationRuntimeStatusesMock.mockResolvedValue({});
     mocks.getConversationsForTaskMock.mockResolvedValue([]);
+    mocks.getSessionStateMock.mockResolvedValue({
+      generation: 1,
+      live: false,
+      registering: false,
+    });
   });
 
   it('does not eagerly connect a preloaded historical conversation PTY', () => {
@@ -287,24 +301,50 @@ describe('ConversationManagerStore', () => {
     expect(mocks.ptyResizeMock).toHaveBeenCalledWith('project-1:task-1:conversation-1', 132, 37);
   });
 
+  it('attaches to an already-live PTY without calling the resume controller', async () => {
+    mocks.getSessionStateMock.mockResolvedValueOnce({
+      generation: 7,
+      live: true,
+      registering: false,
+    });
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    if (item) {
+      item.session.pty = {
+        expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
+        lastSentDims: { cols: 132, rows: 37 },
+      } as unknown as FrontendPty;
+    }
+
+    await expect(store.resumeConversation('conversation-1')).resolves.toBe(true);
+
+    expect(mocks.resumeConversationMock).not.toHaveBeenCalled();
+    expect(mocks.expectCanonicalGenerationMock).toHaveBeenCalledWith(7);
+    expect(mocks.ptyResizeMock).toHaveBeenCalledWith('project-1:task-1:conversation-1', 132, 37);
+    expect(item?.getSessionGeneration()).toBe(7);
+    expect(item?.sessionExited).toBe(false);
+  });
+
   it('reapplies the latest measured terminal size after a slow resume', async () => {
-    let resolveResume!: (running: boolean) => void;
+    let resolveResume!: (result: { running: boolean; generation: number }) => void;
     mocks.resumeConversationMock.mockImplementationOnce(
       () =>
-        new Promise<boolean>((resolve) => {
+        new Promise<{ running: boolean; generation: number }>((resolve) => {
           resolveResume = resolve;
         })
     );
     const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
     const item = store.conversations.get('conversation-1');
+    const markSessionRunning = item ? vi.spyOn(item, 'markSessionRunning') : undefined;
 
     const resume = store.resumeConversation('conversation-1', { cols: 80, rows: 24 });
     if (item) {
       item.session.pty = {
+        expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
         lastSentDims: { cols: 132, rows: 61 },
       } as unknown as FrontendPty;
     }
-    resolveResume(true);
+    resolveResume({ running: true, generation: 2 });
 
     await expect(resume).resolves.toBe(true);
     expect(mocks.resumeConversationMock).toHaveBeenCalledWith(
@@ -314,9 +354,30 @@ describe('ConversationManagerStore', () => {
       { cols: 80, rows: 24 }
     );
     expect(mocks.ptyResizeMock).toHaveBeenCalledWith('project-1:task-1:conversation-1', 132, 61);
+    expect(mocks.expectCanonicalGenerationMock).toHaveBeenCalledWith(2);
+    expect(markSessionRunning).toHaveBeenCalledWith(2);
   });
 
-  it('keeps a stopped session actionable when automatic resume does not start a process', async () => {
+  it('accepts a legacy boolean true resume response during a renderer-only update', async () => {
+    mocks.resumeConversationMock.mockResolvedValueOnce(true);
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    item?.setSessionExited(true);
+    item?.setWorking();
+    if (item) {
+      item.session.pty = {
+        expectCanonicalGeneration: mocks.expectCanonicalGenerationMock,
+      } as unknown as FrontendPty;
+    }
+
+    await expect(store.resumeConversation('conversation-1')).resolves.toBe(true);
+
+    expect(item?.sessionExited).toBe(false);
+    expect(item?.status).toBe('working');
+    expect(mocks.expectCanonicalGenerationMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts a legacy boolean false resume response', async () => {
     mocks.resumeConversationMock.mockResolvedValueOnce(false);
     const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
     const item = store.conversations.get('conversation-1');
@@ -324,8 +385,144 @@ describe('ConversationManagerStore', () => {
 
     await expect(store.resumeConversation('conversation-1')).resolves.toBe(false);
 
+    expect(item?.sessionExited).toBe(true);
+    expect(item?.status).toBe('idle');
+    expect(mocks.expectCanonicalGenerationMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps a stopped session actionable when automatic resume does not start a process', async () => {
+    mocks.resumeConversationMock.mockResolvedValueOnce({ running: false, generation: 1 });
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    const markSessionExited = item ? vi.spyOn(item, 'markSessionExited') : undefined;
+    item?.setWorking();
+
+    await expect(store.resumeConversation('conversation-1')).resolves.toBe(false);
+
     expect(item?.status).toBe('idle');
     expect(item?.sessionExited).toBe(true);
+    expect(markSessionExited).toHaveBeenCalledWith(1);
+  });
+
+  it('ignores an older stopped response after a newer resume succeeds', async () => {
+    let resolveOlder!: (result: { running: boolean; generation: number }) => void;
+    mocks.resumeConversationMock
+      .mockImplementationOnce(
+        () =>
+          new Promise<{ running: boolean; generation: number }>((resolve) => {
+            resolveOlder = resolve;
+          })
+      )
+      .mockResolvedValueOnce({ running: true, generation: 2 });
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    const markSessionExited = item ? vi.spyOn(item, 'markSessionExited') : undefined;
+    item?.setWorking();
+
+    const olderResume = store.resumeConversation('conversation-1');
+    await expect(store.resumeConversation('conversation-1')).resolves.toBe(true);
+    resolveOlder({ running: false, generation: 2 });
+    await expect(olderResume).resolves.toBe(false);
+
+    expect(item?.sessionExited).toBe(false);
+    expect(item?.status).toBe('working');
+    expect(markSessionExited).not.toHaveBeenCalled();
+  });
+
+  it('ignores an older resume rejection after a newer resume succeeds', async () => {
+    let rejectOlder!: (error: Error) => void;
+    mocks.resumeConversationMock
+      .mockImplementationOnce(
+        () =>
+          new Promise<never>((_resolve, reject) => {
+            rejectOlder = reject;
+          })
+      )
+      .mockResolvedValueOnce({ running: true, generation: 2 });
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    const markSessionExited = item ? vi.spyOn(item, 'markSessionExited') : undefined;
+    item?.setWorking();
+
+    const olderResume = store.resumeConversation('conversation-1');
+    await expect(store.resumeConversation('conversation-1')).resolves.toBe(true);
+    rejectOlder(new Error('older resume failed'));
+    await expect(olderResume).resolves.toBe(false);
+
+    expect(item?.sessionExited).toBe(false);
+    expect(item?.status).toBe('working');
+    expect(markSessionExited).not.toHaveBeenCalled();
+  });
+
+  it('ignores a generationless rejection after the session advances to a new generation', async () => {
+    let rejectResume!: (error: Error) => void;
+    mocks.resumeConversationMock.mockImplementationOnce(
+      () =>
+        new Promise<never>((_resolve, reject) => {
+          rejectResume = reject;
+        })
+    );
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    const markSessionExited = item ? vi.spyOn(item, 'markSessionExited') : undefined;
+    item?.setWorking();
+
+    const resume = store.resumeConversation('conversation-1');
+    item?.markSessionRunning(3);
+    rejectResume(new Error('obsolete resume failed'));
+    await expect(resume).resolves.toBe(false);
+
+    expect(item?.sessionExited).toBe(false);
+    expect(item?.status).toBe('working');
+    expect(markSessionExited).not.toHaveBeenCalled();
+  });
+
+  it('ignores an older legacy false response after a newer resume succeeds', async () => {
+    let resolveOlder!: (running: boolean) => void;
+    mocks.resumeConversationMock
+      .mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            resolveOlder = resolve;
+          })
+      )
+      .mockResolvedValueOnce({ running: true, generation: 2 });
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    const markSessionExited = item ? vi.spyOn(item, 'markSessionExited') : undefined;
+    item?.setWorking();
+
+    const olderResume = store.resumeConversation('conversation-1');
+    await expect(store.resumeConversation('conversation-1')).resolves.toBe(true);
+    resolveOlder(false);
+    await expect(olderResume).resolves.toBe(false);
+
+    expect(item?.sessionExited).toBe(false);
+    expect(item?.status).toBe('working');
+    expect(markSessionExited).not.toHaveBeenCalled();
+  });
+
+  it('ignores a legacy false response after the session advances to a new generation', async () => {
+    let resolveResume!: (running: boolean) => void;
+    mocks.resumeConversationMock.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveResume = resolve;
+        })
+    );
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    const markSessionExited = item ? vi.spyOn(item, 'markSessionExited') : undefined;
+    item?.setWorking();
+
+    const resume = store.resumeConversation('conversation-1');
+    item?.markSessionRunning(3);
+    resolveResume(false);
+    await expect(resume).resolves.toBe(false);
+
+    expect(item?.sessionExited).toBe(false);
+    expect(item?.status).toBe('working');
+    expect(markSessionExited).not.toHaveBeenCalled();
   });
 
   it('keeps a stopped session actionable when automatic resume throws', async () => {
@@ -335,6 +532,121 @@ describe('ConversationManagerStore', () => {
     await expect(store.resumeConversation('conversation-1')).resolves.toBe(false);
 
     expect(store.conversations.get('conversation-1')?.sessionExited).toBe(true);
+  });
+
+  it('ignores an exit from another project that happens to reuse task and conversation ids', () => {
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    const listener = mocks.listeners.get(agentSessionExitedChannel.name);
+
+    listener?.({
+      projectId: 'project-2',
+      taskId: 'task-1',
+      conversationId: 'conversation-1',
+      sessionId: 'project-2:task-1:conversation-1',
+      generation: 1,
+      exitCode: 0,
+    });
+
+    expect(item?.sessionExited).toBe(false);
+  });
+
+  it('ignores a delayed exit from the previous PTY generation after resume', async () => {
+    mocks.resumeConversationMock.mockResolvedValueOnce({ running: true, generation: 2 });
+    mocks.getSessionStateMock.mockResolvedValue({
+      generation: 2,
+      live: true,
+      registering: false,
+    });
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    const listener = mocks.listeners.get(agentSessionExitedChannel.name);
+
+    await expect(store.resumeConversation('conversation-1')).resolves.toBe(true);
+    listener?.({
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'conversation-1',
+      sessionId: 'project-1:task-1:conversation-1',
+      generation: 1,
+      exitCode: 0,
+    });
+    await flushPromises();
+
+    expect(item?.sessionExited).toBe(false);
+
+    mocks.getSessionStateMock.mockResolvedValue({
+      generation: 2,
+      live: false,
+      registering: false,
+    });
+
+    listener?.({
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'conversation-1',
+      sessionId: 'project-1:task-1:conversation-1',
+      generation: 2,
+      exitCode: 0,
+    });
+    await flushPromises();
+
+    expect(item?.sessionExited).toBe(true);
+  });
+
+  it('keeps a stopped notice hidden while the replacement PTY is registering', async () => {
+    mocks.getSessionStateMock.mockResolvedValue({
+      generation: 1,
+      live: false,
+      registering: true,
+    });
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    const listener = mocks.listeners.get(agentSessionExitedChannel.name);
+
+    listener?.({
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'conversation-1',
+      sessionId: 'project-1:task-1:conversation-1',
+      generation: 1,
+      exitCode: 0,
+    });
+    await flushPromises();
+
+    expect(item?.sessionExited).toBe(false);
+  });
+
+  it('clears an inherited stopped state when the main process still owns the PTY', async () => {
+    mocks.getSessionStateMock.mockResolvedValue({
+      generation: 4,
+      live: true,
+      registering: false,
+    });
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    item?.setSessionExited(true);
+
+    await store.reconcileSessionLiveness('conversation-1');
+
+    expect(item?.sessionExited).toBe(false);
+  });
+
+  it('uses the active-session fallback while a renderer update precedes main-process reload', async () => {
+    mocks.getSessionStateMock.mockRejectedValueOnce(new Error('unknown pty RPC'));
+    mocks.getConversationSessionInfoMock.mockResolvedValueOnce({ running: true });
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    item?.setSessionExited(true);
+
+    await store.reconcileSessionLiveness('conversation-1');
+
+    expect(mocks.getConversationSessionInfoMock).toHaveBeenCalledWith(
+      'project-1',
+      'task-1',
+      'conversation-1'
+    );
+    expect(item?.sessionExited).toBe(false);
   });
 
   it('dismisses the stopped-session notice without changing exit state and shows it on a new exit', () => {
@@ -371,9 +683,9 @@ describe('ConversationManagerStore', () => {
   });
 
   it('dismisses the exited state as soon as a restart begins', async () => {
-    let finishRestart: (() => void) | undefined;
+    let finishRestart: ((result: { generation: number }) => void) | undefined;
     mocks.restartConversationMock.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
+      new Promise<{ generation: number }>((resolve) => {
         finishRestart = resolve;
       })
     );
@@ -384,8 +696,21 @@ describe('ConversationManagerStore', () => {
     const restart = store.restartConversation('conversation-1');
 
     expect(item?.sessionExited).toBe(false);
-    finishRestart?.();
+    finishRestart?.({ generation: 2 });
     await restart;
+    expect(item?.sessionExited).toBe(false);
+  });
+
+  it('supports a restart response from the previous main-process controller', async () => {
+    mocks.restartConversationMock.mockResolvedValueOnce(undefined);
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    item?.setSessionExited(true);
+
+    await store.restartConversation('conversation-1');
+
+    expect(mocks.ptyReconnectMock).toHaveBeenCalledTimes(1);
+    expect(mocks.expectCanonicalGenerationMock).not.toHaveBeenCalled();
     expect(item?.sessionExited).toBe(false);
   });
 

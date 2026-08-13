@@ -24,6 +24,8 @@ const electronExecutable = await resolveDevElectronExecutable({
 const env = {
   ...process.env,
   ELECTRON_EXEC_PATH: electronExecutable,
+  YODA_DEV_NODE_EXEC_PATH: process.execPath,
+  YODA_DEV_ROOT: repoRoot,
 };
 
 // Lines we drop unless YODA_DEV_VERBOSE=1. These come from Electron / macOS

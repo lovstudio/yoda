@@ -1,9 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
 import { Eye, Pencil } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import {
-  Activity,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -11,6 +10,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { usePanelRef, type Layout } from 'react-resizable-panels';
 import { RoomMemberDetail } from '@renderer/features/agent-room/room-member-detail';
+import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import {
   getTaskManagerStore,
   getTaskStore,
@@ -23,7 +23,6 @@ import {
 } from '@renderer/features/tasks/task-view-context';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
-import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
@@ -36,8 +35,10 @@ import { DiffView } from './diff-view/main-panel/diff-view';
 import { EditorMainPanel } from './editor/editor-main-panel';
 import { useEditorContext } from './editor/editor-provider';
 import { MarkdownEditorPanel } from './editor/markdown-editor-panel';
-import { taskDeliverySummariesQuery } from './task-delivery-summaries-query';
+import { taskOpenTransitionStore } from './task-open-transition-store';
+import { TaskRendererActivity } from './task-renderer-activity';
 import { ActiveTaskTitlebar } from './task-titlebar';
+import { stableTaskOpeningMessageKey } from './task-view-opening';
 import { OverviewPanel } from './view/overview-panel';
 import { TaskSidebar } from './view/task-sidebar';
 
@@ -45,44 +46,27 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
   const taskStore = getTaskStore(projectId, taskId);
+  const taskManager = getTaskManagerStore(projectId);
   const kind = useTaskViewKind();
-  const isOpening =
-    kind === 'project-mounting' ||
-    kind === 'provisioning' ||
-    kind === 'idle' ||
-    kind === 'teardown';
-  const { data: deliverySummaries } = useQuery({
-    ...taskDeliverySummariesQuery(projectId, taskId),
-    enabled: isOpening,
+  const openingMessageKey = stableTaskOpeningMessageKey(kind, {
+    hasProject: Boolean(getProjectStore(projectId)),
+    taskLoadState: taskManager?.taskLoadState,
+    isTaskLoadPending: taskManager?.taskLoadPendingIds?.has(taskId) ?? false,
+    isTargetPending: taskOpenTransitionStore.isPending(projectId, taskId),
   });
-  const latestDeliverySummary = deliverySummaries?.[0]?.text.trim() || null;
-  // Do not replace the opening body after the task has already painted. Cold
-  // tasks often resolve this optional summary while provisioning, and swapping
-  // a spinner for markdown at that point reads as a second loading screen.
-  // A summary already present in the query cache is still shown immediately.
-  const [openingSummary] = useState(() => latestDeliverySummary);
 
-  const renderOpeningState = (progressMessage: string) => (
-    <SessionOpeningSurface
-      heading={progressMessage}
-      description={progressMessage}
-      progressMessage={progressMessage}
-      summary={openingSummary ? <MarkdownRenderer content={openingSummary} /> : null}
-    />
-  );
-
-  if (kind === 'creating' || kind === 'naming') {
-    const setupRequiresBranchName = taskStore?.data.setupRequiresBranchName === true;
-    const progressMessage =
-      kind === 'naming'
-        ? (taskStore?.provisionProgressMessage ??
-          t(
-            setupRequiresBranchName
-              ? 'tasks.generatingTaskNameAndBranch'
-              : 'tasks.generatingTaskName'
-          ))
-        : t('tasks.creatingTask');
-    return renderOpeningState(progressMessage);
+  // Never put historical task content or step-by-step provision updates in the
+  // main area while entering a task. A cold task may cross several store states
+  // before it is usable; one fixed surface prevents A -> B -> C repainting.
+  if (openingMessageKey) {
+    const openingMessage = t(openingMessageKey);
+    return (
+      <SessionOpeningSurface
+        heading={openingMessage}
+        description={openingMessage}
+        progressMessage={openingMessage}
+      />
+    );
   }
 
   if (kind === 'naming-error') {
@@ -102,18 +86,8 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
     );
   }
 
-  if (kind === 'project-mounting' || kind === 'provisioning') {
-    const progressMessage = taskStore?.provisionProgressMessage ?? t('tasks.settingUpWorkspace');
-    return renderOpeningState(progressMessage);
-  }
-
   if (kind === 'provision-error' || kind === 'project-error') {
     return <TaskProvisionRecovery projectId={projectId} taskId={taskId} />;
-  }
-
-  if (kind === 'idle' || kind === 'teardown') {
-    const progressMessage = taskStore?.provisionProgressMessage ?? t('tasks.settingUpWorkspace');
-    return renderOpeningState(progressMessage);
   }
 
   if (kind === 'teardown-error') {
@@ -125,6 +99,16 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
           </p>
           <p className="text-xs font-mono text-foreground-muted">{taskErrorMessage(taskStore)}</p>
         </div>
+      </div>
+    );
+  }
+
+  if (kind === 'missing') {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center p-8">
+        <p className="text-sm font-medium font-mono text-foreground-destructive">
+          {t('tasks.taskUnavailable')}
+        </p>
       </div>
     );
   }
@@ -297,7 +281,10 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
     onPointerCancel: endHeaderResize,
   };
 
-  useEffect(() => {
+  // Match the persisted drawer state before paint. A passive effect lets the
+  // panel's 25% default (and its full empty terminal tree) flash for one frame
+  // when switching tasks; it can also miss the first ref attachment entirely.
+  useLayoutEffect(() => {
     const panel = bottomPanelRef.current;
     if (!panel) return;
     const isCollapsed = panel.isCollapsed();
@@ -342,7 +329,7 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
         panelRef={bottomPanelRef}
         collapsible
         collapsedSize="0%"
-        defaultSize="25%"
+        defaultSize={taskView.isTerminalDrawerOpen ? '25%' : '0%'}
         minSize="15%"
         // Window-height changes must not rescale the drawer height.
         groupResizeBehavior="preserve-pixel-size"
@@ -360,7 +347,9 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
           }
         }}
       >
-        <BottomPanel headerResizeHandlers={headerResizeHandlers} />
+        {taskView.isTerminalDrawerOpen ? (
+          <BottomPanel headerResizeHandlers={headerResizeHandlers} />
+        ) : null}
       </ResizablePanel>
     </ResizablePanelGroup>
   );
@@ -541,24 +530,24 @@ export const TaskActiveTabContent = observer(function TaskActiveTabContent({
           file actions for every code file (mirrors the markdown preview). */}
       {renderer === 'monaco' && <MonacoFileToolbar />}
 
-      <Activity mode={renderer === 'overview' ? 'visible' : 'hidden'}>
+      <TaskRendererActivity active={renderer === 'overview'}>
         <OverviewPanel />
-      </Activity>
-      <Activity mode={renderer === 'markdown' ? 'visible' : 'hidden'}>
+      </TaskRendererActivity>
+      <TaskRendererActivity active={renderer === 'markdown'}>
         <MarkdownEditorPanel />
-      </Activity>
-      <Activity mode={renderer === 'diff' ? 'visible' : 'hidden'}>
+      </TaskRendererActivity>
+      <TaskRendererActivity active={renderer === 'diff'}>
         <DiffView />
-      </Activity>
-      <Activity mode={renderer === 'agents' ? 'visible' : 'hidden'}>
+      </TaskRendererActivity>
+      <TaskRendererActivity active={renderer === 'agents'}>
         <ConversationsPanel forceVisible={forceSessionVisible} />
-      </Activity>
-      <Activity mode={renderer === 'room-member' ? 'visible' : 'hidden'}>
+      </TaskRendererActivity>
+      <TaskRendererActivity active={renderer === 'room-member'}>
         <RoomMemberActiveContent />
-      </Activity>
-      <Activity mode={renderer === 'other-file' ? 'visible' : 'hidden'}>
+      </TaskRendererActivity>
+      <TaskRendererActivity active={renderer === 'other-file'}>
         <EditorMainPanel />
-      </Activity>
+      </TaskRendererActivity>
     </div>
   );
 });

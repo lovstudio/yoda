@@ -50,6 +50,10 @@ type Props = {
   selectedModel?: string | null;
   selectedModelSource?: 'agentOverride' | 'currentSession';
   connectionId?: string;
+  authPresentation?: {
+    value: string;
+    detail?: string;
+  };
   modelEditing?: {
     reasoningEffort?: string | null;
     fastMode?: boolean | null;
@@ -65,6 +69,7 @@ export const AgentInfoCard: React.FC<Props> = ({
   selectedModel,
   selectedModelSource = 'agentOverride',
   connectionId,
+  authPresentation,
   modelEditing,
 }) => {
   const { t } = useTranslation();
@@ -266,7 +271,13 @@ export const AgentInfoCard: React.FC<Props> = ({
               : undefined
           }
         />
-        {snapshot?.config.authProvider ? (
+        {authPresentation ? (
+          <InfoRow
+            label={t('agents.runtimeInfo.auth')}
+            value={authPresentation.value}
+            detail={authPresentation.detail}
+          />
+        ) : snapshot?.config.authProvider ? (
           <InfoRow
             label={t('agents.runtimeInfo.auth')}
             value={t(`agents.runtimeInfo.authProviders.${snapshot.config.authProvider}`)}

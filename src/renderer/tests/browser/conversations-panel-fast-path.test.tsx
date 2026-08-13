@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   historyActive: vi.fn(),
   paneSessionIds: vi.fn(),
   provisioned: null as unknown,
+  routeConversationId: 'conversation-1',
 }));
 
 vi.mock('react-i18next', () => ({
@@ -41,7 +42,9 @@ vi.mock('@renderer/features/tasks/task-view-context', () => ({
 
 vi.mock('@renderer/lib/layout/navigation-provider', () => ({
   useParams: () => ({
-    params: { tab: { kind: 'conversation', conversationId: 'conversation-1' } },
+    params: {
+      tab: { kind: 'conversation', conversationId: mocks.routeConversationId },
+    },
   }),
 }));
 
@@ -99,6 +102,7 @@ describe('ConversationsPanel active-session fast path', () => {
     });
     mocks.historyActive.mockReset();
     mocks.paneSessionIds.mockReset();
+    mocks.routeConversationId = 'conversation-1';
 
     const conversation = {
       data: { id: 'conversation-1' },
@@ -167,10 +171,28 @@ describe('ConversationsPanel active-session fast path', () => {
     ).toBe('session-1');
     expect(mocks.conversationValues).not.toHaveBeenCalled();
     expect(mocks.archivedHook).not.toHaveBeenCalled();
-    expect(mocks.historyActive).toHaveBeenLastCalledWith(false);
+    expect(mocks.historyActive).not.toHaveBeenCalled();
 
     await vi.waitFor(() => {
       expect(mocks.historyActive).toHaveBeenLastCalledWith(true);
     });
+  });
+
+  it('does not mount stale session chrome while the routed conversation is resolving', async () => {
+    mocks.routeConversationId = 'conversation-2';
+    const { ConversationsPanel } = await import(
+      '@renderer/features/tasks/conversations/conversations-panel'
+    );
+    await act(async () => root.render(createElement(ConversationsPanel)));
+
+    expect(host.textContent).toContain('opening');
+    expect(host.querySelector('[data-conversation-session]')).toBeNull();
+    expect(
+      host.querySelector('[data-pane-session-ids]')?.getAttribute('data-pane-session-ids')
+    ).toBe('');
+    expect(mocks.historyActive).not.toHaveBeenCalled();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(mocks.historyActive).not.toHaveBeenCalled();
   });
 });

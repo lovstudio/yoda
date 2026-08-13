@@ -13,6 +13,7 @@ import {
 } from '@renderer/features/projects/stores/project-selectors';
 import { ConversationTree } from '@renderer/features/tasks/conversations/conversation-tree';
 import { useArchivedConversations } from '@renderer/features/tasks/conversations/use-archived-conversations';
+import { openTaskWhenReady } from '@renderer/features/tasks/open-task-when-ready';
 import {
   getTaskStore,
   taskAncestors,
@@ -107,7 +108,7 @@ export const OverviewPanel = observer(function OverviewPanel() {
                   <button
                     type="button"
                     className="-mx-1 inline-flex min-w-0 items-center rounded px-1 hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    onClick={() => navigate('task', { projectId, taskId: ancestor.data.id })}
+                    onClick={() => void openTaskWhenReady(projectId, ancestor.data.id, navigate)}
                     title={ancestor.data.name}
                   >
                     <span className="min-w-0 truncate">{ancestor.data.name}</span>

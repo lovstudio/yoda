@@ -79,15 +79,17 @@ export type SoundEvent = 'needs_attention' | 'task_complete';
 export const agentEventChannel = defineEvent<AgentEventEnvelope>('agent:event');
 
 export interface AgentSessionExited {
-  /** PTY session ID (= conversationId for agent sessions). */
+  /** Deterministic PTY session ID for this conversation. */
   projectId: string;
   sessionId: string;
   conversationId: string;
   taskId: string;
+  /** Backend generation that exited; protects a resumed session from an older exit. */
+  generation: number;
   exitCode: number | undefined;
 }
 
-/** Emitted when an agent PTY session exits. Topic = taskId. */
+/** Broadcast when an agent PTY session exits; consumers must filter its identity fields. */
 export const agentSessionExitedChannel = defineEvent<AgentSessionExited>('agent:session-exited');
 
 export interface AgentSessionStatusChanged {

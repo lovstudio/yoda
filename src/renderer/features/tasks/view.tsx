@@ -249,6 +249,16 @@ export const TaskViewWrapperWithProviders = observer(function TaskViewWrapperWit
   const kind = taskViewKind(taskStore, projectId);
   const provisioned = asProvisioned(taskStore);
 
+  // A direct route can arrive before a lazily mounted project has populated
+  // its task map. Point-load the target from this one owner so `missing` is a
+  // short, coherent opening phase rather than an empty intermediate frame.
+  useLayoutEffect(() => {
+    if (kind !== 'missing') return;
+    void getTaskManagerStore(projectId)
+      ?.ensureTaskLoaded(taskId)
+      .catch(() => {});
+  }, [kind, projectId, taskId]);
+
   // Auto-provision when the task view is rendered with an idle task — covers
   // session restore where the task wasn't in openTaskIds, direct navigation,
   // and any other path that lands on the task view before provisioning runs.

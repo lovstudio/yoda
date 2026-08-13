@@ -13,6 +13,7 @@ import {
   agentSessionStatusChangedChannel,
   isAttentionNotification,
   type AgentEvent,
+  type AgentSessionExited,
   type AgentSessionRuntimeStatus,
   type NotificationType,
 } from '@shared/events/agentEvents';
@@ -70,6 +71,7 @@ export class ConversationManagerStore {
   private readonly pendingConversationTitles = new Map<string, string>();
   private readonly pendingContextForks = new Map<string, Promise<Conversation>>();
   private readonly pendingConversationForks = new Map<string, Promise<Conversation>>();
+  private readonly resumeLeases = new WeakMap<ConversationStore, object>();
   private readonly runtimeStatusRevisions = new Map<string, number>();
   conversations = observable.map<string, ConversationStore>();
 
@@ -188,11 +190,106 @@ export class ConversationManagerStore {
 
   private listenToSessionExited(): () => void {
     return events.on(agentSessionExitedChannel, (event) => {
-      if (event.taskId !== this.taskId) return;
+      if (event.projectId !== this.projectId || event.taskId !== this.taskId) return;
       const conversationStore = this.conversations.get(event.conversationId);
-      if (!conversationStore) return;
-      conversationStore.markSessionExited();
+      if (!conversationStore || conversationStore.session.sessionId !== event.sessionId) return;
+      // The session id is deliberately stable across resume/restart. Confirm
+      // the registry's current owner before changing UI state: a delayed exit
+      // from an older PTY otherwise marks its replacement as stopped.
+      void this.reconcileExitedSession(conversationStore, event);
     });
+  }
+
+  private async reconcileExitedSession(
+    conversationStore: ConversationStore,
+    event: AgentSessionExited
+  ): Promise<void> {
+    try {
+      const state = await rpc.pty.getSessionState(event.sessionId);
+      // The conversation may have moved, been archived, or been replaced
+      // while the RPC was in flight. Never apply a stale asynchronous result.
+      if (
+        this.conversations.get(event.conversationId) !== conversationStore ||
+        conversationStore.session.sessionId !== event.sessionId
+      ) {
+        return;
+      }
+      if (state.live) {
+        conversationStore.markSessionRunning(state.generation);
+        return;
+      }
+      // A replacement is being spawned but has not registered yet. Holding the
+      // existing UI state avoids a stopped flash between generations.
+      if (state.registering || state.generation > event.generation) return;
+      conversationStore.markSessionExited(event.generation);
+    } catch (error) {
+      // An exit banner is only useful when it reflects current main-process
+      // state. Do not promote an unverified broadcast to visible UI state.
+      log.debug('ConversationManagerStore: skipped unverified session exit', {
+        projectId: this.projectId,
+        taskId: this.taskId,
+        conversationId: event.conversationId,
+        sessionId: event.sessionId,
+        error,
+      });
+    }
+  }
+
+  /**
+   * Repair an already-visible conversation after it mounts. This covers a
+   * renderer that retained an old `sessionExited` flag across an app reload
+   * while the main process kept the live PTY running.
+   */
+  async reconcileSessionLiveness(conversationId: string): Promise<void> {
+    const conversationStore = this.conversations.get(conversationId);
+    if (!conversationStore) return;
+    const sessionId = conversationStore.session.sessionId;
+    try {
+      const state = await rpc.pty.getSessionState(sessionId);
+      if (
+        this.conversations.get(conversationId) !== conversationStore ||
+        conversationStore.session.sessionId !== sessionId
+      ) {
+        return;
+      }
+      if (state.live || state.registering) {
+        conversationStore.markSessionRunning(state.generation);
+      }
+    } catch (error) {
+      log.debug('ConversationManagerStore: failed to reconcile session liveness', {
+        projectId: this.projectId,
+        taskId: this.taskId,
+        conversationId,
+        sessionId,
+        error,
+      });
+      // During a renderer-only hot update the main process may still expose
+      // the previous RPC surface. Its established session-info endpoint has a
+      // conservative `running` bit derived from the active provider process;
+      // use it only to clear an inherited false stopped state.
+      try {
+        const sessionInfo = await rpc.conversations.getConversationSessionInfo(
+          this.projectId,
+          this.taskId,
+          conversationId
+        );
+        if (
+          this.conversations.get(conversationId) !== conversationStore ||
+          conversationStore.session.sessionId !== sessionId
+        ) {
+          return;
+        }
+        if (sessionInfo.running) conversationStore.setSessionExited(false);
+      } catch (fallbackError) {
+        log.debug('ConversationManagerStore: session liveness fallback failed', {
+          projectId: this.projectId,
+          taskId: this.taskId,
+          conversationId,
+          sessionId,
+          error: fallbackError,
+        });
+      }
+    }
   }
 
   private listenToConversationRenamed(): () => void {
@@ -579,19 +676,59 @@ export class ConversationManagerStore {
   ): Promise<boolean> {
     const store = this.conversations.get(conversationId);
     if (!store) return false;
+    const resumeLease = {};
+    const sessionGenerationAtStart = store.getSessionGeneration();
+    this.resumeLeases.set(store, resumeLease);
+    const ownsResumeLease = () =>
+      this.conversations.get(conversationId) === store &&
+      this.resumeLeases.get(store) === resumeLease;
+    const ownsUngeneratedFailureLease = () =>
+      ownsResumeLease() && store.getSessionGeneration() === sessionGenerationAtStart;
     store.setSessionExited(false);
     try {
-      const running = await rpc.conversations.resumeConversation(
+      const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
+      // The common task-switch path already has a live backend/tmux session.
+      // Avoid the heavier resume controller (DB lookup, permission reconcile,
+      // operation lock) and simply attach the renderer to the current PTY
+      // generation. If this lightweight probe is unavailable during a
+      // renderer-only update, fall through to the compatible resume RPC.
+      const existingState = store.session.pty
+        ? await rpc.pty.getSessionState(sessionId).catch(() => null)
+        : null;
+      if (existingState?.live) {
+        if (!ownsResumeLease()) return true;
+        store.session.pty?.expectCanonicalGeneration(existingState.generation);
+        store.markSessionRunning(existingState.generation);
+        const mountedSize = store.session.pty?.lastSentDims ?? initialSize;
+        if (mountedSize) {
+          void rpc.pty.resize(sessionId, mountedSize.cols, mountedSize.rows);
+        }
+        return true;
+      }
+
+      const result = (await rpc.conversations.resumeConversation(
         this.projectId,
         this.taskId,
         conversationId,
         initialSize
-      );
+      )) as Awaited<ReturnType<typeof rpc.conversations.resumeConversation>> | boolean;
+      // Renderer-only hot updates can temporarily talk to the previous main
+      // process RPC, whose resume result was the running boolean itself.
+      const running = typeof result === 'boolean' ? result : result.running;
+      const generation = typeof result === 'boolean' ? undefined : result.generation;
       if (!running) {
-        store.markSessionExited();
+        if (generation !== undefined) {
+          if (ownsResumeLease()) store.markSessionExited(generation);
+        } else if (ownsUngeneratedFailureLease()) {
+          store.markSessionExited();
+        }
         return false;
       }
-      store.setSessionExited(false);
+      if (!ownsResumeLease()) return true;
+      if (generation !== undefined) {
+        store.session.pty?.expectCanonicalGeneration(generation);
+      }
+      store.markSessionRunning(generation ?? 0);
       // Mount-time measurement can finish while the main process is still
       // creating the backend PTY. That early resize sees no registered PTY,
       // while initialSize may still be xterm's 80x24 fallback. Reapply the
@@ -599,12 +736,11 @@ export class ConversationManagerStore {
       // first launch instead of waiting for a reload.
       const mountedSize = store.session.pty?.lastSentDims ?? initialSize;
       if (mountedSize) {
-        const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
         void rpc.pty.resize(sessionId, mountedSize.cols, mountedSize.rows);
       }
       return true;
     } catch (error) {
-      store.markSessionExited();
+      if (ownsUngeneratedFailureLease()) store.markSessionExited();
       log.warn('ConversationManagerStore: failed to resume conversation', {
         projectId: this.projectId,
         taskId: this.taskId,
@@ -631,7 +767,7 @@ export class ConversationManagerStore {
     // draws at the wrong width until the first resize and corrupts wrapping.
     const effectiveSize = initialSize ?? store.session.pty?.lastSentDims ?? undefined;
     try {
-      await rpc.conversations.restartConversation(
+      const result = (await rpc.conversations.restartConversation(
         this.projectId,
         this.taskId,
         conversationId,
@@ -639,8 +775,16 @@ export class ConversationManagerStore {
         tmuxOverride,
         enableSkillKey,
         runtimeOverrides
-      );
+      )) as Awaited<ReturnType<typeof rpc.conversations.restartConversation>> | undefined;
+      // Renderer-only hot updates can briefly keep the previous main-process
+      // controller alive. That controller completed the restart successfully
+      // but returned void, before restart responses carried PTY generations.
+      const generation = result?.generation;
+      store.markSessionRunning(generation ?? 0);
       await store.session.reconnect();
+      if (generation !== undefined) {
+        store.session.pty?.expectCanonicalGeneration(generation);
+      }
       if (effectiveSize) {
         const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
         void rpc.pty.resize(sessionId, effectiveSize.cols, effectiveSize.rows);
@@ -707,6 +851,8 @@ export class ConversationStore {
   /** Human-readable "what is it waiting on" context for `awaiting-input`. */
   pendingActionDescription: string | null = null;
   private lastForceWorkingAt = 0;
+  /** Latest backend instance known to be running for this stable session id. */
+  private sessionGeneration = 0;
 
   constructor(
     conversation: Conversation,
@@ -725,6 +871,7 @@ export class ConversationStore {
       sessionExited: observable,
       sessionExitNoticeDismissed: observable,
       setSessionExited: action,
+      markSessionRunning: action,
       markSessionExited: action,
       dismissSessionExitNotice: action,
       lastNotificationType: observable,
@@ -871,7 +1018,22 @@ export class ConversationStore {
     this.sessionExitNoticeDismissed = false;
   }
 
-  markSessionExited() {
+  getSessionGeneration(): number {
+    return this.sessionGeneration;
+  }
+
+  markSessionRunning(generation: number) {
+    if (Number.isSafeInteger(generation) && generation > this.sessionGeneration) {
+      this.sessionGeneration = generation;
+    }
+    this.setSessionExited(false);
+  }
+
+  markSessionExited(generation?: number) {
+    if (generation !== undefined) {
+      if (!Number.isSafeInteger(generation) || generation < this.sessionGeneration) return;
+      this.sessionGeneration = generation;
+    }
     this.clearWorking();
     this.sessionExited = true;
     this.sessionExitNoticeDismissed = false;

@@ -25,8 +25,10 @@
 - confirm renderer event flow if hook payload or notification behavior changes
 - preserve the output contract: generation isolates respawns, sequence joins
   snapshot/live data exactly once, and xterm write ACKs release PTY backpressure
-- keep renderer PTYs bounded by the configured hot-terminal LRU; an evicted
-  xterm must unsubscribe and be reconstructed from the main-process snapshot
+- keep renderer PTYs in the default adaptive cache so hidden xterms continue
+  parsing while their off-screen DOM renderer is paused; only measured memory
+  pressure or sustained hidden output may evict the oldest safe xterms, which
+  must unsubscribe and be reconstructed from the main-process snapshot
 - idle-session hibernation may terminate only detachable `idle`/`completed`
   sessions with zero renderer consumers; first reopen/input must transparently
   resume through the existing conversation registration epoch

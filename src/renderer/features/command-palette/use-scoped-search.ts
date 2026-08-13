@@ -1,8 +1,27 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
-import type { SearchItem, SearchItemKind } from '@shared/search';
+import type { CommandPalettePage, SearchItem, SearchItemKind } from '@shared/search';
 import { rpc } from '@renderer/lib/ipc';
 
 const PAGE_SIZE = 25;
+
+/**
+ * Offset pages can overlap when a task/session receives activity between page
+ * requests and moves earlier in the recency order. Keep the first occurrence:
+ * it is the freshest row and gives React/cmdk one stable identity per entity.
+ */
+export function uniqueScopedSearchItems(pages: CommandPalettePage[]): SearchItem[] {
+  const seen = new Set<string>();
+  const items: SearchItem[] = [];
+  for (const page of pages) {
+    for (const item of page.items) {
+      const identity = `${item.kind}:${item.id}`;
+      if (seen.has(identity)) continue;
+      seen.add(identity);
+      items.push(item);
+    }
+  }
+  return items;
+}
 
 /**
  * Paginated single-kind search backing an infinite-scroll scoped view. Empty
@@ -31,7 +50,7 @@ export function useScopedSearch(
     placeholderData: (prev) => prev,
   });
 
-  const items: SearchItem[] = q.data?.pages.flatMap((p) => p.items) ?? [];
+  const items = q.data ? uniqueScopedSearchItems(q.data.pages) : [];
   return {
     items,
     hasNextPage: q.hasNextPage,

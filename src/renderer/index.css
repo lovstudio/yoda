@@ -23,6 +23,7 @@
   --text-micro--line-height: 1.2;
 
   --color-background: var(--background);
+  --color-background-opaque: var(--background-opaque);
   --color-background-1: var(--background-1);
   --color-background-2: var(--background-2);
   --color-background-3: var(--background-3);
@@ -171,9 +172,18 @@
   text-spacing-trim: space-all;
 }
 
+/*
+ * The DOM renderer replaces glyph spans inside one long-lived row layer. Keep
+ * that layer opaque so a resize/reflow cannot expose Chromium's previous
+ * transparent raster as duplicated text or stale ANSI background blocks.
+ */
+.xterm .xterm-rows {
+  background-color: var(--yoda-xterm-background, var(--xterm-bg));
+}
+
 /* Hide xterm viewport scrollbars in embedded terminals */
 .xterm .xterm-viewport {
-  background-color: transparent !important;
+  background-color: var(--yoda-xterm-background, var(--xterm-bg)) !important;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE/Edge */
 }
@@ -185,6 +195,7 @@
 @layer base {
   .ylight {
     --background: color(display-p3 1 1 1);
+    --background-opaque: color(display-p3 1 1 1);
     --background-1: color(display-p3 0.98 0.98 0.98);
     --background-2: color(display-p3 0.949 0.949 0.949);
     --background-3: color(display-p3 0.918 0.918 0.918);
@@ -279,6 +290,7 @@
 
   .ydark {
     --background: #111111;
+    --background-opaque: #111111;
     --background-1: #171717;
     --background-2: #1e1e1d;
     --background-3: #262624;

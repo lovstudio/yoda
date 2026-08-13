@@ -151,6 +151,22 @@ export const ptyController = createRPCController({
     return ok();
   },
 
+  /**
+   * Return the current ownership state for a stable renderer session id.
+   *
+   * An exit notification can be delivered after a replacement PTY has begun
+   * registering under the same id. Renderers use this snapshot to distinguish
+   * that stale notification from a process that is genuinely gone.
+   */
+  getSessionState: (sessionId: string) => {
+    const diagnostics = ptySessionRegistry.getDiagnostics(sessionId);
+    return {
+      generation: ptySessionRegistry.getGeneration(sessionId),
+      live: diagnostics?.live === true,
+      registering: diagnostics?.registering === true,
+    };
+  },
+
   /** Kill a PTY session and clean it up immediately. */
   kill: (sessionId: string) => {
     const pty = ptySessionRegistry.get(sessionId);

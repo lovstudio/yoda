@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   injectClipboardImagesAndPrompt: vi.fn(),
   injectTuiStartupInput: vi.fn(),
   ensureCodexResumeProviderCompatible: vi.fn(),
+  ensureCodexMaasCompatibleModelCatalog: vi.fn(),
   killTmuxSession: vi.fn(),
   listTmuxSessionMarkersStrict: vi.fn(),
   repairCodexThreadHistoryProjection: vi.fn(),
@@ -161,6 +162,10 @@ vi.mock('@main/core/maas/maas-service', () => ({
 vi.mock('@main/core/maas/codex-history-compat', () => ({
   ensureCodexResumeProviderCompatibleForConfig: mocks.ensureCodexResumeProviderCompatible,
   migrateLegacyCodexMaasHistoryForConfig: mocks.migrateLegacyCodexMaasHistory,
+}));
+
+vi.mock('@main/core/maas/codex-maas-model-catalog', () => ({
+  ensureCodexMaasCompatibleModelCatalog: mocks.ensureCodexMaasCompatibleModelCatalog,
 }));
 
 vi.mock('@main/core/pty/local-pty', () => ({
@@ -368,6 +373,9 @@ describe('LocalConversationProvider', () => {
     mocks.aiLogStart.mockResolvedValue('ai-log-id');
     mocks.buildAgentEnv.mockReturnValue({});
     mocks.ensureCodexResumeProviderCompatible.mockReturnValue({ status: 'unchanged' });
+    mocks.ensureCodexMaasCompatibleModelCatalog.mockResolvedValue(
+      '/state/codex/.yoda/maas-model-catalog.json'
+    );
     mocks.repairCodexThreadHistoryProjection.mockReturnValue({
       status: 'unchanged',
       reason: 'checkpoint-current',
@@ -635,10 +643,14 @@ describe('LocalConversationProvider', () => {
       expect.objectContaining({ data: 'final output' }),
       sessionId
     );
-    expect(mocks.emitEvent).toHaveBeenCalledWith(ptyExitChannel, { exitCode: 7 }, sessionId);
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      ptyExitChannel,
+      expect.objectContaining({ exitCode: 7, generation: expect.any(Number) }),
+      sessionId
+    );
     expect(mocks.emitEvent).toHaveBeenCalledWith(
       agentSessionExitedChannel,
-      expect.objectContaining({ exitCode: 7, sessionId })
+      expect.objectContaining({ exitCode: 7, generation: expect.any(Number), sessionId })
     );
     const eventNames = mocks.emitEvent.mock.calls.map(([event]) => event);
     expect(eventNames.indexOf(ptyDataChannel)).toBeLessThan(eventNames.indexOf(ptyExitChannel));
@@ -672,7 +684,11 @@ describe('LocalConversationProvider', () => {
     );
     expect(mocks.emitEvent).toHaveBeenCalledWith(
       ptyExitChannel,
-      { exitCode: 9, signal: 'SIGTERM' },
+      expect.objectContaining({
+        exitCode: 9,
+        generation: expect.any(Number),
+        signal: 'SIGTERM',
+      }),
       sessionId
     );
     expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
@@ -741,12 +757,16 @@ describe('LocalConversationProvider', () => {
       threadId: 'codex-thread-1',
       ctx: expect.anything(),
     });
-    expect(mocks.ensureCodexResumeProviderCompatible).toHaveBeenCalledWith('codex-thread-1', {
-      cli: 'codex',
-      resumeFlag: 'resume',
-      resumeSessionIdArg: true,
-      initialPromptFlag: '',
-    });
+    expect(mocks.ensureCodexResumeProviderCompatible).toHaveBeenCalledWith(
+      'codex-thread-1',
+      {
+        cli: 'codex',
+        resumeFlag: 'resume',
+        resumeSessionIdArg: true,
+        initialPromptFlag: '',
+      },
+      undefined
+    );
     expect(mocks.resolveLocalPtySpawn).toHaveBeenLastCalledWith(
       expect.objectContaining({
         intent: expect.objectContaining({
@@ -963,7 +983,7 @@ describe('LocalConversationProvider', () => {
     expect(spawned[0].options.args.slice(2)).toEqual(['Fix this']);
   });
 
-  it('launches Codex through the persisted local MaaS Gateway provider', async () => {
+  it('launches Codex against the selected MaaS provider with a process-scoped key', async () => {
     mocks.getProviderConfig.mockResolvedValue({
       cli: 'codex',
       resumeFlag: 'resume',
@@ -986,9 +1006,19 @@ describe('LocalConversationProvider', () => {
 
     await provider.startSession(codexConversation, { cols: 80, rows: 24 }, false, 'Fix this');
 
-    expect(spawned[0].options.args).toEqual(['Fix this']);
+    expect(spawned[0].options.args[0]).toBe('Fix this');
     expect(spawned[0].options.args.join(' ')).not.toContain('yoda-maas');
-    expect(spawned[0].options.args.join(' ')).not.toContain('model_provider');
+    expect(spawned[0].options.args).toEqual(
+      expect.arrayContaining([
+        'model_provider="zenmux"',
+        'model_providers.zenmux.base_url="https://zenmux.example.test/v1"',
+        'model_providers.zenmux.env_key="ZENMUX_API_KEY"',
+        'model_catalog_json="/state/codex/.yoda/maas-model-catalog.json"',
+      ])
+    );
+    expect(mocks.ensureCodexMaasCompatibleModelCatalog).toHaveBeenCalledWith(
+      expect.stringMatching(/\.codex$/)
+    );
     expect(spawned[0].options.args).not.toContain('zenmux-secret');
     expect(mocks.migrateLegacyCodexMaasHistory).toHaveBeenCalledWith(
       expect.objectContaining({ authProvider: 'yoda-maas', maasPlatformId: 'zenmux' })
@@ -996,7 +1026,7 @@ describe('LocalConversationProvider', () => {
     expect(mocks.buildAgentEnv).toHaveBeenCalledWith(
       expect.objectContaining({
         agentApiVars: false,
-        providerVars: undefined,
+        providerVars: { ZENMUX_API_KEY: 'zenmux-secret' },
       })
     );
     expect(mocks.setInteractiveSessionContext).toHaveBeenCalledWith(
@@ -1008,6 +1038,45 @@ describe('LocalConversationProvider', () => {
         metadata: expect.objectContaining({ maasEffective: 'true' }),
       })
     );
+  });
+
+  it('maps a Codex model to the ZenMux catalog id without mixing in reasoning effort', async () => {
+    mocks.getProviderConfig.mockResolvedValue({
+      cli: 'codex',
+      resumeFlag: 'resume',
+      resumeSessionIdArg: true,
+      initialPromptFlag: '',
+      authProvider: 'yoda-maas',
+      maasPlatformId: 'profile:zenmux',
+    });
+    mocks.getRuntimeInferenceCredentials.mockResolvedValue({
+      platformId: 'profile:zenmux',
+      displayName: 'ZenMux',
+      endpoint: 'https://zenmux.ai/api/v1',
+      apiKey: 'zenmux-secret',
+    });
+    const codexConversation: Conversation = {
+      ...conversation,
+      runtimeId: 'codex',
+    };
+    const provider = createProvider();
+
+    await provider.startSession(
+      codexConversation,
+      { cols: 80, rows: 24 },
+      false,
+      'Fix this',
+      undefined,
+      undefined,
+      { model: 'gpt-5.6-sol', reasoningEffort: 'high' }
+    );
+
+    const args = spawned[0].options.args;
+    const modelIndex = args.indexOf('--model');
+    expect(modelIndex).toBeGreaterThanOrEqual(0);
+    expect(args[modelIndex + 1]).toBe('openai/gpt-5.6-sol');
+    expect(args).toContain('model_reasoning_effort="high"');
+    expect(args).not.toContain('gpt-5.6-sol high');
   });
 
   it('removes every MaaS routing override after Codex is switched back', async () => {

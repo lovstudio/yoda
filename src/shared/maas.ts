@@ -59,44 +59,70 @@ export type MaasManagedGatewayStarSnapshot = {
 };
 
 export type MaasPlatformTemplateId = (typeof MAAS_PLATFORM_IDS)[number];
-export type MaasProfileId = `${MaasPlatformTemplateId}:${string}`;
-export type CustomMaasPlatformId = `custom:${string}`;
-export type MaasPlatformId = MaasPlatformTemplateId | MaasProfileId;
+export type MaasProfileId = `profile:${string}`;
+export type LegacyMaasProfileId = `${MaasPlatformTemplateId}:${string}`;
+/** @deprecated Use MaasProfileId. Retained for persisted pre-profile IDs. */
+export type CustomMaasPlatformId = `custom:${string}` | MaasProfileId;
+export type MaasPlatformId = MaasPlatformTemplateId | MaasProfileId | LegacyMaasProfileId;
 
 const CUSTOM_MAAS_PLATFORM_PREFIX = 'custom:';
+const MAAS_PROFILE_PREFIX = 'profile:';
+const LEGACY_CLOUD_PROFILE_IDS = new Set(['zenmux', 'openrouter', 'siliconflow', 'custom']);
+
+export function migrateLegacyMaasPlatformId(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  if (value.startsWith(MAAS_PROFILE_PREFIX)) return value;
+  const prefix = value.split(':', 1)[0] ?? '';
+  if (!LEGACY_CLOUD_PROFILE_IDS.has(prefix)) return value;
+  if (value.includes(':') && value.endsWith(':')) return value;
+  return `${MAAS_PROFILE_PREFIX}${value}`;
+}
+
+export function getLegacyMaasPlatformId(platformId: MaasPlatformId): LegacyMaasProfileId | null {
+  if (!platformId.startsWith(MAAS_PROFILE_PREFIX)) return null;
+  const legacyId = platformId.slice(MAAS_PROFILE_PREFIX.length);
+  const prefix = legacyId.split(':', 1)[0] ?? '';
+  return LEGACY_CLOUD_PROFILE_IDS.has(prefix) ? (legacyId as LegacyMaasProfileId) : null;
+}
 
 export function isMaasPlatformId(value: unknown): value is MaasPlatformId {
   if (typeof value !== 'string') return false;
   if ((MAAS_PLATFORM_IDS as readonly string[]).includes(value)) return true;
   const separatorIndex = value.indexOf(':');
   if (separatorIndex <= 0 || separatorIndex === value.length - 1) return false;
+  if (value.startsWith(MAAS_PROFILE_PREFIX)) return true;
   return (MAAS_PLATFORM_IDS as readonly string[]).includes(value.slice(0, separatorIndex));
 }
 
 export function isCustomMaasPlatformId(
   platformId: MaasPlatformId
 ): platformId is 'custom' | CustomMaasPlatformId {
-  return platformId === 'custom' || platformId.startsWith(CUSTOM_MAAS_PLATFORM_PREFIX);
+  return (
+    platformId === 'custom' ||
+    platformId.startsWith(CUSTOM_MAAS_PLATFORM_PREFIX) ||
+    platformId.startsWith(MAAS_PROFILE_PREFIX)
+  );
 }
 
 export function getMaasPlatformTemplateId(platformId: MaasPlatformId): MaasPlatformTemplateId {
+  if (platformId.startsWith(MAAS_PROFILE_PREFIX)) {
+    const legacyId = getLegacyMaasPlatformId(platformId);
+    return legacyId ? (legacyId.split(':', 1)[0] as MaasPlatformTemplateId) : 'custom';
+  }
   const separatorIndex = platformId.indexOf(':');
   return (
     separatorIndex < 0 ? platformId : platformId.slice(0, separatorIndex)
   ) as MaasPlatformTemplateId;
 }
 
-export function createMaasProfileId(
-  templateId: MaasPlatformTemplateId,
-  uuid: string = globalThis.crypto.randomUUID()
-): MaasProfileId {
-  return `${templateId}:${uuid}`;
+export function createMaasProfileId(uuid: string = globalThis.crypto.randomUUID()): MaasProfileId {
+  return `profile:${uuid}`;
 }
 
 export function createCustomMaasPlatformId(
   uuid: string = globalThis.crypto.randomUUID()
 ): CustomMaasPlatformId {
-  return createMaasProfileId('custom', uuid) as CustomMaasPlatformId;
+  return createMaasProfileId(uuid);
 }
 
 export const MAAS_INVOCATION_KINDS = ['text', 'image', 'embedding', 'video'] as const;
@@ -109,6 +135,14 @@ export type MaasPlatformConnection = {
   platformId: MaasPlatformId;
   displayName: string;
   endpoint: string;
+  websiteUrl?: string;
+  description?: string;
+  logoUrl?: string;
+  envKey?: string;
+  /** @deprecated Legacy per-Profile external sync consent. */
+  syncToAgentClient?: boolean;
+  /** @deprecated Legacy per-Profile external sync consent version. */
+  syncToAgentClientVersion?: 1;
   keyFingerprint: string | null;
   inferenceKeyFingerprint: string | null;
   connectedAt: string | null;
@@ -147,7 +181,75 @@ export type MaasConnectInput = {
   inferenceApiKey?: string;
   displayName?: string;
   endpoint?: string;
+  websiteUrl?: string;
+  description?: string;
+  logoUrl?: string;
+  envKey?: string;
+  /** @deprecated External Agent sync is now a global MaaS setting. */
+  syncToAgentClient?: boolean;
 };
+
+export type MaasProfileWebsiteMetadata = {
+  websiteUrl: string;
+  name: string | null;
+  description: string | null;
+  logoUrl: string | null;
+};
+
+export type MaasProfileWebsiteInspection =
+  | { success: true; metadata: MaasProfileWebsiteMetadata }
+  | { success: false; error: string };
+
+export type MaasSetCodexClientSyncInput = {
+  /** @deprecated Sync is global; retained for older renderer callers. */
+  platformId?: MaasPlatformId;
+  enabled: boolean;
+  loginItemEnabled?: boolean;
+};
+
+export type MaasCodexClientSyncStatus = {
+  supported: boolean;
+  enabled: boolean;
+  managed: boolean;
+  configManaged: boolean;
+  environmentPublished: boolean;
+  persistentCredentialStored: boolean;
+  loginItemEnabled: boolean;
+  platformId: MaasPlatformId | null;
+  displayName: string | null;
+  envKey: string | null;
+  persistsAfterQuit: boolean;
+};
+
+const DEFAULT_MAAS_ENV_KEYS: Record<MaasPlatformTemplateId, string> = {
+  zenmux: 'ZENMUX_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
+  siliconflow: 'SILICONFLOW_API_KEY',
+  litellm: 'LITELLM_API_KEY',
+  newapi: 'NEW_API_API_KEY',
+  cliproxyapi: 'CLIPROXYAPI_API_KEY',
+  custom: 'CUSTOM_MAAS_API_KEY',
+};
+
+export function isValidMaasEnvKey(value: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
+}
+
+export function resolveMaasEnvKey(
+  platformId: MaasPlatformId,
+  displayName?: string,
+  configuredEnvKey?: string
+): string {
+  const explicit = configuredEnvKey?.trim();
+  if (explicit) return explicit;
+  const templateId = getMaasPlatformTemplateId(platformId);
+  const nameKey = displayName
+    ?.trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return nameKey ? `${nameKey}_API_KEY` : DEFAULT_MAAS_ENV_KEYS[templateId];
+}
 
 export type MaasApiKeyKind = 'primary' | 'inference';
 

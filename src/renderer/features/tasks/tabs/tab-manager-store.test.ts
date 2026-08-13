@@ -1,7 +1,10 @@
-import { observable } from 'mobx';
+import { observable, runInAction } from 'mobx';
 import { describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
-import type { ConversationManagerStore } from '@renderer/features/tasks/conversations/conversation-manager';
+import type {
+  ConversationManagerStore,
+  ConversationStore,
+} from '@renderer/features/tasks/conversations/conversation-manager';
 import { OVERVIEW_TAB_ID, TabManagerStore } from './tab-manager-store';
 
 vi.mock('@renderer/lib/ipc', () => ({
@@ -12,6 +15,40 @@ vi.mock('@renderer/lib/ipc', () => ({
 }));
 
 describe('TabManagerStore conversation recovery', () => {
+  it('keeps restored conversation tabs until the manager snapshot is authoritative', () => {
+    const manager = makeConversationManager([], false);
+    const store = new TabManagerStore(manager, 'workspace-1');
+    store.restoreSnapshot({
+      tabs: [
+        {
+          kind: 'conversation',
+          tabId: 'tab-1',
+          conversationId: 'conversation-1',
+          isPreview: false,
+        },
+      ],
+      activeTabId: 'tab-1',
+    });
+
+    runInAction(() => {
+      manager.conversations.set(
+        'unrelated-conversation',
+        makeConversation(
+          'unrelated-conversation',
+          '2026-05-02T00:00:00.000Z',
+          false
+        ) as unknown as ConversationStore
+      );
+    });
+    expect(store.hasConversationTab('conversation-1')).toBe(true);
+    expect(store.activeConversationId).toBe('conversation-1');
+
+    runInAction(() => {
+      manager.hasAuthoritativeSnapshot = true;
+    });
+    expect(store.hasConversationTab('conversation-1')).toBe(false);
+  });
+
   it('reopens the most recently closed conversation', () => {
     const store = new TabManagerStore(
       makeConversationManager([
@@ -281,11 +318,13 @@ function makeConversation(id: string, lastInteractedAt: string, isInitialConvers
 }
 
 function makeConversationManager(
-  conversations: ReturnType<typeof makeConversation>[]
+  conversations: ReturnType<typeof makeConversation>[],
+  hasAuthoritativeSnapshot = true
 ): ConversationManagerStore {
-  return {
+  return observable({
     conversations: observable.map(
       conversations.map((conversation) => [conversation.data.id, conversation])
     ),
-  } as unknown as ConversationManagerStore;
+    hasAuthoritativeSnapshot,
+  }) as unknown as ConversationManagerStore;
 }

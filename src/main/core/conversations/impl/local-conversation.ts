@@ -42,7 +42,13 @@ import {
   ensureCodexResumeProviderCompatibleForConfig,
   migrateLegacyCodexMaasHistoryForConfig,
 } from '@main/core/maas/codex-history-compat';
-import { resolveMaasRuntimeEnv } from '@main/core/maas/runtime-env';
+import { ensureCodexMaasCompatibleModelCatalog } from '@main/core/maas/codex-maas-model-catalog';
+import { resolveCodexMaasProviderSpec } from '@main/core/maas/codex-maas-provider';
+import {
+  resolveCodexMaasRuntimeArgs,
+  resolveMaasRuntimeEnv,
+  rewriteCodexMaasModelArgs,
+} from '@main/core/maas/runtime-env';
 import { spawnLocalPty } from '@main/core/pty/local-pty';
 import type { Pty } from '@main/core/pty/pty';
 import { buildAgentEnv } from '@main/core/pty/pty-env';
@@ -397,7 +403,11 @@ export class LocalConversationProvider implements ConversationProvider {
       ) {
         const compatibility = ensureCodexResumeProviderCompatibleForConfig(
           agentSessionId,
-          sessionProviderConfig
+          sessionProviderConfig,
+          maasCredentials
+            ? resolveCodexMaasProviderSpec(maasCredentials.platformId, maasCredentials.displayName)
+                .providerId
+            : undefined
         );
         if (compatibility.status === 'repaired') {
           log.info('LocalConversationProvider: repaired stale Codex resume provider', {
@@ -513,7 +523,21 @@ export class LocalConversationProvider implements ConversationProvider {
             })
           : baseCommand;
       const { command, args: baseArgs, startupInput } = managedCommand;
-      const argsWithNotify = withCodexRuntimeNotifyArgs(conversation.runtimeId, baseArgs, port);
+      const codexMaasModelCatalogPath =
+        conversation.runtimeId === 'codex' && maasCredentials
+          ? await ensureCodexMaasCompatibleModelCatalog(
+              resolveRuntimeStateDirectory('codex', sessionProviderConfig)
+            )
+          : undefined;
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
+      const argsWithMaas =
+        conversation.runtimeId === 'codex' && maasCredentials
+          ? [
+              ...rewriteCodexMaasModelArgs(baseArgs, maasCredentials),
+              ...resolveCodexMaasRuntimeArgs(maasCredentials, codexMaasModelCatalogPath),
+            ]
+          : baseArgs;
+      const argsWithNotify = withCodexRuntimeNotifyArgs(conversation.runtimeId, argsWithMaas, port);
 
       const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
       if (!this.ownsPendingStart(sessionId, startToken)) return;
@@ -803,13 +827,14 @@ export class LocalConversationProvider implements ConversationProvider {
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       registrationAttempted = true;
       ptySessionRegistry.register(sessionId, pty, {
-        onFinalExit: (info) => {
+        onFinalExit: (info, generation) => {
           if (!shouldEmitAgentSessionExited) return;
           events.emit(agentSessionExitedChannel, {
             sessionId,
             projectId: conversation.projectId,
             conversationId: conversation.id,
             taskId: conversation.taskId,
+            generation,
             exitCode: info.exitCode,
           });
           snapshotTaskDiffOnSessionExit(conversation.taskId);

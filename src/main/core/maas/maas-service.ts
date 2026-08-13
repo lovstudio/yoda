@@ -1,14 +1,18 @@
 import { clipboard, net } from 'electron';
 import type { MaasSettings, RuntimeCustomConfig } from '@shared/app-settings';
-import { MAAS_GATEWAY_EXTENSION_ID } from '@shared/extensions';
 import {
+  getLegacyMaasPlatformId,
   getMaasPlatformDefinition,
   getMaasPlatformTemplateId,
   isCustomMaasPlatformId,
   isMaasPlatformId,
+  isValidMaasEnvKey,
   MAAS_PLATFORM_IDS,
   MAAS_PLATFORMS,
+  resolveMaasEnvKey,
   supportsMaasPlatformForRuntime,
+  type MaasApiKeyKind,
+  type MaasCodexClientSyncStatus,
   type MaasConnectInput,
   type MaasConnection,
   type MaasConnectionCheckResult,
@@ -24,8 +28,10 @@ import {
   type MaasPlatformInfoSnapshot,
   type MaasPlatformOfficialDescription,
   type MaasPlatformTemplateId,
+  type MaasProfileWebsiteInspection,
   type MaasRuntimeBinding,
   type MaasRuntimeBindingStatus,
+  type MaasSetCodexClientSyncInput,
   type MaasSetGlobalBindingInput,
   type MaasSetRuntimeBindingInput,
   type MaasUsageSummary,
@@ -36,8 +42,6 @@ import { resolveRuntimeStateDirectory } from '@main/core/conversations/impl/runt
 import { TTLCache } from '@main/core/utils/ttl-cache';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
-import { extensionMarketplaceService } from '../extensions/extension-marketplace-service';
-import { maasGatewayExtensionRuntime } from '../extensions/maas-gateway/runtime';
 import { encryptedAppSecretsStore } from '../secrets/encrypted-app-secrets-store';
 import { runtimeOverrideSettings } from '../settings/runtime-settings-service';
 import { appSettingsService } from '../settings/settings-service';
@@ -50,6 +54,7 @@ import {
   toMaasPlatformOfficialDescription,
 } from './platform-description';
 import { getMaasPlatformInfoSnapshot, setMaasPlatformInfoSnapshot } from './platform-info-store';
+import { extractMaasProfileWebsiteMetadata } from './profile-website-metadata';
 import { resolveRestoredMaasRuntimeConfig, supportsMaasRuntimeBinding } from './runtime-env';
 
 const SECRET_PREFIX = 'yoda-maas-token';
@@ -57,6 +62,8 @@ const INFERENCE_SECRET_PREFIX = 'yoda-maas-inference-token';
 const REAL_RECORDS_CACHE_TTL_MS = 30_000;
 const PLATFORM_INFO_CACHE_TTL_MS = 24 * 60 * 60 * 1_000;
 const PLATFORM_DESCRIPTION_TIMEOUT_MS = 10_000;
+const PROFILE_WEBSITE_TIMEOUT_MS = 10_000;
+const PROFILE_WEBSITE_MAX_BYTES = 2 * 1024 * 1024;
 const ZENMUX_MODEL_CATALOG_CACHE_TTL_MS = 24 * 60 * 60 * 1_000;
 const ZENMUX_MODEL_CATALOG_TIMEOUT_MS = 10_000;
 const ZENMUX_USAGE_LOOKBACK_DAYS = 60;
@@ -109,10 +116,13 @@ type RealRecordsResult = Pick<MaasInvocationPage, 'source' | 'fetchedAt' | 'peri
   records: MaasInvocationRecord[];
 };
 
-type MaasGatewayBinding = {
-  baseUrl: string;
-  admissionToken: string;
-  rollback: () => Promise<void>;
+type MaasInferenceCredentials = {
+  displayName: string;
+  endpoint: string;
+  apiKey: string;
+  envKey?: string;
+  syncToAgentClient?: boolean;
+  loginItemEnabled?: boolean;
 };
 
 function secretKey(platformId: MaasPlatformId): string {
@@ -123,10 +133,71 @@ function inferenceSecretKey(platformId: MaasPlatformId): string {
   return `${INFERENCE_SECRET_PREFIX}:${platformId}`;
 }
 
+async function readPlatformSecret(
+  platformId: MaasPlatformId,
+  kind: MaasApiKeyKind
+): Promise<string | null> {
+  const keyFor = kind === 'inference' ? inferenceSecretKey : secretKey;
+  const current = await encryptedAppSecretsStore.getSecret(keyFor(platformId));
+  if (current) return current;
+  const legacyId = getLegacyMaasPlatformId(platformId);
+  return legacyId ? encryptedAppSecretsStore.getSecret(keyFor(legacyId)) : null;
+}
+
+async function deletePlatformSecrets(platformId: MaasPlatformId): Promise<void> {
+  const ids = [platformId, getLegacyMaasPlatformId(platformId)].filter(
+    (value): value is MaasPlatformId => value !== null
+  );
+  await Promise.all(
+    ids.flatMap((id) => [
+      encryptedAppSecretsStore.deleteSecret(secretKey(id)),
+      encryptedAppSecretsStore.deleteSecret(inferenceSecretKey(id)),
+    ])
+  );
+}
+
 function keyFingerprint(apiKey: string): string {
   const trimmed = apiKey.trim();
   if (trimmed.length <= 4) return trimmed;
   return `${trimmed.slice(0, 2)}...${trimmed.slice(-2)}`;
+}
+
+function normalizeProfileWebsiteUrl(value: string): URL | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readBoundedHtml(response: Response): Promise<string> {
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > PROFILE_WEBSITE_MAX_BYTES) {
+    throw new Error('The homepage is too large to inspect.');
+  }
+  if (!response.body) return '';
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let byteCount = 0;
+  let html = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteCount += value.byteLength;
+      if (byteCount > PROFILE_WEBSITE_MAX_BYTES) {
+        throw new Error('The homepage is too large to inspect.');
+      }
+      html += decoder.decode(value, { stream: true });
+    }
+    return html + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 function migrateLegacyCodexHistory(providerConfig: RuntimeCustomConfig | undefined): void {
@@ -217,6 +288,34 @@ function getConnectedPlatform(
   platformId: MaasPlatformId
 ): MaasPlatformConnection | undefined {
   return settings.connections.find((item) => item.platformId === platformId);
+}
+
+function getConnectedPlatformByTemplate(
+  settings: MaasSettings,
+  templateId: MaasPlatformTemplateId
+): MaasPlatformConnection | undefined {
+  return settings.connections.find(
+    (connection) => getMaasPlatformTemplateId(connection.platformId) === templateId
+  );
+}
+
+function hasExternalAgentSyncConsent(settings: MaasSettings): boolean {
+  if (settings.externalAgentSyncEnabled !== undefined) {
+    return settings.externalAgentSyncEnabled === true && settings.externalAgentSyncVersion === 1;
+  }
+  return settings.connections.some(
+    (connection) =>
+      connection.syncToAgentClient === true && connection.syncToAgentClientVersion === 1
+  );
+}
+
+function withoutLegacyClientSync(
+  connections: MaasSettings['connections']
+): MaasSettings['connections'] {
+  return connections.map(
+    ({ syncToAgentClient: _enabled, syncToAgentClientVersion: _version, ...connection }) =>
+      connection
+  );
 }
 
 function normalizePageArgs(args: {
@@ -445,19 +544,7 @@ export class MaasService {
         'The active Codex MaaS binding is missing its inference credential; reconnect the platform.'
       );
     }
-    const gateway = await this.configureMaasGateway(binding.platformId, credentials);
-    try {
-      await codexMaasAuthSwitch.enable({
-        codexHome,
-        platformId: binding.platformId,
-        displayName: credentials.displayName,
-        gatewayBaseUrl: gateway.baseUrl,
-        gatewayToken: gateway.admissionToken,
-      });
-    } catch (error) {
-      await gateway.rollback();
-      throw error;
-    }
+    await this.applyCodexClientSync(codexHome, binding.platformId, credentials);
   }
 
   /**
@@ -484,17 +571,14 @@ export class MaasService {
     }
 
     const currentConfig = (await runtimeOverrideSettings.getItem('codex')) ?? {};
-    const gateway = await this.configureMaasGateway(binding.platformId, inferenceCredentials);
     let rollbackCodexAuth: CodexMaasAuthRollback | undefined;
 
     try {
-      rollbackCodexAuth = await codexMaasAuthSwitch.enable({
-        codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
-        platformId: binding.platformId,
-        displayName: inferenceCredentials.displayName,
-        gatewayBaseUrl: gateway.baseUrl,
-        gatewayToken: gateway.admissionToken,
-      });
+      rollbackCodexAuth = await this.applyCodexClientSync(
+        resolveRuntimeStateDirectory('codex', currentConfig),
+        binding.platformId,
+        inferenceCredentials
+      );
       if (
         currentConfig.authProvider !== 'yoda-maas' ||
         currentConfig.maasPlatformId !== binding.platformId
@@ -507,8 +591,154 @@ export class MaasService {
       }
     } catch (error) {
       await rollbackCodexAuth?.();
-      await gateway.rollback();
       throw error;
+    }
+  }
+
+  async getCodexClientSyncStatus(): Promise<MaasCodexClientSyncStatus> {
+    const settings = await appSettingsService.get('maas');
+    const binding = settings.runtimeBindings.find((item) => item.runtimeId === 'codex');
+    const connection = binding ? getConnectedPlatform(settings, binding.platformId) : undefined;
+    const currentConfig = (await runtimeOverrideSettings.getItem('codex')) ?? {};
+    const nativeStatus = await codexMaasAuthSwitch.getStatus({
+      codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+    });
+    const enabled = hasExternalAgentSyncConsent(settings);
+
+    return {
+      supported: process.platform === 'darwin',
+      enabled,
+      managed: nativeStatus.managed,
+      configManaged: nativeStatus.configManaged,
+      environmentPublished: nativeStatus.environmentPublished,
+      persistentCredentialStored: nativeStatus.persistentCredentialStored,
+      loginItemEnabled: settings.externalAgentSyncLoginItemEnabled ?? true,
+      platformId: connection?.platformId ?? null,
+      displayName: connection?.displayName ?? null,
+      envKey:
+        nativeStatus.envKey ??
+        (connection
+          ? resolveMaasEnvKey(connection.platformId, connection.displayName, connection.envKey)
+          : null),
+      persistsAfterQuit: settings.externalAgentSyncLoginItemEnabled ?? true,
+    };
+  }
+
+  async setCodexClientSync(input: MaasSetCodexClientSyncInput): Promise<{
+    success: boolean;
+    status?: MaasCodexClientSyncStatus;
+    error?: string;
+  }> {
+    // Codex is the first external Agent Client adapter. Keep consent global so
+    // future adapters can join this switch without moving it back into a Profile.
+    if (process.platform !== 'darwin') {
+      return { success: false, error: 'Persistent Codex Client sync currently requires macOS.' };
+    }
+    if (typeof input.enabled !== 'boolean') {
+      return { success: false, error: 'Invalid Codex Client sync state.' };
+    }
+    if (input.loginItemEnabled !== undefined && typeof input.loginItemEnabled !== 'boolean') {
+      return { success: false, error: 'Invalid Codex login item state.' };
+    }
+
+    const settings = await appSettingsService.get('maas');
+    const activeCodexBinding = settings.runtimeBindings.find(
+      (binding) => binding.runtimeId === 'codex'
+    );
+    const connection = activeCodexBinding
+      ? getConnectedPlatform(settings, activeCodexBinding.platformId)
+      : undefined;
+    let rollbackCodexAuth: CodexMaasAuthRollback | undefined;
+
+    try {
+      const currentConfig = (await runtimeOverrideSettings.getItem('codex')) ?? {};
+      if (!input.enabled) {
+        rollbackCodexAuth = await codexMaasAuthSwitch.disable({
+          codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+        });
+      } else if (activeCodexBinding) {
+        if (!connection) {
+          return { success: false, error: 'The active MaaS Profile is no longer available.' };
+        }
+        const apiKey = await readPlatformSecret(
+          activeCodexBinding.platformId,
+          getMaasPlatformTemplateId(activeCodexBinding.platformId) === 'zenmux'
+            ? 'inference'
+            : 'primary'
+        );
+        if (!apiKey) {
+          return {
+            success: false,
+            error: 'The Agent Client API key is missing. Reconnect this Profile first.',
+          };
+        }
+        rollbackCodexAuth = await codexMaasAuthSwitch.enable({
+          codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+          platformId: activeCodexBinding.platformId,
+          displayName: connection.displayName,
+          endpoint: connection.endpoint,
+          envKey: resolveMaasEnvKey(
+            activeCodexBinding.platformId,
+            connection.displayName,
+            connection.envKey
+          ),
+          apiKey,
+          loginItemEnabled:
+            input.loginItemEnabled ?? settings.externalAgentSyncLoginItemEnabled ?? true,
+        });
+      }
+
+      await appSettingsService.update('maas', {
+        externalAgentSyncEnabled: input.enabled,
+        externalAgentSyncVersion: input.enabled ? 1 : undefined,
+        externalAgentSyncLoginItemEnabled:
+          input.loginItemEnabled ?? settings.externalAgentSyncLoginItemEnabled ?? true,
+        connections: withoutLegacyClientSync(settings.connections),
+      });
+      const status = await this.getCodexClientSyncStatus().catch((statusError) => {
+        log.warn('Codex Client sync changed, but its status could not be refreshed:', statusError);
+        return undefined;
+      });
+      return { success: true, status };
+    } catch (error) {
+      await rollbackCodexAuth?.().catch((rollbackError) => {
+        log.error('Failed to roll back Codex Client sync update:', rollbackError);
+      });
+      log.error('Failed to update Codex Client sync:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update Codex Client sync.',
+      };
+    }
+  }
+
+  async clearCodexClientSync(): Promise<{
+    success: boolean;
+    status?: MaasCodexClientSyncStatus;
+    error?: string;
+  }> {
+    const settings = await appSettingsService.get('maas');
+    const currentConfig = (await runtimeOverrideSettings.getItem('codex')) ?? {};
+    let rollback: CodexMaasAuthRollback | undefined;
+
+    try {
+      rollback = await codexMaasAuthSwitch.disable({
+        codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+      });
+      await appSettingsService.update('maas', {
+        externalAgentSyncEnabled: false,
+        externalAgentSyncVersion: undefined,
+        connections: withoutLegacyClientSync(settings.connections),
+      });
+      return { success: true, status: await this.getCodexClientSyncStatus() };
+    } catch (error) {
+      await rollback?.().catch((rollbackError) => {
+        log.error('Failed to roll back Codex Client sync cleanup:', rollbackError);
+      });
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to clear Codex Client sync.',
+      };
     }
   }
 
@@ -518,9 +748,10 @@ export class MaasService {
       settings.connections.map(async (saved) => {
         const platformId = saved.platformId;
         const templateId = getMaasPlatformTemplateId(platformId);
-        const apiKey = await encryptedAppSecretsStore.getSecret(secretKey(platformId));
-        const inferenceApiKey = await encryptedAppSecretsStore.getSecret(
-          templateId === 'zenmux' ? inferenceSecretKey(platformId) : secretKey(platformId)
+        const apiKey = await readPlatformSecret(platformId, 'primary');
+        const inferenceApiKey = await readPlatformSecret(
+          platformId,
+          templateId === 'zenmux' ? 'inference' : 'primary'
         );
         const connection = {
           ...saved,
@@ -528,6 +759,9 @@ export class MaasService {
             isCustomMaasPlatformId(platformId) && saved.displayName === 'Custom OpenAI'
               ? getMaasPlatformDefinition(platformId).name
               : saved.displayName,
+          envKey: resolveMaasEnvKey(platformId, saved.displayName, saved.envKey),
+          syncToAgentClient: undefined,
+          syncToAgentClientVersion: undefined,
           keyFingerprint: apiKey ? keyFingerprint(apiKey) : saved.keyFingerprint,
           inferenceKeyFingerprint: inferenceApiKey
             ? keyFingerprint(inferenceApiKey)
@@ -546,6 +780,41 @@ export class MaasService {
     );
   }
 
+  async inspectProfileWebsite(websiteUrl: string): Promise<MaasProfileWebsiteInspection> {
+    const url = normalizeProfileWebsiteUrl(websiteUrl);
+    if (!url) return { success: false, error: 'Enter a valid HTTP or HTTPS website URL.' };
+
+    try {
+      const response = await net.fetch(url.toString(), {
+        headers: { Accept: 'text/html,application/xhtml+xml' },
+        credentials: 'omit',
+        signal: AbortSignal.timeout(PROFILE_WEBSITE_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        throw new Error(`Homepage returned ${response.status} ${response.statusText}`.trim());
+      }
+      const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+      if (contentType && !contentType.includes('text/html')) {
+        throw new Error('The URL did not return an HTML homepage.');
+      }
+      const finalUrl = response.url || url.toString();
+      const metadata = extractMaasProfileWebsiteMetadata(await readBoundedHtml(response), finalUrl);
+      if (!metadata.name && !metadata.description && !metadata.logoUrl) {
+        return { success: false, error: 'No usable product information was found.' };
+      }
+      return { success: true, metadata };
+    } catch (error) {
+      const message =
+        error instanceof Error && error.name === 'TimeoutError'
+          ? `Request timed out after ${PROFILE_WEBSITE_TIMEOUT_MS / 1_000}s.`
+          : error instanceof Error
+            ? error.message
+            : 'Could not inspect the homepage.';
+      log.warn(`Failed to inspect MaaS profile website ${url.origin}:`, error);
+      return { success: false, error: message };
+    }
+  }
+
   async listRuntimeBindings(): Promise<MaasRuntimeBindingStatus[]> {
     const settings = await appSettingsService.get('maas');
     const statuses = await Promise.all(
@@ -560,15 +829,10 @@ export class MaasService {
             configuredPlatformId && supportsMaasPlatformForRuntime(runtimeId, configuredPlatformId)
               ? await this.getInferenceCredentials(configuredPlatformId)
               : undefined;
-          const gatewayStatus =
-            runtimeId === 'codex' ? maasGatewayExtensionRuntime.getStatus() : null;
           const effective =
             config?.authProvider === 'yoda-maas' &&
             configuredPlatformId !== null &&
-            credentials !== undefined &&
-            (runtimeId !== 'codex' ||
-              (gatewayStatus?.state === 'running' &&
-                gatewayStatus.configuredProviderId === configuredPlatformId));
+            credentials !== undefined;
 
           return {
             runtimeId,
@@ -639,7 +903,6 @@ export class MaasService {
       supportsMaasRuntimeBinding(runtimeId)
     );
     let rollbackCodexAuth: CodexMaasAuthRollback | undefined;
-    let rollbackGateway: (() => Promise<void>) | undefined;
 
     try {
       if (!input.enabled) {
@@ -658,17 +921,12 @@ export class MaasService {
             );
           }
         }
-        await maasGatewayExtensionRuntime.clear();
         await appSettingsService.update('maas', { runtimeBindings: [] });
         return { success: true };
       }
 
       const enabledAt = new Date().toISOString();
       const nextBindings: MaasRuntimeBinding[] = [];
-      const gateway = inferenceCredentials
-        ? await this.configureMaasGateway(input.platformId, inferenceCredentials)
-        : undefined;
-      rollbackGateway = gateway?.rollback;
       for (const runtimeId of supportedRuntimeIds) {
         const currentConfig = (await runtimeOverrideSettings.getItem(runtimeId)) ?? {};
         const existingBinding = settings.runtimeBindings.find(
@@ -699,14 +957,11 @@ export class MaasService {
         });
         nextBindings.push(binding);
         if (runtimeId === 'codex' && inferenceCredentials) {
-          if (!gateway) throw new Error('Yoda MaaS Gateway is unavailable.');
-          rollbackCodexAuth = await codexMaasAuthSwitch.enable({
-            codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
-            platformId: input.platformId,
-            displayName: inferenceCredentials.displayName,
-            gatewayBaseUrl: gateway.baseUrl,
-            gatewayToken: gateway.admissionToken,
-          });
+          rollbackCodexAuth = await this.applyCodexClientSync(
+            resolveRuntimeStateDirectory('codex', currentConfig),
+            input.platformId,
+            inferenceCredentials
+          );
         }
         await runtimeOverrideSettings.updateItem(runtimeId, {
           ...currentConfig,
@@ -736,11 +991,6 @@ export class MaasService {
       } catch (rollbackError) {
         log.error('Failed to roll back global MaaS Codex authentication:', rollbackError);
       }
-      try {
-        await rollbackGateway?.();
-      } catch (rollbackError) {
-        log.error('Failed to roll back the Yoda MaaS Gateway:', rollbackError);
-      }
       log.error('Failed to update global MaaS binding:', error);
       return {
         success: false,
@@ -757,7 +1007,6 @@ export class MaasService {
       | Awaited<ReturnType<typeof runtimeOverrideSettings.getOverrides>>
       | undefined;
     let rollbackCodexAuth: CodexMaasAuthRollback | undefined;
-    let rollbackGateway: (() => Promise<void>) | undefined;
     try {
       if (!isValidRuntimeId(input.runtimeId) || !supportsMaasRuntimeBinding(input.runtimeId)) {
         return { success: false, error: 'This Agent Client does not support MaaS switching.' };
@@ -807,15 +1056,11 @@ export class MaasService {
           enabledAt: new Date().toISOString(),
         });
         if (input.runtimeId === 'codex') {
-          const gateway = await this.configureMaasGateway(input.platformId, inferenceCredentials);
-          rollbackGateway = gateway.rollback;
-          rollbackCodexAuth = await codexMaasAuthSwitch.enable({
-            codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
-            platformId: input.platformId,
-            displayName: inferenceCredentials.displayName,
-            gatewayBaseUrl: gateway.baseUrl,
-            gatewayToken: gateway.admissionToken,
-          });
+          rollbackCodexAuth = await this.applyCodexClientSync(
+            resolveRuntimeStateDirectory('codex', currentConfig),
+            input.platformId,
+            inferenceCredentials
+          );
         }
         await runtimeOverrideSettings.updateItem(input.runtimeId, {
           ...currentConfig,
@@ -840,7 +1085,6 @@ export class MaasService {
         rollbackCodexAuth = await codexMaasAuthSwitch.disable({
           codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
         });
-        await maasGatewayExtensionRuntime.clear();
       }
       await this.restoreRuntimeConfig(
         input.runtimeId,
@@ -874,11 +1118,6 @@ export class MaasService {
       } catch (rollbackError) {
         log.error('Failed to roll back MaaS Codex authentication:', rollbackError);
       }
-      try {
-        await rollbackGateway?.();
-      } catch (rollbackError) {
-        log.error('Failed to roll back the Yoda MaaS Gateway:', rollbackError);
-      }
       log.error('Failed to update MaaS runtime binding:', error);
       return {
         success: false,
@@ -903,36 +1142,6 @@ export class MaasService {
     if (!supportsMaasPlatformForRuntime(runtimeId, selectedPlatformId)) return undefined;
     const credentials = await this.getInferenceCredentials(selectedPlatformId);
     return credentials ? { platformId: selectedPlatformId, ...credentials } : undefined;
-  }
-
-  private async configureMaasGateway(
-    platformId: MaasPlatformId,
-    credentials: { displayName: string; endpoint: string; apiKey: string }
-  ): Promise<MaasGatewayBinding> {
-    const extension = await extensionMarketplaceService.getExtension(MAAS_GATEWAY_EXTENSION_ID);
-    if (!extension?.supported) {
-      throw new Error('Yoda MaaS Gateway is unavailable on this platform.');
-    }
-    if (!extension.installation) {
-      throw new Error('Install Yoda MaaS Gateway from Marketplace before enabling MaaS.');
-    }
-    if (!extension.installation.enabled) {
-      throw new Error('Enable Yoda MaaS Gateway from Marketplace before enabling MaaS.');
-    }
-    if (extension.runtime?.state !== 'running') {
-      throw new Error('Yoda MaaS Gateway is not running normally.');
-    }
-    const rollback = await maasGatewayExtensionRuntime.configure({
-      providerId: platformId,
-      endpoint: credentials.endpoint,
-      apiKey: credentials.apiKey,
-    });
-    const connection = maasGatewayExtensionRuntime.getConnection();
-    if (!connection) {
-      await rollback();
-      throw new Error('Yoda MaaS Gateway did not expose a local endpoint.');
-    }
-    return { ...connection, rollback };
   }
 
   private async restoreRuntimeConfig(
@@ -989,17 +1198,42 @@ export class MaasService {
    */
   async getInferenceCredentials(
     platformId: MaasPlatformId
-  ): Promise<{ displayName: string; endpoint: string; apiKey: string } | undefined> {
+  ): Promise<MaasInferenceCredentials | undefined> {
     const settings = await appSettingsService.get('maas');
     const connection = getConnectedPlatform(settings, platformId);
     if (!connection) return undefined;
-    const apiKey = await encryptedAppSecretsStore.getSecret(
-      getMaasPlatformTemplateId(platformId) === 'zenmux'
-        ? inferenceSecretKey(platformId)
-        : secretKey(platformId)
+    const apiKey = await readPlatformSecret(
+      platformId,
+      getMaasPlatformTemplateId(platformId) === 'zenmux' ? 'inference' : 'primary'
     );
     if (!apiKey) return undefined;
-    return { displayName: connection.displayName, endpoint: connection.endpoint, apiKey };
+    return {
+      displayName: connection.displayName,
+      endpoint: connection.endpoint,
+      apiKey,
+      envKey: resolveMaasEnvKey(platformId, connection.displayName, connection.envKey),
+      syncToAgentClient: hasExternalAgentSyncConsent(settings),
+      loginItemEnabled: settings.externalAgentSyncLoginItemEnabled ?? true,
+    };
+  }
+
+  private applyCodexClientSync(
+    codexHome: string,
+    platformId: MaasPlatformId,
+    credentials: MaasInferenceCredentials
+  ): Promise<CodexMaasAuthRollback> {
+    if (!credentials.syncToAgentClient) {
+      return codexMaasAuthSwitch.disable({ codexHome });
+    }
+    return codexMaasAuthSwitch.enable({
+      codexHome,
+      platformId,
+      displayName: credentials.displayName,
+      endpoint: credentials.endpoint,
+      envKey: resolveMaasEnvKey(platformId, credentials.displayName, credentials.envKey),
+      apiKey: credentials.apiKey,
+      loginItemEnabled: credentials.loginItemEnabled ?? true,
+    });
   }
 
   async copyStoredApiKeyToClipboard(
@@ -1022,11 +1256,7 @@ export class MaasService {
         return { success: false, error: 'Platform is not connected.' };
       }
 
-      const storedKey =
-        input.kind === 'inference'
-          ? inferenceSecretKey(input.platformId)
-          : secretKey(input.platformId);
-      const apiKey = await encryptedAppSecretsStore.getSecret(storedKey);
+      const apiKey = await readPlatformSecret(input.platformId, input.kind);
       if (!apiKey) {
         return {
           success: false,
@@ -1051,7 +1281,6 @@ export class MaasService {
     let settingsToRestore: MaasSettings | undefined;
     const secretsToRestore = new Map<string, string | null>();
     let rollbackCodexAuth: CodexMaasAuthRollback | undefined;
-    let rollbackGateway: (() => Promise<void>) | undefined;
     try {
       if (!isMaasPlatformId(input.platformId)) {
         return { success: false, error: 'Unsupported MaaS platform.' };
@@ -1069,9 +1298,7 @@ export class MaasService {
         return { success: false, error: 'A MaaS API key is required.' };
       }
       if (!apiKey && existing?.keyFingerprint) {
-        const existingApiKey = await encryptedAppSecretsStore.getSecret(
-          secretKey(input.platformId)
-        );
+        const existingApiKey = await readPlatformSecret(input.platformId, 'primary');
         if (!existingApiKey) {
           return {
             success: false,
@@ -1082,10 +1309,19 @@ export class MaasService {
       }
 
       const now = new Date().toISOString();
+      const displayName = input.displayName?.trim() || platform.name;
+      const envKey = resolveMaasEnvKey(input.platformId, displayName, input.envKey);
+      if (!isValidMaasEnvKey(envKey)) {
+        return { success: false, error: 'Invalid MaaS environment variable name.' };
+      }
       const connection: MaasPlatformConnection = {
         platformId: input.platformId,
-        displayName: input.displayName?.trim() || platform.name,
+        displayName,
         endpoint: input.endpoint?.trim() || platform.defaultEndpoint,
+        websiteUrl: input.websiteUrl?.trim() || existing?.websiteUrl,
+        description: input.description?.trim() || existing?.description,
+        logoUrl: input.logoUrl?.trim() || existing?.logoUrl,
+        envKey,
         keyFingerprint: apiKey
           ? keyFingerprint(apiKey)
           : retainedApiKey
@@ -1122,32 +1358,28 @@ export class MaasService {
         connections: upsertConnection(settings.connections, connection),
       });
 
+      const currentCodexConfig = (await runtimeOverrideSettings.getItem('codex')) ?? {};
+      const codexHome = resolveRuntimeStateDirectory('codex', currentCodexConfig);
+
       const activeCodexBinding = settings.runtimeBindings.some(
         (binding) => binding.runtimeId === 'codex' && binding.platformId === input.platformId
       );
       if (activeCodexBinding) {
-        const activeApiKey =
-          templateId === 'zenmux'
-            ? await encryptedAppSecretsStore.getSecret(inferenceSecretKey(input.platformId))
-            : await encryptedAppSecretsStore.getSecret(secretKey(input.platformId));
+        const activeApiKey = await readPlatformSecret(
+          input.platformId,
+          templateId === 'zenmux' ? 'inference' : 'primary'
+        );
         if (!activeApiKey) {
           throw new Error(
             'The active Codex MaaS binding is missing its inference credential; reconnect the platform.'
           );
         }
-        const currentConfig = (await runtimeOverrideSettings.getItem('codex')) ?? {};
-        const gateway = await this.configureMaasGateway(input.platformId, {
+        rollbackCodexAuth = await this.applyCodexClientSync(codexHome, input.platformId, {
           displayName: connection.displayName,
           endpoint: connection.endpoint,
           apiKey: activeApiKey,
-        });
-        rollbackGateway = gateway.rollback;
-        rollbackCodexAuth = await codexMaasAuthSwitch.enable({
-          codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
-          platformId: input.platformId,
-          displayName: connection.displayName,
-          gatewayBaseUrl: gateway.baseUrl,
-          gatewayToken: gateway.admissionToken,
+          envKey: connection.envKey ?? envKey,
+          syncToAgentClient: hasExternalAgentSyncConsent(settings),
         });
       }
 
@@ -1161,14 +1393,6 @@ export class MaasService {
       } catch (rollbackError) {
         log.error(
           'Failed to roll back Codex authentication after reconnecting MaaS:',
-          rollbackError
-        );
-      }
-      try {
-        await rollbackGateway?.();
-      } catch (rollbackError) {
-        log.error(
-          'Failed to roll back the Yoda MaaS Gateway after reconnecting MaaS:',
           rollbackError
         );
       }
@@ -1224,10 +1448,9 @@ export class MaasService {
         return failedResult('Platform is not connected.');
       }
 
-      const apiKey = await encryptedAppSecretsStore.getSecret(
-        getMaasPlatformTemplateId(platformId) === 'zenmux'
-          ? inferenceSecretKey(platformId)
-          : secretKey(platformId)
+      const apiKey = await readPlatformSecret(
+        platformId,
+        getMaasPlatformTemplateId(platformId) === 'zenmux' ? 'inference' : 'primary'
       );
       if (!apiKey) {
         return failedResult('Stored API key is missing. Reconnect the platform to restore it.');
@@ -1307,13 +1530,11 @@ export class MaasService {
           await codexMaasAuthSwitch.disable({
             codexHome: resolveRuntimeStateDirectory('codex', config),
           });
-          await maasGatewayExtensionRuntime.clear();
         }
         await this.restoreRuntimeConfig(runtimeId, config, binding, platformId);
       }
 
-      await encryptedAppSecretsStore.deleteSecret(secretKey(platformId));
-      await encryptedAppSecretsStore.deleteSecret(inferenceSecretKey(platformId));
+      await deletePlatformSecrets(platformId);
       await appSettingsService.update('maas', {
         selectedPlatformId,
         connections,
@@ -1414,9 +1635,10 @@ export class MaasService {
 
   async listTextModelCandidates(forceRefresh = false): Promise<string[]> {
     const settings = await appSettingsService.get('maas');
-    if (!getConnectedPlatform(settings, 'zenmux')) return [];
+    const zenmuxConnection = getConnectedPlatformByTemplate(settings, 'zenmux');
+    if (!zenmuxConnection) return [];
 
-    const result = await this.listRealRecords(settings, 'zenmux', forceRefresh);
+    const result = await this.listRealRecords(settings, zenmuxConnection.platformId, forceRefresh);
     const models = new Set<string>();
     for (const record of result.records) {
       const model = record.model?.trim();
@@ -1531,7 +1753,7 @@ export class MaasService {
   private async fetchZenmuxUsageRecords(
     connection: MaasPlatformConnection
   ): Promise<RealRecordsResult> {
-    const apiKey = await encryptedAppSecretsStore.getSecret(secretKey('zenmux'));
+    const apiKey = await readPlatformSecret(connection.platformId, 'primary');
     if (!apiKey) {
       throw new Error(
         'ZenMux Management API key is missing. Reconnect ZenMux with a management key.'

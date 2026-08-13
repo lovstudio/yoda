@@ -138,6 +138,124 @@ describe('FrontendPty canonical DOM rendering', () => {
     expect(pty.ownedContainer.querySelector('.terminal-freeze-overlay')).toBeNull();
   });
 
+  it('does not hide or force-refresh the terminal scene during resize', async () => {
+    pty = new FrontendPty('session-resize-no-content-rerender');
+    pty.flushPendingWrites();
+    mountTarget = document.createElement('div');
+    Object.assign(mountTarget.style, { width: '900px', height: '420px' });
+    document.body.appendChild(mountTarget);
+    pty.mount(mountTarget, { cols: 120, rows: 32 });
+    await pty.connect();
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+    await writeTerminal(pty, 'stable conversation content');
+    const refresh = vi.spyOn(pty.terminal, 'refresh');
+
+    pty.commitResize(96, 24);
+
+    expect(pty.ownedContainer.style.visibility).toBe('');
+    expect(refresh).not.toHaveBeenCalled();
+    expect(visibleBufferText(pty)).toContain('stable conversation content');
+  });
+
+  it('clears rewritten rows on an opaque session-themed surface during first resize', async () => {
+    const background = '#f0edeb';
+    pty = new FrontendPty('session-first-resize-row-clearing', {
+      override: {
+        background,
+        foreground: '#202020',
+        cursor: '#202020',
+      },
+    });
+    pty.flushPendingWrites();
+    mountTarget = document.createElement('div');
+    Object.assign(mountTarget.style, { width: '900px', height: '420px' });
+    document.body.appendChild(mountTarget);
+    pty.mount(mountTarget, { cols: 120, rows: 32 });
+
+    const staleLine = 'stale row must be erased after the first layout pass';
+    const finalLine = 'Hip，时长 02:45。现在按精确片段反查原始发布页。';
+    await writeTerminal(pty, `${staleLine}\r\n`);
+    await nextAnimationFrame();
+    await writeTerminal(pty, `\x1b[2J\x1b[H${finalLine}`);
+    pty.commitResize(139, 50);
+    await nextAnimationFrame();
+    await nextAnimationFrame();
+
+    const rows = pty.ownedContainer.querySelector<HTMLElement>('.xterm-rows');
+    const viewport = pty.ownedContainer.querySelector<HTMLElement>('.xterm-viewport');
+    if (!rows || !viewport) throw new Error('xterm DOM renderer was not mounted');
+
+    expect(getComputedStyle(rows).backgroundColor).toBe('rgb(240, 237, 235)');
+    expect(getComputedStyle(viewport).backgroundColor).toBe('rgb(240, 237, 235)');
+    expect(rows.textContent).not.toContain(staleLine);
+    expect(rows.textContent?.split(finalLine)).toHaveLength(2);
+    expect(visibleBufferText(pty).split(finalLine)).toHaveLength(2);
+  });
+
+  it('keeps the hidden parser current while xterm pauses off-screen DOM rendering', async () => {
+    pty = new FrontendPty('session-hidden-parser-visible-renderer');
+    pty.flushPendingWrites();
+    mountTarget = document.createElement('div');
+    Object.assign(mountTarget.style, { width: '900px', height: '420px' });
+    document.body.appendChild(mountTarget);
+    const firstLease = pty.mount(mountTarget, { cols: 120, rows: 32 });
+    await pty.connect();
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+
+    let renderCount = 0;
+    const renderSubscription = pty.terminal.onRender(() => {
+      renderCount += 1;
+    });
+    pty.unmount(firstLease);
+    await nextAnimationFrame();
+    await nextAnimationFrame();
+    const renderCountBeforeHiddenWrite = renderCount;
+
+    await writeTerminal(pty, 'hidden parser remains current');
+    await nextAnimationFrame();
+    await nextAnimationFrame();
+
+    expect(visibleBufferText(pty)).toContain('hidden parser remains current');
+    expect(renderCount).toBe(renderCountBeforeHiddenWrite);
+
+    pty.mount(mountTarget, { cols: 120, rows: 32 });
+    await nextAnimationFrame();
+    await nextAnimationFrame();
+    expect(renderCount).toBeGreaterThan(renderCountBeforeHiddenWrite);
+    renderSubscription.dispose();
+  });
+
+  it('never exposes stale off-screen DOM rows while a hot terminal remounts', async () => {
+    pty = new FrontendPty('session-hot-remount-frame-commit');
+    pty.flushPendingWrites();
+    mountTarget = document.createElement('div');
+    Object.assign(mountTarget.style, { width: '900px', height: '420px' });
+    document.body.appendChild(mountTarget);
+    const firstLease = pty.mount(mountTarget, { cols: 120, rows: 32 });
+    await pty.connect();
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+
+    const staleLine = 'stale visible frame must never be exposed on remount';
+    const canonicalLine = 'canonical hidden parser frame';
+    await writeTerminal(pty, staleLine);
+    pty.unmount(firstLease);
+    await nextAnimationFrame();
+    await nextAnimationFrame();
+    await writeTerminal(pty, `\x1b[2J\x1b[H${canonicalLine}`);
+
+    const remountStartedAt = performance.now();
+    pty.mount(mountTarget, { cols: 120, rows: 32 });
+
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+    expect(performance.now() - remountStartedAt).toBeLessThan(200);
+    expect(pty.ownedContainer.style.visibility).toBe('');
+    expect(visibleBufferText(pty)).toContain(canonicalLine);
+    expect(visibleBufferText(pty)).not.toContain(staleLine);
+    expect(pty.ownedContainer.querySelector('.xterm-rows')?.textContent).toContain(canonicalLine);
+    expect(pty.ownedContainer.querySelector('.xterm-rows')?.textContent).not.toContain(staleLine);
+  });
+
   it('keeps CJK punctuation and final wide glyphs inside the DOM row grid', async () => {
     pty = new FrontendPty('session-cjk-row-width');
     pty.flushPendingWrites();

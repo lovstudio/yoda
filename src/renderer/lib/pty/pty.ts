@@ -38,6 +38,23 @@ export const TERMINAL_LINE_HEIGHT = 1.0;
  * still amortising Terminal.write overhead for normal PTY batches.
  */
 export const XTERM_WRITE_CHUNK_CODE_UNITS = 64 * 1024;
+const FIRST_FRAME_TIMEOUT_MS = 5_000;
+const SYNCHRONIZED_FIRST_FRAME_QUIET_MS = 120;
+const FALLBACK_FIRST_FRAME_QUIET_MS = 700;
+const FIRST_FRAME_CANCELLATION_POLL_MS = 25;
+const MIN_FIRST_FRAME_NON_EMPTY_LINES = 3;
+const MIN_FIRST_FRAME_VISIBLE_CHARACTERS = 24;
+
+/** DEC synchronized-output boundaries used by both Codex and Claude TUIs. */
+const SYNCHRONIZED_OUTPUT_START = '\x1b[?2026h';
+const SYNCHRONIZED_OUTPUT_END = '\x1b[?2026l';
+const SYNCHRONIZED_OUTPUT_CURSOR_SHOW = '\x1b[?25h';
+const SYNCHRONIZED_OUTPUT_SCAN_OVERLAP =
+  Math.max(
+    SYNCHRONIZED_OUTPUT_START.length,
+    SYNCHRONIZED_OUTPUT_END.length,
+    SYNCHRONIZED_OUTPUT_CURSOR_SHOW.length
+  ) - 1;
 
 /** Reset a stale transcript screen before the first live PTY generation paints. */
 const RESET_TERMINAL_SEQUENCE = '\x1bc';
@@ -58,6 +75,14 @@ type TerminalWriteQueueItem = {
   readonly onWritten?: () => void;
   offset: number;
 };
+
+type ViewportContent = {
+  readonly signature: string;
+  readonly nonEmptyLines: number;
+  readonly visibleCharacters: number;
+};
+
+type OutputActivityOutcome = 'activity' | 'elapsed' | 'cancelled';
 
 export const DEFAULT_TERMINAL_FONT_FAMILY = [
   'Menlo',
@@ -104,10 +129,10 @@ export function buildTheme(theme?: SessionTheme): ITerminalOptions['theme'] {
  * an off-screen container. After mount/measurement opens the flush gate,
  * connect() subscribes to the main-process ring buffer and live IPC events.
  * Successful subscriptions survive later unmounts so the main-process flow
- * control and sequence watermark stay intact. While off-screen, xterm parsing
- * is suspended; the bounded backend watermark naturally pauses noisy sessions
- * until the terminal is visible again. On remount, queued output is replayed as
- * one ordered frame so intermediate TUI cursor positions stay hidden.
+ * control and sequence watermark stay intact. While off-screen, xterm keeps
+ * parsing into its canonical buffer; xterm's IntersectionObserver pauses the
+ * DOM renderer because the shared host is outside the viewport. On remount,
+ * the renderer refreshes once from the already-current buffer.
  *
  * DOM management is handled via mount() / unmount():
  *  - mount()   → appends ownedContainer to the visible mount target
@@ -165,7 +190,7 @@ export class FrontendPty {
     data: string;
     acknowledgement?: { generation: number; sequence: number };
   }> = [];
-  /** PTY batches received while this terminal is off-screen. */
+  /** PTY batches received while parsing is explicitly suspended. */
   private suspendedWrites: Array<{
     data: string;
     acknowledgement?: { generation: number; sequence: number };
@@ -173,7 +198,42 @@ export class FrontendPty {
   private hasFlushed = false;
   private terminalWriteQueue: TerminalWriteQueueItem[] = [];
   private terminalWriteActive = false;
-  /** Prevent hidden sessions from spending renderer time parsing every batch. */
+  /** Resolves explicit first-frame waits if the owning session is disposed mid-parse. */
+  private terminalWriteWaiters = new Set<() => void>();
+  /** Monotonic accepted-output revision used to prove a parser drain stayed quiet. */
+  private outputRevision = 0;
+  /** Live output accepted while hidden since the adaptive-cache sampler last read it. */
+  private hiddenOutputCodeUnits = 0;
+  private outputActivityWaiters = new Set<() => void>();
+  private canonicalStateGeneration = -1;
+  private canonicalGenerationBaseline = '';
+  private canonicalGenerationHasPayload = false;
+  private expectedCanonicalGeneration: number | null = null;
+  private preparedCanonicalGeneration: number | null = null;
+  private preparedCanonicalRevision: number | null = null;
+  private synchronizedOutputOpen = false;
+  private synchronizedOutputCursorShown = false;
+  private synchronizedOutputCompletedRevision: number | null = null;
+  private synchronizedOutputCompletedWithCursorRevision: number | null = null;
+  private synchronizedOutputScanTail = '';
+  /** Serialize staged mounts so one cancelled preparation cannot strand its successor. */
+  private prepareFirstFrameTail: Promise<void> = Promise.resolve();
+  private terminalRenderRevision = 0;
+  private terminalRenderWaiters = new Set<() => void>();
+  /** True after the listener-first subscribe boundary has delivered its initial snapshot. */
+  private hasResolvedInitialSnapshot = false;
+  /** The initial snapshot bytes have fully crossed xterm's parser boundary. */
+  private initialSnapshotParserDrained = false;
+  /** Includes layout transitions that do not advance the backend output watermark. */
+  private visualFrameRevision = 0;
+  /** Keeps cold hydration and an explicitly suspended replay out of the visible scene. */
+  private visibleFrameSettlementPending = false;
+  /** Output revision at the start of the current hidden visual transaction. */
+  private visibleFrameSettlementOutputRevision = 0;
+  private visibleFrameMountGeneration = 0;
+  private visibleFrameAckMountGenerationInFlight = 0;
+  private visibleFrameWaiters = new Set<(ready: boolean) => void>();
+  /** Explicit parser suspension; normal hot-cache unmounts continue parsing off-screen. */
   private renderingSuspended = false;
   /** Token protecting a newer mount from an older replay completion callback. */
   private replayToken = 0;
@@ -199,6 +259,7 @@ export class FrontendPty {
   /** Overrides OSC 8 hyperlink activation while a pane hosts this terminal; null = system browser. */
   private linkOpener: ((url: string) => void) | null = null;
   private readonly scrollDisposable: { dispose(): void };
+  private readonly renderDisposable: { dispose(): void };
   private isMounted = false;
   /** Lease protecting a newer host from an older React effect's late cleanup. */
   private mountGeneration = 0;
@@ -207,16 +268,30 @@ export class FrontendPty {
     return this.isMounted;
   }
 
+  /** A pressure eviction is safe only after main owns a snapshot/watermark for this consumer. */
+  get hasRecoverableSnapshot(): boolean {
+    return this.connectedConsumerId !== null && this.hasResolvedInitialSnapshot;
+  }
+
+  /** Read and reset hidden live-output work for the adaptive cache pressure sampler. */
+  takeHiddenOutputCodeUnits(): number {
+    const codeUnits = this.isMounted ? 0 : this.hiddenOutputCodeUnits;
+    this.hiddenOutputCodeUnits = 0;
+    return codeUnits;
+  }
+
   constructor(
     readonly sessionId: string,
     theme?: SessionTheme,
     options?: { scrollbackLines?: number }
   ) {
+    const terminalTheme = buildTheme(theme);
     this.ownedContainer = document.createElement('div');
     Object.assign(this.ownedContainer.style, {
       width: '100%',
       height: '100%',
     });
+    this.syncRenderBackground(terminalTheme?.background);
 
     this.terminal = new Terminal({
       cols: 120,
@@ -248,7 +323,7 @@ export class FrontendPty {
           });
         },
       },
-      theme: buildTheme(theme),
+      theme: terminalTheme,
     });
 
     // Match modern shell wcwidth tables. The xterm core defaults to Unicode 6,
@@ -268,12 +343,16 @@ export class FrontendPty {
       this.savedViewportY = viewportY;
       this.savedAtBottom = viewportY >= this.terminal.buffer.active.baseY;
     });
+    this.renderDisposable = this.terminal.onRender(() => {
+      this.terminalRenderRevision += 1;
+      for (const resolve of this.terminalRenderWaiters) resolve();
+      this.terminalRenderWaiters.clear();
+    });
 
     const el = (this.terminal as unknown as { element?: HTMLElement }).element;
     if (el) {
       el.style.width = '100%';
       el.style.height = '100%';
-      el.style.backgroundColor = 'transparent';
     }
 
     ensureXtermHost().appendChild(this.ownedContainer);
@@ -344,6 +423,27 @@ export class FrontendPty {
     this.refreshAllRows();
   }
 
+  /**
+   * Keep xterm's DOM row surface opaque with the exact session theme. Chromium
+   * can retain pixels from a previous transparent row layer while the terminal
+   * is first resized or rapidly rewritten; painting the canonical background
+   * in the same layer makes removed glyphs deterministic without replaying or
+   * remounting terminal content.
+   */
+  private syncRenderBackground(background: string | undefined): void {
+    if (background) {
+      this.ownedContainer.style.setProperty('--yoda-xterm-background', background);
+      return;
+    }
+    this.ownedContainer.style.removeProperty('--yoda-xterm-background');
+  }
+
+  setTheme(theme?: SessionTheme): void {
+    const terminalTheme = buildTheme(theme);
+    this.syncRenderBackground(terminalTheme?.background);
+    this.terminal.options.theme = terminalTheme;
+  }
+
   setScrollbackLines(scrollbackLines: unknown): void {
     this.terminal.options.scrollback = normalizeTerminalScrollbackLines(scrollbackLines);
   }
@@ -354,9 +454,9 @@ export class FrontendPty {
    * duplicate a batch already present in the snapshot; snapshot-first can
    * lose a batch in the RPC return window. The watermark closes both races.
    *
-   * The first subscription is allowed only after a visible mount has real
-   * dimensions and opens the flush gate. Once established it remains live
-   * across unmounts; only a still-pending first subscription is cancelled.
+   * The first subscription is allowed only after a visible or staged mount
+   * has real dimensions and opens the flush gate. Once established it remains
+   * live across unmounts; only a still-pending first subscription is cancelled.
    */
   async connect(): Promise<void> {
     if (
@@ -390,6 +490,143 @@ export class FrontendPty {
       this.connectedConsumerId === null
     ) {
       await this.connect();
+    }
+  }
+
+  /**
+   * Hydrate one terminal frame without exposing any of its intermediate states.
+   *
+   * An explicit task open uses the off-screen xterm host as a staging surface:
+   * subscribe to the historical/live snapshot, drain xterm's asynchronous
+   * parser, then return the terminal to its suspended host. The later visible
+   * mount can therefore reparent an already-populated buffer in one commit.
+   *
+   * A lease keeps this cleanup from detaching a newer visible mount if another
+   * route claims the same terminal while preparation is in flight.
+   */
+  async prepareFirstFrame(
+    targetDims?: { cols: number; rows: number },
+    shouldContinue: () => boolean = () => true,
+    options: { waitForCanonicalOutput?: boolean; timeoutMs?: number } = {}
+  ): Promise<boolean> {
+    const previousPreparation = this.prepareFirstFrameTail;
+    let releasePreparation = (): void => {};
+    this.prepareFirstFrameTail = new Promise<void>((resolve) => {
+      releasePreparation = resolve;
+    });
+
+    await previousPreparation;
+    try {
+      if (this.isDisposed || !shouldContinue()) return false;
+      return await this.prepareFirstFrameOnce(targetDims, shouldContinue, options);
+    } finally {
+      releasePreparation();
+    }
+  }
+
+  /**
+   * Wait for this terminal's real routed host to expose a painted canonical frame.
+   *
+   * A preparation mount in the shared off-screen host never satisfies this ACK.
+   * A visible mount must first drain its suspended replay sentinel, restore the
+   * terminal's visibility, emit an xterm render event, and cross a browser paint.
+   */
+  waitForVisibleFrame(
+    shouldContinue: () => boolean = () => true,
+    timeoutMs: number = FIRST_FRAME_TIMEOUT_MS
+  ): Promise<boolean> {
+    if (this.isDisposed || !shouldContinue()) return Promise.resolve(false);
+    if (this.isVisibleFrameReady()) return Promise.resolve(true);
+
+    const boundedTimeoutMs = Math.max(0, timeoutMs);
+    return new Promise((resolve) => {
+      let pollTimer: ReturnType<typeof setInterval> | null = null;
+      let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+      let settled = false;
+      const finish = (ready: boolean) => {
+        if (settled) return;
+        settled = true;
+        if (pollTimer !== null) clearInterval(pollTimer);
+        if (timeoutTimer !== null) clearTimeout(timeoutTimer);
+        this.visibleFrameWaiters.delete(onFrameReady);
+        resolve(ready && shouldContinue() && this.isVisibleFrameReady());
+      };
+      const onFrameReady = (ready: boolean) => finish(ready);
+
+      this.visibleFrameWaiters.add(onFrameReady);
+      pollTimer = setInterval(() => {
+        if (this.isDisposed || !shouldContinue()) finish(false);
+      }, FIRST_FRAME_CANCELLATION_POLL_MS);
+      timeoutTimer = setTimeout(() => {
+        this.revealVisibleMountWithoutAck(this.mountGeneration);
+        finish(false);
+      }, boundedTimeoutMs);
+      if (this.isVisibleMountLease(this.mountGeneration)) {
+        this.scheduleVisibleFrameAck(this.mountGeneration);
+      }
+      if (this.isVisibleFrameReady()) finish(true);
+    });
+  }
+
+  /** Require the next canonical-frame wait to represent this backend generation or newer. */
+  expectCanonicalGeneration(generation: number): void {
+    if (!Number.isSafeInteger(generation) || generation < 0) return;
+    if (
+      this.preparedCanonicalGeneration !== null &&
+      generation > this.preparedCanonicalGeneration
+    ) {
+      this.preparedCanonicalGeneration = null;
+      this.preparedCanonicalRevision = null;
+    }
+    this.expectedCanonicalGeneration = generation;
+  }
+
+  private async prepareFirstFrameOnce(
+    targetDims: { cols: number; rows: number } | undefined,
+    shouldContinue: () => boolean,
+    options: { waitForCanonicalOutput?: boolean; timeoutMs?: number }
+  ): Promise<boolean> {
+    const timeoutMs = Math.max(0, options.timeoutMs ?? FIRST_FRAME_TIMEOUT_MS);
+    const deadline = performance.now() + timeoutMs;
+
+    const finishPreparation = async (): Promise<boolean> => {
+      const connected = await this.waitForPromiseWithin(this.connect(), shouldContinue, deadline);
+      if (!connected) return false;
+      if (this.isDisposed || !shouldContinue()) return false;
+      if (options.waitForCanonicalOutput) {
+        const canonicalOutputAvailable = await this.waitForCanonicalOutput(
+          shouldContinue,
+          deadline
+        );
+        if (!canonicalOutputAvailable || this.isDisposed || !shouldContinue()) return false;
+      }
+      const writesDrained = await this.waitForPromiseWithin(
+        this.waitForTerminalWrites(),
+        shouldContinue,
+        deadline
+      );
+      if (!writesDrained) return false;
+      return !this.isDisposed && shouldContinue();
+    };
+
+    // A terminal may already be visible in a pinned pane. Never steal its DOM;
+    // simply wait for the currently ordered parser queue to reach a sentinel.
+    if (this.isMounted) {
+      this.flushPendingWrites();
+      return finishPreparation();
+    }
+
+    const dimensions = targetDims ??
+      this.lastSentDims ?? {
+        cols: this.terminal.cols,
+        rows: this.terminal.rows,
+      };
+    const mountLease = this.mount(ensureXtermHost(), dimensions);
+    try {
+      this.flushPendingWrites();
+      return await finishPreparation();
+    } finally {
+      this.unmount(mountLease);
     }
   }
 
@@ -446,7 +683,7 @@ export class FrontendPty {
     this.offData = attempt.stopListening;
 
     const snapshot = result.data;
-    this.outputGeneration = snapshot.generation;
+    this.beginCanonicalGeneration(snapshot.generation);
     this.lastOutputSequence = snapshot.sequence;
     this.resetBeforeNextLiveGeneration = snapshot.replayedFromHistory === true;
     this.acknowledgedGeneration = snapshot.generation;
@@ -461,17 +698,36 @@ export class FrontendPty {
     });
     this.startConsumerHeartbeat();
     if (snapshot.buffer) {
-      this.writeOrBuffer(snapshot.buffer, {
-        generation: snapshot.generation,
-        sequence: snapshot.sequence,
-      });
+      this.noteOutputActivity();
+      this.observeCanonicalPayload(snapshot.buffer, this.outputRevision);
+      this.writeOrBuffer(
+        snapshot.buffer,
+        {
+          generation: snapshot.generation,
+          sequence: snapshot.sequence,
+        },
+        () => {
+          this.initialSnapshotParserDrained = true;
+          if (this.hasResolvedInitialSnapshot && this.isVisibleMountLease(this.mountGeneration)) {
+            this.scheduleVisibleFrameAck(this.mountGeneration);
+          }
+        }
+      );
     } else if (snapshot.sequence > 0) {
+      this.noteOutputActivity();
       this.acknowledgeOutput(snapshot.generation, snapshot.sequence);
+      this.initialSnapshotParserDrained = true;
+    } else {
+      this.initialSnapshotParserDrained = true;
     }
 
     attempt.snapshotResolved = true;
     for (const event of pendingEvents) this.acceptOutputEvent(event);
     pendingEvents.length = 0;
+    this.hasResolvedInitialSnapshot = true;
+    if (this.initialSnapshotParserDrained && this.isVisibleMountLease(this.mountGeneration)) {
+      this.scheduleVisibleFrameAck(this.mountGeneration);
+    }
     return 'connected';
   }
 
@@ -508,7 +764,7 @@ export class FrontendPty {
     const shouldResetStaleHistory = isNewGeneration && this.resetBeforeNextLiveGeneration;
     if (event.generation > this.outputGeneration) {
       const previousGeneration = this.outputGeneration;
-      this.outputGeneration = event.generation;
+      this.beginCanonicalGeneration(event.generation);
       this.lastOutputSequence = 0;
       this.acknowledgedGeneration = event.generation;
       this.acknowledgedSequence = 0;
@@ -524,7 +780,10 @@ export class FrontendPty {
     if (event.sequence <= this.lastOutputSequence) return;
 
     this.lastOutputSequence = event.sequence;
+    if (!this.isMounted) this.hiddenOutputCodeUnits += event.data.length;
+    this.noteOutputActivity();
     if (shouldResetStaleHistory) this.writeTerminalData(RESET_TERMINAL_SEQUENCE);
+    this.observeCanonicalPayload(event.data, this.outputRevision);
     this.writeOrBuffer(event.data, {
       generation: event.generation,
       sequence: event.sequence,
@@ -533,7 +792,8 @@ export class FrontendPty {
 
   private writeOrBuffer(
     data: string,
-    acknowledgement?: { generation: number; sequence: number }
+    acknowledgement?: { generation: number; sequence: number },
+    onWritten?: () => void
   ): void {
     if (this.hasFlushed) {
       if (this.renderingSuspended) {
@@ -544,6 +804,7 @@ export class FrontendPty {
         if (acknowledgement) {
           this.acknowledgeOutput(acknowledgement.generation, acknowledgement.sequence);
         }
+        onWritten?.();
       });
     } else {
       this.pendingWrites.push({ data, acknowledgement });
@@ -556,10 +817,326 @@ export class FrontendPty {
     this.pumpTerminalWriteQueue();
   }
 
+  /** Wait until every write queued before this call has finished in xterm. */
+  private waitForTerminalWrites(): Promise<void> {
+    if (this.isDisposed) return Promise.resolve();
+    if (!this.terminalWriteActive && this.terminalWriteQueue.length === 0) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      this.terminalWriteWaiters.add(resolve);
+      if (this.isDisposed) {
+        this.terminalWriteWaiters.delete(resolve);
+        resolve();
+      }
+    });
+  }
+
+  private resolveTerminalWriteWaitersIfIdle(): void {
+    if (this.terminalWriteActive || this.terminalWriteQueue.length > 0) return;
+    for (const resolve of this.terminalWriteWaiters) resolve();
+    this.terminalWriteWaiters.clear();
+  }
+
+  private waitForPromiseWithin(
+    promise: Promise<unknown>,
+    shouldContinue: () => boolean,
+    deadline: number
+  ): Promise<boolean> {
+    if (this.isDisposed || !shouldContinue() || performance.now() >= deadline) {
+      return Promise.resolve(false);
+    }
+
+    return new Promise((resolve, reject) => {
+      let pollTimer: ReturnType<typeof setInterval> | null = null;
+      let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+      let settled = false;
+      const cleanup = () => {
+        if (pollTimer !== null) clearInterval(pollTimer);
+        if (timeoutTimer !== null) clearTimeout(timeoutTimer);
+      };
+      const finish = (completed: boolean) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(completed && !this.isDisposed && shouldContinue());
+      };
+
+      pollTimer = setInterval(() => {
+        if (this.isDisposed || !shouldContinue()) finish(false);
+      }, FIRST_FRAME_CANCELLATION_POLL_MS);
+      timeoutTimer = setTimeout(() => finish(false), Math.max(0, deadline - performance.now()));
+      promise.then(
+        () => finish(true),
+        (error: unknown) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(error);
+        }
+      );
+    });
+  }
+
+  private beginCanonicalGeneration(generation: number): void {
+    this.outputGeneration = generation;
+    if (this.canonicalStateGeneration === generation) return;
+    this.canonicalStateGeneration = generation;
+    this.canonicalGenerationBaseline = this.readViewportContent().signature;
+    this.canonicalGenerationHasPayload = false;
+    this.synchronizedOutputOpen = false;
+    this.synchronizedOutputCursorShown = false;
+    this.synchronizedOutputCompletedRevision = null;
+    this.synchronizedOutputCompletedWithCursorRevision = null;
+    this.synchronizedOutputScanTail = '';
+  }
+
+  private observeCanonicalPayload(data: string, revision: number): void {
+    if (!data) return;
+    this.canonicalGenerationHasPayload = true;
+    const scan = this.synchronizedOutputScanTail + data;
+    let offset = 0;
+    while (offset < scan.length) {
+      const startIndex = scan.indexOf(SYNCHRONIZED_OUTPUT_START, offset);
+      const endIndex = scan.indexOf(SYNCHRONIZED_OUTPUT_END, offset);
+      const cursorIndex = scan.indexOf(SYNCHRONIZED_OUTPUT_CURSOR_SHOW, offset);
+      const nextIndex = Math.min(
+        startIndex < 0 ? Number.POSITIVE_INFINITY : startIndex,
+        endIndex < 0 ? Number.POSITIVE_INFINITY : endIndex,
+        cursorIndex < 0 ? Number.POSITIVE_INFINITY : cursorIndex
+      );
+      if (!Number.isFinite(nextIndex)) break;
+      if (nextIndex === startIndex) {
+        this.synchronizedOutputOpen = true;
+        this.synchronizedOutputCursorShown = false;
+        offset = startIndex + SYNCHRONIZED_OUTPUT_START.length;
+        continue;
+      }
+      if (nextIndex === cursorIndex) {
+        if (this.synchronizedOutputOpen) this.synchronizedOutputCursorShown = true;
+        offset = cursorIndex + SYNCHRONIZED_OUTPUT_CURSOR_SHOW.length;
+        continue;
+      }
+      if (nextIndex === endIndex && this.synchronizedOutputOpen) {
+        this.synchronizedOutputCompletedRevision = revision;
+        this.synchronizedOutputCompletedWithCursorRevision = this.synchronizedOutputCursorShown
+          ? revision
+          : null;
+        this.synchronizedOutputOpen = false;
+        this.synchronizedOutputCursorShown = false;
+      }
+      offset = endIndex + SYNCHRONIZED_OUTPUT_END.length;
+    }
+    this.synchronizedOutputScanTail = scan.slice(-SYNCHRONIZED_OUTPUT_SCAN_OVERLAP);
+  }
+
+  private noteOutputActivity(): void {
+    if (
+      (this.preparedCanonicalRevision !== null || this.visibleFrameSettlementPending) &&
+      this.isVisibleMountLease(this.mountGeneration) &&
+      this.visibleFrameMountGeneration !== this.mountGeneration
+    ) {
+      // The prepared frame was exposed synchronously, but has not crossed its
+      // render/paint ACK yet. Hide it before any newer bytes reach xterm so a
+      // clear/loading transition cannot flash between the old and new frames.
+      this.ownedContainer.style.visibility = 'hidden';
+    }
+    this.outputRevision += 1;
+    this.visualFrameRevision += 1;
+    this.visibleFrameMountGeneration = 0;
+    for (const resolve of this.outputActivityWaiters) resolve();
+    this.outputActivityWaiters.clear();
+  }
+
+  private readViewportContent(): ViewportContent {
+    const buffer = this.terminal.buffer.active;
+    const lines: string[] = [];
+    let nonEmptyLines = 0;
+    let visibleCharacters = 0;
+    for (let row = 0; row < this.terminal.rows; row += 1) {
+      const line = buffer.getLine(buffer.baseY + row)?.translateToString(true) ?? '';
+      const trimmed = line.trim();
+      lines.push(line.trimEnd());
+      if (!trimmed) continue;
+      nonEmptyLines += 1;
+      visibleCharacters += Array.from(trimmed).filter((character) => !/\s/u.test(character)).length;
+    }
+    return {
+      signature: lines.join('\n'),
+      nonEmptyLines,
+      visibleCharacters,
+    };
+  }
+
+  private hasCanonicalViewport(): boolean {
+    if (
+      this.resetBeforeNextLiveGeneration ||
+      this.canonicalStateGeneration !== this.outputGeneration ||
+      !this.canonicalGenerationHasPayload ||
+      (this.expectedCanonicalGeneration !== null &&
+        this.outputGeneration < this.expectedCanonicalGeneration)
+    ) {
+      return false;
+    }
+    const viewport = this.readViewportContent();
+    return (
+      viewport.nonEmptyLines >= MIN_FIRST_FRAME_NON_EMPTY_LINES &&
+      viewport.visibleCharacters >= MIN_FIRST_FRAME_VISIBLE_CHARACTERS &&
+      (this.synchronizedOutputCompletedRevision === this.outputRevision ||
+        viewport.signature !== this.canonicalGenerationBaseline)
+    );
+  }
+
+  /** Wait for output from the requested live generation rather than a transcript fallback. */
+  private async waitForCanonicalOutput(
+    shouldContinue: () => boolean,
+    deadline: number
+  ): Promise<boolean> {
+    while (!this.isDisposed && shouldContinue() && performance.now() < deadline) {
+      const revisionBeforeDrain = this.outputRevision;
+      const parserDrained = await this.waitForPromiseWithin(
+        this.waitForTerminalWrites(),
+        shouldContinue,
+        deadline
+      );
+      if (!parserDrained) return false;
+      // Output accepted while the sentinel was in xterm's queue sits after it.
+      if (revisionBeforeDrain !== this.outputRevision) continue;
+
+      const generation = this.outputGeneration;
+      const revision = this.outputRevision;
+      if (
+        this.preparedCanonicalGeneration === generation &&
+        this.preparedCanonicalRevision === revision &&
+        this.hasCanonicalViewport()
+      ) {
+        return true;
+      }
+      if (this.hasCanonicalViewport() && !this.synchronizedOutputOpen) {
+        const quietMs =
+          this.synchronizedOutputCompletedWithCursorRevision === revision
+            ? SYNCHRONIZED_FIRST_FRAME_QUIET_MS
+            : FALLBACK_FIRST_FRAME_QUIET_MS;
+        const quietOutcome = await this.waitForOutputActivityOrDelay(
+          revision,
+          quietMs,
+          shouldContinue,
+          deadline
+        );
+        if (quietOutcome === 'cancelled') return false;
+        if (quietOutcome === 'activity') continue;
+
+        const finalRevisionBeforeDrain = this.outputRevision;
+        const finalParserDrained = await this.waitForPromiseWithin(
+          this.waitForTerminalWrites(),
+          shouldContinue,
+          deadline
+        );
+        if (!finalParserDrained) return false;
+        if (
+          finalRevisionBeforeDrain !== this.outputRevision ||
+          generation !== this.outputGeneration ||
+          revision !== this.outputRevision ||
+          !this.hasCanonicalViewport()
+        ) {
+          continue;
+        }
+        this.preparedCanonicalGeneration = generation;
+        this.preparedCanonicalRevision = revision;
+        return true;
+      }
+
+      const activityOutcome = await this.waitForOutputActivityOrDelay(
+        revision,
+        Math.max(0, deadline - performance.now()),
+        shouldContinue,
+        deadline
+      );
+      if (activityOutcome !== 'activity') return false;
+    }
+    return false;
+  }
+
+  private waitForOutputActivityOrDelay(
+    observedRevision: number,
+    delayMs: number,
+    shouldContinue: () => boolean,
+    deadline: number
+  ): Promise<OutputActivityOutcome> {
+    if (this.outputRevision !== observedRevision) return Promise.resolve('activity');
+    if (this.isDisposed || !shouldContinue() || performance.now() >= deadline) {
+      return Promise.resolve('cancelled');
+    }
+
+    const remainingMs = Math.max(0, deadline - performance.now());
+    const boundedDelayMs = Math.min(Math.max(0, delayMs), remainingMs);
+    const reachesDeadline = delayMs > remainingMs;
+    return new Promise((resolve) => {
+      let pollTimer: ReturnType<typeof setInterval> | null = null;
+      let delayTimer: ReturnType<typeof setTimeout> | null = null;
+      let settled = false;
+      const finish = (outcome: OutputActivityOutcome) => {
+        if (settled) return;
+        settled = true;
+        if (pollTimer !== null) clearInterval(pollTimer);
+        if (delayTimer !== null) clearTimeout(delayTimer);
+        this.outputActivityWaiters.delete(onActivity);
+        resolve(outcome);
+      };
+      const onActivity = () => finish('activity');
+
+      this.outputActivityWaiters.add(onActivity);
+      pollTimer = setInterval(() => {
+        if (this.isDisposed || !shouldContinue()) finish('cancelled');
+      }, FIRST_FRAME_CANCELLATION_POLL_MS);
+      delayTimer = setTimeout(
+        () => finish(reachesDeadline ? 'cancelled' : 'elapsed'),
+        boundedDelayMs
+      );
+      if (this.outputRevision !== observedRevision) finish('activity');
+    });
+  }
+
+  private waitForTerminalRenderAfter(
+    observedRevision: number,
+    shouldContinue: () => boolean,
+    deadline: number
+  ): Promise<boolean> {
+    if (this.terminalRenderRevision > observedRevision) return Promise.resolve(true);
+    if (this.isDisposed || !shouldContinue() || performance.now() >= deadline) {
+      return Promise.resolve(false);
+    }
+
+    return new Promise((resolve) => {
+      let pollTimer: ReturnType<typeof setInterval> | null = null;
+      let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+      let settled = false;
+      const finish = (rendered: boolean) => {
+        if (settled) return;
+        settled = true;
+        if (pollTimer !== null) clearInterval(pollTimer);
+        if (timeoutTimer !== null) clearTimeout(timeoutTimer);
+        this.terminalRenderWaiters.delete(onRender);
+        resolve(rendered && !this.isDisposed && shouldContinue());
+      };
+      const onRender = () => finish(this.terminalRenderRevision > observedRevision);
+
+      this.terminalRenderWaiters.add(onRender);
+      pollTimer = setInterval(() => {
+        if (this.isDisposed || !shouldContinue()) finish(false);
+      }, FIRST_FRAME_CANCELLATION_POLL_MS);
+      timeoutTimer = setTimeout(() => finish(false), Math.max(0, deadline - performance.now()));
+      if (this.terminalRenderRevision > observedRevision) finish(true);
+    });
+  }
+
   private pumpTerminalWriteQueue(): void {
     if (this.isDisposed || this.renderingSuspended || this.terminalWriteActive) return;
     const write = this.terminalWriteQueue[0];
-    if (!write) return;
+    if (!write) {
+      this.resolveTerminalWriteWaitersIfIdle();
+      return;
+    }
     if (write.offset >= write.data.length) {
       this.terminalWriteQueue.shift();
       // Empty writes are used as ordered completion sentinels when an
@@ -638,12 +1215,172 @@ export class FrontendPty {
     }, PTY_CONSUMER_HEARTBEAT_INTERVAL_MS);
   }
 
+  private isVisibleMountLease(mountLease: number): boolean {
+    return (
+      !this.isDisposed &&
+      this.isMounted &&
+      mountLease === this.mountGeneration &&
+      this.ownedContainer.parentElement !== null &&
+      this.ownedContainer.parentElement !== ensureXtermHost()
+    );
+  }
+
+  private isVisibleFrameReady(): boolean {
+    return (
+      this.visibleFrameMountGeneration === this.mountGeneration &&
+      this.isVisibleMountLease(this.mountGeneration) &&
+      this.ownedContainer.style.visibility !== 'hidden'
+    );
+  }
+
+  private scheduleVisibleFrameAck(mountLease: number): void {
+    if (
+      !this.isVisibleMountLease(mountLease) ||
+      this.visibleFrameAckMountGenerationInFlight === mountLease
+    ) {
+      return;
+    }
+    this.visibleFrameAckMountGenerationInFlight = mountLease;
+    void this.completeVisibleFrameAck(mountLease).finally(() => {
+      if (this.visibleFrameAckMountGenerationInFlight === mountLease) {
+        this.visibleFrameAckMountGenerationInFlight = 0;
+      }
+    });
+  }
+
+  private async completeVisibleFrameAck(mountLease: number): Promise<void> {
+    const isCurrentMount = () => this.isVisibleMountLease(mountLease);
+    const deadline = performance.now() + FIRST_FRAME_TIMEOUT_MS;
+    while (isCurrentMount() && performance.now() < deadline) {
+      // A cold visible mount starts before listener-first subscription resolves.
+      // Keep it hidden until the snapshot and any events crossing that boundary
+      // have entered the same ordered parser queue.
+      if (!this.hasResolvedInitialSnapshot) return;
+
+      const preparedRevision = this.preparedCanonicalRevision;
+      if (preparedRevision !== null && this.outputRevision !== preparedRevision) {
+        // Output changed after off-screen preparation. Keep the routed terminal
+        // hidden until the new generation/frame reaches canonical readiness too.
+        this.ownedContainer.style.visibility = 'hidden';
+        const canonical = await this.waitForCanonicalOutput(isCurrentMount, deadline);
+        if (!canonical) break;
+        continue;
+      }
+
+      const stableRevision = this.outputRevision;
+      const stableVisualRevision = this.visualFrameRevision;
+      const parserDrained = await this.waitForPromiseWithin(
+        this.waitForTerminalWrites(),
+        isCurrentMount,
+        deadline
+      );
+      if (!parserDrained) break;
+      if (
+        stableRevision !== this.outputRevision ||
+        stableVisualRevision !== this.visualFrameRevision
+      ) {
+        if (preparedRevision !== null) this.ownedContainer.style.visibility = 'hidden';
+        continue;
+      }
+
+      if (this.visibleFrameSettlementPending) {
+        const outputChangedDuringSettlement =
+          this.outputRevision !== this.visibleFrameSettlementOutputRevision;
+        const quietMs = outputChangedDuringSettlement
+          ? this.synchronizedOutputCompletedWithCursorRevision === this.outputRevision
+            ? SYNCHRONIZED_FIRST_FRAME_QUIET_MS
+            : FALLBACK_FIRST_FRAME_QUIET_MS
+          : SYNCHRONIZED_FIRST_FRAME_QUIET_MS;
+        const settled = await this.waitForPromiseWithin(
+          new Promise<void>((resolve) => setTimeout(resolve, quietMs)),
+          isCurrentMount,
+          deadline
+        );
+        if (!settled) break;
+        if (
+          stableRevision !== this.outputRevision ||
+          stableVisualRevision !== this.visualFrameRevision
+        ) {
+          continue;
+        }
+        if (this.savedAtBottom) {
+          this.terminal.scrollToBottom();
+          this.savedViewportY = this.terminal.buffer.active.viewportY;
+        }
+      }
+
+      const renderRevision = this.terminalRenderRevision;
+      this.redrawViewportFromBuffer();
+      const rendered = await this.waitForTerminalRenderAfter(
+        renderRevision,
+        isCurrentMount,
+        deadline
+      );
+      if (!rendered) break;
+      const rowsCommitted = await this.waitForPromiseWithin(
+        new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+        isCurrentMount,
+        deadline
+      );
+      if (!rowsCommitted) break;
+      if (
+        stableRevision !== this.outputRevision ||
+        stableVisualRevision !== this.visualFrameRevision
+      ) {
+        if (preparedRevision !== null || this.visibleFrameSettlementPending) {
+          this.ownedContainer.style.visibility = 'hidden';
+        }
+        continue;
+      }
+
+      // The off-screen parser can be current while its DOM rows still contain
+      // the last visible frame. Reveal only after refresh() has committed the
+      // canonical rows; otherwise reparenting exposes those stale rows for one
+      // paint and produces the apparent duplicated/ghost terminal content.
+      this.ownedContainer.style.visibility = '';
+      const painted = await this.waitForPromiseWithin(
+        new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+        isCurrentMount,
+        deadline
+      );
+      if (!painted) break;
+      if (
+        stableRevision !== this.outputRevision ||
+        stableVisualRevision !== this.visualFrameRevision
+      ) {
+        if (preparedRevision !== null || this.visibleFrameSettlementPending) {
+          this.ownedContainer.style.visibility = 'hidden';
+        }
+        continue;
+      }
+
+      this.visibleFrameMountGeneration = mountLease;
+      this.visibleFrameSettlementPending = false;
+      this.preparedCanonicalGeneration = null;
+      this.preparedCanonicalRevision = null;
+      for (const resolve of this.visibleFrameWaiters) resolve(true);
+      this.visibleFrameWaiters.clear();
+      return;
+    }
+
+    // A false ACK lets the route owner choose its explicit fallback. Restore
+    // the DOM scene so that fallback cannot leave a permanently blank terminal.
+    this.revealVisibleMountWithoutAck(mountLease);
+  }
+
+  private revealVisibleMountWithoutAck(mountLease: number): void {
+    if (!this.isVisibleMountLease(mountLease)) return;
+    this.visibleFrameSettlementPending = false;
+    this.ownedContainer.style.visibility = '';
+    this.redrawViewportFromBuffer();
+  }
+
   /**
    * Resume an off-screen session as one ordered replay. Keeping the terminal
    * hidden until the sentinel write completes prevents a TUI's intermediate
    * cursor positions from flashing through while the backlog is parsed.
    */
-  private flushSuspendedWrites(token: number): void {
+  private flushSuspendedWrites(token: number, mountLease: number, visibleMount: boolean): void {
     const writes = this.suspendedWrites;
     this.suspendedWrites = [];
 
@@ -665,21 +1402,25 @@ export class FrontendPty {
     // earlier visible write was still active when the terminal was unmounted.
     this.writeTerminalData('', () => {
       if (token !== this.replayToken || !this.isMounted || this.renderingSuspended) return;
-      this.ownedContainer.style.visibility = '';
-      this.redrawViewportFromBuffer();
+      if (visibleMount) {
+        this.scheduleVisibleFrameAck(mountLease);
+      } else {
+        this.ownedContainer.style.visibility = '';
+        this.redrawViewportFromBuffer();
+      }
     });
   }
 
   /**
-   * Commit rows and columns as one canonical grid transition. The DOM renderer
-   * paints directly from xterm's buffer, so there is no retained GPU frame to
-   * freeze, stretch, or reveal later. A full refresh makes the new grid the only
-   * visible state in the next browser paint.
+   * Commit rows and columns without turning a normal layout resize into a
+   * first-frame transaction. Xterm owns the buffer reflow and renderer update
+   * performed by resize(); hiding the scene, forcing a second full refresh and
+   * waiting for a visible-frame ACK makes the surrounding conversation surface
+   * appear to unmount/remount on every divider or window resize.
    */
   commitResize(cols: number, rows: number): void {
     if (this.terminal.cols === cols && this.terminal.rows === rows) return;
     this.terminal.resize(cols, rows);
-    this.redrawViewportFromBuffer();
   }
 
   /**
@@ -717,12 +1458,33 @@ export class FrontendPty {
    */
   mount(mountTarget: HTMLElement, targetDims?: { cols: number; rows: number }): number {
     const mountLease = ++this.mountGeneration;
+    const visibleMount = mountTarget !== ensureXtermHost();
+    this.visibleFrameMountGeneration = 0;
     this.renderingSuspended = false;
-    const hasReplayBacklog = this.suspendedWrites.length > 0 || this.terminalWriteQueue.length > 0;
+    // A hot-cache terminal keeps its parser current while off-screen. An
+    // already-running parser queue is therefore the canonical live frame, not
+    // a cold replay that should hide the scene and wait for a quiet period.
+    const hasReplayBacklog = this.suspendedWrites.length > 0;
+    const waitsForInitialSnapshot = visibleMount && !this.hasResolvedInitialSnapshot;
+    const holdPreparedFrameUntilAck =
+      visibleMount &&
+      this.preparedCanonicalRevision !== null &&
+      this.preparedCanonicalRevision !== this.outputRevision;
     const replayToken = ++this.replayToken;
-    if (hasReplayBacklog) {
-      this.ownedContainer.style.visibility = 'hidden';
+    const requiresSettlement =
+      waitsForInitialSnapshot || hasReplayBacklog || holdPreparedFrameUntilAck;
+    if (requiresSettlement) {
+      if (!this.visibleFrameSettlementPending) {
+        this.visibleFrameSettlementOutputRevision = this.outputRevision;
+      }
+      this.visibleFrameSettlementPending = true;
     }
+    // Reparenting an off-screen xterm exposes its last rendered DOM rows before
+    // the renderer refresh scheduled below runs. Always keep a visible mount
+    // hidden until completeVisibleFrameAck observes the refreshed row commit.
+    // Hot terminals take the direct path (no quiet-period settlement), so this
+    // costs only the renderer's next frame and never replays terminal content.
+    this.ownedContainer.style.visibility = visibleMount ? 'hidden' : '';
     if (
       targetDims &&
       (this.terminal.cols !== targetDims.cols || this.terminal.rows !== targetDims.rows)
@@ -732,7 +1494,7 @@ export class FrontendPty {
     mountTarget.appendChild(this.ownedContainer);
     this.isMounted = true;
     if (hasReplayBacklog) {
-      this.flushSuspendedWrites(replayToken);
+      this.flushSuspendedWrites(replayToken, mountLease, visibleMount);
     }
     // Force a clean renderer repaint after reparenting in the DOM.
     const t = this.terminal;
@@ -751,6 +1513,7 @@ export class FrontendPty {
           t.scrollToLine(savedViewportY);
         }
         this.redrawViewportFromBuffer();
+        if (visibleMount && !hasReplayBacklog) this.scheduleVisibleFrameAck(mountLease);
       } catch {}
     });
     return mountLease;
@@ -765,8 +1528,15 @@ export class FrontendPty {
     if (mountLease !== undefined && mountLease !== this.mountGeneration) return;
     this.mountGeneration += 1;
     this.replayToken += 1;
+    this.visibleFrameSettlementPending = false;
     this.ownedContainer.style.visibility = '';
-    this.renderingSuspended = true;
+    // Keep cached terminals synchronized while they live in the off-screen
+    // host. Xterm's IntersectionObserver pauses DOM rendering there. Otherwise
+    // every task switch accumulates a replay, and a continuously
+    // working agent can keep resetting the visible-frame quiet window until its
+    // five-second fallback. Renderer eviction still disposes the subscription
+    // and parser through PtySession's adaptive cache policy.
+    this.renderingSuspended = false;
     this.isMounted = false;
     this.cancelPendingConnect();
     ensureXtermHost().appendChild(this.ownedContainer);
@@ -794,11 +1564,21 @@ export class FrontendPty {
     this.suspendedWrites = [];
     this.terminalWriteQueue = [];
     this.terminalWriteActive = false;
+    for (const resolve of this.terminalWriteWaiters) resolve();
+    this.terminalWriteWaiters.clear();
+    for (const resolve of this.outputActivityWaiters) resolve();
+    this.outputActivityWaiters.clear();
+    for (const resolve of this.terminalRenderWaiters) resolve();
+    this.terminalRenderWaiters.clear();
+    for (const resolve of this.visibleFrameWaiters) resolve(false);
+    this.visibleFrameWaiters.clear();
+    this.visibleFrameMountGeneration = 0;
     this.offData?.();
     this.offData = null;
     const connectedConsumerId = this.connectedConsumerId;
     this.connectedConsumerId = null;
     this.scrollDisposable.dispose();
+    this.renderDisposable.dispose();
     if (connectedConsumerId) {
       void rpc.pty.unsubscribe(this.sessionId, connectedConsumerId).catch(() => {});
     }
@@ -815,9 +1595,8 @@ export class FrontendPty {
 
 /** Apply a theme to all live terminals. Called on app-level theme change. */
 export function applyThemeToAll(theme?: SessionTheme): void {
-  const xTermTheme = buildTheme(theme);
   for (const pty of FrontendPty.all) {
-    pty.terminal.options.theme = xTermTheme;
+    pty.setTheme(theme);
   }
 }
 

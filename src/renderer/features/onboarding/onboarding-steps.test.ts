@@ -6,16 +6,14 @@ describe('getOnboardingSteps', () => {
     expect(
       getOnboardingSteps({
         isSignedIn: false,
-        isMaasGatewayInstalled: false,
       })
-    ).toEqual(['language', 'sign-in', 'maas-gateway']);
+    ).toEqual(['language', 'sign-in']);
   });
 
-  it('keeps language selection when account and gateway setup are already complete', () => {
+  it('keeps language selection when account setup is already complete', () => {
     expect(
       getOnboardingSteps({
         isSignedIn: true,
-        isMaasGatewayInstalled: true,
       })
     ).toEqual(['language']);
   });

@@ -126,6 +126,293 @@ describe('FrontendPty stream ordering', () => {
     pty = null;
   });
 
+  it('prepares a cold snapshot off-screen and resolves only after xterm drains it', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: { buffer: 'COLD-FIRST-FRAME', generation: 1, sequence: 4 },
+    });
+    pty = new FrontendPty('cold-first-frame-session');
+    const writes: Array<{ data: string; callback?: () => void }> = [];
+    const writeSpy = vi.spyOn(pty.terminal, 'write').mockImplementation((data, callback) => {
+      writes.push({
+        data: typeof data === 'string' ? data : new TextDecoder().decode(data),
+        callback,
+      });
+    });
+    let prepared = false;
+
+    const preparation = pty.prepareFirstFrame({ cols: 120, rows: 32 }).then((result) => {
+      prepared = true;
+      return result;
+    });
+
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]?.data).toBe('COLD-FIRST-FRAME');
+    expect(prepared).toBe(false);
+    expect(pty.mounted).toBe(true);
+
+    writes[0]?.callback?.();
+    await expect(preparation).resolves.toBe(true);
+    expect(pty.mounted).toBe(false);
+    expect(pty.ownedContainer.parentElement?.dataset.terminalHost).toBe('true');
+    expect(ipcMocks.unsubscribe).not.toHaveBeenCalled();
+    writeSpy.mockRestore();
+  });
+
+  it('keeps a cold visible snapshot hidden until the parser reaches its final tail', async () => {
+    const subscription = deferred<{
+      success: true;
+      data: { buffer: string; generation: number; sequence: number };
+    }>();
+    ipcMocks.subscribe.mockReturnValue(subscription.promise);
+    pty = new FrontendPty('cold-visible-snapshot-session');
+    mountAndOpenFlushGate(pty);
+
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+    const connected = pty.connect();
+    await vi.waitFor(() => expect(ipcMocks.subscribe).toHaveBeenCalledOnce());
+
+    const snapshot = Array.from(
+      { length: 80 },
+      (_, index) => `snapshot line ${String(index + 1).padStart(2, '0')}`
+    ).join('\r\n');
+    subscription.resolve({
+      success: true,
+      data: { buffer: snapshot, generation: 1, sequence: 1 },
+    });
+    await connected;
+
+    // connect() establishes the ordered stream, but the historical parser and
+    // tail positioning still belong to the hidden first-frame transaction.
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+    await vi.waitFor(() => expect(pty?.ownedContainer.style.visibility).toBe(''), {
+      timeout: 1_500,
+    });
+    expect(pty.terminal.buffer.active.viewportY).toBe(pty.terminal.buffer.active.baseY);
+    expect(
+      pty.terminal.buffer.active
+        .getLine(pty.terminal.buffer.active.baseY + pty.terminal.rows - 1)
+        ?.translateToString(true)
+    ).toContain('snapshot line 80');
+  });
+
+  it('rejects a two-line synchronized loading frame before the final cursor-ready TUI', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer: 'STALE-HISTORY',
+        generation: 0,
+        sequence: 0,
+        replayedFromHistory: true,
+      },
+    });
+    pty = new FrontendPty('cold-history-to-live-session');
+    let prepared = false;
+
+    const preparation = pty
+      .prepareFirstFrame({ cols: 120, rows: 32 }, () => true, {
+        waitForCanonicalOutput: true,
+      })
+      .then((result) => {
+        prepared = true;
+        return result;
+      });
+
+    await vi.waitFor(() => expect(ipcMocks.subscribe).toHaveBeenCalledOnce());
+    await Promise.resolve();
+    expect(prepared).toBe(false);
+
+    ipcMocks.emitData(
+      output(1, '\x1b[?2026h\x1b[2J\x1b[HLoading agent…\r\nPlease wait…\x1b[?25h\x1b[?2026l')
+    );
+    await new Promise((resolve) => setTimeout(resolve, 140));
+    expect(prepared).toBe(false);
+
+    ipcMocks.emitData(
+      output(
+        2,
+        '\x1b[?2026h\x1b[2J\x1b[H╭─ Agent session ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l'
+      )
+    );
+    await expect(preparation).resolves.toBe(true);
+
+    const rendered = Array.from({ length: pty.terminal.rows }, (_, index) =>
+      pty?.terminal.buffer.active.getLine(index)?.translateToString(true)
+    ).join('\n');
+    expect(rendered).toContain('Ready for input');
+    expect(rendered).not.toContain('STALE-HISTORY');
+  });
+
+  it('does not reuse a completed synchronized signal for a later banner revision', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer: 'STALE-HISTORY',
+        generation: 0,
+        sequence: 0,
+        replayedFromHistory: true,
+      },
+    });
+    pty = new FrontendPty('revision-bound-synchronized-frame-session');
+    let prepared = false;
+    const preparation = pty
+      .prepareFirstFrame({ cols: 120, rows: 32 }, () => true, {
+        waitForCanonicalOutput: true,
+      })
+      .then((result) => {
+        prepared = true;
+        return result;
+      });
+
+    await vi.waitFor(() => expect(ipcMocks.subscribe).toHaveBeenCalledOnce());
+    ipcMocks.emitData(
+      output(
+        1,
+        '\x1b[?2026h\x1b[2J\x1b[H╭─ Initial frame ─╮\r\n│ Almost ready │\r\n╰─ Please wait ─╯\x1b[?25h\x1b[?2026l'
+      )
+    );
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    // This new revision has no synchronized transaction. It meets the viewport
+    // size threshold, but must use the 700 ms fallback quiet window rather than
+    // borrowing revision 1's strong 120 ms signal.
+    ipcMocks.emitData(
+      output(2, '\x1b[2J\x1b[HLoading workspace\r\nRestoring context\r\nPreparing terminal')
+    );
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    expect(prepared).toBe(false);
+
+    // A complete synchronized transaction without cursor-show is still a
+    // fallback signal and must not get the strong 120 ms quiet window.
+    ipcMocks.emitData(
+      output(
+        3,
+        '\x1b[?2026h\x1b[2J\x1b[HLoading tools\r\nRestoring session\r\nPreparing prompt\x1b[?2026l'
+      )
+    );
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    expect(prepared).toBe(false);
+
+    ipcMocks.emitData(
+      output(
+        4,
+        '\x1b[?2026h\x1b[2J\x1b[H╭─ Final frame ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l'
+      )
+    );
+    await expect(preparation).resolves.toBe(true);
+  });
+
+  it('recognizes synchronized output and cursor markers split across IPC batches', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer: 'STALE-HISTORY',
+        generation: 0,
+        sequence: 0,
+        replayedFromHistory: true,
+      },
+    });
+    pty = new FrontendPty('split-synchronized-markers-session');
+    let prepared = false;
+    const preparation = pty
+      .prepareFirstFrame({ cols: 120, rows: 32 }, () => true, {
+        waitForCanonicalOutput: true,
+      })
+      .then((result) => {
+        prepared = result;
+        return result;
+      });
+
+    await vi.waitFor(() => expect(ipcMocks.subscribe).toHaveBeenCalledOnce());
+    ipcMocks.emitData(output(1, '\x1b[?20'));
+    ipcMocks.emitData(
+      output(
+        2,
+        '26h\x1b[2J\x1b[H╭─ Split frame ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?2'
+      )
+    );
+    ipcMocks.emitData(output(3, '5h\x1b[?20'));
+    ipcMocks.emitData(output(4, '26l'));
+
+    await vi.waitFor(() => expect(prepared).toBe(true), { timeout: 600 });
+    await expect(preparation).resolves.toBe(true);
+  });
+
+  it('serializes preparations so a cancelled staged mount cannot strand its successor', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer: 'STALE-HISTORY',
+        generation: 0,
+        sequence: 0,
+        replayedFromHistory: true,
+      },
+    });
+    pty = new FrontendPty('serialized-first-frame-session');
+    let keepFirstPreparation = true;
+
+    const firstPreparation = pty.prepareFirstFrame(
+      { cols: 120, rows: 32 },
+      () => keepFirstPreparation,
+      { waitForCanonicalOutput: true }
+    );
+    await vi.waitFor(() => expect(ipcMocks.subscribe).toHaveBeenCalledOnce());
+
+    const secondPreparation = pty.prepareFirstFrame({ cols: 120, rows: 32 }, () => true, {
+      waitForCanonicalOutput: true,
+    });
+    keepFirstPreparation = false;
+
+    await expect(firstPreparation).resolves.toBe(false);
+    await vi.waitFor(() => expect(pty?.mounted).toBe(true));
+    ipcMocks.emitData(
+      output(
+        1,
+        '\x1b[?2026h\x1b[2J\x1b[H╭─ New request ─╮\r\n│ Ready to work │\r\n╰─ Idle ────────╯\x1b[?25h\x1b[?2026l'
+      )
+    );
+
+    await expect(secondPreparation).resolves.toBe(true);
+    expect(pty.mounted).toBe(false);
+    expect(ipcMocks.subscribe).toHaveBeenCalledOnce();
+  });
+
+  it('waits for the expected generation instead of reusing a hot canonical frame', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer:
+          '\x1b[?2026h╭─ Old generation ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l',
+        generation: 1,
+        sequence: 4,
+      },
+    });
+    pty = new FrontendPty('expected-generation-session');
+    pty.expectCanonicalGeneration(2);
+    let prepared = false;
+    const preparation = pty
+      .prepareFirstFrame({ cols: 120, rows: 32 }, () => true, {
+        waitForCanonicalOutput: true,
+      })
+      .then((result) => {
+        prepared = true;
+        return result;
+      });
+
+    await vi.waitFor(() => expect(ipcMocks.subscribe).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    expect(prepared).toBe(false);
+
+    ipcMocks.emitData({
+      ...output(
+        1,
+        '\x1b[?2026h\x1b[2J\x1b[H╭─ New generation ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l'
+      ),
+      generation: 2,
+    });
+    await expect(preparation).resolves.toBe(true);
+  });
+
   it('joins snapshot and live output exactly once across the subscribe race', async () => {
     ipcMocks.subscribe.mockImplementation(async () => {
       // seq=1 is already represented by the returned snapshot. seq=2 arrives
@@ -262,7 +549,7 @@ describe('FrontendPty stream ordering', () => {
     pty = null;
   });
 
-  it('suspends xterm parsing while off-screen and resumes the queued stream on remount', async () => {
+  it('keeps a hot xterm synchronized while off-screen', async () => {
     ipcMocks.subscribe.mockResolvedValue({
       success: true,
       data: { buffer: '', generation: 1, sequence: 0 },
@@ -274,12 +561,6 @@ describe('FrontendPty stream ordering', () => {
     pty.unmount(lease);
     ipcMocks.emitData(output(1, 'OFFSCREEN'));
 
-    await Promise.resolve();
-    expect(pty.terminal.buffer.active.getLine(0)?.translateToString(true) ?? '').toBe('');
-    expect(ipcMocks.acknowledgeOutput).not.toHaveBeenCalled();
-    expect(ipcMocks.unsubscribe).not.toHaveBeenCalled();
-
-    const remountLease = pty.mount(mountTarget!, { cols: 120, rows: 32 });
     await vi.waitFor(() => {
       expect(pty?.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe('OFFSCREEN');
       expect(ipcMocks.acknowledgeOutput).toHaveBeenCalledWith(
@@ -289,10 +570,17 @@ describe('FrontendPty stream ordering', () => {
         1
       );
     });
+    expect(ipcMocks.unsubscribe).not.toHaveBeenCalled();
+
+    const remountLease = pty.mount(mountTarget!, { cols: 120, rows: 32 });
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+    expect(pty.ownedContainer.style.visibility).toBe('');
+    expect(pty.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe('OFFSCREEN');
     pty.unmount(remountLease);
   });
 
-  it('replays suspended PTY batches as one hidden ordered frame', async () => {
+  it('keeps a hot remount hidden while its off-screen parser queue drains', async () => {
     ipcMocks.subscribe.mockResolvedValue({
       success: true,
       data: { buffer: '', generation: 1, sequence: 0 },
@@ -307,8 +595,6 @@ describe('FrontendPty stream ordering', () => {
       '\u001b[?25hbackground terminal',
       '\r\n└ pnpm test',
     ];
-    frameParts.forEach((data, index) => ipcMocks.emitData(output(index + 1, data)));
-
     const writes: Array<{ data: string; callback?: () => void }> = [];
     const writeSpy = vi.spyOn(pty.terminal, 'write').mockImplementation((data, callback) => {
       writes.push({
@@ -316,6 +602,8 @@ describe('FrontendPty stream ordering', () => {
         callback,
       });
     });
+    frameParts.forEach((data, index) => ipcMocks.emitData(output(index + 1, data)));
+    expect(writes).toHaveLength(1);
 
     mountTarget = document.createElement('div');
     document.body.appendChild(mountTarget);
@@ -323,21 +611,178 @@ describe('FrontendPty stream ordering', () => {
 
     expect(pty.ownedContainer.style.visibility).toBe('hidden');
     expect(writes).toHaveLength(1);
-    expect(writes[0]?.data).toBe(frameParts.join(''));
+    expect(writes[0]?.data).toBe(frameParts[0]);
     expect(ipcMocks.acknowledgeOutput).not.toHaveBeenCalled();
 
-    writes[0]?.callback?.();
-    expect(pty.ownedContainer.style.visibility).toBe('hidden');
-    expect(writes).toHaveLength(2);
-    expect(writes[1]?.data).toBe('');
-
-    writes[1]?.callback?.();
-    await vi.waitFor(() => {
-      expect(pty?.ownedContainer.style.visibility).toBe('');
-      expect(ipcMocks.acknowledgeOutput).toHaveBeenCalledTimes(3);
-    });
+    for (let index = 0; index < frameParts.length; index += 1) {
+      expect(writes[index]?.data).toBe(frameParts[index]);
+      writes[index]?.callback?.();
+      expect(pty.ownedContainer.style.visibility).toBe('hidden');
+    }
+    expect(ipcMocks.acknowledgeOutput).toHaveBeenCalledTimes(3);
     expect(ipcMocks.acknowledgeOutput.mock.calls.map((call) => call[3])).toEqual([1, 2, 3]);
     writeSpy.mockRestore();
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+    expect(pty.ownedContainer.style.visibility).toBe('');
+  });
+
+  it('keeps the current terminal scene visible during resize', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer:
+          '\x1b[?2026h\x1b[2J\x1b[H╭─ Initial frame ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l',
+        generation: 1,
+        sequence: 1,
+      },
+    });
+    pty = new FrontendPty('resize-final-frame-session');
+    mountAndOpenFlushGate(pty);
+    await pty.connect();
+    await expect(pty.waitForVisibleFrame()).resolves.toBe(true);
+
+    pty.commitResize(96, 24);
+    expect(pty.ownedContainer.style.visibility).toBe('');
+    ipcMocks.emitData(
+      output(2, '\x1b[?2026h\x1b[2J\x1b[HResizing workspace…\r\nReflowing transcript…')
+    );
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    expect(pty.ownedContainer.style.visibility).toBe('');
+
+    ipcMocks.emitData(
+      output(
+        3,
+        '\x1b[2J\x1b[H╭─ Resized frame ─╮\r\n│ Ready for input │\r\n╰─ Idle ─────────╯\x1b[?25h\x1b[?2026l'
+      )
+    );
+    expect(pty.ownedContainer.style.visibility).toBe('');
+    expect(pty.terminal.cols).toBe(96);
+    expect(pty.terminal.rows).toBe(24);
+  });
+
+  it('reveals an unchanged prepared frame only after its DOM rows commit', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer:
+          '\x1b[?2026h\x1b[2J\x1b[H╭─ Prepared frame ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l',
+        generation: 1,
+        sequence: 1,
+      },
+    });
+    pty = new FrontendPty('unchanged-visible-frame-session');
+    await expect(
+      pty.prepareFirstFrame({ cols: 120, rows: 32 }, () => true, {
+        waitForCanonicalOutput: true,
+      })
+    ).resolves.toBe(true);
+
+    const visibleFrame = pty.waitForVisibleFrame();
+    mountTarget = document.createElement('div');
+    document.body.appendChild(mountTarget);
+    pty.mount(mountTarget, { cols: 120, rows: 32 });
+
+    // The parser is current, but IntersectionObserver may have paused the DOM
+    // renderer in the off-screen host. Never expose its previous row scene.
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+    await expect(visibleFrame).resolves.toBe(true);
+    expect(pty.ownedContainer.style.visibility).toBe('');
+  });
+
+  it('rehides a prepared mount when output arrives during its render and paint ACK', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer:
+          '\x1b[?2026h\x1b[2J\x1b[H╭─ Prepared frame ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l',
+        generation: 1,
+        sequence: 1,
+      },
+    });
+    pty = new FrontendPty('visible-frame-paint-race-session');
+    await expect(
+      pty.prepareFirstFrame({ cols: 120, rows: 32 }, () => true, {
+        waitForCanonicalOutput: true,
+      })
+    ).resolves.toBe(true);
+
+    let visibleFrameReady = false;
+    const visibleFrame = pty.waitForVisibleFrame().then((ready) => {
+      visibleFrameReady = true;
+      return ready;
+    });
+    mountTarget = document.createElement('div');
+    document.body.appendChild(mountTarget);
+    pty.mount(mountTarget, { cols: 120, rows: 32 });
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+
+    // Let mount's first rAF enter the render/onRender/double-rAF ACK window.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(visibleFrameReady).toBe(false);
+    ipcMocks.emitData(
+      output(2, '\x1b[?2026h\x1b[2J\x1b[HLoading agent…\r\nPlease wait…\x1b[?25h\x1b[?2026l')
+    );
+
+    // Hiding happens synchronously in noteOutputActivity, before xterm sees
+    // the clear/loading bytes.
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    expect(visibleFrameReady).toBe(false);
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+
+    ipcMocks.emitData(
+      output(
+        3,
+        '\x1b[?2026h\x1b[2J\x1b[H╭─ Visible frame ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l'
+      )
+    );
+    await expect(visibleFrame).resolves.toBe(true);
+    expect(pty.ownedContainer.style.visibility).toBe('');
+  });
+
+  it('revalidates output received after preparation before acknowledging the visible frame', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer:
+          '\x1b[?2026h\x1b[2J\x1b[H╭─ Prepared frame ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l',
+        generation: 1,
+        sequence: 1,
+      },
+    });
+    pty = new FrontendPty('visible-frame-revalidation-session');
+    await expect(
+      pty.prepareFirstFrame({ cols: 120, rows: 32 }, () => true, {
+        waitForCanonicalOutput: true,
+      })
+    ).resolves.toBe(true);
+    expect(pty.mounted).toBe(false);
+
+    // This arrived off-screen after the prepared revision. The visible mount
+    // must replay it, discover that the viewport is now blank, and stay hidden.
+    ipcMocks.emitData(output(2, '\x1b[?2026h\x1b[2J\x1b[H   \r\n   \x1b[?2026l'));
+    let visibleFrameReady = false;
+    const visibleFrame = pty.waitForVisibleFrame().then((ready) => {
+      visibleFrameReady = true;
+      return ready;
+    });
+
+    mountTarget = document.createElement('div');
+    document.body.appendChild(mountTarget);
+    pty.mount(mountTarget, { cols: 120, rows: 32 });
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    expect(visibleFrameReady).toBe(false);
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
+
+    ipcMocks.emitData(
+      output(
+        3,
+        '\x1b[?2026h\x1b[2J\x1b[H╭─ Visible frame ─╮\r\n│ Ready for input │\r\n╰─ Idle ──────────╯\x1b[?25h\x1b[?2026l'
+      )
+    );
+    await expect(visibleFrame).resolves.toBe(true);
+    expect(pty.ownedContainer.style.visibility).toBe('');
   });
 
   it('chunks a 25 MiB snapshot and large live batch without advancing ACKs early', async () => {

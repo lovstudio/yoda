@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@renderer/utils/utils';
 import { LanguageStep } from './language-step';
-import { MaasGatewayStep } from './maas-gateway-step';
 import type { OnboardingStep } from './onboarding-steps';
 import { SignInStep } from './sign-in-step';
 
@@ -17,10 +16,6 @@ const stepConfig: Record<
   'sign-in': {
     labelKey: 'onboarding.signInTitle',
     component: SignInStep,
-  },
-  'maas-gateway': {
-    labelKey: 'onboarding.maasGateway.stepTitle',
-    component: MaasGatewayStep,
   },
 };
 

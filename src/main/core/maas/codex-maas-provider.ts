@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   getMaasPlatformDefinition,
   getMaasPlatformTemplateId,
@@ -46,7 +47,10 @@ export function resolveCodexMaasProviderSpec(
   const fallbackName = getMaasPlatformDefinition(platformId).name;
   const requestedName = displayName?.trim() || fallbackName;
   return {
-    ...metadata,
+    providerId:
+      platformId === templateId
+        ? metadata.providerId
+        : `${metadata.providerId}-${createHash('sha256').update(platformId).digest('hex').slice(0, 12)}`,
     // Codex identifies its first-party provider by the display name "OpenAI".
     // Never let a third-party connection accidentally opt into OpenAI-only
     // request fields such as reasoning_summary_delivery=sequential_cutoff.

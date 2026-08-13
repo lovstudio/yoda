@@ -23,12 +23,19 @@ import {
 import { Toaster } from '@renderer/lib/ui/toaster';
 import { log } from '@renderer/utils/logger';
 import { roomMemberTabMeta } from '../agent-room/room-member-detail';
+import { getProjectStore } from '../projects/stores/project-selectors';
 import { TaskProvisionRecovery } from './components/task-provision-recovery';
 import { formatConversationTitleForDisplay } from './conversations/conversation-title-utils';
 import { TaskActiveTabContent } from './main-panel';
-import { getTaskStore, taskErrorMessage, type TaskViewKind } from './stores/task-selectors';
+import {
+  getTaskManagerStore,
+  getTaskStore,
+  taskErrorMessage,
+  type TaskViewKind,
+} from './stores/task-selectors';
 import type { ResolvedTab } from './tabs/tab-manager-store';
 import { useRequireProvisionedTask, useTaskViewKind } from './task-view-context';
+import { stableTaskOpeningMessageKey } from './task-view-opening';
 import { TaskViewWrapperWithProviders } from './view';
 
 export const TaskTabWindow = observer(function TaskTabWindow() {
@@ -243,7 +250,13 @@ const TaskTabWindowStatus = observer(function TaskTabWindowStatus({
 }) {
   const { t } = useTranslation();
   const taskStore = getTaskStore(target.projectId, target.taskId);
-  const status = getTaskTabWindowStatus(kind, t, taskStore);
+  const taskManager = getTaskManagerStore(target.projectId);
+  const openingMessageKey = stableTaskOpeningMessageKey(kind, {
+    hasProject: Boolean(getProjectStore(target.projectId)),
+    taskLoadState: taskManager?.taskLoadState,
+    isTaskLoadPending: taskManager?.taskLoadPendingIds?.has(target.taskId) ?? false,
+  });
+  const status = getTaskTabWindowStatus(kind, t, taskStore, openingMessageKey);
 
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-8 text-center">
@@ -267,33 +280,12 @@ const TaskTabWindowStatus = observer(function TaskTabWindowStatus({
 function getTaskTabWindowStatus(
   kind: TaskViewKind,
   t: TFunction,
-  taskStore: ReturnType<typeof getTaskStore>
+  taskStore: ReturnType<typeof getTaskStore>,
+  openingMessageKey: ReturnType<typeof stableTaskOpeningMessageKey>
 ): { title: string; description?: string; isBusy: boolean; isError: boolean } {
-  if (kind === 'creating') {
-    return { title: t('tasks.creatingTask'), isBusy: true, isError: false };
-  }
-
-  if (kind === 'naming') {
-    const setupRequiresBranchName = taskStore?.data.setupRequiresBranchName === true;
+  if (openingMessageKey) {
     return {
-      title:
-        taskStore?.provisionProgressMessage ??
-        t(
-          setupRequiresBranchName ? 'tasks.generatingTaskNameAndBranch' : 'tasks.generatingTaskName'
-        ),
-      isBusy: true,
-      isError: false,
-    };
-  }
-
-  if (
-    kind === 'project-mounting' ||
-    kind === 'provisioning' ||
-    kind === 'idle' ||
-    kind === 'teardown'
-  ) {
-    return {
-      title: taskStore?.provisionProgressMessage ?? t('tasks.settingUpWorkspace'),
+      title: t(openingMessageKey),
       isBusy: true,
       isError: false,
     };

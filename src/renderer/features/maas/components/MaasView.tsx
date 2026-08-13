@@ -1,49 +1,53 @@
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import {
   Activity,
+  AlertTriangle,
   BookOpen,
   ChevronDown,
   Copy,
+  Ellipsis,
   ExternalLink,
+  Globe2,
   Layers,
   Loader2,
   Pencil,
   Plug,
   Plus,
-  RefreshCw,
+  ShieldCheck,
+  SquareTerminal,
   Trash2,
   X,
 } from 'lucide-react';
+import { observer } from 'mobx-react-lite';
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  createCustomMaasPlatformId,
   createMaasProfileId,
   getMaasPlatformDefinition,
   getMaasPlatformTemplateId,
   hasMaasInferenceCredential,
   isMaasPlatformId,
+  isValidMaasEnvKey,
   MAAS_MANAGED_GATEWAY_IDS,
-  MAAS_PLATFORMS,
+  resolveMaasEnvKey,
   type MaasApiKeyKind,
   type MaasConnection,
   type MaasManagedGatewayId,
   type MaasPlatformId,
-  type MaasPlatformOfficialDescription,
   type MaasPlatformTemplateId,
 } from '@shared/maas';
 import { YODA_MAAS_DOCS_URL } from '@shared/urls';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
+import { appState } from '@renderer/lib/stores/app-state';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/lib/ui/collapsible';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
@@ -54,28 +58,27 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from '@renderer/lib/ui/input-group';
+import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import { getVisibleMaasPlatformIds } from '../maas-platform-list';
 import {
   useCheckMaasConnection,
+  useCodexClientSyncStatus,
   useConnectMaasPlatform,
   useDisconnectMaasPlatform,
   useMaasConnections,
   useMaasGlobalBinding,
   useMaasManagedGatewayStars,
-  useMaasPlatformDescriptions,
+  useSetCodexClientSync,
   useSetMaasGlobalBinding,
 } from '../useMaas';
-import { useMaasGatewayExtension } from '../useMaasGatewayExtension';
+import type { NewMaasProfileDraft } from './AddMaasProfileModal';
 import { CliProxyApiManagedCard } from './CliProxyApiManagedCard';
 import { LiteLlmManagedCard } from './LiteLlmManagedCard';
-import { MaasGatewayRequirement } from './MaasGatewayRequirement';
 import { ManagedGatewayStarTrend } from './ManagedGatewayStarTrend';
 import { NewApiManagedCard } from './NewApiManagedCard';
-
-const CLOUD_PROFILE_TEMPLATE_IDS = ['zenmux', 'openrouter', 'siliconflow', 'custom'] as const;
 
 function isManagedGatewayId(platformId: MaasPlatformId): platformId is MaasManagedGatewayId {
   return (MAAS_MANAGED_GATEWAY_IDS as readonly MaasPlatformId[]).includes(platformId);
@@ -83,14 +86,18 @@ function isManagedGatewayId(platformId: MaasPlatformId): platformId is MaasManag
 
 function findConnection(
   connections: MaasConnection[] | undefined,
-  platformId: MaasPlatformId
+  platformId: MaasPlatformId,
+  draft?: NewMaasProfileDraft
 ): MaasConnection {
   const platform = getMaasPlatformDefinition(platformId);
   return (
     connections?.find((connection) => connection.platformId === platformId) ?? {
       platformId,
-      displayName: platform.name,
-      endpoint: platform.defaultEndpoint,
+      displayName: draft?.displayName ?? platform.name,
+      endpoint: draft?.endpoint ?? platform.defaultEndpoint,
+      websiteUrl: draft?.websiteUrl,
+      description: draft?.description,
+      logoUrl: draft?.logoUrl,
       keyFingerprint: null,
       inferenceKeyFingerprint: null,
       connectedAt: null,
@@ -113,16 +120,42 @@ function formatDateTime(value: string | null): string {
   }).format(new Date(value));
 }
 
+const ProfileLastActivity: React.FC<{ connection: MaasConnection }> = ({ connection }) => {
+  const { t } = useTranslation();
+  const checkedAt = connection.lastTest?.checkedAt ?? connection.lastCheckedAt;
+
+  if (!checkedAt) {
+    return (
+      <span
+        data-testid="maas-profile-last-activity"
+        className="shrink-0 text-[11px] text-foreground-muted"
+      >
+        {t('maas.connection.neverChecked')}
+      </span>
+    );
+  }
+
+  const failed = connection.lastTest?.ok === false;
+  return (
+    <span
+      data-testid="maas-profile-last-activity"
+      title={formatDateTime(checkedAt)}
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1 text-[11px] tabular-nums',
+        failed ? 'text-amber-600 dark:text-amber-400' : 'text-foreground-muted'
+      )}
+    >
+      <span>{t(failed ? 'maas.connection.lastCheckFailed' : 'maas.connection.lastVerified')}</span>
+      <RelativeTime value={checkedAt} />
+    </span>
+  );
+};
+
 function formatMaskedApiKey(fingerprint: string | null): string {
   const value = fingerprint?.trim();
   if (!value) return '****';
   if (value.startsWith('...')) return `****${value}`;
   return value;
-}
-
-function truncateAuditText(value: string, limit = 360): string {
-  if (value.length <= limit) return value;
-  return `${value.slice(0, limit - 3).trim()}...`;
 }
 
 export const MaasConnectedCountBadge: React.FC = () => {
@@ -133,23 +166,227 @@ export const MaasConnectedCountBadge: React.FC = () => {
   return <Badge variant="secondary">{t('maas.connectedCount', { count: connectedCount })}</Badge>;
 };
 
+const ExternalAgentSyncSettingsCard: React.FC = observer(() => {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const statusQuery = useCodexClientSyncStatus();
+  const setSync = useSetCodexClientSync();
+  const showConfirm = useShowModal('confirmActionModal');
+  const status = statusQuery.data;
+  const enabled = status?.enabled === true;
+  const loginItemEnabled = status?.loginItemEnabled ?? true;
+  const published = Boolean(
+    status?.enabled &&
+      status.managed &&
+      status.configManaged &&
+      status.environmentPublished &&
+      (!loginItemEnabled || status.persistentCredentialStored)
+  );
+  const partial = statusQuery.isError || Boolean(enabled && status?.platformId && !published);
+  const codexDetected = appState.dependencies.agentStatuses.codex?.status === 'available';
+  const claudeDetected = appState.dependencies.agentStatuses.claude?.status === 'available';
+
+  const applySync = (next: boolean, nextLoginItemEnabled = loginItemEnabled) => {
+    setSync.mutate(
+      { enabled: next, loginItemEnabled: nextLoginItemEnabled },
+      {
+        onSuccess: () =>
+          toast({ title: t(`maas.clientSync.${next ? 'enabledToast' : 'disabledToast'}`) }),
+        onError: (error) =>
+          toast({
+            title: t('maas.clientSync.updateFailed'),
+            description: error instanceof Error ? error.message : String(error),
+            variant: 'destructive',
+          }),
+      }
+    );
+  };
+
+  const handleLoginItemToggle = (next: boolean) => {
+    applySync(enabled, next);
+  };
+
+  const handleToggle = (next: boolean) => {
+    if (!next) {
+      applySync(false);
+      return;
+    }
+    showConfirm({
+      title: t('maas.clientSync.enableConfirmTitle'),
+      description: t('maas.clientSync.enableConfirmDescription'),
+      confirmLabel: t('maas.clientSync.enableConfirmLabel'),
+      onSuccess: () => applySync(true),
+    });
+  };
+
+  return (
+    <section
+      data-testid="external-agent-sync-settings"
+      className="overflow-hidden rounded-2xl border border-border/60 bg-background-1/75 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+    >
+      <div className="flex min-w-0 items-start gap-3 px-4 py-3.5">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div
+            className={cn(
+              'flex size-8 shrink-0 items-center justify-center rounded-[9px]',
+              published
+                ? 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400'
+                : partial
+                  ? 'bg-amber-500/12 text-amber-600 dark:text-amber-400'
+                  : enabled
+                    ? 'bg-primary/10 text-primary'
+                    : 'bg-foreground/5 text-foreground-muted'
+            )}
+          >
+            {partial ? (
+              <AlertTriangle className="size-4" />
+            ) : enabled ? (
+              <ShieldCheck className="size-4" />
+            ) : (
+              <Globe2 className="size-4" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-[13px] font-medium text-foreground">
+              {t('maas.clientSync.title')}
+            </h3>
+            <p className="mt-0.5 text-xs leading-relaxed text-foreground-muted">
+              {published && status?.envKey
+                ? t(
+                    loginItemEnabled
+                      ? 'maas.clientSync.activeDetail'
+                      : 'maas.clientSync.activeSessionDetail',
+                    {
+                      profile: status.displayName ?? status.platformId,
+                      envKey: status.envKey,
+                    }
+                  )
+                : partial
+                  ? t('maas.clientSync.partialDetail')
+                  : enabled
+                    ? t('maas.clientSync.waitingDetail')
+                    : t('maas.clientSync.inactiveDetail')}
+            </p>
+          </div>
+        </div>
+        <Switch
+          checked={enabled}
+          disabled={statusQuery.isLoading || setSync.isPending || status?.supported === false}
+          aria-label={t('maas.clientSync.toggle')}
+          onCheckedChange={handleToggle}
+          className="mt-1 shrink-0"
+        />
+      </div>
+      <div className="border-t border-border/50 bg-foreground/[0.018] px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[11px] font-medium text-foreground-muted">
+            {t('maas.clientSync.agentClientAdapters')}
+          </span>
+          <span
+            className="min-w-0 text-right [overflow-wrap:anywhere] text-[10px] text-foreground-passive"
+            style={{ overflowWrap: 'anywhere' }}
+          >
+            {t('maas.clientSync.moreClientsLater')}
+          </span>
+        </div>
+        <div className="mt-2 overflow-hidden rounded-xl border border-border/50 bg-background-1/70">
+          <div
+            data-testid="external-agent-client-codex"
+            className="flex items-center justify-between gap-3 px-3 py-2.5"
+          >
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.055] text-foreground-muted">
+                <SquareTerminal className="size-3.5" />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-medium text-foreground">Codex CLI / App</p>
+                <p className="mt-0.5 text-[10px] text-foreground-muted">
+                  {t('maas.clientSync.adapted')}
+                </p>
+              </div>
+            </div>
+            <span
+              className={cn(
+                'inline-flex shrink-0 items-center gap-1.5 text-[11px]',
+                codexDetected ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground-muted'
+              )}
+            >
+              <span
+                className={cn(
+                  'size-1.5 rounded-full',
+                  codexDetected ? 'bg-emerald-500' : 'bg-foreground/25'
+                )}
+              />
+              {t(codexDetected ? 'maas.clientSync.detected' : 'maas.clientSync.notDetected')}
+            </span>
+          </div>
+          <div
+            data-testid="external-agent-client-claude"
+            className="flex items-center justify-between gap-3 border-t border-border/45 px-3 py-2.5"
+          >
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.035] text-foreground-passive">
+                <SquareTerminal className="size-3.5" />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-medium text-foreground">Claude Code</p>
+                <p className="mt-0.5 text-[10px] text-foreground-muted">
+                  {t('maas.clientSync.planned')}
+                </p>
+              </div>
+            </div>
+            {claudeDetected ? (
+              <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] text-foreground-muted">
+                <span className="size-1.5 rounded-full bg-foreground/35" />
+                {t('maas.clientSync.detected')}
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <div className="mt-3 flex items-start justify-between gap-4 rounded-xl border border-border/50 bg-background-1/70 px-3 py-2.5">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-foreground">
+              {t('maas.clientSync.loginItemTitle')}
+            </p>
+            <p className="mt-0.5 text-[10px] leading-relaxed text-foreground-muted">
+              {t('maas.clientSync.loginItemDescription')}
+            </p>
+          </div>
+          <Switch
+            size="sm"
+            checked={loginItemEnabled}
+            disabled={statusQuery.isLoading || setSync.isPending || status?.supported === false}
+            aria-label={t('maas.clientSync.loginItemToggle')}
+            onCheckedChange={handleLoginItemToggle}
+            className="mt-0.5 shrink-0"
+          />
+        </div>
+        {enabled ? (
+          <p className="mt-2.5 text-[10px] leading-relaxed text-foreground-muted">
+            {t(loginItemEnabled ? 'maas.clientSync.risk' : 'maas.clientSync.currentSessionNotice')}
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+});
+
 export const MaasView: React.FC<{
   embedded?: boolean;
   showSectionChrome?: boolean;
   requestedPlatformId?: MaasPlatformTemplateId;
   onOpenMarketplace?: () => void;
-}> = ({ embedded = false, showSectionChrome = true, requestedPlatformId, onOpenMarketplace }) => {
+}> = ({ embedded = false, showSectionChrome = true, requestedPlatformId }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const { data: connections, isLoading } = useMaasConnections();
   const globalBinding = useMaasGlobalBinding();
   const setGlobalBinding = useSetMaasGlobalBinding();
-  const gateway = useMaasGatewayExtension();
-  const { data: platformDescriptions } = useMaasPlatformDescriptions();
   const managedGatewayStarsQuery = useMaasManagedGatewayStars();
   const showZenmuxUsage = useShowModal('zenmuxUsageModal');
+  const showAddProfile = useShowModal('addMaasProfileModal');
   const [initialRequestedPlatformId] = useState<MaasPlatformId | undefined>(() =>
-    requestedPlatformId === 'custom' ? createCustomMaasPlatformId() : requestedPlatformId
+    requestedPlatformId === 'custom' ? createMaasProfileId() : requestedPlatformId
   );
   const [expandedPlatformId, setExpandedPlatformId] = useState<MaasPlatformId | ''>(
     initialRequestedPlatformId ?? ''
@@ -157,24 +394,15 @@ export const MaasView: React.FC<{
   const [draftPlatformIds, setDraftPlatformIds] = useState<MaasPlatformId[]>(
     initialRequestedPlatformId ? [initialRequestedPlatformId] : []
   );
+  const [draftProfiles, setDraftProfiles] = useState<Map<MaasPlatformId, NewMaasProfileDraft>>(
+    () => new Map()
+  );
   const [managedConnectionPlatformId, setManagedConnectionPlatformId] =
     useState<MaasManagedGatewayId | null>(() =>
       initialRequestedPlatformId && isManagedGatewayId(initialRequestedPlatformId)
         ? initialRequestedPlatformId
         : null
     );
-  const configuredCount =
-    connections?.filter(
-      (connection) =>
-        connection.configured &&
-        !isManagedGatewayId(getMaasPlatformTemplateId(connection.platformId))
-    ).length ?? 0;
-  const activeCount =
-    globalBinding.data?.enabled &&
-    globalBinding.data.platformId &&
-    !isManagedGatewayId(getMaasPlatformTemplateId(globalBinding.data.platformId))
-      ? 1
-      : 0;
   const allVisiblePlatformIds = useMemo(
     () => getVisibleMaasPlatformIds(connections, draftPlatformIds),
     [connections, draftPlatformIds]
@@ -185,11 +413,6 @@ export const MaasView: React.FC<{
         (platformId) => !isManagedGatewayId(getMaasPlatformTemplateId(platformId))
       ),
     [allVisiblePlatformIds]
-  );
-  const platformDescriptionById = useMemo(
-    () =>
-      new Map(platformDescriptions?.map((description) => [description.platformId, description])),
-    [platformDescriptions]
   );
   const managedGatewayStarsById = useMemo(
     () =>
@@ -212,20 +435,35 @@ export const MaasView: React.FC<{
     setExpandedPlatformId(value);
   }, []);
 
-  const handleAddPlatform = useCallback((templateId: MaasPlatformTemplateId) => {
-    const platformId = createMaasProfileId(templateId);
-    setDraftPlatformIds((current) => [...current, platformId]);
-    setExpandedPlatformId(platformId);
-  }, []);
+  const handleAddProfile = useCallback(() => {
+    showAddProfile({
+      onSuccess: (draft) => {
+        const platformId = createMaasProfileId();
+        setDraftProfiles((current) => new Map(current).set(platformId, draft));
+        setDraftPlatformIds((current) => [...current, platformId]);
+        setExpandedPlatformId(platformId);
+      },
+    });
+  }, [showAddProfile]);
 
   const handleCancelDraft = useCallback((platformId: MaasPlatformId) => {
     setDraftPlatformIds((current) => current.filter((id) => id !== platformId));
+    setDraftProfiles((current) => {
+      const next = new Map(current);
+      next.delete(platformId);
+      return next;
+    });
     setExpandedPlatformId((current) => (current === platformId ? '' : current));
     setManagedConnectionPlatformId((current) => (current === platformId ? null : current));
   }, []);
 
   const handlePlatformConnected = useCallback((platformId: MaasPlatformId) => {
     setDraftPlatformIds((current) => current.filter((id) => id !== platformId));
+    setDraftProfiles((current) => {
+      const next = new Map(current);
+      next.delete(platformId);
+      return next;
+    });
   }, []);
 
   const handleOpenManagedConnection = useCallback((platformId: MaasManagedGatewayId) => {
@@ -268,10 +506,10 @@ export const MaasView: React.FC<{
       collapsible
       value={expandedPlatformId}
       onValueChange={handlePlatformValueChange}
-      className="overflow-hidden rounded-xl border border-border/60 bg-muted/10"
+      className="overflow-hidden rounded-2xl border border-border/55 bg-background-1/70 shadow-[0_1px_2px_rgba(0,0,0,0.035)]"
     >
       {platformIds.map((platformId) => {
-        const connection = findConnection(connections, platformId);
+        const connection = findConnection(connections, platformId, draftProfiles.get(platformId));
         const isDraft = !connection.configured && draftPlatformIds.includes(platformId);
         const templateId = getMaasPlatformTemplateId(platformId);
         const enabled = Boolean(
@@ -280,7 +518,7 @@ export const MaasView: React.FC<{
         const platformConfigured = Boolean(
           connection.connected && hasMaasInferenceCredential(connection)
         );
-        const enableAvailable = gateway.ready && platformConfigured;
+        const enableAvailable = platformConfigured;
         const enablePending = Boolean(
           setGlobalBinding.isPending &&
             setGlobalBinding.variables?.platformId === connection.platformId
@@ -289,7 +527,6 @@ export const MaasView: React.FC<{
           <PlatformAccordionItem
             key={platformId}
             connection={connection}
-            officialDescription={platformDescriptionById.get(templateId)}
             onOpenUsage={
               templateId === 'zenmux' ? () => showZenmuxUsage({ platformId }) : undefined
             }
@@ -297,11 +534,9 @@ export const MaasView: React.FC<{
             onConnected={() => handlePlatformConnected(platformId)}
             enabled={enabled}
             enableAvailable={enableAvailable}
-            gatewayReady={gateway.ready}
             enablePending={enablePending}
             enableUpdating={setGlobalBinding.isPending}
             onEnabledChange={(next) => handlePlatformEnabledChange(connection, next)}
-            loading={isLoading}
           />
         );
       })}
@@ -324,65 +559,37 @@ export const MaasView: React.FC<{
   const content = (
     <div
       className={cn(
-        'flex min-h-0 flex-col gap-8',
-        embedded ? 'w-full' : 'mx-auto w-full max-w-5xl px-6 py-6'
+        'flex min-h-0 flex-col gap-7',
+        embedded ? 'w-full' : 'mx-auto w-full max-w-4xl px-6 py-7'
       )}
     >
-      <MaasGatewayRequirement
-        availability={gateway.availability}
-        onOpenMarketplace={onOpenMarketplace}
-      />
+      <ExternalAgentSyncSettingsCard />
       {showSectionChrome ? (
         <MaasChapter
           title={t('maas.cloudProfiles.title')}
           description={t('maas.cloudProfiles.description')}
           action={
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => void rpc.app.openExternal(YODA_MAAS_DOCS_URL)}
-              >
-                <BookOpen className="h-3.5 w-3.5" />
-                {t('maas.cloudProfiles.docs')}
-              </Button>
-              <Badge variant="secondary">{t('maas.addedCount', { count: configuredCount })}</Badge>
-              <Badge variant="secondary">{t('maas.activeCount', { count: activeCount })}</Badge>
-              <DropdownMenu>
-                <DropdownMenuTrigger
+            <div className="flex flex-wrap items-center justify-end gap-2.5">
+              <Tooltip>
+                <TooltipTrigger
                   render={
-                    <Button type="button" variant="outline" size="sm" disabled={isLoading}>
-                      <Plus className="h-3.5 w-3.5" />
-                      {t('maas.addProfile')}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t('maas.cloudProfiles.docs')}
+                      onClick={() => void rpc.app.openExternal(YODA_MAAS_DOCS_URL)}
+                    >
+                      <BookOpen className="h-3.5 w-3.5" />
                     </Button>
                   }
                 />
-                <DropdownMenuContent align="end" className="w-72">
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel>{t('maas.selectTargetPlatform')}</DropdownMenuLabel>
-                  </DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  {CLOUD_PROFILE_TEMPLATE_IDS.map((templateId) => {
-                    const platform = MAAS_PLATFORMS[templateId];
-                    return (
-                      <DropdownMenuItem
-                        key={templateId}
-                        className="items-start py-2"
-                        onClick={() => handleAddPlatform(templateId)}
-                      >
-                        <Layers className="mt-0.5 h-4 w-4" />
-                        <span className="min-w-0">
-                          <span className="block text-sm text-foreground">{platform.name}</span>
-                          <span className="mt-0.5 block line-clamp-2 text-xs leading-relaxed text-foreground-muted">
-                            {t(`maas.platforms.${templateId}.description`)}
-                          </span>
-                        </span>
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                <TooltipContent>{t('maas.cloudProfiles.docs')}</TooltipContent>
+              </Tooltip>
+              <Button type="button" size="sm" disabled={isLoading} onClick={handleAddProfile}>
+                <Plus className="h-3.5 w-3.5" />
+                {t('maas.addProfile')}
+              </Button>
             </div>
           }
         >
@@ -475,75 +682,6 @@ export const MaasView: React.FC<{
   );
 };
 
-const MaasDescriptionSourceBadge: React.FC<{
-  description: MaasPlatformOfficialDescription;
-}> = ({ description }) => {
-  const { t } = useTranslation();
-  const sourceLabel = t(`maas.platformDescription.source.${description.source}`);
-  const sourceHint = t(`maas.platformDescription.hint.${description.source}`);
-
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <span
-            tabIndex={0}
-            className={cn(
-              'inline-flex h-5 shrink-0 cursor-help items-center rounded border px-1.5 text-[10px] leading-none outline-none transition-colors focus-visible:ring-1 focus-visible:ring-border',
-              description.source === 'fallback'
-                ? 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-            )}
-          >
-            {sourceLabel}
-          </span>
-        }
-      />
-      <TooltipContent className="block max-w-[28rem] text-left leading-relaxed">
-        <span className="block font-medium">{sourceHint}</span>
-        {description.sourceUrl && (
-          <span className="mt-1 block break-all text-foreground-muted">
-            {description.sourceUrl}
-          </span>
-        )}
-        {description.metaDescription && (
-          <span className="mt-2 block">
-            <span className="font-medium">{t('maas.platformDescription.metaLabel')}</span>
-            <span className="mt-0.5 block text-foreground-muted">
-              {truncateAuditText(description.metaDescription)}
-            </span>
-          </span>
-        )}
-        {description.bodySummary && (
-          <span className="mt-2 block">
-            <span className="font-medium">{t('maas.platformDescription.bodySummaryLabel')}</span>
-            <span className="mt-0.5 block text-foreground-muted">
-              {truncateAuditText(description.bodySummary)}
-            </span>
-          </span>
-        )}
-        {description.bodyTextExcerpt && (
-          <span className="mt-2 block">
-            <span className="font-medium">
-              {t('maas.platformDescription.bodyExcerptLabel', {
-                count: description.bodyCharCount ?? description.bodyTextExcerpt.length,
-              })}
-            </span>
-            <span className="mt-0.5 block text-foreground-muted">
-              {truncateAuditText(description.bodyTextExcerpt)}
-            </span>
-          </span>
-        )}
-        {description.error && (
-          <span className="mt-2 block text-destructive">
-            {t('maas.platformDescription.errorLabel', { error: description.error })}
-          </span>
-        )}
-      </TooltipContent>
-    </Tooltip>
-  );
-};
-
 const MaasChapter: React.FC<{
   title: string;
   description?: React.ReactNode;
@@ -551,12 +689,18 @@ const MaasChapter: React.FC<{
   children: React.ReactNode;
 }> = ({ title, description, action, children }) => {
   return (
-    <section className="flex min-w-0 flex-col gap-3">
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-        <h3 className="min-w-0 text-sm font-normal text-foreground">{title}</h3>
+    <section className="flex min-w-0 flex-col gap-3.5">
+      <div className="flex min-w-0 flex-wrap items-end justify-between gap-3 px-0.5">
+        <div className="min-w-0">
+          <h3 className="text-[13px] font-semibold text-foreground">{title}</h3>
+          {description && (
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-foreground-muted">
+              {description}
+            </p>
+          )}
+        </div>
         {action && <div className="flex min-w-0 flex-1 justify-end">{action}</div>}
       </div>
-      {description && <p className="text-xs text-foreground-muted">{description}</p>}
       {children}
     </section>
   );
@@ -564,71 +708,74 @@ const MaasChapter: React.FC<{
 
 const PlatformAccordionItem: React.FC<{
   connection: MaasConnection;
-  officialDescription?: MaasPlatformOfficialDescription;
   onOpenUsage?: () => void;
   onCancelDraft?: () => void;
   onConnected: () => void;
   enabled: boolean;
   enableAvailable: boolean;
-  gatewayReady: boolean;
   enablePending: boolean;
   enableUpdating: boolean;
   onEnabledChange: (enabled: boolean) => void;
-  loading: boolean;
 }> = ({
   connection,
-  officialDescription,
   onOpenUsage,
   onCancelDraft,
   onConnected,
   enabled,
   enableAvailable,
-  gatewayReady,
   enablePending,
   enableUpdating,
   onEnabledChange,
-  loading,
 }) => {
   const { t } = useTranslation();
+  const { toast } = useToast();
+  const disconnectMutation = useDisconnectMaasPlatform();
   const platform = getMaasPlatformDefinition(connection.platformId);
   const templateId = getMaasPlatformTemplateId(connection.platformId);
-  const statusLabel = connection.connected ? t('maas.connected') : t('maas.notConnected');
-  const description =
-    officialDescription?.source === 'fallback' || !officialDescription
-      ? t(`maas.platforms.${templateId}.description`)
-      : officialDescription.description;
+
+  const handleDisconnect = () => {
+    disconnectMutation.mutate(connection.platformId, {
+      onError: (error) =>
+        toast({
+          title: t('maas.connection.disconnectFailed'),
+          description: error instanceof Error ? error.message : String(error),
+          variant: 'destructive',
+        }),
+    });
+  };
 
   return (
     <AccordionPrimitive.Item
       value={connection.platformId}
       data-maas-platform-id={connection.platformId}
-      className="border-b border-border/50 transition-colors last:border-b-0 data-[state=open]:bg-background-1/40"
+      className="border-b border-border/45 transition-colors last:border-b-0 data-[state=open]:bg-foreground/[0.018]"
     >
-      <AccordionPrimitive.Header className="flex items-center gap-1 pr-2.5">
-        <AccordionPrimitive.Trigger className="group flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left outline-none transition-colors hover:bg-muted/30 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border">
+      <AccordionPrimitive.Header className="flex items-center gap-1 pr-3">
+        <AccordionPrimitive.Trigger className="group flex min-w-0 flex-1 items-center gap-3 px-3.5 py-3 text-left outline-none transition-colors hover:bg-foreground/[0.025] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border">
           <ChevronDown
             className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200 group-data-[state=open]:rotate-180"
             aria-hidden="true"
           />
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-background-secondary">
-            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-border/35 bg-foreground/5">
+            {connection.logoUrl ? (
+              <img
+                src={connection.logoUrl}
+                alt=""
+                className="size-5 object-contain"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
           </span>
-          <span className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="truncate text-sm text-foreground">{connection.displayName}</span>
-          </span>
-          <span className="hidden min-w-0 max-w-64 truncate text-xs text-muted-foreground @4xl:block">
-            {description}
+          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-0.5">
+            <span className="truncate text-sm font-medium text-foreground">
+              {connection.displayName}
+            </span>
+            <ProfileLastActivity connection={connection} />
           </span>
         </AccordionPrimitive.Trigger>
-        <div className="flex shrink-0 items-center gap-2 px-1">
-          <span
-            className={cn(
-              'hidden text-[11px] @2xl:inline',
-              enabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground-muted'
-            )}
-          >
-            {enabled ? t('maas.global.enabled') : t('maas.global.disabled')}
-          </span>
+        <div className="flex shrink-0 items-center px-1">
           {enablePending ? (
             <Loader2 className="size-3.5 animate-spin text-foreground-muted" />
           ) : (
@@ -642,108 +789,61 @@ const PlatformAccordionItem: React.FC<{
                   : t('maas.global.enableAria', { platform: connection.displayName })
               }
               title={
-                !gatewayReady && !enabled
-                  ? t('maas.global.needsGateway')
-                  : !enableAvailable && !enabled
-                    ? t('maas.global.needsConfiguration')
-                    : enabled
-                      ? t('maas.global.disableAria', { platform: connection.displayName })
-                      : t('maas.global.enableAria', { platform: connection.displayName })
+                !enableAvailable && !enabled
+                  ? t('maas.global.needsConfiguration')
+                  : enabled
+                    ? t('maas.global.disableAria', { platform: connection.displayName })
+                    : t('maas.global.enableAria', { platform: connection.displayName })
               }
               onCheckedChange={onEnabledChange}
             />
           )}
         </div>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <span
-                role="status"
-                tabIndex={0}
-                aria-label={statusLabel}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md outline-none transition-colors hover:bg-muted/40 focus-visible:ring-1 focus-visible:ring-border"
-              >
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    'h-2 w-2 rounded-full',
-                    connection.connected ? 'bg-emerald-500' : 'bg-muted-foreground/40',
-                    loading && 'animate-pulse'
-                  )}
-                />
-              </span>
-            }
-          />
-          <TooltipContent className="block max-w-64 text-left leading-relaxed">
-            <span className="block font-medium">{statusLabel}</span>
-            {connection.keyFingerprint && (
-              <span className="mt-1 block">
-                {t('maas.connection.keyFingerprint', { fingerprint: connection.keyFingerprint })}
-              </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            type="button"
+            title={t('maas.profile.actions')}
+            aria-label={t('maas.profile.actions')}
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border disabled:pointer-events-none disabled:opacity-50"
+          >
+            {disconnectMutation.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Ellipsis className="size-3.5" />
             )}
-            <span className="mt-1 block">
-              {connection.lastCheckedAt
-                ? t('maas.connection.lastChecked', {
-                    time: formatDateTime(connection.lastCheckedAt),
-                  })
-                : t('maas.connection.neverChecked')}
-            </span>
-          </TooltipContent>
-        </Tooltip>
-        {onCancelDraft && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={t('maas.cancelAddPlatform', { platform: connection.displayName })}
-                  onClick={onCancelDraft}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              }
-            />
-            <TooltipContent>
-              {t('maas.cancelAddPlatform', { platform: connection.displayName })}
-            </TooltipContent>
-          </Tooltip>
-        )}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                aria-label={t('maas.connection.openDocs')}
-                onClick={() => void rpc.app.openExternal(platform.docsUrl)}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem
+              onClick={() => void rpc.app.openExternal(connection.websiteUrl ?? platform.docsUrl)}
+            >
+              <ExternalLink className="size-3.5" />
+              {t('maas.connection.openDocs')}
+            </DropdownMenuItem>
+            {templateId === 'zenmux' && onOpenUsage ? (
+              <DropdownMenuItem onClick={onOpenUsage}>
+                <Activity className="size-3.5" />
+                {t('maas.records.viewUsage')}
+              </DropdownMenuItem>
+            ) : null}
+            {onCancelDraft || connection.connected ? <DropdownMenuSeparator /> : null}
+            {onCancelDraft ? (
+              <DropdownMenuItem onClick={onCancelDraft}>
+                <X className="size-3.5" />
+                {t('maas.cancelAddPlatform', { platform: connection.displayName })}
+              </DropdownMenuItem>
+            ) : null}
+            {connection.connected ? (
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={disconnectMutation.isPending}
+                onClick={handleDisconnect}
               >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </Button>
-            }
-          />
-          <TooltipContent>{t('maas.connection.openDocs')}</TooltipContent>
-        </Tooltip>
-        {templateId === 'zenmux' && onOpenUsage && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={t('maas.records.viewUsage')}
-                  onClick={onOpenUsage}
-                >
-                  <Activity className="h-3.5 w-3.5" />
-                </Button>
-              }
-            />
-            <TooltipContent>{t('maas.records.viewUsage')}</TooltipContent>
-          </Tooltip>
-        )}
+                <Trash2 className="size-3.5" />
+                {t('maas.connection.disconnect')}
+              </DropdownMenuItem>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </AccordionPrimitive.Header>
       <AccordionPrimitive.Content
         className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
@@ -756,9 +856,8 @@ const PlatformAccordionItem: React.FC<{
         <ConnectionPanel
           key={`${connection.platformId}:${connection.keyFingerprint ?? 'empty'}`}
           connection={connection}
-          officialDescription={officialDescription}
           onConnected={onConnected}
-          className="border-t border-border/50"
+          className="border-t border-border/45"
         />
       </AccordionPrimitive.Content>
     </AccordionPrimitive.Item>
@@ -794,41 +893,34 @@ const StoredSecretField: React.FC<{
 
   if (showingInput) {
     return (
-      <div className="grid gap-1.5">
-        <InputGroup className="h-8">
-          <InputGroupInput
-            type="password"
-            value={value}
-            autoComplete="new-password"
-            placeholder={placeholder}
-            onChange={(event) => onValueChange(event.target.value)}
-          />
-          {hasStoredKey ? (
-            <InputGroupAddon align="inline-end" className="gap-1 pr-1">
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <InputGroupButton
-                      type="button"
-                      size="icon-xs"
-                      aria-label={t('maas.connection.cancelReplaceKey')}
-                      onClick={onCancelReplace}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </InputGroupButton>
-                  }
-                />
-                <TooltipContent>{t('maas.connection.cancelReplaceKey')}</TooltipContent>
-              </Tooltip>
-            </InputGroupAddon>
-          ) : null}
-        </InputGroup>
+      <InputGroup className="h-8">
+        <InputGroupInput
+          type="password"
+          value={value}
+          autoComplete="new-password"
+          placeholder={placeholder}
+          onChange={(event) => onValueChange(event.target.value)}
+        />
         {hasStoredKey ? (
-          <span className="text-xs leading-relaxed text-foreground-muted">
-            {t('maas.connection.replaceKeyEditingHint')}
-          </span>
+          <InputGroupAddon align="inline-end" className="gap-1 pr-1">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <InputGroupButton
+                    type="button"
+                    size="icon-xs"
+                    aria-label={t('maas.connection.cancelReplaceKey')}
+                    onClick={onCancelReplace}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </InputGroupButton>
+                }
+              />
+              <TooltipContent>{t('maas.connection.cancelReplaceKey')}</TooltipContent>
+            </Tooltip>
+          </InputGroupAddon>
         ) : null}
-      </div>
+      </InputGroup>
     );
   }
 
@@ -885,16 +977,15 @@ const StoredSecretField: React.FC<{
 
 const ConnectionPanel: React.FC<{
   connection: MaasConnection;
-  officialDescription?: MaasPlatformOfficialDescription;
   onConnected: () => void;
   className?: string;
-}> = ({ connection, officialDescription, onConnected, className }) => {
+}> = ({ connection, onConnected, className }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const connectMutation = useConnectMaasPlatform();
-  const disconnectMutation = useDisconnectMaasPlatform();
   const checkMutation = useCheckMaasConnection();
   const templateId = getMaasPlatformTemplateId(connection.platformId);
+  const isZenmux = templateId === 'zenmux';
   const [apiKey, setApiKey] = useState('');
   const [inferenceApiKey, setInferenceApiKey] = useState('');
   const [replacingKey, setReplacingKey] = useState(!connection.connected);
@@ -902,45 +993,56 @@ const ConnectionPanel: React.FC<{
   const [copyingKeyKind, setCopyingKeyKind] = useState<MaasApiKeyKind | null>(null);
   const [displayName, setDisplayName] = useState(connection.displayName);
   const [endpoint, setEndpoint] = useState(connection.endpoint);
+  const generatedEnvKey = resolveMaasEnvKey(connection.platformId, connection.displayName);
+  const legacyDefaultEnvKey = resolveMaasEnvKey(connection.platformId);
+  const hasCustomEnvKey = Boolean(
+    connection.envKey &&
+      connection.envKey !== generatedEnvKey &&
+      connection.envKey !== legacyDefaultEnvKey
+  );
+  const [envKey, setEnvKey] = useState(
+    hasCustomEnvKey ? (connection.envKey ?? generatedEnvKey) : generatedEnvKey
+  );
+  const [envKeyEdited, setEnvKeyEdited] = useState(hasCustomEnvKey);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const saving = connectMutation.isPending;
-  const disconnecting = disconnectMutation.isPending;
-  const hasStoredKey = connection.connected && !!connection.keyFingerprint;
-  const hasNewInferenceKey = templateId === 'zenmux' && !!inferenceApiKey.trim();
-  const submitDisabled =
-    saving ||
-    (!apiKey.trim() && !hasNewInferenceKey && (!hasStoredKey || replacingKey)) ||
-    (!!connection.inferenceKeyFingerprint && replacingInferenceKey && !hasNewInferenceKey);
-  const disconnectLabel = t('maas.connection.disconnect');
-  const disconnectHint = t('maas.connection.disconnectHint');
-  const keyHelper =
-    hasStoredKey && replacingKey
-      ? t('maas.connection.savedKeyHelper')
-      : hasStoredKey
-        ? t('maas.connection.storedKeyHelper')
-        : t('maas.connection.newKeyHelper');
-  const apiKeyLabel =
-    templateId === 'zenmux' ? t('maas.connection.managementApiKey') : t('maas.connection.apiKey');
-  const apiKeyPlaceholder =
-    templateId === 'zenmux'
-      ? t('maas.connection.zenmuxManagementKeyPlaceholder')
-      : templateId === 'litellm'
-        ? t('maas.connection.litellmKeyPlaceholder')
-        : templateId === 'newapi'
-          ? t('maas.connection.newApiKeyPlaceholder')
-          : templateId === 'cliproxyapi'
-            ? t('maas.connection.cliProxyApiKeyPlaceholder')
-            : t('maas.connection.apiKeyPlaceholder');
-  const platformDescription =
-    officialDescription?.source === 'fallback' || !officialDescription
-      ? t(`maas.platforms.${getMaasPlatformTemplateId(connection.platformId)}.description`)
-      : officialDescription.description;
-
+  const hasStoredClientKey =
+    connection.connected &&
+    Boolean(isZenmux ? connection.inferenceKeyFingerprint : connection.keyFingerprint);
+  const clientKey = isZenmux ? inferenceApiKey : apiKey;
+  const replacingClientKey = isZenmux ? replacingInferenceKey : replacingKey;
+  const hasClientKey = Boolean(clientKey.trim() || (hasStoredClientKey && !replacingClientKey));
+  const basicConfigurationComplete = Boolean(displayName.trim() && endpoint.trim() && hasClientKey);
+  const hasUnsavedBasicChanges = Boolean(
+    displayName.trim() !== connection.displayName.trim() ||
+      endpoint.trim() !== connection.endpoint.trim() ||
+      clientKey.trim() ||
+      replacingClientKey
+  );
+  const submitDisabled = saving || !basicConfigurationComplete;
+  const clientApiKeyPlaceholder = isZenmux
+    ? t('maas.connection.inferenceApiKeyPlaceholder')
+    : templateId === 'litellm'
+      ? t('maas.connection.litellmKeyPlaceholder')
+      : templateId === 'newapi'
+        ? t('maas.connection.newApiKeyPlaceholder')
+        : templateId === 'cliproxyapi'
+          ? t('maas.connection.cliProxyApiKeyPlaceholder')
+          : t('maas.connection.apiKeyPlaceholder');
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!apiKey.trim() && !hasNewInferenceKey && (!hasStoredKey || replacingKey)) {
+    if (!displayName.trim() || !endpoint.trim()) {
+      setFormError(t('maas.connection.basicFieldsRequired'));
+      return;
+    }
+    if (!clientKey.trim() && (!hasStoredClientKey || replacingClientKey)) {
       setFormError(t('maas.connection.apiKeyRequired'));
+      return;
+    }
+    if (!isValidMaasEnvKey(envKey.trim())) {
+      setFormError(t('maas.connection.envKeyInvalid'));
       return;
     }
 
@@ -952,6 +1054,10 @@ const ConnectionPanel: React.FC<{
         inferenceApiKey: inferenceApiKey.trim() || undefined,
         displayName,
         endpoint,
+        websiteUrl: connection.websiteUrl,
+        description: connection.description,
+        logoUrl: connection.logoUrl,
+        envKey: envKey.trim(),
       },
       {
         onSuccess: () => {
@@ -964,13 +1070,6 @@ const ConnectionPanel: React.FC<{
         onError: (error) => setFormError(error instanceof Error ? error.message : String(error)),
       }
     );
-  };
-
-  const handleDisconnect = () => {
-    setFormError(null);
-    disconnectMutation.mutate(connection.platformId, {
-      onError: (error) => setFormError(error instanceof Error ? error.message : String(error)),
-    });
   };
 
   const handleCheckConnection = () => {
@@ -1037,36 +1136,38 @@ const ConnectionPanel: React.FC<{
     setReplacingInferenceKey(false);
   };
 
+  const clientKeyKind: MaasApiKeyKind = isZenmux ? 'inference' : 'primary';
+  const clientKeyFingerprint = isZenmux
+    ? connection.inferenceKeyFingerprint
+    : connection.keyFingerprint;
+  const testLabel =
+    connection.lastTest?.averageLatencyMs != null
+      ? t('maas.connection.testWithLatency', {
+          latency: connection.lastTest.averageLatencyMs,
+        })
+      : t('maas.connection.test');
+
   return (
-    <section className={cn('@container bg-background px-4 py-4', className)}>
+    <section className={cn('@container bg-background-secondary/15 px-4 py-4', className)}>
       <form onSubmit={handleSubmit} className="grid gap-4">
-        <div className="flex max-w-2xl flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-relaxed text-muted-foreground">
-          <span>{platformDescription}</span>
-          {officialDescription && <MaasDescriptionSourceBadge description={officialDescription} />}
-        </div>
-
-        {templateId === 'litellm' && (
-          <div className="max-w-2xl rounded-lg border border-border/60 bg-background-secondary px-3 py-2 text-xs leading-relaxed text-foreground-muted">
-            {t('maas.connection.litellmSetupHelper')}
-          </div>
-        )}
-        {templateId === 'newapi' && (
-          <div className="max-w-2xl rounded-lg border border-border/60 bg-background-secondary px-3 py-2 text-xs leading-relaxed text-foreground-muted">
-            {t('maas.connection.newApiSetupHelper')}
-          </div>
-        )}
-        {templateId === 'cliproxyapi' && (
-          <div className="max-w-2xl rounded-lg border border-border/60 bg-background-secondary px-3 py-2 text-xs leading-relaxed text-foreground-muted">
-            {t('maas.connection.cliProxyApiSetupHelper')}
-          </div>
-        )}
-
-        <div className="grid gap-3 @3xl:grid-cols-[minmax(10rem,0.9fr)_minmax(16rem,1.4fr)]">
+        <div
+          data-testid="maas-basic-settings"
+          className="grid gap-4 rounded-xl border border-border/55 bg-background-1/70 px-3.5 py-3.5 shadow-[0_1px_1px_rgba(0,0,0,0.025)] @3xl:grid-cols-2"
+        >
           <label className="grid gap-1.5">
             <span className="text-xs font-medium text-muted-foreground">
               {t('maas.connection.displayName')}
             </span>
-            <Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+            <Input
+              value={displayName}
+              onChange={(event) => {
+                const nextDisplayName = event.target.value;
+                setDisplayName(nextDisplayName);
+                if (!envKeyEdited) {
+                  setEnvKey(resolveMaasEnvKey(connection.platformId, nextDisplayName));
+                }
+              }}
+            />
           </label>
           <label className="grid gap-1.5">
             <span className="text-xs font-medium text-muted-foreground">
@@ -1075,104 +1176,107 @@ const ConnectionPanel: React.FC<{
             <Input value={endpoint} onChange={(event) => setEndpoint(event.target.value)} />
           </label>
           <label className="grid gap-1.5 @3xl:col-span-2">
-            <span className="text-xs font-medium text-muted-foreground">{apiKeyLabel}</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              {t('maas.connection.clientApiKey')}
+            </span>
             <StoredSecretField
-              value={apiKey}
-              fingerprint={connection.keyFingerprint}
-              placeholder={apiKeyPlaceholder}
-              replacing={replacingKey}
-              copying={copyingKeyKind === 'primary'}
-              onValueChange={setApiKey}
-              onCopy={() => handleCopyStoredKey('primary')}
-              onReplace={handleReplaceKey}
-              onCancelReplace={handleCancelReplaceKey}
-              storedActions={
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <InputGroupButton
-                        type="button"
-                        size="icon-xs"
-                        disabled={disconnecting}
-                        aria-label={`${disconnectLabel}: ${disconnectHint}`}
-                        onClick={handleDisconnect}
-                        className="text-foreground-muted hover:bg-destructive/10 hover:text-destructive"
-                      >
-                        {disconnecting ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-3.5 w-3.5" />
-                        )}
-                      </InputGroupButton>
-                    }
-                  />
-                  <TooltipContent className="block w-72 max-w-[calc(100vw-2rem)] text-left leading-relaxed">
-                    <span className="block whitespace-nowrap font-medium">{disconnectLabel}</span>
-                    <span className="mt-1 block">{disconnectHint}</span>
-                  </TooltipContent>
-                </Tooltip>
-              }
+              value={clientKey}
+              fingerprint={clientKeyFingerprint}
+              placeholder={clientApiKeyPlaceholder}
+              replacing={replacingClientKey}
+              copying={copyingKeyKind === clientKeyKind}
+              onValueChange={isZenmux ? setInferenceApiKey : setApiKey}
+              onCopy={() => handleCopyStoredKey(clientKeyKind)}
+              onReplace={isZenmux ? handleReplaceInferenceKey : handleReplaceKey}
+              onCancelReplace={isZenmux ? handleCancelReplaceInferenceKey : handleCancelReplaceKey}
             />
-            <span className="text-xs leading-relaxed text-foreground-muted">{keyHelper}</span>
           </label>
-          {templateId === 'zenmux' && (
-            <label className="grid gap-1.5 @3xl:col-span-2">
-              <span className="text-xs font-medium text-muted-foreground">
-                {t('maas.connection.inferenceApiKey')}
-              </span>
-              <StoredSecretField
-                value={inferenceApiKey}
-                fingerprint={connection.inferenceKeyFingerprint}
-                placeholder={t('maas.connection.inferenceApiKeyPlaceholder')}
-                replacing={replacingInferenceKey}
-                copying={copyingKeyKind === 'inference'}
-                onValueChange={setInferenceApiKey}
-                onCopy={() => handleCopyStoredKey('inference')}
-                onReplace={handleReplaceInferenceKey}
-                onCancelReplace={handleCancelReplaceInferenceKey}
-              />
-              <span className="text-xs leading-relaxed text-foreground-muted">
-                {t('maas.connection.inferenceApiKeyHelper')}
-              </span>
-            </label>
-          )}
         </div>
 
-        {formError && <p className="text-xs text-destructive">{formError}</p>}
-
-        <div className="flex flex-col gap-3 border-t border-border/50 pt-3 @3xl:flex-row @3xl:items-center @3xl:justify-between">
-          <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span className="inline-flex min-h-7 items-center gap-1.5 rounded-md border border-border/60 bg-background-1 px-2">
-              <RefreshCw className="h-3.5 w-3.5" />
-              {connection.lastCheckedAt
-                ? t('maas.connection.lastChecked', {
-                    time: formatDateTime(connection.lastCheckedAt),
-                  })
-                : t('maas.connection.neverChecked')}
+        <Collapsible
+          open={advancedOpen}
+          onOpenChange={setAdvancedOpen}
+          data-testid="maas-advanced-section"
+          className="overflow-hidden rounded-xl border border-border/55 bg-background-1/45 transition-colors data-[panel-open]:bg-background-1/65"
+        >
+          <CollapsibleTrigger
+            type="button"
+            className="group flex w-full items-center justify-between gap-4 px-3.5 py-3 text-left outline-none transition-colors hover:bg-foreground/[0.025] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
+          >
+            <span className="min-w-0">
+              <span className="block text-xs font-medium text-foreground">
+                {t('maas.connection.advanced')}
+              </span>
+              <span
+                className="mt-0.5 block [overflow-wrap:anywhere] text-[11px] leading-relaxed text-foreground-muted"
+                style={{ overflowWrap: 'anywhere' }}
+              >
+                {t(
+                  isZenmux
+                    ? 'maas.connection.advancedSummaryWithManagement'
+                    : 'maas.connection.advancedSummary'
+                )}
+              </span>
             </span>
-            {connection.lastTest?.averageLatencyMs != null && (
-              <span className="inline-flex min-h-7 items-center rounded-md border border-border/60 bg-background-1 px-2">
-                {t('maas.connection.averageLatency', {
-                  latency: connection.lastTest.averageLatencyMs,
-                })}
-              </span>
-            )}
-            {connection.lastTest?.samples.length ? (
-              <span className="text-foreground-muted">
-                {t('maas.connection.testSamples', {
-                  samples: connection.lastTest.samples
-                    .map((sample) => `${sample.durationMs} ms`)
-                    .join(' · '),
-                })}
-              </span>
-            ) : null}
-          </div>
-          <div className="flex w-full gap-2 @3xl:w-auto">
+            <ChevronDown className="size-3.5 shrink-0 text-foreground-muted transition-transform duration-200 group-data-[panel-open]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div data-testid="maas-advanced-settings" className="border-t border-border/50">
+              <div className="grid gap-4 px-3.5 py-3.5 @3xl:grid-cols-2">
+                <label className="grid gap-1.5 @3xl:col-span-2">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {t('maas.connection.envKey')}
+                  </span>
+                  <Input
+                    value={envKey}
+                    spellCheck={false}
+                    onChange={(event) => {
+                      setEnvKeyEdited(true);
+                      setEnvKey(event.target.value);
+                    }}
+                  />
+                </label>
+                {isZenmux ? (
+                  <label className="grid gap-1.5 @3xl:col-span-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {t('maas.connection.managementApiKey')}
+                    </span>
+                    <StoredSecretField
+                      value={apiKey}
+                      fingerprint={connection.keyFingerprint}
+                      placeholder={t('maas.connection.zenmuxManagementKeyPlaceholder')}
+                      replacing={replacingKey}
+                      copying={copyingKeyKind === 'primary'}
+                      onValueChange={setApiKey}
+                      onCopy={() => handleCopyStoredKey('primary')}
+                      onReplace={handleReplaceKey}
+                      onCancelReplace={handleCancelReplaceKey}
+                    />
+                  </label>
+                ) : null}
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        <div
+          data-testid="maas-profile-actions"
+          className="grid gap-3 border-t border-border/55 pt-4"
+        >
+          {formError && <p className="text-xs text-destructive">{formError}</p>}
+
+          <div className="flex w-full justify-end gap-2">
             <Button
               type="button"
               size="sm"
               variant="outline"
-              disabled={!connection.connected || checkMutation.isPending}
+              disabled={
+                !basicConfigurationComplete ||
+                !connection.connected ||
+                hasUnsavedBasicChanges ||
+                saving ||
+                checkMutation.isPending
+              }
               onClick={handleCheckConnection}
               className="flex-1 @3xl:flex-none"
             >
@@ -1181,7 +1285,7 @@ const ConnectionPanel: React.FC<{
               ) : (
                 <Activity className="h-3.5 w-3.5" />
               )}
-              {checkMutation.isPending ? t('maas.connection.testing') : t('maas.connection.test')}
+              {checkMutation.isPending ? t('maas.connection.testing') : testLabel}
             </Button>
             <Button
               type="submit"

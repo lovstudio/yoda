@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { Fragment, useEffect, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, type ReactNode } from 'react';
 import { EditorProvider } from '@renderer/features/tasks/editor/editor-provider';
 import { TaskMainPanel } from '@renderer/features/tasks/main-panel';
 import {
@@ -32,6 +32,15 @@ export const SelfContainedTaskPane = observer(function SelfContainedTaskPane({
   const taskStore = getTaskStore(projectId, taskId);
   const kind = taskViewKind(taskStore, projectId);
   const provisioned = asProvisioned(taskStore);
+
+  // Mirror the routed task owner: a split/pinned task can also arrive before
+  // lazy task hydration has populated this project's map.
+  useLayoutEffect(() => {
+    if (kind !== 'missing') return;
+    void getTaskManagerStore(projectId)
+      ?.ensureTaskLoaded(taskId)
+      .catch(() => {});
+  }, [kind, projectId, taskId]);
 
   // Auto-provision an idle task the same way the route does.
   useEffect(() => {

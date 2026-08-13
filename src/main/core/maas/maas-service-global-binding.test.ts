@@ -15,12 +15,8 @@ const mocks = vi.hoisted(() => ({
   netFetch: vi.fn(),
   codexAuthDisable: vi.fn(),
   codexAuthEnable: vi.fn(),
+  codexAuthGetStatus: vi.fn(),
   codexAuthRollback: vi.fn(),
-  extensionGet: vi.fn(),
-  gatewayClear: vi.fn(),
-  gatewayConfigure: vi.fn(),
-  gatewayProviderId: null as string | null,
-  gatewayRollback: vi.fn(),
   migrateLegacyCodexMaasHistory: vi.fn(),
 }));
 
@@ -85,27 +81,7 @@ vi.mock('./codex-maas-auth-switch', () => ({
   codexMaasAuthSwitch: {
     enable: mocks.codexAuthEnable,
     disable: mocks.codexAuthDisable,
-  },
-}));
-
-vi.mock('../extensions/extension-marketplace-service', () => ({
-  extensionMarketplaceService: {
-    getExtension: mocks.extensionGet,
-  },
-}));
-
-vi.mock('../extensions/maas-gateway/runtime', () => ({
-  maasGatewayExtensionRuntime: {
-    clear: mocks.gatewayClear,
-    configure: mocks.gatewayConfigure,
-    getConnection: vi.fn(() => ({
-      baseUrl: 'http://127.0.0.1:15721/v1',
-      admissionToken: 'local-gateway-token',
-    })),
-    getStatus: vi.fn(() => ({
-      state: 'running',
-      configuredProviderId: mocks.gatewayProviderId,
-    })),
+    getStatus: mocks.codexAuthGetStatus,
   },
 }));
 
@@ -129,18 +105,14 @@ describe('global MaaS binding', () => {
     vi.clearAllMocks();
     mocks.codexAuthEnable.mockResolvedValue(mocks.codexAuthRollback);
     mocks.codexAuthDisable.mockResolvedValue(mocks.codexAuthRollback);
-    mocks.extensionGet.mockResolvedValue({
-      supported: true,
-      installation: { enabled: true },
-      runtime: { state: 'running' },
+    mocks.codexAuthGetStatus.mockResolvedValue({
+      managed: false,
+      configManaged: false,
+      environmentPublished: false,
+      persistentCredentialStored: false,
+      envKey: null,
     });
-    mocks.gatewayClear.mockResolvedValue(undefined);
     mocks.netFetch.mockResolvedValue(new Response('{}', { status: 200 }));
-    mocks.gatewayProviderId = null;
-    mocks.gatewayConfigure.mockImplementation(async (configuration: { providerId: string }) => {
-      mocks.gatewayProviderId = configuration.providerId;
-      return mocks.gatewayRollback;
-    });
     mocks.migrateLegacyCodexMaasHistory.mockReturnValue({ rows: 0, files: 0 });
   });
 
@@ -165,6 +137,8 @@ describe('global MaaS binding', () => {
       displayName: 'ZenMux',
       endpoint: 'https://zenmux.ai/api/v1',
       apiKey: 'inference-secret',
+      envKey: 'ZENMUX_API_KEY',
+      syncToAgentClient: true,
     });
 
     await expect(service.reconcileActiveBindings()).resolves.toBeUndefined();
@@ -174,13 +148,10 @@ describe('global MaaS binding', () => {
       codexHome: expect.any(String),
       platformId: 'zenmux',
       displayName: 'ZenMux',
-      gatewayBaseUrl: 'http://127.0.0.1:15721/v1',
-      gatewayToken: 'local-gateway-token',
-    });
-    expect(mocks.gatewayConfigure).toHaveBeenCalledWith({
-      providerId: 'zenmux',
       endpoint: 'https://zenmux.ai/api/v1',
+      envKey: 'ZENMUX_API_KEY',
       apiKey: 'inference-secret',
+      loginItemEnabled: true,
     });
   });
 
@@ -216,7 +187,10 @@ describe('global MaaS binding', () => {
     vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
       displayName: 'ZenMux',
       endpoint: 'https://zenmux.ai/api/v1',
+      envKey: 'ZENMUX_API_KEY',
       apiKey: 'inference-secret',
+      loginItemEnabled: true,
+      syncToAgentClient: true,
     });
 
     await expect(service.reconcileCodexStateRoot('/state/account-b')).resolves.toBeUndefined();
@@ -225,14 +199,283 @@ describe('global MaaS binding', () => {
       codexHome: '/state/account-b',
       platformId: 'zenmux',
       displayName: 'ZenMux',
-      gatewayBaseUrl: 'http://127.0.0.1:15721/v1',
-      gatewayToken: 'local-gateway-token',
+      endpoint: 'https://zenmux.ai/api/v1',
+      envKey: 'ZENMUX_API_KEY',
+      apiKey: 'inference-secret',
+      loginItemEnabled: true,
     });
-    expect(mocks.gatewayConfigure).toHaveBeenCalledWith({
-      providerId: 'zenmux',
+  });
+
+  it('keeps an unsynced Profile scoped to Yoda while restoring native Codex files', async () => {
+    mocks.settings.runtimeBindings = [
+      {
+        runtimeId: 'codex',
+        platformId: 'zenmux',
+        previousAuthProvider: 'official-api',
+        previousMaasPlatformId: null,
+        previousConfig: { authProvider: 'official-api' },
+        enabledAt: '2026-07-25T00:00:00.000Z',
+      },
+    ];
+    const service = new MaasService();
+    vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
+      displayName: 'ZenMux',
       endpoint: 'https://zenmux.ai/api/v1',
       apiKey: 'inference-secret',
+      envKey: 'ZENMUX_API_KEY',
+      syncToAgentClient: false,
+      loginItemEnabled: true,
     });
+
+    await expect(service.reconcileCodexStateRoot('/state/account-c')).resolves.toBeUndefined();
+
+    expect(mocks.codexAuthDisable).toHaveBeenCalledWith({ codexHome: '/state/account-c' });
+    expect(mocks.codexAuthEnable).not.toHaveBeenCalled();
+  });
+
+  it('requires fresh consent before upgrading a legacy Codex Profile to persistent sync', async () => {
+    mocks.settings = {
+      selectedPlatformId: 'zenmux',
+      connections: [
+        {
+          platformId: 'zenmux',
+          displayName: 'ZenMux',
+          endpoint: 'https://zenmux.ai/api/v1',
+          keyFingerprint: null,
+          inferenceKeyFingerprint: 'in...ce',
+          connectedAt: '2026-07-25T00:00:00.000Z',
+          lastCheckedAt: null,
+          lastTest: null,
+        },
+      ],
+      runtimeBindings: [
+        {
+          runtimeId: 'codex',
+          platformId: 'zenmux',
+          previousAuthProvider: 'official-api',
+          previousMaasPlatformId: null,
+          previousConfig: { authProvider: 'official-api' },
+          enabledAt: '2026-07-25T00:00:00.000Z',
+        },
+      ],
+    };
+    mocks.secrets = { 'yoda-maas-inference-token:zenmux': 'legacy-inference-secret' };
+    const service = new MaasService();
+
+    const [connection] = await service.listConnections();
+    const credentials = await service.getInferenceCredentials('zenmux');
+
+    expect(connection).toMatchObject({ envKey: 'ZENMUX_API_KEY' });
+    expect(connection?.syncToAgentClient).toBeUndefined();
+    expect(credentials).toEqual({
+      displayName: 'ZenMux',
+      endpoint: 'https://zenmux.ai/api/v1',
+      apiKey: 'legacy-inference-secret',
+      envKey: 'ZENMUX_API_KEY',
+      syncToAgentClient: false,
+      loginItemEnabled: true,
+    });
+
+    await service.reconcileActiveBindings();
+    expect(mocks.codexAuthDisable).toHaveBeenCalledOnce();
+    expect(mocks.codexAuthEnable).not.toHaveBeenCalled();
+  });
+
+  it('clears native Codex sync and disables it for every Profile', async () => {
+    mocks.settings = {
+      selectedPlatformId: 'zenmux',
+      connections: [
+        {
+          platformId: 'zenmux',
+          displayName: 'ZenMux',
+          endpoint: 'https://zenmux.ai/api/v1',
+          envKey: 'ZENMUX_API_KEY',
+          syncToAgentClient: true,
+          keyFingerprint: null,
+          inferenceKeyFingerprint: 'in...ce',
+          connectedAt: '2026-07-25T00:00:00.000Z',
+          lastCheckedAt: null,
+          lastTest: null,
+        },
+        {
+          platformId: 'custom:lovstudio',
+          displayName: 'LovStudio LLM',
+          endpoint: 'https://llm.lovstudio.test/v1',
+          envKey: 'LOVSTUDIO_LLM_API_KEY',
+          syncToAgentClient: true,
+          keyFingerprint: 'lo...io',
+          inferenceKeyFingerprint: 'lo...io',
+          connectedAt: '2026-07-25T00:00:00.000Z',
+          lastCheckedAt: null,
+          lastTest: null,
+        },
+      ],
+      runtimeBindings: [
+        {
+          runtimeId: 'codex',
+          platformId: 'zenmux',
+          previousAuthProvider: 'official-api',
+          previousMaasPlatformId: null,
+          previousConfig: { authProvider: 'official-api' },
+          enabledAt: '2026-07-25T00:00:00.000Z',
+        },
+      ],
+    };
+
+    const result = await new MaasService().clearCodexClientSync();
+
+    expect(result).toMatchObject({ success: true, status: { enabled: false, managed: false } });
+    expect(mocks.codexAuthDisable).toHaveBeenCalledOnce();
+    expect(mocks.settings.connections.every((connection) => !connection.syncToAgentClient)).toBe(
+      true
+    );
+    expect(
+      mocks.settings.connections.every(
+        (connection) => connection.syncToAgentClientVersion === undefined
+      )
+    ).toBe(true);
+    expect(mocks.settings).toMatchObject({ externalAgentSyncEnabled: false });
+  });
+
+  it('publishes persistent Codex sync immediately for the active Profile', async () => {
+    mocks.settings = {
+      selectedPlatformId: 'zenmux',
+      connections: [
+        {
+          platformId: 'zenmux',
+          displayName: 'ZenMux',
+          endpoint: 'https://zenmux.ai/api/v1',
+          envKey: 'ZENMUX_API_KEY',
+          syncToAgentClient: false,
+          keyFingerprint: 'ma...nt',
+          inferenceKeyFingerprint: 'in...ce',
+          connectedAt: '2026-07-25T00:00:00.000Z',
+          lastCheckedAt: null,
+          lastTest: null,
+        },
+      ],
+      runtimeBindings: [
+        {
+          runtimeId: 'codex',
+          platformId: 'zenmux',
+          previousAuthProvider: 'official-api',
+          previousMaasPlatformId: null,
+          previousConfig: { authProvider: 'official-api' },
+          enabledAt: '2026-07-25T00:00:00.000Z',
+        },
+      ],
+    };
+    mocks.secrets = { 'yoda-maas-inference-token:zenmux': 'inference-secret' };
+
+    const result = await new MaasService().setCodexClientSync({
+      enabled: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(mocks.codexAuthEnable).toHaveBeenCalledWith({
+      codexHome: expect.any(String),
+      platformId: 'zenmux',
+      displayName: 'ZenMux',
+      endpoint: 'https://zenmux.ai/api/v1',
+      envKey: 'ZENMUX_API_KEY',
+      apiKey: 'inference-secret',
+      loginItemEnabled: true,
+    });
+    expect(mocks.settings).toMatchObject({
+      externalAgentSyncEnabled: true,
+      externalAgentSyncVersion: 1,
+    });
+
+    await expect(
+      new MaasService().setCodexClientSync({ enabled: true, loginItemEnabled: false })
+    ).resolves.toMatchObject({ success: true });
+    expect(mocks.codexAuthEnable).toHaveBeenLastCalledWith(
+      expect.objectContaining({ loginItemEnabled: false })
+    );
+    expect(mocks.settings.externalAgentSyncLoginItemEnabled).toBe(false);
+  });
+
+  it('remembers global sync before MaaS is active and publishes on the next switch', async () => {
+    mocks.settings = {
+      selectedPlatformId: 'zenmux',
+      connections: [
+        {
+          platformId: 'zenmux',
+          displayName: 'ZenMux',
+          endpoint: 'https://zenmux.ai/api/v1',
+          envKey: 'ZENMUX_API_KEY',
+          keyFingerprint: null,
+          inferenceKeyFingerprint: 'in...ce',
+          connectedAt: '2026-07-25T00:00:00.000Z',
+          lastCheckedAt: null,
+          lastTest: null,
+        },
+      ],
+      runtimeBindings: [],
+      externalAgentSyncEnabled: false,
+    };
+    mocks.secrets = { 'yoda-maas-inference-token:zenmux': 'inference-secret' };
+    const service = new MaasService();
+
+    await expect(service.setCodexClientSync({ enabled: true })).resolves.toMatchObject({
+      success: true,
+    });
+    expect(mocks.codexAuthEnable).not.toHaveBeenCalled();
+    expect(mocks.settings).toMatchObject({
+      externalAgentSyncEnabled: true,
+      externalAgentSyncVersion: 1,
+    });
+
+    await expect(
+      service.setGlobalBinding({ platformId: 'zenmux', enabled: true })
+    ).resolves.toEqual({ success: true });
+    expect(mocks.codexAuthEnable).toHaveBeenCalledWith({
+      codexHome: expect.any(String),
+      platformId: 'zenmux',
+      displayName: 'ZenMux',
+      endpoint: 'https://zenmux.ai/api/v1',
+      envKey: 'ZENMUX_API_KEY',
+      apiKey: 'inference-secret',
+      loginItemEnabled: true,
+    });
+  });
+
+  it('does not publish persistent sync when the active Profile key is missing', async () => {
+    mocks.settings.connections = [
+      {
+        platformId: 'zenmux',
+        displayName: 'ZenMux',
+        endpoint: 'https://zenmux.ai/api/v1',
+        envKey: 'ZENMUX_API_KEY',
+        syncToAgentClient: false,
+        keyFingerprint: 'ma...nt',
+        inferenceKeyFingerprint: 'in...ce',
+        connectedAt: '2026-07-25T00:00:00.000Z',
+        lastCheckedAt: null,
+        lastTest: null,
+      },
+    ];
+    mocks.settings.runtimeBindings = [
+      {
+        runtimeId: 'codex',
+        platformId: 'zenmux',
+        previousAuthProvider: 'official-api',
+        previousMaasPlatformId: null,
+        previousConfig: { authProvider: 'official-api' },
+        enabledAt: '2026-07-25T00:00:00.000Z',
+      },
+    ];
+
+    const result = await new MaasService().setCodexClientSync({
+      enabled: true,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'The Agent Client API key is missing. Reconnect this Profile first.',
+    });
+    expect(mocks.codexAuthEnable).not.toHaveBeenCalled();
+    expect(mocks.settings.externalAgentSyncEnabled).toBeUndefined();
   });
 
   it('repairs a split runtime binding and rolls native files back if persistence fails', async () => {
@@ -251,6 +494,8 @@ describe('global MaaS binding', () => {
       displayName: 'ZenMux',
       endpoint: 'https://zenmux.ai/api/v1',
       apiKey: 'inference-secret',
+      envKey: 'ZENMUX_API_KEY',
+      syncToAgentClient: true,
     });
     mocks.failRuntimeId = 'codex';
 
@@ -287,6 +532,8 @@ describe('global MaaS binding', () => {
       displayName: 'MaaS Test',
       endpoint: 'https://maas.example.test/v1',
       apiKey: 'secret',
+      envKey: 'MAAS_TEST_API_KEY',
+      syncToAgentClient: true,
     });
 
     await expect(
@@ -301,8 +548,7 @@ describe('global MaaS binding', () => {
       expect.objectContaining({
         platformId: 'zenmux',
         displayName: 'MaaS Test',
-        gatewayBaseUrl: 'http://127.0.0.1:15721/v1',
-        gatewayToken: 'local-gateway-token',
+        endpoint: 'https://maas.example.test/v1',
       })
     );
     expect(mocks.migrateLegacyCodexMaasHistory).toHaveBeenCalledWith({
@@ -386,8 +632,7 @@ describe('global MaaS binding', () => {
       expect.objectContaining({
         platformId: 'openrouter',
         displayName: 'MaaS Test',
-        gatewayBaseUrl: 'http://127.0.0.1:15721/v1',
-        gatewayToken: 'local-gateway-token',
+        endpoint: 'https://maas.example.test/v1',
       })
     );
 
@@ -406,42 +651,22 @@ describe('global MaaS binding', () => {
     expect(mocks.codexAuthDisable).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    [
-      'not installed',
-      { supported: true, installation: null, runtime: null },
-      'Install Yoda MaaS Gateway from Marketplace before enabling MaaS.',
-    ],
-    [
-      'disabled',
-      { supported: true, installation: { enabled: false }, runtime: { state: 'stopped' } },
-      'Enable Yoda MaaS Gateway from Marketplace before enabling MaaS.',
-    ],
-    [
-      'not running',
-      { supported: true, installation: { enabled: true }, runtime: { state: 'error' } },
-      'Yoda MaaS Gateway is not running normally.',
-    ],
-    [
-      'unsupported',
-      { supported: false, installation: null, runtime: null },
-      'Yoda MaaS Gateway is unavailable on this platform.',
-    ],
-  ])('rejects MaaS enable when the Gateway is %s', async (_state, extension, error) => {
+  it('does not require the optional local Gateway when the Profile points elsewhere', async () => {
     const service = new MaasService();
     vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
       displayName: 'MaaS Test',
       endpoint: 'https://maas.example.test/v1',
       apiKey: 'secret',
+      envKey: 'MAAS_TEST_API_KEY',
+      syncToAgentClient: true,
     });
-    mocks.extensionGet.mockResolvedValue(extension);
 
     await expect(
       service.setGlobalBinding({ platformId: 'zenmux', enabled: true })
-    ).resolves.toEqual({ success: false, error });
-    expect(mocks.gatewayConfigure).not.toHaveBeenCalled();
-    expect(mocks.codexAuthEnable).not.toHaveBeenCalled();
-    expect(mocks.settings.runtimeBindings).toEqual([]);
+    ).resolves.toEqual({ success: true });
+    expect(mocks.codexAuthEnable).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: 'https://maas.example.test/v1' })
+    );
   });
 
   it('rolls back every Client when a global switch fails midway', async () => {
@@ -450,6 +675,8 @@ describe('global MaaS binding', () => {
       displayName: 'MaaS Test',
       endpoint: 'https://maas.example.test/v1',
       apiKey: 'secret',
+      envKey: 'MAAS_TEST_API_KEY',
+      syncToAgentClient: true,
     });
     const originalConfigs = structuredClone(mocks.runtimeConfigs);
     const originalSettings = structuredClone(mocks.settings);
@@ -469,6 +696,8 @@ describe('global MaaS binding', () => {
       displayName: 'Custom Test',
       endpoint: 'https://custom.example.test/v1',
       apiKey: 'secret',
+      envKey: 'CUSTOM_TEST_API_KEY',
+      syncToAgentClient: true,
     });
 
     await expect(
@@ -497,6 +726,8 @@ describe('global MaaS binding', () => {
       displayName: 'MaaS Test',
       endpoint: 'https://maas.example.test/v1',
       apiKey: 'secret',
+      envKey: 'MAAS_TEST_API_KEY',
+      syncToAgentClient: true,
     });
 
     await expect(
@@ -519,6 +750,8 @@ describe('global MaaS binding', () => {
       displayName: 'MaaS Test',
       endpoint: 'https://maas.example.test/v1',
       apiKey: 'secret',
+      envKey: 'MAAS_TEST_API_KEY',
+      syncToAgentClient: true,
     });
     const beforeMaas = {
       authProvider: 'official-api' as const,
@@ -553,11 +786,15 @@ describe('stored MaaS keys', () => {
   beforeEach(() => {
     mocks.settings = {
       selectedPlatformId: 'zenmux',
+      externalAgentSyncEnabled: true,
+      externalAgentSyncVersion: 1,
       connections: [
         {
           platformId: 'zenmux',
           displayName: 'ZenMux',
           endpoint: 'https://zenmux.ai/api/v1',
+          envKey: 'ZENMUX_API_KEY',
+          syncToAgentClient: true,
           keyFingerprint: 'ma...nt',
           inferenceKeyFingerprint: 'in...ce',
           connectedAt: '2026-07-16T00:00:00.000Z',
@@ -578,18 +815,7 @@ describe('stored MaaS keys', () => {
     vi.clearAllMocks();
     mocks.codexAuthEnable.mockResolvedValue(mocks.codexAuthRollback);
     mocks.codexAuthDisable.mockResolvedValue(mocks.codexAuthRollback);
-    mocks.extensionGet.mockResolvedValue({
-      supported: true,
-      installation: { enabled: true },
-      runtime: { state: 'running' },
-    });
-    mocks.gatewayClear.mockResolvedValue(undefined);
-    mocks.gatewayProviderId = null;
     mocks.netFetch.mockResolvedValue(new Response('{}', { status: 200 }));
-    mocks.gatewayConfigure.mockImplementation(async (configuration: { providerId: string }) => {
-      mocks.gatewayProviderId = configuration.providerId;
-      return mocks.gatewayRollback;
-    });
   });
 
   it('lists only saved profiles and does not synthesize built-in cloud routers', async () => {
@@ -662,6 +888,7 @@ describe('stored MaaS keys', () => {
       platformId: 'zenmux',
       displayName: 'ZenMux Production',
       endpoint: 'https://new.zenmux.example/v1',
+      envKey: 'ZENMUX_API_KEY',
       inferenceApiKey: 'new-inference-secret',
     });
 
@@ -670,13 +897,10 @@ describe('stored MaaS keys', () => {
       codexHome: expect.any(String),
       platformId: 'zenmux',
       displayName: 'ZenMux Production',
-      gatewayBaseUrl: 'http://127.0.0.1:15721/v1',
-      gatewayToken: 'local-gateway-token',
-    });
-    expect(mocks.gatewayConfigure).toHaveBeenCalledWith({
-      providerId: 'zenmux',
       endpoint: 'https://new.zenmux.example/v1',
+      envKey: 'ZENMUX_API_KEY',
       apiKey: 'new-inference-secret',
+      loginItemEnabled: true,
     });
     expect(mocks.secrets['yoda-maas-inference-token:zenmux']).toBe('new-inference-secret');
   });
@@ -747,6 +971,7 @@ describe('stored MaaS keys', () => {
         expect.objectContaining({ platformId: 'custom:second', displayName: 'Second Custom' }),
       ])
     );
+    expect(mocks.codexAuthEnable).not.toHaveBeenCalled();
 
     const connections = await service.listConnections();
     expect(connections).toEqual(
@@ -763,6 +988,29 @@ describe('stored MaaS keys', () => {
         }),
       ])
     );
+  });
+
+  it('does not touch native Codex config when saving a Profile before MaaS is enabled', async () => {
+    mocks.settings = {
+      selectedPlatformId: 'zenmux',
+      connections: [],
+      runtimeBindings: [],
+      externalAgentSyncEnabled: false,
+    };
+    mocks.secrets = {};
+
+    await expect(
+      new MaasService().connectPlatform({
+        platformId: 'custom:lovstudio',
+        displayName: 'LovStudio LLM',
+        endpoint: 'https://llm.lovstudio.test/v1',
+        apiKey: 'lovstudio-secret',
+        envKey: 'LOVSTUDIO_LLM_API_KEY',
+      })
+    ).resolves.toMatchObject({ success: true });
+
+    expect(mocks.codexAuthEnable).not.toHaveBeenCalled();
+    expect(mocks.settings.externalAgentSyncEnabled).toBe(false);
   });
 
   it('loads a legacy fixed Custom connection under the new Custom name', async () => {

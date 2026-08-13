@@ -170,6 +170,27 @@ describe('AgentInfoCard', () => {
     await clickUser(findMenuItem('agents.runtimeInfo.update')!);
     expect(mocks.runRuntimeAction).toHaveBeenCalledWith('codex', 'update');
   });
+
+  it('uses the active model-access Profile as the authentication identity', async () => {
+    const { AgentInfoCard } = await import(
+      '@renderer/lib/components/agent-selector/agent-info-card'
+    );
+    await act(async () =>
+      root.render(
+        <AgentInfoCard
+          id="codex"
+          authPresentation={{
+            value: 'ZenMux Production',
+            detail: 'workspaceRuntime.maas.authenticationSource',
+          }}
+        />
+      )
+    );
+
+    expect(host.textContent).toContain('agents.runtimeInfo.auth');
+    expect(host.textContent).toContain('ZenMux Production');
+    expect(host.textContent).toContain('workspaceRuntime.maas.authenticationSource');
+  });
 });
 
 function findMenuItem(text: string) {

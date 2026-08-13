@@ -1,7 +1,15 @@
 import { autorun, reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import type * as monacoNS from 'monaco-editor';
-import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { registerActiveCodeEditor } from '@renderer/lib/editor/activeCodeEditor';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
@@ -53,13 +61,21 @@ export const EditorProvider = observer(function EditorProvider({
   const { editorView, tabManager } = taskView;
   const { effectiveTheme, themeFingerprint } = useTheme();
   const isActive = useIsActiveTask(taskId);
+  const activeRenderer = taskView.activeRenderer;
+
+  // Agent/overview task switches must not acquire Monaco or restore editor
+  // buffers. Once this task actually visits a code file, retain the lease for
+  // fast internal tab switching until the task view itself unmounts.
+  const [editorRequested, setEditorRequested] = useState(activeRenderer === 'monaco');
+  const shouldPrepareEditor = editorRequested || activeRenderer === 'monaco';
+  if (activeRenderer === 'monaco' && !editorRequested) setEditorRequested(true);
 
   // Conflict dialog — shown when editorView.pendingConflictUri is set.
   const showConflictModal = useShowModal('conflictDialog');
 
   // Lease is exposed as a MobX observable box — unified with activeFilePath and
   // modelStatus in a single autorun for reliable model attachment.
-  const leaseBox = useMonacoLease(codeEditorPool);
+  const leaseBox = useMonacoLease(codeEditorPool, shouldPrepareEditor);
 
   // editorRef — shared with useDiffDecorations and the focus-restore effect.
   // Updated reactively from leaseBox via a reaction below.
@@ -177,10 +193,10 @@ export const EditorProvider = observer(function EditorProvider({
   // Model registration is handled reactively by FileModelLifecycleStore.
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    if (!taskId) return;
+    if (!taskId || !shouldPrepareEditor) return;
     void editorView.restoreBuffers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId]);
+  }, [taskId, shouldPrepareEditor]);
 
   // ---------------------------------------------------------------------------
   // Conflict dialog — reaction on pendingConflictUri shows the modal.

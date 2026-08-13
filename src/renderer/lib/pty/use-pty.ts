@@ -1,5 +1,5 @@
 import { type Terminal } from '@xterm/xterm';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { AppSettings } from '@shared/app-settings';
 import { appPasteChannel } from '@shared/events/appEvents';
 import { ptyDataChannel, ptyExitChannel, type PtyExitEvent } from '@shared/events/ptyEvents';
@@ -8,7 +8,7 @@ import { imagePathMention, isImagePath } from '@renderer/lib/image-path-mention'
 import { events, rpc } from '@renderer/lib/ipc';
 import { log } from '@renderer/utils/logger';
 import { usePaneSizingContext } from './pane-sizing-context';
-import { buildTerminalFontFamily, buildTheme, FrontendPty, type SessionTheme } from './pty';
+import { buildTerminalFontFamily, FrontendPty, type SessionTheme } from './pty';
 import {
   getCellMetrics,
   getTerminalFitScrollbarWidth,
@@ -98,23 +98,12 @@ function selectBetweenBufferCells(
   terminal.select(start % terminal.cols, Math.floor(start / terminal.cols), length);
 }
 
-interface MeasureAndResizeOptions {
-  forceRefresh?: boolean;
-  resetResizeDedup?: boolean;
-}
-
 function isMeasureTargetReady(
   element: HTMLElement,
   cell: { width: number; height: number }
 ): boolean {
   const rect = element.getBoundingClientRect();
   return rect.width >= cell.width * MIN_READY_TERMINAL_COLS && rect.height >= cell.height;
-}
-
-function refreshTerminal(terminal: Terminal): void {
-  try {
-    terminal.refresh(0, Math.max(0, terminal.rows - 1));
-  } catch {}
 }
 
 function hasEnterSubmit(data: string): boolean {
@@ -284,31 +273,25 @@ export function usePty(
 
   // Layout not ready yet — try again next frame (event-driven: rAF is the
   // browser telling us a new layout pass has happened).
-  const retryMeasureAndResize = useCallback(
-    (retries: number, options?: MeasureAndResizeOptions) => {
-      if (retries >= MAX_LAYOUT_READY_RETRIES) return false;
-      requestAnimationFrame(() => measureAndResizeRef.current(retries + 1, options));
-      return true;
-    },
-    []
-  );
+  const retryMeasureAndResize = useCallback((retries: number) => {
+    if (retries >= MAX_LAYOUT_READY_RETRIES) return false;
+    requestAnimationFrame(() => measureAndResizeRef.current(retries + 1));
+    return true;
+  }, []);
 
   // measureAndResize is the single entry point for all DOM measurement + PTY
   // resize work. ResizeObserver callers schedule it after layout, then this
   // commits the xterm grid and PTY dimensions as one canonical transition.
   const measureAndResize = useCallback(
-    (retries = 0, options: MeasureAndResizeOptions = {}) => {
+    (retries = 0) => {
       if (!termRef.current) return;
-      if (options.resetResizeDedup) {
-        lastSentResizeRef.current = null;
-      }
       try {
         const term = termRef.current;
         const pane = paneSizingRef.current;
 
         const cell = getCellMetrics(term);
         if (!cell) {
-          retryMeasureAndResize(retries, options);
+          retryMeasureAndResize(retries);
           return;
         }
 
@@ -324,7 +307,7 @@ export function usePty(
         if (!measureTarget) return;
         const scrollbarWidth = getTerminalFitScrollbarWidth(term);
 
-        if (!isMeasureTargetReady(measureTarget, cell) && retryMeasureAndResize(retries, options)) {
+        if (!isMeasureTargetReady(measureTarget, cell) && retryMeasureAndResize(retries)) {
           return;
         }
 
@@ -343,19 +326,13 @@ export function usePty(
             TERMINAL_FIT_GUARD_COLUMNS
           );
         if (!dims) {
-          retryMeasureAndResize(retries, options);
+          retryMeasureAndResize(retries);
           return;
         }
         const { cols: targetCols, rows: targetRows } = dims;
 
-        let didResize = false;
         if (term.cols !== targetCols || term.rows !== targetRows) {
           pty.commitResize(targetCols, targetRows);
-          didResize = true;
-        }
-
-        if (options.forceRefresh && !didResize) {
-          refreshTerminal(term);
         }
 
         // Open the parser flush gate only after xterm has the real pane grid.
@@ -403,10 +380,13 @@ export function usePty(
     });
   }, []);
 
-  const applyTheme = useCallback((t?: SessionTheme) => {
-    if (!termRef.current) return;
-    termRef.current.options.theme = buildTheme(t);
-  }, []);
+  const applyTheme = useCallback(
+    (t?: SessionTheme) => {
+      if (!termRef.current) return;
+      pty.setTheme(t);
+    },
+    [pty]
+  );
 
   const setTheme = useCallback(
     (t: SessionTheme) => {
@@ -498,25 +478,28 @@ export function usePty(
 
   // ─── Main effect: mount terminal once per sessionId ────────────────────────
 
-  useEffect(() => {
+  // Reparent the prepared xterm during React's commit, before Chromium paints
+  // the new route. A passive effect leaves one frame containing only the empty
+  // terminal host even when the historical buffer was already hydrated.
+  useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     // ── Compute targetDims synchronously ─────────────────────────────────────
-    // Reads the previous session's terminal cell metrics before overwriting
-    // termRef. PaneSizingContext dimensions are also sampled here so the
-    // pre-resize happens against the live pane dimensions.
+    // Measure with the destination terminal's own cell metrics. A keyed task
+    // route has no previous termRef, and using another session's metrics makes
+    // the prepared frame reflow immediately after it becomes visible.
     const pane = paneSizingRef.current;
-    const previousTerm = termRef.current;
-    const prevCell = previousTerm ? getCellMetrics(previousTerm) : null;
+    const destinationTerm = pty.terminal;
+    const destinationCell = getCellMetrics(destinationTerm);
     let targetDims: { cols: number; rows: number } | undefined;
 
-    if (pane?.containerRef.current && previousTerm && prevCell) {
+    if (pane?.containerRef.current && destinationCell) {
       const measured = measureDimensions(
         pane.containerRef.current,
-        prevCell.width,
-        prevCell.height,
-        getTerminalFitScrollbarWidth(previousTerm),
+        destinationCell.width,
+        destinationCell.height,
+        getTerminalFitScrollbarWidth(destinationTerm),
         TERMINAL_FIT_GUARD_COLUMNS
       );
       if (measured) targetDims = measured;
@@ -542,7 +525,7 @@ export function usePty(
 
       // Apply current theme before mounting (in case it differs from the
       // theme the terminal was constructed with).
-      frontendPty.terminal.options.theme = buildTheme(themeRef.current);
+      frontendPty.setTheme(themeRef.current);
       frontendPty.terminal.options.macOptionClickForcesSelection = true;
 
       // Mount: pre-resize then appendChild (flash-free).
@@ -561,12 +544,15 @@ export function usePty(
           if (terminalSettings?.fontFamily) {
             customFontFamily = terminalSettings.fontFamily.trim();
             if (customFontFamily) {
-              frontendPty.terminal.options.fontFamily = buildTerminalFontFamily(customFontFamily);
-              const remeasureAfterFontLoad = () => {
-                if (mounted) scheduleCommit();
-              };
-              scheduleCommit();
-              void document.fonts?.ready.then(remeasureAfterFontLoad);
+              const fontFamily = buildTerminalFontFamily(customFontFamily);
+              if (frontendPty.terminal.options.fontFamily !== fontFamily) {
+                frontendPty.terminal.options.fontFamily = fontFamily;
+                const remeasureAfterFontLoad = () => {
+                  if (mounted) scheduleCommit();
+                };
+                scheduleCommit();
+                void document.fonts?.ready.then(remeasureAfterFontLoad);
+              }
             }
           }
           frontendPty.setScrollbackLines(
@@ -961,12 +947,11 @@ export function usePty(
           detail?.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK_LINES
         );
       };
-      // Host position changes (tab pin/unpin/reclaim between panes) re-host the
-      // terminal without a container size change, so the ResizeObserver never
-      // fires and a same-sessionId pane skips its mount measure. Same recipe as
-      // the HMR re-fit: clear the dedup so the resize always lands.
+      // Host position changes (tab pin/unpin/reclaim between panes) only need a
+      // measurement pass. FrontendPty.mount() owns the one canonical repaint;
+      // sending another same-size SIGWINCH makes the TUI redraw its content.
       const handleRelayout = () => {
-        measureAndResizeRef.current(0, { forceRefresh: true, resetResizeDedup: true });
+        scheduleCommit();
       };
       window.addEventListener(TERMINAL_RELAYOUT_EVENT, handleRelayout);
       window.addEventListener('terminal-font-changed', handleFontChange);
@@ -993,35 +978,16 @@ export function usePty(
       resizeObserver.observe(container);
       cleanups.push(() => resizeObserver.disconnect());
 
-      // ── HMR: re-fit after every Vite update ────────────────────────────────
-      // Hot-reload can subtly change xterm cell metrics (font CSS reinjection,
-      // padding tweaks) without changing the container's pixel size, so the
-      // ResizeObserver never fires and the PTY keeps its stale cols/rows while
-      // xterm's canvas re-renders with new cell widths — producing the visual
-      // line-wrap glitch that the user has to fix by dragging a divider.
-      // Clearing the dedup ref guarantees the broadcast goes through even when
-      // measured dims round to the same integer cols/rows as before.
+      // ── HMR: re-measure after every Vite update ────────────────────────────
+      // CSS/font changes can alter cell metrics without resizing the host. Only
+      // commit when the resulting grid dimensions actually changed; refreshing
+      // identical rows after every edit is both wasteful and a source of stale
+      // dev-only frames.
       if (import.meta.hot) {
-        const onHmrUpdate = () =>
-          measureAndResizeRef.current(0, { forceRefresh: true, resetResizeDedup: true });
+        const onHmrUpdate = () => scheduleCommit();
         import.meta.hot.on('vite:afterUpdate', onHmrUpdate);
         cleanups.push(() => import.meta.hot?.off('vite:afterUpdate', onHmrUpdate));
       }
-
-      // Chromium can resume a previously backgrounded canvas without changing
-      // the observed element size, so redraw the visible terminal explicitly.
-      const refreshVisibleTerminal = () => {
-        measureAndResizeRef.current(0, { forceRefresh: true });
-      };
-      const refreshOnVisible = () => {
-        if (document.visibilityState === 'visible') refreshVisibleTerminal();
-      };
-      window.addEventListener('focus', refreshVisibleTerminal);
-      document.addEventListener('visibilitychange', refreshOnVisible);
-      cleanups.push(
-        () => window.removeEventListener('focus', refreshVisibleTerminal),
-        () => document.removeEventListener('visibilitychange', refreshOnVisible)
-      );
     }
 
     // ── Cleanup ───────────────────────────────────────────────────────────────

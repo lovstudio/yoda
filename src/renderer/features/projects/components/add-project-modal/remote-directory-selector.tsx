@@ -78,6 +78,7 @@ export function RemoteDirectorySelector({
         }}
       >
         <PopoverTrigger
+          nativeButton={false}
           render={
             <Input
               placeholder="/home/user/project"

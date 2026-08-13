@@ -220,6 +220,8 @@ export class TaskManagerStore {
 
   tasks = observable.map<string, TaskStore>();
   taskLoadState: 'idle' | 'loading' | 'loaded' | 'error' = 'idle';
+  /** Point-loaded task records that have not settled yet. */
+  taskLoadPendingIds = observable.set<string>();
   archivedTaskLoadState: 'idle' | 'loading' | 'loaded' | 'error' = 'idle';
   taskCounts: Omit<ProjectTaskCounts, 'projectId'> = { active: 0, archived: 0 };
   /**
@@ -281,6 +283,7 @@ export class TaskManagerStore {
     makeObservable(this, {
       tasks: observable,
       taskLoadState: observable,
+      taskLoadPendingIds: observable,
       archivedTaskLoadState: observable,
       taskCounts: observable,
       archivingTaskIds: observable,
@@ -664,10 +667,16 @@ export class TaskManagerStore {
     const inFlight = this._taskPointLoadPromises.get(taskId);
     if (inFlight) return inFlight;
 
+    runInAction(() => {
+      this.taskLoadPendingIds.add(taskId);
+    });
     const promise = this._ensureTaskLoaded(taskId).finally(() => {
-      if (this._taskPointLoadPromises.get(taskId) === promise) {
-        this._taskPointLoadPromises.delete(taskId);
-      }
+      runInAction(() => {
+        this.taskLoadPendingIds.delete(taskId);
+        if (this._taskPointLoadPromises.get(taskId) === promise) {
+          this._taskPointLoadPromises.delete(taskId);
+        }
+      });
     });
     this._taskPointLoadPromises.set(taskId, promise);
     return promise;
@@ -1111,7 +1120,7 @@ export class TaskManagerStore {
       await this.teardownTask(taskId).catch(() => {});
     }
 
-    const result = await rpc.tasks.moveTaskToProject(taskId, targetProjectId);
+    const result = await rpc.tasks.moveTaskToProject(taskId, targetProjectId, parentTaskId);
     if (!result.success) return result.error;
 
     appState.agentRuntime.forgetTask(this.projectId, taskId);
@@ -1385,6 +1394,7 @@ export class TaskManagerStore {
     for (const task of this.tasks.values()) task.dispose();
     runInAction(() => {
       this.tasks.clear();
+      this.taskLoadPendingIds.clear();
       this.archivingTaskIds.clear();
       this.archivedTaskLoadState = 'idle';
       this.taskCounts = { active: 0, archived: 0 };

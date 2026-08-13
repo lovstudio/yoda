@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import {
   DEFAULT_HOT_TERMINAL_LIMIT,
   DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
+  DEFAULT_TERMINAL_CACHE_MODE,
   MAX_HOT_TERMINAL_LIMIT,
   MAX_IDLE_SESSION_TIMEOUT_MINUTES,
   MAX_TERMINAL_SCROLLBACK_LINES,
@@ -17,6 +18,13 @@ import { PtySession } from '@renderer/lib/pty/pty-session';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/lib/ui/select';
 import { Switch } from '@renderer/lib/ui/switch';
 import { SettingRow } from './SettingRow';
 
@@ -63,6 +71,7 @@ const TerminalSettingsCard: React.FC = () => {
 
   const fontFamily = terminal?.fontFamily ?? '';
   const autoCopyOnSelection = terminal?.autoCopyOnSelection ?? true;
+  const hotTerminalMode = terminal?.hotTerminalMode ?? DEFAULT_TERMINAL_CACHE_MODE;
   const hotTerminalLimit = terminal?.hotTerminalLimit ?? DEFAULT_HOT_TERMINAL_LIMIT;
   const idleSessionTimeoutMinutes =
     terminal?.idleSessionTimeoutMinutes ?? DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES;
@@ -160,10 +169,18 @@ const TerminalSettingsCard: React.FC = () => {
     [update]
   );
 
+  const updateHotTerminalMode = useCallback(
+    (next: 'auto' | 'fixed') => {
+      update({ hotTerminalMode: next });
+      PtySession.setHotTerminalPolicy(next, hotTerminalLimit);
+    },
+    [hotTerminalLimit, update]
+  );
+
   const updateHotTerminalLimit = useCallback(
     (next: number) => {
       update({ hotTerminalLimit: next });
-      PtySession.setHotTerminalLimit(next);
+      PtySession.setHotTerminalPolicy('fixed', next);
     },
     [update]
   );
@@ -368,19 +385,39 @@ const TerminalSettingsCard: React.FC = () => {
         title={t('settings.terminal.hotTerminalLimit')}
         description={t('settings.terminal.hotTerminalLimitDescription')}
         control={
-          <Input
-            type="number"
-            min={MIN_HOT_TERMINAL_LIMIT}
-            max={MAX_HOT_TERMINAL_LIMIT}
-            value={hotTerminalLimit}
-            disabled={loading || saving}
-            className="h-8 w-[100px] text-right"
-            aria-label={t('settings.terminal.hotTerminalLimit')}
-            onChange={(event) => {
-              const value = Number(event.target.value);
-              if (Number.isInteger(value)) updateHotTerminalLimit(value);
-            }}
-          />
+          <div className="flex items-center gap-2">
+            <Select
+              value={hotTerminalMode}
+              disabled={loading || saving}
+              onValueChange={(value) => updateHotTerminalMode(value as 'auto' | 'fixed')}
+            >
+              <SelectTrigger
+                className="h-8 w-[110px]"
+                aria-label={t('settings.terminal.hotTerminalLimit')}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">{t('settings.terminal.hotTerminalAuto')}</SelectItem>
+                <SelectItem value="fixed">{t('settings.terminal.hotTerminalFixed')}</SelectItem>
+              </SelectContent>
+            </Select>
+            {hotTerminalMode === 'fixed' ? (
+              <Input
+                type="number"
+                min={MIN_HOT_TERMINAL_LIMIT}
+                max={MAX_HOT_TERMINAL_LIMIT}
+                value={hotTerminalLimit}
+                disabled={loading || saving}
+                className="h-8 w-[72px] text-right"
+                aria-label={t('settings.terminal.hotTerminalFixedLimit')}
+                onChange={(event) => {
+                  const value = Number(event.target.value);
+                  if (Number.isInteger(value)) updateHotTerminalLimit(value);
+                }}
+              />
+            ) : null}
+          </div>
         }
       />
       <SettingRow

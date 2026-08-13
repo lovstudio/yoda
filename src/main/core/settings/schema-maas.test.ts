@@ -29,9 +29,37 @@ describe('MaaS settings schema', () => {
       permissionMode: 'default',
     });
 
-    expect(maas.selectedPlatformId).toBe('custom:first');
-    expect(maas.connections[0]?.platformId).toBe('custom:first');
-    expect(profile.maasPlatformId).toBe('custom:first');
+    expect(maas.selectedPlatformId).toBe('profile:custom:first');
+    expect(maas.connections[0]?.platformId).toBe('profile:custom:first');
+    expect(maas.connections[0]?.envKey).toBeUndefined();
+    expect(maas.connections[0]?.syncToAgentClient).toBeUndefined();
+    expect(maas.connections[0]?.syncToAgentClientVersion).toBeUndefined();
+    expect(profile.maasPlatformId).toBe('profile:custom:first');
+  });
+
+  it('persists explicit global consent for durable external Agent Client sync', () => {
+    const maas = maasSettingsSchema.parse({
+      selectedPlatformId: 'zenmux',
+      externalAgentSyncEnabled: true,
+      externalAgentSyncVersion: 1,
+      connections: [
+        {
+          platformId: 'zenmux',
+          displayName: 'ZenMux',
+          endpoint: 'https://zenmux.ai/api/v1',
+          envKey: 'ZENMUX_API_KEY',
+          keyFingerprint: 'ke...ey',
+          inferenceKeyFingerprint: 'ke...ey',
+          connectedAt: null,
+          lastCheckedAt: null,
+        },
+      ],
+      runtimeBindings: [],
+    });
+
+    expect(maas.externalAgentSyncEnabled).toBe(true);
+    expect(maas.externalAgentSyncVersion).toBe(1);
+    expect(maas.connections[0]?.syncToAgentClientVersion).toBeUndefined();
   });
 
   it('rejects an empty Custom instance suffix', () => {

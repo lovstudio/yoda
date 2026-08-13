@@ -118,13 +118,15 @@ export function migrateLegacyCodexMaasHistoryForConfig(
  */
 export function ensureCodexResumeProviderCompatibleForConfig(
   threadId: string,
-  providerConfig: RuntimeCustomConfig | undefined
+  providerConfig: RuntimeCustomConfig | undefined,
+  invocationProviderId?: string
 ): CodexResumeProviderCompatibilityResult {
   const codexHome = resolveRuntimeStateDirectory('codex', providerConfig);
   return ensureCodexResumeProviderCompatible({
     threadId,
     statePath: resolveCodexStatePath(codexHome),
     configPath: join(codexHome, 'config.toml'),
+    invocationProviderId,
   });
 }
 
@@ -132,17 +134,19 @@ export function ensureCodexResumeProviderCompatible({
   threadId,
   statePath,
   configPath,
+  invocationProviderId,
 }: {
   threadId: string;
   statePath: string;
   configPath: string;
+  invocationProviderId?: string;
 }): CodexResumeProviderCompatibilityResult {
   if (!existsSync(statePath)) return { status: 'unchanged' };
 
   const row = readThreadProviderRow(statePath, threadId);
   if (!row) return { status: 'unchanged' };
 
-  const configured = readConfiguredProviders(configPath);
+  const configured = readConfiguredProviders(configPath, invocationProviderId);
   if (!configured) {
     return {
       status: 'failed',
@@ -221,21 +225,27 @@ export function ensureCodexResumeProviderCompatible({
 }
 
 function readConfiguredProviders(
-  configPath: string
+  configPath: string,
+  invocationProviderId?: string
 ): { activeProviderId: string; availableProviderIds: Set<string> } | undefined {
   if (!existsSync(configPath)) {
     return {
-      activeProviderId: NATIVE_PROVIDER_ID,
-      availableProviderIds: new Set([NATIVE_PROVIDER_ID]),
+      activeProviderId: invocationProviderId ?? NATIVE_PROVIDER_ID,
+      availableProviderIds: new Set([
+        NATIVE_PROVIDER_ID,
+        ...(invocationProviderId ? [invocationProviderId] : []),
+      ]),
     };
   }
   try {
     const parsed = parseToml(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
     const activeProviderId =
-      typeof parsed.model_provider === 'string' && parsed.model_provider.trim()
+      invocationProviderId ??
+      (typeof parsed.model_provider === 'string' && parsed.model_provider.trim()
         ? parsed.model_provider.trim()
-        : NATIVE_PROVIDER_ID;
+        : NATIVE_PROVIDER_ID);
     const availableProviderIds = new Set([NATIVE_PROVIDER_ID]);
+    if (invocationProviderId) availableProviderIds.add(invocationProviderId);
     if (parsed.model_providers && typeof parsed.model_providers === 'object') {
       for (const providerId of Object.keys(parsed.model_providers)) {
         availableProviderIds.add(providerId);

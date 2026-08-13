@@ -2,6 +2,7 @@ import { ArrowRight, ListTodo } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import type { ReadyTask } from '@renderer/features/projects/components/task-view/task-row';
+import { openTaskWhenReady } from '@renderer/features/tasks/open-task-when-ready';
 import { getTaskManagerStore } from '@renderer/features/tasks/stores/task-selectors';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -67,7 +68,7 @@ export const TasksOverviewCard = observer(function TasksOverviewCard({
               <button
                 type="button"
                 className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-left text-xs hover:bg-background-hover transition-colors"
-                onClick={() => navigate('task', { projectId, taskId: task.data.id })}
+                onClick={() => void openTaskWhenReady(projectId, task.data.id, navigate)}
               >
                 <span className="truncate font-medium text-foreground">{task.data.name}</span>
                 <span className="text-foreground-muted shrink-0">

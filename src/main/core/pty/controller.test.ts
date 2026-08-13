@@ -355,3 +355,32 @@ describe('ptyController.sendInput registration gate', () => {
     ptySessionRegistry.cancelRegistration(sessionId, epoch);
   });
 });
+
+describe('ptyController.getSessionState', () => {
+  it('reports the current generation plus live and registering ownership', () => {
+    const sessionId = 'project-state:task-state:conversation-state';
+    const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+
+    expect(ptyController.getSessionState(sessionId)).toEqual({
+      generation: 0,
+      live: false,
+      registering: true,
+    });
+
+    ptySessionRegistry.register(sessionId, new FakePty(), { registrationEpoch });
+
+    expect(ptyController.getSessionState(sessionId)).toEqual({
+      generation: 1,
+      live: true,
+      registering: false,
+    });
+
+    ptySessionRegistry.unregister(sessionId);
+
+    expect(ptyController.getSessionState(sessionId)).toEqual({
+      generation: 1,
+      live: false,
+      registering: false,
+    });
+  });
+});

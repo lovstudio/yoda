@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   instances: [] as Array<{
     connect: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
+    mounted: boolean;
   }>,
   getTerminalSettings: vi.fn(async () => ({})),
   throwOnConstruct: false,
@@ -29,6 +30,9 @@ vi.mock('@renderer/lib/pty/pty', () => ({
     readonly connect = vi.fn(async () => {});
     readonly dispose = vi.fn();
     lastSentDims = null;
+    mounted = false;
+    hasRecoverableSnapshot = true;
+    terminal = { options: { fontFamily: '' } };
 
     constructor() {
       if (mocks.throwOnConstruct) throw new Error('xterm preparation failed');
@@ -36,6 +40,9 @@ vi.mock('@renderer/lib/pty/pty', () => ({
     }
 
     setScrollbackLines() {}
+    takeHiddenOutputCodeUnits() {
+      return 0;
+    }
   },
 }));
 
@@ -135,5 +142,21 @@ describe('PtySession connection lifecycle', () => {
 
     session.dispose();
     expect(mocks.exitListeners.has('one-shot')).toBe(false);
+  });
+
+  it('keeps 20 frontend terminal parsers resident in the default auto policy', async () => {
+    PtySession.setHotTerminalPolicy('auto', 2);
+    const sessions = Array.from({ length: 20 }, (_, index) => new PtySession(`auto-${index}`));
+    const firstNewInstance = mocks.instances.length;
+
+    await Promise.all(sessions.map((session) => session.connect()));
+
+    expect(mocks.instances.slice(firstNewInstance)).toHaveLength(20);
+    expect(
+      mocks.instances
+        .slice(firstNewInstance)
+        .every((instance) => !instance.dispose.mock.calls.length)
+    ).toBe(true);
+    for (const session of sessions) session.dispose();
   });
 });

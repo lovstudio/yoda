@@ -2,6 +2,7 @@ import { Link2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import type { Issue, Task } from '@shared/tasks';
+import { openTaskWhenReady } from '@renderer/features/tasks/open-task-when-ready';
 import { isRegistered, type TaskStore } from '@renderer/features/tasks/stores/task';
 import { getTaskManagerStore } from '@renderer/features/tasks/stores/task-selectors';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
@@ -44,7 +45,7 @@ function TaskChip({ projectId, task }: { projectId: string; task: ReadyTaskStore
         <button
           type="button"
           className="max-w-32 justify-start"
-          onClick={() => navigate('task', { projectId, taskId: task.data.id })}
+          onClick={() => void openTaskWhenReady(projectId, task.data.id, navigate)}
         />
       }
     >

@@ -141,6 +141,8 @@ describe('FrontendPty DOM rendering', () => {
     ptys.push(pty);
     pty.flushPendingWrites();
     pty.mount(mountTarget, { cols: 80, rows: 24 });
+    await pty.connect();
+    expect(await pty.waitForVisibleFrame()).toBe(true);
     expect(pty.ownedContainer.querySelector('.xterm-rows')).not.toBeNull();
 
     // Deliver output across multiple renderer frames instead of as one parser
@@ -178,9 +180,9 @@ describe('FrontendPty DOM rendering', () => {
     for (const [index, target] of [firstTarget, secondTarget].entries()) {
       Object.assign(target.style, {
         position: 'absolute',
-        left: `${index * 710}px`,
+        left: `${index * 166}px`,
         top: '0',
-        width: '700px',
+        width: '158px',
         height: '360px',
         background: '#ffffff',
       });
@@ -207,7 +209,9 @@ describe('FrontendPty DOM rendering', () => {
       [second, secondTarget],
     ] as const) {
       pty.flushPendingWrites();
-      pty.mount(target, { cols: 72, rows: 20 });
+      pty.mount(target, { cols: 16, rows: 20 });
+      await pty.connect();
+      expect(await pty.waitForVisibleFrame()).toBe(true);
       expect(pty.ownedContainer.querySelector('.xterm-rows')).not.toBeNull();
     }
 

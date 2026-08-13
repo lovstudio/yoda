@@ -43,6 +43,14 @@ describe('i18n locales', () => {
     expect(JSON.stringify(zhCN)).not.toContain('MaaS');
   });
 
+  it('shows only the active provider after the MaaS icon in the runtime bar', () => {
+    expect(zhCN.workspaceRuntime.maas.providerSuffix).toBe('（{{provider}}）');
+    expect(zhCN.workspaceRuntime.maas.labelWithProvider).toBe('模型接入（{{provider}}）');
+    expect(en.workspaceRuntime.maas.providerSuffix).toBe('({{provider}})');
+    expect(en.workspaceRuntime.maas.labelWithProvider).toBe('Model access ({{provider}})');
+    expect(JSON.stringify(zhCN.workspaceRuntime.maas)).not.toContain('智慧处理');
+  });
+
   it('resolves the model access global tab label in both locales', async () => {
     await i18n.changeLanguage('zh-CN');
     expect(i18n.t('sidebar.maas')).toBe('模型接入');

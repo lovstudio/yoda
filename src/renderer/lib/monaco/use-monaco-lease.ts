@@ -10,14 +10,18 @@ import type { PoolEntry } from './monaco-pool';
  * coordination — the box is just another observable input alongside
  * `activeFile` and `modelRegistry.modelStatus`.
  */
-export function useMonacoLease<T>(pool: {
-  lease(): Promise<PoolEntry<T>>;
-  release(entry: PoolEntry<T>): void;
-}): IObservableValue<PoolEntry<T> | null> {
+export function useMonacoLease<T>(
+  pool: {
+    lease(): Promise<PoolEntry<T>>;
+    release(entry: PoolEntry<T>): void;
+  },
+  enabled = true
+): IObservableValue<PoolEntry<T> | null> {
   // Stable box — created once per component mount, never replaced.
   const box = useRef(observable.box<PoolEntry<T> | null>(null)).current;
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     void pool.lease().then((entry) => {
       if (cancelled) {
@@ -32,8 +36,10 @@ export function useMonacoLease<T>(pool: {
       runInAction(() => box.set(null));
       if (entry) pool.release(entry);
     };
+    // `pool` and `box` are stable owners. `enabled` is allowed to turn the
+    // deferred lease on; callers that want retention keep it latched true.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [enabled]);
 
   return box;
 }

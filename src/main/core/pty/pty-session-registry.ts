@@ -64,7 +64,7 @@ type SessionState = {
   resumeRetryTimer: ReturnType<typeof setTimeout> | null;
   resumeRetryAttempt: number;
   pendingExit: { info: PtyExitInfo; preserveBuffer: boolean } | null;
-  readonly onFinalExit: ((info: PtyExitInfo) => void) | undefined;
+  readonly onFinalExit: ((info: PtyExitInfo, generation: number) => void) | undefined;
   outputBytesTotal: number;
   outputRateSampleAt: number;
   outputRateSampleBytes: number;
@@ -294,7 +294,7 @@ export class PtySessionRegistry {
     sessionId: string,
     pty: Pty,
     options?: {
-      onFinalExit?: (info: PtyExitInfo) => void;
+      onFinalExit?: (info: PtyExitInfo, generation: number) => void;
       preserveBufferOnExit?: boolean;
       registrationEpoch?: number;
       tmuxBacked?: boolean;
@@ -491,6 +491,11 @@ export class PtySessionRegistry {
 
   snapshot(sessionId: string): string {
     return this.sessions.get(sessionId)?.ringBuffer.snapshot() ?? '';
+  }
+
+  /** Current backend generation, including the last generation after exit. */
+  getGeneration(sessionId: string): number {
+    return this.sessions.get(sessionId)?.generation ?? this.generationCounters.get(sessionId) ?? 0;
   }
 
   getDiagnostics(sessionId: string): PtySessionDiagnostics | null {
@@ -710,9 +715,9 @@ export class PtySessionRegistry {
     const pendingExit = state.pendingExit;
     if (!pendingExit || this.sessions.get(sessionId) !== state) return;
     state.pendingExit = null;
-    events.emit(ptyExitChannel, pendingExit.info, sessionId);
+    events.emit(ptyExitChannel, { ...pendingExit.info, generation: state.generation }, sessionId);
     try {
-      state.onFinalExit?.(pendingExit.info);
+      state.onFinalExit?.(pendingExit.info, state.generation);
     } catch (error) {
       log.warn('PTY final-exit callback failed', { error, sessionId });
     }

@@ -14,7 +14,7 @@ import AgentLogo from '@renderer/lib/components/agent-logo';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { cn } from '@renderer/utils/utils';
-import { AgentInfoHover } from './agent-info-card';
+import { AgentInfoCard } from './agent-info-card';
 
 interface AgentSlotSelectorProps {
   /** Currently selected Agent, or null when none is chosen yet. */
@@ -47,6 +47,7 @@ export function AgentSlotSelector({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [preview, setPreview] = useState<{ agent: Agent; anchor: HTMLButtonElement } | null>(null);
 
   const q = query.trim().toLowerCase();
   const filtered = q
@@ -65,7 +66,11 @@ export function AgentSlotSelector({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (next) setQuery('');
+        if (next) {
+          setQuery('');
+        } else {
+          setPreview(null);
+        }
       }}
     >
       <PopoverTrigger
@@ -113,7 +118,10 @@ export function AgentSlotSelector({
             <input
               autoFocus
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setPreview(null);
+              }}
               placeholder={t('agents.searchAgents')}
               className="h-8 w-full rounded-md border border-border bg-background px-2.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
@@ -138,50 +146,78 @@ export function AgentSlotSelector({
                 ? (getRuntime(agent.preferredRuntime)?.name ?? agent.preferredRuntime)
                 : t('agentManager.anyRuntime');
               return (
-                <AgentInfoHover key={agent.id} agent={agent}>
-                  <Row active={active} onClick={() => pick(agent.id)}>
-                    <AgentAvatar
-                      name={agent.name}
-                      icon={agent.icon}
-                      className="size-7 self-start rounded-md text-xs"
-                    />
-                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="truncate">{agent.name}</span>
-                      {agent.description && (
-                        <span className="truncate text-xs text-foreground-muted">
-                          {agent.description}
-                        </span>
-                      )}
-                      <span className="flex items-center gap-1.5 text-[11px] text-foreground-muted">
-                        {runtimeConfig ? (
-                          <AgentLogo
-                            logo={runtimeConfig.logo}
-                            alt={runtimeConfig.alt}
-                            isSvg={runtimeConfig.isSvg}
-                            invertInDark={runtimeConfig.invertInDark}
-                            className="h-3 w-3 shrink-0 rounded-sm"
-                          />
-                        ) : null}
-                        <span className="truncate">{runtimeName}</span>
-                        {agent.enabledSkillIds.length + agent.manualSkillIds.length > 0 && (
-                          <>
-                            <span className="text-foreground-passive">·</span>
-                            <span className="shrink-0">
-                              {t('agentManager.skillsCount', {
-                                count: agent.enabledSkillIds.length + agent.manualSkillIds.length,
-                              })}
-                            </span>
-                          </>
-                        )}
+                <Row
+                  key={agent.id}
+                  active={active}
+                  onClick={() => pick(agent.id)}
+                  onPointerEnter={(event) => setPreview({ agent, anchor: event.currentTarget })}
+                  onPointerLeave={() =>
+                    setPreview((current) => (current?.agent.id === agent.id ? null : current))
+                  }
+                  onFocus={(event) => setPreview({ agent, anchor: event.currentTarget })}
+                  onBlur={() =>
+                    setPreview((current) => (current?.agent.id === agent.id ? null : current))
+                  }
+                >
+                  <AgentAvatar
+                    name={agent.name}
+                    icon={agent.icon}
+                    className="size-7 self-start rounded-md text-xs"
+                  />
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate">{agent.name}</span>
+                    {agent.description && (
+                      <span className="truncate text-xs text-foreground-muted">
+                        {agent.description}
                       </span>
+                    )}
+                    <span className="flex items-center gap-1.5 text-[11px] text-foreground-muted">
+                      {runtimeConfig ? (
+                        <AgentLogo
+                          logo={runtimeConfig.logo}
+                          alt={runtimeConfig.alt}
+                          isSvg={runtimeConfig.isSvg}
+                          invertInDark={runtimeConfig.invertInDark}
+                          className="h-3 w-3 shrink-0 rounded-sm"
+                        />
+                      ) : null}
+                      <span className="truncate">{runtimeName}</span>
+                      {agent.enabledSkillIds.length + agent.manualSkillIds.length > 0 && (
+                        <>
+                          <span className="text-foreground-passive">·</span>
+                          <span className="shrink-0">
+                            {t('agentManager.skillsCount', {
+                              count: agent.enabledSkillIds.length + agent.manualSkillIds.length,
+                            })}
+                          </span>
+                        </>
+                      )}
                     </span>
-                    {active && <Check className="size-3.5 shrink-0 self-start text-primary" />}
-                  </Row>
-                </AgentInfoHover>
+                  </span>
+                  {active && <Check className="size-3.5 shrink-0 self-start text-primary" />}
+                </Row>
               );
             })
           )}
         </div>
+        <Popover
+          open={preview !== null}
+          onOpenChange={(next) => {
+            if (!next) setPreview(null);
+          }}
+        >
+          {preview && (
+            <PopoverContent
+              anchor={preview.anchor}
+              side="right"
+              align="start"
+              sideOffset={8}
+              className="w-auto border border-border bg-background p-0 text-foreground shadow-lg"
+            >
+              <AgentInfoCard agent={preview.agent} />
+            </PopoverContent>
+          )}
+        </Popover>
         <div className="flex items-center gap-1 border-t border-border/60 p-1">
           <ActionButton
             icon={Plus}
@@ -205,8 +241,8 @@ export function AgentSlotSelector({
   );
 }
 
-// forwardRef + prop spreading so AgentInfoHover can use a Row as its hover
-// trigger (base-ui clones the element and merges hover handlers + ref onto it).
+// forwardRef + prop spreading keeps the row usable as a measured popover anchor
+// while preserving native button semantics and keyboard focus.
 const Row = forwardRef<
   HTMLButtonElement,
   {

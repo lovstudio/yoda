@@ -83,7 +83,8 @@ describe('SettingsStore', () => {
     expect(result).toEqual({
       autoCopyOnSelection: false,
       scrollbackLines: 10_000,
-      hotTerminalLimit: 2,
+      hotTerminalMode: 'auto',
+      hotTerminalLimit: 4,
       idleSessionTimeoutMinutes: 5,
     });
   });

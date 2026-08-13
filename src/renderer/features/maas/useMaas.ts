@@ -6,6 +6,7 @@ import type {
 } from '@shared/cliproxyapi-managed';
 import type { LiteLlmManagedActionResult, LiteLlmManagedStatus } from '@shared/litellm-managed';
 import type {
+  MaasCodexClientSyncStatus,
   MaasConnectInput,
   MaasConnection,
   MaasGlobalBindingStatus,
@@ -14,6 +15,7 @@ import type {
   MaasPlatformId,
   MaasPlatformOfficialDescription,
   MaasRuntimeBindingStatus,
+  MaasSetCodexClientSyncInput,
   MaasSetGlobalBindingInput,
   MaasSetRuntimeBindingInput,
   MaasUsageSummary,
@@ -41,6 +43,7 @@ export const maasQueryKeys = {
   runtimeBindings: (platformId?: MaasPlatformId) =>
     ['maas', 'runtime-bindings', platformId ?? 'all'] as const,
   globalBinding: ['maas', 'global-binding'] as const,
+  codexClientSync: ['maas', 'codex-client-sync'] as const,
   liteLlmManaged: ['maas', 'litellm-managed'] as const,
   newApiManaged: ['maas', 'new-api-managed'] as const,
   cliProxyApiManaged: ['maas', 'cliproxyapi-managed'] as const,
@@ -327,6 +330,53 @@ export function useSetMaasGlobalBinding() {
       void queryClient.invalidateQueries({ queryKey: ['maas', 'runtime-bindings'] });
       void queryClient.invalidateQueries({ queryKey: ['runtimeSettings'] });
       void queryClient.invalidateQueries({ queryKey: ['runtimeSnapshot'] });
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.codexClientSync });
+    },
+  });
+}
+
+export function useCodexClientSyncStatus(enabled = true) {
+  return useQuery<MaasCodexClientSyncStatus>({
+    queryKey: maasQueryKeys.codexClientSync,
+    queryFn: () => rpc.maas.getCodexClientSyncStatus(),
+    enabled,
+    staleTime: 5_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useClearCodexClientSync() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const result = await rpc.maas.clearCodexClientSync();
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to clear Codex Client sync.');
+      }
+      return result.status;
+    },
+    onSuccess: (status) => {
+      if (status) queryClient.setQueryData(maasQueryKeys.codexClientSync, status);
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections });
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.codexClientSync });
+    },
+  });
+}
+
+export function useSetCodexClientSync() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: MaasSetCodexClientSyncInput) => {
+      const result = await rpc.maas.setCodexClientSync(input);
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to update Codex Client sync.');
+      }
+      return result.status;
+    },
+    onSuccess: (status) => {
+      if (status) queryClient.setQueryData(maasQueryKeys.codexClientSync, status);
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections });
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.codexClientSync });
     },
   });
 }
@@ -374,6 +424,7 @@ export function useConnectMaasPlatform() {
       }
       void queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections });
       void queryClient.invalidateQueries({ queryKey: ['maas', 'records'] });
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.codexClientSync });
     },
   });
 }
@@ -412,6 +463,7 @@ export function useDisconnectMaasPlatform() {
       void queryClient.invalidateQueries({ queryKey: ['maas', 'records'] });
       void queryClient.invalidateQueries({ queryKey: ['runtimeSettings'] });
       void queryClient.invalidateQueries({ queryKey: ['runtimeSnapshot'] });
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.codexClientSync });
     },
   });
 }

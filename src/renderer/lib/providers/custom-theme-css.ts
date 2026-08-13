@@ -4,6 +4,7 @@ type CssVarMap = Record<string, string>;
 
 export const CUSTOM_THEME_CSS_VARIABLES = [
   '--background',
+  '--background-opaque',
   '--background-1',
   '--background-2',
   '--background-3',
@@ -119,6 +120,7 @@ export function buildCustomThemeCssVars(theme: CustomTheme): CssVarMap {
 
   return {
     '--background': surface(c.background, isDark ? 0.88 : 0.86),
+    '--background-opaque': c.background,
     '--background-1': surface(c.background1, 0.9),
     '--background-2': surface(c.background2, 0.91),
     '--background-3': surface(c.background3, 0.9),

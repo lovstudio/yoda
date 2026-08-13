@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { userEvent } from 'vitest/browser';
 import type { Agent } from '@shared/agents';
 import type { ModelProviderCatalogResult } from '@shared/model-provider-catalog';
+import type * as DialogModule from '@renderer/lib/ui/dialog';
 import '../../index.css';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -54,7 +55,8 @@ vi.mock('@renderer/lib/components/agent-selector/agent-selector', () => ({
   ),
 }));
 
-vi.mock('@renderer/lib/ui/dialog', () => ({
+vi.mock('@renderer/lib/ui/dialog', async (importOriginal) => ({
+  ...(await importOriginal<typeof DialogModule>()),
   DialogContentArea: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   DialogFooter: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   DialogHeader: ({ children }: { children: ReactNode }) => <div>{children}</div>,

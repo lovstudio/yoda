@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { config as dotenvConfig } from 'dotenv';
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
@@ -213,7 +214,7 @@ void app.whenReady().then(async () => {
   externalFileOpenService.start();
 
   setupAppProtocol(join(app.getAppPath(), 'out', 'renderer'));
-  await setupApplicationMenu();
+  await setupApplicationMenu(requestRestart);
   __bootMark('protocol + menu done');
   const __win = createMainWindowWithDeepLinkReset();
   __bootMark('createMainWindow returned');
@@ -320,6 +321,15 @@ process.on('SIGINT', () => app.quit());
 
 let shutdownStarted = false;
 let shutdownPromise: Promise<void> | null = null;
+// The menu only records the user's intent. Relaunch must be registered after
+// async teardown completes because app.exit() is the final exit path here.
+let restartRequested = false;
+
+function requestRestart(): void {
+  if (shutdownStarted) return;
+  restartRequested = true;
+  app.quit();
+}
 
 function prepareShutdown(mode: TeardownMode): Promise<void> {
   if (shutdownPromise) return shutdownPromise;
@@ -370,8 +380,34 @@ function prepareShutdown(mode: TeardownMode): Promise<void> {
   return shutdownPromise;
 }
 
-function beginShutdown(mode: TeardownMode): void {
+function relaunchApp(): void {
+  if (import.meta.env.DEV) {
+    const nodeExecPath = process.env.YODA_DEV_NODE_EXEC_PATH ?? process.env.npm_node_execpath;
+    if (nodeExecPath) {
+      const devRoot = process.env.YODA_DEV_ROOT ?? app.getAppPath();
+      const devRunner = spawn(
+        nodeExecPath,
+        ['--experimental-strip-types', join(devRoot, 'scripts/dev.ts')],
+        {
+          cwd: devRoot,
+          detached: true,
+          stdio: 'ignore',
+          env: process.env,
+        }
+      );
+      devRunner.unref();
+      return;
+    }
+  }
+
+  app.relaunch();
+}
+
+function beginShutdown(mode: TeardownMode, shouldRelaunch = restartRequested): void {
   void prepareShutdown(mode).finally(() => {
+    // Register the relaunch immediately before the final exit so a cancelled
+    // quit never leaves a stale relaunch request behind.
+    if (shouldRelaunch) relaunchApp();
     app.exit(0);
   });
 }
@@ -407,6 +443,9 @@ app.on('before-quit', (event) => {
       : dialog.showMessageBoxSync(options);
   });
 
-  if (shutdownDecision.action === 'cancel') return;
+  if (shutdownDecision.action === 'cancel') {
+    restartRequested = false;
+    return;
+  }
   beginShutdown(shutdownDecision.mode);
 });

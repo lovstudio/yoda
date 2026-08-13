@@ -41,6 +41,9 @@ vi.mock('@renderer/features/projects/stores/project-selectors', () => ({
 vi.mock('@renderer/features/tasks/archive-task', () => ({
   useArchiveTask: () => ({ archiveTask: mocks.archiveTask }),
 }));
+vi.mock('@renderer/features/tasks/open-task-when-ready', () => ({
+  openTaskWhenReady: vi.fn(),
+}));
 vi.mock('@renderer/features/tasks/components/task-context-menu', () => ({
   copyTaskLink: vi.fn(),
 }));

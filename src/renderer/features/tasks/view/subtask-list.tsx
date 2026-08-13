@@ -2,6 +2,7 @@ import { ListPlus, ListTree } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import type { TaskLifecycleStatus } from '@shared/tasks';
+import { openTaskWhenReady } from '@renderer/features/tasks/open-task-when-ready';
 import { registeredTaskData, type TaskStore } from '@renderer/features/tasks/stores/task';
 import { taskChildren } from '@renderer/features/tasks/stores/task-selectors';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
@@ -61,7 +62,7 @@ export const SubtaskList = observer(function SubtaskList({
             <SubtaskRow
               key={store.data.id}
               store={store}
-              onOpen={() => navigate('task', { projectId, taskId: store.data.id })}
+              onOpen={() => void openTaskWhenReady(projectId, store.data.id, navigate)}
             />
           ))}
         </ul>

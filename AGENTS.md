@@ -117,3 +117,6 @@ optional_env:
 - `src/main/core/pty/`、`src/main/core/ssh/`、`src/main/db/` 和更新器代码视为高危。
 - 除非任务明确涉及打包或更新器/签名，不要编辑 `dist/`、`release/`、`build/`。
 - `docs/` 里的落地页与 Electron renderer 相互独立，默认端口同为 `3000`。对外文档内容不在本仓库——见 `agents/workflows/docs-site.md`。
+
+## 注意
+- 我正在以开发模式运行与迭代 yoda，不要打开我已安装的 yoda

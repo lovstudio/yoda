@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { app, Menu, shell } from 'electron';
 import {
   menuCheckForUpdatesChannel,
@@ -27,23 +26,6 @@ export function setLeftSidebarMenuChecked(checked: boolean): void {
   item.checked = checked;
 }
 
-function restartApp(): void {
-  if (import.meta.env.DEV) {
-    const nodeExecPath = process.env.npm_node_execpath;
-    if (nodeExecPath) {
-      app.relaunch({
-        execPath: nodeExecPath,
-        args: ['--experimental-strip-types', join(process.cwd(), 'scripts/dev.ts')],
-      });
-      app.quit();
-      return;
-    }
-  }
-
-  app.relaunch();
-  app.quit();
-}
-
 function configureAboutPanel(appVersion: string): void {
   app.setAboutPanelOptions({
     applicationName: app.name,
@@ -70,7 +52,7 @@ function settingsTransferMenuItems(): Electron.MenuItemConstructorOptions[] {
   ];
 }
 
-export async function setupApplicationMenu(): Promise<void> {
+export async function setupApplicationMenu(onRestart: () => void): Promise<void> {
   const isMac = process.platform === 'darwin';
   const appVersion = await resolveAppVersion();
 
@@ -108,7 +90,7 @@ export async function setupApplicationMenu(): Promise<void> {
               { type: 'separator' as const },
               {
                 label: `Restart ${app.name}`,
-                click: restartApp,
+                click: onRestart,
               },
               { type: 'separator' as const },
               {
@@ -143,7 +125,7 @@ export async function setupApplicationMenu(): Promise<void> {
               { type: 'separator' as const },
               {
                 label: `Restart ${app.name}`,
-                click: restartApp,
+                click: onRestart,
               },
             ]
           : []),

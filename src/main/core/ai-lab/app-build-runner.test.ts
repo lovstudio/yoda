@@ -85,7 +85,7 @@ describe('AiLabAppBuildRunner', () => {
       conversationId: 'conversation-1',
       runtimeId: 'amp',
     });
-    expect(await jobs.list()).toEqual([]);
+    await vi.waitFor(async () => expect(await jobs.list()).toEqual([]));
 
     await writeReadyBuild(directory, 'Timer Plus', 'A timer with laps');
     mocks.emit.mockReset();

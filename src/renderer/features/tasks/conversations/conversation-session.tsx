@@ -34,7 +34,10 @@ import { agentConfig } from '@renderer/utils/agentConfig';
 import { log } from '@renderer/utils/logger';
 import type { ConversationStore } from './conversation-manager';
 import { ConversationSessionPendingState } from './conversation-session-pending-state';
-import { shouldAutoResumeConversation } from './conversation-session-utils';
+import {
+  shouldAutoResumeConversation,
+  shouldProbeConversationSession,
+} from './conversation-session-utils';
 
 export function getResumeInitialSize(
   pty: FrontendPty,
@@ -187,6 +190,26 @@ export const ConversationSession = observer(function ConversationSession({
       terminalRef.current?.focus();
     }
   }, [sessionStatus]);
+
+  // The renderer store can survive while the main process replaces a PTY.
+  // Ask the main-process registry once this exact visible terminal is ready so
+  // an old exit banner is cleared immediately instead of waiting for another
+  // terminal event. A retained output consumer is already authoritative proof
+  // that this frontend is attached; hot task switches must not add another IPC
+  // probe before showing the cached terminal.
+  useEffect(() => {
+    if (
+      !shouldProbeConversationSession({
+        isVisible,
+        sessionId,
+        sessionStatus,
+        sessionPty,
+      })
+    ) {
+      return;
+    }
+    void conversations.reconcileSessionLiveness(conversation.data.id);
+  }, [conversation.data.id, conversations, isVisible, sessionId, sessionPty, sessionStatus]);
 
   // Resume the PTY when visible + ready (once per session id).
   useEffect(() => {
@@ -455,7 +478,6 @@ export const ConversationSession = observer(function ConversationSession({
           onEnterPress={onEnterPress}
           onSubmittedInput={onSubmittedInput}
           onInterruptPress={onInterruptPress}
-          onExit={() => conversation.markSessionExited()}
           mapShiftEnterToCtrlJ
           pasteImagesAsPaths={attachImagesAsPaths}
           remoteConnectionId={remoteConnectionId}

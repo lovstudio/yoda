@@ -1,4 +1,6 @@
 import { createRPCController } from '@shared/ipc/rpc';
+import { makePtySessionId } from '@shared/ptySessionId';
+import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { KeyedTtlSingleFlightCache } from '@main/lib/keyed-ttl-single-flight-cache';
 import { archiveConversation } from './archiveConversation';
@@ -222,10 +224,46 @@ export const conversationController = createRPCController({
   getConversationNamingPreview,
   getConversationNamingSnapshot,
   renameConversation,
-  restartConversation,
+  restartConversation: async (
+    projectId: string,
+    taskId: string,
+    conversationId: string,
+    initialSize?: { cols: number; rows: number },
+    tmuxOverride?: boolean,
+    enableSkillKey?: string,
+    runtimeOverrides?: Parameters<typeof restartConversation>[6]
+  ) => {
+    await restartConversation(
+      projectId,
+      taskId,
+      conversationId,
+      initialSize,
+      tmuxOverride,
+      enableSkillKey,
+      runtimeOverrides
+    );
+    return {
+      generation: ptySessionRegistry.getGeneration(
+        makePtySessionId(projectId, taskId, conversationId)
+      ),
+    };
+  },
   injectConversationPrompt,
   rewritePrompt,
-  resumeConversation,
+  resumeConversation: async (
+    projectId: string,
+    taskId: string,
+    conversationId: string,
+    initialSize?: { cols: number; rows: number }
+  ) => {
+    const running = await resumeConversation(projectId, taskId, conversationId, initialSize);
+    return {
+      running,
+      generation: ptySessionRegistry.getGeneration(
+        makePtySessionId(projectId, taskId, conversationId)
+      ),
+    };
+  },
   interruptConversation,
   getActiveRuntimeStatuses,
   listLocalAgentSessions,

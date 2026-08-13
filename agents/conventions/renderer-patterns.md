@@ -61,6 +61,11 @@ allocate scrollback buffers or subscribe as flow-control consumers.
 xterm → mount lease → measure + flush gate → subscribe listener-first → apply snapshot
 watermark → unmount/off-screen with subscription retained → dispose
 
+The default cache is adaptive rather than count-bounded: hidden xterms keep parsing into
+their canonical buffers while xterm pauses the off-screen DOM renderer. Only repeated app
+memory pressure or sustained hidden output may evict the oldest unmounted, non-connecting,
+snapshot-backed frontend renderers. This never terminates tmux or an Agent session.
+
 **Rules:**
 - Output uses `{ generation, sequence }`; never revert to snapshot-first or
   listener-first without watermark deduplication.

@@ -16,7 +16,7 @@ import {
   MIN_ISSUE_WORKER_POLL_INTERVAL_SECONDS,
 } from '@shared/issue-worker';
 import { KANBAN_STATUSES } from '@shared/kanban';
-import { isMaasPlatformId, type MaasPlatformId } from '@shared/maas';
+import { isMaasPlatformId, migrateLegacyMaasPlatformId, type MaasPlatformId } from '@shared/maas';
 import {
   MAX_CUSTOM_MODEL_PROVIDERS,
   MAX_CUSTOM_MODELS_PER_PROVIDER,
@@ -50,12 +50,14 @@ import {
 import {
   DEFAULT_HOT_TERMINAL_LIMIT,
   DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
+  DEFAULT_TERMINAL_CACHE_MODE,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
   MAX_HOT_TERMINAL_LIMIT,
   MAX_IDLE_SESSION_TIMEOUT_MINUTES,
   MAX_TERMINAL_SCROLLBACK_LINES,
   MIN_HOT_TERMINAL_LIMIT,
   MIN_TERMINAL_SCROLLBACK_LINES,
+  TERMINAL_CACHE_MODES,
 } from '@shared/terminal-settings';
 import { DEFAULT_RUNTIME_ID } from './settings-registry';
 
@@ -214,9 +216,12 @@ export const kanbanSettingsSchema = z.object({
   hooksByStatus: z.partialRecord(z.enum(KANBAN_STATUSES), z.array(kanbanColumnHookSchema)),
 });
 
-export const maasPlatformIdSchema = z.custom<MaasPlatformId>(isMaasPlatformId, {
-  message: 'Invalid MaaS platform ID',
-});
+export const maasPlatformIdSchema = z.preprocess(
+  migrateLegacyMaasPlatformId,
+  z.custom<MaasPlatformId>(isMaasPlatformId, {
+    message: 'Invalid MaaS platform ID',
+  })
+);
 
 export const runtimeCustomConfigEntrySchema = z.object({
   /** Disabled runtimes stay installed but cannot start new Yoda sessions. */
@@ -249,6 +254,12 @@ export const maasConnectionSchema = z.object({
   platformId: maasPlatformIdSchema,
   displayName: z.string(),
   endpoint: z.string(),
+  websiteUrl: z.string().optional(),
+  description: z.string().optional(),
+  logoUrl: z.string().optional(),
+  envKey: z.string().optional(),
+  syncToAgentClient: z.boolean().optional(),
+  syncToAgentClientVersion: z.literal(1).optional(),
   keyFingerprint: z.string().nullable(),
   inferenceKeyFingerprint: z.string().nullable().default(null),
   connectedAt: z.string().nullable(),
@@ -284,6 +295,10 @@ export const maasSettingsSchema = z.object({
   selectedPlatformId: maasPlatformIdSchema,
   connections: z.array(maasConnectionSchema),
   runtimeBindings: z.array(maasRuntimeBindingSchema).default([]),
+  /** Explicit consent to publish the active MaaS route outside Yoda. */
+  externalAgentSyncEnabled: z.boolean().optional(),
+  externalAgentSyncVersion: z.literal(1).optional(),
+  externalAgentSyncLoginItemEnabled: z.boolean().optional(),
 });
 
 export const llmProfileSchema = z.object({
@@ -406,6 +421,7 @@ export const terminalSettingsSchema = z.object({
     .min(MIN_TERMINAL_SCROLLBACK_LINES)
     .max(MAX_TERMINAL_SCROLLBACK_LINES)
     .catch(DEFAULT_TERMINAL_SCROLLBACK_LINES),
+  hotTerminalMode: z.enum(TERMINAL_CACHE_MODES).catch(DEFAULT_TERMINAL_CACHE_MODE),
   hotTerminalLimit: z
     .number()
     .int()

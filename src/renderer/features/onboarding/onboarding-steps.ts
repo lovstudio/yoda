@@ -1,16 +1,9 @@
-export type OnboardingStep = 'language' | 'sign-in' | 'maas-gateway';
+export type OnboardingStep = 'language' | 'sign-in';
 
-export function getOnboardingSteps({
-  isSignedIn,
-  isMaasGatewayInstalled,
-}: {
-  isSignedIn: boolean;
-  isMaasGatewayInstalled: boolean;
-}): OnboardingStep[] {
+export function getOnboardingSteps({ isSignedIn }: { isSignedIn: boolean }): OnboardingStep[] {
   const steps: OnboardingStep[] = ['language'];
 
   if (!isSignedIn) steps.push('sign-in');
-  if (!isMaasGatewayInstalled) steps.push('maas-gateway');
 
   return steps;
 }

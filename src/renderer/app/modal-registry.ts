@@ -8,6 +8,7 @@ import { DoctorModal } from '@renderer/features/doctor/doctor-modal';
 import { CreateFeatureModal } from '@renderer/features/features/create-feature-modal';
 import { FeatureArtifactModal } from '@renderer/features/features/feature-artifact-modal';
 import { IntegrationSetupModal } from '@renderer/features/integrations/integration-setup-modal';
+import { AddMaasProfileModal } from '@renderer/features/maas/components/AddMaasProfileModal';
 import { ZenmuxUsageModal } from '@renderer/features/maas/components/ZenmuxUsageModal';
 import { McpModal } from '@renderer/features/mcp/components/McpModal';
 import { AddProjectModal } from '@renderer/features/projects/components/add-project-modal/add-project-modal';
@@ -85,6 +86,7 @@ export const modalRegistry = {
   accountDeviceFlowModal: createModal(AccountDeviceFlowModalOverlay, { size: 'sm' }),
   confirmActionModal: createModal(ConfirmActionDialog, { size: 'xs' }),
   feedbackModal: createModal(FeedbackModal),
+  addMaasProfileModal: createModal(AddMaasProfileModal, { size: 'sm' }),
   zenmuxUsageModal: createModal(ZenmuxUsageModal, { size: 'lg' }),
   mcpServerModal: createModal(McpModal),
   createSkillModal: createModal(CreateSkillModal),

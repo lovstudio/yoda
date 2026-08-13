@@ -22,6 +22,7 @@ import {
 import {
   DEFAULT_HOT_TERMINAL_LIMIT,
   DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
+  DEFAULT_TERMINAL_CACHE_MODE,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
 } from '@shared/terminal-settings';
 import { getDefaultLocalWorktreeDirectory } from './worktree-defaults';
@@ -78,6 +79,8 @@ export const SETTINGS_DEFAULTS = {
     selectedPlatformId: MAAS_PLATFORMS.zenmux.id,
     connections: [],
     runtimeBindings: [],
+    externalAgentSyncEnabled: false,
+    externalAgentSyncLoginItemEnabled: true,
   },
   llm: {
     profiles: [
@@ -120,6 +123,7 @@ export const SETTINGS_DEFAULTS = {
   terminal: {
     autoCopyOnSelection: true,
     scrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
+    hotTerminalMode: DEFAULT_TERMINAL_CACHE_MODE,
     hotTerminalLimit: DEFAULT_HOT_TERMINAL_LIMIT,
     idleSessionTimeoutMinutes: DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
   },

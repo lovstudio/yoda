@@ -7,6 +7,7 @@ import {
   getRepositoryStore,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useArchiveTask } from '@renderer/features/tasks/archive-task';
+import { openTaskWhenReady } from '@renderer/features/tasks/open-task-when-ready';
 import { splitViewStore } from '@renderer/features/tasks/split-view/split-view-store';
 import { registeredTaskData } from '@renderer/features/tasks/stores/task';
 import {
@@ -15,7 +16,6 @@ import {
   getTaskStore,
   taskChildren,
 } from '@renderer/features/tasks/stores/task-selectors';
-import { OVERVIEW_TAB_ID } from '@renderer/features/tasks/tabs/tab-manager-store';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -103,11 +103,7 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
   // Overview tab (task info / sessions / sub-tasks), distinguishing it from a
   // plain row click which only enters the task view on the last-active tab.
   const handleOpenOverview = () => {
-    if (task.state === 'unprovisioned' && task.phase === 'idle') {
-      void taskManager?.provisionTask(taskId);
-    }
-    navigate('task', { projectId, taskId });
-    asProvisioned(task)?.taskView.tabManager.setActiveTab(OVERVIEW_TAB_ID);
+    void openTaskWhenReady(projectId, taskId, navigate, { kind: 'overview' });
   };
 
   // Pending acceptance leaves the active-workspace list just like archive.

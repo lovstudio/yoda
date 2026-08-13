@@ -12,6 +12,7 @@ import type { useFeatureMutations } from '@renderer/features/features/use-featur
 import { openProjectFileTab } from '@renderer/features/project-file/project-file-session';
 import { joinProjectPath } from '@renderer/features/projects/project-path';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
+import { openTaskWhenReady } from '@renderer/features/tasks/open-task-when-ready';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import {
   FilePathActionsDropdown,
@@ -73,7 +74,12 @@ function ArtifactLocation({
         variant="ghost"
         size="icon-xs"
         aria-label={t('featureDelivery.artifacts.openSourceTask')}
-        onClick={() => navigate('task', { projectId, taskId: sourceTaskId })}
+        onClick={() =>
+          void openTaskWhenReady(projectId, sourceTaskId, navigate, {
+            kind: 'file',
+            path: artifact.uri,
+          })
+        }
       >
         <AppWindow className="size-3.5" />
       </Button>
@@ -99,8 +105,10 @@ function ArtifactLocation({
         onClick={(event) => {
           event.stopPropagation();
           if (sourceTask && sourceTaskId) {
-            sourceTask.taskView.tabManager.openFile(artifact.uri);
-            navigate('task', { projectId, taskId: sourceTaskId });
+            void openTaskWhenReady(projectId, sourceTaskId, navigate, {
+              kind: 'file',
+              path: artifact.uri,
+            });
             return;
           }
           openProjectFileTab(projectId, artifact.uri);

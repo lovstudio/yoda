@@ -21,6 +21,7 @@ describe('custom theme CSS variables', () => {
     const vars = buildCustomThemeCssVars(theme);
 
     expect(vars['--background']).toMatch(/^rgba\(/);
+    expect(vars['--background-opaque']).toBe(theme.colors.background);
     expect(vars['--background-tertiary']).toMatch(/^rgba\(/);
     expect(vars['--xterm-bg']).toBe(theme.colors.background);
     expect(vars['--monaco-bg']).toBe(theme.colors.background);

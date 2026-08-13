@@ -51,14 +51,6 @@ export const ConversationsPanel = observer(function ConversationsPanel({
 
   const activeConversation: ConversationStore | undefined = tm.activeConversation;
   const activeDescriptor = tm.activeDescriptor;
-  const activeSessionId = activeConversation?.session.sessionId ?? null;
-  // PaneSizingProvider only validates resize ownership for the active session.
-  // Supplying every open conversation used to resolve every tab before the
-  // terminal could mount; one stable O(1) entry is sufficient here.
-  const paneSessionIds = useMemo(
-    () => (activeSessionId ? [activeSessionId] : []),
-    [activeSessionId]
-  );
   const routeConversationId =
     params.tab?.kind === 'conversation' ? params.tab.conversationId : undefined;
   // A tab can be selected before its conversation store arrives from the
@@ -86,6 +78,19 @@ export const ConversationsPanel = observer(function ConversationsPanel({
     (conversations.conversations.size > 0 || !conversations.hasAuthoritativeSnapshot);
   const isResolvingConversation =
     isResolvingActiveConversation || isResolvingRouteConversation || isResolvingTaskSession;
+  // A route can point at the next conversation while the tab manager still
+  // exposes the previous active store. Do not let that stale session retain
+  // resize ownership or mount auxiliary UI beneath the opening surface.
+  const activeSessionId = isResolvingConversation
+    ? null
+    : (activeConversation?.session.sessionId ?? null);
+  // PaneSizingProvider only validates resize ownership for the active session.
+  // Supplying every open conversation used to resolve every tab before the
+  // terminal could mount; one stable O(1) entry is sufficient here.
+  const paneSessionIds = useMemo(
+    () => (activeSessionId ? [activeSessionId] : []),
+    [activeSessionId]
+  );
 
   const isDebugTracing = log.level === 'debug';
   // Keep debug telemetry structural. File/diff route targets can contain a
@@ -209,7 +214,9 @@ export const ConversationsPanel = observer(function ConversationsPanel({
           </PaneSizingProvider>
         </div>
       </div>
-      {activeConversation ? <PostPaintSessionHistory key={activeConversation.data.id} /> : null}
+      {!isResolvingConversation && activeConversation ? (
+        <PostPaintSessionHistory key={`${taskId}:${activeConversation.data.id}`} />
+      ) : null}
     </div>
   );
 });
@@ -227,9 +234,10 @@ function ConversationOpeningSurface() {
 }
 
 /**
- * Keep transcript parsing and its polling RPC outside the terminal's first
- * browser paint. The dock still renders cached query data immediately; only a
- * cold read is delayed by two animation frames.
+ * Keep the entire transcript dock, including cached-query reads and empty
+ * states, outside the terminal's first browser paint. Mounting the component
+ * with `active=false` still exposed a transient "0 / no prompts" dock before
+ * the target session had painted.
  */
 function PostPaintSessionHistory() {
   const [canLoad, setCanLoad] = useState(false);
@@ -245,7 +253,7 @@ function PostPaintSessionHistory() {
     };
   }, []);
 
-  return <DockedSessionHistory active={canLoad} />;
+  return canLoad ? <DockedSessionHistory active /> : null;
 }
 
 const ConversationLandingSurface = observer(function ConversationLandingSurface({

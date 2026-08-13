@@ -323,11 +323,18 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       initializeDefault: action,
     });
 
-    // Auto-close conversation tabs when the conversation is deleted from the manager.
+    // Auto-close conversation tabs only after the manager has a completed
+    // backend snapshot. An unhydrated manager also has an empty map; treating
+    // that temporary shape as deletion erases restored session tabs while a
+    // cold task is opening and forces the visible target back to Overview.
     this.disposers.push(
       reaction(
-        () => Array.from(conversations.conversations.keys()),
-        action((ids: string[]) => {
+        () => ({
+          hasAuthoritativeSnapshot: conversations.hasAuthoritativeSnapshot,
+          ids: Array.from(conversations.conversations.keys()),
+        }),
+        action(({ hasAuthoritativeSnapshot, ids }) => {
+          if (!hasAuthoritativeSnapshot) return;
           const idSet = new Set(ids);
           const toRemove: string[] = [];
           for (const [tabId, entry] of this.entries) {

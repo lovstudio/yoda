@@ -152,10 +152,13 @@ describe('PtySessionRegistry', () => {
     const registry = new PtySessionRegistry();
     const oldPty = new FakePty();
     const newPty = new FakePty();
+    expect(registry.getGeneration('session')).toBe(0);
     registry.register('session', oldPty);
+    expect(registry.getGeneration('session')).toBe(1);
     oldPty.emitData('STALE');
 
     registry.register('session', newPty);
+    expect(registry.getGeneration('session')).toBe(2);
     emitInput('session', 'input');
     vi.advanceTimersByTime(16);
 
@@ -378,9 +381,9 @@ describe('PtySessionRegistry', () => {
 
     expect(eventMocks.emit.mock.calls).toEqual([
       [ptyDataChannel, { generation: 1, sequence: 1, byteLength: 4, data: 'tail' }, 'session'],
-      [ptyExitChannel, { exitCode: 7 }, 'session'],
+      [ptyExitChannel, { exitCode: 7, generation: 1 }, 'session'],
     ]);
-    expect(onFinalExit).toHaveBeenCalledWith({ exitCode: 7 });
+    expect(onFinalExit).toHaveBeenCalledWith({ exitCode: 7 }, 1);
     expect(onFinalExit.mock.invocationCallOrder[0]).toBeGreaterThan(
       eventMocks.emit.mock.invocationCallOrder.at(-1) ?? 0
     );
@@ -687,7 +690,7 @@ describe('PtySessionRegistry', () => {
     vi.advanceTimersByTime(0);
 
     expect(eventMocks.emit.mock.calls.filter(([event]) => event === ptyExitChannel)).toEqual([
-      [ptyExitChannel, { exitCode: 7 }, 'session'],
+      [ptyExitChannel, { exitCode: 7, generation: 1 }, 'session'],
     ]);
     expect(registry.getDiagnostics('session')).toBeNull();
   });
@@ -772,7 +775,7 @@ describe('PtySessionRegistry', () => {
     expect(exitCallIndex).toBe(finalDataCallIndex + 1);
     expect(eventMocks.emit.mock.calls[exitCallIndex]).toEqual([
       ptyExitChannel,
-      { exitCode: 7 },
+      { exitCode: 7, generation: 1 },
       'session',
     ]);
     expect(registry.get('session')).toBe(replacementPty);

@@ -5,6 +5,7 @@ import type { Feature } from '@shared/features';
 import type { useFeatureMutations } from '@renderer/features/features/use-features';
 import { getReadyTaskStores } from '@renderer/features/projects/components/issues-view/issue-task-links';
 import { StatusIcon } from '@renderer/features/tasks/components/lifecycleStatusIndicator';
+import { openTaskWhenReady } from '@renderer/features/tasks/open-task-when-ready';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
@@ -116,7 +117,7 @@ export const FeatureTasks = observer(function FeatureTasks({
               <button
                 type="button"
                 className="max-w-48 truncate hover:underline"
-                onClick={() => navigate('task', { projectId, taskId: task.taskId })}
+                onClick={() => void openTaskWhenReady(projectId, task.taskId, navigate)}
               >
                 {task.name}
               </button>
