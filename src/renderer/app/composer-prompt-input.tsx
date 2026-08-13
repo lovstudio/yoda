@@ -287,7 +287,17 @@ function useComposerMenuPosition(
   const updatePosition = useCallback(() => {
     const anchor = anchorRef.current;
     if (!anchor) return;
-    setPosition(measureComposerMenuPosition(anchor));
+    const next = measureComposerMenuPosition(anchor);
+    setPosition((current) =>
+      current &&
+      current.left === next.left &&
+      current.width === next.width &&
+      current.maxHeight === next.maxHeight &&
+      current.side === next.side &&
+      current.offset === next.offset
+        ? current
+        : next
+    );
   }, [anchorRef]);
 
   useLayoutEffect(() => {
@@ -313,6 +323,9 @@ function useComposerMenuPosition(
 function composerMenuStyle(position: ComposerMenuPosition): CSSProperties {
   const style: CSSProperties = {
     left: position.left,
+    overflowX: 'hidden',
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
     position: 'fixed',
     width: position.width,
     maxHeight: position.maxHeight,
@@ -1572,10 +1585,13 @@ function PathCompletionMenu({
 }: PathCompletionMenuProps) {
   const activeItemRef = useRef<HTMLButtonElement>(null);
   const position = useComposerMenuPosition(anchorRef);
+  const activeItem = items[activeIndex];
+  const activeItemKey = activeItem ? `${activeItem.type}:${activeItem.path}` : null;
+  const positioned = position !== null;
 
   useEffect(() => {
     activeItemRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [activeIndex, position]);
+  }, [activeItemKey, positioned]);
 
   if (!loading && !error && items.length === 0 && !showEmpty) return null;
   if (!position || typeof document === 'undefined') return null;
@@ -1584,7 +1600,7 @@ function PathCompletionMenu({
     <div
       data-path-completion-menu
       role="listbox"
-      className="fixed z-[60] flex flex-col overflow-hidden rounded-lg border border-border bg-background-quaternary text-sm text-foreground shadow-lg ring-1 ring-foreground/5"
+      className="fixed z-[60] overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border border-border bg-background-quaternary text-sm text-foreground shadow-lg ring-1 ring-foreground/5"
       style={composerMenuStyle(position)}
       onMouseDown={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
@@ -1599,7 +1615,7 @@ function PathCompletionMenu({
       ) : items.length === 0 && showEmpty ? (
         <div className="px-3 py-2 text-foreground-muted">{labels.noResults}</div>
       ) : items.length === 0 ? null : (
-        <div className="min-h-0 overflow-y-auto py-1">
+        <div className="py-1">
           {items.map((item, index) => {
             const Icon = item.type === 'dir' ? Folder : FileText;
             const active = index === activeIndex;
@@ -1668,10 +1684,12 @@ function SkillShortcutMenu({
 }: SkillShortcutMenuProps) {
   const activeItemRef = useRef<HTMLButtonElement>(null);
   const position = useComposerMenuPosition(anchorRef);
+  const activeItemKey = items[activeIndex]?.value ?? null;
+  const positioned = position !== null;
 
   useEffect(() => {
     activeItemRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [activeIndex, position]);
+  }, [activeItemKey, positioned]);
 
   if (!loading && items.length === 0 && !showEmpty) return null;
   if (!position || typeof document === 'undefined') return null;
@@ -1705,7 +1723,7 @@ function SkillShortcutMenu({
   return createPortal(
     <div
       data-skill-shortcut-menu
-      className="fixed z-[60] flex flex-col overflow-hidden rounded-lg border border-border bg-background-quaternary text-sm text-foreground shadow-lg ring-1 ring-foreground/5"
+      className="fixed z-[60] overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border border-border bg-background-quaternary text-sm text-foreground shadow-lg ring-1 ring-foreground/5"
       style={composerMenuStyle(position)}
       onBlurCapture={(event) => {
         const nextTarget = event.relatedTarget;
@@ -1717,7 +1735,7 @@ function SkillShortcutMenu({
       onMouseDown={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <div className="border-b border-border px-2 py-1.5">
+      <div className="sticky top-0 z-10 border-b border-border bg-background-quaternary px-2 py-1.5">
         <label className="flex h-8 items-center gap-2 rounded-md border border-border bg-background px-2 text-foreground-muted focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/40">
           <Search className="size-3.5 shrink-0" />
           <span className="sr-only">{labels.search}</span>
@@ -1739,7 +1757,7 @@ function SkillShortcutMenu({
       ) : items.length === 0 && showEmpty ? (
         <div className="px-3 py-2 text-foreground-muted">{labels.noResults}</div>
       ) : items.length === 0 ? null : (
-        <div role="listbox" className="min-h-0 overflow-y-auto py-1">
+        <div role="listbox" className="py-1">
           {items.map((item, index) => {
             const active = index === activeIndex;
             return (
@@ -1763,7 +1781,10 @@ function SkillShortcutMenu({
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                    <code className="shrink-0 rounded bg-background-quaternary-2 px-1.5 py-0.5 font-mono text-[10px] text-foreground-muted">
+                    <code
+                      className="max-w-[45%] shrink-0 truncate rounded bg-background-quaternary-2 px-1.5 py-0.5 font-mono text-[10px] text-foreground-muted"
+                      title={item.command}
+                    >
                       {item.command}
                     </code>
                   </div>
