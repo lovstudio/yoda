@@ -12,7 +12,6 @@ export function SessionPromptRestoreButton({
   className,
   containerClassName,
   unavailableHint,
-  unavailableLabel,
   visibleLabel,
 }: {
   prompt: ClaudeSessionPrompt;
@@ -22,7 +21,6 @@ export function SessionPromptRestoreButton({
   className?: string;
   containerClassName?: string;
   unavailableHint?: string;
-  unavailableLabel?: string;
   visibleLabel?: string;
 }) {
   const { t } = useTranslation();
@@ -31,7 +29,7 @@ export function SessionPromptRestoreButton({
   if (isUnavailable && !unavailableHint) return null;
 
   const label = isUnavailable
-    ? (unavailableLabel ?? visibleLabel ?? t('tasks.bottomPanel.sessionCheckpointUnavailableLabel'))
+    ? (visibleLabel ?? t('tasks.bottomPanel.sessionCheckpointUnavailableLabel'))
     : t('tasks.sessionInfo.restoreContextAtPrompt', { index });
   const forkHint = t('tasks.bottomPanel.sessionForkHint');
   const hint = unavailableHint ?? forkHint;

@@ -632,7 +632,7 @@ function SessionPromptRow({
                     prompt={selectedPrompt}
                     index={selectedIndex}
                     onRestore={onRestore}
-                    visibleLabel={t('tasks.bottomPanel.sessionCheckpointUnavailableLabel')}
+                    visibleLabel={t('tasks.bottomPanel.sessionBranchFromHere')}
                     unavailableHint={t('tasks.bottomPanel.sessionCheckpointUnavailableHint')}
                     containerClassName="ml-auto"
                     className={promptActionClassName}

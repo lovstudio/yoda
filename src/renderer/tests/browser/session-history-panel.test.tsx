@@ -363,13 +363,11 @@ describe('DockedSessionHistory conversation tree menu', () => {
       expect(pending?.tagName).toBe('BUTTON');
       expect(pending?.disabled).toBe(true);
       expect(pending?.getAttribute('aria-disabled')).toBe('true');
-      expect(pending?.textContent).toBe('tasks.bottomPanel.sessionCheckpointUnavailableLabel');
+      expect(pending?.textContent).toBe('fork');
       expect(pending?.getAttribute('title')).toBe(
         'tasks.bottomPanel.sessionCheckpointUnavailableHint'
       );
-      expect(pending?.getAttribute('aria-label')).toBe(
-        'tasks.bottomPanel.sessionCheckpointUnavailableLabel'
-      );
+      expect(pending?.getAttribute('aria-label')).toBe('fork');
       const checkpointBubble = preview?.querySelector<HTMLElement>(
         '[data-session-prompt-checkpoint-bubble]'
       );
