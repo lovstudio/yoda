@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import { and, eq } from 'drizzle-orm';
 import { createRPCController } from '@shared/ipc/rpc';
+import type { PtyRenderCheckpoint } from '@shared/pty-render-checkpoint';
 import { parsePtySessionId } from '@shared/ptySessionId';
 import { err, ok } from '@shared/result';
 import { loadCodexRolloutTerminalHistoryForConversation } from '@main/core/conversations/codex-rollout-terminal-history';
@@ -55,7 +56,7 @@ export const ptyController = createRPCController({
    * Called once by the renderer when connecting a FrontendPty to a session.
    */
   subscribe: async (sessionId: string, consumerId: string) => {
-    const initialSnapshot = ptySessionRegistry.subscribe(sessionId, consumerId);
+    const initialSnapshot = await ptySessionRegistry.subscribeForRenderer(sessionId, consumerId);
     const hasPendingRegistration = () =>
       ptySessionRegistry.getDiagnostics(sessionId)?.registering === true;
     const initialLive = ptySessionRegistry.get(sessionId) !== undefined;
@@ -65,6 +66,7 @@ export const ptyController = createRPCController({
       generation: initialSnapshot.generation,
       sequence: initialSnapshot.sequence,
       snapshotCharacters: initialSnapshot.buffer.length,
+      compactCheckpoint: initialSnapshot.checkpointDimensions !== undefined,
       live: initialLive,
       registering: initialRegistering,
     });
@@ -86,7 +88,7 @@ export const ptyController = createRPCController({
     // a PTY that registered (and perhaps already exited) in the meantime wins
     // over stale history. Its listener was installed before the first call, so
     // live events remain queued and the returned watermark can deduplicate them.
-    const latestSnapshot = ptySessionRegistry.subscribe(sessionId, consumerId);
+    const latestSnapshot = await ptySessionRegistry.subscribeForRenderer(sessionId, consumerId);
     const latestLive = ptySessionRegistry.get(sessionId) !== undefined;
     const latestRegistering = hasPendingRegistration();
     if (
@@ -149,6 +151,24 @@ export const ptyController = createRPCController({
   unsubscribe: (sessionId: string, consumerId: string) => {
     ptySessionRegistry.unsubscribe(sessionId, consumerId);
     return ok();
+  },
+
+  /** Persist the current framebuffer and release its renderer consumer atomically. */
+  checkpointAndUnsubscribe: (
+    sessionId: string,
+    consumerId: string,
+    checkpoint: PtyRenderCheckpoint
+  ) => {
+    const saved = ptySessionRegistry.saveRenderCheckpoint(sessionId, checkpoint);
+    log.debug('[DEBUG][agent-session-load] compact checkpoint saved', {
+      sessionId,
+      generation: checkpoint.generation,
+      sequence: checkpoint.sequence,
+      checkpointCharacters: checkpoint.buffer.length,
+      saved,
+    });
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
+    return ok({ saved });
   },
 
   /**

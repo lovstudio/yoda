@@ -1,3 +1,4 @@
+import { SerializeAddon } from '@xterm/addon-serialize';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { Terminal, type ITerminalOptions } from '@xterm/xterm';
 import {
@@ -5,6 +6,7 @@ import {
   ptyDataChannel,
   type PtyDataEvent,
 } from '@shared/events/ptyEvents';
+import type { PtyRenderCheckpoint } from '@shared/pty-render-checkpoint';
 import {
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
   normalizeTerminalScrollbackLines,
@@ -175,6 +177,7 @@ export class FrontendPty {
   }
   readonly terminal: Terminal;
   readonly ownedContainer: HTMLDivElement;
+  private readonly serializeAddon = new SerializeAddon();
   private offData: (() => void) | null = null;
   private connectedConsumerId: string | null = null;
   private pendingConnectAttempt: PendingConnectAttempt | null = null;
@@ -339,6 +342,7 @@ export class FrontendPty {
     // which mismeasures newer CJK/emoji code points and makes following glyphs
     // overwrite the wrong cells. Grapheme clustering remains opt-in until its
     // experimental width rules are validated against local, tmux, and SSH.
+    this.terminal.loadAddon(this.serializeAddon);
     this.terminal.loadAddon(new Unicode11Addon());
     this.terminal.unicode.activeVersion = '11';
 
@@ -726,6 +730,16 @@ export class FrontendPty {
     this.startConsumerHeartbeat();
     if (snapshot.buffer) {
       const initialSnapshotMountLease = this.mountGeneration;
+      const mountedDimensions = { cols: this.terminal.cols, rows: this.terminal.rows };
+      const checkpointDimensions =
+        'checkpointDimensions' in snapshot ? snapshot.checkpointDimensions : undefined;
+      if (
+        checkpointDimensions &&
+        (checkpointDimensions.cols !== mountedDimensions.cols ||
+          checkpointDimensions.rows !== mountedDimensions.rows)
+      ) {
+        this.terminal.resize(checkpointDimensions.cols, checkpointDimensions.rows);
+      }
       this.noteOutputActivity();
       this.observeCanonicalPayload(snapshot.buffer, this.outputRevision);
       this.writeOrBuffer(
@@ -735,12 +749,19 @@ export class FrontendPty {
           sequence: snapshot.sequence,
         },
         () => {
+          if (
+            this.terminal.cols !== mountedDimensions.cols ||
+            this.terminal.rows !== mountedDimensions.rows
+          ) {
+            this.terminal.resize(mountedDimensions.cols, mountedDimensions.rows);
+          }
           this.initialSnapshotParserDrained = true;
           console.log('[DEBUG][agent-session-load] snapshot parser drained:', {
             sessionId: this.sessionId,
             snapshotCharacters: snapshot.buffer.length,
             parserMs: Math.round((performance.now() - snapshotReceivedAt) * 10) / 10,
             elapsedMs: Math.round((performance.now() - subscriptionStartedAt) * 10) / 10,
+            compactCheckpoint: checkpointDimensions !== undefined,
           });
           if (this.hasResolvedInitialSnapshot && this.isVisibleMountLease(this.mountGeneration)) {
             this.scheduleVisibleFrameAck(this.mountGeneration);
@@ -1685,8 +1706,9 @@ export class FrontendPty {
    * Unsubscribes from the main process, tears down the IPC data listener,
    * disposes the xterm Terminal, and removes the owned container from the DOM.
    */
-  dispose(): void {
+  dispose(options?: { checkpoint?: boolean }): void {
     if (this.isDisposed) return;
+    const checkpoint = options?.checkpoint ? this.createRenderCheckpoint() : null;
     this.isDisposed = true;
     this.cancelPendingConnect();
     this.connectPromise = null;
@@ -1718,7 +1740,21 @@ export class FrontendPty {
     this.scrollDisposable.dispose();
     this.renderDisposable.dispose();
     if (connectedConsumerId) {
-      void rpc.pty.unsubscribe(this.sessionId, connectedConsumerId).catch(() => {});
+      if (checkpoint) {
+        console.log('[DEBUG][agent-session-load] compact checkpoint captured:', {
+          sessionId: this.sessionId,
+          generation: checkpoint.generation,
+          sequence: checkpoint.sequence,
+          checkpointCharacters: checkpoint.buffer.length,
+          cols: checkpoint.cols,
+          rows: checkpoint.rows,
+        });
+        void rpc.pty
+          .checkpointAndUnsubscribe(this.sessionId, connectedConsumerId, checkpoint)
+          .catch(() => rpc.pty.unsubscribe(this.sessionId, connectedConsumerId).catch(() => {}));
+      } else {
+        void rpc.pty.unsubscribe(this.sessionId, connectedConsumerId).catch(() => {});
+      }
     }
     try {
       this.terminal.dispose();
@@ -1726,6 +1762,27 @@ export class FrontendPty {
     try {
       this.ownedContainer.remove();
     } catch {}
+  }
+
+  private createRenderCheckpoint(): PtyRenderCheckpoint | null {
+    if (
+      !this.connectedConsumerId ||
+      !this.hasResolvedInitialSnapshot ||
+      !this.initialSnapshotParserDrained ||
+      this.terminalWriteActive ||
+      this.terminalWriteQueue.length > 0 ||
+      this.pendingWrites.length > 0 ||
+      this.suspendedWrites.length > 0
+    ) {
+      return null;
+    }
+    return {
+      buffer: this.serializeAddon.serialize({ scrollback: 0 }),
+      generation: this.acknowledgedGeneration,
+      sequence: this.acknowledgedSequence,
+      cols: this.terminal.cols,
+      rows: this.terminal.rows,
+    };
   }
 }
 

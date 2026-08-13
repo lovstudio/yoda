@@ -159,4 +159,22 @@ describe('PtySession connection lifecycle', () => {
     ).toBe(true);
     for (const session of sessions) session.dispose();
   });
+
+  it('captures a current-frame checkpoint when the fixed cache evicts a renderer', async () => {
+    mocks.getTerminalSettings.mockResolvedValue({
+      hotTerminalMode: 'fixed',
+      hotTerminalLimit: 1,
+    });
+    const first = new PtySession('fixed-first');
+    const second = new PtySession('fixed-second');
+
+    await first.connect();
+    const firstInstance = mocks.instances.at(-1);
+    await second.connect();
+
+    expect(firstInstance?.dispose).toHaveBeenCalledWith({ checkpoint: true });
+    first.dispose();
+    second.dispose();
+    PtySession.setHotTerminalPolicy('auto', 4);
+  });
 });

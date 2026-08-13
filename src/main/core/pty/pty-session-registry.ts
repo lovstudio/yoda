@@ -5,6 +5,10 @@ import {
   ptyInputChannel,
   type PtyDataEvent,
 } from '@shared/events/ptyEvents';
+import type {
+  PtyRenderCheckpoint,
+  PtyRenderCheckpointDimensions,
+} from '@shared/pty-render-checkpoint';
 import {
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
   getTerminalRingBufferCapBytes,
@@ -12,6 +16,7 @@ import {
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import type { Pty, PtyExitInfo } from './pty';
+import { PtyRenderCheckpointTracker } from './pty-render-checkpoint';
 import { TmuxTerminalReplyFilter } from './tmux-terminal-reply-filter';
 
 const FLUSH_INTERVAL_MS = 16; // One IPC output batch per display frame.
@@ -31,6 +36,7 @@ const PTY_RESUME_RETRY_BASE_MS = 25;
 const PTY_RESUME_RETRY_MAX_DELAY_MS = 1_000;
 const PTY_PENDING_INPUT_CAP_BYTES = 64 * 1024;
 const PTY_PENDING_INPUT_TTL_MS = 30_000;
+const PTY_RENDER_CHECKPOINT_MAX_BYTES = 512 * 1024;
 export const PTY_PENDING_INPUT_MAX_SESSIONS = 128;
 export const PTY_PENDING_INPUT_MAX_CHUNKS = 128;
 
@@ -51,6 +57,7 @@ type SessionState = {
   readonly registrationEpoch: number;
   readonly ringBuffer: Utf8RingBuffer;
   readonly tmuxInputFilter: TmuxTerminalReplyFilter | null;
+  renderCheckpoint: PtyRenderCheckpointTracker | null;
   live: boolean;
   sequence: number;
   pendingData: Buffer[];
@@ -79,6 +86,8 @@ export type PtySubscriptionSnapshot = {
   sequence: number;
   /** The buffer came from transcript history and must be replaced by a live generation. */
   replayedFromHistory?: boolean;
+  /** Original grid for a compact serialized framebuffer. */
+  checkpointDimensions?: PtyRenderCheckpointDimensions;
 };
 
 export type PtySessionDiagnostics = {
@@ -316,6 +325,7 @@ export class PtySessionRegistry {
       registrationEpoch: registration.epoch,
       ringBuffer: new Utf8RingBuffer(this.ringBufferCapBytes),
       tmuxInputFilter: options?.tmuxBacked ? new TmuxTerminalReplyFilter() : null,
+      renderCheckpoint: null,
       live: true,
       sequence: 0,
       pendingData: [],
@@ -352,6 +362,7 @@ export class PtySessionRegistry {
       state.outputBytesTotal += encoded.length;
       state.lastOutputAt = Date.now();
       state.ringBuffer.append(data, encoded.length);
+      state.renderCheckpoint?.write(data, state.sequence);
       if (state.flushTimer !== null && state.pendingByteLength >= PTY_OUTPUT_BATCH_MAX_BYTES) {
         clearTimeout(state.flushTimer);
         state.flushTimer = null;
@@ -532,7 +543,11 @@ export class PtySessionRegistry {
    * events at or below the returned watermark, closing both the loss and
    * duplicate windows at the snapshot/live boundary.
    */
-  subscribe(sessionId: string, consumerId: string): PtySubscriptionSnapshot {
+  subscribe(
+    sessionId: string,
+    consumerId: string,
+    options?: { materializeBuffer?: boolean }
+  ): PtySubscriptionSnapshot {
     const state = this.sessions.get(sessionId);
     const currentGeneration = state?.generation ?? this.generationCounters.get(sessionId) ?? 0;
     if (state && !state.paused && state.pendingByteLength > 0) {
@@ -554,7 +569,7 @@ export class PtySessionRegistry {
 
     if (!state) return { buffer: '', generation: currentGeneration, sequence: 0 };
     const snapshot = {
-      buffer: this.snapshotCommittedOutput(state),
+      buffer: options?.materializeBuffer === false ? '' : this.snapshotCommittedOutput(state),
       generation: state.generation,
       sequence: state.sequence,
     };
@@ -566,6 +581,110 @@ export class PtySessionRegistry {
       );
     }
     return snapshot;
+  }
+
+  /**
+   * Prefer the compact framebuffer maintained after a renderer eviction. The
+   * ordinary subscribe still establishes the consumer and snapshot/live
+   * watermark first; the tracker marker then captures exactly that sequence.
+   */
+  async subscribeForRenderer(
+    sessionId: string,
+    consumerId: string
+  ): Promise<PtySubscriptionSnapshot> {
+    const checkpointAvailable = Boolean(this.sessions.get(sessionId)?.renderCheckpoint);
+    const subscription = this.subscribe(sessionId, consumerId, {
+      materializeBuffer: !checkpointAvailable,
+    });
+    const state = this.sessions.get(sessionId);
+    const tracker = state?.renderCheckpoint;
+    if (!state || !tracker || state.generation !== subscription.generation) {
+      return checkpointAvailable ? this.subscribe(sessionId, consumerId) : subscription;
+    }
+
+    try {
+      const compactSnapshot = await tracker.snapshot();
+      if (
+        this.sessions.get(sessionId) !== state ||
+        state.renderCheckpoint !== tracker ||
+        compactSnapshot.generation !== state.generation ||
+        compactSnapshot.sequence !== subscription.sequence
+      ) {
+        if (state.renderCheckpoint === tracker) state.renderCheckpoint = null;
+        tracker.dispose();
+        return this.subscribe(sessionId, consumerId);
+      }
+      state.renderCheckpoint = null;
+      tracker.dispose();
+      return {
+        buffer: compactSnapshot.buffer,
+        generation: compactSnapshot.generation,
+        sequence: compactSnapshot.sequence,
+        checkpointDimensions: {
+          cols: compactSnapshot.cols,
+          rows: compactSnapshot.rows,
+        },
+      };
+    } catch (error) {
+      if (state.renderCheckpoint === tracker) state.renderCheckpoint = null;
+      tracker.dispose();
+      log.debug('[pty-checkpoint] compact snapshot unavailable', {
+        sessionId,
+        error: String(error),
+      });
+      return this.subscribe(sessionId, consumerId);
+    }
+  }
+
+  /** Seed a headless current-frame tracker before the frontend xterm is evicted. */
+  saveRenderCheckpoint(sessionId: string, checkpoint: PtyRenderCheckpoint): boolean {
+    const state = this.sessions.get(sessionId);
+    if (
+      !state ||
+      typeof checkpoint.buffer !== 'string' ||
+      !isValidPtyWatermark(checkpoint.generation) ||
+      !isValidPtyWatermark(checkpoint.sequence) ||
+      checkpoint.generation !== state.generation ||
+      checkpoint.sequence > state.sequence ||
+      !Number.isSafeInteger(checkpoint.cols) ||
+      checkpoint.cols < 2 ||
+      !Number.isSafeInteger(checkpoint.rows) ||
+      checkpoint.rows < 1 ||
+      Buffer.byteLength(checkpoint.buffer, 'utf8') > PTY_RENDER_CHECKPOINT_MAX_BYTES
+    ) {
+      return false;
+    }
+
+    let catchup = '';
+    if (checkpoint.sequence < state.sequence) {
+      const batches = state.inflightBatches.filter(
+        (batch) => batch.sequence > checkpoint.sequence && batch.sequence <= state.sequence
+      );
+      if (
+        batches.length === 0 ||
+        batches[0]?.sequence !== checkpoint.sequence + 1 ||
+        batches.at(-1)?.sequence !== state.sequence ||
+        batches.some((batch, index) => batch.sequence !== checkpoint.sequence + index + 1)
+      ) {
+        return false;
+      }
+      const catchupBytes = batches.reduce((total, batch) => total + batch.byteLength, 0);
+      const committed = this.snapshotCommittedOutput(state);
+      if (catchupBytes > Buffer.byteLength(committed, 'utf8')) return false;
+      catchup = utf8Tail(committed, catchupBytes);
+    }
+
+    const tracker = new PtyRenderCheckpointTracker(checkpoint);
+    if (catchup) tracker.write(catchup, state.sequence);
+    if (state.pendingByteLength > 0) {
+      const pending = Buffer.concat(state.pendingData.slice(state.pendingDataHead)).toString(
+        'utf8'
+      );
+      if (pending) tracker.write(pending, state.sequence);
+    }
+    state.renderCheckpoint?.dispose();
+    state.renderCheckpoint = tracker;
+    return true;
   }
 
   acknowledge(sessionId: string, consumerId: string, generation: number, sequence: number): void {
@@ -685,6 +804,7 @@ export class PtySessionRegistry {
       byteLength,
       data,
     };
+    state.renderCheckpoint?.markSequence(state.sequence);
     events.emit(ptyDataChannel, payload, sessionId);
 
     if (tracksConsumerBacklog) {
@@ -1000,6 +1120,8 @@ export class PtySessionRegistry {
 
     if (options.deleteBuffer) state.ringBuffer.clear();
     if (options.deleteState) {
+      state.renderCheckpoint?.dispose();
+      state.renderCheckpoint = null;
       this.sessions.delete(sessionId);
     }
   }

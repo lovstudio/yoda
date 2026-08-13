@@ -36,6 +36,7 @@ vi.mock('@main/lib/events', () => ({
 
 vi.mock('@main/lib/logger', () => ({
   log: {
+    debug: vi.fn(),
     warn: vi.fn(),
   },
 }));
@@ -100,6 +101,54 @@ beforeEach(() => {
 });
 
 describe('PtySessionRegistry', () => {
+  it('restores an evicted renderer from a compact current-frame checkpoint', async () => {
+    vi.useRealTimers();
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    const oldHistory = `${'old terminal history\r\n'.repeat(20_000)}CURRENT FRAME`;
+    registry.register('session', pty);
+    pty.emitData(oldHistory);
+
+    expect(registry.subscribe('session', 'old-renderer')).toMatchObject({
+      generation: 1,
+      sequence: 0,
+    });
+    expect(
+      registry.saveRenderCheckpoint('session', {
+        buffer: '\x1bcCURRENT FRAME',
+        generation: 1,
+        sequence: 0,
+        cols: 120,
+        rows: 32,
+      })
+    ).toBe(true);
+    registry.unsubscribe('session', 'old-renderer');
+    const sessionState = (
+      registry as unknown as {
+        sessions: Map<string, { ringBuffer: { snapshot(): string } }>;
+      }
+    ).sessions.get('session');
+    expect(sessionState).toBeDefined();
+    if (!sessionState) throw new Error('Expected registered PTY state');
+    const ringSnapshot = vi.spyOn(sessionState.ringBuffer, 'snapshot');
+
+    pty.emitData('\x1b[2J\x1b[HNEWEST FRAME');
+    const compact = await registry.subscribeForRenderer('session', 'new-renderer');
+
+    expect(compact).toMatchObject({
+      generation: 1,
+      sequence: 0,
+      checkpointDimensions: { cols: 120, rows: 32 },
+    });
+    expect(compact.buffer).toContain('NEWEST FRAME');
+    expect(compact.buffer).not.toContain('old terminal history');
+    expect(Buffer.byteLength(compact.buffer, 'utf8')).toBeLessThan(4 * 1024);
+    expect(ringSnapshot).not.toHaveBeenCalled();
+    expect(Buffer.byteLength(registry.snapshot('session'), 'utf8')).toBeGreaterThan(300_000);
+
+    registry.unsubscribe('session', 'new-renderer');
+  });
+
   it('commits pending cold output without broadcasting or advancing the watermark', () => {
     const registry = new PtySessionRegistry();
     const pty = new FakePty();

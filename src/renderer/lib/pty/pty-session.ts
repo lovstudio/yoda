@@ -420,7 +420,7 @@ export class PtySession {
     log.debug('[pty-session] frontend renderer cache evicted', { sessionId: this.sessionId });
     this.connectionRequested = false;
     this.connectPromise = null;
-    this.pty?.dispose();
+    this.pty?.dispose({ checkpoint: true });
     runInAction(() => {
       this.pty = null;
       this.status = 'disconnected';

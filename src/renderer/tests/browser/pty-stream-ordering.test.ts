@@ -18,6 +18,10 @@ const ipcMocks = vi.hoisted(() => {
       ) => Promise.resolve()
     ),
     unsubscribe: vi.fn((_sessionId: string, _consumerId: string) => Promise.resolve()),
+    checkpointAndUnsubscribe: vi.fn(
+      (_sessionId: string, _consumerId: string, _checkpoint: unknown) =>
+        Promise.resolve({ success: true, data: { saved: true } })
+    ),
     subscribe: vi.fn(),
     listenerDisposals: [] as Array<ReturnType<typeof vi.fn>>,
     setDataListener(listener: (event: PtyDataEvent) => void) {
@@ -52,6 +56,7 @@ vi.mock('@renderer/lib/ipc', () => ({
       acknowledgeOutput: ipcMocks.acknowledgeOutput,
       heartbeatConsumer: ipcMocks.heartbeatConsumer,
       unsubscribe: ipcMocks.unsubscribe,
+      checkpointAndUnsubscribe: ipcMocks.checkpointAndUnsubscribe,
     },
   },
 }));
@@ -110,6 +115,7 @@ describe('FrontendPty stream ordering', () => {
     ipcMocks.acknowledgeOutput.mockClear();
     ipcMocks.heartbeatConsumer.mockClear();
     ipcMocks.unsubscribe.mockClear();
+    ipcMocks.checkpointAndUnsubscribe.mockClear();
     ipcMocks.listenerDisposals.length = 0;
     ipcMocks.clearDataListener();
   });
@@ -157,6 +163,65 @@ describe('FrontendPty stream ordering', () => {
     expect(pty.ownedContainer.parentElement?.dataset.terminalHost).toBe('true');
     expect(ipcMocks.unsubscribe).not.toHaveBeenCalled();
     writeSpy.mockRestore();
+  });
+
+  it('captures a compact current-frame checkpoint before cache eviction', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer: `${'old history\r\n'.repeat(2_000)}CURRENT FRAME`,
+        generation: 1,
+        sequence: 8,
+      },
+    });
+    pty = new FrontendPty('checkpoint-session');
+    const lease = mountAndOpenFlushGate(pty);
+
+    await pty.connect();
+    await vi.waitFor(() => expect(ipcMocks.acknowledgeOutput).toHaveBeenCalled());
+    pty.unmount(lease);
+    pty.dispose({ checkpoint: true });
+
+    expect(ipcMocks.checkpointAndUnsubscribe).toHaveBeenCalledWith(
+      'checkpoint-session',
+      expect.any(String),
+      expect.objectContaining({
+        generation: 1,
+        sequence: 8,
+        cols: 120,
+        rows: 32,
+      })
+    );
+    const checkpoint = ipcMocks.checkpointAndUnsubscribe.mock.calls[0]?.[2] as {
+      buffer: string;
+    };
+    expect(checkpoint.buffer).toContain('CURRENT FRAME');
+    expect(checkpoint.buffer.length).toBeLessThan(1_024);
+    expect(checkpoint.buffer.match(/old history/g)?.length ?? 0).toBeLessThanOrEqual(32);
+    expect(ipcMocks.unsubscribe).not.toHaveBeenCalled();
+  });
+
+  it('restores a compact checkpoint at its source grid before fitting the visible pane', async () => {
+    ipcMocks.subscribe.mockResolvedValue({
+      success: true,
+      data: {
+        buffer: '\x1bcCOMPACT CURRENT FRAME',
+        generation: 1,
+        sequence: 9,
+        checkpointDimensions: { cols: 80, rows: 24 },
+      },
+    });
+    pty = new FrontendPty('checkpoint-restore-session');
+    mountAndOpenFlushGate(pty);
+
+    await pty.connect();
+    await vi.waitFor(() => expect(ipcMocks.acknowledgeOutput).toHaveBeenCalled());
+
+    expect(pty.terminal.cols).toBe(120);
+    expect(pty.terminal.rows).toBe(32);
+    expect(pty.terminal.buffer.active.getLine(0)?.translateToString(true)).toContain(
+      'COMPACT CURRENT FRAME'
+    );
   });
 
   it('keeps a cold visible snapshot hidden until the parser reaches its final tail', async () => {
