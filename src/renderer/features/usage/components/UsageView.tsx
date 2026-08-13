@@ -1,4 +1,4 @@
-import { Archive, ChartColumn, Loader2 } from 'lucide-react';
+import { Archive, ChartColumn, Database, Loader2 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentAccountProviderId } from '@shared/runtime-registry';
@@ -69,7 +69,7 @@ export function UsageView({ embedded = false }: { embedded?: boolean } = {}) {
             <Loader2 className="size-5 animate-spin" />
             <p className="text-xs">{t('usage.loadingHint')}</p>
           </div>
-        ) : overview.tasksTotal === 0 && !overview.tokens ? (
+        ) : overview.tasksTotal === 0 && !overview.tokens && !overview.historical ? (
           <EmptyState label={t('usage.empty')} />
         ) : (
           <UsageContent overview={overview} />
@@ -81,6 +81,7 @@ export function UsageView({ embedded = false }: { embedded?: boolean } = {}) {
 
 function UsageContent({ overview }: { overview: UsageOverview }) {
   const { t } = useTranslation();
+  const headlineTokens = overview.historical?.tokens ?? overview.tokens;
 
   return (
     <>
@@ -92,15 +93,15 @@ function UsageContent({ overview }: { overview: UsageOverview }) {
           caliber={t('usage.caliber.tasks')}
         />
         <StatCard
-          label={t('usage.cards.tokens')}
-          value={overview.tokens ? formatTokenValue(overview.tokens.total) : '0'}
+          label={t(overview.historical ? 'usage.cards.historicalTokens' : 'usage.cards.tokens')}
+          value={headlineTokens ? formatTokenValue(headlineTokens.total) : '0'}
           detail={
-            overview.tokens
+            headlineTokens
               ? t('usage.cards.tokensDetail', {
-                  input: formatCompactNumber(overview.tokens.input),
-                  output: formatCompactNumber(overview.tokens.output),
+                  input: formatCompactNumber(headlineTokens.input),
+                  output: formatCompactNumber(headlineTokens.output),
                   cache: formatCompactNumber(
-                    overview.tokens.cacheRead + overview.tokens.cacheCreation
+                    headlineTokens.cacheRead + headlineTokens.cacheCreation
                   ),
                 })
               : t('usage.cards.tokensNone')
@@ -129,6 +130,19 @@ function UsageContent({ overview }: { overview: UsageOverview }) {
           caliber={t('usage.caliber.activeDays')}
         />
       </section>
+
+      {overview.historical && (
+        <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/15 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+          <Database className="mt-0.5 size-3.5 shrink-0 text-foreground-passive" aria-hidden />
+          <span>
+            {t('usage.historyScope', {
+              date: overview.historical.cacheThroughDate,
+              attributable: formatCompactNumber(overview.tokens?.total ?? 0),
+              recent: formatCompactNumber(overview.historical.recentTrackedTokens.total),
+            })}
+          </span>
+        </div>
+      )}
 
       {overview.daily.length > 0 && (
         <section className="flex flex-col gap-3 rounded-xl border border-border/70 p-5">

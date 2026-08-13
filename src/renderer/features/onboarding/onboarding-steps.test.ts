@@ -7,7 +7,7 @@ describe('getOnboardingSteps', () => {
       getOnboardingSteps({
         isSignedIn: false,
       })
-    ).toEqual(['language', 'sign-in']);
+    ).toEqual(['language', 'claude-retention', 'sign-in']);
   });
 
   it('keeps language selection when account setup is already complete', () => {
@@ -15,6 +15,6 @@ describe('getOnboardingSteps', () => {
       getOnboardingSteps({
         isSignedIn: true,
       })
-    ).toEqual(['language']);
+    ).toEqual(['language', 'claude-retention']);
   });
 });

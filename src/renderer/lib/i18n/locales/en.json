@@ -1465,6 +1465,12 @@
       }
     },
     "signInTitle": "Sign in",
+    "claudeRetention": {
+      "stepTitle": "Session history",
+      "title": "Keep Claude Code task details",
+      "description": "Claude Code cleans up transcripts older than 30 days by default. A longer retention period lets Yoda preserve complete project and task statistics going forward.",
+      "keepDefault": "Keep 30 days for now"
+    },
     "importTitle": "Import",
     "loading": "Loading…",
     "continue": "Continue",
@@ -4053,6 +4059,24 @@
       "configDescription": "Open the agent's local config directory or file in Finder.",
       "noConfig": "No default config path for {{name}}."
     },
+    "retention": {
+      "title": "Session transcript retention",
+      "description": "Set how many days Claude Code keeps local transcripts before cleanup.",
+      "notice": "Claude Code currently uses its {{days}}-day default. Older project and task details disappear when transcripts are cleaned up.",
+      "configure": "Set retention",
+      "days": "{{days}} days",
+      "tenYears": "10 years",
+      "default": "Claude default",
+      "preset": "Preset",
+      "recommended": "Recommended for history",
+      "customLabel": "Custom days",
+      "saveAndContinue": "Save and continue",
+      "scopeHint": "This controls future project and task detail. Claude's global historical total remains available from stats-cache.json.",
+      "invalid": "Enter an integer greater than or equal to 1.",
+      "saved": "Claude Code will retain transcripts for {{days}} days",
+      "copyError": "Copy error details",
+      "errorCopied": "Error details copied"
+    },
     "compareAgents": "Compare clients",
     "copyInstallCommandFor": "Copy install command for {{name}}",
     "copyCommand": "Copy command",
@@ -4484,7 +4508,7 @@
   },
   "usage": {
     "title": "Usage",
-    "subtitle": "Lifetime activity across all tasks and sessions — token burn parsed from agent transcripts.",
+    "subtitle": "Global history plus currently attributable project and task detail.",
     "empty": "No usage data yet — run some agent sessions first.",
     "loadingHint": "First load parses all session history — this can take a moment.",
     "loadFailed": "Failed to load usage data",
@@ -4494,6 +4518,7 @@
       "tasksArchived": "Tasks archived",
       "tasksTotal": "{{count}} total",
       "tokens": "Tokens",
+      "historicalTokens": "Historical tokens",
       "tokensDetail": "In {{input}} · Out {{output}} · Cache {{cache}}",
       "tokensNone": "No parseable sessions yet",
       "lines": "Code changed",
@@ -4527,9 +4552,10 @@
     "sourceUnknown": "Untracked",
     "topTasks": "Top tasks by tokens",
     "topTasksCount": "Top tasks by tokens ({{shown}} of {{total}})",
+    "historyScope": "Claude's historical baseline runs through {{date}}, plus {{recent}} of later tracked usage. Project, model, and task rankings use attributable records only (currently {{attributable}}).",
     "caliber": {
       "tasks": "How it's counted: tasks with a non-null archive date (archiving is the completion act). The sub-line is all tasks ever created.",
-      "tokens": "How it's counted: current Claude / Codex transcripts are parsed first and Yoda-session usage is persisted as a durable snapshot; each transcript counts once. Claude Code cleans up transcripts older than 30 days by default, so history removed before snapshots were enabled is absent from local data. Total = input + output + cache read + cache write. Cache reads usually dominate and are not new input or output. Other clients have no transcript reader and count as zero.",
+      "tokens": "How it's counted: global historical tokens use Claude Code stats-cache.json as a baseline, then add confirmed Claude transcript / Yoda snapshot usage after the cache cutoff. Project, model, and task detail continues to use attributable Claude / Codex transcripts and snapshots. Historical aggregates are never allocated to projects. Total = input + output + cache read + cache write.",
       "lines": "How it's counted: per task = committed diff vs source branch (merge-base) + uncommitted working-tree changes. Live for active tasks; archived tasks use their last snapshot (tasks archived before this feature shipped have none and count as zero).",
       "activeDays": "How it's counted: local calendar days with any token usage in session transcripts.",
       "dailyChart": "How it's counted: the chart defaults to the last 30 days and can switch between 7, 30, or 90 days. Each session's tokens are bucketed into the local date they were consumed; bar height is relative to the selected period's single-day peak.",

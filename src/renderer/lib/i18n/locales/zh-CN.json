@@ -1465,6 +1465,12 @@
       }
     },
     "signInTitle": "登录",
+    "claudeRetention": {
+      "stepTitle": "会话记录",
+      "title": "保留 Claude Code 的任务明细",
+      "description": "Claude Code 默认会清理超过 30 天的 transcript。延长保留期后，Yoda 才能持续显示完整的逐项目与逐任务统计。",
+      "keepDefault": "暂时保持 30 天"
+    },
     "importTitle": "导入",
     "loading": "加载中…",
     "continue": "继续",
@@ -4053,6 +4059,24 @@
       "configDescription": "在 Finder 中打开代理的本地配置目录或文件。",
       "noConfig": "暂未为 {{name}} 配置默认路径。"
     },
+    "retention": {
+      "title": "会话记录保留期",
+      "description": "设置 Claude Code 清理本地 transcript 前保留的天数。",
+      "notice": "Claude Code 当前按默认值保留 {{days}} 天会话记录；更早的逐项目、逐任务明细会随 transcript 清理。",
+      "configure": "设置保留期",
+      "days": "{{days}} 天",
+      "tenYears": "10 年",
+      "default": "Claude 默认",
+      "preset": "预设",
+      "recommended": "长期统计推荐",
+      "customLabel": "自定义天数",
+      "saveAndContinue": "保存并继续",
+      "scopeHint": "该设置影响未来可追溯的项目与任务明细；Claude 的历史全局总量仍由 stats-cache.json 聚合。",
+      "invalid": "请输入大于或等于 1 的整数。",
+      "saved": "Claude Code 会话记录将保留 {{days}} 天",
+      "copyError": "复制错误详情",
+      "errorCopied": "错误详情已复制"
+    },
     "compareAgents": "对比客户端",
     "copyInstallCommandFor": "复制 {{name}} 的安装命令",
     "copyCommand": "复制命令",
@@ -4484,7 +4508,7 @@
   },
   "usage": {
     "title": "用量统计",
-    "subtitle": "全部任务与会话的累计活动——Token 消耗解析自 agent 会话记录。",
+    "subtitle": "历史全局总量与当前可归因的项目、任务明细。",
     "empty": "暂无用量数据，先跑几个 agent 会话吧。",
     "loadingHint": "首次加载需解析全部会话历史，可能需要一点时间。",
     "loadFailed": "用量数据加载失败",
@@ -4494,6 +4518,7 @@
       "tasksArchived": "已归档任务",
       "tasksTotal": "共 {{count}} 个",
       "tokens": "Token 总量",
+      "historicalTokens": "历史 Token",
       "tokensDetail": "输入 {{input}} · 输出 {{output}} · 缓存 {{cache}}",
       "tokensNone": "暂无可解析的会话",
       "lines": "代码变更",
@@ -4527,9 +4552,10 @@
     "sourceUnknown": "未记录",
     "topTasks": "Token 消耗 Top 任务",
     "topTasksCount": "Token 消耗 Top 任务（前 {{shown}} / {{total}}）",
+    "historyScope": "Claude 历史基线统计至 {{date}}，并补入其后的 {{recent}} 可追踪用量；项目、模型与任务排行仅使用可归因记录（当前 {{attributable}}）。",
     "caliber": {
       "tasks": "口径：归档时间非空的任务数（归档即完成）；副行为历史创建的全部任务数。",
-      "tokens": "口径：优先解析当前磁盘上的 Claude / Codex 会话记录，并为 Yoda 会话持久化用量快照；同一 transcript 只计一次。Claude Code 默认会清理超过 30 天的 transcript，快照启用前已经清理的历史不在本机数据中。总量 = 输入 + 输出 + 缓存读 + 缓存写；缓存读取通常占大头，不等同于新增输入或输出。其他客户端暂无解析器，计 0。",
+      "tokens": "口径：全局历史 Token 以 Claude Code stats-cache.json 为基线，并补入缓存截止日之后仍可确认的 Claude transcript / Yoda 快照；项目、模型与任务明细继续使用可归因的 Claude / Codex transcript 与快照。历史聚合不会分摊到项目。总量 = 输入 + 输出 + 缓存读 + 缓存写。",
       "lines": "口径：每任务 = 相对源分支的已提交差异（merge-base）+ 工作区未提交变更。活跃任务实时计算，归档任务取归档前快照（本功能上线前归档的任务无快照，计 0）。",
       "activeDays": "口径：会话记录中出现过 token 消耗的本地日历天数。",
       "dailyChart": "口径：默认展示最近 30 天，可切换最近 7、30 或 90 天；各会话 Token 按实际消耗时刻归入本地日期，柱高按所选区间内的单日峰值计算。",

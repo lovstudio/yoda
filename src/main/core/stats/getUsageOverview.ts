@@ -19,6 +19,7 @@ import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-se
 import { db } from '@main/db/client';
 import { conversations, projects, projectSettings, tasks } from '@main/db/schema';
 import { log } from '@main/lib/logger';
+import { mergeClaudeHistoricalUsage, readClaudeStatsCache } from './claude-stats-cache';
 import { getAllSessionUsageSnapshots, resolveConversationUsage } from './session-usage-snapshot';
 import { resolveTaskCwd } from './task-cwd';
 import { getStoredTaskDiffTotals, getTaskDiffTotals } from './task-diff-snapshot';
@@ -79,6 +80,7 @@ async function loadStatsAuxiliaryPaths(projectId?: string): Promise<string[]> {
  * to one project (used by the project overview).
  */
 export async function getUsageOverview(projectId?: string): Promise<UsageOverview> {
+  const claudeHistorical = projectId ? null : await readClaudeStatsCache();
   const allTasks = projectId
     ? await db.select().from(tasks).where(eq(tasks.projectId, projectId))
     : await db.select().from(tasks);
@@ -163,6 +165,7 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
 
   let tokens: TokenBuckets | null = null;
   const dailyByDate = new Map<string, TokenBuckets>();
+  const claudeDailyByDate = new Map<string, TokenBuckets>();
   const byProject = new Map<string, ProjectUsage>();
   const byModel = new Map<string | null, ModelUsage>();
   const byRuntime = new Map<string, RuntimeUsage>();
@@ -211,6 +214,12 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
       const bucket = dailyByDate.get(day.date);
       if (bucket) addTokenBuckets(bucket, day.tokens);
       else dailyByDate.set(day.date, { ...day.tokens });
+
+      if (runtimeId === 'claude') {
+        const claudeBucket = claudeDailyByDate.get(day.date);
+        if (claudeBucket) addTokenBuckets(claudeBucket, day.tokens);
+        else claudeDailyByDate.set(day.date, { ...day.tokens });
+      }
     }
 
     for (const model of usage.byModel) {
@@ -379,6 +388,23 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
   const daily: DailyTokenUsage[] = [...dailyByDate.entries()]
     .map(([date, dayTokens]) => ({ date, tokens: dayTokens }))
     .sort((a, b) => a.date.localeCompare(b.date));
+  const historical = claudeHistorical
+    ? (() => {
+        const merged = mergeClaudeHistoricalUsage(
+          claudeHistorical,
+          [...claudeDailyByDate.entries()].map(([date, dayTokens]) => ({
+            date,
+            tokens: dayTokens,
+          }))
+        );
+        return {
+          tokens: merged.tokens,
+          cacheThroughDate: claudeHistorical.cacheThroughDate,
+          recentTrackedTokens: merged.recentTrackedTokens,
+          sessionCount: claudeHistorical.sessionCount,
+        };
+      })()
+    : null;
 
   return {
     tasksTotal: allTasks.length,
@@ -387,6 +413,7 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
     linesAdded,
     linesDeleted,
     tokens,
+    historical,
     daily,
     byProject: [...byProject.values()].sort((a, b) => b.tokens.total - a.tokens.total),
     byModel: [...byModel.values()].sort((a, b) => b.tokens.total - a.tokens.total),

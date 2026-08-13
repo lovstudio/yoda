@@ -30,6 +30,7 @@ import { Textarea } from '@renderer/lib/ui/textarea';
 import { isImeComposing } from '@renderer/utils/ime';
 import { log } from '@renderer/utils/logger';
 import { AgentSection } from './AgentSection';
+import { ClaudeRetentionSettingsCard } from './ClaudeRetentionSettingsCard';
 
 export const AgentTabSettings: React.FC<{ agentId: RuntimeId }> = observer(
   function AgentTabSettings({ agentId }) {
@@ -59,9 +60,17 @@ export const AgentTabSettings: React.FC<{ agentId: RuntimeId }> = observer(
         <AgentNamingSettings agentId={agentId} agentName={provider.name} />
 
         {agentId === 'claude' && (
-          <AgentSection title={t('settings.statusline.title')}>
-            <StatuslineSettingsCard />
-          </AgentSection>
+          <>
+            <AgentSection
+              title={t('agents.retention.title')}
+              description={t('agents.retention.description')}
+            >
+              <ClaudeRetentionSettingsCard />
+            </AgentSection>
+            <AgentSection title={t('settings.statusline.title')}>
+              <StatuslineSettingsCard />
+            </AgentSection>
+          </>
         )}
 
         <AgentSection

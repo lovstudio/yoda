@@ -8,6 +8,10 @@ import {
   type RuntimeAccountStatus,
   type RuntimeId,
 } from '@shared/runtime-registry';
+import {
+  getClaudeRetentionSettings,
+  updateClaudeRetentionSettings,
+} from './claude-retention-service';
 import { getAccountUsage, resetAccountUsage } from './codex-account-usage-service';
 import { getLocalUsage } from './local-usage-service';
 import { probeOfficialApi } from './official-api-probe-service';
@@ -41,6 +45,10 @@ export const runtimeSettingsController = createRPCController({
   resetItem: (id: string): Promise<void> => runtimeOverrideSettings.resetItem(id),
 
   resetAll: (): Promise<void> => runtimeOverrideSettings.resetAll(),
+
+  getClaudeRetentionSettings,
+
+  updateClaudeRetentionSettings,
 
   inferNamingModelCandidates: (id: RuntimeId, args?: { forceRefresh?: boolean }) =>
     runtimeModelCandidatesService.inferNamingModelCandidates(id, args),

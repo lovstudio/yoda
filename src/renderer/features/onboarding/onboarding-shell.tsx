@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@renderer/utils/utils';
+import { ClaudeRetentionStep } from './claude-retention-step';
 import { LanguageStep } from './language-step';
 import type { OnboardingStep } from './onboarding-steps';
 import { SignInStep } from './sign-in-step';
@@ -12,6 +13,10 @@ const stepConfig: Record<
   language: {
     labelKey: 'onboarding.language.stepTitle',
     component: LanguageStep,
+  },
+  'claude-retention': {
+    labelKey: 'onboarding.claudeRetention.stepTitle',
+    component: ClaudeRetentionStep,
   },
   'sign-in': {
     labelKey: 'onboarding.signInTitle',

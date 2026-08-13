@@ -87,6 +87,17 @@ export type TaskUsage = {
   tokens: TokenBuckets;
 };
 
+export type HistoricalUsage = {
+  /** Global historical total. It is intentionally not attributed to projects or tasks. */
+  tokens: TokenBuckets;
+  /** Last local date already included in the provider-maintained aggregate. */
+  cacheThroughDate: string;
+  /** Tracked transcript/snapshot usage added after `cacheThroughDate`. */
+  recentTrackedTokens: TokenBuckets;
+  /** Provider-reported historical session count, when present. */
+  sessionCount: number | null;
+};
+
 /** Everything the Usage view renders, in one call. */
 export type UsageOverview = {
   tasksTotal: number;
@@ -99,6 +110,8 @@ export type UsageOverview = {
   linesDeleted: number;
   /** Cumulative burn across all parseable session transcripts; null when none. */
   tokens: TokenBuckets | null;
+  /** Global provider-maintained history; null for project-scoped requests or missing caches. */
+  historical: HistoricalUsage | null;
   /** Merged per-local-day burn across all sessions, ascending by date. */
   daily: DailyTokenUsage[];
   /** Sorted by token total, descending. */

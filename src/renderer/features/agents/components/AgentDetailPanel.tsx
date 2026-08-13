@@ -23,6 +23,7 @@ import { AgentTabModels } from './AgentTabModels';
 import { AgentTabRuntime } from './AgentTabRuntime';
 import { AgentTabSettings } from './AgentTabSettings';
 import { AgentTabSkills } from './AgentTabSkills';
+import { ClaudeRetentionNotice } from './ClaudeRetentionNotice';
 import { RuntimeLogo } from './RuntimeLogo';
 
 type TabId = 'account' | 'maas' | 'models' | 'memory' | 'hooks' | 'skills' | 'settings';
@@ -91,6 +92,9 @@ export const AgentDetailPanel: React.FC<{ agentId: RuntimeId; hideHeader?: boole
             );
           })}
         </div>
+        {agentId === 'claude' && (
+          <ClaudeRetentionNotice onConfigure={() => setActiveTab('settings')} />
+        )}
         <div className={hideHeader ? '' : 'flex-1 overflow-y-auto'}>
           {activeTab === 'account' && <AgentTabAccount agentId={agentId} />}
           {activeTab === 'maas' && <AgentTabRuntime agentId={agentId} />}
