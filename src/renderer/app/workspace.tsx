@@ -1,5 +1,6 @@
 import { FilePlus2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { Activity, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppSidePane } from '@renderer/app/app-side-pane';
 import { moveDraggedTabToStrip } from '@renderer/app/open-task-target';
@@ -56,11 +57,7 @@ export const Workspace = observer(function Workspace() {
   // Read the route while this observer is rendering. The old hook subscribes
   // after render, which lets a route change from a task to a global view
   // briefly pair an old task panel with the new view's wrapper.
-  const { WrapView, TitlebarSlot, MainPanel, currentView, wrapParams } = workspaceRouteSnapshot();
-  const routeBoundaryKey =
-    currentView === 'task'
-      ? `${currentView}:${String(wrapParams.projectId)}:${String(wrapParams.taskId)}`
-      : currentView;
+  const routeSnapshot = workspaceRouteSnapshot();
 
   return (
     <>
@@ -77,21 +74,7 @@ export const Workspace = observer(function Workspace() {
             <LeftSidebar />
           </ErrorBoundary>
         }
-        mainContent={
-          <WrapView key={routeBoundaryKey} {...wrapParams}>
-            <ErrorBoundary variant="inline" componentName="ModalRenderer">
-              <ModalRenderer />
-            </ErrorBoundary>
-            <ErrorBoundary variant="inline" componentName="WorkspaceView">
-              <WorkspaceViewContent
-                key={routeBoundaryKey}
-                TitlebarSlot={TitlebarSlot}
-                MainPanel={MainPanel}
-                currentView={currentView}
-              />
-            </ErrorBoundary>
-          </WrapView>
-        }
+        mainContent={<WorkspaceRouteCache snapshot={routeSnapshot} />}
         rightPane={
           appState.sidePane.isVisible ? (
             <ErrorBoundary variant="inline" componentName="AppSidePane">
@@ -104,6 +87,116 @@ export const Workspace = observer(function Workspace() {
     </>
   );
 });
+
+const TASK_ROUTE_CACHE_LIMIT = 2;
+
+type CachedTaskRoute = WorkspaceRouteSnapshot & {
+  key: string;
+  projectId: string;
+  taskId: string;
+  lastUsed: number;
+};
+
+/**
+ * Keep the current and previous task trees warm. Task stores already outlive
+ * navigation, but remounting their full provider/layout/terminal tree still
+ * makes a sidebar switch feel like a reload. React Activity pauses effects for
+ * the hidden task while retaining its DOM and component state, so returning to
+ * it only flips visibility. The two-entry bound keeps this from growing with
+ * the number of tasks visited.
+ */
+const WorkspaceRouteCache = observer(function WorkspaceRouteCache({
+  snapshot,
+}: {
+  snapshot: WorkspaceRouteSnapshot;
+}) {
+  const taskRoutesRef = useRef<CachedTaskRoute[]>([]);
+  const usageSequenceRef = useRef(0);
+  const currentTaskKey =
+    snapshot.currentView === 'task' &&
+    typeof snapshot.wrapParams.projectId === 'string' &&
+    typeof snapshot.wrapParams.taskId === 'string'
+      ? `${snapshot.wrapParams.projectId}:${snapshot.wrapParams.taskId}`
+      : null;
+
+  if (currentTaskKey) {
+    const projectId = snapshot.wrapParams.projectId as string;
+    const taskId = snapshot.wrapParams.taskId as string;
+    const lastUsed = ++usageSequenceRef.current;
+    const existing = taskRoutesRef.current.find((entry) => entry.key === currentTaskKey);
+    if (existing) {
+      existing.WrapView = snapshot.WrapView;
+      existing.TitlebarSlot = snapshot.TitlebarSlot;
+      existing.MainPanel = snapshot.MainPanel;
+      existing.wrapParams = { projectId, taskId };
+      existing.lastUsed = lastUsed;
+    } else {
+      taskRoutesRef.current.push({
+        ...snapshot,
+        key: currentTaskKey,
+        projectId,
+        taskId,
+        wrapParams: { projectId, taskId },
+        lastUsed,
+      });
+    }
+
+    while (taskRoutesRef.current.length > TASK_ROUTE_CACHE_LIMIT) {
+      let oldestIndex = 0;
+      for (let index = 1; index < taskRoutesRef.current.length; index++) {
+        if (taskRoutesRef.current[index]!.lastUsed < taskRoutesRef.current[oldestIndex]!.lastUsed) {
+          oldestIndex = index;
+        }
+      }
+      taskRoutesRef.current.splice(oldestIndex, 1);
+    }
+  }
+
+  return (
+    <div className="h-full min-h-0 min-w-0 overflow-hidden">
+      {taskRoutesRef.current.map((taskRoute) => (
+        <Activity
+          key={taskRoute.key}
+          mode={currentTaskKey === taskRoute.key ? 'visible' : 'hidden'}
+        >
+          <WorkspaceRouteSurface snapshot={taskRoute} routeBoundaryKey={`task:${taskRoute.key}`} />
+        </Activity>
+      ))}
+      {snapshot.currentView !== 'task' ? (
+        <WorkspaceRouteSurface
+          key={snapshot.currentView}
+          snapshot={snapshot}
+          routeBoundaryKey={snapshot.currentView}
+        />
+      ) : null}
+    </div>
+  );
+});
+
+function WorkspaceRouteSurface({
+  snapshot,
+  routeBoundaryKey,
+}: {
+  snapshot: WorkspaceRouteSnapshot;
+  routeBoundaryKey: string;
+}) {
+  const { WrapView, TitlebarSlot, MainPanel, currentView, wrapParams } = snapshot;
+
+  return (
+    <WrapView key={routeBoundaryKey} {...wrapParams}>
+      <ErrorBoundary variant="inline" componentName="ModalRenderer">
+        <ModalRenderer />
+      </ErrorBoundary>
+      <ErrorBoundary variant="inline" componentName="WorkspaceView">
+        <WorkspaceViewContent
+          TitlebarSlot={TitlebarSlot}
+          MainPanel={MainPanel}
+          currentView={currentView}
+        />
+      </ErrorBoundary>
+    </WrapView>
+  );
+}
 
 const WorkspaceViewContent = observer(function WorkspaceViewContent({
   TitlebarSlot,

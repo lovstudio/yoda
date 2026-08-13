@@ -10,6 +10,7 @@ import type { NavigateFnTyped } from '@renderer/lib/layout/navigation-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { log } from '@renderer/utils/logger';
 import { resolveLastTaskSessionTarget } from './resolve-task-session-target';
+import { markTaskOpenTrace } from './task-open-performance';
 import { taskOpenTransitionStore } from './task-open-transition-store';
 
 let latestOpenRequest = 0;
@@ -41,6 +42,10 @@ export async function openTaskWhenReady(
   const request = ++latestOpenRequest;
   let target: TaskWindowTabTarget | undefined = explicitTarget;
   let provisioned = asProvisioned(getTaskStore(projectId, taskId));
+  markTaskOpenTrace(projectId, taskId, 'store-resolved', {
+    provisioned: Boolean(provisioned),
+    explicitTarget: explicitTarget?.kind ?? null,
+  });
 
   // The normal task-row path is already provisioned. Resolve and select the
   // remembered session synchronously, then switch route without waiting for
@@ -52,10 +57,13 @@ export async function openTaskWhenReady(
       projectId,
       taskId
     ) ?? { kind: 'overview' };
+    markTaskOpenTrace(projectId, taskId, 'target-resolved', { target: target.kind });
     const foundPromise = openProvisionedTaskTab(provisioned, target, {
       shouldApply: () => request === latestOpenRequest,
     });
+    markTaskOpenTrace(projectId, taskId, 'target-selected', { target: target.kind });
     appState.appTabs.openTaskScope(projectId, taskId, target);
+    markTaskOpenTrace(projectId, taskId, 'route-committed', { target: target.kind });
     const destinationNavigationKey = currentNavigationKey();
     const isCurrentDestination = () =>
       request === latestOpenRequest && currentNavigationKey() === destinationNavigationKey;
@@ -85,17 +93,20 @@ export async function openTaskWhenReady(
     taskId,
     ...(target ? { tab: target } : {}),
   });
+  markTaskOpenTrace(projectId, taskId, 'route-committed', { target: target?.kind ?? 'opening' });
   let destinationNavigationKey = currentNavigationKey();
   const isCurrentRequest = () =>
     request === latestOpenRequest && currentNavigationKey() === destinationNavigationKey;
 
   try {
     await prepareExplicitTaskOpen(projectId, taskId);
+    markTaskOpenTrace(projectId, taskId, 'task-prepared');
     if (!isCurrentRequest()) return false;
 
     const taskManager = getTaskManagerStore(projectId);
     if (!taskManager) throw new Error(`Project ${projectId} could not be mounted`);
     await taskManager.provisionTask(taskId);
+    markTaskOpenTrace(projectId, taskId, 'task-provisioned');
     if (!isCurrentRequest()) return false;
 
     provisioned = asProvisioned(getTaskStore(projectId, taskId));
@@ -107,10 +118,12 @@ export async function openTaskWhenReady(
       projectId,
       taskId
     ) ?? { kind: 'overview' };
+    markTaskOpenTrace(projectId, taskId, 'target-resolved', { target: target.kind });
 
     const foundPromise = openProvisionedTaskTab(provisioned, target, {
       shouldApply: isCurrentRequest,
     });
+    markTaskOpenTrace(projectId, taskId, 'target-selected', { target: target.kind });
     // Commit the resolved target in the same continuation that observes the
     // provisioned task. Target validation may still yield even on a cache hit;
     // routing first prevents React from committing a ready Overview in between.

@@ -29,6 +29,7 @@ import {
   taskIdleOpacityClassName,
   taskTitleStyleClassName,
 } from '@renderer/features/tasks/task-appearance-classes';
+import { beginTaskOpenTrace } from '@renderer/features/tasks/task-open-performance';
 import { TreeGuideSlot } from '@renderer/lib/components/tree-guide-slot';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
 import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
@@ -174,6 +175,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     project?.state === 'unregistered' ? projectId : (project?.displayName ?? projectId);
 
   const handleOpenTask = () => {
+    beginTaskOpenTrace(projectId, taskId);
     void openTaskWhenReady(projectId, taskId, navigate);
   };
 

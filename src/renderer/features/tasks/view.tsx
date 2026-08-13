@@ -25,6 +25,7 @@ import { createTaskCommandProvider } from './commands';
 import { EditorProvider } from './editor/editor-provider';
 import { useIsActiveTask } from './hooks/use-is-active-task';
 import { TaskMainPanel } from './main-panel';
+import { markTaskOpenTrace } from './task-open-performance';
 import { TaskTitlebar } from './task-titlebar';
 
 /**
@@ -248,6 +249,10 @@ export const TaskViewWrapperWithProviders = observer(function TaskViewWrapperWit
   const taskStore = getTaskStore(projectId, taskId);
   const kind = taskViewKind(taskStore, projectId);
   const provisioned = asProvisioned(taskStore);
+
+  useLayoutEffect(() => {
+    markTaskOpenTrace(projectId, taskId, 'view-wrapper-committed', { kind });
+  }, [kind, projectId, taskId]);
 
   // A direct route can arrive before a lazily mounted project has populated
   // its task map. Point-load the target from this one owner so `missing` is a

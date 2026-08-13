@@ -35,6 +35,7 @@ import { DiffView } from './diff-view/main-panel/diff-view';
 import { EditorMainPanel } from './editor/editor-main-panel';
 import { useEditorContext } from './editor/editor-provider';
 import { MarkdownEditorPanel } from './editor/markdown-editor-panel';
+import { completeTaskOpenTrace, markTaskOpenTrace } from './task-open-performance';
 import { taskOpenTransitionStore } from './task-open-transition-store';
 import { TaskRendererActivity } from './task-renderer-activity';
 import { ActiveTaskTitlebar } from './task-titlebar';
@@ -54,6 +55,13 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
     isTaskLoadPending: taskManager?.taskLoadPendingIds?.has(taskId) ?? false,
     isTargetPending: taskOpenTransitionStore.isPending(projectId, taskId),
   });
+
+  useLayoutEffect(() => {
+    markTaskOpenTrace(projectId, taskId, 'main-panel-committed', {
+      kind,
+      surface: openingMessageKey ? 'opening' : kind === 'ready' ? 'ready' : 'state',
+    });
+  }, [kind, openingMessageKey, projectId, taskId]);
 
   // Never put historical task content or step-by-step provision updates in the
   // main area while entering a task. A cold task may cross several store states
@@ -503,6 +511,7 @@ export const TaskActiveTabContent = observer(function TaskActiveTabContent({
   /** A detached task window is visible even though it is not the main workspace route. */
   forceSessionVisible?: boolean;
 }) {
+  const { projectId, taskId } = useTaskViewContext();
   const { taskView } = useRequireProvisionedTask();
   const { setEditorHost, triggerLayout } = useEditorContext();
 
@@ -513,6 +522,17 @@ export const TaskActiveTabContent = observer(function TaskActiveTabContent({
   useEffect(() => {
     if (renderer === 'monaco') triggerLayout();
   }, [renderer, triggerLayout]);
+
+  useLayoutEffect(() => {
+    markTaskOpenTrace(projectId, taskId, 'active-renderer-committed', { renderer });
+  }, [projectId, renderer, taskId]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      completeTaskOpenTrace(projectId, taskId, { renderer });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [projectId, renderer, taskId]);
 
   return (
     <div className="relative h-full min-h-0 flex-1" data-task-active-tab-content>
