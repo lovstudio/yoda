@@ -79,4 +79,14 @@ describe('selectTerminalPressureEvictions', () => {
       ])
     ).toEqual(['safe-old']);
   });
+
+  it('does not collapse the recent warm window under repeated pressure', () => {
+    const entries = Array.from({ length: 4 }, (_, index) => ({
+      sessionId: `session-${index + 1}`,
+      mounted: index === 3,
+      recoverable: true,
+    }));
+
+    expect(selectTerminalPressureEvictions(entries, 'session-4', 4)).toEqual([]);
+  });
 });

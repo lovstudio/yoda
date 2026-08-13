@@ -805,6 +805,7 @@ describe('FrontendPty stream ordering', () => {
 
     // The serial pump keeps at most one parser job in xterm's queue.
     expect(writes).toHaveLength(1);
+    expect(pty.ownedContainer.style.visibility).toBe('hidden');
     expect(ipcMocks.acknowledgeOutput).not.toHaveBeenCalled();
 
     const live = `L${'y'.repeat(XTERM_WRITE_CHUNK_CODE_UNITS * 2)}Z`;
@@ -820,6 +821,10 @@ describe('FrontendPty stream ordering', () => {
       snapshotChunks.push(write.data);
       nextWriteIndex += 1;
       write.callback();
+      if (snapshotChunks.length === 1) {
+        expect(pty.ownedContainer.style.visibility).toBe('');
+        expect(ipcMocks.acknowledgeOutput).not.toHaveBeenCalled();
+      }
     }
     expect(snapshotChunks).toHaveLength(snapshot.length / XTERM_WRITE_CHUNK_CODE_UNITS);
     expect(snapshotChunks[0]?.startsWith('S')).toBe(true);

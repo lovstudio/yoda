@@ -29,28 +29,23 @@ export function selectTerminalLruEvictions(
  * Under measured runtime pressure, release one quarter of the oldest safe
  * frontend renderers. Visible, connecting and not-yet-snapshotted terminals
  * remain protected; tmux/Agent processes are outside this cache operation.
+ * A retained floor prevents repeated pressure samples from collapsing the
+ * recent-session warm window and making every task switch cold again.
  */
 export function selectTerminalPressureEvictions(
   entriesOldestFirst: TerminalLruEntry[],
-  protectedSessionId?: string
+  protectedSessionId?: string,
+  minimumRetained = 1
 ): string[] {
-  const eligibleCount = entriesOldestFirst.filter(
+  const eligible = entriesOldestFirst.filter(
     (entry) =>
       !entry.mounted &&
       !entry.connecting &&
       entry.recoverable === true &&
       entry.sessionId !== protectedSessionId
-  ).length;
-  const evictionCount = Math.max(0, Math.ceil(eligibleCount / 4));
+  );
+  const retentionBudget = Math.max(0, entriesOldestFirst.length - Math.max(1, minimumRetained));
+  const evictionCount = Math.min(Math.ceil(eligible.length / 4), retentionBudget);
   if (evictionCount === 0) return [];
-  return entriesOldestFirst
-    .filter(
-      (entry) =>
-        !entry.mounted &&
-        !entry.connecting &&
-        entry.recoverable === true &&
-        entry.sessionId !== protectedSessionId
-    )
-    .slice(0, evictionCount)
-    .map((entry) => entry.sessionId);
+  return eligible.slice(0, evictionCount).map((entry) => entry.sessionId);
 }

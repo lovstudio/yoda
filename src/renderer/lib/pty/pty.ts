@@ -73,6 +73,7 @@ type PendingConnectAttempt = {
 type TerminalWriteQueueItem = {
   readonly data: string;
   readonly onWritten?: () => void;
+  onFirstChunkWritten?: () => void;
   offset: number;
 };
 
@@ -189,11 +190,13 @@ export class FrontendPty {
   private pendingWrites: Array<{
     data: string;
     acknowledgement?: { generation: number; sequence: number };
+    onFirstChunkWritten?: () => void;
   }> = [];
   /** PTY batches received while parsing is explicitly suspended. */
   private suspendedWrites: Array<{
     data: string;
     acknowledgement?: { generation: number; sequence: number };
+    onFirstChunkWritten?: () => void;
   }> = [];
   private hasFlushed = false;
   private terminalWriteQueue: TerminalWriteQueueItem[] = [];
@@ -263,6 +266,12 @@ export class FrontendPty {
   private isMounted = false;
   /** Lease protecting a newer host from an older React effect's late cleanup. */
   private mountGeneration = 0;
+  private debugSubscriptionStartedAt: number | null = null;
+  private debugSnapshotReceivedAt: number | null = null;
+  private debugVisibleMount: {
+    lease: number;
+    startedAt: number;
+  } | null = null;
 
   get mounted(): boolean {
     return this.isMounted;
@@ -631,6 +640,8 @@ export class FrontendPty {
   }
 
   private async connectOnce(): Promise<ConnectOutcome> {
+    const subscriptionStartedAt = performance.now();
+    this.debugSubscriptionStartedAt = subscriptionStartedAt;
     const pendingEvents: PtyDataEvent[] = [];
     let listenerActive = true;
     let attempt: PendingConnectAttempt | null = null;
@@ -665,6 +676,11 @@ export class FrontendPty {
       mounted: this.isMounted,
       flushGateOpen: this.hasFlushed,
     });
+    console.log('[DEBUG][agent-session-load] snapshot requested:', {
+      sessionId: this.sessionId,
+      mounted: this.isMounted,
+      flushGateOpen: this.hasFlushed,
+    });
 
     let result: Awaited<ReturnType<typeof rpc.pty.subscribe>>;
     try {
@@ -683,6 +699,8 @@ export class FrontendPty {
     this.offData = attempt.stopListening;
 
     const snapshot = result.data;
+    const snapshotReceivedAt = performance.now();
+    this.debugSnapshotReceivedAt = snapshotReceivedAt;
     this.beginCanonicalGeneration(snapshot.generation);
     this.lastOutputSequence = snapshot.sequence;
     this.resetBeforeNextLiveGeneration = snapshot.replayedFromHistory === true;
@@ -696,8 +714,18 @@ export class FrontendPty {
       replayedFromHistory: snapshot.replayedFromHistory === true,
       pendingLiveEventCount: pendingEvents.length,
     });
+    console.log('[DEBUG][agent-session-load] snapshot received:', {
+      sessionId: this.sessionId,
+      elapsedMs: Math.round((snapshotReceivedAt - subscriptionStartedAt) * 10) / 10,
+      generation: snapshot.generation,
+      sequence: snapshot.sequence,
+      snapshotCharacters: snapshot.buffer.length,
+      replayedFromHistory: snapshot.replayedFromHistory === true,
+      pendingLiveEventCount: pendingEvents.length,
+    });
     this.startConsumerHeartbeat();
     if (snapshot.buffer) {
+      const initialSnapshotMountLease = this.mountGeneration;
       this.noteOutputActivity();
       this.observeCanonicalPayload(snapshot.buffer, this.outputRevision);
       this.writeOrBuffer(
@@ -708,10 +736,25 @@ export class FrontendPty {
         },
         () => {
           this.initialSnapshotParserDrained = true;
+          console.log('[DEBUG][agent-session-load] snapshot parser drained:', {
+            sessionId: this.sessionId,
+            snapshotCharacters: snapshot.buffer.length,
+            parserMs: Math.round((performance.now() - snapshotReceivedAt) * 10) / 10,
+            elapsedMs: Math.round((performance.now() - subscriptionStartedAt) * 10) / 10,
+          });
           if (this.hasResolvedInitialSnapshot && this.isVisibleMountLease(this.mountGeneration)) {
             this.scheduleVisibleFrameAck(this.mountGeneration);
           }
-        }
+        },
+        snapshot.buffer.length > XTERM_WRITE_CHUNK_CODE_UNITS
+          ? () => {
+              this.revealInitialSnapshotProgress(
+                initialSnapshotMountLease,
+                snapshot.buffer.length,
+                subscriptionStartedAt
+              );
+            }
+          : undefined
       );
     } else if (snapshot.sequence > 0) {
       this.noteOutputActivity();
@@ -793,27 +836,36 @@ export class FrontendPty {
   private writeOrBuffer(
     data: string,
     acknowledgement?: { generation: number; sequence: number },
-    onWritten?: () => void
+    onWritten?: () => void,
+    onFirstChunkWritten?: () => void
   ): void {
     if (this.hasFlushed) {
       if (this.renderingSuspended) {
-        this.suspendedWrites.push({ data, acknowledgement });
+        this.suspendedWrites.push({ data, acknowledgement, onFirstChunkWritten });
         return;
       }
-      this.writeTerminalData(data, () => {
-        if (acknowledgement) {
-          this.acknowledgeOutput(acknowledgement.generation, acknowledgement.sequence);
-        }
-        onWritten?.();
-      });
+      this.writeTerminalData(
+        data,
+        () => {
+          if (acknowledgement) {
+            this.acknowledgeOutput(acknowledgement.generation, acknowledgement.sequence);
+          }
+          onWritten?.();
+        },
+        onFirstChunkWritten
+      );
     } else {
-      this.pendingWrites.push({ data, acknowledgement });
+      this.pendingWrites.push({ data, acknowledgement, onFirstChunkWritten });
     }
   }
 
-  private writeTerminalData(data: string, onWritten?: () => void): void {
+  private writeTerminalData(
+    data: string,
+    onWritten?: () => void,
+    onFirstChunkWritten?: () => void
+  ): void {
     if (this.isDisposed) return;
-    this.terminalWriteQueue.push({ data, onWritten, offset: 0 });
+    this.terminalWriteQueue.push({ data, onWritten, onFirstChunkWritten, offset: 0 });
     this.pumpTerminalWriteQueue();
   }
 
@@ -1174,6 +1226,9 @@ export class FrontendPty {
       if (this.isDisposed) return;
       this.terminalWriteActive = false;
       write.offset = end;
+      const onFirstChunkWritten = write.onFirstChunkWritten;
+      write.onFirstChunkWritten = undefined;
+      onFirstChunkWritten?.();
       if (write.offset >= write.data.length) {
         this.terminalWriteQueue.shift();
         write.onWritten?.();
@@ -1360,6 +1415,24 @@ export class FrontendPty {
       this.preparedCanonicalRevision = null;
       for (const resolve of this.visibleFrameWaiters) resolve(true);
       this.visibleFrameWaiters.clear();
+      const visibleMount =
+        this.debugVisibleMount?.lease === mountLease ? this.debugVisibleMount : null;
+      console.log('[DEBUG][agent-session-load] visible frame painted:', {
+        sessionId: this.sessionId,
+        elapsedMs: visibleMount
+          ? Math.round((performance.now() - visibleMount.startedAt) * 10) / 10
+          : null,
+        subscriptionElapsedMs:
+          this.debugSubscriptionStartedAt === null
+            ? null
+            : Math.round((performance.now() - this.debugSubscriptionStartedAt) * 10) / 10,
+        snapshotToPaintMs:
+          this.debugSnapshotReceivedAt === null
+            ? null
+            : Math.round((performance.now() - this.debugSnapshotReceivedAt) * 10) / 10,
+        usedFallback: false,
+      });
+      if (visibleMount) this.debugVisibleMount = null;
       return;
     }
 
@@ -1373,6 +1446,47 @@ export class FrontendPty {
     this.visibleFrameSettlementPending = false;
     this.ownedContainer.style.visibility = '';
     this.redrawViewportFromBuffer();
+    const visibleMount =
+      this.debugVisibleMount?.lease === mountLease ? this.debugVisibleMount : null;
+    console.log('[DEBUG][agent-session-load] visible frame fallback:', {
+      sessionId: this.sessionId,
+      elapsedMs: visibleMount
+        ? Math.round((performance.now() - visibleMount.startedAt) * 10) / 10
+        : null,
+      hasResolvedInitialSnapshot: this.hasResolvedInitialSnapshot,
+      initialSnapshotParserDrained: this.initialSnapshotParserDrained,
+      queuedWriteCount: this.terminalWriteQueue.length,
+      pendingWriteCount: this.pendingWrites.length,
+    });
+    if (visibleMount) this.debugVisibleMount = null;
+  }
+
+  /**
+   * A newly-created xterm has no stale DOM scene to protect. For a multi-chunk
+   * cold snapshot, reveal the first parsed chunk instead of presenting a blank
+   * panel until the entire scrollback and a quiet window have drained. The
+   * ordered parser queue and backend ACK still complete at the final chunk.
+   */
+  private revealInitialSnapshotProgress(
+    mountLease: number,
+    snapshotCharacters: number,
+    subscriptionStartedAt: number
+  ): void {
+    if (!this.isVisibleMountLease(mountLease)) return;
+    this.visibleFrameSettlementPending = false;
+    this.ownedContainer.style.visibility = '';
+    this.redrawViewportFromBuffer();
+    const visibleMount =
+      this.debugVisibleMount?.lease === mountLease ? this.debugVisibleMount : null;
+    console.log('[DEBUG][agent-session-load] progressive snapshot painted:', {
+      sessionId: this.sessionId,
+      elapsedMs: visibleMount
+        ? Math.round((performance.now() - visibleMount.startedAt) * 10) / 10
+        : null,
+      subscriptionElapsedMs: Math.round((performance.now() - subscriptionStartedAt) * 10) / 10,
+      snapshotCharacters,
+      parsedCharacters: Math.min(snapshotCharacters, XTERM_WRITE_CHUNK_CODE_UNITS),
+    });
   }
 
   /**
@@ -1386,16 +1500,20 @@ export class FrontendPty {
 
     if (writes.length > 0) {
       const data = writes.map((write) => write.data).join('');
-      this.writeTerminalData(data, () => {
-        for (const write of writes) {
-          if (write.acknowledgement) {
-            this.acknowledgeOutput(
-              write.acknowledgement.generation,
-              write.acknowledgement.sequence
-            );
+      this.writeTerminalData(
+        data,
+        () => {
+          for (const write of writes) {
+            if (write.acknowledgement) {
+              this.acknowledgeOutput(
+                write.acknowledgement.generation,
+                write.acknowledgement.sequence
+              );
+            }
           }
-        }
-      });
+        },
+        writes.find((write) => write.onFirstChunkWritten)?.onFirstChunkWritten
+      );
     }
 
     // A zero-length queue item acts as a completion sentinel even when an
@@ -1436,18 +1554,25 @@ export class FrontendPty {
     const pendingWrites = this.pendingWrites;
     this.pendingWrites = [];
     for (const [index, write] of pendingWrites.entries()) {
-      this.writeTerminalData(write.data, () => {
-        if (write.acknowledgement) {
-          this.acknowledgeOutput(write.acknowledgement.generation, write.acknowledgement.sequence);
-        }
-        if (index !== pendingWrites.length - 1) return;
-        try {
-          this.terminal.scrollToBottom();
-          this.savedViewportY = this.terminal.buffer.active.viewportY;
-          this.savedAtBottom = true;
-          this.redrawViewportFromBuffer();
-        } catch {}
-      });
+      this.writeTerminalData(
+        write.data,
+        () => {
+          if (write.acknowledgement) {
+            this.acknowledgeOutput(
+              write.acknowledgement.generation,
+              write.acknowledgement.sequence
+            );
+          }
+          if (index !== pendingWrites.length - 1) return;
+          try {
+            this.terminal.scrollToBottom();
+            this.savedViewportY = this.terminal.buffer.active.viewportY;
+            this.savedAtBottom = true;
+            this.redrawViewportFromBuffer();
+          } catch {}
+        },
+        write.onFirstChunkWritten
+      );
     }
   }
 
@@ -1459,6 +1584,19 @@ export class FrontendPty {
   mount(mountTarget: HTMLElement, targetDims?: { cols: number; rows: number }): number {
     const mountLease = ++this.mountGeneration;
     const visibleMount = mountTarget !== ensureXtermHost();
+    if (visibleMount) {
+      this.debugVisibleMount = { lease: mountLease, startedAt: performance.now() };
+      console.log('[DEBUG][agent-session-load] visible mount requested:', {
+        sessionId: this.sessionId,
+        mountLease,
+        hasResolvedInitialSnapshot: this.hasResolvedInitialSnapshot,
+        initialSnapshotParserDrained: this.initialSnapshotParserDrained,
+        connected: this.connectedConsumerId !== null,
+        suspendedWriteCount: this.suspendedWrites.length,
+        pendingWriteCount: this.pendingWrites.length,
+        queuedWriteCount: this.terminalWriteQueue.length,
+      });
+    }
     this.visibleFrameMountGeneration = 0;
     this.renderingSuspended = false;
     // A hot-cache terminal keeps its parser current while off-screen. An

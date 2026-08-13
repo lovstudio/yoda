@@ -115,8 +115,12 @@ export class PtySession {
       return;
     }
 
+    const preparationStartedAt = performance.now();
+    console.log('[DEBUG][agent-session-load] frontend preparation requested:', {
+      sessionId: this.sessionId,
+    });
     log.debug('[pty-session] preparation requested', { sessionId: this.sessionId });
-    const promise = this.connectInternal();
+    const promise = this.connectInternal(preparationStartedAt);
     this.connectPromise = promise;
     try {
       await promise;
@@ -125,7 +129,7 @@ export class PtySession {
     }
   }
 
-  private async connectInternal(): Promise<void> {
+  private async connectInternal(preparationStartedAt: number): Promise<void> {
     let pty: FrontendPty | null = null;
     try {
       pty = new FrontendPty(this.sessionId);
@@ -164,6 +168,10 @@ export class PtySession {
       runInAction(() => {
         this.status = 'ready';
         this.connectionError = null;
+      });
+      console.log('[DEBUG][agent-session-load] frontend preparation ready:', {
+        sessionId: this.sessionId,
+        elapsedMs: Math.round((performance.now() - preparationStartedAt) * 10) / 10,
       });
       log.debug('[pty-session] preparation ready', { sessionId: this.sessionId });
     } catch (error) {
@@ -366,7 +374,8 @@ export class PtySession {
           connecting: session.status === 'connecting',
           recoverable: session.pty?.hasRecoverableSnapshot ?? false,
         })),
-        protectedSessionId
+        protectedSessionId,
+        DEFAULT_HOT_TERMINAL_LIMIT
       )
     );
     if (evictions.size === 0) return;
