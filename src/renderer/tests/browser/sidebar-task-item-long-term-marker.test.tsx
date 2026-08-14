@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   toggleTaskCollapsed: vi.fn(),
   archiveQuick: vi.fn(),
+  createSubtaskAndRun: vi.fn(),
   getTaskDeliverySummaries: vi.fn(),
   preloadTask: vi.fn(),
   provisionTask: vi.fn(),
@@ -75,6 +76,7 @@ vi.mock('@renderer/features/tasks/components/use-task-menu-actions', () => ({
   useTaskMenuActions: () => ({
     onRename: vi.fn(),
     onArchiveQuick: mocks.archiveQuick,
+    onCreateSubtaskAndRun: mocks.createSubtaskAndRun,
   }),
 }));
 
@@ -151,6 +153,7 @@ describe('SidebarTaskItem long-term marker', () => {
     mocks.navigate.mockClear();
     mocks.toggleTaskCollapsed.mockClear();
     mocks.archiveQuick.mockClear();
+    mocks.createSubtaskAndRun.mockClear();
     mocks.getTaskDeliverySummaries.mockReset();
     mocks.getTaskDeliverySummaries.mockResolvedValue([]);
     mocks.preloadTask.mockReset();
@@ -289,6 +292,27 @@ describe('SidebarTaskItem long-term marker', () => {
 
     expect(mocks.archiveQuick).toHaveBeenCalledOnce();
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('keeps archive as the parent task hover action', async () => {
+    const { SidebarTaskItem } = await import('@renderer/features/sidebar/task-item');
+
+    await act(async () => {
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SidebarTaskItem, {
+            projectId: 'project-1',
+            taskId: 'task-1',
+            childCount: 1,
+          })
+        )
+      );
+    });
+
+    expect(host.querySelector('[aria-label="sidebar.archiveTask"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="tasks.context.createSubtaskAndRun"]')).toBeNull();
   });
 
   it('reveals archive on hover when the agent status is not working', async () => {

@@ -1,4 +1,4 @@
-import { Archive, Bookmark, GitBranch, ListPlus, MoreHorizontal, Users } from 'lucide-react';
+import { Archive, Bookmark, GitBranch, MoreHorizontal, Users } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -135,10 +135,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
       ? (treeTrail?.slice(-treeDepth) ?? Array.from({ length: treeDepth }, () => false))
       : [];
   const hasChildren = rowVariant === 'underProject' && childCount > 0;
-  const isParentTask = childCount > 0;
-  const canQuickCreateSubtask =
-    !isArchived && isParentTask && Boolean(menuActions.onCreateSubtaskAndRun);
-  const canShowHoverPreview = !disableHoverPreview && !canQuickCreateSubtask;
+  const canShowHoverPreview = !disableHoverPreview;
   const isCollapsed = hasChildren && sidebarStore.collapsedTaskIds.has(taskId);
   // Root-level parents swap pl-8 for a project-style mini-button slot (same 32px
   // name offset), so the hover-only chevron aligns with the project row's chevron
@@ -393,20 +390,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
             </SidebarItemMiniButton>
           }
         />
-        {canQuickCreateSubtask ? (
-          <SidebarItemMiniButton
-            type="button"
-            aria-label={t('tasks.context.createSubtaskAndRun')}
-            onClick={(e) => {
-              e.stopPropagation();
-              menuActions.onCreateSubtaskAndRun?.();
-            }}
-          >
-            <ListPlus className="h-4 w-4" />
-          </SidebarItemMiniButton>
-        ) : !isArchived ? (
-          archiveControl
-        ) : null}
+        {!isArchived ? archiveControl : null}
       </div>
       <div
         data-sidebar-task-status
