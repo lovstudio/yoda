@@ -11,6 +11,15 @@ describe('MaaS Gateway entry-point wiring', () => {
     );
   });
 
+  it('dismisses the bottom-bar model access popover when the app window loses focus', () => {
+    const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain('useDismissOnWindowBlur(isMaasPopoverOpen, dismissMaasPopover)');
+    expect(source).toContain(
+      '<Popover open={isMaasPopoverOpen} onOpenChange={setIsMaasPopoverOpen}>'
+    );
+  });
+
   it('routes the Settings MaaS requirement to Library Extensions', () => {
     const source = readFileSync(
       new URL('../features/settings/components/SettingsPage.tsx', import.meta.url),

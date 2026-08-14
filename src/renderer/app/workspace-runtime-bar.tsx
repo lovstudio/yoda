@@ -52,6 +52,7 @@ import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/tas
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { AgentInfoCard } from '@renderer/lib/components/agent-selector/agent-info-card';
 import type { SessionModelSettings } from '@renderer/lib/components/agent-selector/session-model-editor';
+import { useDismissOnWindowBlur } from '@renderer/lib/hooks/use-dismiss-on-window-blur';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
@@ -152,8 +153,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const [agentPanelTab, setAgentPanelTab] = useState<AgentPanelTab>('all');
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
   const [isConfigPopoverOpen, setIsConfigPopoverOpen] = useState(false);
+  const [isMaasPopoverOpen, setIsMaasPopoverOpen] = useState(false);
   const [accountUsageWarningThresholdDraft, setAccountUsageWarningThresholdDraft] = useState('95');
   const notifiedAccountUsageWindowsRef = useRef(new Set<string>());
+  const dismissMaasPopover = useCallback(() => setIsMaasPopoverOpen(false), []);
+  useDismissOnWindowBlur(isMaasPopoverOpen, dismissMaasPopover);
   const resourceHistory = useSyncExternalStore(
     workspaceResourceHistoryStore.subscribe,
     workspaceResourceHistoryStore.getSnapshot,
@@ -1762,7 +1766,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           />
         </PopoverContent>
       </Popover>
-      <Popover>
+      <Popover open={isMaasPopoverOpen} onOpenChange={setIsMaasPopoverOpen}>
         <PopoverTrigger
           aria-label={maasTriggerLabel}
           className={cn(
