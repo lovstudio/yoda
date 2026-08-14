@@ -114,7 +114,10 @@ export function useConversationBackgroundJobs(active: boolean): BackgroundJob[] 
     };
   }, [active, conversationId, projectId, taskId]);
 
-  return loaded?.conversationId === conversationId ? loaded.jobs : EMPTY_JOBS;
+  // Explicit null check, not `loaded?.conversationId === conversationId`: with no
+  // conversation at all both sides are `undefined` and that comparison passes.
+  if (!loaded || loaded.conversationId !== conversationId) return EMPTY_JOBS;
+  return loaded.jobs;
 }
 
 /**
