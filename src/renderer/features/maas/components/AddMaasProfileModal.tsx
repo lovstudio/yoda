@@ -42,7 +42,7 @@ export function AddMaasProfileModal({ onSuccess, onClose }: Props) {
   const [inspectionError, setInspectionError] = useState<string | null>(null);
   const [isInspecting, setIsInspecting] = useState(false);
   const canContinue = Boolean(websiteUrl.trim()) && !isInspecting;
-  const canCreate = Boolean(displayName.trim() && endpoint.trim());
+  const canCreate = Boolean(displayName.trim());
   const progressLabel = useMemo(
     () => t('maas.addProfileModal.progress', { current: step, total: 2 }),
     [step, t]
@@ -219,8 +219,9 @@ export function AddMaasProfileModal({ onSuccess, onClose }: Props) {
             </div>
 
             <label className="grid gap-1.5">
-              <span className="text-xs font-medium text-foreground">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
                 {t('maas.connection.endpoint')}
+                <span className="font-normal text-foreground-muted">{t('common.optional')}</span>
               </span>
               <Input
                 type="url"
