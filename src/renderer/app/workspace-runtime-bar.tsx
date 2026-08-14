@@ -674,22 +674,25 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     }
   };
 
-  const copyMaasUsageError = useCallback(() => {
-    if (!maasUsageError) return;
-    const diagnostics = [
-      `runtime=${runtimeId ?? 'unknown'}`,
-      `platform=${activeMaasPlatformId ?? 'unknown'}`,
-      `provider=${maasPresentation.providerName ?? 'unknown'}`,
-      `error=${maasUsageError}`,
-    ].join('\n');
-    void copyTextToClipboard(diagnostics)
-      .then(() => toast.success(t('workspaceRuntime.maasUsageErrorCopied')))
-      .catch((error) =>
-        toast.error(t('common.copyFailed'), {
-          description: error instanceof Error ? error.message : String(error),
-        })
-      );
-  }, [activeMaasPlatformId, maasPresentation.providerName, maasUsageError, runtimeId, t, toast]);
+  const copyMaasUsageError = useCallback(
+    (usageError: string | null = maasUsageError) => {
+      if (!usageError) return;
+      const diagnostics = [
+        `runtime=${runtimeId ?? 'unknown'}`,
+        `platform=${activeMaasPlatformId ?? 'unknown'}`,
+        `provider=${maasPresentation.providerName ?? 'unknown'}`,
+        `error=${usageError}`,
+      ].join('\n');
+      void copyTextToClipboard(diagnostics)
+        .then(() => toast.success(t('workspaceRuntime.maasUsageErrorCopied')))
+        .catch((error) =>
+          toast.error(t('common.copyFailed'), {
+            description: error instanceof Error ? error.message : String(error),
+          })
+        );
+    },
+    [activeMaasPlatformId, maasPresentation.providerName, maasUsageError, runtimeId, t, toast]
+  );
 
   const resetAccountUsage = useCallback(async () => {
     if (!officialCodexAccountAvailable) return;
@@ -1907,7 +1910,7 @@ function WorkspaceMaasUsageContent({
   refreshing: boolean;
   error: string | null;
   onRefresh: () => void;
-  onCopyError: () => void;
+  onCopyError: (error?: string | null) => void;
   onManage: () => void;
 }) {
   const { t } = useTranslation();
@@ -1917,14 +1920,20 @@ function WorkspaceMaasUsageContent({
     usage?.totalCreditsUsd != null ||
     usage?.remainingCreditsUsd != null ||
     usage?.keyLimitRemainingUsd != null;
+  const usageProgressPercent =
+    usage?.totalCostUsd != null && usage.totalCreditsUsd != null && usage.totalCreditsUsd > 0
+      ? Math.round((usage.totalCostUsd / usage.totalCreditsUsd) * 100)
+      : null;
   const sourceLabel =
     usage?.source === 'zenmux-management-statistics'
       ? t('workspaceRuntime.maasUsageSourceZenmux')
       : usage?.source === 'openrouter-key' || usage?.source === 'openrouter-key-and-credits'
         ? t('workspaceRuntime.maasUsageSourceOpenRouter')
-        : usage?.source === 'new-api-token'
-          ? t('workspaceRuntime.maasUsageSourceNewApi')
-          : t('workspaceRuntime.maasUsageSourceUnavailable');
+        : usage?.source === 'new-api-account'
+          ? t('workspaceRuntime.maasUsageSourceNewApiAccount')
+          : usage?.source === 'new-api-token'
+            ? t('workspaceRuntime.maasUsageSourceNewApi')
+            : t('workspaceRuntime.maasUsageSourceUnavailable');
 
   return (
     <>
@@ -1959,7 +1968,7 @@ function WorkspaceMaasUsageContent({
               {error}
             </p>
             <div className="mt-2 flex gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={onCopyError}>
+              <Button type="button" size="sm" variant="outline" onClick={() => onCopyError()}>
                 <Copy aria-hidden className="size-3.5" />
                 {t('workspaceRuntime.maasUsageCopyError')}
               </Button>
@@ -1973,48 +1982,106 @@ function WorkspaceMaasUsageContent({
             {t('workspaceRuntime.maasUsageNoReadableApi', { provider: providerName })}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
-            {usage.remainingCreditsUsd != null ? (
-              <ContextMetric
-                label={t('workspaceRuntime.maasUsageRemainingCredits')}
-                value={formatUsd(usage.remainingCreditsUsd)}
-              />
+          <div className="grid gap-3">
+            {usageProgressPercent != null ? (
+              <div className="grid gap-2 rounded-lg border border-border/70 bg-background-secondary/45 px-2.5 py-2">
+                <div className="flex items-center justify-between gap-3 text-[11px]">
+                  <span className="text-foreground-passive">
+                    {t('workspaceRuntime.maasUsageProgress')}
+                  </span>
+                  <span className="font-mono tabular-nums text-foreground-muted">
+                    {usageProgressPercent}%
+                  </span>
+                </div>
+                <ContextProgressBar
+                  percent={usageProgressPercent}
+                  tone={getUsageTone(usageProgressPercent)}
+                />
+                <div className="flex items-center justify-between gap-3 text-[10px] text-foreground-passive">
+                  <span>{formatUsd(usage.totalCostUsd ?? 0)}</span>
+                  <span>{formatUsd(usage.totalCreditsUsd ?? 0)}</span>
+                </div>
+              </div>
             ) : null}
-            {usage.keyLimitRemainingUsd != null ? (
-              <ContextMetric
-                label={t('workspaceRuntime.maasUsageKeyRemaining')}
-                value={formatUsd(usage.keyLimitRemainingUsd)}
-              />
-            ) : null}
-            {usage.totalCostUsd != null ? (
-              <ContextMetric
-                label={t('workspaceRuntime.maasUsageTotalCost')}
-                value={formatUsd(usage.totalCostUsd)}
-              />
-            ) : null}
-            {usage.usageDailyUsd != null ? (
-              <ContextMetric
-                label={t('workspaceRuntime.maasUsageToday')}
-                value={formatUsd(usage.usageDailyUsd)}
-              />
-            ) : null}
-            {usage.usageWeeklyUsd != null ? (
-              <ContextMetric
-                label={t('workspaceRuntime.maasUsageThisWeek')}
-                value={formatUsd(usage.usageWeeklyUsd)}
-              />
-            ) : null}
-            {usage.totalInputTokens != null ? (
-              <ContextMetric
-                label={t('workspaceRuntime.maasUsageInputTokens')}
-                value={formatCompactNumber(usage.totalInputTokens)}
-              />
-            ) : null}
-            {usage.totalOutputTokens != null ? (
-              <ContextMetric
-                label={t('workspaceRuntime.maasUsageOutputTokens')}
-                value={formatCompactNumber(usage.totalOutputTokens)}
-              />
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+              {usage.remainingCreditsUsd != null ? (
+                <ContextMetric
+                  label={t('workspaceRuntime.maasUsageRemainingCredits')}
+                  value={formatUsd(usage.remainingCreditsUsd)}
+                />
+              ) : null}
+              {usage.totalCreditsUsd != null ? (
+                <ContextMetric
+                  label={t('workspaceRuntime.maasUsageTotalCredits')}
+                  value={formatUsd(usage.totalCreditsUsd)}
+                />
+              ) : null}
+              {usage.keyLimitRemainingUsd != null ? (
+                <ContextMetric
+                  label={t('workspaceRuntime.maasUsageKeyRemaining')}
+                  value={formatUsd(usage.keyLimitRemainingUsd)}
+                />
+              ) : null}
+              {usage.totalCostUsd != null ? (
+                <ContextMetric
+                  label={t('workspaceRuntime.maasUsageTotalCost')}
+                  value={formatUsd(usage.totalCostUsd)}
+                />
+              ) : null}
+              {usage.usageDailyUsd != null ? (
+                <ContextMetric
+                  label={t('workspaceRuntime.maasUsageToday')}
+                  value={formatUsd(usage.usageDailyUsd)}
+                />
+              ) : null}
+              {usage.usageWeeklyUsd != null ? (
+                <ContextMetric
+                  label={t('workspaceRuntime.maasUsageThisWeek')}
+                  value={formatUsd(usage.usageWeeklyUsd)}
+                />
+              ) : null}
+              {usage.totalInputTokens != null ? (
+                <ContextMetric
+                  label={t('workspaceRuntime.maasUsageInputTokens')}
+                  value={formatCompactNumber(usage.totalInputTokens)}
+                />
+              ) : null}
+              {usage.totalOutputTokens != null ? (
+                <ContextMetric
+                  label={t('workspaceRuntime.maasUsageOutputTokens')}
+                  value={formatCompactNumber(usage.totalOutputTokens)}
+                />
+              ) : null}
+            </div>
+            {usage.accountUsageStatus === 'credential-required' ? (
+              <div className="rounded-md border border-border/70 bg-background-secondary/35 px-2.5 py-2 text-[11px] leading-relaxed text-foreground-passive">
+                <div className="font-medium text-foreground-muted">
+                  {t(
+                    usage.quotaUnlimited
+                      ? 'workspaceRuntime.maasUsageUnlimitedToken'
+                      : 'workspaceRuntime.maasUsageTokenScope'
+                  )}
+                </div>
+                <div className="mt-0.5">
+                  {t('workspaceRuntime.maasUsageAccountCredentialRequired')}
+                </div>
+              </div>
+            ) : usage.accountUsageStatus === 'error' && usage.accountUsageError ? (
+              <div className="rounded-md border border-amber-500/25 bg-amber-500/5 px-2.5 py-2 text-[11px] leading-relaxed">
+                <div className="font-medium text-foreground-muted">
+                  {t('workspaceRuntime.maasUsageAccountUnavailable')}
+                </div>
+                <div className="mt-0.5 break-words text-foreground-passive">
+                  {usage.accountUsageError}
+                </div>
+                <button
+                  type="button"
+                  className="mt-1.5 text-foreground-muted underline-offset-2 hover:text-foreground hover:underline"
+                  onClick={() => onCopyError(usage.accountUsageError)}
+                >
+                  {t('workspaceRuntime.maasUsageCopyError')}
+                </button>
+              </div>
             ) : null}
           </div>
         )}

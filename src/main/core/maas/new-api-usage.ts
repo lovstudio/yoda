@@ -27,13 +27,25 @@ export type NewApiTokenUsageResponse = {
   message?: string;
 };
 
-type NewApiUsageResource = 'status' | 'token';
+export type NewApiAccountUsageResponse = {
+  success?: boolean;
+  data?: {
+    quota?: number;
+    used_quota?: number;
+  };
+  message?: string;
+};
+
+type NewApiUsageResource = 'status' | 'token' | 'account';
 
 function nullableFiniteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-function errorMessage(body: NewApiTokenUsageResponse | null, fallback: string): string {
+function errorMessage(
+  body: NewApiTokenUsageResponse | NewApiAccountUsageResponse | null,
+  fallback: string
+): string {
   if (typeof body?.error === 'string' && body.error.trim()) return body.error.trim();
   if (
     typeof body?.error === 'object' &&
@@ -47,7 +59,12 @@ function errorMessage(body: NewApiTokenUsageResponse | null, fallback: string): 
 }
 
 export function newApiUsageUrl(endpoint: string, resource: NewApiUsageResource): URL {
-  const path = resource === 'status' ? '/api/status' : '/api/usage/token/';
+  const path =
+    resource === 'status'
+      ? '/api/status'
+      : resource === 'account'
+        ? '/api/user/self'
+        : '/api/usage/token/';
   return new URL(path, endpoint.trim());
 }
 
@@ -99,21 +116,109 @@ export function buildNewApiUsageSummary(
     usageDailyUsd: null,
     usageWeeklyUsd: null,
     usageMonthlyUsd: null,
+    quotaUnlimited: unlimitedQuota,
+    accountUsageStatus: 'credential-required',
+    accountUsageError: null,
     source: 'new-api-token',
     fetchedAt,
     period: null,
   };
 }
 
+export function buildNewApiAccountUsageSummary(
+  tokenSummary: MaasUsageSummary,
+  response: NewApiAccountUsageResponse,
+  quotaPerUnit: number,
+  fetchedAt: string
+): MaasUsageSummary {
+  const remainingQuota = nullableFiniteNumber(response.data?.quota);
+  const usedQuota = nullableFiniteNumber(response.data?.used_quota);
+  if (remainingQuota == null || usedQuota == null) {
+    throw new Error('New API account usage did not return quota and used_quota.');
+  }
+
+  return {
+    ...tokenSummary,
+    totalCostUsd: usedQuota / quotaPerUnit,
+    totalCreditsUsd: (remainingQuota + usedQuota) / quotaPerUnit,
+    remainingCreditsUsd: remainingQuota / quotaPerUnit,
+    quotaUnlimited: false,
+    accountUsageStatus: 'available',
+    accountUsageError: null,
+    source: 'new-api-account',
+    fetchedAt,
+  };
+}
+
+async function fetchNewApiAccountUsage({
+  endpoint,
+  accountAccessToken,
+  tokenSummary,
+  quotaPerUnit,
+  fetchedAt,
+  fetchImpl,
+}: {
+  endpoint: string;
+  accountAccessToken: string;
+  tokenSummary: MaasUsageSummary;
+  quotaPerUnit: number;
+  fetchedAt: string;
+  fetchImpl: typeof fetch;
+}): Promise<MaasUsageSummary> {
+  let response: Response;
+  try {
+    response = await fetchImpl(newApiUsageUrl(endpoint, 'account'), {
+      headers: { Authorization: `Bearer ${accountAccessToken}` },
+    });
+  } catch (error) {
+    return {
+      ...tokenSummary,
+      accountUsageStatus: 'error',
+      accountUsageError:
+        error instanceof Error ? error.message : 'New API account usage request failed.',
+    };
+  }
+
+  let body: NewApiAccountUsageResponse | null = null;
+  try {
+    body = (await response.json()) as NewApiAccountUsageResponse;
+  } catch {
+    body = null;
+  }
+
+  if (!response.ok || body?.success === false) {
+    return {
+      ...tokenSummary,
+      accountUsageStatus: 'error',
+      accountUsageError: `New API account usage returned ${response.status}: ${errorMessage(
+        body,
+        response.statusText || 'Request failed.'
+      )}`,
+    };
+  }
+
+  try {
+    return buildNewApiAccountUsageSummary(tokenSummary, body ?? {}, quotaPerUnit, fetchedAt);
+  } catch (error) {
+    return {
+      ...tokenSummary,
+      accountUsageStatus: 'error',
+      accountUsageError: error instanceof Error ? error.message : 'New API account usage failed.',
+    };
+  }
+}
+
 export async function fetchNewApiUsageSummary({
   endpoint,
   apiKey,
+  accountAccessToken,
   platformId,
   fetchedAt = new Date().toISOString(),
   fetchImpl = fetch,
 }: {
   endpoint: string;
   apiKey: string;
+  accountAccessToken?: string;
   platformId: MaasPlatformId;
   fetchedAt?: string;
   fetchImpl?: typeof fetch;
@@ -166,5 +271,15 @@ export async function fetchNewApiUsageSummary({
     throw new Error('New API token usage did not return a token payload.');
   }
 
-  return buildNewApiUsageSummary(platformId, body, quotaPerUnit, fetchedAt);
+  const tokenSummary = buildNewApiUsageSummary(platformId, body, quotaPerUnit, fetchedAt);
+  if (!accountAccessToken?.trim()) return tokenSummary;
+
+  return fetchNewApiAccountUsage({
+    endpoint,
+    accountAccessToken: accountAccessToken.trim(),
+    tokenSummary,
+    quotaPerUnit,
+    fetchedAt,
+    fetchImpl,
+  });
 }

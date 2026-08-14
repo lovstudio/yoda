@@ -264,6 +264,7 @@ export const maasConnectionSchema = z.object({
   syncToAgentClientVersion: z.literal(1).optional(),
   keyFingerprint: z.string().nullable(),
   inferenceKeyFingerprint: z.string().nullable().default(null),
+  accountKeyFingerprint: z.string().nullable().default(null),
   connectedAt: z.string().nullable(),
   lastCheckedAt: z.string().nullable(),
   lastTest: z

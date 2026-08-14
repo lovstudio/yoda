@@ -5,6 +5,11 @@ import { useTranslation } from 'react-i18next';
 import { basenameFromAnyPath } from '@shared/path-name';
 import { projectDisplayName } from '@shared/projects';
 import { getProjectManagerStore } from '@renderer/features/projects/stores/project-selectors';
+import {
+  loadRecentProjectIds,
+  rememberRecentProjectId,
+  sortProjectsByRecentSelection,
+} from '@renderer/features/tasks/create-task-modal/recent-project-order';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -73,25 +78,21 @@ export const ProjectSelector = observer(function ProjectSelector({
   const { toast } = useToast();
   const showExpressCreateModal = useShowModal('expressCreateProjectModal');
   const projectManager = getProjectManagerStore();
+  const [recentProjectIds, setRecentProjectIds] = useState(() => loadRecentProjectIds());
 
-  const options: ProjectOption[] = Array.from(projectManager.projects.entries())
-    .flatMap(([id, store]) => {
-      const project = store.data;
-      if (!project || project.isInternal) return [];
-      return [{ id, project }];
-    })
-    .sort((a, b) => {
-      if (a.project.updatedAt !== b.project.updatedAt) {
-        return b.project.updatedAt.localeCompare(a.project.updatedAt);
-      }
-      return a.id.localeCompare(b.id);
-    })
-    .map(({ id, project }) => ({
+  const projects = Array.from(projectManager.projects.entries()).flatMap(([id, store]) => {
+    const project = store.data;
+    if (!project || project.isInternal) return [];
+    return [{ id, project, updatedAt: project.updatedAt }];
+  });
+  const options: ProjectOption[] = sortProjectsByRecentSelection(projects, recentProjectIds).map(
+    ({ id, project }) => ({
       kind: 'project',
       value: id,
       label: projectDisplayName(project),
       path: project.path,
-    }));
+    })
+  );
   const projectlessOption: ProjectlessOption = {
     kind: 'projectless',
     value: '__projectless__',
@@ -126,6 +127,7 @@ export const ProjectSelector = observer(function ProjectSelector({
 
   function selectAndLoadProject(projectId: string) {
     appState.sidebar.ensureProjectExpanded(projectId);
+    setRecentProjectIds(rememberRecentProjectId(projectId));
     onChange(projectId);
     setOpen(false);
     void projectManager.mountProject(projectId).catch((error: unknown) => {

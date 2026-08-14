@@ -145,6 +145,7 @@ export type MaasPlatformConnection = {
   syncToAgentClientVersion?: 1;
   keyFingerprint: string | null;
   inferenceKeyFingerprint: string | null;
+  accountKeyFingerprint?: string | null;
   connectedAt: string | null;
   lastCheckedAt: string | null;
   lastTest: MaasConnectionCheckResult | null;
@@ -179,6 +180,7 @@ export type MaasConnectInput = {
   platformId: MaasPlatformId;
   apiKey?: string;
   inferenceApiKey?: string;
+  accountAccessToken?: string;
   displayName?: string;
   endpoint?: string;
   websiteUrl?: string;
@@ -256,7 +258,7 @@ export function resolveMaasEnvKey(
   return nameKey ? `${nameKey}_API_KEY` : DEFAULT_MAAS_ENV_KEYS[templateId];
 }
 
-export type MaasApiKeyKind = 'primary' | 'inference';
+export type MaasApiKeyKind = 'primary' | 'inference' | 'account';
 
 export type MaasCopyStoredApiKeyInput = {
   platformId: MaasPlatformId;
@@ -410,7 +412,11 @@ export type MaasUsageSummary = {
     | MaasInvocationPage['source']
     | 'openrouter-key'
     | 'openrouter-key-and-credits'
-    | 'new-api-token';
+    | 'new-api-token'
+    | 'new-api-account';
+  quotaUnlimited: boolean | null;
+  accountUsageStatus: 'not-applicable' | 'credential-required' | 'available' | 'error';
+  accountUsageError: string | null;
   fetchedAt: string | null;
   period: MaasInvocationPage['period'];
 };

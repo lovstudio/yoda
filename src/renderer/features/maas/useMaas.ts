@@ -25,7 +25,7 @@ import type { NewApiManagedActionResult, NewApiManagedStatus } from '@shared/new
 import { rpc } from '@renderer/lib/ipc';
 
 const PAGE_SIZE = 24;
-const REAL_USAGE_QUERY_VERSION = 'provider-account-usage-v3';
+const REAL_USAGE_QUERY_VERSION = 'provider-account-usage-v4';
 const PLATFORM_DESCRIPTION_QUERY_VERSION = 'official-page-description-v1';
 const MANAGED_GATEWAY_STARS_QUERY_VERSION = 'github-stars-v3';
 
@@ -425,6 +425,7 @@ export function useConnectMaasPlatform() {
       }
       void queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections });
       void queryClient.invalidateQueries({ queryKey: ['maas', 'records'] });
+      void queryClient.invalidateQueries({ queryKey: ['maas', 'summary'] });
       void queryClient.invalidateQueries({ queryKey: maasQueryKeys.codexClientSync });
     },
   });
@@ -468,6 +469,7 @@ export function useDisconnectMaasPlatform() {
                 ...connection,
                 keyFingerprint: null,
                 inferenceKeyFingerprint: null,
+                accountKeyFingerprint: null,
                 connectedAt: null,
                 lastCheckedAt: null,
                 lastTest: null,
@@ -482,6 +484,7 @@ export function useDisconnectMaasPlatform() {
       void queryClient.invalidateQueries({ queryKey: maasQueryKeys.globalBinding });
       void queryClient.invalidateQueries({ queryKey: ['maas', 'runtime-bindings'] });
       void queryClient.invalidateQueries({ queryKey: ['maas', 'records'] });
+      void queryClient.invalidateQueries({ queryKey: ['maas', 'summary'] });
       void queryClient.invalidateQueries({ queryKey: ['runtimeSettings'] });
       void queryClient.invalidateQueries({ queryKey: ['runtimeSnapshot'] });
       void queryClient.invalidateQueries({ queryKey: maasQueryKeys.codexClientSync });

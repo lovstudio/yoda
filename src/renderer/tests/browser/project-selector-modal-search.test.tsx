@@ -154,6 +154,8 @@ describe('ProjectSelector in a modal', () => {
 
   beforeEach(async () => {
     await page.viewport(900, 700);
+    // Recency order is persisted, so earlier selections must not leak between tests.
+    window.localStorage.removeItem('yoda:project-selector:recent-project-ids');
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -182,6 +184,20 @@ describe('ProjectSelector in a modal', () => {
       });
 
     expect(projectOrder).toEqual(['blog', 'yoda', 'visualizer']);
+  });
+
+  it('moves the most recently picked project to the top', async () => {
+    const items = await openProjectSearch('');
+    const visualizer = items.find((item) => item.textContent?.includes('算法可视化'));
+    if (!visualizer) throw new Error('Expected the visualizer project option');
+    await act(async () => visualizer.click());
+
+    const reopened = await openProjectSearch('');
+    const firstProject = reopened.find((item) =>
+      ['算法可视化', '科技博主的自我修养', 'Yoda'].some((name) => item.textContent?.includes(name))
+    );
+
+    expect(firstProject?.textContent).toContain('算法可视化');
   });
 
   it('ignores a shared parent path when filtering by a project keyword', async () => {
