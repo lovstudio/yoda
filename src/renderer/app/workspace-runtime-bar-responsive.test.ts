@@ -9,7 +9,7 @@ describe('Workspace runtime bar responsive layout', () => {
   );
 
   it('uses its own container width and never wraps the single-line status bar', () => {
-    expect(source).toContain('@container flex h-7 min-w-0');
+    expect(source).toContain('@container flex h-8 min-w-0');
     expect(source).toContain('overflow-hidden whitespace-nowrap');
   });
 
@@ -18,7 +18,9 @@ describe('Workspace runtime bar responsive layout', () => {
       "const RUNTIME_BAR_ACTION_LABEL_CLASS = 'hidden @min-[1441px]:inline';"
     );
     expect(source).toContain('className="tabular-nums @max-[1440px]:hidden"');
-    expect(source).toContain('className="hidden tabular-nums @max-[1440px]:inline"');
+    expect(source).toContain(
+      'className="hidden min-w-4 text-center font-mono text-[10px] leading-4 tabular-nums @max-[1440px]:inline"'
+    );
     expect(source.match(/className=\{RUNTIME_BAR_ACTION_LABEL_CLASS\}/g)).toHaveLength(5);
     expect(source).toContain('triggerLabelClassName={RUNTIME_BAR_ACTION_LABEL_CLASS}');
     expect(skillPopoverSource).toContain('className={triggerLabelClassName}');

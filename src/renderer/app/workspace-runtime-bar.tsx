@@ -115,7 +115,7 @@ type PendingAcceptanceTask = {
 type AgentPanelTab = 'all' | 'working' | 'needs-reply' | 'pending-acceptance';
 
 const RUNTIME_BAR_ACTION_CLASS =
-  'flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border';
+  'flex h-6 min-w-7 shrink-0 items-center justify-center gap-1 rounded-md px-1.5 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border';
 const RUNTIME_BAR_ACTION_LABEL_CLASS = 'hidden @min-[1441px]:inline';
 
 function agentSessionKey(
@@ -854,7 +854,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   return (
     <footer
       data-yoda-surface="workspace-runtime-bar"
-      className="@container flex h-7 min-w-0 shrink-0 items-center gap-1 overflow-hidden whitespace-nowrap border-t border-border bg-background-secondary px-2 text-[11px] text-foreground-muted @min-[1441px]:gap-2"
+      className="@container flex h-8 min-w-0 shrink-0 items-center gap-0.5 overflow-hidden whitespace-nowrap border-t border-border bg-background-secondary px-1.5 text-[11px] text-foreground-muted"
     >
       {!runtimeId ? renderConfigPopover() : null}
       {runtimeId ? (
@@ -1349,7 +1349,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         >
           <Bot className="size-3.5" />
           <span className="tabular-nums @max-[1440px]:hidden">{agentTriggerText}</span>
-          <span className="hidden tabular-nums @max-[1440px]:inline">{agentSessionCount}</span>
+          <span className="hidden min-w-4 text-center font-mono text-[10px] leading-4 tabular-nums @max-[1440px]:inline">
+            {agentSessionCount}
+          </span>
           {attentionAgentCount > 0 || workingAgentCount > 0 ? (
             <span
               aria-hidden
@@ -1682,7 +1684,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           aria-label={maasTriggerLabel}
           className={cn(
             RUNTIME_BAR_ACTION_CLASS,
-            maasPresentation.active ? 'bg-background-2 text-foreground' : 'text-foreground-passive'
+            isMaasPopoverOpen
+              ? 'bg-background-2 text-foreground'
+              : maasPresentation.active
+                ? 'text-foreground'
+                : 'text-foreground-passive'
           )}
           title={maasTriggerLabel}
         >
@@ -1725,6 +1731,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           </PopoverContent>
         ) : null}
       </Popover>
+      <span
+        aria-hidden
+        data-slot="workspace-runtime-group-divider"
+        className="mx-1 h-3.5 w-px shrink-0 bg-border/70"
+      />
       <button
         type="button"
         title={t('workspaceRuntime.doctor')}
@@ -1732,7 +1743,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         onClick={() => showDoctorModal({})}
         className={cn(RUNTIME_BAR_ACTION_CLASS, 'text-foreground-passive')}
       >
-        <Stethoscope className="size-3.5" />
+        <Stethoscope aria-hidden className="size-3.5" />
         <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>{t('workspaceRuntime.doctor')}</span>
       </button>
       <button
@@ -1746,7 +1757,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           terminalActive && 'bg-background-2 text-foreground'
         )}
       >
-        <Terminal className="size-3.5" />
+        <Terminal aria-hidden className="size-3.5" />
         <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>{t('workspaceRuntime.terminal')}</span>
       </button>
     </footer>
