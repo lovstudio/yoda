@@ -11,7 +11,7 @@ import '../../index.css';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => {
-  const project = (id: string, name: string, path: string): Project => ({
+  const project = (id: string, name: string, path: string, updatedAt: string): Project => ({
     type: 'local',
     id,
     name,
@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => {
     workspaceId: null,
     isInternal: false,
     createdAt: '2026-07-31T00:00:00.000Z',
-    updatedAt: '2026-07-31T00:00:00.000Z',
+    updatedAt,
   });
   return {
     manager: {
@@ -29,7 +29,12 @@ const mocks = vi.hoisted(() => {
         [
           'visualizer',
           {
-            data: project('visualizer', '算法可视化', '/Users/mark/yoda/repositories/算法可视化'),
+            data: project(
+              'visualizer',
+              '算法可视化',
+              '/Users/mark/yoda/repositories/算法可视化',
+              '2026-07-31T00:00:00.000Z'
+            ),
           },
         ],
         [
@@ -38,11 +43,22 @@ const mocks = vi.hoisted(() => {
             data: project(
               'blog',
               '科技博主的自我修养',
-              '/Users/mark/yoda/repositories/科技博主的自我修养'
+              '/Users/mark/yoda/repositories/科技博主的自我修养',
+              '2026-08-02T00:00:00.000Z'
             ),
           },
         ],
-        ['yoda', { data: project('yoda', 'Yoda', '/Users/mark/lovstudio/coding/yoda') }],
+        [
+          'yoda',
+          {
+            data: project(
+              'yoda',
+              'Yoda',
+              '/Users/mark/lovstudio/coding/yoda',
+              '2026-08-01T00:00:00.000Z'
+            ),
+          },
+        ],
       ]),
       mountProject: vi.fn().mockResolvedValue(undefined),
       createProject: vi.fn(),
@@ -150,6 +166,22 @@ describe('ProjectSelector in a modal', () => {
     await act(async () => root.unmount());
     host.remove();
     vi.clearAllMocks();
+  });
+
+  it('orders projects by most recently updated first', async () => {
+    const items = await openProjectSearch('');
+    const projectOrder = items
+      .map((item) => item.textContent)
+      .filter((text): text is string =>
+        ['算法可视化', '科技博主的自我修养', 'Yoda'].some((name) => text?.includes(name))
+      )
+      .map((text) => {
+        if (text.includes('科技博主的自我修养')) return 'blog';
+        if (text.includes('Yoda')) return 'yoda';
+        return 'visualizer';
+      });
+
+    expect(projectOrder).toEqual(['blog', 'yoda', 'visualizer']);
   });
 
   it('ignores a shared parent path when filtering by a project keyword', async () => {

@@ -74,20 +74,24 @@ export const ProjectSelector = observer(function ProjectSelector({
   const showExpressCreateModal = useShowModal('expressCreateProjectModal');
   const projectManager = getProjectManagerStore();
 
-  const options: ProjectOption[] = Array.from(projectManager.projects.entries()).flatMap(
-    ([id, store]) => {
+  const options: ProjectOption[] = Array.from(projectManager.projects.entries())
+    .flatMap(([id, store]) => {
       const project = store.data;
       if (!project || project.isInternal) return [];
-      return [
-        {
-          kind: 'project',
-          value: id,
-          label: projectDisplayName(project),
-          path: project.path,
-        },
-      ];
-    }
-  );
+      return [{ id, project }];
+    })
+    .sort((a, b) => {
+      if (a.project.updatedAt !== b.project.updatedAt) {
+        return b.project.updatedAt.localeCompare(a.project.updatedAt);
+      }
+      return a.id.localeCompare(b.id);
+    })
+    .map(({ id, project }) => ({
+      kind: 'project',
+      value: id,
+      label: projectDisplayName(project),
+      path: project.path,
+    }));
   const projectlessOption: ProjectlessOption = {
     kind: 'projectless',
     value: '__projectless__',
