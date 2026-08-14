@@ -186,6 +186,25 @@ describe('ProjectsSettingsMenu', () => {
     expect(mocks.updateInterface).toHaveBeenCalledWith({ newTaskOpenMode: 'modal' });
   });
 
+  it('does not expose bulk project expansion controls', async () => {
+    const { ProjectsSettingsMenu } = await import(
+      '@renderer/features/sidebar/projects-group-label'
+    );
+    await act(async () => root.render(createElement(ProjectsSettingsMenu, { renderTrigger })));
+
+    const viewOptions = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="workspaces.viewOptions"]'
+    );
+    if (!viewOptions) throw new Error('View options trigger is missing');
+    await click(viewOptions);
+
+    const popover = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
+    expect(popover?.textContent).not.toContain('sidebar.expandAll');
+    expect(popover?.textContent).not.toContain('sidebar.collapseAll');
+    expect(mocks.sidebarStore.expandAllProjects).not.toHaveBeenCalled();
+    expect(mocks.sidebarStore.collapseAllProjects).not.toHaveBeenCalled();
+  });
+
   it('opens the priority order in a compact modal entry when priority mode is enabled', async () => {
     mocks.sidebarStore.taskPriorityMode = true;
     const { ProjectsSettingsMenu } = await import(
@@ -206,6 +225,9 @@ describe('ProjectsSettingsMenu', () => {
     expect(popover?.textContent).not.toContain('sidebar.priorityGroups.archived');
     expect(popover?.textContent).not.toContain('sidebar.groupBy');
     expect(popoverText.indexOf('sidebar.sortBy')).toBeLessThan(
+      popoverText.indexOf('sidebar.prioritySection')
+    );
+    expect(popoverText.indexOf('sidebar.prioritySection')).toBeLessThan(
       popoverText.indexOf('sidebar.priorityMode')
     );
     expect(popoverText.indexOf('sidebar.priorityMode')).toBeLessThan(

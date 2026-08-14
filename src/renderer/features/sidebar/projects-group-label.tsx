@@ -1,8 +1,6 @@
 import {
   Archive,
   ChevronRight,
-  ChevronsDownUp,
-  ChevronsUpDown,
   EyeOff,
   FolderTree,
   ListRestart,
@@ -32,7 +30,6 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
-  ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@renderer/lib/ui/context-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
@@ -67,15 +64,6 @@ export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
         <ContextMenuItem onClick={() => navigate('projectsOverview')}>
           <FolderTree className="size-4" />
           {t('sidebar.projectsOverview')}
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onClick={() => sidebarStore.expandAllProjects()}>
-          <ChevronsUpDown className="size-4" />
-          {t('sidebar.expandAll')}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => sidebarStore.collapseAllProjects()}>
-          <ChevronsDownUp className="size-4" />
-          {t('sidebar.collapseAll')}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
@@ -239,6 +227,8 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
           <ToggleGroupItem value="updated-at">{t('sidebar.sortByUpdatedAt')}</ToggleGroupItem>
         </ToggleGroup>
       </PanelRow>
+      <PanelSeparator />
+      <SectionLabel>{t('sidebar.prioritySection')}</SectionLabel>
       <PanelSwitchRow
         id="sidebar-priority-mode"
         label={t('sidebar.priorityMode')}
@@ -247,6 +237,7 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
         onCheckedChange={(checked) => sidebarStore.setTaskPriorityMode(checked)}
       />
       {sidebarStore.taskPriorityMode && <PriorityOrderCard />}
+      <PanelSeparator />
       <PanelRow label={t('sidebar.branchDisplay')}>
         <ToggleGroup
           size="xs"
@@ -306,38 +297,22 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
         checked={expressMode}
         onCheckedChange={(checked) => updateHomeDraft({ expressMode: checked })}
       />
-      <PanelSeparator />
-      <div className="grid grid-cols-2 gap-1">
-        <Button
-          variant="ghost"
-          size="xs"
-          className="justify-start text-foreground-muted hover:text-foreground"
-          onClick={() => sidebarStore.expandAllProjects()}
-        >
-          <ChevronsUpDown />
-          {t('sidebar.expandAll')}
-        </Button>
-        <Button
-          variant="ghost"
-          size="xs"
-          className="justify-start text-foreground-muted hover:text-foreground"
-          onClick={() => sidebarStore.collapseAllProjects()}
-        >
-          <ChevronsDownUp />
-          {t('sidebar.collapseAll')}
-        </Button>
-        {!sidebarStore.taskPriorityMode && (
-          <Button
-            variant="ghost"
-            size="xs"
-            className="col-span-2 justify-start text-foreground-muted hover:text-foreground"
-            onClick={() => sidebarStore.clearManualTaskOrder()}
-          >
-            <ListRestart />
-            {t('sidebar.clearManualOrder')}
-          </Button>
-        )}
-      </div>
+      {!sidebarStore.taskPriorityMode && (
+        <>
+          <PanelSeparator />
+          <div className="px-1">
+            <Button
+              variant="ghost"
+              size="xs"
+              className="w-full justify-start text-foreground-muted hover:text-foreground"
+              onClick={() => sidebarStore.clearManualTaskOrder()}
+            >
+              <ListRestart />
+              {t('sidebar.clearManualOrder')}
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 });
@@ -352,7 +327,7 @@ const PriorityOrderCard = observer(function PriorityOrderCard() {
       className="group mx-2 flex h-8 w-[calc(100%-1rem)] items-center gap-2 rounded-sm bg-background-tertiary-1/45 px-2 text-left text-xs text-foreground-muted outline-none transition-colors hover:bg-background-tertiary-1 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
       onClick={() => showModal('priorityOrderModal', {})}
     >
-      <span className="min-w-0 flex-1 truncate">{t('sidebar.priorityOrder')}</span>
+      <PanelFieldLabel>{t('sidebar.priorityOrder')}</PanelFieldLabel>
       <span className="shrink-0 text-[11px] text-foreground-passive">
         {t('sidebar.priorityOrderSummary', { count: sidebarStore.taskPriorityOrder.length })}
       </span>
@@ -364,9 +339,21 @@ const PriorityOrderCard = observer(function PriorityOrderCard() {
 function PanelRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex h-8 items-center justify-between gap-2 px-2">
-      <span className="text-xs text-foreground-muted">{label}</span>
+      <PanelFieldLabel>{label}</PanelFieldLabel>
       {children}
     </div>
+  );
+}
+
+function PanelFieldLabel({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
+  const className = 'min-w-0 flex-1 truncate text-xs font-medium leading-4 text-foreground-muted';
+
+  return htmlFor ? (
+    <label htmlFor={htmlFor} className={className}>
+      {children}
+    </label>
+  ) : (
+    <span className={className}>{children}</span>
   );
 }
 
@@ -383,11 +370,7 @@ function PanelSwitchRow({
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
 }) {
-  const labelElement = (
-    <label htmlFor={id} className="cursor-default text-xs text-foreground-muted">
-      {label}
-    </label>
-  );
+  const labelElement = <PanelFieldLabel htmlFor={id}>{label}</PanelFieldLabel>;
 
   return (
     <div className="flex h-8 items-center justify-between gap-2 px-2">
@@ -414,7 +397,9 @@ function PanelSwitchRow({
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="px-2 pt-1 pb-0.5 text-xs font-medium text-foreground-muted">{children}</div>
+    <div className="px-2 pt-1 pb-0.5 text-[10px] font-semibold uppercase leading-4 tracking-[0.08em] text-foreground-muted">
+      {children}
+    </div>
   );
 }
 
@@ -439,11 +424,11 @@ function SwitchRow({
   // control and stops propagation so a direct click doesn't double-toggle.
   const row = (
     <div
-      className="flex h-8 cursor-default items-center gap-2 rounded-sm px-2 text-sm hover:bg-background-quaternary-1"
+      className="flex h-8 cursor-default items-center gap-2 rounded-sm px-2 hover:bg-background-quaternary-1"
       onClick={() => onCheckedChange(!checked)}
     >
       <Icon className="size-3.5 shrink-0 text-foreground-muted" />
-      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+      <PanelFieldLabel>{label}</PanelFieldLabel>
       <Switch
         size="sm"
         checked={checked}
