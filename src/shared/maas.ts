@@ -399,7 +399,14 @@ export type MaasUsageSummary = {
   totalInputTokens: number | null;
   totalOutputTokens: number | null;
   totalCostUsd: number | null;
-  source: MaasInvocationPage['source'];
+  totalCreditsUsd: number | null;
+  remainingCreditsUsd: number | null;
+  keyLimitUsd: number | null;
+  keyLimitRemainingUsd: number | null;
+  usageDailyUsd: number | null;
+  usageWeeklyUsd: number | null;
+  usageMonthlyUsd: number | null;
+  source: MaasInvocationPage['source'] | 'openrouter-key-and-credits';
   fetchedAt: string | null;
   period: MaasInvocationPage['period'];
 };

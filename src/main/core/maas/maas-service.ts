@@ -51,6 +51,12 @@ import { appSettingsService } from '../settings/settings-service';
 import { migrateLegacyCodexMaasHistoryForConfig } from './codex-history-compat';
 import { codexMaasAuthSwitch, type CodexMaasAuthRollback } from './codex-maas-auth-switch';
 import {
+  buildOpenRouterUsageSummary,
+  openRouterUsageUrl,
+  type OpenRouterCreditsResponse,
+  type OpenRouterKeyResponse,
+} from './openrouter-usage';
+import {
   extractMaasPlatformInfoSnapshot,
   fallbackMaasPlatformInfoSnapshot,
   MAAS_PLATFORM_INFO_SNAPSHOT_VERSION,
@@ -1713,10 +1719,24 @@ export class MaasService {
         totalInputTokens: null,
         totalOutputTokens: null,
         totalCostUsd: null,
+        totalCreditsUsd: null,
+        remainingCreditsUsd: null,
+        keyLimitUsd: null,
+        keyLimitRemainingUsd: null,
+        usageDailyUsd: null,
+        usageWeeklyUsd: null,
+        usageMonthlyUsd: null,
         source: 'none',
         fetchedAt: null,
         period: null,
       };
+    }
+
+    if (getMaasPlatformTemplateId(input.platformId) === 'openrouter') {
+      return this.fetchOpenRouterUsageSummary(
+        getConnectedPlatform(settings, input.platformId)!,
+        input.platformId
+      );
     }
 
     const result = await this.listRealRecords(settings, input.platformId, !!input.forceRefresh);
@@ -1735,6 +1755,13 @@ export class MaasService {
       totalInputTokens: sumNullable(records, (record) => record.inputTokens),
       totalOutputTokens: sumNullable(records, (record) => record.outputTokens),
       totalCostUsd: sumNullable(records, (record) => record.costUsd),
+      totalCreditsUsd: null,
+      remainingCreditsUsd: null,
+      keyLimitUsd: null,
+      keyLimitRemainingUsd: null,
+      usageDailyUsd: null,
+      usageWeeklyUsd: null,
+      usageMonthlyUsd: null,
       source: result.source,
       fetchedAt: result.fetchedAt,
       period: result.period,
@@ -1884,6 +1911,65 @@ export class MaasService {
         endingAt: tokens.data?.ending_at ?? fallbackPeriod.endingAt,
       },
     };
+  }
+
+  private async fetchOpenRouterUsageSummary(
+    connection: MaasPlatformConnection,
+    platformId: MaasPlatformId
+  ): Promise<MaasUsageSummary> {
+    const apiKey = await readPlatformSecret(connection.platformId, 'primary');
+    if (!apiKey) {
+      throw new Error('OpenRouter API key is missing. Reconnect OpenRouter to read usage.');
+    }
+
+    const [keyResponse, creditsResponse] = await Promise.all([
+      this.fetchOpenRouterUsageResource<OpenRouterKeyResponse>(
+        openRouterUsageUrl(connection.endpoint, 'key'),
+        apiKey
+      ),
+      this.fetchOpenRouterUsageResource<OpenRouterCreditsResponse>(
+        openRouterUsageUrl(connection.endpoint, 'credits'),
+        apiKey
+      ),
+    ]);
+
+    return buildOpenRouterUsageSummary(
+      platformId,
+      keyResponse,
+      creditsResponse,
+      new Date().toISOString()
+    );
+  }
+
+  private async fetchOpenRouterUsageResource<T extends { data?: unknown }>(
+    url: URL,
+    apiKey: string
+  ): Promise<T> {
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    let body: T | null = null;
+    try {
+      body = (await response.json()) as T;
+    } catch {
+      body = null;
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        `OpenRouter usage API returned ${response.status}: ${getErrorMessage(
+          body as ZenmuxErrorBody | null,
+          response.statusText || 'Request failed.'
+        )}`
+      );
+    }
+    if (!body?.data) {
+      throw new Error('OpenRouter usage API did not return an account payload.');
+    }
+    return body;
   }
 
   private async fetchZenmuxTimeseries(

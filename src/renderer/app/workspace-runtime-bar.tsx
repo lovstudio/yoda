@@ -6,8 +6,10 @@ import {
   Brain,
   ClipboardCheck,
   Cloud,
+  Copy,
   ExternalLink,
   Gauge,
+  RefreshCw,
   Settings2,
   Stethoscope,
   Terminal,
@@ -25,6 +27,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { AppAgentSessionResource, TmuxReclamationSnapshot } from '@shared/app-resource';
 import type { Conversation } from '@shared/conversations';
+import type { MaasUsageSummary } from '@shared/maas';
 import type { ComposerDefaults } from '@shared/project-settings';
 import {
   getRuntime,
@@ -35,7 +38,11 @@ import {
 } from '@shared/runtime-registry';
 import { YODA_ACCOUNT_USAGE_DOC_URL } from '@shared/urls';
 import { openTaskTarget } from '@renderer/app/open-task-target';
-import { useMaasConnections, useMaasGlobalBinding } from '@renderer/features/maas/useMaas';
+import {
+  useMaasConnections,
+  useMaasGlobalBinding,
+  useMaasUsageSummary,
+} from '@renderer/features/maas/useMaas';
 import {
   asMounted,
   getProjectSettingsStore,
@@ -53,7 +60,7 @@ import { AgentInfoCard } from '@renderer/lib/components/agent-selector/agent-inf
 import type { SessionModelSettings } from '@renderer/lib/components/agent-selector/session-model-editor';
 import { dismissBeforeSynchronousAction } from '@renderer/lib/dismiss-before-synchronous-action';
 import { useDismissOnWindowBlur } from '@renderer/lib/hooks/use-dismiss-on-window-blur';
-import { useToast } from '@renderer/lib/hooks/use-toast';
+import { copyTextToClipboard, useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -96,6 +103,10 @@ import {
   getQuotaWindowLabel,
 } from './workspace-runtime-bar-format';
 import { getWorkspaceMaasPresentation } from './workspace-runtime-bar-maas';
+import {
+  isMaasUsageActiveForRuntime,
+  shouldReadOfficialAccountUsage,
+} from './workspace-runtime-usage-source';
 import { WorkspaceSkillPopover } from './workspace-skill-popover';
 
 type WorkspaceAgentSession = Omit<AppAgentSessionResource, 'runtimeId' | 'title' | 'taskTitle'> & {
@@ -295,13 +306,22 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     () => getWorkspaceMaasPresentation(globalMaasBinding.data, maasConnections),
     [globalMaasBinding.data, maasConnections]
   );
-  const maasActiveForRuntime = Boolean(
-    runtimeId &&
-      globalMaasBinding.data?.enabled &&
-      globalMaasBinding.data.effective &&
-      globalMaasBinding.data.runtimeIds.includes(runtimeId)
+  const maasActiveForRuntime = isMaasUsageActiveForRuntime(runtimeId, globalMaasBinding.data);
+  const activeMaasPlatformId = maasActiveForRuntime
+    ? globalMaasBinding.data?.platformId
+    : undefined;
+  const {
+    summary: maasUsage,
+    loading: isLoadingMaasUsage,
+    reloading: isRefreshingMaasUsage,
+    reload: refreshMaasUsage,
+    error: maasUsageError,
+  } = useMaasUsageSummary(activeMaasPlatformId, 'all', maasActiveForRuntime);
+  const officialCodexAccountAvailable = shouldReadOfficialAccountUsage(
+    runtimeId,
+    connectionId,
+    maasActiveForRuntime
   );
-  const officialCodexAccountAvailable = runtimeId === 'codex' && !connectionId;
   const officialUsageUrl = runtimeId
     ? getRuntimeAccountProfile(runtimeId).officialSubscription.usageUrl
     : undefined;
@@ -353,10 +373,10 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     () =>
       accountUsage && !accountUsage.error && accountUsage.rateLimits.length > 0
         ? accountUsage.rateLimits
-        : globalMaasBinding.data?.enabled
+        : maasActiveForRuntime
           ? []
           : (sessionContext?.rateLimits ?? []),
-    [accountUsage, globalMaasBinding.data?.enabled, sessionContext?.rateLimits]
+    [accountUsage, maasActiveForRuntime, sessionContext?.rateLimits]
   );
   const shortAccountWindow = accountRateLimits[0] ?? null;
   const accountUsageSupportsResetCreditDetails =
@@ -373,6 +393,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         provider: maasPresentation.providerName,
       })
     : t('workspaceRuntime.maas.title');
+  const usageTriggerLabel = maasActiveForRuntime
+    ? t('workspaceRuntime.maasUsageTitle', {
+        provider: maasPresentation.providerName ?? t('workspaceRuntime.maas.title'),
+      })
+    : t('workspaceRuntime.accountUsage');
   const { data: resourceSnapshot, refetch: refreshResourceSnapshot } = useQuery({
     queryKey: WORKSPACE_RESOURCE_QUERY_KEY,
     queryFn: () => rpc.app.getResourceSnapshot({ freshAgentProcesses: isAgentPopoverOpen }),
@@ -633,7 +658,27 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     if (open && officialCodexAccountAvailable) {
       void refreshAccountUsageQuery();
     }
+    if (open && maasActiveForRuntime) {
+      refreshMaasUsage();
+    }
   };
+
+  const copyMaasUsageError = useCallback(() => {
+    if (!maasUsageError) return;
+    const diagnostics = [
+      `runtime=${runtimeId ?? 'unknown'}`,
+      `platform=${activeMaasPlatformId ?? 'unknown'}`,
+      `provider=${maasPresentation.providerName ?? 'unknown'}`,
+      `error=${maasUsageError}`,
+    ].join('\n');
+    void copyTextToClipboard(diagnostics)
+      .then(() => toast.success(t('workspaceRuntime.maasUsageErrorCopied')))
+      .catch((error) =>
+        toast.error(t('common.copyFailed'), {
+          description: error instanceof Error ? error.message : String(error),
+        })
+      );
+  }, [activeMaasPlatformId, maasPresentation.providerName, maasUsageError, runtimeId, t, toast]);
 
   const resetAccountUsage = useCallback(async () => {
     if (!officialCodexAccountAvailable) return;
@@ -1082,20 +1127,22 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               </Popover>
             </>
           ) : null}
-          {shortAccountWindow || officialCodexAccountAvailable ? (
+          {maasActiveForRuntime || shortAccountWindow || officialCodexAccountAvailable ? (
             <>
               <span aria-hidden className="@max-[1120px]:hidden">
                 ·
               </span>
               <Popover onOpenChange={handleAccountUsagePopoverOpen}>
                 <PopoverTrigger
-                  aria-label={t('workspaceRuntime.accountUsage')}
+                  aria-label={usageTriggerLabel}
                   className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
-                  title={t('workspaceRuntime.accountUsage')}
+                  title={usageTriggerLabel}
                 >
-                  <Gauge className="size-3.5" />
+                  <Gauge aria-hidden className="size-3.5" />
                   <span className="@max-[1120px]:hidden">
-                    {t('workspaceRuntime.accountUsageShort')}
+                    {maasActiveForRuntime
+                      ? t('workspaceRuntime.maasUsageShort')
+                      : t('workspaceRuntime.accountUsageShort')}
                   </span>
                   {shortAccountWindow ? (
                     <ContextProgressBar
@@ -1111,213 +1158,232 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   sideOffset={8}
                   className="w-72 gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
                 >
-                  <div className="p-3">
-                    <div className="text-sm font-medium">{t('workspaceRuntime.accountUsage')}</div>
-                    <div className="mt-0.5 text-xs text-foreground-passive">
-                      {t('workspaceRuntime.accountUsageDescription')}
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <a
-                        href={YODA_ACCOUNT_USAGE_DOC_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex shrink-0 items-center gap-1 text-xs text-foreground-muted underline-offset-2 hover:text-foreground hover:underline"
-                      >
-                        {t('workspaceRuntime.accountDocs')}
-                        <ExternalLink aria-hidden className="size-3" />
-                      </a>
-                      {officialUsageUrl ? (
-                        <a
-                          href={officialUsageUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex shrink-0 items-center gap-1 text-xs text-foreground-muted underline-offset-2 hover:text-foreground hover:underline"
-                        >
-                          {t('workspaceRuntime.officialAccountUsage', {
-                            name: runtime?.name ?? runtimeId,
-                          })}
-                          <ExternalLink aria-hidden className="size-3" />
-                        </a>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="border-t border-border" />
-                  <div className="flex flex-col gap-3 p-3">
-                    {accountRateLimits.map((limit) => {
-                      const percent = Math.round(limit.usedPercent);
-                      const windowLabel = getQuotaWindowLabel(limit.windowMinutes);
-                      return (
-                        <div key={limit.windowMinutes} className="flex flex-col gap-1.5">
-                          <div className="flex items-center justify-between gap-3 text-xs">
-                            <span className="text-foreground-muted">
-                              {t(windowLabel.translationKey, {
-                                value: windowLabel.value,
+                  {maasActiveForRuntime ? (
+                    <WorkspaceMaasUsageContent
+                      providerName={
+                        maasPresentation.providerName ?? t('workspaceRuntime.maas.title')
+                      }
+                      usage={maasUsage}
+                      loading={isLoadingMaasUsage}
+                      refreshing={isRefreshingMaasUsage}
+                      error={maasUsageError}
+                      onRefresh={refreshMaasUsage}
+                      onCopyError={copyMaasUsageError}
+                      onManage={openMaasManagement}
+                    />
+                  ) : (
+                    <>
+                      <div className="p-3">
+                        <div className="text-sm font-medium">
+                          {t('workspaceRuntime.accountUsage')}
+                        </div>
+                        <div className="mt-0.5 text-xs text-foreground-passive">
+                          {t('workspaceRuntime.accountUsageDescription')}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <a
+                            href={YODA_ACCOUNT_USAGE_DOC_URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex shrink-0 items-center gap-1 text-xs text-foreground-muted underline-offset-2 hover:text-foreground hover:underline"
+                          >
+                            {t('workspaceRuntime.accountDocs')}
+                            <ExternalLink aria-hidden className="size-3" />
+                          </a>
+                          {officialUsageUrl ? (
+                            <a
+                              href={officialUsageUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex shrink-0 items-center gap-1 text-xs text-foreground-muted underline-offset-2 hover:text-foreground hover:underline"
+                            >
+                              {t('workspaceRuntime.officialAccountUsage', {
+                                name: runtime?.name ?? runtimeId,
                               })}
+                              <ExternalLink aria-hidden className="size-3" />
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="border-t border-border" />
+                      <div className="flex flex-col gap-3 p-3">
+                        {accountRateLimits.map((limit) => {
+                          const percent = Math.round(limit.usedPercent);
+                          const windowLabel = getQuotaWindowLabel(limit.windowMinutes);
+                          return (
+                            <div key={limit.windowMinutes} className="flex flex-col gap-1.5">
+                              <div className="flex items-center justify-between gap-3 text-xs">
+                                <span className="text-foreground-muted">
+                                  {t(windowLabel.translationKey, {
+                                    value: windowLabel.value,
+                                  })}
+                                </span>
+                                <span className="font-mono tabular-nums text-foreground">
+                                  {percent}%
+                                </span>
+                              </div>
+                              <ContextProgressBar percent={percent} tone={getUsageTone(percent)} />
+                              <span className="text-[11px] text-foreground-passive">
+                                {t('workspaceRuntime.accountQuotaStatus', {
+                                  remaining: Math.max(0, 100 - percent),
+                                  reset: limit.resetsAt
+                                    ? formatResetCountdown(limit.resetsAt)
+                                    : t('tasks.sessionInfo.unknown'),
+                                })}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {runtimeId === 'codex' && !connectionId ? (
+                        <div className="border-t border-border p-3 text-xs">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-foreground">
+                                {t('workspaceRuntime.accountUsageWarning')}
+                              </div>
+                              <div className="mt-0.5 text-[11px] text-foreground-passive">
+                                {t('workspaceRuntime.accountUsageWarningDescription')}
+                              </div>
+                            </div>
+                            <Switch
+                              size="sm"
+                              checked={accountUsageWarningEnabled}
+                              onCheckedChange={(enabled) =>
+                                updateNotificationSettings({ accountUsageWarningEnabled: enabled })
+                              }
+                              aria-label={t('workspaceRuntime.accountUsageWarning')}
+                            />
+                          </div>
+                          {accountUsageWarningEnabled ? (
+                            <div className="mt-2.5 flex items-center justify-between gap-3">
+                              <label
+                                htmlFor="account-usage-warning-threshold"
+                                className="text-foreground-muted"
+                              >
+                                {t('workspaceRuntime.accountUsageWarningThreshold')}
+                              </label>
+                              <div className="flex items-center gap-1.5">
+                                <Input
+                                  id="account-usage-warning-threshold"
+                                  type="number"
+                                  min={1}
+                                  max={100}
+                                  step={1}
+                                  value={accountUsageWarningThresholdDraft}
+                                  className="h-7 w-16 text-right font-mono tabular-nums"
+                                  onChange={(event) =>
+                                    setAccountUsageWarningThresholdDraft(event.target.value)
+                                  }
+                                  onBlur={commitAccountUsageWarningThreshold}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter') {
+                                      event.currentTarget.blur();
+                                      return;
+                                    }
+                                    if (event.key === 'Escape') {
+                                      setAccountUsageWarningThresholdDraft(
+                                        String(accountUsageWarningThreshold)
+                                      );
+                                      event.currentTarget.blur();
+                                    }
+                                  }}
+                                />
+                                <span className="text-foreground-passive">%</span>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {runtimeId === 'codex' && !connectionId ? (
+                        <div className="border-t border-border px-3 py-2.5 text-xs">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-foreground-passive">
+                              {t('workspaceRuntime.accountResetCredits')}
                             </span>
                             <span className="font-mono tabular-nums text-foreground">
-                              {percent}%
+                              {accountUsage?.resetCreditsAvailable != null
+                                ? t('workspaceRuntime.accountResetCreditsCount', {
+                                    count: accountUsage.resetCreditsAvailable,
+                                  })
+                                : accountUsage?.error
+                                  ? t('workspaceRuntime.accountResetCreditsFailed')
+                                  : t('workspaceRuntime.accountResetCreditsLoading')}
                             </span>
                           </div>
-                          <ContextProgressBar percent={percent} tone={getUsageTone(percent)} />
-                          <span className="text-[11px] text-foreground-passive">
-                            {t('workspaceRuntime.accountQuotaStatus', {
-                              remaining: Math.max(0, 100 - percent),
-                              reset: limit.resetsAt
-                                ? formatResetCountdown(limit.resetsAt)
-                                : t('tasks.sessionInfo.unknown'),
-                            })}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {runtimeId === 'codex' && !connectionId ? (
-                    <div className="border-t border-border p-3 text-xs">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-foreground">
-                            {t('workspaceRuntime.accountUsageWarning')}
-                          </div>
-                          <div className="mt-0.5 text-[11px] text-foreground-passive">
-                            {t('workspaceRuntime.accountUsageWarningDescription')}
-                          </div>
-                        </div>
-                        <Switch
-                          size="sm"
-                          checked={accountUsageWarningEnabled}
-                          onCheckedChange={(enabled) =>
-                            updateNotificationSettings({ accountUsageWarningEnabled: enabled })
-                          }
-                          aria-label={t('workspaceRuntime.accountUsageWarning')}
-                        />
-                      </div>
-                      {accountUsageWarningEnabled ? (
-                        <div className="mt-2.5 flex items-center justify-between gap-3">
-                          <label
-                            htmlFor="account-usage-warning-threshold"
-                            className="text-foreground-muted"
-                          >
-                            {t('workspaceRuntime.accountUsageWarningThreshold')}
-                          </label>
-                          <div className="flex items-center gap-1.5">
-                            <Input
-                              id="account-usage-warning-threshold"
-                              type="number"
-                              min={1}
-                              max={100}
-                              step={1}
-                              value={accountUsageWarningThresholdDraft}
-                              className="h-7 w-16 text-right font-mono tabular-nums"
-                              onChange={(event) =>
-                                setAccountUsageWarningThresholdDraft(event.target.value)
-                              }
-                              onBlur={commitAccountUsageWarningThreshold}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') {
-                                  event.currentTarget.blur();
-                                  return;
+                          {accountUsage?.resetCreditsAvailable != null &&
+                          accountUsage.resetCreditsAvailable > 0 ? (
+                            <div className="mt-1.5 flex items-center justify-between gap-3">
+                              <span className="text-foreground-passive">
+                                {t('workspaceRuntime.accountResetCreditExpiry')}
+                              </span>
+                              <span
+                                className="text-right font-mono tabular-nums text-foreground"
+                                title={
+                                  nextAccountResetCredit?.expiresAt
+                                    ? new Date(nextAccountResetCredit.expiresAt).toLocaleString()
+                                    : t(
+                                        accountUsageSupportsResetCreditDetails
+                                          ? 'workspaceRuntime.accountResetCreditExpiryUnknownDescription'
+                                          : 'workspaceRuntime.accountResetCreditRestartRequiredDescription'
+                                      )
                                 }
-                                if (event.key === 'Escape') {
-                                  setAccountUsageWarningThresholdDraft(
-                                    String(accountUsageWarningThreshold)
-                                  );
-                                  event.currentTarget.blur();
-                                }
-                              }}
-                            />
-                            <span className="text-foreground-passive">%</span>
-                          </div>
+                              >
+                                {nextAccountResetCredit?.expiresAt
+                                  ? t('workspaceRuntime.accountResetCreditExpiresAt', {
+                                      time: formatAccountResetCreditExpiry(
+                                        nextAccountResetCredit.expiresAt
+                                      ),
+                                    })
+                                  : nextAccountResetCredit
+                                    ? t('workspaceRuntime.accountResetCreditNoExpiry')
+                                    : t(
+                                        accountUsageSupportsResetCreditDetails
+                                          ? 'workspaceRuntime.accountResetCreditExpiryUnknown'
+                                          : 'workspaceRuntime.accountResetCreditRestartRequired'
+                                      )}
+                              </span>
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
-                    </div>
-                  ) : null}
-                  {runtimeId === 'codex' && !connectionId ? (
-                    <div className="border-t border-border px-3 py-2.5 text-xs">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-foreground-passive">
-                          {t('workspaceRuntime.accountResetCredits')}
-                        </span>
-                        <span className="font-mono tabular-nums text-foreground">
-                          {accountUsage?.resetCreditsAvailable != null
-                            ? t('workspaceRuntime.accountResetCreditsCount', {
-                                count: accountUsage.resetCreditsAvailable,
-                              })
-                            : accountUsage?.error
-                              ? t('workspaceRuntime.accountResetCreditsFailed')
-                              : t('workspaceRuntime.accountResetCreditsLoading')}
-                        </span>
-                      </div>
-                      {accountUsage?.resetCreditsAvailable != null &&
-                      accountUsage.resetCreditsAvailable > 0 ? (
-                        <div className="mt-1.5 flex items-center justify-between gap-3">
-                          <span className="text-foreground-passive">
-                            {t('workspaceRuntime.accountResetCreditExpiry')}
-                          </span>
-                          <span
-                            className="text-right font-mono tabular-nums text-foreground"
-                            title={
-                              nextAccountResetCredit?.expiresAt
-                                ? new Date(nextAccountResetCredit.expiresAt).toLocaleString()
-                                : t(
-                                    accountUsageSupportsResetCreditDetails
-                                      ? 'workspaceRuntime.accountResetCreditExpiryUnknownDescription'
-                                      : 'workspaceRuntime.accountResetCreditRestartRequiredDescription'
-                                  )
+                      <div className="border-t border-border p-3">
+                        <p className="mb-2 text-[11px] leading-relaxed text-foreground-passive">
+                          {t('workspaceRuntime.accountQuotaResetDescription')}
+                        </p>
+                        <div className="flex gap-2">
+                          <Button
+                            className="flex-1"
+                            disabled={
+                              isRefreshingUsage ||
+                              isResettingAccountUsage ||
+                              accountUsage?.resetCreditsAvailable == null ||
+                              accountUsage.resetCreditsAvailable <= 0
                             }
+                            size="sm"
+                            variant="outline"
+                            onClick={confirmAccountUsageReset}
                           >
-                            {nextAccountResetCredit?.expiresAt
-                              ? t('workspaceRuntime.accountResetCreditExpiresAt', {
-                                  time: formatAccountResetCreditExpiry(
-                                    nextAccountResetCredit.expiresAt
-                                  ),
-                                })
-                              : nextAccountResetCredit
-                                ? t('workspaceRuntime.accountResetCreditNoExpiry')
-                                : t(
-                                    accountUsageSupportsResetCreditDetails
-                                      ? 'workspaceRuntime.accountResetCreditExpiryUnknown'
-                                      : 'workspaceRuntime.accountResetCreditRestartRequired'
-                                  )}
-                          </span>
+                            {isResettingAccountUsage
+                              ? t('workspaceRuntime.resettingAccountUsage')
+                              : accountUsage?.resetCreditsAvailable === 0
+                                ? t('workspaceRuntime.noAccountResetCredits')
+                                : t('workspaceRuntime.resetAccountUsage')}
+                          </Button>
+                          {!connectionId ? (
+                            <Button
+                              className="flex-1"
+                              size="sm"
+                              variant="outline"
+                              onClick={manageAccount}
+                            >
+                              {t('workspaceRuntime.manageAccount')}
+                            </Button>
+                          ) : null}
                         </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  <div className="border-t border-border p-3">
-                    <p className="mb-2 text-[11px] leading-relaxed text-foreground-passive">
-                      {t('workspaceRuntime.accountQuotaResetDescription')}
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        className="flex-1"
-                        disabled={
-                          isRefreshingUsage ||
-                          isResettingAccountUsage ||
-                          accountUsage?.resetCreditsAvailable == null ||
-                          accountUsage.resetCreditsAvailable <= 0
-                        }
-                        size="sm"
-                        variant="outline"
-                        onClick={confirmAccountUsageReset}
-                      >
-                        {isResettingAccountUsage
-                          ? t('workspaceRuntime.resettingAccountUsage')
-                          : accountUsage?.resetCreditsAvailable === 0
-                            ? t('workspaceRuntime.noAccountResetCredits')
-                            : t('workspaceRuntime.resetAccountUsage')}
-                      </Button>
-                      {!connectionId ? (
-                        <Button
-                          className="flex-1"
-                          size="sm"
-                          variant="outline"
-                          onClick={manageAccount}
-                        >
-                          {t('workspaceRuntime.manageAccount')}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
+                      </div>
+                    </>
+                  )}
                 </PopoverContent>
               </Popover>
             </>
@@ -1792,6 +1858,174 @@ function ContextProgressBar({
   );
 }
 
+function WorkspaceMaasUsageContent({
+  providerName,
+  usage,
+  loading,
+  refreshing,
+  error,
+  onRefresh,
+  onCopyError,
+  onManage,
+}: {
+  providerName: string;
+  usage: MaasUsageSummary | null;
+  loading: boolean;
+  refreshing: boolean;
+  error: string | null;
+  onRefresh: () => void;
+  onCopyError: () => void;
+  onManage: () => void;
+}) {
+  const { t } = useTranslation();
+  const hasTokenUsage = usage?.totalInputTokens != null || usage?.totalOutputTokens != null;
+  const hasCreditUsage =
+    usage?.totalCostUsd != null ||
+    usage?.totalCreditsUsd != null ||
+    usage?.remainingCreditsUsd != null ||
+    usage?.keyLimitRemainingUsd != null;
+  const sourceLabel =
+    usage?.source === 'zenmux-management-statistics'
+      ? t('workspaceRuntime.maasUsageSourceZenmux')
+      : usage?.source === 'openrouter-key-and-credits'
+        ? t('workspaceRuntime.maasUsageSourceOpenRouter')
+        : t('workspaceRuntime.maasUsageSourceUnavailable');
+
+  return (
+    <>
+      <div className="p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium">
+              {t('workspaceRuntime.maasUsageTitle', { provider: providerName })}
+            </div>
+            <div className="mt-0.5 text-xs leading-relaxed text-foreground-passive">
+              {t('workspaceRuntime.maasUsageDescription', { provider: providerName })}
+            </div>
+          </div>
+          <span className="shrink-0 rounded-full border border-border bg-background-secondary px-2 py-0.5 text-[10px] text-foreground-muted">
+            {sourceLabel}
+          </span>
+        </div>
+      </div>
+
+      <div className="border-t border-border p-3">
+        {loading && !usage ? (
+          <div className="flex items-center gap-2 text-xs text-foreground-passive">
+            <RefreshCw aria-hidden className="size-3.5 animate-spin" />
+            {t('workspaceRuntime.maasUsageLoading')}
+          </div>
+        ) : error ? (
+          <div className="rounded-md border border-amber-500/25 bg-amber-500/5 p-2.5">
+            <div className="text-xs font-medium text-foreground">
+              {t('workspaceRuntime.maasUsageUnavailable')}
+            </div>
+            <p className="mt-1 break-words text-[11px] leading-relaxed text-foreground-passive">
+              {error}
+            </p>
+            <div className="mt-2 flex gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={onCopyError}>
+                <Copy aria-hidden className="size-3.5" />
+                {t('workspaceRuntime.maasUsageCopyError')}
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={onManage}>
+                {t('workspaceRuntime.maasUsageManage')}
+              </Button>
+            </div>
+          </div>
+        ) : usage?.source === 'none' || (!hasTokenUsage && !hasCreditUsage) ? (
+          <div className="text-xs leading-relaxed text-foreground-passive">
+            {t('workspaceRuntime.maasUsageNoReadableApi', { provider: providerName })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+            {usage.remainingCreditsUsd != null ? (
+              <ContextMetric
+                label={t('workspaceRuntime.maasUsageRemainingCredits')}
+                value={formatUsd(usage.remainingCreditsUsd)}
+              />
+            ) : null}
+            {usage.keyLimitRemainingUsd != null ? (
+              <ContextMetric
+                label={t('workspaceRuntime.maasUsageKeyRemaining')}
+                value={formatUsd(usage.keyLimitRemainingUsd)}
+              />
+            ) : null}
+            {usage.totalCostUsd != null ? (
+              <ContextMetric
+                label={t('workspaceRuntime.maasUsageTotalCost')}
+                value={formatUsd(usage.totalCostUsd)}
+              />
+            ) : null}
+            {usage.usageDailyUsd != null ? (
+              <ContextMetric
+                label={t('workspaceRuntime.maasUsageToday')}
+                value={formatUsd(usage.usageDailyUsd)}
+              />
+            ) : null}
+            {usage.usageWeeklyUsd != null ? (
+              <ContextMetric
+                label={t('workspaceRuntime.maasUsageThisWeek')}
+                value={formatUsd(usage.usageWeeklyUsd)}
+              />
+            ) : null}
+            {usage.totalInputTokens != null ? (
+              <ContextMetric
+                label={t('workspaceRuntime.maasUsageInputTokens')}
+                value={formatCompactNumber(usage.totalInputTokens)}
+              />
+            ) : null}
+            {usage.totalOutputTokens != null ? (
+              <ContextMetric
+                label={t('workspaceRuntime.maasUsageOutputTokens')}
+                value={formatCompactNumber(usage.totalOutputTokens)}
+              />
+            ) : null}
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-border px-3 py-2.5">
+        <div className="flex items-center justify-between gap-3 text-[11px] text-foreground-passive">
+          <span className="min-w-0 truncate">
+            {usage?.period
+              ? formatUsagePeriod(usage.period.startingAt, usage.period.endingAt)
+              : t('workspaceRuntime.maasUsageCurrentAccount')}
+          </span>
+          <span className="shrink-0 font-mono tabular-nums">
+            {usage?.fetchedAt
+              ? t('workspaceRuntime.maasUsageUpdatedAt', {
+                  time: formatPopoverTime(usage.fetchedAt),
+                })
+              : '—'}
+          </span>
+        </div>
+        <div className="mt-2 flex gap-2">
+          <Button
+            type="button"
+            className="flex-1"
+            size="sm"
+            variant="outline"
+            disabled={loading || refreshing}
+            onClick={onRefresh}
+          >
+            <RefreshCw
+              aria-hidden
+              className={cn('size-3.5', (loading || refreshing) && 'animate-spin')}
+            />
+            {refreshing
+              ? t('workspaceRuntime.refreshingAccountUsage')
+              : t('workspaceRuntime.refreshAccountUsage')}
+          </Button>
+          <Button type="button" className="flex-1" size="sm" variant="outline" onClick={onManage}>
+            {t('workspaceRuntime.maasUsageManage')}
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 type ActiveSessionModelDetails = {
   model: string | null;
   reasoningEffort: string | null;
@@ -1870,6 +2104,20 @@ function formatPopoverTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(
     new Date(value)
   );
+}
+
+function formatUsagePeriod(startingAt: string, endingAt: string): string {
+  const formatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+  return `${formatter.format(new Date(startingAt))} – ${formatter.format(new Date(endingAt))}`;
+}
+
+function formatUsd(value: number): string {
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: value >= 100 ? 0 : 2,
+    maximumFractionDigits: value >= 100 ? 0 : 4,
+  }).format(value);
 }
 
 function formatResetCountdown(value: string): string {

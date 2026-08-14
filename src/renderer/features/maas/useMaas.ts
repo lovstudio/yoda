@@ -25,7 +25,7 @@ import type { NewApiManagedActionResult, NewApiManagedStatus } from '@shared/new
 import { rpc } from '@renderer/lib/ipc';
 
 const PAGE_SIZE = 24;
-const REAL_USAGE_QUERY_VERSION = 'zenmux-management-statistics-v2';
+const REAL_USAGE_QUERY_VERSION = 'provider-account-usage-v3';
 const PLATFORM_DESCRIPTION_QUERY_VERSION = 'official-page-description-v1';
 const MANAGED_GATEWAY_STARS_QUERY_VERSION = 'github-stars-v3';
 
@@ -51,7 +51,7 @@ export const maasQueryKeys = {
   records: (platformId: MaasPlatformId, kind: MaasInvocationFilterKind, refreshSequence = 0) =>
     ['maas', 'records', REAL_USAGE_QUERY_VERSION, platformId, kind, refreshSequence] as const,
   summary: (
-    platformId: MaasPlatformId,
+    platformId: MaasPlatformId | null | undefined,
     kind: MaasInvocationFilterKind,
     providerHints: readonly string[],
     modelHints: readonly string[],
@@ -552,7 +552,7 @@ export function useMaasInvocationRecords(
 }
 
 export function useMaasUsageSummary(
-  platformId: MaasPlatformId,
+  platformId: MaasPlatformId | null | undefined,
   kind: MaasInvocationFilterKind,
   enabled: boolean,
   filters?: {
@@ -567,15 +567,17 @@ export function useMaasUsageSummary(
 
   const query = useQuery<MaasUsageSummary>({
     queryKey: maasQueryKeys.summary(platformId, kind, providerHints, modelHints, refreshSequence),
-    queryFn: () =>
-      rpc.maas.getUsageSummary({
+    queryFn: () => {
+      if (!platformId) throw new Error('A MaaS platform is required to read usage.');
+      return rpc.maas.getUsageSummary({
         platformId,
         kind,
         providerHints,
         modelHints,
         forceRefresh: refreshSequence > 0,
-      }) as Promise<MaasUsageSummary>,
-    enabled,
+      }) as Promise<MaasUsageSummary>;
+    },
+    enabled: enabled && Boolean(platformId),
     staleTime: 0,
     gcTime: 0,
     refetchOnMount: 'always',
