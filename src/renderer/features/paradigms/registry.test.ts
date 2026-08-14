@@ -76,26 +76,40 @@ describe('paradigm registry', () => {
     }
   });
 
-  it('ships one built-in instance per self-contained kind and none for the rest', () => {
-    // A kind sourcing its instances elsewhere (today: one per Agent Team) must not
-    // also get a synthesized builtin, or the picker grows a phantom entry.
-    expect(BUILTIN_PARADIGMS.map((paradigm) => paradigm.kindId)).toEqual(
-      PARADIGM_KIND_IDS.filter((kindId) => PARADIGM_KINDS[kindId].instanceSource === null)
-    );
-    // Built-in Agent Teams share the `builtin:` namespace and are about to share
-    // the instance list too, so a kind's own id must not be able to name a team.
-    const teamIds = new Set(BUILTIN_TEAMS.map((team) => team.id));
+  it('ships every code-defined instance exactly once, whatever its source', () => {
     for (const paradigm of BUILTIN_PARADIGMS) {
-      expect(teamIds.has(paradigm.id), `${paradigm.id} collides with a built-in team`).toBe(false);
-      expect(paradigm.id).toBe(builtinParadigmId(paradigm.kindId));
       expect(isBuiltinParadigmId(paradigm.id)).toBe(true);
       expect(paradigm.builtin).toBe(true);
-      // Empty label/icon are what make a builtin fall back to its kind's copy.
-      expect(paradigm.label).toBe('');
-      expect(paradigm.icon).toBe('');
       expect(() =>
         PARADIGM_KINDS[paradigm.kindId].paramsSchema.parse(paradigm.params)
       ).not.toThrow();
+    }
+    // The `builtin:` namespace is shared across sources, so uniqueness here is what
+    // keeps `get(id)` from having to choose between two different instances.
+    const ids = BUILTIN_PARADIGMS.map((paradigm) => paradigm.id);
+    expect(new Set(ids).size, `duplicate built-in ids: ${ids.join(', ')}`).toBe(ids.length);
+
+    // A kind that sources its instances elsewhere gets no synthesized instance of
+    // its own, or the picker grows a phantom entry beside the real ones.
+    const kindOwned = BUILTIN_PARADIGMS.filter(
+      (paradigm) => paradigm.id === builtinParadigmId(paradigm.kindId)
+    );
+    expect(kindOwned.map((paradigm) => paradigm.kindId)).toEqual(
+      PARADIGM_KIND_IDS.filter((kindId) => PARADIGM_KINDS[kindId].instanceSource === null)
+    );
+    for (const paradigm of kindOwned) {
+      // Empty label/icon are what make a builtin fall back to its kind's copy.
+      expect(paradigm.label).toBe('');
+      expect(paradigm.icon).toBe('');
+    }
+
+    // Built-in teams come across as instances keyed by the team id — rooms
+    // reference it, so re-keying them would orphan every existing room.
+    const teamOwned = BUILTIN_PARADIGMS.filter((paradigm) => !kindOwned.includes(paradigm));
+    expect(teamOwned.map((paradigm) => paradigm.id)).toEqual(BUILTIN_TEAMS.map((team) => team.id));
+    for (const paradigm of teamOwned) {
+      expect(paradigm.kindId).toBe('team');
+      expect(paradigm.label).not.toBe('');
     }
   });
 });

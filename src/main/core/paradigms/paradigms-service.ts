@@ -1,12 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { asc, desc, eq } from 'drizzle-orm';
+import { normalizeTeamRouting } from '@shared/agent-team';
 import { BUILTIN_PARADIGMS, builtinParadigm } from '@shared/paradigms/builtins';
 import { isParadigmKindId, type ParadigmKindId } from '@shared/paradigms/contract';
 import { PARADIGM_KINDS } from '@shared/paradigms/kinds';
 import { isBuiltinParadigmId, type Paradigm, type ParadigmDraft } from '@shared/paradigms/paradigm';
+import { teamToParadigmDraft } from '@shared/paradigms/team-adapter';
 import { db } from '@main/db/client';
-import { paradigms, type ParadigmRow } from '@main/db/schema';
+import { KV } from '@main/db/kv';
+import { agentTeams, paradigms, type ParadigmRow } from '@main/db/schema';
 import { log } from '@main/lib/logger';
+
+/** Records the one-time `agent_teams` fold-in so it never runs twice. */
+const migrationKV = new KV<{ agentTeamsMigratedAt: string }>('paradigms');
 
 /**
  * Params a kind will accept, or its defaults.
@@ -60,8 +66,63 @@ function sanitizeDraft(draft: ParadigmDraft): ParadigmDraft & { kindId: Paradigm
 }
 
 class ParadigmsService {
+  private teamMigration: Promise<void> | null = null;
+
+  /**
+   * Folds `agent_teams` into this table, once.
+   *
+   * Teams keep their ids: rooms reference them, so re-keying would orphan every
+   * existing room. The completion flag is what makes this safe to leave in place
+   * — `agent_teams` stays readable for a release as a fallback, and without the
+   * flag every launch would resurrect teams the user deleted after migrating.
+   */
+  private async ensureTeamsMigrated(): Promise<void> {
+    this.teamMigration ??= (async () => {
+      if (await migrationKV.get('agentTeamsMigratedAt')) return;
+      const rows = await db.select().from(agentTeams).execute();
+      if (rows.length > 0) {
+        await db
+          .insert(paradigms)
+          .values(
+            rows.map((row) => {
+              const draft = teamToParadigmDraft({
+                name: row.name,
+                icon: row.icon,
+                routing: normalizeTeamRouting(row.routing),
+                communication: row.communication,
+                routingHopLimit: row.routingHopLimit,
+                members: row.members,
+              });
+              return {
+                id: row.id,
+                kindId: 'team' as const,
+                label: draft.label,
+                icon: draft.icon,
+                params: draft.params,
+                // Carried over so the picker's ordering does not reshuffle on upgrade.
+                createdAt: row.createdAt,
+                updatedAt: row.updatedAt,
+              };
+            })
+          )
+          // Idempotent even if the flag write below never landed.
+          .onConflictDoNothing()
+          .execute();
+        log.info(`[paradigms] migrated ${rows.length} Agent Team(s) into paradigms`);
+      }
+      await migrationKV.setStrict('agentTeamsMigratedAt', new Date().toISOString());
+    })().catch((error) => {
+      // Left unflagged so the next launch retries; a failed migration must not
+      // present a half-migrated list as complete.
+      this.teamMigration = null;
+      log.warn(`[paradigms] Agent Team migration failed: ${String(error)}`);
+    });
+    return this.teamMigration;
+  }
+
   /** Code-defined instances first, then the user's (by rank, newest tie-break). */
   async list(): Promise<Paradigm[]> {
+    await this.ensureTeamsMigrated();
     const rows = await db
       .select()
       .from(paradigms)
@@ -73,6 +134,7 @@ class ParadigmsService {
   async get(id: string): Promise<Paradigm | null> {
     const builtin = builtinParadigm(id);
     if (builtin) return builtin;
+    await this.ensureTeamsMigrated();
     const [row] = await db.select().from(paradigms).where(eq(paradigms.id, id)).execute();
     return row ? rowToParadigm(row) : null;
   }

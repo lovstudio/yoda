@@ -1,19 +1,18 @@
+import { BUILTIN_TEAMS } from '../agent-team';
 import { PARADIGM_KIND_IDS } from './contract';
 import { PARADIGM_KINDS } from './kinds';
 import { builtinParadigmId, type Paradigm } from './paradigm';
+import { builtinTeamToParadigm } from './team-adapter';
 
 /**
- * The code-defined paradigm instance every self-contained kind ships with.
+ * The instance a self-contained kind ships with: one per kind whose instances are
+ * not sourced from somewhere else.
  *
- * A kind whose `instanceSource` names an external collection has no builtin row
- * here — its instances *are* that collection (today: one per Agent Team), so
- * synthesizing an extra one would put a phantom entry in the picker.
- *
- * These are not stored: they carry no user edits, so persisting them would only
- * create rows to keep in sync. `paradigmsService.list()` prepends them to the
- * user's rows the same way `agentTeamsService` prepends `BUILTIN_TEAMS`.
+ * A kind whose `instanceSource` names an external collection is excluded — its
+ * instances *are* that collection, so synthesizing an extra one would put a
+ * phantom entry in the picker.
  */
-export const BUILTIN_PARADIGMS: readonly Paradigm[] = PARADIGM_KIND_IDS.filter(
+const KIND_OWNED_BUILTINS: readonly Paradigm[] = PARADIGM_KIND_IDS.filter(
   (kindId) => PARADIGM_KINDS[kindId].instanceSource === null
 ).map((kindId) => {
   const kind = PARADIGM_KINDS[kindId];
@@ -33,6 +32,24 @@ export const BUILTIN_PARADIGMS: readonly Paradigm[] = PARADIGM_KIND_IDS.filter(
     updatedAt: '1970-01-01T00:00:00.000Z',
   } satisfies Paradigm;
 });
+
+/**
+ * Every code-defined paradigm instance.
+ *
+ * The built-in Agent Teams are here rather than behind the team adapter because
+ * they are not a different species: a built-in team is a code-defined instance of
+ * the multi-agent kind, exactly as `builtin:paradigm:review` is one of the review
+ * kind. Keeping them out would leave `paradigms.list()` missing instances that the
+ * picker shows.
+ *
+ * None of these are stored. They carry no user edits, so rows would only be
+ * something to keep in sync; `paradigmsService.list()` prepends them to the user's
+ * rows the same way `agentTeamsService` used to prepend `BUILTIN_TEAMS`.
+ */
+export const BUILTIN_PARADIGMS: readonly Paradigm[] = [
+  ...KIND_OWNED_BUILTINS,
+  ...BUILTIN_TEAMS.map(builtinTeamToParadigm),
+];
 
 export function builtinParadigm(id: string): Paradigm | undefined {
   return BUILTIN_PARADIGMS.find((paradigm) => paradigm.id === id);
