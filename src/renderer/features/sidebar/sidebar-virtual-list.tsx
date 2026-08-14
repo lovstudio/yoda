@@ -26,6 +26,7 @@ import {
 } from '@renderer/features/tasks/conversations/conversation-transfer';
 import { moveConversationToTask } from '@renderer/features/tasks/conversations/move-conversation-to-task';
 import { getRegisteredTaskData } from '@renderer/features/tasks/stores/task-selectors';
+import { useToast } from '@renderer/lib/hooks/use-toast';
 import { useParams, useWorkspaceSlots } from '@renderer/lib/layout/navigation-provider';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { cn } from '@renderer/utils/utils';
@@ -55,6 +56,8 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
   scrollElementRef: RefObject<HTMLDivElement | null>;
 }) {
   const rows = sidebarStore.sidebarRows;
+  const { t } = useTranslation();
+  const { toast } = useToast();
   const pinnedEntries = sidebarStore.pinnedSidebarEntries;
   const teamRoomTaskKeys = useTeamRoomTaskKeys();
   const { currentView } = useWorkspaceSlots();
@@ -279,6 +282,18 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
               next.set(groupId, (previous.get(groupId) ?? 0) + loadedCount);
               return next;
             });
+          })
+          .catch((error: unknown) => {
+            toast({
+              title: t('sidebar.loadMoreArchivedTasksFailed'),
+              description: t('sidebar.loadMoreArchivedTasksFailedDescription'),
+              variant: 'destructive',
+              debugInfo: {
+                error: error instanceof Error ? error.message : String(error),
+                groupId,
+                limit: SIDEBAR_TASK_GROUP_REVEAL_INCREMENT,
+              },
+            });
           });
         return;
       }
@@ -289,7 +304,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
         return next;
       });
     },
-    [taskGroupVisibleLimit]
+    [t, taskGroupVisibleLimit, toast]
   );
 
   const revealMorePinnedTaskGroupItems = useCallback(

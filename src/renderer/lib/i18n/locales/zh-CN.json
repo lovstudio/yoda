@@ -231,6 +231,8 @@
     "filterLocalShort": "本地",
     "filterSshShort": "SSH",
     "showMoreGroupItems": "再显示 {{count}} 个任务",
+    "loadMoreArchivedTasksFailed": "归档任务加载失败",
+    "loadMoreArchivedTasksFailedDescription": "请重试；可复制错误详情用于排查。",
     "collapseGroupItems": "收起",
     "expandAll": "全部展开",
     "collapseAll": "全部折叠",

@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   staleVirtualItemKey: null as string | null,
   virtualizerOptions: [] as object[],
   loadMoreSidebarArchivedTasks: vi.fn<(limit: number) => Promise<number>>(async () => 0),
+  toast: vi.fn(),
 }));
 
 type ReactVirtualizerModule = {
@@ -115,7 +116,10 @@ vi.mock('@renderer/features/tasks/conversations/conversation-transfer', () => ({
 vi.mock('@renderer/features/tasks/conversations/move-conversation-to-task', () => ({
   moveConversationToTask: vi.fn(),
 }));
-vi.mock('@renderer/lib/hooks/use-toast', () => ({ toast: vi.fn() }));
+vi.mock('@renderer/lib/hooks/use-toast', () => ({
+  toast: mocks.toast,
+  useToast: () => ({ toast: mocks.toast }),
+}));
 vi.mock('@renderer/app/tab-drag', () => ({
   useTabDropZone: () => ({ dropRef: () => {}, isOver: false }),
 }));
@@ -326,6 +330,35 @@ describe('SidebarVirtualList', () => {
     });
     expect(mocks.loadMoreSidebarArchivedTasks).toHaveBeenCalledWith(10);
     expect(document.querySelectorAll('[data-testid^="task-"]')).toHaveLength(10);
+  });
+
+  it('shows copyable diagnostics when archived priority rows fail to load', async () => {
+    const archivedGroup: SidebarRow = {
+      kind: 'group',
+      group: { kind: 'priority', priority: 'archived', count: 25 },
+    };
+    const error = new Error("No handler registered for 'tasks.getArchivedTasksPage'");
+    mocks.loadMoreSidebarArchivedTasks.mockRejectedValue(error);
+    runInAction(() => {
+      mocks.sidebarStore.taskPriorityMode = true;
+      mocks.sidebarStore.sidebarRows = [archivedGroup];
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      document.querySelector<HTMLElement>('[data-testid="show-more-tasks"]')?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(mocks.toast).toHaveBeenCalledWith({
+      title: 'sidebar.loadMoreArchivedTasksFailed',
+      description: 'sidebar.loadMoreArchivedTasksFailedDescription',
+      variant: 'destructive',
+      debugInfo: {
+        error: error.message,
+        groupId: 'direct-tasks::group::priority::archived',
+        limit: 10,
+      },
+    });
   });
 
   it('flushes shared scroll-root virtual ranges synchronously', () => {
