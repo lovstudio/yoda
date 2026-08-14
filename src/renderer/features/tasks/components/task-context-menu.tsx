@@ -27,6 +27,11 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RuntimeId } from '@shared/runtime-registry';
 import {
+  ProjectQuickActionsContextSubmenu,
+  ProjectQuickActionsDropdownSubmenu,
+  type ProjectQuickActionsMenuActions,
+} from '@renderer/features/projects/project-quick-actions-menu';
+import {
   WorkspaceAssignContextSubmenu,
   WorkspaceAssignDropdownSubmenu,
 } from '@renderer/features/workspaces/workspace-assign-submenu';
@@ -67,7 +72,7 @@ interface TaskMenuInfoFields extends TaskBasicInfoFields, TaskSessionInfoFields 
   workingDirectory?: string;
 }
 
-export interface TaskMenuActions extends TaskMenuInfoFields {
+export interface TaskMenuActions extends TaskMenuInfoFields, ProjectQuickActionsMenuActions {
   isPinned: boolean;
   canPin: boolean;
   isFavorite: boolean;
@@ -551,6 +556,12 @@ export function TaskContextMenuItems(actions: TaskMenuActions) {
           </React.Fragment>
         );
       })}
+      {actions.onCaptureAutomation && (
+        <>
+          <ContextMenuSeparator />
+          <ProjectQuickActionsContextSubmenu actions={actions} />
+        </>
+      )}
       {actions.onMoveToProject && actions.projectId && (
         <MoveToProjectContextSubmenu
           currentProjectId={actions.projectId}
@@ -571,7 +582,12 @@ export function TaskContextMenuItems(actions: TaskMenuActions) {
 
 export function TaskContextMenu({ children, onOpenChange, ...actions }: TaskContextMenuProps) {
   return (
-    <ContextMenu onOpenChange={onOpenChange}>
+    <ContextMenu
+      onOpenChange={(open) => {
+        if (open) actions.onQuickActionsMenuOpen?.();
+        onOpenChange?.(open);
+      }}
+    >
       <ContextMenuTrigger>{children}</ContextMenuTrigger>
       <ContextMenuContent
         className="w-max overflow-x-visible"
@@ -600,7 +616,13 @@ export function TaskActionsMenu({
 }: TaskActionsMenuProps) {
   const items = useMenuItems(actions);
   return (
-    <DropdownMenu open={open} onOpenChange={onOpenChange}>
+    <DropdownMenu
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) actions.onQuickActionsMenuOpen?.();
+        onOpenChange?.(nextOpen);
+      }}
+    >
       <DropdownMenuTrigger render={trigger} />
       <DropdownMenuContent
         align={align}
@@ -630,6 +652,12 @@ export function TaskActionsMenu({
             </React.Fragment>
           );
         })}
+        {actions.onCaptureAutomation && (
+          <>
+            <DropdownMenuSeparator />
+            <ProjectQuickActionsDropdownSubmenu actions={actions} />
+          </>
+        )}
         {actions.onMoveToProject && actions.projectId && (
           <MoveToProjectDropdownSubmenu
             currentProjectId={actions.projectId}

@@ -11,16 +11,10 @@ import { observer } from 'mobx-react-lite';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { buildProjectDeepLink } from '@shared/deep-links';
-import type { QuickAction } from '@shared/project-settings';
 import { ensureUniqueTaskSlug } from '@shared/task-name';
 import { openNewTask, resolveNewTaskOpenMode } from '@renderer/app/open-new-task';
 import { openProjectArchivedTasks } from '@renderer/features/projects/open-project-archived-tasks';
 import { getProjectPathForNameRename } from '@renderer/features/projects/project-path';
-import {
-  getRunningProjectQuickActionTarget,
-  openProjectQuickActionTarget,
-} from '@renderer/features/projects/project-quick-action-target';
-import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import {
   isUnregisteredProject,
   type UnregisteredProject,
@@ -33,6 +27,7 @@ import {
   getRepositoryStore,
   projectViewKind,
 } from '@renderer/features/projects/stores/project-selectors';
+import { useProjectQuickActions } from '@renderer/features/projects/use-project-quick-actions';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useArchiveTask } from '@renderer/features/tasks/archive-task';
 import { copyTaskLink } from '@renderer/features/tasks/components/task-context-menu';
@@ -78,9 +73,6 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   const { params: projectParams } = useParams('project');
   const { params: taskParams } = useParams('task');
   const showChangeConnectionModal = useShowModal('changeProjectConnectionModal');
-  const showManageRunScripts = useShowModal('manageRunScriptsModal');
-  const showCaptureAutomation = useShowModal('captureProjectAutomationModal');
-  const showManageQuickActions = useShowModal('manageQuickActionsModal');
   const showRenameProject = useShowModal('renameProjectModal');
   const showMoveProjectPath = useShowModal('moveProjectPathModal');
   const showConfirmRemoveProject = useShowModal('confirmActionModal');
@@ -132,19 +124,11 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   );
 
   const { value: homeDraft } = useAppSettingsKey('homeDraft');
-  const quickActions = settingsStore?.settings?.quickActions ?? [];
-  const quickActionTargets = new Map(
-    mountedProject
-      ? quickActions.flatMap((action) => {
-          const target = getRunningProjectQuickActionTarget(mountedProject, action);
-          return target ? [[action.id, target] as const] : [];
-        })
-      : []
-  );
   const expressMode = homeDraft?.expressMode ?? false;
   const expressConnectionId =
     mountedProject?.data?.type === 'ssh' ? mountedProject.data.connectionId : undefined;
   const { runtimeId: expressProviderId } = useEffectiveRuntime(expressConnectionId);
+  const projectQuickActions = useProjectQuickActions(projectId);
 
   const currentProjectId =
     currentView === 'task'
@@ -187,72 +171,6 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     }
   }, [prefetchRepository, projectId, settingsStore]);
   const projectMenuDataIntent = useSidebarHoverIntent(prefetchProjectMenuData);
-
-  const handleRunQuickAction = useCallback(
-    async (action: QuickAction) => {
-      const mounted = asMounted(getProjectStore(projectId));
-      const repository = getRepositoryStore(projectId);
-      if (!mounted) return;
-      try {
-        if (action.kind === 'skill') {
-          if (!repository) return;
-          await Promise.all([repository.localData.load(), repository.remoteData.load()]);
-        }
-        const result = await runProjectQuickAction({
-          project: mounted,
-          action,
-          runtimeId: expressProviderId,
-          defaultBranch: repository?.defaultBranch,
-        });
-        if (result.kind === 'skill') {
-          navigate('task', { projectId, taskId: result.taskId });
-        }
-      } catch (error) {
-        log.warn('sidebar quick action failed', {
-          projectId,
-          actionId: action.id,
-          error: String(error),
-        });
-        toast({
-          title: t('sidebar.captureAutomation.runFailed'),
-          description: error instanceof Error ? error.message : String(error),
-          variant: 'destructive',
-        });
-      }
-    },
-    [expressProviderId, navigate, projectId, t]
-  );
-
-  const handleNavigateQuickAction = useCallback(
-    (action: QuickAction) => {
-      void (async () => {
-        const mounted = asMounted(getProjectStore(projectId));
-        if (!mounted) return;
-        const target = getRunningProjectQuickActionTarget(mounted, action);
-        if (
-          target &&
-          (await openProjectQuickActionTarget(mounted, target, (taskId) => {
-            navigate('task', { projectId, taskId });
-          }))
-        ) {
-          return;
-        }
-        await handleRunQuickAction(action);
-      })().catch((error) => {
-        log.warn('sidebar quick action navigation failed', {
-          projectId,
-          actionId: action.id,
-          error: String(error),
-        });
-        toast({
-          title: t('sidebar.captureAutomation.runFailed'),
-          description: error instanceof Error ? error.message : String(error),
-          variant: 'destructive',
-        });
-      });
-    },
-    [handleRunQuickAction, navigate, projectId, t]
-  );
 
   const openTaskComposer = useCallback(async () => {
     const openMode = await resolveNewTaskOpenMode();
@@ -455,29 +373,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
           });
         }
       : undefined,
-    onConfigureScripts:
-      project.state === 'unregistered'
-        ? undefined
-        : () => showManageRunScripts({ projectId, projectName: project.displayName }),
-    onCaptureAutomation:
-      project.state === 'unregistered'
-        ? undefined
-        : () => showCaptureAutomation({ projectId, projectName: project.displayName }),
-    onManageQuickActions:
-      project.state === 'unregistered' ? undefined : () => showManageQuickActions({ projectId }),
-    quickActions,
-    isQuickActionRunning: (action: QuickAction) => quickActionTargets.has(action.id),
-    canRunQuickAction: (action: QuickAction) =>
-      action.kind === 'command' || Boolean(expressProviderId),
-    onRunQuickAction:
-      project.state === 'mounted' &&
-      (expressProviderId || quickActions.some((action) => action.kind === 'command'))
-        ? (action: QuickAction) => void handleRunQuickAction(action)
-        : undefined,
-    onNavigateQuickAction:
-      project.state === 'mounted'
-        ? (action: QuickAction) => handleNavigateQuickAction(action)
-        : undefined,
+    ...projectQuickActions,
     onMenuOpen: projectMenuDataIntent.runNow,
     onRename: project.state === 'unregistered' ? undefined : handleRename,
     onMovePath:

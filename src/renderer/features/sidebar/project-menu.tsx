@@ -11,17 +11,17 @@ import {
   PencilLine,
   Pin,
   PinOff,
-  Play,
   Plus,
   RotateCcw,
-  Settings2,
-  TerminalSquare,
   Trash2,
-  WandSparkles,
 } from 'lucide-react';
 import React, { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { QuickAction } from '@shared/project-settings';
+import {
+  ProjectQuickActionsContextSubmenu,
+  ProjectQuickActionsDropdownSubmenu,
+  type ProjectQuickActionsMenuActions,
+} from '@renderer/features/projects/project-quick-actions-menu';
 import {
   WorkspaceAssignContextSubmenu,
   WorkspaceAssignDropdownSubmenu,
@@ -37,9 +37,6 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@renderer/lib/ui/context-menu';
 import {
@@ -47,13 +44,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 
-interface ProjectMenuActions {
+interface ProjectMenuActions extends ProjectQuickActionsMenuActions {
   isPinned: boolean;
   canPin: boolean;
   isSsh: boolean;
@@ -69,14 +63,6 @@ interface ProjectMenuActions {
   onOpenArchivedTasks?: () => void;
   onReconnect?: () => void;
   onChangeSshConnection?: () => void;
-  onConfigureScripts?: () => void;
-  onCaptureAutomation?: () => void;
-  onManageQuickActions?: () => void;
-  quickActions?: QuickAction[];
-  canRunQuickAction?: (action: QuickAction) => boolean;
-  isQuickActionRunning?: (action: QuickAction) => boolean;
-  onRunQuickAction?: (action: QuickAction) => void;
-  onNavigateQuickAction?: (action: QuickAction) => void;
   onMenuOpen?: () => void;
   onRename?: () => void;
   onMovePath?: () => void;
@@ -262,15 +248,6 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   });
 
   // group 6 — repeatable project operations
-  if (actions.onConfigureScripts) {
-    items.push({
-      key: 'configure-scripts',
-      group: 6,
-      icon: Settings2,
-      label: t('sidebar.runScripts.configure'),
-      onSelect: actions.onConfigureScripts,
-    });
-  }
   if (actions.onCaptureAutomation) {
     items.push({
       key: 'quick-actions',
@@ -295,165 +272,6 @@ async function copyProjectPath(path: string, t: TFunction) {
       variant: 'destructive',
     });
   }
-}
-
-function QuickActionMenuItemContent({
-  action,
-  running,
-}: {
-  action: QuickAction;
-  running: boolean;
-}) {
-  const { t } = useTranslation();
-  return (
-    <>
-      {action.kind === 'command' ? (
-        <TerminalSquare className="size-4" />
-      ) : (
-        <Bot className="size-4" />
-      )}
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate">{action.label}</span>
-        <span className="truncate text-[10px] text-foreground-passive">
-          {t(
-            action.kind === 'command'
-              ? 'sidebar.captureAutomation.commandKind'
-              : 'sidebar.captureAutomation.skillKind'
-          )}
-          {' · '}
-          {action.command}
-        </span>
-      </span>
-      {running ? (
-        <span className="ml-2 flex shrink-0 items-center gap-1 text-[10px] text-success">
-          <span className="size-1.5 rounded-full bg-success motion-safe:animate-pulse" />
-          {t('sidebar.captureAutomation.running')}
-        </span>
-      ) : null}
-    </>
-  );
-}
-
-function quickActionMenuState(actions: ProjectMenuActions, action: QuickAction) {
-  const running = actions.isQuickActionRunning?.(action) === true;
-  return {
-    running,
-    disabled: running
-      ? !actions.onNavigateQuickAction
-      : !actions.onRunQuickAction || actions.canRunQuickAction?.(action) === false,
-    select: () => {
-      if (running) actions.onNavigateQuickAction?.(action);
-      else actions.onRunQuickAction?.(action);
-    },
-  };
-}
-
-function ProjectQuickActionsContextSubmenu({ actions }: { actions: ProjectMenuActions }) {
-  const { t } = useTranslation();
-  const quickActions = actions.quickActions ?? [];
-  return (
-    <ContextMenuSub>
-      <ContextMenuSubTrigger>
-        <Play className="size-4" />
-        {t('sidebar.captureAutomation.menuLabel')}
-      </ContextMenuSubTrigger>
-      <ContextMenuSubContent className="min-w-72 max-w-96">
-        {quickActions.length > 0
-          ? quickActions.map((action) => {
-              const state = quickActionMenuState(actions, action);
-              return (
-                <ContextMenuItem
-                  key={action.id}
-                  disabled={state.disabled}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    state.select();
-                  }}
-                >
-                  <QuickActionMenuItemContent action={action} running={state.running} />
-                </ContextMenuItem>
-              );
-            })
-          : null}
-        {quickActions.length === 0 ? (
-          <ContextMenuItem disabled>{t('sidebar.captureAutomation.noCommands')}</ContextMenuItem>
-        ) : null}
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          onClick={(event) => {
-            event.stopPropagation();
-            actions.onCaptureAutomation?.();
-          }}
-        >
-          <WandSparkles className="size-4" />
-          {t('sidebar.captureAutomation.createLabel')}
-        </ContextMenuItem>
-        <ContextMenuItem
-          onClick={(event) => {
-            event.stopPropagation();
-            actions.onManageQuickActions?.();
-          }}
-        >
-          <Settings2 className="size-4" />
-          {t('projects.quickActions.manage')}
-        </ContextMenuItem>
-      </ContextMenuSubContent>
-    </ContextMenuSub>
-  );
-}
-
-function ProjectQuickActionsDropdownSubmenu({ actions }: { actions: ProjectMenuActions }) {
-  const { t } = useTranslation();
-  const quickActions = actions.quickActions ?? [];
-  return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger>
-        <Play className="size-4" />
-        {t('sidebar.captureAutomation.menuLabel')}
-      </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="min-w-72 max-w-96">
-        {quickActions.length > 0
-          ? quickActions.map((action) => {
-              const state = quickActionMenuState(actions, action);
-              return (
-                <DropdownMenuItem
-                  key={action.id}
-                  disabled={state.disabled}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    state.select();
-                  }}
-                >
-                  <QuickActionMenuItemContent action={action} running={state.running} />
-                </DropdownMenuItem>
-              );
-            })
-          : null}
-        {quickActions.length === 0 ? (
-          <DropdownMenuItem disabled>{t('sidebar.captureAutomation.noCommands')}</DropdownMenuItem>
-        ) : null}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={(event) => {
-            event.stopPropagation();
-            actions.onCaptureAutomation?.();
-          }}
-        >
-          <WandSparkles className="size-4" />
-          {t('sidebar.captureAutomation.createLabel')}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={(event) => {
-            event.stopPropagation();
-            actions.onManageQuickActions?.();
-          }}
-        >
-          <Settings2 className="size-4" />
-          {t('projects.quickActions.manage')}
-        </DropdownMenuItem>
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
-  );
 }
 
 interface ProjectContextMenuProps extends ProjectMenuActions {
@@ -502,7 +320,10 @@ function useProjectMenuPrefetchAfterPaint(onMenuOpen?: () => void) {
 
 export function ProjectContextMenu({ children, ...actions }: ProjectContextMenuProps) {
   const items = useMenuItems(actions);
-  const scheduleMenuPrefetch = useProjectMenuPrefetchAfterPaint(actions.onMenuOpen);
+  const scheduleMenuPrefetch = useProjectMenuPrefetchAfterPaint(() => {
+    actions.onQuickActionsMenuOpen?.();
+    actions.onMenuOpen?.();
+  });
   return (
     <ContextMenu onOpenChange={scheduleMenuPrefetch}>
       <ContextMenuTrigger className="block w-full min-w-0 overflow-hidden">
@@ -578,7 +399,10 @@ export function ProjectActionsMenu({
   ...actions
 }: ProjectActionsMenuProps) {
   const items = useMenuItems(actions);
-  const scheduleMenuPrefetch = useProjectMenuPrefetchAfterPaint(actions.onMenuOpen);
+  const scheduleMenuPrefetch = useProjectMenuPrefetchAfterPaint(() => {
+    actions.onQuickActionsMenuOpen?.();
+    actions.onMenuOpen?.();
+  });
   return (
     <DropdownMenu
       open={open}

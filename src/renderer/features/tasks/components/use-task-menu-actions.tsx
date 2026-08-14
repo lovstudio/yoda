@@ -6,6 +6,7 @@ import {
   getProjectStore,
   getRepositoryStore,
 } from '@renderer/features/projects/stores/project-selectors';
+import { useProjectQuickActions } from '@renderer/features/projects/use-project-quick-actions';
 import { useArchiveTask } from '@renderer/features/tasks/archive-task';
 import { openTaskWhenReady } from '@renderer/features/tasks/open-task-when-ready';
 import { splitViewStore } from '@renderer/features/tasks/split-view/split-view-store';
@@ -46,6 +47,7 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
   const showCreateProject = useShowModal('expressCreateProjectModal');
   const moveTaskToProject = useMoveTaskToProject();
   const { archiveTask } = useArchiveTask(projectId);
+  const projectQuickActions = useProjectQuickActions(projectId);
 
   const task = getTaskStore(projectId, taskId);
   const taskManager = getTaskManagerStore(projectId);
@@ -229,5 +231,6 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
             splitViewStore.replace(childTaskIds.map((id) => ({ projectId, taskId: id })));
           }
         : undefined,
+    ...projectQuickActions,
   };
 }

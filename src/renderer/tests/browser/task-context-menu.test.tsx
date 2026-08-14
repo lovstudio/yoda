@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { QuickAction } from '@shared/project-settings';
 import type { TaskMenuActions } from '@renderer/features/tasks/components/task-context-menu';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -68,6 +69,9 @@ vi.mock('@renderer/lib/ui/context-menu', async () => {
     ContextMenuContent: container('context-menu-content'),
     ContextMenuItem: item,
     ContextMenuSeparator: () => create('hr'),
+    ContextMenuSub: container('context-menu-sub'),
+    ContextMenuSubContent: container('context-menu-sub-content'),
+    ContextMenuSubTrigger: container('context-menu-sub-trigger'),
     ContextMenuTrigger: container('context-menu-trigger'),
   };
 });
@@ -90,6 +94,9 @@ vi.mock('@renderer/lib/ui/dropdown-menu', async () => {
     DropdownMenuContent: container('dropdown-menu-content'),
     DropdownMenuItem: item,
     DropdownMenuSeparator: () => create('hr'),
+    DropdownMenuSub: container('dropdown-menu-sub'),
+    DropdownMenuSubContent: container('dropdown-menu-sub-content'),
+    DropdownMenuSubTrigger: container('dropdown-menu-sub-trigger'),
     DropdownMenuTrigger: ({ render }: { render: ReactElement }) => render,
   };
 });
@@ -301,6 +308,52 @@ describe('TaskContextMenuItems grouping', () => {
       await renderMenu(true);
       await act(async () => findButton(host, 'tasks.context.unfavoriteTask')?.click());
       expect(onUnfavorite).toHaveBeenCalledOnce();
+    }
+  );
+
+  it.each(['context', 'dropdown'] as const)(
+    'shows project-scoped quick actions in the shared task %s menu',
+    async (surface) => {
+      const { TaskActionsMenu, TaskContextMenu } = await import(
+        '@renderer/features/tasks/components/task-context-menu'
+      );
+      const quickAction: QuickAction = {
+        id: 'review-project',
+        label: 'Review project',
+        command: 'Review the current project changes.',
+        kind: 'skill',
+      };
+      const onRunQuickAction = vi.fn();
+      const onCaptureAutomation = vi.fn();
+      const onManageQuickActions = vi.fn();
+      const actions = taskMenuActions({
+        quickActions: [quickAction],
+        onRunQuickAction,
+        onCaptureAutomation,
+        onManageQuickActions,
+      });
+
+      await act(async () => {
+        root.render(
+          surface === 'context'
+            ? createElement(TaskContextMenu, {
+                ...actions,
+                children: createElement('div', null, 'Task'),
+              })
+            : createElement(TaskActionsMenu, {
+                ...actions,
+                trigger: createElement('button', null, 'More'),
+              })
+        );
+      });
+
+      expect(host.textContent).toContain('sidebar.captureAutomation.menuLabel');
+      await act(async () => findButton(host, quickAction.label)?.click());
+      expect(onRunQuickAction).toHaveBeenCalledWith(quickAction);
+      await act(async () => findButton(host, 'sidebar.captureAutomation.createLabel')?.click());
+      expect(onCaptureAutomation).toHaveBeenCalledOnce();
+      await act(async () => findButton(host, 'projects.quickActions.manage')?.click());
+      expect(onManageQuickActions).toHaveBeenCalledOnce();
     }
   );
 });
