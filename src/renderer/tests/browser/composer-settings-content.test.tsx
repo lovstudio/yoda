@@ -12,22 +12,6 @@ vi.mock('react-i18next', async (importOriginal) => ({
   }),
 }));
 
-vi.mock('@renderer/features/tasks/components/permission-mode-select', async () => {
-  const React = await import('react');
-  return {
-    PermissionModeSelect: () =>
-      React.createElement('div', { 'data-slot': 'permission-mode-select' }),
-  };
-});
-
-vi.mock('@renderer/features/tasks/components/auto-trust-worktrees-control', async () => {
-  const React = await import('react');
-  return {
-    AutoTrustWorktreesControl: () =>
-      React.createElement('div', { 'data-slot': 'auto-trust-worktrees-control' }),
-  };
-});
-
 vi.mock('@renderer/lib/ui/info-tooltip', async () => {
   const React = await import('react');
   return {
@@ -53,12 +37,11 @@ describe('ComposerSettingsContent', () => {
     host.remove();
   });
 
-  it('keeps the popover focused on composer and agent settings', async () => {
+  it('keeps the popover focused on composer settings', async () => {
     const { ComposerSettingsContent } = await import('@renderer/app/composer-settings-content');
     await act(async () => {
       root.render(
         createElement(ComposerSettingsContent, {
-          runtimeId: 'codex',
           attachImagesAsPaths: true,
           inputPromptLanguage: 'skip',
           namingLanguage: 'app',
@@ -74,9 +57,9 @@ describe('ComposerSettingsContent', () => {
     const settingsSections = host.querySelectorAll<HTMLElement>(
       '[data-slot="composer-settings-section"]'
     );
-    expect(settingsSections).toHaveLength(2);
-    expect(host.querySelector('[data-slot="permission-mode-select"]')).not.toBeNull();
-    expect(host.querySelector('[data-slot="auto-trust-worktrees-control"]')).not.toBeNull();
+    expect(settingsSections).toHaveLength(1);
+    expect(host.textContent).not.toContain('home.agentCliConfigLabel');
+    expect(host.textContent).not.toContain('home.permissionModeLabel');
     expect(host.querySelector('[data-slot="compact-prompt-list"]')).toBeNull();
     expect(host.querySelector('[data-slot="prompt-injection-controls"]')).toBeNull();
     expect(host.textContent).not.toContain('home.promptConfigurationLabel');

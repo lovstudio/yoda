@@ -19,8 +19,9 @@ describe('shared composer settings surfaces', () => {
     expect(content).toContain("t('settings.tasks.inputPromptLanguageLabel')");
     expect(content).toContain("t('settings.tasks.sessionTitleLanguageLabel')");
     expect(content).toContain("t('settings.tasks.summaryLanguageLabel')");
-    expect(content).toContain('<PermissionModeSelect');
-    expect(content).toContain('<AutoTrustWorktreesControl compact');
+    expect(content).not.toContain('<PermissionModeSelect');
+    expect(content).not.toContain('<AutoTrustWorktreesControl compact');
+    expect(content).not.toContain('agentCliConfigLabel');
     expect(content).toContain('data-slot="composer-settings-section-header"');
     expect(content).not.toContain('max-h-48 overflow-y-auto overscroll-contain');
     expect(content).not.toContain('<InstructionFilesSection');

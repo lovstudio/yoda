@@ -1,11 +1,8 @@
-import { Bot, SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TaskOutputLanguage } from '@shared/project-settings';
-import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
-import { AutoTrustWorktreesControl } from '@renderer/features/tasks/components/auto-trust-worktrees-control';
-import { PermissionModeSelect } from '@renderer/features/tasks/components/permission-mode-select';
 import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
 import {
   Select,
@@ -24,7 +21,6 @@ export const DEFAULT_SUMMARY_OUTPUT_LANGUAGE: TaskOutputLanguage = 'app';
 export const DEFAULT_INPUT_PROMPT_LANGUAGE: TaskOutputLanguage = 'skip';
 
 export interface ComposerSettingsContentProps {
-  runtimeId: RuntimeId | null;
   attachImagesAsPaths: boolean;
   inputPromptLanguage: TaskOutputLanguage;
   namingLanguage: TaskOutputLanguage;
@@ -42,7 +38,6 @@ export interface ComposerSettingsContentProps {
  * behavior regardless of where the user opens it.
  */
 export const ComposerSettingsContent = observer(function ComposerSettingsContent({
-  runtimeId,
   attachImagesAsPaths,
   inputPromptLanguage,
   namingLanguage,
@@ -54,7 +49,6 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
   footer,
 }: ComposerSettingsContentProps) {
   const { t } = useTranslation();
-  const runtime = runtimeId ? getRuntime(runtimeId) : undefined;
 
   return (
     <div className="grid gap-3">
@@ -94,30 +88,6 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
           onValueChange={onSummaryLanguageChange}
         />
       </ComposerSettingsSection>
-      {runtimeId ? (
-        <ComposerSettingsSection
-          icon={<Bot className="size-3.5" />}
-          label={`${t('home.agentCliConfigLabel')} · ${runtime?.name ?? runtimeId}`}
-        >
-          <ComposerSettingRow
-            label={t('home.permissionModeLabel')}
-            hint={t('home.permissionModeDesc')}
-            control={
-              <PermissionModeSelect
-                runtimeId={runtimeId}
-                className="shrink-0"
-                contentPortaled={false}
-                alignContentWithTrigger={false}
-              />
-            }
-          />
-          {runtimeId === 'codex' || runtimeId === 'claude' ? (
-            <div className="px-3 py-2">
-              <AutoTrustWorktreesControl compact />
-            </div>
-          ) : null}
-        </ComposerSettingsSection>
-      ) : null}
       {footer}
     </div>
   );

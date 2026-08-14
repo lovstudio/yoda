@@ -144,7 +144,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const { value: taskSettings, update: updateTaskSettings } = useAppSettingsKey('tasks');
   const { value: notificationSettings, update: updateNotificationSettings } =
     useAppSettingsKey('notifications');
-  const { value: defaultRuntime } = useAppSettingsKey('defaultRuntime');
   const [isCompacting, setIsCompacting] = useState(false);
   const [isResettingAccountUsage, setIsResettingAccountUsage] = useState(false);
   const [isRuntimePopoverOpen, setIsRuntimePopoverOpen] = useState(false);
@@ -220,11 +219,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const runtimeId = explicitConversationRuntimeId(
     provisionedTask?.taskView.tabManager.activeConversation?.data.runtimeId
   );
-  const configRuntimeId =
-    runtimeId ??
-    composerDefaults?.runtimeId ??
-    (isValidRuntimeId(homeDraft?.runtimeOverride) ? homeDraft.runtimeOverride : null) ??
-    (isValidRuntimeId(defaultRuntime) ? defaultRuntime : 'claude');
   const activeConversation = provisionedTask?.taskView.tabManager.activeConversation?.data ?? null;
   const runtime = runtimeId ? getRuntime(runtimeId) : null;
   const runtimeConfig = runtimeId ? agentConfig[runtimeId] : null;
@@ -835,7 +829,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         </div>
         <div className="p-3">
           <ComposerSettingsContent
-            runtimeId={configRuntimeId}
             attachImagesAsPaths={attachImagesField.value}
             inputPromptLanguage={inputPromptLanguageField.value}
             namingLanguage={namingLanguageField.value}

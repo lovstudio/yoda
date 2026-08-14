@@ -2076,7 +2076,6 @@ export const HomeComposer = observer(function HomeComposer({
         className="max-h-[min(32rem,calc(100vh-3rem))] w-96 gap-0 overflow-y-auto p-2.5"
       >
         <ComposerSettingsContent
-          runtimeId={runtimeId}
           attachImagesAsPaths={attachImagesAsPaths}
           inputPromptLanguage={inputPromptLanguageField.value}
           namingLanguage={namingLanguageField.value}
