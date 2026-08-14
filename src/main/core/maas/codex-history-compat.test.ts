@@ -180,6 +180,43 @@ describe('legacy Codex MaaS history compatibility', () => {
     expect(Buffer.byteLength(readFileSync(rolloutPath, 'utf8'))).toBe(Buffer.byteLength(contents));
   });
 
+  it('streams rollout metadata across read chunks without changing byte offsets', () => {
+    const rolloutPath = join(directory, 'chunked-rollout.jsonl');
+    const metadata = (git?: Record<string, unknown>) =>
+      JSON.stringify({
+        type: 'session_meta',
+        payload: {
+          id: 'chunked-thread',
+          model_provider: 'custom',
+          ...(git ? { git } : {}),
+        },
+      });
+    const contents = [
+      metadata(),
+      JSON.stringify({ type: 'event_msg', payload: { text: 'x'.repeat(70_000) } }),
+      metadata({ branch: 'feature/keep-offsets' }),
+      '',
+    ].join('\n');
+    writeFileSync(rolloutPath, contents);
+    const db = new Database(statePath);
+    db.exec(
+      'CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL, model_provider TEXT NOT NULL)'
+    );
+    db.prepare('INSERT INTO threads VALUES (?, ?, ?)').run('chunked-thread', rolloutPath, 'custom');
+    db.close();
+
+    expect(migrateLegacyCodexMaasHistory({ statePath })).toMatchObject({ rows: 1, files: 1 });
+
+    const migrated = readFileSync(rolloutPath, 'utf8');
+    expect(Buffer.byteLength(migrated)).toBe(Buffer.byteLength(contents));
+    expect(
+      migrated
+        .split('\n')
+        .filter((line) => line.includes('session_meta'))
+        .map((line) => JSON.parse(line).payload.model_provider)
+    ).toEqual(['yoda', 'yoda']);
+  });
+
   it('retags the requested thread when its historical provider is no longer configured', () => {
     const rolloutPath = join(directory, 'stale-provider.jsonl');
     const configPath = join(directory, 'config.toml');
