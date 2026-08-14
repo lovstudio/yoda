@@ -171,7 +171,12 @@ export function supportsMaasPlatformForRuntime(
   if (runtimeId === 'codex') return true;
   if (runtimeId === 'claude') {
     const templateId = getMaasPlatformTemplateId(platformId);
-    return templateId === 'zenmux' || templateId === 'openrouter';
+    // Claude Code talks to Anthropic's Messages API through ANTHROPIC_BASE_URL.
+    // ZenMux and OpenRouter need provider-specific endpoint rewrites, while the
+    // remaining gateway/Profile types expose the conventional /v1/messages
+    // route from their API origin. SiliconFlow currently exposes only its
+    // OpenAI-compatible surface, so keep it out of the Claude binding set.
+    return templateId !== 'siliconflow';
   }
   return false;
 }
@@ -226,6 +231,14 @@ export type MaasCodexClientSyncStatus = {
   displayName: string | null;
   envKey: string | null;
   persistsAfterQuit: boolean;
+  /** Added in sync contract v3; optional while a hot-reloaded renderer sees an older main process. */
+  claude?: {
+    supported: boolean;
+    compatible: boolean;
+    managed: boolean;
+    configManaged: boolean;
+    persistentCredentialStored: boolean;
+  };
 };
 
 const DEFAULT_MAAS_ENV_KEYS: Record<MaasPlatformTemplateId, string> = {

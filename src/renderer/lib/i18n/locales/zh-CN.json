@@ -207,6 +207,9 @@
     "branchDisplayHidden": "隐藏",
     "branchDisplayCompact": "简洁",
     "branchDisplayFull": "完整",
+    "privacySection": "隐私",
+    "privacyMode": "隐私模式",
+    "privacyModeDescription": "轻度模糊侧边栏中的任务名称、项目标签和分支名称；开启期间不显示任务悬浮预览。",
     "activityBucket": {
       "today": "今天",
       "thisWeek": "本周",
@@ -1033,7 +1036,11 @@
     },
     "interfaceTab": {
       "description": "自定义应用的外观与行为。",
-      "keyboardShortcuts": "键盘快捷键"
+      "keyboardShortcuts": "键盘快捷键",
+      "sidebarStatusBarPrimary": "侧边栏状态栏",
+      "sidebarStatusBarPrimaryDescription": "选择优先显示产品信息还是账号信息，另一项仍可通过紧凑图标访问。",
+      "sidebarStatusBarProduct": "产品信息",
+      "sidebarStatusBarAccount": "账号信息"
     },
     "taskAppearance": {
       "title": "任务外观",
@@ -1749,10 +1756,11 @@
       "deleteTitle": "删除会话",
       "deleteDescription": "“{{title}}” 将被永久删除，此操作无法撤销。",
       "sessionExited": "代理进程已退出。",
-      "startingTitle": "Agent 正在启动",
-      "startingDescription": "消息已提交，终端准备完成后会在这里继续显示。",
-      "startingErrorTitle": "Agent 启动遇到问题",
+      "startingTitle": "正在打开会话",
+      "startingDescription": "正在准备会话内容。",
+      "startingErrorTitle": "会话打开遇到问题",
       "startingErrorDescription": "终端准备没有完成，请重试；如果仍然失败，请复制调试信息。",
+      "externalWriter": "正在其他 Codex 窗口中使用",
       "sessionStopped": "会话已停止",
       "continueConversation": "继续会话",
       "continuingConversation": "正在继续…"
@@ -4753,6 +4761,7 @@
       "disabled": "未启用",
       "notEnabled": "可启用",
       "needsConfiguration": "需要先配置 API Key",
+      "needsSuccessfulTest": "测试连接通过后才可启用",
       "needsGateway": "需要先安装并启用 Yoda 模型网关",
       "toggleAria": "全局启用 {{platform}}",
       "enableAria": "启用 {{platform}}",
@@ -4768,7 +4777,9 @@
       "duplicate": "创建副本",
       "duplicateName": "{{name}} 副本",
       "duplicatedToast": "已创建 {{name}}",
-      "duplicateFailed": "创建 Profile 副本失败"
+      "duplicateFailed": "创建 Profile 副本失败",
+      "reorder": "拖动「{{name}}」调整顺序",
+      "reorderFailed": "Profile 顺序保存失败"
     },
     "gatewayRequirement": {
       "title": "需要 Yoda 模型网关",
@@ -4801,14 +4812,15 @@
     "clientSync": {
       "title": "全局生效",
       "toggle": "让模型接入切换在 Yoda 之外全局生效",
-      "activeDetail": "{{profile}} 已写入 Codex 用户级配置；Codex CLI / App 无需先打开 Yoda。",
-      "activeSessionDetail": "{{profile}} 已同步到 Codex 用户级配置。",
-      "partialDetail": "当前模型接入已启用，但 Codex 用户级配置或凭据不完整。请关闭后重新开启全局生效。",
+      "activeDetail": "{{profile}} 已写入 {{clients}} 的用户级配置；无需先打开 Yoda。",
+      "activeSessionDetail": "{{profile}} 已同步到外部 Agent Client 的用户级配置。",
+      "partialDetail": "当前模型接入已启用，但外部 Agent Client 的用户级配置或凭据不完整。请关闭后重新开启全局生效。",
       "waitingDetail": "已开启。下次启用或切换模型接入时，会同步迁移到支持的外部 Agent App。",
       "inactiveDetail": "仅在 Yoda 内生效；切换模型接入不会修改其他 Agent App 的配置。",
       "agentClientAdapters": "Agent Client 适配",
       "adapted": "已支持全局配置迁移",
       "planned": "待实现",
+      "codexAndClaude": "Codex CLI / App 与 Claude Code",
       "detected": "已检测",
       "notDetected": "未检测到",
       "moreClientsLater": "持续增加中",
@@ -4816,9 +4828,9 @@
       "loginItemDescription": "开启后，macOS 会将“Yoda Model Access”显示为 Yoda 创建的后台登录项，用于登录后从钥匙串恢复当前路由。关闭后会移除此项。",
       "loginItemToggle": "允许 Yoda 登录项保持外部 Agent App 同步",
       "currentSessionNotice": "当前配置只保持到本次登录会话结束。Mac 重启或重新登录后，需要先打开 Yoda 才会再次生效。",
-      "risk": "全局生效会把当前 API Key 明文写入 Codex 用户级 config.toml，并将文件权限收紧为仅当前用户可读写；配置会在退出 Yoda 或重启系统后继续保留。关闭开关会恢复原配置，已经运行的 Client 需重启后才会读取变化。",
+      "risk": "全局生效会把当前 API Key 明文写入 Codex 用户级 config.toml，以及兼容时的 Claude Code 用户级 settings.json，并将文件权限收紧为仅当前用户可读写；配置会在退出 Yoda 或重启系统后继续保留。关闭开关会恢复原配置，已经运行的 Client 需重启后才会读取变化。",
       "enableConfirmTitle": "让模型接入切换全局生效？",
-      "enableConfirmDescription": "之后每次启用或切换模型接入，Yoda 都会把当前路由同步到支持的外部 Agent App。当前优先支持 Codex CLI / App；API Key 会按 Codex 官方配置格式，以明文写入用户级 config.toml，文件权限会收紧为仅当前用户可读写。关闭全局生效时会恢复切换前的配置。",
+      "enableConfirmDescription": "之后每次启用或切换模型接入，Yoda 都会把当前路由同步到支持的外部 Agent App。当前支持 Codex CLI / App，以及使用 Anthropic 兼容接口时的 Claude Code；API Key 会按各 Client 的官方配置格式，以明文写入用户级配置文件，文件权限会收紧为仅当前用户可读写。关闭全局生效时会恢复切换前的配置。",
       "enableConfirmLabel": "开启全局生效",
       "enabledToast": "模型接入切换已全局生效",
       "disabledToast": "模型接入切换已恢复为仅 Yoda 生效",
@@ -4917,12 +4929,14 @@
       "lastVerified": "最近有效",
       "lastCheckFailed": "检测失败",
       "neverChecked": "尚未检查",
+      "testSpeed": "，速度：{{latency}} ms",
       "test": "测试连接",
       "testWithLatency": "测试连接（{{latency}} ms）",
       "testing": "正在测试 3 次…",
       "testFailed": "连接测试未通过",
       "averageLatency": "平均 {{latency}} ms",
-      "testSamples": "3 次：{{samples}}"
+      "testSamples": "3 次：{{samples}}",
+      "profileActions": "Profile 连接操作"
     },
     "records": {
       "title": "ZenMux 账单与用量",
@@ -5492,6 +5506,7 @@
     "officialAccountUsage": "{{name}} 官网用量",
     "accountUsageDescription": "当前 CLI 账号的额度窗口",
     "maasUsageTitle": "{{provider}} 用量",
+    "maasUsageOpenWebsite": "打开 {{provider}} 官网",
     "maasUsageShort": "用量",
     "maasUsageDescription": "当前会话通过 {{provider}} 路由，显示服务商返回的真实统计。",
     "maasUsageSourceZenmux": "管理统计",

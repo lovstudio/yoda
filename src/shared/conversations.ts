@@ -5,6 +5,29 @@ import type { TaskNamingContextSnapshot, TaskNamingStatus } from '@shared/task-n
 export type ConversationExecutionMode = 'interactive' | 'automation';
 export type ConversationClientSource = 'desktop' | 'mobile';
 
+export type ConversationResumeBlockReason = 'external-writer';
+
+/**
+ * Durable evidence the renderer can match against the provider's canonical
+ * terminal surface before revealing a resumed conversation.
+ *
+ * Segments are short, bounded excerpts of provider-visible transcript text.
+ * Markdown-only syntax is removed, while renderer-specific NFKC, punctuation
+ * and terminal wrapping normalisation remains the renderer's responsibility.
+ * `live-turn` carries no text: the provider's durable run-state proves that the
+ * current turn is unfinished, so an exact-generation atomic TUI frame is the
+ * canonical surface even after its original prompt has scrolled away.
+ */
+export type ConversationSurfaceAnchor =
+  | { kind: 'none' }
+  | { kind: 'live-turn' }
+  | { kind: 'anchor'; segments: string[] }
+  | { kind: 'unverifiable' };
+
+export type ConversationResumeResult =
+  | { running: true; reason?: never; surfaceAnchor?: ConversationSurfaceAnchor }
+  | { running: false; reason?: ConversationResumeBlockReason };
+
 /** The reusable Agent profile bound to a conversation when it was created. */
 export type ConversationAgent = {
   id: string;

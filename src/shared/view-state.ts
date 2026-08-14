@@ -221,6 +221,8 @@ export type SidebarSnapshot = {
   taskPriorityOrder?: SidebarTaskPriorityGroup[];
   taskGroupVisibleLimit?: SidebarTaskGroupVisibleLimit;
   taskBranchDisplay?: SidebarBranchDisplay;
+  /** Lightly blur task metadata in the sidebar for privacy-conscious captures. */
+  redactTaskContent?: boolean;
   pinnedProjectIds?: string[];
   pinnedCollapsed?: boolean;
   projectsCollapsed?: boolean;

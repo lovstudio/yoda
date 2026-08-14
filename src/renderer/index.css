@@ -490,6 +490,43 @@
   }
 }
 
+@keyframes yoda-session-opening-glow {
+  0%,
+  100% {
+    opacity: 0.48;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.16);
+  }
+}
+
+.yoda-session-opening-mark {
+  --yoda-opening-presence: #2fa56e;
+
+  color: #1a3b2a;
+}
+
+.ydark .yoda-session-opening-mark {
+  --yoda-opening-presence: #5dc98f;
+
+  color: #dbebde;
+}
+
+.yoda-session-opening-glow {
+  animation: yoda-session-opening-glow 3.6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: opacity, transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .yoda-session-opening-glow {
+    animation: none;
+  }
+}
+
 /* Yoda Dream — native adaptation of Codex Dream Skin Studio. The image is a
    licensed derivative tracked in THIRD_PARTY_NOTICES.md. Only semantic
    `data-yoda-surface` hooks are styled here so route/component markup can

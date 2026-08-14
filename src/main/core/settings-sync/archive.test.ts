@@ -113,6 +113,7 @@ describe('settings archive', () => {
       expandedProjectIds: ['project-a'],
       activeWorkspaceId: 'workspace-a',
       taskSortBy: 'updated-at',
+      redactTaskContent: true,
       hideProjectsWithoutActiveTasks: true,
     });
   });
@@ -154,6 +155,7 @@ describe('settings archive', () => {
     });
     expect(archive.data.viewState.sidebar).toEqual({
       taskSortBy: 'updated-at',
+      redactTaskContent: true,
       hideProjectsWithoutActiveTasks: true,
     });
   });

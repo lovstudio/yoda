@@ -98,6 +98,13 @@ export interface AgentSessionStatusChanged {
   conversationId: string;
   status: AgentSessionRuntimeStatus;
   pendingAction?: PendingAction | null;
+  /**
+   * True only after the provider's own run-state source has confirmed the
+   * current running turn. Renderer `working` predictions deliberately publish
+   * false so startup/submit chrome cannot unlock the fast terminal-frame path.
+   * Optional for compatibility with an older main/renderer during dev HMR.
+   */
+  providerTurnConfirmed?: boolean;
 }
 
 export const agentSessionStatusChangedChannel = defineEvent<AgentSessionStatusChanged>(

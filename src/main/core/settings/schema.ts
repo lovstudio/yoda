@@ -300,7 +300,7 @@ export const maasSettingsSchema = z.object({
   runtimeBindings: z.array(maasRuntimeBindingSchema).default([]),
   /** Explicit consent to publish the active MaaS route outside Yoda. */
   externalAgentSyncEnabled: z.boolean().optional(),
-  externalAgentSyncVersion: z.union([z.literal(1), z.literal(2)]).optional(),
+  externalAgentSyncVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
   externalAgentSyncLoginItemEnabled: z.boolean().optional(),
 });
 
@@ -579,6 +579,8 @@ export const taskAppearanceSettingsSchema = z.object({
 export const interfaceSettingsSchema = z.object({
   taskHoverAction: z.enum(['delete', 'archive']),
   autoRightSidebarBehavior: z.boolean(),
+  /** Which identity gets the primary text treatment in the sidebar footer. */
+  sidebarStatusBarPrimary: z.enum(['product', 'account']).catch('product'),
   /** Where the global new-task action opens its composer. */
   newTaskOpenMode: z.enum(['home', 'modal']).catch('home'),
   /** How much of the agent's transcript appears in the Session → Conversation surface. */

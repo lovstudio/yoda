@@ -28,6 +28,10 @@ describe('settings defaults', () => {
     expect(getDefaultForKey('interface').agentReplyDisplayLevel).toBe('concise');
   });
 
+  it('prioritizes product information in the sidebar status bar by default', () => {
+    expect(getDefaultForKey('interface').sidebarStatusBarPrimary).toBe('product');
+  });
+
   it('preserves the established task hierarchy in the default appearance preset', () => {
     expect(getDefaultForKey('interface').taskAppearance).toEqual({
       standard: {

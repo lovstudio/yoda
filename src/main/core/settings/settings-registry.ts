@@ -147,6 +147,7 @@ export const SETTINGS_DEFAULTS = {
   interface: {
     taskHoverAction: 'delete' as const,
     autoRightSidebarBehavior: false,
+    sidebarStatusBarPrimary: 'product' as const,
     newTaskOpenMode: 'home' as const,
     agentReplyDisplayLevel: 'concise' as const,
     dockSessionHistory: true,

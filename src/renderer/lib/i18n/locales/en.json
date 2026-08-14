@@ -207,6 +207,9 @@
     "branchDisplayHidden": "Hidden",
     "branchDisplayCompact": "Compact",
     "branchDisplayFull": "Full",
+    "privacySection": "Privacy",
+    "privacyMode": "Privacy mode",
+    "privacyModeDescription": "Lightly blurs task titles, project tags, and branch names in the sidebar. Task hover previews stay hidden while it is on.",
     "activityBucket": {
       "today": "Today",
       "thisWeek": "This week",
@@ -1033,7 +1036,11 @@
     },
     "interfaceTab": {
       "description": "Customize the appearance and behavior of the app.",
-      "keyboardShortcuts": "Keyboard shortcuts"
+      "keyboardShortcuts": "Keyboard shortcuts",
+      "sidebarStatusBarPrimary": "Sidebar status bar",
+      "sidebarStatusBarPrimaryDescription": "Choose which identity is shown as the primary entry. The other remains available as a compact icon.",
+      "sidebarStatusBarProduct": "Product info",
+      "sidebarStatusBarAccount": "Account info"
     },
     "taskAppearance": {
       "title": "Task appearance",
@@ -1749,10 +1756,11 @@
       "deleteTitle": "Delete conversation",
       "deleteDescription": "\"{{title}}\" will be permanently deleted. This action cannot be undone.",
       "sessionExited": "The agent process exited.",
-      "startingTitle": "Starting agent",
-      "startingDescription": "Your message was submitted. Output will continue here as soon as the terminal is ready.",
-      "startingErrorTitle": "Agent startup needs attention",
+      "startingTitle": "Opening conversation",
+      "startingDescription": "Preparing the conversation.",
+      "startingErrorTitle": "Conversation opening needs attention",
       "startingErrorDescription": "The terminal did not finish preparing. Retry, or copy debug info if it happens again.",
+      "externalWriter": "In use by another Codex window",
       "sessionStopped": "Session stopped",
       "continueConversation": "Continue",
       "continuingConversation": "Continuing…"
@@ -4753,6 +4761,7 @@
       "disabled": "Disabled",
       "notEnabled": "Available",
       "needsConfiguration": "Configure an API key first",
+      "needsSuccessfulTest": "Pass the connection test before enabling",
       "needsGateway": "Install and enable Yoda Model Gateway first",
       "toggleAria": "Enable {{platform}} globally",
       "enableAria": "Enable {{platform}}",
@@ -4768,7 +4777,9 @@
       "duplicate": "Duplicate",
       "duplicateName": "{{name}} copy",
       "duplicatedToast": "{{name}} duplicated",
-      "duplicateFailed": "Could not duplicate Profile"
+      "duplicateFailed": "Could not duplicate Profile",
+      "reorder": "Drag {{name}} to reorder",
+      "reorderFailed": "Could not save the Profile order"
     },
     "gatewayRequirement": {
       "title": "Yoda Model Gateway required",
@@ -4801,14 +4812,15 @@
     "clientSync": {
       "title": "Apply globally",
       "toggle": "Apply MaaS switching globally outside Yoda",
-      "activeDetail": "{{profile}} is stored in the Codex user configuration. Codex CLI / App can use it without opening Yoda first.",
-      "activeSessionDetail": "{{profile}} is synced to the Codex user configuration.",
-      "partialDetail": "MaaS is active, but the Codex user configuration or credential is incomplete. Turn global access off and on again.",
+      "activeDetail": "{{profile}} is stored in the user configuration for {{clients}}. Yoda does not need to be open first.",
+      "activeSessionDetail": "{{profile}} is synced to the external Agent Client user configuration.",
+      "partialDetail": "MaaS is active, but an external Agent Client user configuration or credential is incomplete. Turn global access off and on again.",
       "waitingDetail": "Enabled. The next MaaS activation or switch will migrate to supported external Agent Apps.",
       "inactiveDetail": "Applies only inside Yoda. Switching MaaS will not modify other Agent App configurations.",
       "agentClientAdapters": "Agent Client adapters",
       "adapted": "Global configuration migration supported",
       "planned": "Planned",
+      "codexAndClaude": "Codex CLI / App and Claude Code",
       "detected": "Detected",
       "notDetected": "Not detected",
       "moreClientsLater": "More coming",
@@ -4816,9 +4828,9 @@
       "loginItemDescription": "When enabled, macOS shows Yoda Model Access as a background login item created by Yoda. It restores the current route from Keychain after login; turning it off removes the item.",
       "loginItemToggle": "Allow the Yoda login item to keep external Agent Apps synced",
       "currentSessionNotice": "This configuration lasts only for the current login session. After restarting the Mac or signing in again, open Yoda first to apply it again.",
-      "risk": "Global access writes the current API key in plaintext to the Codex user-level config.toml and restricts the file to the current user. It persists after Yoda quits or the system restarts. Turning it off restores the previous configuration; running Clients must restart to read the change.",
+      "risk": "Global access writes the current API key in plaintext to the Codex user-level config.toml and, when compatible, the Claude Code user-level settings.json. File permissions are restricted to the current user. The configuration persists after Yoda quits or the system restarts. Turning it off restores the previous configuration; running Clients must restart to read the change.",
       "enableConfirmTitle": "Apply MaaS switching globally?",
-      "enableConfirmDescription": "Whenever MaaS is enabled or switched, Yoda will sync the current route to supported external Agent Apps. Codex CLI / App is supported first. Following the official Codex configuration format, the API key is written in plaintext to the user-level config.toml and the file is restricted to the current user. Turning global access off restores the previous configuration.",
+      "enableConfirmDescription": "Whenever MaaS is enabled or switched, Yoda will sync the current route to supported external Agent Apps. Codex CLI / App is supported, along with Claude Code when the Profile exposes an Anthropic-compatible API. The API key is written in plaintext using each Client's official user configuration format, and the files are restricted to the current user. Turning global access off restores the previous configuration.",
       "enableConfirmLabel": "Apply globally",
       "enabledToast": "MaaS switching now applies globally",
       "disabledToast": "MaaS switching now applies only inside Yoda",
@@ -4917,12 +4929,14 @@
       "lastVerified": "Last verified",
       "lastCheckFailed": "Check failed",
       "neverChecked": "Not checked yet",
+      "testSpeed": ", latency: {{latency}} ms",
       "test": "Test connection",
       "testWithLatency": "Test connection ({{latency}} ms)",
       "testing": "Testing 3 times…",
       "testFailed": "Connection test failed",
       "averageLatency": "Average {{latency}} ms",
-      "testSamples": "3 runs: {{samples}}"
+      "testSamples": "3 runs: {{samples}}",
+      "profileActions": "Profile connection actions"
     },
     "records": {
       "title": "ZenMux billing and usage",
@@ -5492,6 +5506,7 @@
     "officialAccountUsage": "{{name}} usage",
     "accountUsageDescription": "CLI account quota windows",
     "maasUsageTitle": "{{provider}} usage",
+    "maasUsageOpenWebsite": "Open {{provider}} website",
     "maasUsageShort": "Usage",
     "maasUsageDescription": "This session is routed through {{provider}}. Values come directly from the provider.",
     "maasUsageSourceZenmux": "Management stats",

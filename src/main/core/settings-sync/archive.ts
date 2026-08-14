@@ -49,6 +49,7 @@ const PORTABLE_SIDEBAR_KEYS = [
   'taskSortBy',
   'taskGroupBy',
   'taskBranchDisplay',
+  'redactTaskContent',
   'pinnedCollapsed',
   'projectsCollapsed',
   'hideProjectsWithoutActiveTasks',
