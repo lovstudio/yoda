@@ -6,6 +6,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readSync,
   writeFileSync,
   writeSync,
 } from 'node:fs';
@@ -15,14 +16,17 @@ import { parse as parseToml } from 'smol-toml';
 import type { RuntimeCustomConfig } from '@shared/app-settings';
 import { resolveCodexStatePath } from '@main/core/session-title/codex-title-source';
 import { resolveRuntimeStateDirectory } from '../conversations/impl/runtime-env';
-import { CODEX_SHARED_PROVIDER_ID } from './codex-maas-provider';
+import { CODEX_SHARED_PROVIDER_ID, LEGACY_CODEX_SHARED_PROVIDER_IDS } from './codex-maas-provider';
 
 const LEGACY_PROVIDER_ID = 'yoda-maas';
 const NATIVE_PROVIDER_ID = 'openai';
 const CODEX_STATE_BUSY_TIMEOUT_MS = 5_000;
+const ROLLOUT_SCAN_CHUNK_BYTES = 64 * 1024;
+const SESSION_META_NEEDLE = Buffer.from('session_meta');
 const LEGACY_YODA_PROVIDER_IDS = new Set([
   LEGACY_PROVIDER_ID,
   NATIVE_PROVIDER_ID,
+  ...LEGACY_CODEX_SHARED_PROVIDER_IDS,
   'zenmux',
   'openrouter',
   'siliconflow',
@@ -64,8 +68,9 @@ export type CodexResumeProviderCompatibilityResult =
 
 /**
  * Move native OpenAI sessions and every provider id previously emitted by Yoda
- * into one shared Codex history bucket. The target id is intentionally the same
- * length as `openai`, so existing paginated rollout offsets remain valid.
+ * into one shared Codex history bucket. Provider metadata is patched in place
+ * and padded when the target id is shorter, so paginated rollout offsets remain
+ * valid.
  */
 export function migrateLegacyCodexMaasHistory({
   statePath = resolveCodexStatePath(),
@@ -96,8 +101,17 @@ export function migrateLegacyCodexMaasHistory({
       continue;
     }
     try {
+      const rolloutProviderId = readRolloutProviderId(row.rolloutPath, row.id);
       if (
-        migrateRolloutProvider(row.rolloutPath, row.id, row.modelProvider, CODEX_SHARED_PROVIDER_ID)
+        !rolloutProviderId ||
+        (rolloutProviderId !== CODEX_SHARED_PROVIDER_ID &&
+          !isLegacyYodaProviderId(rolloutProviderId, true))
+      ) {
+        failed = true;
+        continue;
+      }
+      if (
+        migrateRolloutProvider(row.rolloutPath, row.id, rolloutProviderId, CODEX_SHARED_PROVIDER_ID)
       ) {
         compatibleRows.push(row);
         files += 1;
@@ -444,11 +458,7 @@ function migrateRolloutProvider(
   fromProviderId: string,
   toProviderId: string
 ): boolean {
-  const content = readFileSync(path, 'utf8');
-  const lines = content.split('\n');
-  const firstLine = lines[0];
-  if (!firstLine) return false;
-  const firstMeta = parseSessionMeta(firstLine);
+  const firstMeta = readFirstRolloutSessionMeta(path);
   if (!firstMeta || firstMeta.payload.id !== expectedId) return false;
   if (
     firstMeta.payload.model_provider !== fromProviderId &&
@@ -457,7 +467,15 @@ function migrateRolloutProvider(
     return false;
   }
 
-  return patchRolloutProvidersInPlace(path, lines, expectedId, fromProviderId, toProviderId);
+  return patchRolloutProvidersInPlace(path, expectedId, fromProviderId, toProviderId);
+}
+
+function readRolloutProviderId(path: string, expectedId: string): string | undefined {
+  const firstMeta = readFirstRolloutSessionMeta(path);
+  if (!firstMeta || firstMeta.payload.id !== expectedId) return undefined;
+  return typeof firstMeta.payload.model_provider === 'string'
+    ? firstMeta.payload.model_provider
+    : undefined;
 }
 
 function parseSessionMeta(line: string | undefined): SessionMeta | undefined {
@@ -483,7 +501,6 @@ function parseSessionMeta(line: string | undefined): SessionMeta | undefined {
  */
 function patchRolloutProvidersInPlace(
   path: string,
-  lines: string[],
   expectedId: string,
   fromProviderId: string,
   toProviderId: string
@@ -493,27 +510,36 @@ function patchRolloutProvidersInPlace(
     `("model_provider"\\s*:\\s*)${escapeRegExp(encodedFromProvider)}\\s*`
   );
   const patches: Array<{ offset: number; line: string }> = [];
-  let byteOffset = 0;
-  for (const line of lines) {
+  let firstProvider: unknown;
+  let lineIndex = 0;
+  scanRolloutLines(path, (lineBuffer, byteOffset) => {
+    const isFirstLine = lineIndex === 0;
+    lineIndex += 1;
+    if (!isFirstLine && lineBuffer.indexOf(SESSION_META_NEEDLE) < 0) return true;
+    const line = lineBuffer.toString('utf8');
     const meta = parseSessionMeta(line);
+    if (isFirstLine) firstProvider = meta?.payload.model_provider;
     if (meta?.payload.id === expectedId && meta.payload.model_provider === fromProviderId) {
       const match = line.match(providerPattern);
-      if (!match || match.index === undefined) return false;
+      if (!match || match.index === undefined) throw new Error('Provider metadata is malformed.');
       const replacementCore = `${match[1]}${JSON.stringify(toProviderId)}`;
       const paddingBytes =
         Buffer.byteLength(match[0], 'utf8') - Buffer.byteLength(replacementCore, 'utf8');
-      if (paddingBytes < 0) return false;
+      if (paddingBytes < 0) throw new Error('Provider id does not fit in place.');
       const replacement = `${replacementCore}${' '.repeat(paddingBytes)}`;
       const patched =
         line.slice(0, match.index) + replacement + line.slice(match.index + match[0].length);
-      if (Buffer.byteLength(patched, 'utf8') !== Buffer.byteLength(line, 'utf8')) return false;
-      if (parseSessionMeta(patched)?.payload.model_provider !== toProviderId) return false;
+      if (Buffer.byteLength(patched, 'utf8') !== lineBuffer.length) {
+        throw new Error('Provider patch changed the rollout byte length.');
+      }
+      if (parseSessionMeta(patched)?.payload.model_provider !== toProviderId) {
+        throw new Error('Provider patch could not be verified.');
+      }
       patches.push({ offset: byteOffset, line: patched });
     }
-    byteOffset += Buffer.byteLength(line, 'utf8') + 1;
-  }
+    return true;
+  });
 
-  const firstProvider = parseSessionMeta(lines[0])?.payload.model_provider;
   if (firstProvider === fromProviderId && patches.length === 0) return false;
   if (patches.length === 0) return firstProvider === toProviderId;
 
@@ -531,6 +557,46 @@ function patchRolloutProvidersInPlace(
     closeSync(fd);
   }
   return true;
+}
+
+function readFirstRolloutSessionMeta(path: string): SessionMeta | undefined {
+  let firstMeta: SessionMeta | undefined;
+  scanRolloutLines(path, (lineBuffer) => {
+    firstMeta = parseSessionMeta(lineBuffer.toString('utf8'));
+    return false;
+  });
+  return firstMeta;
+}
+
+function scanRolloutLines(
+  path: string,
+  visit: (line: Buffer, byteOffset: number) => boolean
+): void {
+  const fd = openSync(path, 'r');
+  const chunk = Buffer.allocUnsafe(ROLLOUT_SCAN_CHUNK_BYTES);
+  let pending = Buffer.alloc(0);
+  let pendingOffset = 0;
+  try {
+    while (true) {
+      const bytesRead = readSync(fd, chunk, 0, chunk.length, null);
+      if (bytesRead === 0) break;
+      const data = pending.length
+        ? Buffer.concat([pending, chunk.subarray(0, bytesRead)])
+        : Buffer.from(chunk.subarray(0, bytesRead));
+      let lineStart = 0;
+      while (true) {
+        const newline = data.indexOf(0x0a, lineStart);
+        if (newline < 0) break;
+        if (!visit(data.subarray(lineStart, newline), pendingOffset + lineStart)) return;
+        lineStart = newline + 1;
+      }
+      pending = Buffer.from(data.subarray(lineStart));
+      pendingOffset += lineStart;
+    }
+    if (pending.length > 0) visit(pending, pendingOffset);
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function escapeRegExp(value: string): string {

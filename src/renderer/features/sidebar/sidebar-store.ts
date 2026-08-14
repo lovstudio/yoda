@@ -53,7 +53,32 @@ function parseSidebarBranchDisplay(value: unknown): SidebarBranchDisplay | undef
   return value === 'hidden' || value === 'compact' || value === 'full' ? value : undefined;
 }
 
+const LEGACY_DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER: readonly SidebarTaskPriorityGroup[] = [
+  'awaiting-input',
+  'error',
+  'completed',
+  'working',
+  'pending-review',
+  'long-term',
+  'idle',
+  'archived',
+];
+
+function matchesSidebarTaskPriorityOrder(
+  value: unknown,
+  order: readonly SidebarTaskPriorityGroup[]
+): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === order.length &&
+    value.every((entry, index) => entry === order[index])
+  );
+}
+
 export function normalizeSidebarTaskPriorityOrder(value: unknown): SidebarTaskPriorityGroup[] {
+  if (matchesSidebarTaskPriorityOrder(value, LEGACY_DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER)) {
+    return [...DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER];
+  }
   const valid = new Set<SidebarTaskPriorityGroup>(SIDEBAR_TASK_PRIORITY_GROUPS);
   const seen = new Set<SidebarTaskPriorityGroup>();
   const normalized: SidebarTaskPriorityGroup[] = [];

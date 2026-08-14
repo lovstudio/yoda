@@ -128,6 +128,10 @@ async function openProjectSearch(query: string): Promise<HTMLElement[]> {
   return Array.from(document.querySelectorAll<HTMLElement>('[data-slot="combobox-item"]'));
 }
 
+function pressKey(input: HTMLInputElement, key: string): void {
+  input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+}
+
 describe('ProjectSelector in a modal', () => {
   let host: HTMLDivElement;
   let root: Root;
@@ -173,5 +177,32 @@ describe('ProjectSelector in a modal', () => {
     expect(visualizer).toBeDefined();
     expect(blog).toBeUndefined();
     expect(yoda).toBeUndefined();
+  });
+
+  it('navigates options with arrow keys and selects the highlighted option', async () => {
+    const items = await openProjectSearch('yoda');
+    const input = document.querySelector<HTMLInputElement>(
+      'input[placeholder="projects.searchProjects"]'
+    );
+    const yoda = items.find((item) => item.textContent?.includes('Yoda'));
+    const browse = items.find((item) => item.textContent?.includes('projects.browseForFolder'));
+
+    if (!input || !yoda || !browse)
+      throw new Error('Expected project selector options are missing');
+    expect(yoda).toHaveAttribute('data-highlighted');
+    expect(yoda).toHaveClass('data-highlighted:border-foreground/70');
+    expect(yoda).toHaveClass('data-highlighted:bg-background-3');
+
+    await act(async () => pressKey(input, 'ArrowDown'));
+    expect(browse).toHaveAttribute('data-highlighted');
+    expect(yoda).not.toHaveAttribute('data-highlighted');
+
+    await act(async () => pressKey(input, 'ArrowUp'));
+    expect(yoda).toHaveAttribute('data-highlighted');
+
+    await act(async () => pressKey(input, 'Enter'));
+    expect(document.querySelector<HTMLOutputElement>('[data-slot="selected-project"]')?.value).toBe(
+      'yoda'
+    );
   });
 });

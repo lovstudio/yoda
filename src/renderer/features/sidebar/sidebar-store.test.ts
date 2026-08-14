@@ -12,7 +12,7 @@ import {
   type TaskStore,
 } from '@renderer/features/tasks/stores/task';
 import type { WorkspaceStore } from '@renderer/features/workspaces/workspace-store';
-import { SidebarStore, type SidebarRow } from './sidebar-store';
+import { normalizeSidebarTaskPriorityOrder, SidebarStore, type SidebarRow } from './sidebar-store';
 
 const mocks = vi.hoisted(() => ({
   getArchivedTasksPage: vi.fn(),
@@ -172,9 +172,9 @@ describe('SidebarStore task recency ordering', () => {
       'error',
       'completed',
       'working',
+      'idle',
       'pending-review',
       'long-term',
-      'idle',
       'archived',
     ]);
     expect(taskIds(store.sidebarRows)).toEqual([
@@ -182,9 +182,55 @@ describe('SidebarStore task recency ordering', () => {
       'failed',
       'completed',
       'working',
+      'idle',
       'review',
       'long-term',
+    ]);
+  });
+
+  it('migrates the legacy default priority order while preserving custom orders', () => {
+    expect(
+      normalizeSidebarTaskPriorityOrder([
+        'awaiting-input',
+        'error',
+        'completed',
+        'working',
+        'pending-review',
+        'long-term',
+        'idle',
+        'archived',
+      ])
+    ).toEqual([
+      'awaiting-input',
+      'error',
+      'completed',
+      'working',
       'idle',
+      'pending-review',
+      'long-term',
+      'archived',
+    ]);
+
+    expect(
+      normalizeSidebarTaskPriorityOrder([
+        'working',
+        'awaiting-input',
+        'error',
+        'completed',
+        'pending-review',
+        'long-term',
+        'idle',
+        'archived',
+      ])
+    ).toEqual([
+      'working',
+      'awaiting-input',
+      'error',
+      'completed',
+      'pending-review',
+      'long-term',
+      'idle',
+      'archived',
     ]);
   });
 
@@ -340,9 +386,9 @@ describe('SidebarStore task recency ordering', () => {
       'error',
       'working',
       'completed',
+      'idle',
       'pending-review',
       'long-term',
-      'idle',
       'archived',
     ]);
     store.moveTaskPriorityGroup('archived', -1);
