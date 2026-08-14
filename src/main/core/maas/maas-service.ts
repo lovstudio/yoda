@@ -1358,19 +1358,27 @@ export class MaasService {
       const existing = getConnectedPlatform(settings, input.platformId);
       const apiKey = input.apiKey?.trim() ?? '';
       const inferenceApiKey = input.inferenceApiKey?.trim() ?? '';
-      let retainedApiKey: string | null = null;
-      if (!apiKey && !existing?.keyFingerprint && !(templateId === 'zenmux' && inferenceApiKey)) {
+      const usesSeparateInferenceKey = templateId === 'zenmux';
+      const clientApiKey = usesSeparateInferenceKey ? inferenceApiKey : apiKey;
+      const existingClientKeyFingerprint = usesSeparateInferenceKey
+        ? existing?.inferenceKeyFingerprint
+        : existing?.keyFingerprint;
+      let retainedClientApiKey: string | null = null;
+      if (!clientApiKey && !existingClientKeyFingerprint) {
         return { success: false, error: 'A MaaS API key is required.' };
       }
-      if (!apiKey && existing?.keyFingerprint) {
-        const existingApiKey = await readPlatformSecret(input.platformId, 'primary');
-        if (!existingApiKey) {
+      if (!clientApiKey && existingClientKeyFingerprint) {
+        const existingClientApiKey = await readPlatformSecret(
+          input.platformId,
+          usesSeparateInferenceKey ? 'inference' : 'primary'
+        );
+        if (!existingClientApiKey) {
           return {
             success: false,
             error: 'Stored MaaS API key is missing. Paste the key again to reconnect.',
           };
         }
-        retainedApiKey = existingApiKey;
+        retainedClientApiKey = existingClientApiKey;
       }
 
       const now = new Date().toISOString();
@@ -1389,19 +1397,20 @@ export class MaasService {
         envKey,
         keyFingerprint: apiKey
           ? keyFingerprint(apiKey)
-          : retainedApiKey
-            ? keyFingerprint(retainedApiKey)
+          : !usesSeparateInferenceKey && retainedClientApiKey
+            ? keyFingerprint(retainedClientApiKey)
             : (existing?.keyFingerprint ?? null),
-        inferenceKeyFingerprint:
-          templateId === 'zenmux'
-            ? inferenceApiKey
-              ? keyFingerprint(inferenceApiKey)
+        inferenceKeyFingerprint: usesSeparateInferenceKey
+          ? inferenceApiKey
+            ? keyFingerprint(inferenceApiKey)
+            : retainedClientApiKey
+              ? keyFingerprint(retainedClientApiKey)
               : (existing?.inferenceKeyFingerprint ?? null)
-            : apiKey
-              ? keyFingerprint(apiKey)
-              : retainedApiKey
-                ? keyFingerprint(retainedApiKey)
-                : (existing?.inferenceKeyFingerprint ?? existing?.keyFingerprint ?? null),
+          : apiKey
+            ? keyFingerprint(apiKey)
+            : retainedClientApiKey
+              ? keyFingerprint(retainedClientApiKey)
+              : (existing?.inferenceKeyFingerprint ?? existing?.keyFingerprint ?? null),
         connectedAt: existing?.connectedAt ?? now,
         lastCheckedAt: existing?.lastCheckedAt ?? null,
         lastTest: existing?.lastTest ?? null,

@@ -933,6 +933,28 @@ describe('stored MaaS keys', () => {
     });
   });
 
+  it('retains the stored ZenMux inference key when saving Profile settings', async () => {
+    mocks.settings.connections[0]!.keyFingerprint = null;
+
+    const result = await new MaasService().connectPlatform({
+      platformId: 'zenmux',
+      displayName: 'ZenMux Production',
+      endpoint: 'https://new.zenmux.example/v1',
+      envKey: 'ZENMUX_PRODUCTION_API_KEY',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      connection: {
+        displayName: 'ZenMux Production',
+        endpoint: 'https://new.zenmux.example/v1',
+        keyFingerprint: null,
+        inferenceKeyFingerprint: 'in...et',
+      },
+    });
+    expect(mocks.secrets['yoda-maas-inference-token:zenmux']).toBe('inference-secret');
+  });
+
   it('immediately republishes an edited endpoint and key for an active Codex binding', async () => {
     mocks.settings.runtimeBindings = [
       {
