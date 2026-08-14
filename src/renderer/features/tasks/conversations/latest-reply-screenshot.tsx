@@ -10,6 +10,7 @@ import { openFilePath } from '@renderer/lib/components/file-path-operations';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
+import { DropdownMenuItem } from '@renderer/lib/ui/dropdown-menu';
 import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 
 type ScreenshotPayload = {
@@ -23,10 +24,12 @@ export function LatestReplyScreenshotButton({
   projectId,
   taskId,
   conversationId,
+  presentation = 'button',
 }: {
   projectId: string;
   taskId: string;
   conversationId: string;
+  presentation?: 'button' | 'menu-item';
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -124,20 +127,35 @@ export function LatestReplyScreenshotButton({
 
   return (
     <>
-      <Button
-        className="w-full"
-        disabled={isCapturing}
-        size="sm"
-        variant="outline"
-        onClick={() => void captureLatestReply()}
-      >
-        {isCapturing ? <Loader2 className="animate-spin" /> : <Camera />}
-        {t(
-          isCapturing
-            ? 'workspaceRuntime.replyScreenshotCapturing'
-            : 'workspaceRuntime.replyScreenshot'
-        )}
-      </Button>
+      {presentation === 'menu-item' ? (
+        <DropdownMenuItem
+          disabled={isCapturing}
+          title={t('workspaceRuntime.replyScreenshotDescription')}
+          onClick={() => void captureLatestReply()}
+        >
+          {isCapturing ? <Loader2 className="animate-spin" /> : <Camera />}
+          {t(
+            isCapturing
+              ? 'workspaceRuntime.replyScreenshotCapturing'
+              : 'workspaceRuntime.replyScreenshot'
+          )}
+        </DropdownMenuItem>
+      ) : (
+        <Button
+          className="w-full"
+          disabled={isCapturing}
+          size="sm"
+          variant="outline"
+          onClick={() => void captureLatestReply()}
+        >
+          {isCapturing ? <Loader2 className="animate-spin" /> : <Camera />}
+          {t(
+            isCapturing
+              ? 'workspaceRuntime.replyScreenshotCapturing'
+              : 'workspaceRuntime.replyScreenshot'
+          )}
+        </Button>
+      )}
       {payload && typeof document !== 'undefined'
         ? createPortal(<LatestReplyScreenshotCard ref={cardRef} payload={payload} />, document.body)
         : null}

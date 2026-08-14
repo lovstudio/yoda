@@ -7,8 +7,10 @@ import {
   ClipboardCheck,
   Cloud,
   Copy,
+  Ellipsis,
   ExternalLink,
   Gauge,
+  Minimize2,
   RefreshCw,
   Settings2,
   Stethoscope,
@@ -67,9 +69,17 @@ import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 import { Button } from '@renderer/lib/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { Input } from '@renderer/lib/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { Switch } from '@renderer/lib/ui/switch';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
@@ -354,6 +364,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const canCompactContext = Boolean(
     runtimeId === 'codex' && params?.projectId && params.taskId && activeConversationId
   );
+  const canCaptureLatestReply = Boolean(params?.projectId && params.taskId && activeConversationId);
   const {
     data: accountUsage,
     refetch: refreshAccountUsageQuery,
@@ -1035,9 +1046,26 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                           {t('workspaceRuntime.contextPopoverDescription')}
                         </div>
                       </div>
-                      <span className="font-mono text-sm tabular-nums text-foreground-muted">
-                        {contextPercent}%
-                      </span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="font-mono text-sm tabular-nums text-foreground-muted">
+                          {contextPercent}%
+                        </span>
+                        {activeConversationId ? (
+                          <Tooltip>
+                            <TooltipTrigger render={<span className="inline-flex" />}>
+                              <Switch
+                                size="sm"
+                                checked={sessionHistoryDocked}
+                                onCheckedChange={toggleSessionHistoryDock}
+                                aria-label={t('workspaceRuntime.sessionHistoryVisibility')}
+                              />
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" sideOffset={8}>
+                              {t('workspaceRuntime.sessionHistoryVisibility')}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : null}
+                      </div>
                     </div>
                     <ContextProgressBar percent={contextPercent} tone={contextTone} />
                     <div className="flex items-end justify-between gap-3">
@@ -1076,51 +1104,53 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                       />
                     ) : null}
                   </div>
-                  {activeConversationId ? (
-                    <div className="flex flex-col gap-3 border-t border-border p-3">
-                      <div className="flex items-center gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium">
-                            {t('workspaceRuntime.sessionHistoryVisibility')}
-                          </div>
-                          <div className="mt-0.5 text-xs text-foreground-passive">
-                            {t('workspaceRuntime.sessionHistoryVisibilityDescription')}
-                          </div>
-                        </div>
-                        <Switch
-                          size="sm"
-                          checked={sessionHistoryDocked}
-                          onCheckedChange={toggleSessionHistoryDock}
-                          aria-label={t('workspaceRuntime.sessionHistoryVisibility')}
-                        />
-                      </div>
-                      {params?.projectId && params.taskId ? (
-                        <div>
-                          <LatestReplyScreenshotButton
-                            projectId={params.projectId}
-                            taskId={params.taskId}
-                            conversationId={activeConversationId}
-                          />
-                          <p className="mt-1.5 text-[11px] leading-4 text-foreground-passive">
-                            {t('workspaceRuntime.replyScreenshotDescription')}
-                          </p>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  {canCompactContext ? (
-                    <div className="border-t border-border p-3">
-                      <Button
-                        className="w-full"
-                        disabled={isCompacting}
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void compactContext()}
-                      >
-                        {isCompacting
-                          ? t('workspaceRuntime.compactingContext')
-                          : t('workspaceRuntime.compactContext')}
-                      </Button>
+                  {canCaptureLatestReply || canCompactContext ? (
+                    <div className="flex items-center justify-end border-t border-border px-2 py-1.5">
+                      <DropdownMenu>
+                        <Tooltip>
+                          <TooltipTrigger render={<span className="inline-flex" />}>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={t('common.more')}
+                                />
+                              }
+                            >
+                              <Ellipsis className="size-4" />
+                            </DropdownMenuTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" sideOffset={8}>
+                            {t('common.more')}
+                          </TooltipContent>
+                        </Tooltip>
+                        <DropdownMenuContent align="end" side="top" sideOffset={6} className="w-52">
+                          {activeConversationId && params?.projectId && params.taskId ? (
+                            <LatestReplyScreenshotButton
+                              projectId={params.projectId}
+                              taskId={params.taskId}
+                              conversationId={activeConversationId}
+                              presentation="menu-item"
+                            />
+                          ) : null}
+                          {canCaptureLatestReply && canCompactContext ? (
+                            <DropdownMenuSeparator />
+                          ) : null}
+                          {canCompactContext ? (
+                            <DropdownMenuItem
+                              disabled={isCompacting}
+                              onClick={() => void compactContext()}
+                            >
+                              <Minimize2 className={isCompacting ? 'animate-pulse' : undefined} />
+                              {isCompacting
+                                ? t('workspaceRuntime.compactingContext')
+                                : t('workspaceRuntime.compactContext')}
+                            </DropdownMenuItem>
+                          ) : null}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   ) : null}
                 </PopoverContent>
