@@ -2,26 +2,36 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('MaaS Gateway entry-point wiring', () => {
-  it('routes the bottom-bar Gateway requirement to Library Extensions', () => {
+  it('keeps one MaaS selector inside the active account popover', () => {
     const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+    const accountStart = source.indexOf('{maasAccount ? (');
+    const selectorStart = source.indexOf('<MaasGlobalSelector');
+    const officialAccountStart = source.indexOf(
+      'shortAccountWindow || officialCodexAccountAvailable'
+    );
 
-    expect(source).toContain('<MaasGlobalSelector');
+    expect(accountStart).toBeGreaterThanOrEqual(0);
+    expect(selectorStart).toBeGreaterThan(accountStart);
+    expect(selectorStart).toBeLessThan(officialAccountStart);
+    expect(source.match(/<MaasGlobalSelector/g)).toHaveLength(1);
     expect(source).toContain('onOpenMarketplace={openMaasMarketplace}');
     expect(source).toMatch(
       /const openMaasMarketplace = useCallback\(\(\) => \{\s+dismissBeforeSynchronousAction\(dismissMaasPopover, \(\) => \{\s+appState\.navigation\.navigate\('library', \{ section: 'extensions' \}\);/
     );
   });
 
-  it('dismisses the bottom-bar model access popover when the app window loses focus', () => {
+  it('dismisses the account model access popover when the app window loses focus', () => {
     const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
 
     expect(source).toContain('useDismissOnWindowBlur(isMaasPopoverOpen, dismissMaasPopover)');
     expect(source).toContain(
       '<Popover open={isMaasPopoverOpen} onOpenChange={setIsMaasPopoverOpen}>'
     );
+    expect(source).toContain('{isMaasPopoverOpen ? (');
+    expect(source).not.toContain('aria-label={maasTriggerLabel}');
   });
 
-  it('dismisses the bottom-bar model access popover before opening details or logs', () => {
+  it('dismisses the account model access popover before opening details or logs', () => {
     const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
 
     expect(source).toContain('onManagePlatform={openMaasManagement}');

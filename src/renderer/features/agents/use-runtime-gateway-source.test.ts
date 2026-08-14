@@ -32,34 +32,34 @@ describe('resolveDefaultGatewaySource', () => {
 });
 
 describe('workspace MaaS placement', () => {
-  it('renders the global MaaS selector in the right-side action area', () => {
+  it('renders the global MaaS selector inside the active account popover', () => {
     const source = readFileSync(
       new URL('../../app/workspace-runtime-bar.tsx', import.meta.url),
       'utf8'
     );
-    const triggerIndex = source.indexOf('aria-label={maasTriggerLabel}');
-    const triggerEnd = source.indexOf('</PopoverTrigger>', triggerIndex);
-    const triggerSource = source.slice(triggerIndex, triggerEnd);
-    const spacerIndex = source.indexOf('<span className="flex-1" />');
-    const terminalIndex = source.indexOf("title={t('workspaceRuntime.terminal')}", triggerIndex);
-    const localRuntimeBlockEnd = source.lastIndexOf('      ) : null}', triggerIndex);
-
-    expect(triggerIndex).toBeGreaterThan(localRuntimeBlockEnd);
-    expect(triggerIndex).toBeGreaterThan(spacerIndex);
-    expect(terminalIndex).toBeGreaterThan(triggerIndex);
-    expect(source).toContain('<MaasGlobalSelector');
-    expect(source).toContain("t('workspaceRuntime.maas.labelWithProvider'");
-    expect(source).toContain(": t('workspaceRuntime.maas.title');");
-    expect(source).toContain('const maasPresentation = useMemo(');
-    expect(source).toContain(
-      'getWorkspaceMaasPresentation(globalMaasBinding.data, maasConnections)'
+    const accountIndex = source.indexOf('{maasAccount ? (');
+    const popoverIndex = source.indexOf(
+      '<Popover open={isMaasPopoverOpen} onOpenChange={setIsMaasPopoverOpen}>',
+      accountIndex
     );
+    const selectorIndex = source.indexOf('<MaasGlobalSelector', popoverIndex);
+    const officialAccountIndex = source.indexOf(
+      'shortAccountWindow || officialCodexAccountAvailable',
+      selectorIndex
+    );
+    const spacerIndex = source.indexOf('<span className="flex-1" />');
+    const terminalIndex = source.indexOf("title={t('workspaceRuntime.terminal')}", spacerIndex);
+
+    expect(accountIndex).toBeGreaterThanOrEqual(0);
+    expect(popoverIndex).toBeGreaterThan(accountIndex);
+    expect(selectorIndex).toBeGreaterThan(popoverIndex);
+    expect(officialAccountIndex).toBeGreaterThan(selectorIndex);
+    expect(spacerIndex).toBeGreaterThan(selectorIndex);
+    expect(terminalIndex).toBeGreaterThan(spacerIndex);
+    expect(source.match(/<MaasGlobalSelector/g)).toHaveLength(1);
+    expect(source).not.toContain('aria-label={maasTriggerLabel}');
+    expect(source).not.toContain('const maasPresentation = useMemo(');
+    expect(source).not.toContain('getWorkspaceMaasPresentation(');
     expect(source).not.toContain('<GatewayRuntimeSources');
-    expect(triggerSource).toContain("? 'bg-background-2 text-foreground'");
-    expect(triggerSource).toContain('title={maasTriggerLabel}');
-    expect(triggerSource).toContain("t('workspaceRuntime.maas.providerSuffix'");
-    expect(triggerSource).toContain('{maasPresentation.providerName ? (');
-    expect(triggerSource).toContain('className="inline-block max-w-48 truncate"');
-    expect(triggerSource).not.toContain('RUNTIME_BAR_ACTION_LABEL_CLASS');
   });
 });

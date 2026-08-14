@@ -6,36 +6,12 @@ import {
 } from '@shared/maas';
 import type { RuntimeId } from '@shared/runtime-registry';
 
-export type WorkspaceMaasPresentation = {
-  active: boolean;
-  providerName: string | null;
-};
-
 export type WorkspaceMaasAccountPresentation = {
   platformId: NonNullable<MaasGlobalBindingStatus['platformId']>;
   providerName: string;
   endpoint: string | null;
   envKey: string | null;
 };
-
-export function getWorkspaceMaasPresentation(
-  binding: MaasGlobalBindingStatus | null | undefined,
-  connections: readonly MaasConnection[] | undefined
-): WorkspaceMaasPresentation {
-  if (!binding?.enabled || !binding.platformId) {
-    return { active: false, providerName: null };
-  }
-
-  const selectedConnection = connections?.find(
-    (connection) => connection.platformId === binding.platformId
-  );
-
-  return {
-    active: true,
-    providerName:
-      selectedConnection?.displayName ?? getMaasPlatformDefinition(binding.platformId).name,
-  };
-}
 
 export function getWorkspaceMaasAccountPresentation(
   binding: MaasGlobalBindingStatus | null | undefined,

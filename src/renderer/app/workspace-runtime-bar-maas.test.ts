@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MaasConnection, MaasGlobalBindingStatus } from '@shared/maas';
-import {
-  getWorkspaceMaasAccountPresentation,
-  getWorkspaceMaasPresentation,
-} from './workspace-runtime-bar-maas';
+import { getWorkspaceMaasAccountPresentation } from './workspace-runtime-bar-maas';
 
 const zenmuxBinding: MaasGlobalBindingStatus = {
   platformId: 'zenmux',
@@ -26,27 +23,7 @@ const zenmuxConnection: MaasConnection = {
   error: null,
 };
 
-describe('getWorkspaceMaasPresentation', () => {
-  it('stays inactive without an enabled provider', () => {
-    expect(
-      getWorkspaceMaasPresentation({ ...zenmuxBinding, enabled: false }, [zenmuxConnection])
-    ).toEqual({ active: false, providerName: null });
-  });
-
-  it('shows the active connection display name', () => {
-    expect(getWorkspaceMaasPresentation(zenmuxBinding, [zenmuxConnection])).toEqual({
-      active: true,
-      providerName: 'ZenMux Production',
-    });
-  });
-
-  it('falls back to the provider definition while connections load', () => {
-    expect(getWorkspaceMaasPresentation(zenmuxBinding, undefined)).toEqual({
-      active: true,
-      providerName: 'ZenMux',
-    });
-  });
-
+describe('getWorkspaceMaasAccountPresentation', () => {
   it('uses the effective MaaS Profile as the current Codex account source', () => {
     expect(getWorkspaceMaasAccountPresentation(zenmuxBinding, [zenmuxConnection], 'codex')).toEqual(
       {
