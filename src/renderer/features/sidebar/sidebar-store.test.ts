@@ -123,6 +123,9 @@ describe('SidebarStore task recency ordering', () => {
     const working = makeTask('working', {
       createdAt: '2026-06-02T09:00:00.000Z',
     });
+    const idle = makeTask('idle', {
+      createdAt: '2026-06-02T08:30:00.000Z',
+    });
     const review = makeTask('review', {
       createdAt: '2026-06-02T08:00:00.000Z',
       needsReview: true,
@@ -138,6 +141,7 @@ describe('SidebarStore task recency ordering', () => {
     const runtimeStatuses = new Map([
       ['awaiting', 'awaiting-input' as const],
       ['failed', 'error' as const],
+      ['working', 'working' as const],
     ]);
     const store = makeSidebarStore(
       [
@@ -146,6 +150,7 @@ describe('SidebarStore task recency ordering', () => {
           failed,
           completed,
           working,
+          idle,
           review,
           longTerm,
           archived,
@@ -169,6 +174,7 @@ describe('SidebarStore task recency ordering', () => {
       'working',
       'pending-review',
       'long-term',
+      'idle',
       'archived',
     ]);
     expect(taskIds(store.sidebarRows)).toEqual([
@@ -178,7 +184,27 @@ describe('SidebarStore task recency ordering', () => {
       'working',
       'review',
       'long-term',
+      'idle',
     ]);
+  });
+
+  it('keeps a consumed completed session completed when the task is opened', () => {
+    const completed = makeTask('completed-session', {
+      createdAt: '2026-06-02T10:00:00.000Z',
+    });
+    const taskSessionStatuses = vi.fn(() => []);
+    const taskStatus = vi.fn(() => 'completed' as const);
+    const store = makeSidebarStore(
+      [makeProject('project-1', [completed])],
+      {},
+      { taskSessionStatuses, taskStatus }
+    );
+
+    store.setTaskPriorityMode(true);
+
+    expect(priorityGroups(store.sidebarRows)).toEqual(['completed']);
+    expect(taskSessionStatuses).toHaveBeenCalledWith('project-1', 'completed-session');
+    expect(taskStatus).toHaveBeenCalledWith('project-1', 'completed-session');
   });
 
   it('replaces project grouping with global priority groups across collapsed projects', () => {
@@ -203,7 +229,7 @@ describe('SidebarStore task recency ordering', () => {
     store.setTaskPriorityMode(true);
 
     expect(store.sidebarRows.some((row) => row.kind === 'project')).toBe(false);
-    expect(priorityGroups(store.sidebarRows)).toEqual(['working', 'archived']);
+    expect(priorityGroups(store.sidebarRows)).toEqual(['idle', 'archived']);
     expect(
       store.sidebarRows.flatMap((row) =>
         row.kind === 'task'
@@ -316,6 +342,7 @@ describe('SidebarStore task recency ordering', () => {
       'completed',
       'pending-review',
       'long-term',
+      'idle',
       'archived',
     ]);
     store.moveTaskPriorityGroup('archived', -1);
@@ -820,6 +847,10 @@ function makeSidebarStore(
       projectId: string,
       taskId: string
     ) => { conversationId: string; status: 'working' | 'awaiting-input' | 'error' | 'completed' }[];
+    taskStatus?: (
+      projectId: string,
+      taskId: string
+    ) => 'idle' | 'working' | 'awaiting-input' | 'error' | 'completed' | null;
   }
 ): SidebarStore {
   return new SidebarStore(

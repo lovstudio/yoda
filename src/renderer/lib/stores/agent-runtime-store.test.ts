@@ -128,6 +128,7 @@ describe('AgentRuntimeStore task session display state', () => {
     store.markTaskSeen('project-1', 'task-1');
 
     expect(store.sessionStatus('project-1', 'task-1', 'conversation-1')).toBeNull();
+    expect(store.taskStatus('project-1', 'task-1')).toBe('completed');
   });
 
   it('exposes routing identities for every globally running session', async () => {

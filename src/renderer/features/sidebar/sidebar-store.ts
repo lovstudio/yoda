@@ -233,7 +233,8 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   constructor(
     private readonly projectManager: ProjectManagerStore,
     private readonly workspaceStore: WorkspaceStore,
-    private readonly agentRuntime?: Pick<AgentRuntimeStore, 'taskSessionStatuses'>
+    private readonly agentRuntime?: Pick<AgentRuntimeStore, 'taskSessionStatuses'> &
+      Partial<Pick<AgentRuntimeStore, 'taskStatus'>>
   ) {
     makeAutoObservable(this, {
       expandedProjectIds: false,
@@ -341,6 +342,13 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       }
     }
     statuses.push(...runtimeStatuses.values());
+    // Opening a task consumes completed/error notifications, but that is only
+    // an acknowledgement action. Preserve the terminal grouping when no live
+    // or unread session state supersedes it.
+    if (statuses.length === 0) {
+      const retainedStatus = this.agentRuntime?.taskStatus?.(data.projectId, data.id);
+      if (retainedStatus && retainedStatus !== 'idle') statuses.push(retainedStatus);
+    }
     const priority: Record<Exclude<AgentSessionRuntimeStatus, 'idle'>, number> = {
       'awaiting-input': 0,
       error: 1,
@@ -351,9 +359,9 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   }
 
   private taskPriorityGroup(task: TaskStore): SidebarTaskPriorityGroup {
-    if (task.state === 'unregistered') return 'working';
+    if (task.state === 'unregistered') return 'idle';
     const data = registeredTaskData(task);
-    if (!data) return 'working';
+    if (!data) return 'idle';
     if (data.archivedAt) return 'archived';
 
     const runtimeStatus = this.taskRuntimePriorityStatus(task);
@@ -373,7 +381,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       return 'completed';
     }
     if (data.isLongTerm) return 'long-term';
-    return 'working';
+    return 'idle';
   }
 
   /**

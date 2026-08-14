@@ -185,6 +185,7 @@
       "working": "正在进行",
       "pending-review": "已完成 · 待审阅",
       "long-term": "长期",
+      "idle": "空闲",
       "archived": "已归档"
     },
     "pinned": "已置顶",
