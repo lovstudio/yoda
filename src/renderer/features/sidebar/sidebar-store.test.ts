@@ -8,6 +8,7 @@ import type { ProjectStore } from '@renderer/features/projects/stores/project';
 import type { ProjectManagerStore } from '@renderer/features/projects/stores/project-manager';
 import {
   createUnprovisionedTask,
+  createUnregisteredTask,
   registeredTaskData,
   type TaskStore,
 } from '@renderer/features/tasks/stores/task';
@@ -187,6 +188,63 @@ describe('SidebarStore task recency ordering', () => {
       'review',
       'long-term',
     ]);
+  });
+
+  it('groups a creating task by its submitted initial conversation status', () => {
+    const creating = createUnregisteredTask({
+      id: 'creating-task',
+      projectId: 'project-1',
+      name: 'creating-task',
+      status: 'in_progress',
+      lastInteractedAt: '2026-06-02T10:00:00.000Z',
+      createdAt: '2026-06-02T10:00:00.000Z',
+      statusChangedAt: '2026-06-02T10:00:00.000Z',
+      isPinned: false,
+      isFavorite: false,
+      isLongTerm: false,
+      needsReview: false,
+      setupStatus: 'pending',
+    });
+    const store = makeSidebarStore(
+      [makeProject('project-1', [creating])],
+      {},
+      {
+        taskSessionStatuses: (_projectId: string, taskId: string) =>
+          taskId === 'creating-task'
+            ? [{ conversationId: 'conversation-1', status: 'working' as const }]
+            : [],
+      }
+    );
+
+    store.setTaskPriorityMode(true);
+
+    expect(priorityGroups(store.sidebarRows)).toEqual(['working']);
+  });
+
+  it('leaves a creating task idle until its conversation reports work', () => {
+    const creating = createUnregisteredTask({
+      id: 'creating-task',
+      projectId: 'project-1',
+      name: 'creating-task',
+      status: 'in_progress',
+      lastInteractedAt: '2026-06-02T10:00:00.000Z',
+      createdAt: '2026-06-02T10:00:00.000Z',
+      statusChangedAt: '2026-06-02T10:00:00.000Z',
+      isPinned: false,
+      isFavorite: false,
+      isLongTerm: false,
+      needsReview: false,
+      setupStatus: 'pending',
+    });
+    const store = makeSidebarStore(
+      [makeProject('project-1', [creating])],
+      {},
+      { taskSessionStatuses: () => [] }
+    );
+
+    store.setTaskPriorityMode(true);
+
+    expect(priorityGroups(store.sidebarRows)).toEqual(['idle']);
   });
 
   it('migrates the legacy default priority order while preserving custom orders', () => {

@@ -149,6 +149,19 @@ export function getSortInstant(task: TaskStore, kind: 'created' | 'updated'): st
   return '';
 }
 
+/**
+ * Routing identity of a task for the agent runtime read model. Available in
+ * every state, including `unregistered`: a task whose creation is still in
+ * flight already owns its `(projectId, taskId)` pair, and its submitted initial
+ * conversation publishes an optimistic status under that key.
+ */
+function taskRuntimeIdentity(task: TaskStore): { projectId: string; id: string } | null {
+  const reg = registeredTaskData(task);
+  if (reg) return { projectId: reg.projectId, id: reg.id };
+  const u = unregisteredTaskData(task);
+  return u ? { projectId: u.projectId, id: u.id } : null;
+}
+
 export type SidebarRow =
   | { kind: 'project'; projectId: string }
   | {
@@ -344,10 +357,11 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   private taskRuntimePriorityStatus(
     task: TaskStore
   ): Exclude<AgentSessionRuntimeStatus, 'idle'> | null {
-    const data = registeredTaskData(task);
-    if (!data) return null;
+    const identity = taskRuntimeIdentity(task);
+    if (!identity) return null;
+    const { projectId, id } = identity;
     const runtimeStatuses = new Map(
-      (this.agentRuntime?.taskSessionStatuses(data.projectId, data.id) ?? []).map(
+      (this.agentRuntime?.taskSessionStatuses(projectId, id) ?? []).map(
         ({ conversationId, status }) => [conversationId, status] as const
       )
     );
@@ -364,7 +378,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     // an acknowledgement action. Preserve the terminal grouping when no live
     // or unread session state supersedes it.
     if (statuses.length === 0) {
-      const retainedStatus = this.agentRuntime?.taskStatus?.(data.projectId, data.id);
+      const retainedStatus = this.agentRuntime?.taskStatus?.(projectId, id);
       if (retainedStatus && retainedStatus !== 'idle') statuses.push(retainedStatus);
     }
     const priority: Record<Exclude<AgentSessionRuntimeStatus, 'idle'>, number> = {
@@ -377,23 +391,26 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   }
 
   private taskPriorityGroup(task: TaskStore): SidebarTaskPriorityGroup {
-    if (task.state === 'unregistered') return 'idle';
     const data = registeredTaskData(task);
-    if (!data) return 'idle';
-    if (data.archivedAt) return 'archived';
+    if (data?.archivedAt) return 'archived';
 
+    // A task being created is not yet in the DB, but its submitted initial
+    // conversation already published an optimistic runtime status. Read it, so
+    // a task that starts working never renders an idle frame first and then
+    // jumps groups once the create RPC settles.
     const runtimeStatus = this.taskRuntimePriorityStatus(task);
     if (runtimeStatus === 'awaiting-input') return 'awaiting-input';
     if (
       runtimeStatus === 'error' ||
       task.phase?.endsWith('-error') === true ||
-      data.setupStatus === 'naming_failed' ||
-      data.setupStatus === 'branch_failed' ||
-      Boolean(data.setupError)
+      data?.setupStatus === 'naming_failed' ||
+      data?.setupStatus === 'branch_failed' ||
+      Boolean(data?.setupError)
     ) {
       return 'error';
     }
     if (runtimeStatus === 'working') return 'working';
+    if (!data) return 'idle';
     if (data.needsReview || data.status === 'review') return 'pending-review';
     if (runtimeStatus === 'completed' || data.status === 'done' || data.status === 'cancelled') {
       return 'completed';

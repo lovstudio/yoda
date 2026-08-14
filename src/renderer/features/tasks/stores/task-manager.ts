@@ -783,6 +783,7 @@ export class TaskManagerStore {
         params.id,
         createUnregisteredTask({
           id: params.id,
+          projectId: params.projectId,
           lastInteractedAt: new Date().toISOString(),
           createdAt: new Date().toISOString(),
           name: params.name,

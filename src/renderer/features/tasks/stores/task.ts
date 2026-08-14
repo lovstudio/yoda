@@ -28,6 +28,12 @@ export type UnprovisionedTaskPhase =
 
 export type UnregisteredTaskData = {
   id: string;
+  /**
+   * Owning project. Present before the DB row exists so surfaces that key on
+   * `(projectId, taskId)` — notably the agent runtime read model — can classify
+   * a task while its creation is still in flight.
+   */
+  projectId: string;
   name: string;
   status: TaskLifecycleStatus;
   lastInteractedAt: string;

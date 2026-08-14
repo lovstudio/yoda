@@ -20,6 +20,7 @@ describe('project quick action target', () => {
   it('returns to the task created by a running Skill action', async () => {
     const task = createUnregisteredTask({
       id: 'task-1',
+      projectId: 'project-1',
       name: 'Review changes',
       status: 'in_progress',
       lastInteractedAt: '2026-08-03T00:00:00.000Z',

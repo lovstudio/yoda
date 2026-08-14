@@ -157,6 +157,7 @@ describe('TaskManagerStore task rename events', () => {
       'task-1',
       createUnregisteredTask({
         id: 'task-1',
+        projectId: 'project-1',
         name: 'Initial title',
         status: 'in_progress',
         lastInteractedAt: '2026-06-05T10:00:00.000Z',
@@ -466,6 +467,7 @@ describe('TaskManagerStore external task reconciliation', () => {
     const manager = createManager();
     const optimisticTask = createUnregisteredTask({
       id: 'task-1',
+      projectId: 'project-1',
       name: 'Creating locally',
       status: 'in_progress',
       lastInteractedAt: '2026-06-05T10:00:00.000Z',
