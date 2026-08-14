@@ -107,7 +107,7 @@ export function PromptInjectionControls({
               data-slot="prompt-injection-row"
               className={cn(
                 'flex min-w-0 items-center justify-between gap-3',
-                compact ? 'min-h-8' : 'px-2.5 py-2'
+                compact ? 'min-h-8 pr-3' : 'px-2.5 py-2'
               )}
             >
               {compact ? (
