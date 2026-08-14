@@ -1763,6 +1763,8 @@
       "startingDescription": "正在准备会话内容。",
       "startingErrorTitle": "会话打开遇到问题",
       "startingErrorDescription": "终端准备没有完成，请重试；如果仍然失败，请复制调试信息。",
+      "startingSlowTitle": "会话仍在准备",
+      "startingSlowDescription": "终端画面校验比平时久，仍在继续。可以再等一会儿，或重试。",
       "externalWriter": "正在其他 Codex 窗口中使用",
       "sessionStopped": "会话已停止",
       "continueConversation": "继续会话",

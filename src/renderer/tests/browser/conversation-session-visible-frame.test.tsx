@@ -97,13 +97,16 @@ vi.mock('@renderer/features/tasks/task-open-performance', () => ({
 }));
 
 vi.mock('@renderer/features/tasks/conversations/conversation-session-pending-state', () => ({
-  ConversationSessionPendingState: (props: { error?: unknown }) => {
+  ConversationSessionPendingState: (props: { error?: { tone?: string } }) => {
     mocks.pendingProps(props);
     return createElement(
       'div',
       {
         'data-conversation-session-pending': true,
         'data-conversation-session-error': String(Boolean(props.error)),
+        // A slow canonical frame surfaces a retry affordance without claiming
+        // the session failed. Keep the two distinguishable in assertions.
+        'data-conversation-session-tone': props.error ? (props.error.tone ?? 'error') : 'none',
       },
       'pending'
     );
@@ -508,6 +511,11 @@ describe('ConversationSession visible-frame generation retry', () => {
         .querySelector('[data-conversation-session-pending]')
         ?.getAttribute('data-conversation-session-error')
     ).toBe('true');
+    expect(
+      host
+        .querySelector('[data-conversation-session-pending]')
+        ?.getAttribute('data-conversation-session-tone')
+    ).toBe('error');
     session.connectionError = null;
     await act(async () => renderSession(true));
 
@@ -601,7 +609,7 @@ describe('ConversationSession visible-frame generation retry', () => {
       expect(taskOpenTransitionStore.hasSessionError('project-1', 'task-1')).toBe(false);
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(10_100);
+        await vi.advanceTimersByTimeAsync(30_100);
       });
 
       expect(session.reportConnectionError).not.toHaveBeenCalled();
@@ -611,6 +619,13 @@ describe('ConversationSession visible-frame generation retry', () => {
           .querySelector('[data-conversation-session-pending]')
           ?.getAttribute('data-conversation-session-error')
       ).toBe('true');
+      // Verification that is merely slow is still making progress. It may offer
+      // a retry, but it must never be dressed as a failed session.
+      expect(
+        host
+          .querySelector('[data-conversation-session-pending]')
+          ?.getAttribute('data-conversation-session-tone')
+      ).toBe('notice');
       expect(taskOpenTransitionStore.hasSessionError('project-1', 'task-1')).toBe(true);
       expect(vi.mocked(current.pty.waitForVisibleFrame).mock.calls.length).toBeGreaterThan(2);
       expect(mocks.logWarn).toHaveBeenCalledOnce();
@@ -641,7 +656,7 @@ describe('ConversationSession visible-frame generation retry', () => {
       expect(session.reportConnectionError).not.toHaveBeenCalled();
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(10_100);
+        await vi.advanceTimersByTimeAsync(30_100);
       });
       expect(
         host

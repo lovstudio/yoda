@@ -55,7 +55,19 @@ const FIRST_FRAME_TIMEOUT_MS = 5_000;
  */
 const PREPARED_FRAME_SETTLEMENT_QUIET_MS = 120;
 const FALLBACK_FIRST_FRAME_QUIET_MS = 700;
-const PTY_SUBSCRIBE_ATTEMPT_TIMEOUT_MS = 3_000;
+/**
+ * Bound the subscribe round-trip generously. This is not a latency target: it
+ * is the point at which we give up entirely, and giving up strands the caller
+ * on its opening surface, because connect() rejections are intentionally
+ * swallowed by callers that treat connection as best-effort.
+ *
+ * A measured healthy cold open on a developer machine took ~3.4 s here — main
+ * is contended by worktree/agent spawns, directory scans and SQLite work while
+ * a task opens, and the snapshot itself may serialize a headless xterm. A bound
+ * anywhere near that latency aborts healthy opens; keep several times the
+ * observed cost so only a genuinely stuck main process trips it.
+ */
+const PTY_SUBSCRIBE_ATTEMPT_TIMEOUT_MS = 15_000;
 const FIRST_FRAME_CANCELLATION_POLL_MS = 25;
 const PTY_CONSUMER_RELEASE_TIMEOUT_MS = 250;
 const MIN_FIRST_FRAME_NON_EMPTY_LINES = 3;

@@ -48,7 +48,18 @@ import {
 const AUTO_RESUME_RETRY_DELAY_MS = 150;
 const AUTO_RESUME_MAX_ATTEMPTS = 2;
 const RESUME_ATTEMPT_TIMEOUT_MS = 2_000;
-const VISIBLE_FRAME_SLOW_WARNING_MS = 10_000;
+/**
+ * A canonical frame legitimately takes seconds: a cold open pays the PTY
+ * subscribe round-trip and then xterm's parse of the restored snapshot, and a
+ * measured healthy open on this machine first painted at ~9 s. Offer the manual
+ * escape hatch only well beyond that, and count *visible* time only — a
+ * backgrounded window throttles rAF to roughly 1 Hz, so wall-clock time would
+ * flag a perfectly healthy session the user merely switched away from.
+ *
+ * Crossing this bound is not a failure. The verification loop keeps retrying;
+ * the surface stays an opening surface and only gains a retry affordance.
+ */
+const VISIBLE_FRAME_SLOW_NOTICE_MS = 30_000;
 
 type BoundedPromiseOutcome<T> =
   | { kind: 'resolved'; value: T }
@@ -148,7 +159,7 @@ export const ConversationSession = observer(function ConversationSession({
     elapsedMs: number;
   } | null>(null);
   const [frameVerificationRevision, setFrameVerificationRevision] = useState(0);
-  const frameVerificationErrorOwner = useRef(Symbol(`frame-verification:${projectId}:${taskId}`));
+  const frameVerificationOwner = useRef(Symbol(`frame-verification:${projectId}:${taskId}`));
   const lastAutoResumePtyRef = useRef<FrontendPty | null>(null);
   const autoResumeAttemptRef = useRef<{ pty: FrontendPty | null; count: number }>({
     pty: null,
@@ -286,8 +297,22 @@ export const ConversationSession = observer(function ConversationSession({
     let focusAttempts = 0;
     let frameRetryRunning = false;
     let ensureFrameRetry = () => {};
-    let frameStartedAt = performance.now();
+    // Only time this window actually spent on screen counts toward the slow
+    // notice. Chromium throttles a backgrounded window's timers and rAF to
+    // roughly 1 Hz, so wall-clock elapsed time would accuse a healthy session
+    // the user merely switched away from. Sampled once per loop iteration,
+    // which is precise enough for a 30 s soft bound.
+    let visibleFrameElapsedMs = 0;
+    let elapsedSampledAt = performance.now();
     let slowFrameLogged = false;
+    const sampleVisibleFrameElapsed = () => {
+      const now = performance.now();
+      if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
+        visibleFrameElapsedMs += now - elapsedSampledAt;
+      }
+      elapsedSampledAt = now;
+      return visibleFrameElapsedMs;
+    };
     const shouldContinue = () => active && isVisible && !session.connectionError;
     const completeReadyTrace = () => {
       completeTaskOpenTrace(projectId, taskId, {
@@ -341,7 +366,8 @@ export const ConversationSession = observer(function ConversationSession({
           // A later backend generation starts a fresh verification attempt.
           // Do not retain either the previous generation's slow detail or its
           // elapsed-time budget while the new frame is still being parsed.
-          frameStartedAt = performance.now();
+          visibleFrameElapsedMs = 0;
+          elapsedSampledAt = performance.now();
           slowFrameLogged = false;
           setSlowFrameVerification(null);
           if (autoFocus) {
@@ -370,8 +396,8 @@ export const ConversationSession = observer(function ConversationSession({
       void (async () => {
         try {
           while (shouldContinue() && !frameReportedReady) {
-            const elapsedMs = performance.now() - frameStartedAt;
-            if (!slowFrameLogged && elapsedMs >= VISIBLE_FRAME_SLOW_WARNING_MS) {
+            const elapsedMs = sampleVisibleFrameElapsed();
+            if (!slowFrameLogged && elapsedMs >= VISIBLE_FRAME_SLOW_NOTICE_MS) {
               slowFrameLogged = true;
               log.warn('[conversation-session] canonical frame is still pending', {
                 projectId,
@@ -736,8 +762,12 @@ export const ConversationSession = observer(function ConversationSession({
   const frameVerificationElapsedMs = hasSlowFrameVerification
     ? slowFrameVerification?.elapsedMs
     : undefined;
+  // TaskMainPanel's full-panel opening surface would otherwise cover this
+  // pane's own detail surface. Reporting here is what makes it yield, so the
+  // slow *notice* has to use the same channel as a genuine error even though it
+  // is not one; the tone and copy below are what keep the two distinguishable.
   useLayoutEffect(() => {
-    const owner = frameVerificationErrorOwner.current;
+    const owner = frameVerificationOwner.current;
     taskOpenTransitionStore.reportSessionError(projectId, taskId, owner, hasSlowFrameVerification);
     return () => taskOpenTransitionStore.clearSessionError(projectId, taskId, owner);
   }, [hasSlowFrameVerification, projectId, taskId]);
@@ -880,11 +910,22 @@ export const ConversationSession = observer(function ConversationSession({
           <div className="absolute inset-0 z-10 flex bg-background">
             <ConversationSessionPendingState
               title={conversation.data.title}
-              heading={t('tasks.conversations.startingErrorTitle')}
-              description={t('tasks.conversations.startingErrorDescription')}
+              heading={t(
+                // A slow frame is still making progress. Only a real preparation
+                // failure may claim the session needs attention.
+                hasStartError
+                  ? 'tasks.conversations.startingErrorTitle'
+                  : 'tasks.conversations.startingSlowTitle'
+              )}
+              description={t(
+                hasStartError
+                  ? 'tasks.conversations.startingErrorDescription'
+                  : 'tasks.conversations.startingSlowDescription'
+              )}
               error={{
+                tone: hasStartError ? 'error' : 'notice',
                 retryLabel: t('common.retry'),
-                onRetry: hasSlowFrameVerification ? handleRetryFrameVerification : handleRetryStart,
+                onRetry: hasStartError ? handleRetryStart : handleRetryFrameVerification,
                 copyDebugLabel: t('common.copyDebugInfo'),
                 debugCopiedLabel: t('common.debugInfoCopied'),
                 debugCopied: startDebugCopied,

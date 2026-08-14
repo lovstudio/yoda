@@ -1300,7 +1300,10 @@ describe('FrontendPty stream ordering', () => {
         (error: unknown) => error
       );
       expect(ipcMocks.subscribe).toHaveBeenCalledOnce();
-      await vi.advanceTimersByTimeAsync(3_100);
+      // A healthy cold open was measured at ~3.4 s on a contended main process,
+      // so the abort bound sits far above it. Only a genuinely hung subscribe
+      // reaches this point.
+      await vi.advanceTimersByTimeAsync(15_100);
 
       const error = await connecting;
       expect(error).toBeInstanceOf(Error);
