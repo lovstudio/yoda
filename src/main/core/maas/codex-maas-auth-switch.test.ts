@@ -130,15 +130,15 @@ describe('Codex MaaS native authentication switch', () => {
     });
     const activeConfig = await readFile(configPath, 'utf8');
     expect(activeConfig).toContain('# Auto-injected by Yoda MaaS\r\n');
-    expect(activeConfig).toContain('model_provider = "custom"\r\n');
+    expect(activeConfig).toContain('model_provider = "yoda"\r\n');
     expect(activeConfig).toContain('model = "openai/gpt-5"\r\n');
-    expect(activeConfig).toContain('[model_providers.custom]\r\n');
+    expect(activeConfig).toContain('[model_providers.yoda]\r\n');
     expect(activeConfig).toContain('name = "ZenMux"\r\n');
     expect(activeConfig).toContain(`base_url = "${MAAS_ENDPOINT}"\r\n`);
     expect(activeConfig).toContain('wire_api = "responses"\r\n');
     expect(activeConfig).toContain('env_key = "ZENMUX_API_KEY"\r\n');
     expect(activeConfig).not.toContain('experimental_bearer_token');
-    expect(activeConfig).not.toContain('[model_providers.custom.auth]\r\n');
+    expect(activeConfig).not.toContain('[model_providers.yoda.auth]\r\n');
     expect(activeConfig).not.toContain('command = ');
     expect(activeConfig).not.toContain('requires_openai_auth');
     expect(activeConfig).not.toContain('upstream-secret');
@@ -159,7 +159,7 @@ describe('Codex MaaS native authentication switch', () => {
     const disabledConfig = await readFile(configPath, 'utf8');
     expect(disabledConfig).toContain('model = "gpt-5"\r\n');
     expect(disabledConfig).not.toContain('model_provider =');
-    expect(disabledConfig).not.toContain('[model_providers.custom]\r\n');
+    expect(disabledConfig).not.toContain('[model_providers.yoda]\r\n');
     expect(disabledConfig).not.toContain(MAAS_ENDPOINT);
     expect((await stat(authPath)).mode & 0o777).toBe(0o600);
     expect((await stat(configPath)).mode & 0o777).toBe(0o640);
@@ -195,8 +195,8 @@ describe('Codex MaaS native authentication switch', () => {
     await authSwitch.enableOfficial({ codexHome });
 
     const officialConfig = await readFile(configPath, 'utf8');
-    expect(officialConfig).toContain('model_provider = "custom"');
-    expect(officialConfig).toContain('[model_providers.custom]');
+    expect(officialConfig).toContain('model_provider = "yoda"');
+    expect(officialConfig).toContain('[model_providers.yoda]');
     expect(officialConfig).toContain('name = "OpenAI"');
     expect(officialConfig).toContain('requires_openai_auth = true');
     expect(officialConfig).toContain('supports_websockets = true');
@@ -221,11 +221,11 @@ describe('Codex MaaS native authentication switch', () => {
     });
 
     const activeConfig = await readFile(configPath, 'utf8');
-    expect(activeConfig).toContain('model_provider = "custom"');
-    expect(activeConfig).toContain('[model_providers.custom]');
+    expect(activeConfig).toContain('model_provider = "yoda"');
+    expect(activeConfig).toContain('[model_providers.yoda]');
     expect(activeConfig).toContain('base_url = "https://second.example.test/v1"');
     expect(activeConfig).toContain('env_key = "OPENROUTER_API_KEY"');
-    expect(activeConfig.match(/\[model_providers\.custom\]/g)).toHaveLength(1);
+    expect(activeConfig.match(/\[model_providers\.yoda\]/g)).toHaveLength(1);
     expect(activeConfig).not.toContain('https://first.example.test/v1');
     expect(userEnvironment.get('OPENROUTER_API_KEY')).toEqual({
       exists: true,
@@ -236,7 +236,7 @@ describe('Codex MaaS native authentication switch', () => {
     await authSwitch.disable({ codexHome });
     const disabledConfig = await readFile(configPath, 'utf8');
     expect(disabledConfig).not.toContain('model_provider =');
-    expect(disabledConfig).not.toContain('[model_providers.custom]');
+    expect(disabledConfig).not.toContain('[model_providers.yoda]');
   });
 
   it('routes LiteLLM through the shared Codex model provider', async () => {
@@ -246,8 +246,8 @@ describe('Codex MaaS native authentication switch', () => {
     });
 
     const activeConfig = await readFile(configPath, 'utf8');
-    expect(activeConfig).toContain('model_provider = "custom"');
-    expect(activeConfig).toContain('[model_providers.custom]');
+    expect(activeConfig).toContain('model_provider = "yoda"');
+    expect(activeConfig).toContain('[model_providers.yoda]');
     expect(activeConfig).toContain('name = "LiteLLM"');
     expect(activeConfig).toContain('wire_api = "responses"');
   });
@@ -259,8 +259,8 @@ describe('Codex MaaS native authentication switch', () => {
     });
 
     const activeConfig = await readFile(configPath, 'utf8');
-    expect(activeConfig).toContain('model_provider = "custom"');
-    expect(activeConfig).toContain('[model_providers.custom]');
+    expect(activeConfig).toContain('model_provider = "yoda"');
+    expect(activeConfig).toContain('[model_providers.yoda]');
     expect(activeConfig).toContain('name = "New API"');
     expect(activeConfig).toContain('wire_api = "responses"');
   });
@@ -272,8 +272,8 @@ describe('Codex MaaS native authentication switch', () => {
     });
 
     const activeConfig = await readFile(configPath, 'utf8');
-    expect(activeConfig).toContain('model_provider = "custom"');
-    expect(activeConfig).toContain('[model_providers.custom]');
+    expect(activeConfig).toContain('model_provider = "yoda"');
+    expect(activeConfig).toContain('[model_providers.yoda]');
     expect(activeConfig).toContain('name = "CLIProxyAPI"');
     expect(activeConfig).toContain('wire_api = "responses"');
   });
@@ -334,8 +334,8 @@ describe('Codex MaaS native authentication switch', () => {
     await enableMaas(authSwitch, codexHome);
 
     const activeConfig = await readFile(configPath, 'utf8');
-    expect(activeConfig.match(/\[model_providers\.custom\]/g)).toHaveLength(1);
-    expect(activeConfig.match(/\[model_providers\.custom\.auth\]/g) ?? []).toHaveLength(0);
+    expect(activeConfig.match(/\[model_providers\.yoda\]/g)).toHaveLength(1);
+    expect(activeConfig.match(/\[model_providers\.yoda\.auth\]/g) ?? []).toHaveLength(0);
     expect(activeConfig.match(/^ZENMUX_API_KEY\s*=/gm)).toHaveLength(1);
     expect(activeConfig).toContain(`base_url = "${MAAS_ENDPOINT}"`);
     expect(activeConfig).toContain('env_key = "ZENMUX_API_KEY"');
@@ -351,6 +351,30 @@ describe('Codex MaaS native authentication switch', () => {
     expect(disabledConfig).toContain('[model_providers.zenmux.auth]');
     expect(disabledConfig).toContain('command = "/usr/bin/old-helper"');
     expect(disabledConfig).toContain('KEEP_ME = "yes"');
+  });
+
+  it('replaces the legacy custom shared provider table', async () => {
+    await writeFile(
+      configPath,
+      [
+        'model_provider = "custom"',
+        '',
+        '[model_providers.custom]',
+        'name = "Legacy shared provider"',
+        'base_url = "https://legacy.example.test/v1"',
+        'wire_api = "responses"',
+        'env_key = "ZENMUX_API_KEY"',
+        '',
+      ].join('\n'),
+      { mode: 0o640 }
+    );
+
+    await enableMaas(authSwitch, codexHome);
+
+    const activeConfig = await readFile(configPath, 'utf8');
+    expect(activeConfig).toContain('model_provider = "yoda"');
+    expect(activeConfig).toContain('[model_providers.yoda]');
+    expect(activeConfig).not.toContain('[model_providers.custom]');
   });
 
   it('preserves the OpenAI credential-store preference and refreshed login', async () => {
@@ -376,7 +400,7 @@ describe('Codex MaaS native authentication switch', () => {
     const disabledConfig = await readFile(configPath, 'utf8');
     expect(disabledConfig).toContain('cli_auth_credentials_store = "keyring"');
     expect(disabledConfig).not.toContain('model_provider =');
-    expect(disabledConfig).not.toContain('[model_providers.custom]');
+    expect(disabledConfig).not.toContain('[model_providers.yoda]');
   });
 
   it('restores a user-owned session variable after global synchronization is disabled', async () => {
@@ -426,7 +450,7 @@ describe('Codex MaaS native authentication switch', () => {
     await authSwitch.disable({ codexHome });
     const disabledConfig = await readFile(configPath, 'utf8');
     expect(disabledConfig).not.toContain('model_provider =');
-    expect(disabledConfig).not.toContain('[model_providers.custom]');
+    expect(disabledConfig).not.toContain('[model_providers.yoda]');
     expect(disabledConfig).not.toContain('base_url = "https://second.example.test/v1"');
     expect(userEnvironment.get('YODA_MAAS_API_KEY')).toEqual({
       exists: true,

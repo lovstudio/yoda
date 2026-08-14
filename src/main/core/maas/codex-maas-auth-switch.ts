@@ -6,6 +6,7 @@ import { isValidMaasEnvKey, type MaasPlatformId } from '@shared/maas';
 import { encryptedAppSecretsStore } from '@main/core/secrets/encrypted-app-secrets-store';
 import {
   CODEX_SHARED_PROVIDER_ID,
+  LEGACY_CODEX_SHARED_PROVIDER_IDS,
   resolveCodexMaasProviderSpec,
   type CodexMaasProviderSpec,
 } from './codex-maas-provider';
@@ -492,7 +493,7 @@ function buildRegisteredMaasConfig(
 ): string {
   const eol = content.includes('\r\n') ? '\r\n' : '\n';
   let lines = content.replace(/\r\n/g, '\n').split('\n');
-  lines = removeTable(lines, modelProviderTablePattern(provider.providerId));
+  lines = removeSharedProviderTables(lines);
   lines = trimTrailingBlankLines(lines);
   lines.push(
     '',
@@ -545,7 +546,7 @@ function buildActiveOfficialConfig(content: string): string {
   const eol = content.includes('\r\n') ? '\r\n' : '\n';
   const currentModel = readRootString(content, 'model');
   let lines = content.replace(/\r\n/g, '\n').split('\n');
-  lines = removeTable(lines, modelProviderTablePattern(CODEX_SHARED_PROVIDER_ID));
+  lines = removeSharedProviderTables(lines);
   lines = removeRootAssignments(lines, ['model_provider', 'openai_base_url', 'model']);
   lines = trimLeadingBlankLines(lines);
   lines = trimTrailingBlankLines(lines);
@@ -568,6 +569,14 @@ function buildActiveOfficialConfig(content: string): string {
     'wire_api = "responses"'
   );
   return `${trimTrailingBlankLines(lines).join('\n')}\n`.replace(/\n/g, eol);
+}
+
+function removeSharedProviderTables(lines: string[]): string[] {
+  let result = lines;
+  for (const providerId of [CODEX_SHARED_PROVIDER_ID, ...LEGACY_CODEX_SHARED_PROVIDER_IDS]) {
+    result = removeTable(result, modelProviderTablePattern(providerId));
+  }
+  return result;
 }
 
 function restoreRootProviderSelection(content: string, originalContent: string): string {

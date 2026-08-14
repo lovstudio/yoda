@@ -30,9 +30,9 @@ describe('MaaS Agent Client runtime environment', () => {
       apiKey: 'super-secret',
     });
 
-    expect(args.join(' ')).toContain('model_providers.custom.env_key="LOVSTUDIO_LLM_API_KEY"');
+    expect(args.join(' ')).toContain('model_providers.yoda.env_key="LOVSTUDIO_LLM_API_KEY"');
     expect(args.join(' ')).toContain(
-      'model_providers.custom.base_url="https://llm.lovstudio.test/v1"'
+      'model_providers.yoda.base_url="https://llm.lovstudio.test/v1"'
     );
     expect(args.join(' ')).not.toContain('super-secret');
   });
@@ -40,15 +40,15 @@ describe('MaaS Agent Client runtime environment', () => {
   it('runs the native OpenAI account under the same shared history provider', () => {
     expect(resolveCodexOfficialRuntimeArgs()).toEqual([
       '-c',
-      'model_provider="custom"',
+      'model_provider="yoda"',
       '-c',
-      'model_providers.custom.name="OpenAI"',
+      'model_providers.yoda.name="OpenAI"',
       '-c',
-      'model_providers.custom.requires_openai_auth=true',
+      'model_providers.yoda.requires_openai_auth=true',
       '-c',
-      'model_providers.custom.supports_websockets=true',
+      'model_providers.yoda.supports_websockets=true',
       '-c',
-      'model_providers.custom.wire_api="responses"',
+      'model_providers.yoda.wire_api="responses"',
     ]);
   });
 

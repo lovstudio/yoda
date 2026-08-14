@@ -24,6 +24,7 @@ describe('legacy Codex MaaS history compatibility', () => {
   it('moves official and legacy Yoda sessions into one shared provider bucket', () => {
     const legacyRolloutPath = join(directory, 'legacy.jsonl');
     const nativeRolloutPath = join(directory, 'native.jsonl');
+    const previousSharedRolloutPath = join(directory, 'previous-shared.jsonl');
     const firstMeta = {
       timestamp: '2026-07-25T00:00:00.000Z',
       type: 'session_meta',
@@ -48,6 +49,15 @@ describe('legacy Codex MaaS history compatibility', () => {
       payload: { ...firstMeta.payload, id: 'native-thread', model_provider: 'openai' },
     })}\n`;
     writeFileSync(nativeRolloutPath, nativeContents);
+    const previousSharedContents = `${JSON.stringify({
+      ...firstMeta,
+      payload: {
+        ...firstMeta.payload,
+        id: 'previous-shared-thread',
+        model_provider: 'custom',
+      },
+    })}\n`;
+    writeFileSync(previousSharedRolloutPath, previousSharedContents);
 
     const db = new Database(statePath);
     db.exec(`
@@ -67,21 +77,32 @@ describe('legacy Codex MaaS history compatibility', () => {
       nativeRolloutPath,
       'openai'
     );
+    db.prepare('INSERT INTO threads VALUES (?, ?, ?)').run(
+      'previous-shared-thread',
+      previousSharedRolloutPath,
+      'custom'
+    );
     db.close();
 
     const legacyBytes = Buffer.byteLength(readFileSync(legacyRolloutPath, 'utf8'));
     const nativeBytes = Buffer.byteLength(nativeContents);
+    const previousSharedBytes = Buffer.byteLength(previousSharedContents);
     const migration = migrateLegacyCodexMaasHistory({ statePath, includeNativeProvider: true });
-    expect(migration).toMatchObject({ rows: 2, files: 2 });
+    expect(migration).toMatchObject({ rows: 3, files: 3 });
     expect(migration.backupPath && existsSync(migration.backupPath)).toBe(true);
 
     const migratedDb = new Database(statePath, { readonly: true });
     expect(
       migratedDb.prepare('SELECT model_provider FROM threads WHERE id = ?').get('legacy-thread')
-    ).toEqual({ model_provider: 'custom' });
+    ).toEqual({ model_provider: 'yoda' });
     expect(
       migratedDb.prepare('SELECT model_provider FROM threads WHERE id = ?').get('native-thread')
-    ).toEqual({ model_provider: 'custom' });
+    ).toEqual({ model_provider: 'yoda' });
+    expect(
+      migratedDb
+        .prepare('SELECT model_provider FROM threads WHERE id = ?')
+        .get('previous-shared-thread')
+    ).toEqual({ model_provider: 'yoda' });
     migratedDb.close();
 
     const records = readFileSync(legacyRolloutPath, 'utf8')
@@ -89,15 +110,19 @@ describe('legacy Codex MaaS history compatibility', () => {
       .split('\n')
       .map((line) => JSON.parse(line) as { type: string; payload: Record<string, unknown> });
     expect(records).toHaveLength(3);
-    expect(records[0]?.payload.model_provider).toBe('custom');
+    expect(records[0]?.payload.model_provider).toBe('yoda');
     expect(records.at(-1)?.payload).toMatchObject({
       id: 'legacy-thread',
-      model_provider: 'custom',
+      model_provider: 'yoda',
       git: { branch: 'feature/keep-me' },
     });
-    expect(readFileSync(nativeRolloutPath, 'utf8')).toContain('"model_provider":"custom"');
+    expect(readFileSync(nativeRolloutPath, 'utf8')).toContain('"model_provider":"yoda"');
+    expect(readFileSync(previousSharedRolloutPath, 'utf8')).toContain('"model_provider":"yoda"');
     expect(Buffer.byteLength(readFileSync(legacyRolloutPath, 'utf8'))).toBe(legacyBytes);
     expect(Buffer.byteLength(readFileSync(nativeRolloutPath, 'utf8'))).toBe(nativeBytes);
+    expect(Buffer.byteLength(readFileSync(previousSharedRolloutPath, 'utf8'))).toBe(
+      previousSharedBytes
+    );
 
     const onceMigrated = readFileSync(legacyRolloutPath, 'utf8');
     expect(migrateLegacyCodexMaasHistory({ statePath })).toEqual({ rows: 0, files: 0 });
@@ -124,6 +149,35 @@ describe('legacy Codex MaaS history compatibility', () => {
 
     expect(migrateLegacyCodexMaasHistory({ statePath })).toEqual({ rows: 0, files: 0 });
     expect(readFileSync(rolloutPath, 'utf8')).toBe(contents);
+  });
+
+  it('repairs a legacy index and rollout provider mismatch', () => {
+    const rolloutPath = join(directory, 'split-provider.jsonl');
+    const contents = `${JSON.stringify({
+      type: 'session_meta',
+      payload: { id: 'split-thread', model_provider: 'openai' },
+    })}\n`;
+    writeFileSync(rolloutPath, contents);
+    const db = new Database(statePath);
+    db.exec(
+      'CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL, model_provider TEXT NOT NULL)'
+    );
+    db.prepare('INSERT INTO threads VALUES (?, ?, ?)').run(
+      'split-thread',
+      rolloutPath,
+      'zenmux-123456789abc'
+    );
+    db.close();
+
+    expect(migrateLegacyCodexMaasHistory({ statePath })).toMatchObject({ rows: 1, files: 1 });
+
+    const migratedDb = new Database(statePath, { readonly: true });
+    expect(
+      migratedDb.prepare('SELECT model_provider FROM threads WHERE id = ?').get('split-thread')
+    ).toEqual({ model_provider: 'yoda' });
+    migratedDb.close();
+    expect(JSON.parse(readFileSync(rolloutPath, 'utf8')).payload.model_provider).toBe('yoda');
+    expect(Buffer.byteLength(readFileSync(rolloutPath, 'utf8'))).toBe(Buffer.byteLength(contents));
   });
 
   it('retags the requested thread when its historical provider is no longer configured', () => {
@@ -203,13 +257,13 @@ describe('legacy Codex MaaS history compatibility', () => {
     writeFileSync(
       configPath,
       [
-        'model_provider = "custom"',
+        'model_provider = "yoda"',
         '[model_providers.lovbrowser]',
         'name = "LovBrowser"',
         'base_url = "https://example.test/v1"',
         'wire_api = "responses"',
         '',
-        '[model_providers.custom]',
+        '[model_providers.yoda]',
         'name = "Custom"',
         'base_url = "https://custom.example.test/v1"',
         'wire_api = "responses"',

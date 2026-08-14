@@ -15,15 +15,15 @@ import { LocalConversationProvider } from './local-conversation';
 
 const CODEX_OFFICIAL_PROVIDER_ARGS = [
   '-c',
-  'model_provider="custom"',
+  'model_provider="yoda"',
   '-c',
-  'model_providers.custom.name="OpenAI"',
+  'model_providers.yoda.name="OpenAI"',
   '-c',
-  'model_providers.custom.requires_openai_auth=true',
+  'model_providers.yoda.requires_openai_auth=true',
   '-c',
-  'model_providers.custom.supports_websockets=true',
+  'model_providers.yoda.supports_websockets=true',
   '-c',
-  'model_providers.custom.wire_api="responses"',
+  'model_providers.yoda.wire_api="responses"',
 ];
 
 const mocks = vi.hoisted(() => ({
@@ -819,7 +819,7 @@ describe('LocalConversationProvider', () => {
         resumeSessionIdArg: true,
         initialPromptFlag: '',
       },
-      'custom'
+      'yoda'
     );
     expect(mocks.resolveLocalPtySpawn).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -1082,9 +1082,9 @@ describe('LocalConversationProvider', () => {
     expect(spawned[0].options.args.join(' ')).not.toContain('yoda-maas');
     expect(spawned[0].options.args).toEqual(
       expect.arrayContaining([
-        'model_provider="custom"',
-        'model_providers.custom.base_url="https://zenmux.example.test/v1"',
-        'model_providers.custom.env_key="ZENMUX_API_KEY"',
+        'model_provider="yoda"',
+        'model_providers.yoda.base_url="https://zenmux.example.test/v1"',
+        'model_providers.yoda.env_key="ZENMUX_API_KEY"',
         'model_catalog_json="/state/codex/.yoda/maas-model-catalog.json"',
       ])
     );

@@ -1,6 +1,7 @@
 import { getMaasPlatformDefinition, type MaasPlatformId } from '@shared/maas';
 
-export const CODEX_SHARED_PROVIDER_ID = 'custom';
+export const CODEX_SHARED_PROVIDER_ID = 'yoda';
+export const LEGACY_CODEX_SHARED_PROVIDER_IDS = ['custom'] as const;
 
 export type CodexMaasProviderSpec = {
   providerId: typeof CODEX_SHARED_PROVIDER_ID;

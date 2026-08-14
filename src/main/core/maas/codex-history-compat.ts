@@ -15,7 +15,7 @@ import { parse as parseToml } from 'smol-toml';
 import type { RuntimeCustomConfig } from '@shared/app-settings';
 import { resolveCodexStatePath } from '@main/core/session-title/codex-title-source';
 import { resolveRuntimeStateDirectory } from '../conversations/impl/runtime-env';
-import { CODEX_SHARED_PROVIDER_ID } from './codex-maas-provider';
+import { CODEX_SHARED_PROVIDER_ID, LEGACY_CODEX_SHARED_PROVIDER_IDS } from './codex-maas-provider';
 
 const LEGACY_PROVIDER_ID = 'yoda-maas';
 const NATIVE_PROVIDER_ID = 'openai';
@@ -23,6 +23,7 @@ const CODEX_STATE_BUSY_TIMEOUT_MS = 5_000;
 const LEGACY_YODA_PROVIDER_IDS = new Set([
   LEGACY_PROVIDER_ID,
   NATIVE_PROVIDER_ID,
+  ...LEGACY_CODEX_SHARED_PROVIDER_IDS,
   'zenmux',
   'openrouter',
   'siliconflow',
@@ -64,8 +65,9 @@ export type CodexResumeProviderCompatibilityResult =
 
 /**
  * Move native OpenAI sessions and every provider id previously emitted by Yoda
- * into one shared Codex history bucket. The target id is intentionally the same
- * length as `openai`, so existing paginated rollout offsets remain valid.
+ * into one shared Codex history bucket. Provider metadata is patched in place
+ * and padded when the target id is shorter, so paginated rollout offsets remain
+ * valid.
  */
 export function migrateLegacyCodexMaasHistory({
   statePath = resolveCodexStatePath(),
@@ -96,8 +98,17 @@ export function migrateLegacyCodexMaasHistory({
       continue;
     }
     try {
+      const rolloutProviderId = readRolloutProviderId(row.rolloutPath, row.id);
       if (
-        migrateRolloutProvider(row.rolloutPath, row.id, row.modelProvider, CODEX_SHARED_PROVIDER_ID)
+        !rolloutProviderId ||
+        (rolloutProviderId !== CODEX_SHARED_PROVIDER_ID &&
+          !isLegacyYodaProviderId(rolloutProviderId, true))
+      ) {
+        failed = true;
+        continue;
+      }
+      if (
+        migrateRolloutProvider(row.rolloutPath, row.id, rolloutProviderId, CODEX_SHARED_PROVIDER_ID)
       ) {
         compatibleRows.push(row);
         files += 1;
@@ -458,6 +469,15 @@ function migrateRolloutProvider(
   }
 
   return patchRolloutProvidersInPlace(path, lines, expectedId, fromProviderId, toProviderId);
+}
+
+function readRolloutProviderId(path: string, expectedId: string): string | undefined {
+  const firstLine = readFileSync(path, 'utf8').split('\n', 1)[0];
+  const firstMeta = parseSessionMeta(firstLine);
+  if (!firstMeta || firstMeta.payload.id !== expectedId) return undefined;
+  return typeof firstMeta.payload.model_provider === 'string'
+    ? firstMeta.payload.model_provider
+    : undefined;
 }
 
 function parseSessionMeta(line: string | undefined): SessionMeta | undefined {
