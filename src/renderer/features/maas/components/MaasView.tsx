@@ -68,6 +68,7 @@ import {
   useCodexClientSyncStatus,
   useConnectMaasPlatform,
   useDisconnectMaasPlatform,
+  useDuplicateMaasProfile,
   useMaasConnections,
   useMaasGlobalBinding,
   useMaasManagedGatewayStars,
@@ -532,6 +533,7 @@ export const MaasView: React.FC<{
             }
             onCancelDraft={isDraft ? () => handleCancelDraft(platformId) : undefined}
             onConnected={() => handlePlatformConnected(platformId)}
+            onDuplicated={(duplicate) => setExpandedPlatformId(duplicate.platformId)}
             enabled={enabled}
             enableAvailable={enableAvailable}
             enablePending={enablePending}
@@ -711,6 +713,7 @@ const PlatformAccordionItem: React.FC<{
   onOpenUsage?: () => void;
   onCancelDraft?: () => void;
   onConnected: () => void;
+  onDuplicated: (connection: MaasConnection) => void;
   enabled: boolean;
   enableAvailable: boolean;
   enablePending: boolean;
@@ -721,6 +724,7 @@ const PlatformAccordionItem: React.FC<{
   onOpenUsage,
   onCancelDraft,
   onConnected,
+  onDuplicated,
   enabled,
   enableAvailable,
   enablePending,
@@ -730,6 +734,7 @@ const PlatformAccordionItem: React.FC<{
   const { t } = useTranslation();
   const { toast } = useToast();
   const disconnectMutation = useDisconnectMaasPlatform();
+  const duplicateMutation = useDuplicateMaasProfile();
   const platform = getMaasPlatformDefinition(connection.platformId);
   const templateId = getMaasPlatformTemplateId(connection.platformId);
 
@@ -742,6 +747,27 @@ const PlatformAccordionItem: React.FC<{
           variant: 'destructive',
         }),
     });
+  };
+
+  const handleDuplicate = () => {
+    duplicateMutation.mutate(
+      {
+        platformId: connection.platformId,
+        displayName: t('maas.profile.duplicateName', { name: connection.displayName }),
+      },
+      {
+        onSuccess: (duplicate) => {
+          onDuplicated(duplicate);
+          toast({ title: t('maas.profile.duplicatedToast', { name: duplicate.displayName }) });
+        },
+        onError: (error) =>
+          toast({
+            title: t('maas.profile.duplicateFailed'),
+            description: error instanceof Error ? error.message : String(error),
+            variant: 'destructive',
+          }),
+      }
+    );
   };
 
   return (
@@ -806,7 +832,7 @@ const PlatformAccordionItem: React.FC<{
             aria-label={t('maas.profile.actions')}
             className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border disabled:pointer-events-none disabled:opacity-50"
           >
-            {disconnectMutation.isPending ? (
+            {disconnectMutation.isPending || duplicateMutation.isPending ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : (
               <Ellipsis className="size-3.5" />
@@ -819,6 +845,12 @@ const PlatformAccordionItem: React.FC<{
               <ExternalLink className="size-3.5" />
               {t('maas.connection.openDocs')}
             </DropdownMenuItem>
+            {connection.connected ? (
+              <DropdownMenuItem disabled={duplicateMutation.isPending} onClick={handleDuplicate}>
+                <Copy className="size-3.5" />
+                {t('maas.profile.duplicate')}
+              </DropdownMenuItem>
+            ) : null}
             {templateId === 'zenmux' && onOpenUsage ? (
               <DropdownMenuItem onClick={onOpenUsage}>
                 <Activity className="size-3.5" />

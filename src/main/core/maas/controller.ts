@@ -2,6 +2,7 @@ import { createRPCController } from '@shared/ipc/rpc';
 import type {
   MaasConnectInput,
   MaasCopyStoredApiKeyInput,
+  MaasDuplicateProfileInput,
   MaasInvocationFilterKind,
   MaasPlatformId,
   MaasSetCodexClientSyncInput,
@@ -40,6 +41,10 @@ async function connectPlatform(input: MaasConnectInput) {
 
 async function disconnectPlatform(platformId: MaasPlatformId) {
   return maasService.disconnectPlatform(platformId);
+}
+
+async function duplicateProfile(input: MaasDuplicateProfileInput) {
+  return maasService.duplicateProfile(input);
 }
 
 async function checkConnection(platformId: MaasPlatformId) {
@@ -99,6 +104,7 @@ export const maasController = createRPCController({
   getPlatformInfoSnapshot,
   connectPlatform,
   disconnectPlatform,
+  duplicateProfile,
   checkConnection,
   copyStoredApiKey,
   listInvocationRecords,

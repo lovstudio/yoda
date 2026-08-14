@@ -4764,7 +4764,11 @@
       "updateFailed": "无法更新全局模型接入配置"
     },
     "profile": {
-      "actions": "Profile 操作"
+      "actions": "Profile 操作",
+      "duplicate": "创建副本",
+      "duplicateName": "{{name}} 副本",
+      "duplicatedToast": "已创建 {{name}}",
+      "duplicateFailed": "创建 Profile 副本失败"
     },
     "gatewayRequirement": {
       "title": "需要 Yoda 模型网关",

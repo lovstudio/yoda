@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   setCodexClientSync: vi.fn(),
   setGlobalBinding: vi.fn(),
   connectPlatform: vi.fn(),
+  duplicateProfile: vi.fn(),
   openMarketplace: vi.fn(),
   installLiteLlm: vi.fn(async () => undefined),
   installNewApi: vi.fn(async () => undefined),
@@ -148,6 +149,7 @@ vi.mock('@renderer/features/maas/useMaas', () => ({
   useConnectMaasPlatform: () => ({ isPending: false, mutate: mocks.connectPlatform }),
   useCheckMaasConnection: () => ({ isPending: false, mutate: vi.fn() }),
   useDisconnectMaasPlatform: () => ({ isPending: false, mutate: vi.fn() }),
+  useDuplicateMaasProfile: () => ({ isPending: false, mutate: mocks.duplicateProfile }),
   useMaasConnections: () => ({ data: mocks.connections, isLoading: false }),
   useMaasGlobalBinding: () => ({ data: mocks.globalBinding, isLoading: false }),
   useMaasManagedGatewayStars: () => ({ data: mocks.managedGatewayStars, isPending: false }),
@@ -597,7 +599,7 @@ describe('MaaS platform menu', () => {
     expect(saveButton?.disabled).toBe(false);
   });
 
-  it('groups Profile documentation, usage, and remove actions in one menu', async () => {
+  it('groups Profile duplication, documentation, usage, and remove actions in one menu', async () => {
     mocks.connections = [connection()];
     const { MaasView } = await import('@renderer/features/maas/components/MaasView');
     await act(async () => root.render(createElement(MaasView, { embedded: true })));
@@ -606,8 +608,18 @@ describe('MaaS platform menu', () => {
     await act(async () => actions?.click());
     const menu = document.querySelector('[data-slot="dropdown-menu-content"]');
     expect(menu?.textContent).toContain('maas.connection.openDocs');
+    expect(menu?.textContent).toContain('maas.profile.duplicate');
     expect(menu?.textContent).toContain('maas.records.viewUsage');
     expect(menu?.textContent).toContain('maas.connection.disconnect');
+
+    const duplicate = Array.from(
+      menu?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []
+    ).find((item) => item.textContent?.includes('maas.profile.duplicate'));
+    await act(async () => duplicate?.click());
+    expect(mocks.duplicateProfile).toHaveBeenCalledWith(
+      { platformId: 'zenmux', displayName: 'maas.profile.duplicateName' },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
+    );
   });
 
   it('derives a distinct environment key from a renamed Profile and keeps it in advanced settings', async () => {

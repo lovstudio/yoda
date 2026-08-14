@@ -9,6 +9,7 @@ import type {
   MaasCodexClientSyncStatus,
   MaasConnectInput,
   MaasConnection,
+  MaasDuplicateProfileInput,
   MaasGlobalBindingStatus,
   MaasInvocationFilterKind,
   MaasManagedGatewayStarSnapshot,
@@ -425,6 +426,26 @@ export function useConnectMaasPlatform() {
       void queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections });
       void queryClient.invalidateQueries({ queryKey: ['maas', 'records'] });
       void queryClient.invalidateQueries({ queryKey: maasQueryKeys.codexClientSync });
+    },
+  });
+}
+
+export function useDuplicateMaasProfile() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: MaasDuplicateProfileInput) => {
+      const result = await rpc.maas.duplicateProfile(input);
+      if (!result.success || !result.connection) {
+        throw new Error(result.error ?? 'Failed to duplicate MaaS Profile.');
+      }
+      return result.connection;
+    },
+    onSuccess: (connection) => {
+      queryClient.setQueryData<MaasConnection[]>(maasQueryKeys.connections, (current) =>
+        current ? [connection, ...current] : [connection]
+      );
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections });
     },
   });
 }

@@ -189,6 +189,11 @@ export type MaasConnectInput = {
   syncToAgentClient?: boolean;
 };
 
+export type MaasDuplicateProfileInput = {
+  platformId: MaasPlatformId;
+  displayName: string;
+};
+
 export type MaasProfileWebsiteMetadata = {
   websiteUrl: string;
   name: string | null;

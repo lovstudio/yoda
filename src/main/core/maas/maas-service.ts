@@ -1,6 +1,7 @@
 import { clipboard, net } from 'electron';
 import type { MaasSettings, RuntimeCustomConfig } from '@shared/app-settings';
 import {
+  createMaasProfileId,
   getLegacyMaasPlatformId,
   getMaasPlatformDefinition,
   getMaasPlatformTemplateId,
@@ -17,6 +18,7 @@ import {
   type MaasConnection,
   type MaasConnectionCheckResult,
   type MaasCopyStoredApiKeyInput,
+  type MaasDuplicateProfileInput,
   type MaasGlobalBindingStatus,
   type MaasInvocationFilterKind,
   type MaasInvocationKind,
@@ -1477,6 +1479,59 @@ export class MaasService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to connect MaaS platform.',
+      };
+    }
+  }
+
+  async duplicateProfile(
+    input: MaasDuplicateProfileInput
+  ): Promise<{ success: boolean; connection?: MaasConnection; error?: string }> {
+    try {
+      if (!isMaasPlatformId(input.platformId)) {
+        return { success: false, error: 'Unsupported MaaS platform.' };
+      }
+
+      const settings = await appSettingsService.get('maas');
+      const source = getConnectedPlatform(settings, input.platformId);
+      if (!source) {
+        return { success: false, error: 'Profile is not connected.' };
+      }
+
+      const templateId = getMaasPlatformTemplateId(input.platformId);
+      const duplicateId = createMaasProfileId(
+        templateId === 'custom'
+          ? globalThis.crypto.randomUUID()
+          : `${templateId}:${globalThis.crypto.randomUUID()}`
+      );
+      const apiKey = await readPlatformSecret(input.platformId, 'primary');
+      const inferenceApiKey =
+        templateId === 'zenmux'
+          ? await readPlatformSecret(input.platformId, 'inference')
+          : undefined;
+
+      if (!apiKey && !inferenceApiKey) {
+        return {
+          success: false,
+          error: 'Stored MaaS API key is missing. Paste the key again before duplicating.',
+        };
+      }
+
+      return this.connectPlatform({
+        platformId: duplicateId,
+        apiKey: apiKey ?? undefined,
+        inferenceApiKey: inferenceApiKey ?? undefined,
+        displayName: input.displayName.trim() || source.displayName,
+        endpoint: source.endpoint,
+        websiteUrl: source.websiteUrl,
+        description: source.description,
+        logoUrl: source.logoUrl,
+        envKey: source.envKey,
+      });
+    } catch (error) {
+      log.error('Failed to duplicate MaaS Profile:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to duplicate MaaS Profile.',
       };
     }
   }

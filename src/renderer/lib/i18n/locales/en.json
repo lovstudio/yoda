@@ -4764,7 +4764,11 @@
       "updateFailed": "Could not update global model access configuration"
     },
     "profile": {
-      "actions": "Profile actions"
+      "actions": "Profile actions",
+      "duplicate": "Duplicate",
+      "duplicateName": "{{name}} copy",
+      "duplicatedToast": "{{name}} duplicated",
+      "duplicateFailed": "Could not duplicate Profile"
     },
     "gatewayRequirement": {
       "title": "Yoda Model Gateway required",

@@ -891,6 +891,43 @@ describe('stored MaaS keys', () => {
     expect(mocks.clipboardWriteText).toHaveBeenLastCalledWith('management-secret');
   });
 
+  it('duplicates a Profile with isolated stored keys and reset connection checks', async () => {
+    mocks.settings.connections[0]!.websiteUrl = 'https://zenmux.ai';
+    mocks.settings.connections[0]!.description = 'ZenMux profile';
+    mocks.settings.connections[0]!.logoUrl = 'https://zenmux.ai/logo.svg';
+    mocks.settings.connections[0]!.lastCheckedAt = '2026-08-13T00:00:00.000Z';
+    mocks.settings.connections[0]!.lastTest = {
+      ok: true,
+      error: null,
+      checkedAt: '2026-08-13T00:00:00.000Z',
+      samples: [{ durationMs: 10, ok: true, error: null }],
+      averageLatencyMs: 10,
+    };
+
+    const result = await new MaasService().duplicateProfile({
+      platformId: 'zenmux',
+      displayName: 'ZenMux copy',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      connection: {
+        displayName: 'ZenMux copy',
+        endpoint: 'https://zenmux.ai/api/v1',
+        websiteUrl: 'https://zenmux.ai',
+        description: 'ZenMux profile',
+        logoUrl: 'https://zenmux.ai/logo.svg',
+        lastCheckedAt: null,
+        lastTest: null,
+      },
+    });
+    const duplicateId = result.connection?.platformId;
+    expect(duplicateId).toMatch(/^profile:zenmux:/);
+    expect(mocks.secrets[`yoda-maas-token:${duplicateId}`]).toBe('management-secret');
+    expect(mocks.secrets[`yoda-maas-inference-token:${duplicateId}`]).toBe('inference-secret');
+    expect(mocks.settings.runtimeBindings).toEqual([]);
+  });
+
   it('tests the target router three times and persists the raw samples and average', async () => {
     const service = new MaasService();
 
