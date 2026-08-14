@@ -52,6 +52,7 @@ import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/tas
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { AgentInfoCard } from '@renderer/lib/components/agent-selector/agent-info-card';
 import type { SessionModelSettings } from '@renderer/lib/components/agent-selector/session-model-editor';
+import { dismissBeforeSynchronousAction } from '@renderer/lib/dismiss-before-synchronous-action';
 import { useDismissOnWindowBlur } from '@renderer/lib/hooks/use-dismiss-on-window-blur';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
@@ -158,16 +159,19 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const notifiedAccountUsageWindowsRef = useRef(new Set<string>());
   const dismissMaasPopover = useCallback(() => setIsMaasPopoverOpen(false), []);
   const openMaasManagement = useCallback(() => {
-    dismissMaasPopover();
-    appState.navigation.navigate('maas');
+    dismissBeforeSynchronousAction(dismissMaasPopover, () => {
+      appState.navigation.navigate('maas');
+    });
   }, [dismissMaasPopover]);
   const openMaasMarketplace = useCallback(() => {
-    dismissMaasPopover();
-    appState.navigation.navigate('library', { section: 'extensions' });
+    dismissBeforeSynchronousAction(dismissMaasPopover, () => {
+      appState.navigation.navigate('library', { section: 'extensions' });
+    });
   }, [dismissMaasPopover]);
   const openMaasLogs = useCallback(() => {
-    dismissMaasPopover();
-    appState.sidePane.pinView('settings', { tab: 'ai-logs' });
+    dismissBeforeSynchronousAction(dismissMaasPopover, () => {
+      appState.sidePane.pinView('settings', { tab: 'ai-logs' });
+    });
   }, [dismissMaasPopover]);
   useDismissOnWindowBlur(isMaasPopoverOpen, dismissMaasPopover);
   const resourceHistory = useSyncExternalStore(

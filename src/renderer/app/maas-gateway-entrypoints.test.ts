@@ -8,7 +8,7 @@ describe('MaaS Gateway entry-point wiring', () => {
     expect(source).toContain('<MaasGlobalSelector');
     expect(source).toContain('onOpenMarketplace={openMaasMarketplace}');
     expect(source).toMatch(
-      /const openMaasMarketplace = useCallback\(\(\) => \{\s+dismissMaasPopover\(\);\s+appState\.navigation\.navigate\('library', \{ section: 'extensions' \}\);/
+      /const openMaasMarketplace = useCallback\(\(\) => \{\s+dismissBeforeSynchronousAction\(dismissMaasPopover, \(\) => \{\s+appState\.navigation\.navigate\('library', \{ section: 'extensions' \}\);/
     );
   });
 
@@ -28,10 +28,10 @@ describe('MaaS Gateway entry-point wiring', () => {
     expect(source).toContain('onClick={openMaasManagement}');
     expect(source).toContain('onClick={openMaasLogs}');
     expect(source).toMatch(
-      /const openMaasManagement = useCallback\(\(\) => \{\s+dismissMaasPopover\(\);\s+appState\.navigation\.navigate\('maas'\);/
+      /const openMaasManagement = useCallback\(\(\) => \{\s+dismissBeforeSynchronousAction\(dismissMaasPopover, \(\) => \{\s+appState\.navigation\.navigate\('maas'\);/
     );
     expect(source).toMatch(
-      /const openMaasLogs = useCallback\(\(\) => \{\s+dismissMaasPopover\(\);\s+appState\.sidePane\.pinView\('settings', \{ tab: 'ai-logs' \}\);/
+      /const openMaasLogs = useCallback\(\(\) => \{\s+dismissBeforeSynchronousAction\(dismissMaasPopover, \(\) => \{\s+appState\.sidePane\.pinView\('settings', \{ tab: 'ai-logs' \}\);/
     );
   });
 
