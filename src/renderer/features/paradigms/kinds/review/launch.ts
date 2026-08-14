@@ -46,6 +46,8 @@ export const reviewLauncher: ParadigmLauncher = {
       .requirementForOrchestration(launch, buildPrompt)
       .then((requirement) => {
         if (requirement === null) return undefined;
+        // The loop now drives this task, whether it was created here or joined.
+        ctx.claimJoinedTask();
         return rpc.reviewOrchestration.start({
           projectId: launch.projectId,
           taskId: launch.taskId,

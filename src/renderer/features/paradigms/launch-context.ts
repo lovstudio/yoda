@@ -156,6 +156,15 @@ export interface ParadigmLaunchContext {
     buildPrompt: (requirement: string) => string | undefined
   ): Promise<string | null>;
 
+  /**
+   * Records this paradigm as the one now driving the task being joined. No-op for
+   * the targets that create their own task — those are stamped at creation.
+   *
+   * Opt-in per kind rather than automatic: adding a lone Agent session to a team's
+   * task does not stop a team from driving it, so only the kinds that establish an
+   * orchestration of their own claim the task.
+   */
+  claimJoinedTask(): void;
   /** Throws when the task is not provisioned far enough to orchestrate on. */
   assertTaskReady(task: { projectId: string; taskId: string }): void;
   /** Reveals the task. No-op when the composer already sits inside it. */

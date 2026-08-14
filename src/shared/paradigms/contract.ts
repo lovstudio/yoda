@@ -127,6 +127,15 @@ export interface ParadigmCapabilities {
   composable: boolean;
 }
 
+/**
+ * How a paradigm's tasks are marked in task lists.
+ *
+ * A kind declares this instead of the sidebar asking "does a team room exist for
+ * this task?" — that reverse-lookup pulled every room in the app just to badge a
+ * row, and it could only ever answer for the one kind it knew about.
+ */
+export type ParadigmTaskMarker = 'default' | 'multi-agent';
+
 export interface ParadigmKindDescriptor<Params = unknown> {
   kindId: ParadigmKindId;
   /** i18n key for the kind's own name, used when an instance has no label. */
@@ -140,6 +149,8 @@ export interface ParadigmKindDescriptor<Params = unknown> {
   /** Where the kind's instances come from; null = one implicit instance. */
   instanceSource: ParadigmInstanceSource;
   slots: readonly ParadigmSlot[];
+  /** How tasks driven by this kind are marked in task lists. */
+  taskMarker: ParadigmTaskMarker;
   capabilities: ParadigmCapabilities;
   paramsSchema: z.ZodType<Params>;
   defaultParams: Params;

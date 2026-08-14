@@ -23,10 +23,6 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  teamRoomTaskKey,
-  useTeamRoomTaskKeys,
-} from '@renderer/features/agent-room/team-room-queries';
 import { useMoveTaskToProject } from '@renderer/features/tasks/components/use-move-task-to-project';
 import {
   getRegisteredTaskData,
@@ -61,7 +57,6 @@ export const SidebarDndProvider = observer(function SidebarDndProvider({
   children: ReactNode;
 }) {
   const { t } = useTranslation();
-  const teamRoomTaskKeys = useTeamRoomTaskKeys();
   const rows = sidebarStore.sidebarRows;
   const dndEnabled = sidebarStore.taskGroupBy === 'project' && !sidebarStore.taskPriorityMode;
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -264,7 +259,7 @@ export const SidebarDndProvider = observer(function SidebarDndProvider({
           {activeId ? (
             <div className="px-3">
               <div className="rounded-lg bg-background-tertiary-2 shadow-md">
-                {renderOverlayContent(activeId, teamRoomTaskKeys)}
+                {renderOverlayContent(activeId)}
               </div>
             </div>
           ) : null}
@@ -325,20 +320,13 @@ function filterTaskDescendantRows(
   return result;
 }
 
-function renderOverlayContent(id: string, teamRoomTaskKeys: ReadonlySet<string>) {
+function renderOverlayContent(id: string) {
   if (id.startsWith('proj::')) {
     return <SidebarProjectItem projectId={id.slice('proj::'.length)} />;
   }
   if (id.startsWith('task::')) {
     const [, projectId, taskId] = id.split('::');
-    return (
-      <SidebarTaskItem
-        projectId={projectId}
-        taskId={taskId}
-        isMultiAgent={teamRoomTaskKeys.has(teamRoomTaskKey(projectId, taskId))}
-        disableHoverPreview
-      />
-    );
+    return <SidebarTaskItem projectId={projectId} taskId={taskId} disableHoverPreview />;
   }
   return null;
 }

@@ -16,10 +16,6 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTabDropZone, type TabDragPayload, type TabDropEvent } from '@renderer/app/tab-drag';
-import {
-  teamRoomTaskKey,
-  useTeamRoomTaskKeys,
-} from '@renderer/features/agent-room/team-room-queries';
 import { sidebarGroupId, type SidebarGroupKey } from '@renderer/features/sidebar/sidebar-group';
 import { type SidebarRow } from '@renderer/features/sidebar/sidebar-store';
 import {
@@ -61,7 +57,6 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
   const { t } = useTranslation();
   const { toast } = useToast();
   const pinnedEntries = sidebarStore.pinnedSidebarEntries;
-  const teamRoomTaskKeys = useTeamRoomTaskKeys();
   const { currentView } = useWorkspaceSlots();
   const { params: taskParams } = useParams('task');
   const { params: projectParams } = useParams('project');
@@ -336,7 +331,6 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
         dropTargetProjectId={dropTargetProjectId}
         activeId={activeId}
         taskProjection={taskProjection}
-        teamRoomTaskKeys={teamRoomTaskKeys}
         onToggleTaskGroup={revealMoreTaskGroupItems}
         onTogglePinnedTaskGroup={revealMorePinnedTaskGroupItems}
         collapsedTaskGroupSignature={collapsedTaskGroupSignature}
@@ -458,7 +452,6 @@ type SidebarNavigationRowContentProps = {
   dropTargetProjectId: string | null;
   activeId: string | null;
   taskProjection: TreeProjection | null;
-  teamRoomTaskKeys: ReadonlySet<string>;
   onToggleTaskGroup: (groupId: string) => void;
   onTogglePinnedTaskGroup: (groupId: string) => void;
   collapsedTaskGroupSignature: string;
@@ -470,7 +463,6 @@ const SidebarNavigationRowContent = memo(function SidebarNavigationRowContent({
   dropTargetProjectId,
   activeId,
   taskProjection,
-  teamRoomTaskKeys,
   onToggleTaskGroup,
   onTogglePinnedTaskGroup,
   collapsedTaskGroupSignature,
@@ -493,7 +485,6 @@ const SidebarNavigationRowContent = memo(function SidebarNavigationRowContent({
         <PinnedRowContent
           row={row.row}
           dndEnabled={dndEnabled}
-          teamRoomTaskKeys={teamRoomTaskKeys}
           onToggleTaskGroup={onTogglePinnedTaskGroup}
         />
       </div>
@@ -507,7 +498,6 @@ const SidebarNavigationRowContent = memo(function SidebarNavigationRowContent({
         dropTargetProjectId={dropTargetProjectId}
         activeId={activeId}
         taskProjection={taskProjection}
-        teamRoomTaskKeys={teamRoomTaskKeys}
         onToggleTaskGroup={onToggleTaskGroup}
         collapsedTaskGroupSignature={collapsedTaskGroupSignature}
       />
@@ -521,7 +511,6 @@ type SidebarRowContentProps = {
   dropTargetProjectId: string | null;
   activeId: string | null;
   taskProjection: TreeProjection | null;
-  teamRoomTaskKeys: ReadonlySet<string>;
   onToggleTaskGroup: (groupId: string) => void;
   collapsedTaskGroupSignature: string;
 };
@@ -535,7 +524,6 @@ const SidebarRowContent = memo(function SidebarRowContent({
   dropTargetProjectId,
   activeId,
   taskProjection,
-  teamRoomTaskKeys,
   onToggleTaskGroup,
   collapsedTaskGroupSignature,
 }: SidebarRowContentProps) {
@@ -597,7 +585,6 @@ const SidebarRowContent = memo(function SidebarRowContent({
       depth={isDragGhost ? taskProjection.depth : row.depth}
       childCount={row.childCount}
       treeTrail={isDragGhost ? undefined : row.treeTrail}
-      isMultiAgent={teamRoomTaskKeys.has(teamRoomTaskKey(row.projectId, row.taskId))}
     />
   );
   if (!dndEnabled) {

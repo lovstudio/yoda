@@ -6,6 +6,7 @@ import {
   type ParadigmKindDescriptor,
   type ParadigmKindId,
   type ParadigmSlot,
+  type ParadigmTaskMarker,
 } from './contract';
 import { builtinParadigmId } from './paradigm';
 import {
@@ -47,6 +48,7 @@ export const singleParadigmKind: ParadigmKindDescriptor = {
       runtimeFallback: 'composer',
     },
   ],
+  taskMarker: 'default',
   capabilities: {
     worktree: 'optional',
     strategyField: 'standard',
@@ -80,6 +82,7 @@ export const specParadigmKind: ParadigmKindDescriptor = {
       runtimeFallback: 'composer',
     },
   ],
+  taskMarker: 'default',
   capabilities: {
     // Spec work reads and writes the repo in place — no branch is cut for it.
     worktree: 'never',
@@ -123,6 +126,9 @@ export const reviewParadigmKind: ParadigmKindDescriptor = {
       runtimeFallback: 'reviewer',
     },
   ],
+  // Two Agents, but only one seat is user-facing and the loop reads as a single
+  // thread of work — the multi-agent marker is reserved for a visible roster.
+  taskMarker: 'default',
   capabilities: {
     worktree: 'optional',
     strategyField: 'review',
@@ -157,6 +163,7 @@ export const appBuildParadigmKind: ParadigmKindDescriptor = {
       runtimeFallback: 'composer',
     },
   ],
+  taskMarker: 'default',
   capabilities: {
     worktree: 'never',
     strategyField: null,
@@ -184,6 +191,7 @@ export const teamParadigmKind: ParadigmKindDescriptor = {
   instanceSource: 'agent-teams',
   // The roster lives in params (one instance per Agent Team), not in fixed slots.
   slots: [],
+  taskMarker: 'multi-agent',
   capabilities: {
     worktree: 'required',
     strategyField: null,
@@ -214,6 +222,9 @@ export const compareParadigmKind: ParadigmKindDescriptor = {
   pickerOrder: 0,
   instanceSource: null,
   slots: [],
+  // Each variant task is stamped with the inner paradigm, so the marker a
+  // comparison produces is the inner kind's, never this one's.
+  taskMarker: 'default',
   capabilities: {
     worktree: 'optional',
     strategyField: 'standard',
@@ -251,6 +262,17 @@ export function paradigmSlot(kindId: ParadigmKindId, slotKey: string): ParadigmS
   const slot = PARADIGM_KINDS[kindId].slots.find((candidate) => candidate.key === slotKey);
   if (!slot) throw new Error(`Paradigm kind "${kindId}" has no "${slotKey}" slot`);
   return slot;
+}
+
+/**
+ * How a task's list rows should be marked, from the paradigm recorded on it.
+ *
+ * Unknown or absent kinds fall back to `default`: a task stamped by a build this
+ * one does not know about is still a task, and a row is the wrong place to fail.
+ */
+export function paradigmTaskMarker(kindId: ParadigmKindId | undefined): ParadigmTaskMarker {
+  if (!kindId) return 'default';
+  return PARADIGM_KINDS[kindId]?.taskMarker ?? 'default';
 }
 
 /** Kinds in picker order: converged workflows first, then multi-agent. */

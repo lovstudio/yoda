@@ -1216,7 +1216,7 @@ describe('TaskManagerStore disposal', () => {
     } as unknown as TaskStore);
     const unsubscribers = [...mocks.unsubscribers];
 
-    expect(unsubscribers).toHaveLength(11);
+    expect(unsubscribers).toHaveLength(12);
     manager.dispose();
     manager.dispose();
 

@@ -1,5 +1,7 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
 import type { Conversation } from '@shared/conversations';
+import type { ParadigmKindId } from '@shared/paradigms/contract';
+import type { ParadigmStamp } from '@shared/paradigms/stamp';
 import type { Issue, Task, TaskLifecycleStatus, TaskSetupStatus } from '@shared/tasks';
 import type { TaskViewSnapshot } from '@shared/view-state';
 import type { ProjectSettingsStore } from '@renderer/features/projects/stores/project-settings-store';
@@ -49,6 +51,15 @@ export type UnregisteredTaskData = {
   setupRequiresBranchName?: boolean;
   sidebarWorkspaceId?: string;
   quickActionId?: string;
+  /**
+   * Paradigm stamp as of creation, mirroring `Task` so a surface can read
+   * `data.paradigmKind` without caring whether the DB row exists yet. Omitting it
+   * here would make every task look single-Agent for the width of the optimistic
+   * window, which is exactly when the sidebar first draws it.
+   */
+  paradigmId?: string;
+  paradigmKind?: ParadigmKindId;
+  paradigmParams?: unknown;
 };
 
 export class ProvisionedTask {
@@ -343,6 +354,19 @@ export class TaskStore {
     });
   }
 
+  /**
+   * Adopt a paradigm stamp written elsewhere — another window, or a main-process
+   * orchestration that claimed this task. Not optimistic: the value is already
+   * persisted, so there is nothing to roll back.
+   */
+  applyAuthoritativeParadigm(paradigm: ParadigmStamp): void {
+    runInAction(() => {
+      this.data.paradigmId = paradigm.paradigmId;
+      this.data.paradigmKind = paradigm.paradigmKind;
+      this.data.paradigmParams = paradigm.paradigmParams;
+    });
+  }
+
   async setPinned(isPinned: boolean): Promise<void> {
     if (this.state === 'unregistered') return;
     const task = registeredTaskData(this);
@@ -466,6 +490,38 @@ export class TaskStore {
     } catch (e) {
       runInAction(() => {
         task.needsReview = previous;
+      });
+      log.error(e);
+      throw e;
+    }
+  }
+
+  /**
+   * Re-stamp this task with the paradigm now driving it — used when a paradigm is
+   * injected into a task that already exists, since the original stamp belongs to
+   * whatever launched it first.
+   */
+  async setParadigm(paradigm: ParadigmStamp): Promise<void> {
+    if (this.state === 'unregistered') return;
+    const task = registeredTaskData(this);
+    if (!task) return;
+    const previous = {
+      paradigmId: task.paradigmId,
+      paradigmKind: task.paradigmKind,
+      paradigmParams: task.paradigmParams,
+    };
+    runInAction(() => {
+      task.paradigmId = paradigm.paradigmId;
+      task.paradigmKind = paradigm.paradigmKind;
+      task.paradigmParams = paradigm.paradigmParams;
+    });
+    try {
+      await rpc.tasks.setTaskParadigm(task.id, paradigm);
+    } catch (e) {
+      runInAction(() => {
+        task.paradigmId = previous.paradigmId;
+        task.paradigmKind = previous.paradigmKind;
+        task.paradigmParams = previous.paradigmParams;
       });
       log.error(e);
       throw e;

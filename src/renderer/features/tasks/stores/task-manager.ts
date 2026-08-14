@@ -7,6 +7,7 @@ import {
   taskCreatedChannel,
   taskDeletedChannel,
   taskMovedChannel,
+  taskParadigmUpdatedChannel,
   taskProvisionProgressChannel,
   taskRenamedChannel,
   taskRestoredChannel,
@@ -238,6 +239,7 @@ export class TaskManagerStore {
   private _unsubProvisionProgress: (() => void) | null = null;
   private _unsubConversationMoved: (() => void) | null = null;
   private _unsubTaskStatusUpdated: (() => void) | null = null;
+  private _unsubTaskParadigmUpdated: (() => void) | null = null;
   private _unsubTaskCreated: (() => void) | null = null;
   private _unsubTaskArchived: (() => void) | null = null;
   private _unsubTaskRestored: (() => void) | null = null;
@@ -346,6 +348,17 @@ export class TaskManagerStore {
         if (store && isRegistered(store)) {
           store.applyAuthoritativeStatus(status as TaskLifecycleStatus);
         }
+      }
+    );
+
+    // A paradigm can be claimed by the main process (a Room started outside the
+    // composer) or by another window, and task rows render their marker from it.
+    this._unsubTaskParadigmUpdated = events.on(
+      taskParadigmUpdatedChannel,
+      ({ taskId, projectId: evtProjectId, paradigm }) => {
+        if (evtProjectId !== this.projectId) return;
+        const store = this.tasks.get(taskId);
+        if (store && isRegistered(store)) store.applyAuthoritativeParadigm(paradigm);
       }
     );
 
@@ -825,6 +838,11 @@ export class TaskManagerStore {
       setupRequiresBranchName,
       sidebarWorkspaceId,
       quickActionId: params.quickActionId,
+      // Carried into the optimistic record so the sidebar draws the right paradigm
+      // on the first frame, not once the DB row comes back.
+      paradigmId: params.paradigm?.paradigmId,
+      paradigmKind: params.paradigm?.paradigmKind,
+      paradigmParams: params.paradigm?.paradigmParams,
     });
     // Submission intent is already authoritative enough for an immediate
     // renderer preview. Publish it before the task first enters the observable
@@ -1492,6 +1510,8 @@ export class TaskManagerStore {
     this._disposed = true;
     this._unsubTaskStatusUpdated?.();
     this._unsubTaskStatusUpdated = null;
+    this._unsubTaskParadigmUpdated?.();
+    this._unsubTaskParadigmUpdated = null;
     this._unsubTaskCreated?.();
     this._unsubTaskCreated = null;
     this._unsubTaskArchived?.();

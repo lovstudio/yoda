@@ -121,10 +121,6 @@ vi.mock('@renderer/lib/layout/navigation-provider', () => ({
 vi.mock('@renderer/features/projects/open-project-archived-tasks', () => ({
   openProjectArchivedTasks: vi.fn(),
 }));
-vi.mock('@renderer/features/agent-room/team-room-queries', () => ({
-  teamRoomTaskKey: (projectId: string, taskId: string) => `${projectId}:${taskId}`,
-  useTeamRoomTaskKeys: () => new Set<string>(),
-}));
 vi.mock('@renderer/features/tasks/components/use-move-task-to-project', () => ({
   useMoveTaskToProject: () => vi.fn(),
 }));

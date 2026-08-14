@@ -2,6 +2,7 @@ import { Archive, Bookmark, GitBranch, MoreHorizontal, Users } from 'lucide-reac
 import { observer } from 'mobx-react-lite';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { paradigmTaskMarker } from '@shared/paradigms/kinds';
 import { selectCurrentPr } from '@shared/pull-requests';
 import {
   DEFAULT_TASK_APPEARANCE_SETTINGS,
@@ -56,8 +57,6 @@ interface SidebarTaskItemProps {
   childCount?: number;
   /** Terminal-tree guide state per indent slot — see SidebarRow.treeTrail. */
   treeTrail?: boolean[];
-  /** True when this task is backed by an Agent Room / team workflow. */
-  isMultiAgent?: boolean;
   /** Drag overlays are visual-only and should not mount a hover preview. */
   disableHoverPreview?: boolean;
 }
@@ -72,7 +71,6 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   depth = 0,
   childCount = 0,
   treeTrail,
-  isMultiAgent = false,
   disableHoverPreview = false,
 }: SidebarTaskItemProps) {
   const { t } = useTranslation();
@@ -115,6 +113,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const hasAgentNotification = statusSummary.primaryStatus !== null;
   const hasWorkingAgent = statusSummary.workingCount > 0;
   const isIdle = !isBootstrapping && !isOpening && !hasAgentNotification;
+  // Read from the paradigm the task records for itself. This used to be a prop
+  // threaded down from a query that pulled every Agent Room in the app just to
+  // answer "is this row a team task?" — one paradigm's marker, at global cost.
+  const isMultiAgent = paradigmTaskMarker(task.data.paradigmKind) === 'multi-agent';
   const appearance = resolveTaskAppearance(
     interfaceSettings?.taskAppearance ?? DEFAULT_TASK_APPEARANCE_SETTINGS,
     {

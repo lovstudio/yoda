@@ -5,6 +5,7 @@ import {
   roomMessagePostedChannel,
   teamRoomUpdatedChannel,
 } from '@shared/events/teamRoomEvents';
+import { defaultParadigmStamp } from '@shared/paradigms/stamp';
 import type { RuntimeId } from '@shared/runtime-registry';
 import type { SkillSelectionInput } from '@shared/skills/types';
 import {
@@ -24,6 +25,7 @@ import {
   type TeamRoom,
 } from '@shared/team-room';
 import { normalizeRoutingHopLimit, type RoutingHopLimit } from '@shared/team-routing-limit';
+import { claimTaskParadigm } from '@main/core/tasks/operations/setTaskParadigm';
 import { db } from '@main/db/client';
 import {
   featureTaskLinks,
@@ -157,6 +159,12 @@ export async function createRoom(params: CreateRoomParams): Promise<TeamRoom> {
         })
       : (await db.insert(teamRooms).values(values).returning())[0];
   if (!row) throw new Error('Could not create Team Room.');
+  // A Room is the team paradigm made concrete, and it can be started without
+  // going through a paradigm launcher — from the rooms panel, or by the
+  // create-task modal's Feature workflow. Claim the task here so every entry
+  // point agrees, rather than asking each one to remember. Kind-level, so a
+  // launcher that already recorded which team runs the task keeps its stamp.
+  await claimTaskParadigm(params.taskId, defaultParadigmStamp('team'));
   return mapRoom(row);
 }
 

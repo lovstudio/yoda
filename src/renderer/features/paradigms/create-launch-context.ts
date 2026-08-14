@@ -367,6 +367,15 @@ export function createParadigmLaunchContext(
         : launch.promise.then(() => requirement);
     },
 
+    claimJoinedTask() {
+      if (!joinedTask) return;
+      void getTaskStore(joinedTask.projectId, joinedTask.taskId)
+        ?.setParadigm(args.paradigm)
+        .catch(() => {
+          // The stamp is display metadata; the orchestration it labels already ran.
+        });
+    },
+
     assertTaskReady(task) {
       if (!asProvisioned(getTaskStore(task.projectId, task.taskId))) {
         throw new Error(args.t('home.teamTaskSetupIncomplete'));

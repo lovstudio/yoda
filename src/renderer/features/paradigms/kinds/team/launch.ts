@@ -40,6 +40,8 @@ export const teamLauncher: ParadigmLauncher = {
         teamId: team.id,
         requirement,
       });
+      // The room now drives this task, whether it was created here or joined.
+      ctx.claimJoinedTask();
       await invalidateTeamRoomQueries(ctx.queryClient, task.projectId, task.taskId);
       ctx.finish();
     } catch (error) {

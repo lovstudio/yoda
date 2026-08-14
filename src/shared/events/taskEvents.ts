@@ -1,4 +1,5 @@
 import { defineEvent } from '@shared/ipc/events';
+import type { ParadigmStamp } from '@shared/paradigms/stamp';
 import type { PullRequest } from '@shared/pull-requests';
 import type { TaskNamingSnapshot } from '@shared/task-naming';
 
@@ -15,6 +16,17 @@ export const taskStatusUpdatedChannel = defineEvent<{
   projectId: string;
   status: string;
 }>('task:status-updated');
+
+/**
+ * Emitted when the paradigm driving a task changes — a paradigm was injected into
+ * an existing task, or an orchestration claimed one. Task lists render from the
+ * stamp, so without this a badge would only appear after a reload.
+ */
+export const taskParadigmUpdatedChannel = defineEvent<{
+  taskId: string;
+  projectId: string;
+  paradigm: ParadigmStamp;
+}>('task:paradigm-updated');
 
 /** Emitted by the main process when a task finishes archiving — including
  *  archives that complete after the initiating renderer reloaded. */

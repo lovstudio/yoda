@@ -2,10 +2,6 @@ import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { observer } from 'mobx-react-lite';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  teamRoomTaskKey,
-  useTeamRoomTaskKeys,
-} from '@renderer/features/agent-room/team-room-queries';
 import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { cn } from '@renderer/utils/utils';
@@ -25,7 +21,6 @@ import { SidebarTaskItem } from './task-item';
 export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList() {
   const { t } = useTranslation();
   const entries = sidebarStore.pinnedSidebarEntries;
-  const teamRoomTaskKeys = useTeamRoomTaskKeys();
   const { params: taskParams } = useParams('task');
   const collapsed = sidebarStore.pinnedCollapsed;
   const showList = !collapsed && entries.length > 0;
@@ -112,7 +107,6 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList() {
               <PinnedRowContent
                 row={row}
                 dndEnabled={dndEnabled}
-                teamRoomTaskKeys={teamRoomTaskKeys}
                 onToggleTaskGroup={revealMoreTaskGroupItems}
               />
             </div>
@@ -126,7 +120,6 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList() {
 type PinnedRowContentProps = {
   row: PinnedTaskListRow;
   dndEnabled: boolean;
-  teamRoomTaskKeys: ReadonlySet<string>;
   onToggleTaskGroup: (groupId: string) => void;
 };
 
@@ -135,7 +128,6 @@ type PinnedRowContentProps = {
 export const PinnedRowContent = memo(function PinnedRowContent({
   row,
   dndEnabled,
-  teamRoomTaskKeys,
   onToggleTaskGroup,
 }: PinnedRowContentProps) {
   if (row.kind === 'task-group-toggle') {
@@ -160,7 +152,6 @@ export const PinnedRowContent = memo(function PinnedRowContent({
         projectId={row.projectId}
         taskId={row.taskId}
         rowVariant={row.kind === 'project-task' ? 'underProject' : 'pinned'}
-        isMultiAgent={teamRoomTaskKeys.has(teamRoomTaskKey(row.projectId, row.taskId))}
       />
     </PinnedDraggableRow>
   );

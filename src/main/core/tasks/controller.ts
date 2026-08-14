@@ -28,6 +28,7 @@ import { restoreTask } from './operations/restoreTask';
 import { setTaskFavorite } from './operations/setTaskFavorite';
 import { setTaskLongTerm } from './operations/setTaskLongTerm';
 import { setTaskNeedsReview } from './operations/setTaskNeedsReview';
+import { setTaskParadigm } from './operations/setTaskParadigm';
 import { setTaskParent } from './operations/setTaskParent';
 import { setTaskPinned } from './operations/setTaskPinned';
 import { suggestTaskName } from './operations/suggestTaskName';
@@ -69,6 +70,7 @@ export const taskController = createRPCController({
   setTaskFavorite,
   setTaskLongTerm,
   setTaskNeedsReview,
+  setTaskParadigm,
   setTaskParent,
   moveTaskToProject,
 });
