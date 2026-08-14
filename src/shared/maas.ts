@@ -406,7 +406,7 @@ export type MaasUsageSummary = {
   usageDailyUsd: number | null;
   usageWeeklyUsd: number | null;
   usageMonthlyUsd: number | null;
-  source: MaasInvocationPage['source'] | 'openrouter-key-and-credits';
+  source: MaasInvocationPage['source'] | 'openrouter-key' | 'openrouter-key-and-credits';
   fetchedAt: string | null;
   period: MaasInvocationPage['period'];
 };

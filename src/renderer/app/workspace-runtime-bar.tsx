@@ -1887,7 +1887,7 @@ function WorkspaceMaasUsageContent({
   const sourceLabel =
     usage?.source === 'zenmux-management-statistics'
       ? t('workspaceRuntime.maasUsageSourceZenmux')
-      : usage?.source === 'openrouter-key-and-credits'
+      : usage?.source === 'openrouter-key' || usage?.source === 'openrouter-key-and-credits'
         ? t('workspaceRuntime.maasUsageSourceOpenRouter')
         : t('workspaceRuntime.maasUsageSourceUnavailable');
 

@@ -47,4 +47,30 @@ describe('OpenRouter usage', () => {
       period: null,
     });
   });
+
+  it('keeps key usage available when account credits require a management key', () => {
+    expect(
+      buildOpenRouterUsageSummary(
+        'openrouter',
+        {
+          data: {
+            limit: 25,
+            limit_remaining: 7,
+            usage: 18,
+            usage_daily: 1.25,
+            usage_weekly: 7.5,
+            usage_monthly: 18,
+          },
+        },
+        null,
+        '2026-08-14T00:00:00.000Z'
+      )
+    ).toMatchObject({
+      totalCostUsd: 18,
+      totalCreditsUsd: null,
+      remainingCreditsUsd: null,
+      keyLimitRemainingUsd: 7,
+      source: 'openrouter-key',
+    });
+  });
 });

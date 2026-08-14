@@ -34,12 +34,12 @@ export function openRouterUsageUrl(endpoint: string, resource: 'key' | 'credits'
 export function buildOpenRouterUsageSummary(
   platformId: MaasPlatformId,
   keyResponse: OpenRouterKeyResponse,
-  creditsResponse: OpenRouterCreditsResponse,
+  creditsResponse: OpenRouterCreditsResponse | null,
   fetchedAt: string
 ): MaasUsageSummary {
-  const totalCreditsUsd = nullableFiniteNumber(creditsResponse.data?.total_credits);
+  const totalCreditsUsd = nullableFiniteNumber(creditsResponse?.data?.total_credits);
   const totalCostUsd =
-    nullableFiniteNumber(creditsResponse.data?.total_usage) ??
+    nullableFiniteNumber(creditsResponse?.data?.total_usage) ??
     nullableFiniteNumber(keyResponse.data?.usage);
 
   return {
@@ -59,7 +59,7 @@ export function buildOpenRouterUsageSummary(
     usageDailyUsd: nullableFiniteNumber(keyResponse.data?.usage_daily),
     usageWeeklyUsd: nullableFiniteNumber(keyResponse.data?.usage_weekly),
     usageMonthlyUsd: nullableFiniteNumber(keyResponse.data?.usage_monthly),
-    source: 'openrouter-key-and-credits',
+    source: creditsResponse?.data ? 'openrouter-key-and-credits' : 'openrouter-key',
     fetchedAt,
     period: null,
   };

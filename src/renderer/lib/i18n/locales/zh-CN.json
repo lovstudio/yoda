@@ -5491,7 +5491,7 @@
     "maasUsageShort": "用量",
     "maasUsageDescription": "当前会话通过 {{provider}} 路由，显示服务商返回的真实统计。",
     "maasUsageSourceZenmux": "管理统计",
-    "maasUsageSourceOpenRouter": "账号 API",
+    "maasUsageSourceOpenRouter": "Key API",
     "maasUsageSourceUnavailable": "未接入",
     "maasUsageLoading": "正在读取服务商用量…",
     "maasUsageUnavailable": "用量读取失败",

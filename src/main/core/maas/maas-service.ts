@@ -1922,16 +1922,20 @@ export class MaasService {
       throw new Error('OpenRouter API key is missing. Reconnect OpenRouter to read usage.');
     }
 
-    const [keyResponse, creditsResponse] = await Promise.all([
-      this.fetchOpenRouterUsageResource<OpenRouterKeyResponse>(
-        openRouterUsageUrl(connection.endpoint, 'key'),
-        apiKey
-      ),
-      this.fetchOpenRouterUsageResource<OpenRouterCreditsResponse>(
-        openRouterUsageUrl(connection.endpoint, 'credits'),
-        apiKey
-      ),
-    ]);
+    const keyResponse = await this.fetchOpenRouterUsageResource<OpenRouterKeyResponse>(
+      openRouterUsageUrl(connection.endpoint, 'key'),
+      apiKey
+    );
+    const creditsResponse = await this.fetchOpenRouterUsageResource<OpenRouterCreditsResponse>(
+      openRouterUsageUrl(connection.endpoint, 'credits'),
+      apiKey
+    ).catch((error) => {
+      log.info(
+        'OpenRouter account credits are unavailable; continuing with current key usage:',
+        error
+      );
+      return null;
+    });
 
     return buildOpenRouterUsageSummary(
       platformId,
