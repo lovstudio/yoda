@@ -695,7 +695,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   );
 
   const resetAccountUsage = useCallback(async () => {
-    if (!officialCodexAccountAvailable) return;
+    if (!officialCodexAccountAvailable || !runtimeId) return;
     setIsResettingAccountUsage(true);
     try {
       const result = await rpc.runtimeSettings.resetAccountUsage(runtimeId, {
@@ -1195,6 +1195,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                       providerName={
                         maasPresentation.providerName ?? t('workspaceRuntime.maas.title')
                       }
+                      websiteUrl={maasPresentation.websiteUrl}
                       usage={maasUsage}
                       loading={isLoadingMaasUsage}
                       refreshing={isRefreshingMaasUsage}
@@ -1896,6 +1897,7 @@ function ContextProgressBar({
 
 function WorkspaceMaasUsageContent({
   providerName,
+  websiteUrl,
   usage,
   loading,
   refreshing,
@@ -1905,6 +1907,7 @@ function WorkspaceMaasUsageContent({
   onManage,
 }: {
   providerName: string;
+  websiteUrl: string | null;
   usage: MaasUsageSummary | null;
   loading: boolean;
   refreshing: boolean;
@@ -1940,9 +1943,24 @@ function WorkspaceMaasUsageContent({
       <div className="p-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="truncate text-sm font-medium">
-              {t('workspaceRuntime.maasUsageTitle', { provider: providerName })}
-            </div>
+            {websiteUrl ? (
+              <button
+                type="button"
+                title={websiteUrl}
+                aria-label={t('workspaceRuntime.maasUsageOpenWebsite', { provider: providerName })}
+                className="inline-flex min-w-0 max-w-full items-center gap-1 truncate text-left text-sm font-medium underline-offset-2 hover:text-foreground-muted hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+                onClick={() => void rpc.app.openExternal(websiteUrl)}
+              >
+                <span className="truncate">
+                  {t('workspaceRuntime.maasUsageTitle', { provider: providerName })}
+                </span>
+                <ExternalLink aria-hidden className="size-3 shrink-0" />
+              </button>
+            ) : (
+              <div className="truncate text-sm font-medium">
+                {t('workspaceRuntime.maasUsageTitle', { provider: providerName })}
+              </div>
+            )}
             <div className="mt-0.5 text-xs leading-relaxed text-foreground-passive">
               {t('workspaceRuntime.maasUsageDescription', { provider: providerName })}
             </div>

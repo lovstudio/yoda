@@ -56,6 +56,9 @@ export function resolveMaasRuntimeEnv(
   if (runtimeId === 'claude' && templateId === 'openrouter') {
     endpoint = endpoint.replace(/\/api\/v1$/, '/api');
   }
+  if (runtimeId === 'claude' && templateId !== 'zenmux' && templateId !== 'openrouter') {
+    endpoint = endpoint.replace(/\/v1$/, '');
+  }
 
   const env = Object.fromEntries([
     ...spec.apiKeyEnvVars.map((key) => [key, credentials.apiKey] as const),

@@ -110,6 +110,20 @@ describe('MaaS Agent Client runtime environment', () => {
     });
   });
 
+  it('maps a custom MaaS Profile root to Claude Code without duplicating /v1', () => {
+    expect(
+      resolveMaasRuntimeEnv('claude', {
+        platformId: 'profile:lovbrowser',
+        endpoint: 'https://newapi.example.test/v1',
+        apiKey: 'secret',
+      })
+    ).toEqual({
+      ANTHROPIC_AUTH_TOKEN: 'secret',
+      ANTHROPIC_API_KEY: '',
+      ANTHROPIC_BASE_URL: 'https://newapi.example.test',
+    });
+  });
+
   it('derives the native Anthropic endpoints required by Claude Code', () => {
     expect(
       resolveMaasRuntimeEnv('claude', {

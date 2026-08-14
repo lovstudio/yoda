@@ -46,13 +46,15 @@ function errorMessage(
   body: NewApiTokenUsageResponse | NewApiAccountUsageResponse | null,
   fallback: string
 ): string {
-  if (typeof body?.error === 'string' && body.error.trim()) return body.error.trim();
+  const error = body && 'error' in body ? body.error : undefined;
+  if (typeof error === 'string' && error.trim()) return error.trim();
   if (
-    typeof body?.error === 'object' &&
-    typeof body.error.message === 'string' &&
-    body.error.message.trim()
+    typeof error === 'object' &&
+    error !== null &&
+    typeof error.message === 'string' &&
+    error.message.trim()
   ) {
-    return body.error.message.trim();
+    return error.message.trim();
   }
   if (typeof body?.message === 'string' && body.message.trim()) return body.message.trim();
   return fallback;

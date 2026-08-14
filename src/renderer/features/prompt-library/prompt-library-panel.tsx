@@ -66,6 +66,7 @@ import type { Workspace } from '@shared/workspaces';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
+import { reorderIdsInVisibleList } from '@renderer/lib/reorder-ids';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
 import { Checkbox } from '@renderer/lib/ui/checkbox';
@@ -96,7 +97,7 @@ import { cn } from '@renderer/utils/utils';
 import { ProjectPromptSection } from './project-prompt-section';
 import { PromptLibraryChapter } from './prompt-library-chapter';
 import { PromptRuntimeSelector, UserInstructionSection } from './prompt-system-section';
-import { collectPromptTags, filterPrompts, reorderPromptIdsInVisibleList } from './prompt-tags';
+import { collectPromptTags, filterPrompts } from './prompt-tags';
 import { PromptVersionHistory } from './prompt-version-history';
 import {
   useCreatePrompt,
@@ -675,7 +676,7 @@ export function PromptLibraryPanel({
   const handleDragEnd = (event: DragEndEvent) => {
     if (!event.over) return;
     const currentOrder = items.map((entry) => entry.id);
-    const next = reorderPromptIdsInVisibleList(
+    const next = reorderIdsInVisibleList(
       currentOrder,
       visibleItems.map((entry) => entry.id),
       String(event.active.id),

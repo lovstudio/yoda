@@ -451,6 +451,39 @@ export function useDuplicateMaasProfile() {
   });
 }
 
+export function useReorderMaasConnections() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (platformIds: MaasPlatformId[]) => {
+      const result = await rpc.maas.reorderConnections(platformIds);
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to reorder MaaS Profiles.');
+      }
+    },
+    onMutate: async (platformIds) => {
+      await queryClient.cancelQueries({ queryKey: maasQueryKeys.connections });
+      const previous = queryClient.getQueryData<MaasConnection[]>(maasQueryKeys.connections);
+      queryClient.setQueryData<MaasConnection[]>(maasQueryKeys.connections, (current) => {
+        if (!current) return current;
+        const byPlatformId = new Map(current.map((item) => [item.platformId, item]));
+        return platformIds
+          .map((platformId) => byPlatformId.get(platformId))
+          .filter((item): item is MaasConnection => !!item);
+      });
+      return { previous };
+    },
+    onError: (_error, _platformIds, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(maasQueryKeys.connections, context.previous);
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections });
+    },
+  });
+}
+
 export function useDisconnectMaasPlatform() {
   const queryClient = useQueryClient();
 

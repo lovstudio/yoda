@@ -7,6 +7,7 @@ import {
 export type WorkspaceMaasPresentation = {
   active: boolean;
   providerName: string | null;
+  websiteUrl: string | null;
 };
 
 export function getWorkspaceMaasPresentation(
@@ -14,7 +15,7 @@ export function getWorkspaceMaasPresentation(
   connections: readonly MaasConnection[] | undefined
 ): WorkspaceMaasPresentation {
   if (!binding?.enabled || !binding.platformId) {
-    return { active: false, providerName: null };
+    return { active: false, providerName: null, websiteUrl: null };
   }
 
   const selectedConnection = connections?.find(
@@ -25,5 +26,6 @@ export function getWorkspaceMaasPresentation(
     active: true,
     providerName:
       selectedConnection?.displayName ?? getMaasPlatformDefinition(binding.platformId).name,
+    websiteUrl: selectedConnection?.websiteUrl?.trim() || null,
   };
 }

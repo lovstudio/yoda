@@ -24,7 +24,9 @@ const mocks = vi.hoisted(() => ({
   setCodexClientSync: vi.fn(),
   setGlobalBinding: vi.fn(),
   connectPlatform: vi.fn(),
+  checkConnection: vi.fn(),
   duplicateProfile: vi.fn(),
+  reorderConnections: vi.fn(),
   openMarketplace: vi.fn(),
   installLiteLlm: vi.fn(async () => undefined),
   installNewApi: vi.fn(async () => undefined),
@@ -91,6 +93,13 @@ const mocks = vi.hoisted(() => ({
     displayName: null,
     envKey: null,
     persistsAfterQuit: true,
+    claude: {
+      supported: true,
+      compatible: false,
+      managed: false,
+      configManaged: false,
+      persistentCredentialStored: false,
+    },
   } as MaasCodexClientSyncStatus,
   managedGatewayStars: [
     {
@@ -148,9 +157,10 @@ vi.mock('react-i18next', async (importOriginal) => ({
 
 vi.mock('@renderer/features/maas/useMaas', () => ({
   useConnectMaasPlatform: () => ({ isPending: false, mutate: mocks.connectPlatform }),
-  useCheckMaasConnection: () => ({ isPending: false, mutate: vi.fn() }),
+  useCheckMaasConnection: () => ({ isPending: false, mutate: mocks.checkConnection }),
   useDisconnectMaasPlatform: () => ({ isPending: false, mutate: vi.fn() }),
   useDuplicateMaasProfile: () => ({ isPending: false, mutate: mocks.duplicateProfile }),
+  useReorderMaasConnections: () => ({ isPending: false, mutate: mocks.reorderConnections }),
   useMaasConnections: () => ({ data: mocks.connections, isLoading: false }),
   useMaasGlobalBinding: () => ({ data: mocks.globalBinding, isLoading: false }),
   useMaasManagedGatewayStars: () => ({ data: mocks.managedGatewayStars, isPending: false }),
@@ -277,11 +287,18 @@ describe('MaaS platform menu', () => {
       configManaged: false,
       environmentPublished: false,
       persistentCredentialStored: false,
-      loginItemEnabled: false,
+      loginItemEnabled: true,
       platformId: null,
       displayName: null,
       envKey: null,
       persistsAfterQuit: true,
+      claude: {
+        supported: true,
+        compatible: false,
+        managed: false,
+        configManaged: false,
+        persistentCredentialStored: false,
+      },
     };
     mocks.liteLlmStatus.state = 'not-installed';
     mocks.newApiStatus.state = 'not-installed';
@@ -514,6 +531,7 @@ describe('MaaS platform menu', () => {
     const profile = host.querySelector<HTMLElement>('[data-maas-platform-id="zenmux"]');
     expect(profile?.textContent).toContain('ZenMux');
     expect(profile?.textContent).toContain('maas.connection.lastVerified');
+    expect(profile?.textContent).toContain('maas.connection.testSpeed');
     expect(profile?.textContent).not.toContain('maas.platforms.zenmux.description');
     expect(profile?.textContent).not.toContain('maas.global.enabled');
     expect(profile?.textContent).not.toContain('maas.global.disabled');
@@ -521,6 +539,7 @@ describe('MaaS platform menu', () => {
       profile?.querySelector('[data-testid="maas-profile-last-activity"] time')
     ).not.toBeNull();
     expect(profile?.querySelector('[data-slot="switch"]')).not.toBeNull();
+    expect(profile?.querySelector('[aria-label="maas.connection.test"]')).not.toBeNull();
     expect(profile?.querySelector('[aria-label="maas.profile.actions"]')).not.toBeNull();
 
     const profileTrigger = profile?.querySelector<HTMLButtonElement>('h3 > button');
@@ -531,7 +550,7 @@ describe('MaaS platform menu', () => {
     expect(basic?.textContent).toContain('maas.connection.clientApiKey');
     expect(profile?.querySelector('[data-testid="maas-advanced-settings"]')).toBeNull();
     expect(profile?.textContent).toContain('maas.connection.advancedSummaryWithManagement');
-    expect(profile?.textContent).toContain('maas.connection.testWithLatency');
+    expect(profile?.textContent).not.toContain('maas.connection.testWithLatency');
 
     const advancedTrigger = Array.from(profile?.querySelectorAll('button') ?? []).find((button) =>
       button.textContent?.includes('maas.connection.advanced')
@@ -544,15 +563,13 @@ describe('MaaS platform menu', () => {
     const advancedSection = profile?.querySelector<HTMLElement>(
       '[data-testid="maas-advanced-section"]'
     );
-    const profileActions = profile?.querySelector<HTMLElement>(
-      '[data-testid="maas-profile-actions"]'
-    );
+    const profileActions = profile?.querySelector<HTMLElement>('[role="toolbar"]');
     expect(profileActions).not.toBeNull();
     if (!profileActions) throw new Error('Profile actions were not rendered');
     expect(advancedSection?.contains(profileActions)).toBe(false);
   });
 
-  it('gates Profile actions on complete and saved basic settings', async () => {
+  it('keeps test in the header and shows save only while configuration is dirty', async () => {
     mocks.connections = [connection()];
     const { MaasView } = await import('@renderer/features/maas/components/MaasView');
     await act(async () => root.render(createElement(MaasView, { embedded: true })));
@@ -561,30 +578,33 @@ describe('MaaS platform menu', () => {
     await act(async () => profile?.querySelector<HTMLButtonElement>('h3 > button')?.click());
 
     const basic = profile?.querySelector<HTMLElement>('[data-testid="maas-basic-settings"]');
-    const actions = profile?.querySelector<HTMLElement>('[data-testid="maas-profile-actions"]');
     const [nameInput, endpointInput] = Array.from(
       basic?.querySelectorAll<HTMLInputElement>('input') ?? []
     );
-    const testButton = Array.from(
-      actions?.querySelectorAll<HTMLButtonElement>('button') ?? []
-    ).find((button) => button.textContent?.includes('maas.connection.test'));
-    const saveButton = Array.from(
-      actions?.querySelectorAll<HTMLButtonElement>('button') ?? []
-    ).find((button) => button.textContent?.includes('maas.connection.saveChanges'));
+    const getTestButton = () =>
+      profile?.querySelector<HTMLButtonElement>('[data-testid="maas-profile-test"]');
+    const getSaveButton = () =>
+      profile?.querySelector<HTMLButtonElement>('[data-testid="maas-profile-save"]');
 
-    expect(testButton?.disabled).toBe(false);
-    expect(saveButton?.disabled).toBe(false);
+    expect(getTestButton()?.disabled).toBe(false);
+    expect(getSaveButton()).toBeNull();
+    await act(async () => getTestButton()?.click());
+    expect(mocks.checkConnection).toHaveBeenCalledWith(
+      'zenmux',
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
+    );
 
     await act(async () => setInputValue(nameInput!, ''));
-    expect(testButton?.disabled).toBe(true);
-    expect(saveButton?.disabled).toBe(true);
+    expect(getTestButton()?.disabled).toBe(true);
+    expect(getSaveButton()?.disabled).toBe(true);
 
     await act(async () => setInputValue(nameInput!, 'ZenMux'));
     await act(async () => setInputValue(endpointInput!, ''));
-    expect(testButton?.disabled).toBe(true);
-    expect(saveButton?.disabled).toBe(true);
+    expect(getTestButton()?.disabled).toBe(true);
+    expect(getSaveButton()?.disabled).toBe(true);
 
     await act(async () => setInputValue(endpointInput!, 'https://zenmux.ai/api/v1'));
+    expect(getSaveButton()).toBeNull();
     const replaceClientKey = basic?.querySelector<HTMLButtonElement>(
       '[aria-label="maas.connection.replaceKey"]'
     );
@@ -592,12 +612,103 @@ describe('MaaS platform menu', () => {
     const clientKeyInput = Array.from(
       basic?.querySelectorAll<HTMLInputElement>('input') ?? []
     ).find((input) => input.type === 'password');
-    expect(testButton?.disabled).toBe(true);
-    expect(saveButton?.disabled).toBe(true);
+    expect(getTestButton()?.disabled).toBe(true);
+    expect(getSaveButton()?.disabled).toBe(true);
 
     await act(async () => setInputValue(clientKeyInput!, 'sk-test'));
-    expect(testButton?.disabled).toBe(true);
+    expect(getTestButton()?.disabled).toBe(true);
+    expect(getSaveButton()?.disabled).toBe(false);
+    await act(async () => getSaveButton()?.click());
+    expect(mocks.connectPlatform).toHaveBeenCalledWith(
+      expect.objectContaining({
+        platformId: 'zenmux',
+        displayName: 'ZenMux',
+        endpoint: 'https://zenmux.ai/api/v1',
+        inferenceApiKey: 'sk-test',
+      }),
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
+    );
+  });
+
+  it('stores a separate New API account credential without changing the Client key', async () => {
+    mocks.connections = [
+      connection({
+        platformId: 'profile:lovbrowser',
+        displayName: 'LovBrowser',
+        endpoint: 'https://newapi.1234bot.com/v1',
+        accountKeyFingerprint: null,
+      }),
+    ];
+    const { MaasView } = await import('@renderer/features/maas/components/MaasView');
+    await act(async () => root.render(createElement(MaasView, { embedded: true })));
+
+    const profile = host.querySelector<HTMLElement>('[data-maas-platform-id="profile:lovbrowser"]');
+    await act(async () => profile?.querySelector<HTMLButtonElement>('h3 > button')?.click());
+    const advancedTrigger = Array.from(profile?.querySelectorAll('button') ?? []).find((button) =>
+      button.textContent?.includes('maas.connection.advanced')
+    );
+    await act(async () => advancedTrigger?.click());
+
+    const accountInput = profile?.querySelector<HTMLInputElement>(
+      'input[placeholder="maas.connection.accountUsageCredentialPlaceholder"]'
+    );
+    expect(accountInput).not.toBeNull();
+    expect(profile?.textContent).toContain('maas.connection.accountUsageCredentialHelper');
+    await act(async () => setInputValue(accountInput!, 'account-access-token'));
+
+    const saveButton = profile?.querySelector<HTMLButtonElement>(
+      '[data-testid="maas-profile-save"]'
+    );
     expect(saveButton?.disabled).toBe(false);
+    await act(async () => saveButton?.click());
+    expect(mocks.connectPlatform).toHaveBeenCalledWith(
+      expect.objectContaining({
+        platformId: 'profile:lovbrowser',
+        accountAccessToken: 'account-access-token',
+        apiKey: undefined,
+      }),
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
+    );
+  });
+
+  it('requires a successful connection test before enabling a Profile from either surface', async () => {
+    mocks.connections = [
+      connection({
+        platformId: 'custom:first',
+        displayName: 'First Custom',
+        lastTest: {
+          ok: false,
+          error: 'HTTP 401',
+          checkedAt: '2026-08-13T00:00:00.000Z',
+          samples: [{ durationMs: 12, ok: false, error: 'HTTP 401' }],
+          averageLatencyMs: null,
+        },
+      }),
+    ];
+    const { MaasView } = await import('@renderer/features/maas/components/MaasView');
+    await act(async () => root.render(createElement(MaasView, { embedded: true })));
+
+    const enableSwitch = host.querySelector<HTMLElement>(
+      '[data-slot="switch"][aria-label="maas.global.enableAria"]'
+    );
+    expect(enableSwitch?.hasAttribute('data-disabled')).toBe(true);
+    expect(enableSwitch?.getAttribute('title')).toBe('maas.global.needsSuccessfulTest');
+
+    const { MaasGlobalSelector } = await import(
+      '@renderer/features/maas/components/MaasGlobalSelector'
+    );
+    await act(async () => root.render(createElement(MaasGlobalSelector)));
+    const selector = host.querySelector<HTMLButtonElement>(
+      '[data-slot="select-trigger"][aria-label="maas.global.title"]'
+    );
+    expect(selector).not.toBeNull();
+    expect(host.querySelector('[data-slot="checkbox"]')).toBeNull();
+    await userEvent.click(selector!);
+    const profileOption = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-slot="select-item"]')
+    ).find((item) => item.textContent?.includes('First Custom'));
+    expect(profileOption?.hasAttribute('data-disabled')).toBe(true);
+    expect(profileOption?.textContent).toContain('maas.global.needsSuccessfulTest');
   });
 
   it('groups Profile duplication, documentation, usage, and remove actions in one menu', async () => {
@@ -705,7 +816,7 @@ describe('MaaS platform menu', () => {
     expect(syncSettings?.textContent).toContain('Codex CLI / App');
     expect(syncSettings?.textContent).toContain('maas.clientSync.adapted');
     expect(syncSettings?.textContent).toContain('Claude Code');
-    expect(syncSettings?.textContent).toContain('maas.clientSync.planned');
+    expect(syncSettings?.textContent).toContain('maas.clientSync.adapted');
     const syncSwitch = syncSettings?.querySelector<HTMLElement>(
       '[data-slot="switch"][aria-label="maas.clientSync.toggle"]'
     );
@@ -714,6 +825,17 @@ describe('MaaS platform menu', () => {
     expect(mocks.showConfirm).toHaveBeenCalledOnce();
     expect(mocks.setCodexClientSync).toHaveBeenCalledWith({ enabled: true }, expect.any(Object));
     expect(mocks.connectPlatform).not.toHaveBeenCalled();
+  });
+
+  it('renders an older Client sync payload without the Claude status extension', async () => {
+    const { claude: _claude, ...legacyStatus } = mocks.codexClientSyncStatus;
+    mocks.codexClientSyncStatus = legacyStatus as MaasCodexClientSyncStatus;
+
+    const { MaasView } = await import('@renderer/features/maas/components/MaasView');
+    await act(async () => root.render(createElement(MaasView, { embedded: true })));
+
+    expect(host.querySelector('[data-testid="external-agent-sync-settings"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="external-agent-client-claude"]')).not.toBeNull();
   });
 
   it('shows the active global sync state independently from Profile settings', async () => {
@@ -729,6 +851,13 @@ describe('MaaS platform menu', () => {
       displayName: 'ZenMux',
       envKey: null,
       persistsAfterQuit: true,
+      claude: {
+        supported: true,
+        compatible: true,
+        managed: true,
+        configManaged: true,
+        persistentCredentialStored: true,
+      },
     };
     const { MaasView } = await import('@renderer/features/maas/components/MaasView');
     await act(async () => root.render(createElement(MaasView, { embedded: true })));
@@ -807,28 +936,11 @@ describe('MaaS platform menu', () => {
     );
   });
 
-  it('allows the bottom-bar selector to switch between configured remote Profiles', async () => {
+  it('uses a compact selector for remote Profiles and keeps configuration adjacent', async () => {
     mocks.gatewayAvailability = 'not-installed';
-    const successfulTest = {
-      ok: true,
-      error: null,
-      checkedAt: '2026-08-13T00:00:00.000Z',
-      samples: [{ durationMs: 12, ok: true, error: null }],
-      averageLatencyMs: 12,
-    };
     mocks.connections = [
-      connection({
-        platformId: 'custom:first',
-        displayName: 'First Custom',
-        lastCheckedAt: successfulTest.checkedAt,
-        lastTest: successfulTest,
-      }),
-      connection({
-        platformId: 'custom:second',
-        displayName: 'Second Custom',
-        lastCheckedAt: successfulTest.checkedAt,
-        lastTest: successfulTest,
-      }),
+      connection({ platformId: 'custom:first', displayName: 'First Custom' }),
+      connection({ platformId: 'custom:second', displayName: 'Second Custom' }),
     ];
     mocks.globalBinding = {
       platformId: 'custom:first',
@@ -853,6 +965,8 @@ describe('MaaS platform menu', () => {
       '[data-slot="select-trigger"][aria-label="maas.global.title"]'
     );
     expect(selector?.textContent).toContain('First Custom');
+    expect(selector?.textContent).toContain('maas.global.effective');
+    expect(host.querySelector('[data-slot="checkbox"]')).toBeNull();
     expect(host.querySelector('[data-maas-gateway-requirement]')).toBeNull();
 
     await userEvent.click(selector!);
@@ -881,8 +995,14 @@ function connection(overrides: Partial<MaasConnection> = {}): MaasConnection {
     keyFingerprint: 'ke...ey',
     inferenceKeyFingerprint: 'ke...ey',
     connectedAt: '2026-07-25T00:00:00.000Z',
-    lastCheckedAt: null,
-    lastTest: null,
+    lastCheckedAt: '2026-08-13T00:00:00.000Z',
+    lastTest: {
+      ok: true,
+      error: null,
+      checkedAt: '2026-08-13T00:00:00.000Z',
+      samples: [{ durationMs: 12, ok: true, error: null }],
+      averageLatencyMs: 12,
+    },
     configured: true,
     connected: true,
     error: null,

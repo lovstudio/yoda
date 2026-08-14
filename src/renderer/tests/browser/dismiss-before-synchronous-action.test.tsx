@@ -36,19 +36,21 @@ describe('dismissBeforeSynchronousAction', () => {
         <section data-view="task">
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger>Model access</PopoverTrigger>
-            <PopoverContent>
-              <button
-                type="button"
-                onClick={() =>
-                  dismissBeforeSynchronousAction(
-                    () => setOpen(false),
-                    () => runInAction(() => route.set('maas'))
-                  )
-                }
-              >
-                Details and configuration
-              </button>
-            </PopoverContent>
+            {open ? (
+              <PopoverContent>
+                <button
+                  type="button"
+                  onClick={() =>
+                    dismissBeforeSynchronousAction(
+                      () => setOpen(false),
+                      () => runInAction(() => route.set('maas'))
+                    )
+                  }
+                >
+                  Details and configuration
+                </button>
+              </PopoverContent>
+            ) : null}
           </Popover>
         </section>
       );
@@ -82,6 +84,6 @@ describe('dismissBeforeSynchronousAction', () => {
     expect(host.querySelector<HTMLElement>('[data-view="task"]')?.style.display).toBe('none');
     expect(host.querySelector<HTMLElement>('[data-view="maas"]')?.hidden).toBe(false);
     expect(trigger?.getAttribute('aria-expanded')).toBe('false');
-    expect(document.querySelector('[data-slot="popover-content"][data-open]')).toBeNull();
+    expect(document.querySelector('[data-slot="popover-content"]')).toBeNull();
   });
 });

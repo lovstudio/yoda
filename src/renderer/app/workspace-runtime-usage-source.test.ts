@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import type { MaasGlobalBindingStatus } from '@shared/maas';
 import {
   isMaasUsageActiveForRuntime,
   shouldReadOfficialAccountUsage,
 } from './workspace-runtime-usage-source';
 
 describe('workspace runtime usage source', () => {
-  const activeBinding = {
+  const activeBinding: MaasGlobalBindingStatus = {
     platformId: 'zenmux',
     enabled: true,
     effective: true,
     runtimeIds: ['codex', 'claude'],
-  } as const;
+  };
 
   it('uses provider usage when the current runtime is routed through global MaaS', () => {
     const maasActive = isMaasUsageActiveForRuntime('codex', activeBinding);

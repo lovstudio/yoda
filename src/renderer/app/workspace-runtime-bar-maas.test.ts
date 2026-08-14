@@ -18,6 +18,7 @@ const zenmuxConnection: MaasConnection = {
   connectedAt: '2026-08-12T00:00:00.000Z',
   lastCheckedAt: null,
   lastTest: null,
+  websiteUrl: 'https://zenmux.example',
   configured: true,
   connected: true,
   error: null,
@@ -28,6 +29,7 @@ describe('getWorkspaceMaasPresentation', () => {
     expect(getWorkspaceMaasPresentation(zenmuxBinding, [zenmuxConnection])).toEqual({
       active: true,
       providerName: 'ZenMux Production',
+      websiteUrl: 'https://zenmux.example',
     });
   });
 
@@ -37,6 +39,6 @@ describe('getWorkspaceMaasPresentation', () => {
         { ...zenmuxBinding, platformId: null, enabled: false, effective: false, runtimeIds: [] },
         [zenmuxConnection]
       )
-    ).toEqual({ active: false, providerName: null });
+    ).toEqual({ active: false, providerName: null, websiteUrl: null });
   });
 });

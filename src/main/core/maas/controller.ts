@@ -47,6 +47,10 @@ async function duplicateProfile(input: MaasDuplicateProfileInput) {
   return maasService.duplicateProfile(input);
 }
 
+async function reorderConnections(platformIds: MaasPlatformId[]) {
+  return maasService.reorderConnections(platformIds);
+}
+
 async function checkConnection(platformId: MaasPlatformId) {
   return maasService.checkConnection(platformId);
 }
@@ -105,6 +109,7 @@ export const maasController = createRPCController({
   connectPlatform,
   disconnectPlatform,
   duplicateProfile,
+  reorderConnections,
   checkConnection,
   copyStoredApiKey,
   listInvocationRecords,

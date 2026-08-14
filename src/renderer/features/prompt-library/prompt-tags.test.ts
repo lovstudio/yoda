@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Prompt } from '@shared/prompt-library';
-import {
-  collectPromptTags,
-  filterPrompts,
-  normalizePromptList,
-  reorderPromptIds,
-  reorderPromptIdsInVisibleList,
-} from './prompt-tags';
+import { collectPromptTags, filterPrompts, normalizePromptList } from './prompt-tags';
 
 function prompt(id: string, tags: string[], injectionEnabled = false): Prompt {
   return {
@@ -50,24 +44,5 @@ describe('prompt tags', () => {
     expect(filterPrompts(prompts, { query: 'release' }).map((item) => item.id)).toEqual([
       'release',
     ]);
-  });
-
-  it('reorders a flat list by drag target', () => {
-    expect(reorderPromptIds(['first', 'second', 'third'], 'first', 'third')).toEqual([
-      'second',
-      'third',
-      'first',
-    ]);
-  });
-
-  it('reorders a filtered subset without changing hidden prompt slots', () => {
-    expect(
-      reorderPromptIdsInVisibleList(
-        ['first', 'hidden', 'second', 'third'],
-        ['first', 'second', 'third'],
-        'first',
-        'third'
-      )
-    ).toEqual(['second', 'hidden', 'third', 'first']);
   });
 });

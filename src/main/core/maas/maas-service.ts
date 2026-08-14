@@ -48,6 +48,10 @@ import { telemetryService } from '@main/lib/telemetry';
 import { encryptedAppSecretsStore } from '../secrets/encrypted-app-secrets-store';
 import { runtimeOverrideSettings } from '../settings/runtime-settings-service';
 import { appSettingsService } from '../settings/settings-service';
+import {
+  claudeMaasSettingsSwitch,
+  type ClaudeMaasSettingsRollback,
+} from './claude-maas-settings-switch';
 import { migrateLegacyCodexMaasHistoryForConfig } from './codex-history-compat';
 import { codexMaasAuthSwitch, type CodexMaasAuthRollback } from './codex-maas-auth-switch';
 import { fetchNewApiUsageSummary } from './new-api-usage';
@@ -69,6 +73,7 @@ import { resolveRestoredMaasRuntimeConfig, supportsMaasRuntimeBinding } from './
 
 const SECRET_PREFIX = 'yoda-maas-token';
 const INFERENCE_SECRET_PREFIX = 'yoda-maas-inference-token';
+const ACCOUNT_SECRET_PREFIX = 'yoda-maas-account-token';
 const REAL_RECORDS_CACHE_TTL_MS = 30_000;
 const PLATFORM_INFO_CACHE_TTL_MS = 24 * 60 * 60 * 1_000;
 const PLATFORM_DESCRIPTION_TIMEOUT_MS = 10_000;
@@ -134,8 +139,8 @@ type MaasInferenceCredentials = {
   syncToAgentClient?: boolean;
 };
 
-const EXTERNAL_AGENT_SYNC_VERSION = 2;
-const CODEX_CONFIG_SYNC_PLATFORMS = new Set<NodeJS.Platform>(['darwin', 'win32', 'linux']);
+const EXTERNAL_AGENT_SYNC_VERSION = 3;
+const EXTERNAL_AGENT_CONFIG_SYNC_PLATFORMS = new Set<NodeJS.Platform>(['darwin', 'win32', 'linux']);
 
 function secretKey(platformId: MaasPlatformId): string {
   return `${SECRET_PREFIX}:${platformId}`;
@@ -145,11 +150,16 @@ function inferenceSecretKey(platformId: MaasPlatformId): string {
   return `${INFERENCE_SECRET_PREFIX}:${platformId}`;
 }
 
+function accountSecretKey(platformId: MaasPlatformId): string {
+  return `${ACCOUNT_SECRET_PREFIX}:${platformId}`;
+}
+
 async function readPlatformSecret(
   platformId: MaasPlatformId,
   kind: MaasApiKeyKind
 ): Promise<string | null> {
-  const keyFor = kind === 'inference' ? inferenceSecretKey : secretKey;
+  const keyFor =
+    kind === 'inference' ? inferenceSecretKey : kind === 'account' ? accountSecretKey : secretKey;
   const current = await encryptedAppSecretsStore.getSecret(keyFor(platformId));
   if (current) return current;
   const legacyId = getLegacyMaasPlatformId(platformId);
@@ -164,6 +174,7 @@ async function deletePlatformSecrets(platformId: MaasPlatformId): Promise<void> 
     ids.flatMap((id) => [
       encryptedAppSecretsStore.deleteSecret(secretKey(id)),
       encryptedAppSecretsStore.deleteSecret(inferenceSecretKey(id)),
+      encryptedAppSecretsStore.deleteSecret(accountSecretKey(id)),
     ])
   );
 }
@@ -265,6 +276,7 @@ function defaultConnection(platformId: MaasPlatformId): MaasConnection {
     endpoint: platform.defaultEndpoint,
     keyFingerprint: null,
     inferenceKeyFingerprint: null,
+    accountKeyFingerprint: null,
     connectedAt: null,
     lastCheckedAt: null,
     lastTest: null,
@@ -296,8 +308,33 @@ function upsertConnection(
   connections: MaasSettings['connections'],
   connection: MaasPlatformConnection
 ): MaasSettings['connections'] {
-  const withoutCurrent = connections.filter((item) => item.platformId !== connection.platformId);
-  return [connection, ...withoutCurrent];
+  const saved = {
+    ...connection,
+    accountKeyFingerprint: connection.accountKeyFingerprint ?? null,
+  };
+  // Keep the manual Profile order stable: editing a Profile must not move it.
+  const index = connections.findIndex((item) => item.platformId === connection.platformId);
+  if (index === -1) return [saved, ...connections];
+  return connections.map((item, itemIndex) => (itemIndex === index ? saved : item));
+}
+
+/** Returns the connections in `platformIds` order, or null when the order is not a permutation. */
+function reorderConnectionsByPlatformId(
+  connections: MaasSettings['connections'],
+  platformIds: readonly MaasPlatformId[]
+): MaasSettings['connections'] | null {
+  const byPlatformId = new Map(
+    connections.map((connection) => [connection.platformId, connection])
+  );
+  if (platformIds.length !== byPlatformId.size) return null;
+  const ordered: MaasSettings['connections'] = [];
+  for (const platformId of platformIds) {
+    const connection = byPlatformId.get(platformId);
+    if (!connection) return null;
+    byPlatformId.delete(platformId);
+    ordered.push(connection);
+  }
+  return ordered;
 }
 
 function getConnectedPlatform(
@@ -528,6 +565,9 @@ function emptyUsageSummary(platformId: MaasPlatformId): MaasUsageSummary {
     usageDailyUsd: null,
     usageWeeklyUsd: null,
     usageMonthlyUsd: null,
+    quotaUnlimited: null,
+    accountUsageStatus: 'not-applicable',
+    accountUsageError: null,
     source: 'none',
     fetchedAt: null,
     period: null,
@@ -599,51 +639,61 @@ export class MaasService {
    */
   async reconcileActiveBindings(): Promise<void> {
     const settings = await appSettingsService.get('maas');
-    const binding = settings.runtimeBindings.find((item) => item.runtimeId === 'codex');
+    const activeBinding = settings.runtimeBindings[0];
+    const codexBinding = settings.runtimeBindings.find((item) => item.runtimeId === 'codex');
     const currentConfig = (await runtimeOverrideSettings.getItem('codex')) ?? {};
+    const currentClaudeConfig = (await runtimeOverrideSettings.getItem('claude')) ?? {};
     migrateLegacyCodexHistory(currentConfig, hasExternalAgentSyncConsent(settings));
-    if (!binding) {
-      if (hasExternalAgentSyncConsent(settings)) {
-        await codexMaasAuthSwitch.enableOfficial({
-          codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
-        });
-      } else {
-        await codexMaasAuthSwitch.disable({
-          codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
-        });
-      }
-      return;
-    }
-    if (!supportsMaasPlatformForRuntime('codex', binding.platformId)) {
-      throw new Error('The active MaaS platform is not compatible with Codex.');
-    }
-
-    const inferenceCredentials = await this.getInferenceCredentials(binding.platformId);
-    if (!inferenceCredentials) {
-      throw new Error(
-        'The active Codex MaaS binding is missing its inference credential; reconnect the platform.'
-      );
-    }
-
     let rollbackCodexAuth: CodexMaasAuthRollback | undefined;
+    let rollbackClaudeSettings: ClaudeMaasSettingsRollback | undefined;
 
     try {
+      if (!activeBinding) {
+        rollbackCodexAuth = hasExternalAgentSyncConsent(settings)
+          ? await codexMaasAuthSwitch.enableOfficial({
+              codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+            })
+          : await codexMaasAuthSwitch.disable({
+              codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+            });
+        rollbackClaudeSettings = await claudeMaasSettingsSwitch.disable({
+          claudeHome: resolveRuntimeStateDirectory('claude', currentClaudeConfig),
+        });
+        return;
+      }
+      if (!supportsMaasPlatformForRuntime('codex', activeBinding.platformId)) {
+        throw new Error('The active MaaS platform is not compatible with Codex.');
+      }
+
+      const inferenceCredentials = await this.getInferenceCredentials(activeBinding.platformId);
+      if (!inferenceCredentials) {
+        throw new Error(
+          'The active MaaS binding is missing its inference credential; reconnect the platform.'
+        );
+      }
       rollbackCodexAuth = await this.applyCodexClientSync(
         resolveRuntimeStateDirectory('codex', currentConfig),
-        binding.platformId,
+        activeBinding.platformId,
+        inferenceCredentials
+      );
+      rollbackClaudeSettings = await this.applyClaudeClientSync(
+        resolveRuntimeStateDirectory('claude', currentClaudeConfig),
+        activeBinding.platformId,
         inferenceCredentials
       );
       if (
-        currentConfig.authProvider !== 'yoda-maas' ||
-        currentConfig.maasPlatformId !== binding.platformId
+        codexBinding &&
+        (currentConfig.authProvider !== 'yoda-maas' ||
+          currentConfig.maasPlatformId !== codexBinding.platformId)
       ) {
         await runtimeOverrideSettings.updateItem('codex', {
           ...currentConfig,
           authProvider: 'yoda-maas',
-          maasPlatformId: binding.platformId,
+          maasPlatformId: codexBinding.platformId,
         });
       }
     } catch (error) {
+      await rollbackClaudeSettings?.();
       await rollbackCodexAuth?.();
       throw error;
     }
@@ -651,16 +701,23 @@ export class MaasService {
 
   async getCodexClientSyncStatus(): Promise<MaasCodexClientSyncStatus> {
     const settings = await appSettingsService.get('maas');
-    const binding = settings.runtimeBindings.find((item) => item.runtimeId === 'codex');
+    const binding = settings.runtimeBindings[0];
     const connection = binding ? getConnectedPlatform(settings, binding.platformId) : undefined;
     const currentConfig = (await runtimeOverrideSettings.getItem('codex')) ?? {};
+    const currentClaudeConfig = (await runtimeOverrideSettings.getItem('claude')) ?? {};
     const nativeStatus = await codexMaasAuthSwitch.getStatus({
       codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
     });
+    const claudeStatus = await claudeMaasSettingsSwitch.getStatus({
+      claudeHome: resolveRuntimeStateDirectory('claude', currentClaudeConfig),
+    });
     const enabled = hasExternalAgentSyncConsent(settings);
+    const claudeCompatible = Boolean(
+      binding && supportsMaasPlatformForRuntime('claude', binding.platformId)
+    );
 
     return {
-      supported: CODEX_CONFIG_SYNC_PLATFORMS.has(process.platform),
+      supported: EXTERNAL_AGENT_CONFIG_SYNC_PLATFORMS.has(process.platform),
       enabled,
       managed: nativeStatus.managed,
       configManaged: nativeStatus.configManaged,
@@ -671,6 +728,13 @@ export class MaasService {
       displayName: connection?.displayName ?? null,
       envKey: null,
       persistsAfterQuit: true,
+      claude: {
+        supported: EXTERNAL_AGENT_CONFIG_SYNC_PLATFORMS.has(process.platform),
+        compatible: claudeCompatible,
+        managed: claudeStatus.managed,
+        configManaged: claudeStatus.configManaged,
+        persistentCredentialStored: claudeStatus.persistentCredentialStored,
+      },
     };
   }
 
@@ -679,10 +743,11 @@ export class MaasService {
     status?: MaasCodexClientSyncStatus;
     error?: string;
   }> {
-    // Codex is the first external Agent Client adapter. Keep consent global so
-    // future adapters can join this switch without moving it back into a Profile.
-    if (!CODEX_CONFIG_SYNC_PLATFORMS.has(process.platform)) {
-      return { success: false, error: 'Persistent Codex Client sync is not supported here.' };
+    if (!EXTERNAL_AGENT_CONFIG_SYNC_PLATFORMS.has(process.platform)) {
+      return {
+        success: false,
+        error: 'Persistent external Agent Client sync is not supported here.',
+      };
     }
     if (typeof input.enabled !== 'boolean') {
       return { success: false, error: 'Invalid Codex Client sync state.' };
@@ -692,29 +757,30 @@ export class MaasService {
     }
 
     const settings = await appSettingsService.get('maas');
-    const activeCodexBinding = settings.runtimeBindings.find(
-      (binding) => binding.runtimeId === 'codex'
-    );
-    const connection = activeCodexBinding
-      ? getConnectedPlatform(settings, activeCodexBinding.platformId)
+    const activeBinding = settings.runtimeBindings[0];
+    const connection = activeBinding
+      ? getConnectedPlatform(settings, activeBinding.platformId)
       : undefined;
     let rollbackCodexAuth: CodexMaasAuthRollback | undefined;
+    let rollbackClaudeSettings: ClaudeMaasSettingsRollback | undefined;
 
     try {
       const currentConfig = (await runtimeOverrideSettings.getItem('codex')) ?? {};
+      const currentClaudeConfig = (await runtimeOverrideSettings.getItem('claude')) ?? {};
       if (!input.enabled) {
         rollbackCodexAuth = await codexMaasAuthSwitch.disable({
           codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
         });
-      } else if (activeCodexBinding) {
+        rollbackClaudeSettings = await claudeMaasSettingsSwitch.disable({
+          claudeHome: resolveRuntimeStateDirectory('claude', currentClaudeConfig),
+        });
+      } else if (activeBinding) {
         if (!connection) {
           return { success: false, error: 'The active MaaS Profile is no longer available.' };
         }
         const apiKey = await readPlatformSecret(
-          activeCodexBinding.platformId,
-          getMaasPlatformTemplateId(activeCodexBinding.platformId) === 'zenmux'
-            ? 'inference'
-            : 'primary'
+          activeBinding.platformId,
+          getMaasPlatformTemplateId(activeBinding.platformId) === 'zenmux' ? 'inference' : 'primary'
         );
         if (!apiKey) {
           return {
@@ -724,14 +790,28 @@ export class MaasService {
         }
         rollbackCodexAuth = await codexMaasAuthSwitch.enable({
           codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
-          platformId: activeCodexBinding.platformId,
+          platformId: activeBinding.platformId,
           displayName: connection.displayName,
           endpoint: connection.endpoint,
           apiKey,
         });
+        rollbackClaudeSettings = await this.applyClaudeClientSync(
+          resolveRuntimeStateDirectory('claude', currentClaudeConfig),
+          activeBinding.platformId,
+          {
+            displayName: connection.displayName,
+            endpoint: connection.endpoint,
+            apiKey,
+            envKey: connection.envKey,
+            syncToAgentClient: true,
+          }
+        );
       } else {
         rollbackCodexAuth = await codexMaasAuthSwitch.enableOfficial({
           codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+        });
+        rollbackClaudeSettings = await claudeMaasSettingsSwitch.disable({
+          claudeHome: resolveRuntimeStateDirectory('claude', currentClaudeConfig),
         });
       }
       if (input.enabled) migrateLegacyCodexHistory(currentConfig, true);
@@ -748,6 +828,9 @@ export class MaasService {
       });
       return { success: true, status };
     } catch (error) {
+      await rollbackClaudeSettings?.().catch((rollbackError) => {
+        log.error('Failed to roll back Claude Code Client sync update:', rollbackError);
+      });
       await rollbackCodexAuth?.().catch((rollbackError) => {
         log.error('Failed to roll back Codex Client sync update:', rollbackError);
       });
@@ -766,11 +849,16 @@ export class MaasService {
   }> {
     const settings = await appSettingsService.get('maas');
     const currentConfig = (await runtimeOverrideSettings.getItem('codex')) ?? {};
+    const currentClaudeConfig = (await runtimeOverrideSettings.getItem('claude')) ?? {};
     let rollback: CodexMaasAuthRollback | undefined;
+    let rollbackClaudeSettings: ClaudeMaasSettingsRollback | undefined;
 
     try {
       rollback = await codexMaasAuthSwitch.disable({
         codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+      });
+      rollbackClaudeSettings = await claudeMaasSettingsSwitch.disable({
+        claudeHome: resolveRuntimeStateDirectory('claude', currentClaudeConfig),
       });
       await appSettingsService.update('maas', {
         externalAgentSyncEnabled: false,
@@ -779,6 +867,9 @@ export class MaasService {
       });
       return { success: true, status: await this.getCodexClientSyncStatus() };
     } catch (error) {
+      await rollbackClaudeSettings?.().catch((rollbackError) => {
+        log.error('Failed to roll back Claude Code Client sync cleanup:', rollbackError);
+      });
       await rollback?.().catch((rollbackError) => {
         log.error('Failed to roll back Codex Client sync cleanup:', rollbackError);
       });
@@ -933,6 +1024,14 @@ export class MaasService {
     if (!isMaasPlatformId(input.platformId)) {
       return { success: false, error: 'Unsupported MaaS platform.' };
     }
+    const settings = await appSettingsService.get('maas');
+    const connection = getConnectedPlatform(settings, input.platformId);
+    if (input.enabled && connection && connection.lastTest?.ok !== true) {
+      return {
+        success: false,
+        error: 'Pass the MaaS connection test before enabling it.',
+      };
+    }
     const inferenceCredentials = input.enabled
       ? await this.getInferenceCredentials(input.platformId)
       : undefined;
@@ -943,7 +1042,6 @@ export class MaasService {
       };
     }
 
-    const settings = await appSettingsService.get('maas');
     const originalRuntimeOverrides = await runtimeOverrideSettings.getOverrides();
     migrateLegacyCodexHistory(
       originalRuntimeOverrides.codex,
@@ -953,6 +1051,7 @@ export class MaasService {
       supportsMaasRuntimeBinding(runtimeId)
     );
     let rollbackCodexAuth: CodexMaasAuthRollback | undefined;
+    let rollbackClaudeSettings: ClaudeMaasSettingsRollback | undefined;
 
     try {
       if (!input.enabled) {
@@ -964,6 +1063,11 @@ export class MaasService {
             rollbackCodexAuth = hasExternalAgentSyncConsent(settings)
               ? await codexMaasAuthSwitch.enableOfficial({ codexHome })
               : await codexMaasAuthSwitch.disable({ codexHome });
+          }
+          if (runtimeId === 'claude') {
+            rollbackClaudeSettings = await claudeMaasSettingsSwitch.disable({
+              claudeHome: resolveRuntimeStateDirectory('claude', currentConfig),
+            });
           }
           if (binding || currentConfig.authProvider === 'yoda-maas') {
             await runtimeOverrideSettings.updateItem(
@@ -995,6 +1099,11 @@ export class MaasService {
                 codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
               });
             }
+            if (runtimeId === 'claude') {
+              rollbackClaudeSettings = await claudeMaasSettingsSwitch.disable({
+                claudeHome: resolveRuntimeStateDirectory('claude', currentConfig),
+              });
+            }
             await runtimeOverrideSettings.updateItem(
               runtimeId,
               resolveRestoredMaasRuntimeConfig(currentConfig, existingBinding)
@@ -1014,6 +1123,13 @@ export class MaasService {
         if (runtimeId === 'codex' && inferenceCredentials) {
           rollbackCodexAuth = await this.applyCodexClientSync(
             resolveRuntimeStateDirectory('codex', currentConfig),
+            input.platformId,
+            inferenceCredentials
+          );
+        }
+        if (runtimeId === 'claude' && inferenceCredentials) {
+          rollbackClaudeSettings = await this.applyClaudeClientSync(
+            resolveRuntimeStateDirectory('claude', currentConfig),
             input.platformId,
             inferenceCredentials
           );
@@ -1046,6 +1162,11 @@ export class MaasService {
         log.error('Failed to roll back global MaaS app settings:', rollbackError);
       }
       try {
+        await rollbackClaudeSettings?.();
+      } catch (rollbackError) {
+        log.error('Failed to roll back global MaaS Claude Code settings:', rollbackError);
+      }
+      try {
         await rollbackCodexAuth?.();
       } catch (rollbackError) {
         log.error('Failed to roll back global MaaS Codex authentication:', rollbackError);
@@ -1066,6 +1187,7 @@ export class MaasService {
       | Awaited<ReturnType<typeof runtimeOverrideSettings.getOverrides>>
       | undefined;
     let rollbackCodexAuth: CodexMaasAuthRollback | undefined;
+    let rollbackClaudeSettings: ClaudeMaasSettingsRollback | undefined;
     try {
       if (!isValidRuntimeId(input.runtimeId) || !supportsMaasRuntimeBinding(input.runtimeId)) {
         return { success: false, error: 'This Agent Client does not support MaaS switching.' };
@@ -1099,6 +1221,13 @@ export class MaasService {
             error: 'Only one MaaS platform can be active at a time.',
           };
         }
+        const connection = getConnectedPlatform(settings, input.platformId);
+        if (connection && connection.lastTest?.ok !== true) {
+          return {
+            success: false,
+            error: 'Pass the MaaS connection test before enabling a Client.',
+          };
+        }
         const inferenceCredentials = await this.getInferenceCredentials(input.platformId);
         if (!inferenceCredentials) {
           return {
@@ -1117,6 +1246,13 @@ export class MaasService {
         if (input.runtimeId === 'codex') {
           rollbackCodexAuth = await this.applyCodexClientSync(
             resolveRuntimeStateDirectory('codex', currentConfig),
+            input.platformId,
+            inferenceCredentials
+          );
+        }
+        if (input.runtimeId === 'claude') {
+          rollbackClaudeSettings = await this.applyClaudeClientSync(
+            resolveRuntimeStateDirectory('claude', currentConfig),
             input.platformId,
             inferenceCredentials
           );
@@ -1150,6 +1286,11 @@ export class MaasService {
           ? await codexMaasAuthSwitch.enableOfficial({ codexHome })
           : await codexMaasAuthSwitch.disable({ codexHome });
       }
+      if (input.runtimeId === 'claude') {
+        rollbackClaudeSettings = await claudeMaasSettingsSwitch.disable({
+          claudeHome: resolveRuntimeStateDirectory('claude', currentConfig),
+        });
+      }
       await this.restoreRuntimeConfig(
         input.runtimeId,
         currentConfig,
@@ -1180,6 +1321,11 @@ export class MaasService {
         } catch (rollbackError) {
           log.error('Failed to roll back MaaS app settings:', rollbackError);
         }
+      }
+      try {
+        await rollbackClaudeSettings?.();
+      } catch (rollbackError) {
+        log.error('Failed to roll back MaaS Claude Code settings:', rollbackError);
       }
       try {
         await rollbackCodexAuth?.();
@@ -1301,6 +1447,23 @@ export class MaasService {
     });
   }
 
+  private applyClaudeClientSync(
+    claudeHome: string,
+    platformId: MaasPlatformId,
+    credentials: MaasInferenceCredentials
+  ): Promise<ClaudeMaasSettingsRollback> {
+    if (!credentials.syncToAgentClient || !supportsMaasPlatformForRuntime('claude', platformId)) {
+      return claudeMaasSettingsSwitch.disable({ claudeHome });
+    }
+    return claudeMaasSettingsSwitch.enable({
+      claudeHome,
+      platformId,
+      displayName: credentials.displayName,
+      endpoint: credentials.endpoint,
+      apiKey: credentials.apiKey,
+    });
+  }
+
   async copyStoredApiKeyToClipboard(
     input: MaasCopyStoredApiKeyInput
   ): Promise<{ success: boolean; error?: string }> {
@@ -1308,7 +1471,7 @@ export class MaasService {
       if (!isMaasPlatformId(input.platformId)) {
         return { success: false, error: 'Unsupported MaaS platform.' };
       }
-      if (input.kind !== 'primary' && input.kind !== 'inference') {
+      if (input.kind !== 'primary' && input.kind !== 'inference' && input.kind !== 'account') {
         return { success: false, error: 'Unsupported MaaS API key kind.' };
       }
       if (input.kind === 'inference' && getMaasPlatformTemplateId(input.platformId) !== 'zenmux') {
@@ -1346,6 +1509,7 @@ export class MaasService {
     let settingsToRestore: MaasSettings | undefined;
     const secretsToRestore = new Map<string, string | null>();
     let rollbackCodexAuth: CodexMaasAuthRollback | undefined;
+    let rollbackClaudeSettings: ClaudeMaasSettingsRollback | undefined;
     try {
       if (!isMaasPlatformId(input.platformId)) {
         return { success: false, error: 'Unsupported MaaS platform.' };
@@ -1358,6 +1522,7 @@ export class MaasService {
       const existing = getConnectedPlatform(settings, input.platformId);
       const apiKey = input.apiKey?.trim() ?? '';
       const inferenceApiKey = input.inferenceApiKey?.trim() ?? '';
+      const accountAccessToken = input.accountAccessToken?.trim() ?? '';
       const usesSeparateInferenceKey = templateId === 'zenmux';
       const clientApiKey = usesSeparateInferenceKey ? inferenceApiKey : apiKey;
       const existingClientKeyFingerprint = usesSeparateInferenceKey
@@ -1387,33 +1552,48 @@ export class MaasService {
       if (!isValidMaasEnvKey(envKey)) {
         return { success: false, error: 'Invalid MaaS environment variable name.' };
       }
+      const nextKeyFingerprint = apiKey
+        ? keyFingerprint(apiKey)
+        : !usesSeparateInferenceKey && retainedClientApiKey
+          ? keyFingerprint(retainedClientApiKey)
+          : (existing?.keyFingerprint ?? null);
+      const nextInferenceKeyFingerprint = usesSeparateInferenceKey
+        ? inferenceApiKey
+          ? keyFingerprint(inferenceApiKey)
+          : retainedClientApiKey
+            ? keyFingerprint(retainedClientApiKey)
+            : (existing?.inferenceKeyFingerprint ?? null)
+        : apiKey
+          ? keyFingerprint(apiKey)
+          : retainedClientApiKey
+            ? keyFingerprint(retainedClientApiKey)
+            : (existing?.inferenceKeyFingerprint ?? existing?.keyFingerprint ?? null);
+      const nextAccountKeyFingerprint = accountAccessToken
+        ? keyFingerprint(accountAccessToken)
+        : (existing?.accountKeyFingerprint ?? null);
+      const endpoint = input.endpoint?.trim() || platform.defaultEndpoint;
+      const configurationChanged = Boolean(
+        !existing ||
+          existing.displayName !== displayName ||
+          existing.endpoint !== endpoint ||
+          resolveMaasEnvKey(input.platformId, existing.displayName, existing.envKey) !== envKey ||
+          existing.keyFingerprint !== nextKeyFingerprint ||
+          existing.inferenceKeyFingerprint !== nextInferenceKeyFingerprint
+      );
       const connection: MaasPlatformConnection = {
         platformId: input.platformId,
         displayName,
-        endpoint: input.endpoint?.trim() || platform.defaultEndpoint,
+        endpoint,
         websiteUrl: input.websiteUrl?.trim() || existing?.websiteUrl,
         description: input.description?.trim() || existing?.description,
         logoUrl: input.logoUrl?.trim() || existing?.logoUrl,
         envKey,
-        keyFingerprint: apiKey
-          ? keyFingerprint(apiKey)
-          : !usesSeparateInferenceKey && retainedClientApiKey
-            ? keyFingerprint(retainedClientApiKey)
-            : (existing?.keyFingerprint ?? null),
-        inferenceKeyFingerprint: usesSeparateInferenceKey
-          ? inferenceApiKey
-            ? keyFingerprint(inferenceApiKey)
-            : retainedClientApiKey
-              ? keyFingerprint(retainedClientApiKey)
-              : (existing?.inferenceKeyFingerprint ?? null)
-          : apiKey
-            ? keyFingerprint(apiKey)
-            : retainedClientApiKey
-              ? keyFingerprint(retainedClientApiKey)
-              : (existing?.inferenceKeyFingerprint ?? existing?.keyFingerprint ?? null),
+        keyFingerprint: nextKeyFingerprint,
+        inferenceKeyFingerprint: nextInferenceKeyFingerprint,
+        accountKeyFingerprint: nextAccountKeyFingerprint,
         connectedAt: existing?.connectedAt ?? now,
-        lastCheckedAt: existing?.lastCheckedAt ?? null,
-        lastTest: existing?.lastTest ?? null,
+        lastCheckedAt: configurationChanged ? null : (existing?.lastCheckedAt ?? null),
+        lastTest: configurationChanged ? null : (existing?.lastTest ?? null),
       };
 
       if (apiKey) {
@@ -1426,6 +1606,11 @@ export class MaasService {
         secretsToRestore.set(key, await encryptedAppSecretsStore.getSecret(key));
         await encryptedAppSecretsStore.setSecret(key, inferenceApiKey);
       }
+      if (accountAccessToken) {
+        const key = accountSecretKey(input.platformId);
+        secretsToRestore.set(key, await encryptedAppSecretsStore.getSecret(key));
+        await encryptedAppSecretsStore.setSecret(key, accountAccessToken);
+      }
 
       await appSettingsService.update('maas', {
         selectedPlatformId: input.platformId,
@@ -1434,11 +1619,13 @@ export class MaasService {
 
       const currentCodexConfig = (await runtimeOverrideSettings.getItem('codex')) ?? {};
       const codexHome = resolveRuntimeStateDirectory('codex', currentCodexConfig);
+      const currentClaudeConfig = (await runtimeOverrideSettings.getItem('claude')) ?? {};
+      const claudeHome = resolveRuntimeStateDirectory('claude', currentClaudeConfig);
 
-      const activeCodexBinding = settings.runtimeBindings.some(
-        (binding) => binding.runtimeId === 'codex' && binding.platformId === input.platformId
+      const activePlatformBinding = settings.runtimeBindings.some(
+        (binding) => binding.platformId === input.platformId
       );
-      if (activeCodexBinding) {
+      if (activePlatformBinding) {
         const activeApiKey = await readPlatformSecret(
           input.platformId,
           templateId === 'zenmux' ? 'inference' : 'primary'
@@ -1449,6 +1636,13 @@ export class MaasService {
           );
         }
         rollbackCodexAuth = await this.applyCodexClientSync(codexHome, input.platformId, {
+          displayName: connection.displayName,
+          endpoint: connection.endpoint,
+          apiKey: activeApiKey,
+          envKey: connection.envKey ?? envKey,
+          syncToAgentClient: hasExternalAgentSyncConsent(settings),
+        });
+        rollbackClaudeSettings = await this.applyClaudeClientSync(claudeHome, input.platformId, {
           displayName: connection.displayName,
           endpoint: connection.endpoint,
           apiKey: activeApiKey,
@@ -1471,6 +1665,14 @@ export class MaasService {
 
       return { success: true, connection: toConnection(connection, input.platformId) };
     } catch (error) {
+      try {
+        await rollbackClaudeSettings?.();
+      } catch (rollbackError) {
+        log.error(
+          'Failed to roll back Claude Code settings after reconnecting MaaS:',
+          rollbackError
+        );
+      }
       try {
         await rollbackCodexAuth?.();
       } catch (rollbackError) {
@@ -1536,6 +1738,7 @@ export class MaasService {
         templateId === 'zenmux'
           ? await readPlatformSecret(input.platformId, 'inference')
           : undefined;
+      const accountAccessToken = await readPlatformSecret(input.platformId, 'account');
 
       if (!apiKey && !inferenceApiKey) {
         return {
@@ -1548,6 +1751,7 @@ export class MaasService {
         platformId: duplicateId,
         apiKey: apiKey ?? undefined,
         inferenceApiKey: inferenceApiKey ?? undefined,
+        accountAccessToken: accountAccessToken ?? undefined,
         displayName: input.displayName.trim() || source.displayName,
         endpoint: source.endpoint,
         websiteUrl: source.websiteUrl,
@@ -1560,6 +1764,30 @@ export class MaasService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to duplicate MaaS Profile.',
+      };
+    }
+  }
+
+  /** Persists the manual Profile order shown in Settings. */
+  async reorderConnections(
+    platformIds: MaasPlatformId[]
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const settings = await appSettingsService.get('maas');
+      const connections = reorderConnectionsByPlatformId(settings.connections, platformIds);
+      if (!connections) {
+        return {
+          success: false,
+          error: 'Profile order must list every saved Profile exactly once.',
+        };
+      }
+      await appSettingsService.update('maas', { connections });
+      return { success: true };
+    } catch (error) {
+      log.error('Failed to reorder MaaS Profiles:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to reorder MaaS Profiles.',
       };
     }
   }
@@ -1667,6 +1895,11 @@ export class MaasService {
             codexHome: resolveRuntimeStateDirectory('codex', config),
           });
         }
+        if (runtimeId === 'claude' && binding) {
+          await claudeMaasSettingsSwitch.disable({
+            claudeHome: resolveRuntimeStateDirectory('claude', config),
+          });
+        }
         await this.restoreRuntimeConfig(runtimeId, config, binding, platformId);
       }
 
@@ -1743,10 +1976,12 @@ export class MaasService {
 
     if (templateId !== 'zenmux') {
       const apiKey = await readPlatformSecret(connection.platformId, 'primary');
+      const accountAccessToken = await readPlatformSecret(connection.platformId, 'account');
       return (
         (await fetchNewApiUsageSummary({
           endpoint: connection.endpoint,
           apiKey: apiKey ?? '',
+          accountAccessToken: accountAccessToken ?? undefined,
           platformId: input.platformId,
         })) ?? emptyUsageSummary(input.platformId)
       );
@@ -1775,6 +2010,9 @@ export class MaasService {
       usageDailyUsd: null,
       usageWeeklyUsd: null,
       usageMonthlyUsd: null,
+      quotaUnlimited: null,
+      accountUsageStatus: 'not-applicable',
+      accountUsageError: null,
       source: result.source,
       fetchedAt: result.fetchedAt,
       period: result.period,

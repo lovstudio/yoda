@@ -1,3 +1,19 @@
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import {
   Activity,
@@ -8,18 +24,19 @@ import {
   Ellipsis,
   ExternalLink,
   Globe2,
+  GripVertical,
   Layers,
   Loader2,
   Pencil,
-  Plug,
   Plus,
+  Save,
   ShieldCheck,
   SquareTerminal,
   Trash2,
   X,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   createMaasProfileId,
@@ -37,9 +54,11 @@ import {
   type MaasPlatformTemplateId,
 } from '@shared/maas';
 import { YODA_MAAS_DOCS_URL } from '@shared/urls';
+import { HeaderActionButton, HeaderActionToolbar } from '@renderer/lib/components/header-actions';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
+import { reorderIdsInVisibleList } from '@renderer/lib/reorder-ids';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
@@ -72,6 +91,7 @@ import {
   useMaasConnections,
   useMaasGlobalBinding,
   useMaasManagedGatewayStars,
+  useReorderMaasConnections,
   useSetCodexClientSync,
   useSetMaasGlobalBinding,
 } from '../useMaas';
@@ -142,12 +162,19 @@ const ProfileLastActivity: React.FC<{ connection: MaasConnection }> = ({ connect
       data-testid="maas-profile-last-activity"
       title={formatDateTime(checkedAt)}
       className={cn(
-        'inline-flex shrink-0 items-center gap-1 text-[11px] tabular-nums',
+        'shrink-0 text-[11px] tabular-nums',
         failed ? 'text-amber-600 dark:text-amber-400' : 'text-foreground-muted'
       )}
     >
-      <span>{t(failed ? 'maas.connection.lastCheckFailed' : 'maas.connection.lastVerified')}</span>
+      <span>{t(failed ? 'maas.connection.lastCheckFailed' : 'maas.connection.lastVerified')} </span>
       <RelativeTime value={checkedAt} />
+      {connection.lastTest?.averageLatencyMs != null ? (
+        <span>
+          {t('maas.connection.testSpeed', {
+            latency: connection.lastTest.averageLatencyMs,
+          })}
+        </span>
+      ) : null}
     </span>
   );
 };
@@ -175,8 +202,17 @@ const ExternalAgentSyncSettingsCard: React.FC = observer(() => {
   const showConfirm = useShowModal('confirmActionModal');
   const status = statusQuery.data;
   const enabled = status?.enabled === true;
+  const claudePublished = Boolean(
+    status?.claude?.managed &&
+      status.claude?.configManaged &&
+      status.claude?.persistentCredentialStored
+  );
   const published = Boolean(
-    status?.enabled && status.managed && status.configManaged && status.persistentCredentialStored
+    status?.enabled &&
+      status.managed &&
+      status.configManaged &&
+      status.persistentCredentialStored &&
+      (!status.claude?.compatible || claudePublished)
   );
   const partial = statusQuery.isError || Boolean(enabled && status?.platformId && !published);
   const codexDetected = appState.dependencies.agentStatuses.codex?.status === 'available';
@@ -246,6 +282,9 @@ const ExternalAgentSyncSettingsCard: React.FC = observer(() => {
               {published
                 ? t('maas.clientSync.activeDetail', {
                     profile: status?.displayName ?? status?.platformId,
+                    clients: status?.claude?.compatible
+                      ? t('maas.clientSync.codexAndClaude')
+                      : 'Codex CLI / App',
                   })
                 : partial
                   ? t('maas.clientSync.partialDetail')
@@ -311,22 +350,30 @@ const ExternalAgentSyncSettingsCard: React.FC = observer(() => {
             className="flex items-center justify-between gap-3 border-t border-border/45 px-3 py-2.5"
           >
             <div className="flex min-w-0 items-center gap-2.5">
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.035] text-foreground-passive">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.055] text-foreground-muted">
                 <SquareTerminal className="size-3.5" />
               </span>
               <div className="min-w-0">
                 <p className="truncate text-xs font-medium text-foreground">Claude Code</p>
                 <p className="mt-0.5 text-[10px] text-foreground-muted">
-                  {t('maas.clientSync.planned')}
+                  {t('maas.clientSync.adapted')}
                 </p>
               </div>
             </div>
-            {claudeDetected ? (
-              <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] text-foreground-muted">
-                <span className="size-1.5 rounded-full bg-foreground/35" />
-                {t('maas.clientSync.detected')}
-              </span>
-            ) : null}
+            <span
+              className={cn(
+                'inline-flex shrink-0 items-center gap-1.5 text-[11px]',
+                claudeDetected ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground-muted'
+              )}
+            >
+              <span
+                className={cn(
+                  'size-1.5 rounded-full',
+                  claudeDetected ? 'bg-emerald-500' : 'bg-foreground/25'
+                )}
+              />
+              {t(claudeDetected ? 'maas.clientSync.detected' : 'maas.clientSync.notDetected')}
+            </span>
           </div>
         </div>
         {enabled ? (
@@ -350,6 +397,11 @@ export const MaasView: React.FC<{
   const { data: connections, isLoading } = useMaasConnections();
   const globalBinding = useMaasGlobalBinding();
   const setGlobalBinding = useSetMaasGlobalBinding();
+  const reorderConnections = useReorderMaasConnections();
+  const sortingSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
   const managedGatewayStarsQuery = useMaasManagedGatewayStars();
   const showZenmuxUsage = useShowModal('zenmuxUsageModal');
   const showAddProfile = useShowModal('addMaasProfileModal');
@@ -381,6 +433,11 @@ export const MaasView: React.FC<{
         (platformId) => !isManagedGatewayId(getMaasPlatformTemplateId(platformId))
       ),
     [allVisiblePlatformIds]
+  );
+  /** Saved Profiles in the visible list — drafts have no persisted slot to reorder. */
+  const sortablePlatformIds = useMemo(
+    () => visiblePlatformIds.filter((platformId) => !draftPlatformIds.includes(platformId)),
+    [visiblePlatformIds, draftPlatformIds]
   );
   const managedGatewayStarsById = useMemo(
     () =>
@@ -468,53 +525,111 @@ export const MaasView: React.FC<{
     [setGlobalBinding, t, toast]
   );
 
-  const renderPlatformAccordion = (platformIds: MaasPlatformId[]) => (
-    <AccordionPrimitive.Root
-      type="single"
-      collapsible
-      value={expandedPlatformId}
-      onValueChange={handlePlatformValueChange}
-      className="overflow-hidden rounded-2xl border border-border/55 bg-background-1/70 shadow-[0_1px_2px_rgba(0,0,0,0.035)]"
-    >
-      {platformIds.map((platformId) => {
-        const connection = findConnection(connections, platformId, draftProfiles.get(platformId));
-        const isDraft = !connection.configured && draftPlatformIds.includes(platformId);
-        const templateId = getMaasPlatformTemplateId(platformId);
-        const enabled = Boolean(
-          globalBinding.data?.enabled && globalBinding.data.platformId === platformId
-        );
-        const platformConfigured = Boolean(
-          connection.connected && hasMaasInferenceCredential(connection)
-        );
-        const enableAvailable = platformConfigured;
-        const enablePending = Boolean(
-          setGlobalBinding.isPending &&
-            setGlobalBinding.variables?.platformId === connection.platformId
-        );
-        return (
-          <PlatformAccordionItem
-            key={platformId}
-            connection={connection}
-            onOpenUsage={
-              templateId === 'zenmux' ? () => showZenmuxUsage({ platformId }) : undefined
-            }
-            onCancelDraft={isDraft ? () => handleCancelDraft(platformId) : undefined}
-            onConnected={() => handlePlatformConnected(platformId)}
-            onDuplicated={(duplicate) => setExpandedPlatformId(duplicate.platformId)}
-            enabled={enabled}
-            enableAvailable={enableAvailable}
-            enablePending={enablePending}
-            enableUpdating={setGlobalBinding.isPending}
-            onEnabledChange={(next) => handlePlatformEnabledChange(connection, next)}
-          />
-        );
-      })}
-    </AccordionPrimitive.Root>
-  );
+  const handleDragEnd = (event: DragEndEvent) => {
+    const overId = event.over?.id;
+    if (overId === undefined || overId === event.active.id) return;
+    const savedPlatformIds = connections?.map((connection) => connection.platformId) ?? [];
+    const reordered = reorderIdsInVisibleList(
+      savedPlatformIds,
+      sortablePlatformIds,
+      String(event.active.id),
+      String(overId)
+    );
+    if (reordered === savedPlatformIds) return;
+    const nextOrder = reordered.filter(isMaasPlatformId);
+    if (nextOrder.length !== savedPlatformIds.length) return;
+    reorderConnections.mutate(nextOrder, {
+      onError: (error) =>
+        toast({
+          title: t('maas.profile.reorderFailed'),
+          description: error instanceof Error ? error.message : String(error),
+          variant: 'destructive',
+        }),
+    });
+  };
+
+  const renderPlatformAccordion = (platformIds: MaasPlatformId[], sortable = false) => {
+    const accordion = (
+      <AccordionPrimitive.Root
+        type="single"
+        collapsible
+        value={expandedPlatformId}
+        onValueChange={handlePlatformValueChange}
+        className={cn(
+          'overflow-hidden rounded-2xl border border-border/55 bg-background-1/70 shadow-[0_1px_2px_rgba(0,0,0,0.035)]',
+          sortable && 'group/maas-profiles'
+        )}
+      >
+        {platformIds.map((platformId) => {
+          const connection = findConnection(connections, platformId, draftProfiles.get(platformId));
+          const isDraft = !connection.configured && draftPlatformIds.includes(platformId);
+          const templateId = getMaasPlatformTemplateId(platformId);
+          const enabled = Boolean(
+            globalBinding.data?.enabled && globalBinding.data.platformId === platformId
+          );
+          const platformConfigured = Boolean(
+            connection.connected && hasMaasInferenceCredential(connection)
+          );
+          const enableAvailable = platformConfigured && connection.lastTest?.ok === true;
+          const enablePending = Boolean(
+            setGlobalBinding.isPending &&
+              setGlobalBinding.variables?.platformId === connection.platformId
+          );
+          const itemProps = {
+            connection,
+            onOpenUsage:
+              templateId === 'zenmux' ? () => showZenmuxUsage({ platformId }) : undefined,
+            onCancelDraft: isDraft ? () => handleCancelDraft(platformId) : undefined,
+            onConnected: () => handlePlatformConnected(platformId),
+            onDuplicated: (duplicate: MaasConnection) =>
+              setExpandedPlatformId(duplicate.platformId),
+            enabled,
+            enableAvailable,
+            enablePending,
+            enableUpdating: setGlobalBinding.isPending,
+            onEnabledChange: (next: boolean) => handlePlatformEnabledChange(connection, next),
+          };
+          // Drafts are not persisted yet, so they stay out of the sortable list.
+          if (!sortable || isDraft) {
+            return (
+              <PlatformAccordionItem
+                key={platformId}
+                {...itemProps}
+                dragHandle={sortable ? MAAS_PROFILE_GUTTER : undefined}
+              />
+            );
+          }
+          return (
+            <SortablePlatformAccordionItem
+              key={platformId}
+              {...itemProps}
+              disabled={reorderConnections.isPending}
+            />
+          );
+        })}
+      </AccordionPrimitive.Root>
+    );
+
+    if (!sortable) return accordion;
+    return (
+      <DndContext
+        sensors={sortingSensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={platformIds.filter((platformId) => !draftPlatformIds.includes(platformId))}
+          strategy={verticalListSortingStrategy}
+        >
+          {accordion}
+        </SortableContext>
+      </DndContext>
+    );
+  };
 
   const platformSections =
     visiblePlatformIds.length > 0 ? (
-      renderPlatformAccordion(visiblePlatformIds)
+      renderPlatformAccordion(visiblePlatformIds, sortablePlatformIds.length > 1)
     ) : (
       <div className="flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/10 px-6 py-8 text-center">
         <Layers className="h-5 w-5 text-foreground-muted" />
@@ -675,7 +790,19 @@ const MaasChapter: React.FC<{
   );
 };
 
-const PlatformAccordionItem: React.FC<{
+type ConnectionEditorState = {
+  dirty: boolean;
+  canSave: boolean;
+  saving: boolean;
+};
+
+const EMPTY_CONNECTION_EDITOR_STATE: ConnectionEditorState = {
+  dirty: false,
+  canSave: false,
+  saving: false,
+};
+
+type PlatformAccordionItemProps = {
   connection: MaasConnection;
   onOpenUsage?: () => void;
   onCancelDraft?: () => void;
@@ -686,7 +813,16 @@ const PlatformAccordionItem: React.FC<{
   enablePending: boolean;
   enableUpdating: boolean;
   onEnabledChange: (enabled: boolean) => void;
-}> = ({
+};
+
+const PlatformAccordionItem: React.FC<
+  PlatformAccordionItemProps & {
+    /** Rendered in the left gutter; pass a spacer to keep rows aligned in a sortable list. */
+    dragHandle?: React.ReactNode;
+    itemRef?: (node: HTMLElement | null) => void;
+    itemStyle?: React.CSSProperties;
+  }
+> = ({
   connection,
   onOpenUsage,
   onCancelDraft,
@@ -697,13 +833,21 @@ const PlatformAccordionItem: React.FC<{
   enablePending,
   enableUpdating,
   onEnabledChange,
+  dragHandle,
+  itemRef,
+  itemStyle,
 }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const disconnectMutation = useDisconnectMaasPlatform();
   const duplicateMutation = useDuplicateMaasProfile();
+  const checkMutation = useCheckMaasConnection();
   const platform = getMaasPlatformDefinition(connection.platformId);
   const templateId = getMaasPlatformTemplateId(connection.platformId);
+  const formId = `maas-profile-form-${useId()}`;
+  const [editorState, setEditorState] = useState<ConnectionEditorState>(
+    EMPTY_CONNECTION_EDITOR_STATE
+  );
 
   const handleDisconnect = () => {
     disconnectMutation.mutate(connection.platformId, {
@@ -737,14 +881,47 @@ const PlatformAccordionItem: React.FC<{
     );
   };
 
+  const handleCheckConnection = () => {
+    checkMutation.mutate(connection.platformId, {
+      onSuccess: (result) => {
+        if (result.ok) return;
+        toast({
+          title: t('maas.connection.testFailed'),
+          description: result.error ?? t('maas.connection.testFailed'),
+          variant: 'destructive',
+        });
+      },
+      onError: (error) =>
+        toast({
+          title: t('maas.connection.testFailed'),
+          description: error instanceof Error ? error.message : String(error),
+          variant: 'destructive',
+        }),
+    });
+  };
+
+  const enableUnavailableReason = connection.lastTest?.ok
+    ? t('maas.global.needsConfiguration')
+    : t('maas.global.needsSuccessfulTest');
+
   return (
     <AccordionPrimitive.Item
+      ref={itemRef}
+      style={itemStyle}
       value={connection.platformId}
       data-maas-platform-id={connection.platformId}
       className="border-b border-border/45 transition-colors last:border-b-0 data-[state=open]:bg-foreground/[0.018]"
     >
-      <AccordionPrimitive.Header className="flex items-center gap-1 pr-3">
-        <AccordionPrimitive.Trigger className="group flex min-w-0 flex-1 items-center gap-3 px-3.5 py-3 text-left outline-none transition-colors hover:bg-foreground/[0.025] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border">
+      <AccordionPrimitive.Header
+        className={cn('flex items-center gap-1 pr-3', dragHandle ? 'pl-1' : undefined)}
+      >
+        {dragHandle}
+        <AccordionPrimitive.Trigger
+          className={cn(
+            'group flex min-w-0 flex-1 items-center gap-3 py-3 pr-3.5 text-left outline-none transition-colors hover:bg-foreground/[0.025] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border',
+            dragHandle ? 'pl-1.5' : 'pl-3.5'
+          )}
+        >
           <ChevronDown
             className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200 group-data-[state=open]:rotate-180"
             aria-hidden="true"
@@ -768,6 +945,45 @@ const PlatformAccordionItem: React.FC<{
             <ProfileLastActivity connection={connection} />
           </span>
         </AccordionPrimitive.Trigger>
+        <HeaderActionToolbar label={t('maas.connection.profileActions')}>
+          {editorState.dirty ? (
+            <HeaderActionButton
+              type="submit"
+              form={formId}
+              label={
+                editorState.saving ? t('maas.connection.saving') : t('maas.connection.saveChanges')
+              }
+              disabled={!editorState.canSave || editorState.saving}
+              data-testid="maas-profile-save"
+            >
+              {editorState.saving ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Save className="size-3.5" />
+              )}
+            </HeaderActionButton>
+          ) : null}
+          <HeaderActionButton
+            type="button"
+            label={
+              checkMutation.isPending ? t('maas.connection.testing') : t('maas.connection.test')
+            }
+            disabled={
+              !connection.connected ||
+              editorState.dirty ||
+              editorState.saving ||
+              checkMutation.isPending
+            }
+            onClick={handleCheckConnection}
+            data-testid="maas-profile-test"
+          >
+            {checkMutation.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Activity className="size-3.5" />
+            )}
+          </HeaderActionButton>
+        </HeaderActionToolbar>
         <div className="flex shrink-0 items-center px-1">
           {enablePending ? (
             <Loader2 className="size-3.5 animate-spin text-foreground-muted" />
@@ -783,7 +999,7 @@ const PlatformAccordionItem: React.FC<{
               }
               title={
                 !enableAvailable && !enabled
-                  ? t('maas.global.needsConfiguration')
+                  ? enableUnavailableReason
                   : enabled
                     ? t('maas.global.disableAria', { platform: connection.displayName })
                     : t('maas.global.enableAria', { platform: connection.displayName })
@@ -853,13 +1069,61 @@ const PlatformAccordionItem: React.FC<{
         }
       >
         <ConnectionPanel
-          key={`${connection.platformId}:${connection.keyFingerprint ?? 'empty'}`}
+          key={`${connection.platformId}:${connection.keyFingerprint ?? 'empty'}:${connection.accountKeyFingerprint ?? 'no-account'}`}
           connection={connection}
           onConnected={onConnected}
+          formId={formId}
+          onEditorStateChange={setEditorState}
           className="border-t border-border/45"
         />
       </AccordionPrimitive.Content>
     </AccordionPrimitive.Item>
+  );
+};
+
+const MAAS_PROFILE_GUTTER = <span aria-hidden="true" className="size-6 shrink-0" />;
+
+const SortablePlatformAccordionItem: React.FC<
+  PlatformAccordionItemProps & { disabled: boolean }
+> = ({ disabled, ...itemProps }) => {
+  const { t } = useTranslation();
+  const {
+    attributes,
+    listeners,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: itemProps.connection.platformId, disabled });
+  const label = t('maas.profile.reorder', { name: itemProps.connection.displayName });
+
+  return (
+    <PlatformAccordionItem
+      {...itemProps}
+      itemRef={setNodeRef}
+      itemStyle={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.45 : 1,
+        position: isDragging ? 'relative' : undefined,
+        zIndex: isDragging ? 1 : undefined,
+      }}
+      dragHandle={
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          className="flex size-6 shrink-0 touch-none cursor-grab items-center justify-center rounded-md text-foreground-passive opacity-0 outline-none transition-[color,background-color,opacity] hover:bg-foreground/5 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-border active:cursor-grabbing disabled:cursor-not-allowed group-hover/maas-profiles:opacity-100"
+          aria-label={label}
+          title={label}
+          disabled={disabled}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-3.5" />
+        </button>
+      }
+    />
   );
 };
 
@@ -977,18 +1241,22 @@ const StoredSecretField: React.FC<{
 const ConnectionPanel: React.FC<{
   connection: MaasConnection;
   onConnected: () => void;
+  formId: string;
+  onEditorStateChange: (state: ConnectionEditorState) => void;
   className?: string;
-}> = ({ connection, onConnected, className }) => {
+}> = ({ connection, onConnected, formId, onEditorStateChange, className }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const connectMutation = useConnectMaasPlatform();
-  const checkMutation = useCheckMaasConnection();
   const templateId = getMaasPlatformTemplateId(connection.platformId);
   const isZenmux = templateId === 'zenmux';
+  const supportsAccountUsageCredential = !isZenmux && templateId !== 'openrouter';
   const [apiKey, setApiKey] = useState('');
   const [inferenceApiKey, setInferenceApiKey] = useState('');
+  const [accountAccessToken, setAccountAccessToken] = useState('');
   const [replacingKey, setReplacingKey] = useState(!connection.connected);
   const [replacingInferenceKey, setReplacingInferenceKey] = useState(false);
+  const [replacingAccountKey, setReplacingAccountKey] = useState(false);
   const [copyingKeyKind, setCopyingKeyKind] = useState<MaasApiKeyKind | null>(null);
   const [displayName, setDisplayName] = useState(connection.displayName);
   const [endpoint, setEndpoint] = useState(connection.endpoint);
@@ -1014,13 +1282,17 @@ const ConnectionPanel: React.FC<{
   const replacingClientKey = isZenmux ? replacingInferenceKey : replacingKey;
   const hasClientKey = Boolean(clientKey.trim() || (hasStoredClientKey && !replacingClientKey));
   const basicConfigurationComplete = Boolean(displayName.trim() && endpoint.trim() && hasClientKey);
-  const hasUnsavedBasicChanges = Boolean(
+  const savedEnvKey = connection.envKey ?? generatedEnvKey;
+  const hasUnsavedChanges = Boolean(
     displayName.trim() !== connection.displayName.trim() ||
       endpoint.trim() !== connection.endpoint.trim() ||
       clientKey.trim() ||
-      replacingClientKey
+      replacingClientKey ||
+      envKey.trim() !== savedEnvKey ||
+      (isZenmux && (apiKey.trim() || replacingKey)) ||
+      (supportsAccountUsageCredential && (accountAccessToken.trim() || replacingAccountKey))
   );
-  const submitDisabled = saving || !basicConfigurationComplete;
+  const canSave = basicConfigurationComplete && isValidMaasEnvKey(envKey.trim());
   const clientApiKeyPlaceholder = isZenmux
     ? t('maas.connection.inferenceApiKeyPlaceholder')
     : templateId === 'litellm'
@@ -1051,6 +1323,7 @@ const ConnectionPanel: React.FC<{
         platformId: connection.platformId,
         apiKey: apiKey.trim() || undefined,
         inferenceApiKey: inferenceApiKey.trim() || undefined,
+        accountAccessToken: accountAccessToken.trim() || undefined,
         displayName,
         endpoint,
         websiteUrl: connection.websiteUrl,
@@ -1063,23 +1336,26 @@ const ConnectionPanel: React.FC<{
           onConnected();
           setApiKey('');
           setInferenceApiKey('');
+          setAccountAccessToken('');
           setReplacingKey(false);
           setReplacingInferenceKey(false);
+          setReplacingAccountKey(false);
         },
         onError: (error) => setFormError(error instanceof Error ? error.message : String(error)),
       }
     );
   };
 
-  const handleCheckConnection = () => {
-    setFormError(null);
-    checkMutation.mutate(connection.platformId, {
-      onSuccess: (result) => {
-        if (!result.ok) setFormError(result.error ?? t('maas.connection.testFailed'));
-      },
-      onError: (error) => setFormError(error instanceof Error ? error.message : String(error)),
-    });
-  };
+  useEffect(() => {
+    onEditorStateChange({ dirty: hasUnsavedChanges, canSave, saving });
+  }, [canSave, hasUnsavedChanges, onEditorStateChange, saving]);
+
+  useEffect(
+    () => () => {
+      onEditorStateChange(EMPTY_CONNECTION_EDITOR_STATE);
+    },
+    [onEditorStateChange]
+  );
 
   const handleCopyStoredKey = (kind: MaasApiKeyKind) => {
     setFormError(null);
@@ -1135,20 +1411,25 @@ const ConnectionPanel: React.FC<{
     setReplacingInferenceKey(false);
   };
 
+  const handleReplaceAccountKey = () => {
+    setFormError(null);
+    setAccountAccessToken('');
+    setReplacingAccountKey(true);
+  };
+
+  const handleCancelReplaceAccountKey = () => {
+    setFormError(null);
+    setAccountAccessToken('');
+    setReplacingAccountKey(false);
+  };
+
   const clientKeyKind: MaasApiKeyKind = isZenmux ? 'inference' : 'primary';
   const clientKeyFingerprint = isZenmux
     ? connection.inferenceKeyFingerprint
     : connection.keyFingerprint;
-  const testLabel =
-    connection.lastTest?.averageLatencyMs != null
-      ? t('maas.connection.testWithLatency', {
-          latency: connection.lastTest.averageLatencyMs,
-        })
-      : t('maas.connection.test');
-
   return (
     <section className={cn('@container bg-background-secondary/15 px-4 py-4', className)}>
-      <form onSubmit={handleSubmit} className="grid gap-4">
+      <form id={formId} onSubmit={handleSubmit} className="grid gap-4">
         <div
           data-testid="maas-basic-settings"
           className="grid gap-4 rounded-xl border border-border/55 bg-background-1/70 px-3.5 py-3.5 shadow-[0_1px_1px_rgba(0,0,0,0.025)] @3xl:grid-cols-2"
@@ -1213,7 +1494,9 @@ const ConnectionPanel: React.FC<{
                 {t(
                   isZenmux
                     ? 'maas.connection.advancedSummaryWithManagement'
-                    : 'maas.connection.advancedSummary'
+                    : supportsAccountUsageCredential
+                      ? 'maas.connection.advancedSummaryWithAccountUsage'
+                      : 'maas.connection.advancedSummary'
                 )}
               </span>
             </span>
@@ -1253,54 +1536,33 @@ const ConnectionPanel: React.FC<{
                     />
                   </label>
                 ) : null}
+                {supportsAccountUsageCredential ? (
+                  <label className="grid gap-1.5 @3xl:col-span-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {t('maas.connection.accountUsageCredential')}
+                    </span>
+                    <StoredSecretField
+                      value={accountAccessToken}
+                      fingerprint={connection.accountKeyFingerprint ?? null}
+                      placeholder={t('maas.connection.accountUsageCredentialPlaceholder')}
+                      replacing={replacingAccountKey}
+                      copying={copyingKeyKind === 'account'}
+                      onValueChange={setAccountAccessToken}
+                      onCopy={() => handleCopyStoredKey('account')}
+                      onReplace={handleReplaceAccountKey}
+                      onCancelReplace={handleCancelReplaceAccountKey}
+                    />
+                    <span className="text-[11px] leading-relaxed text-foreground-muted">
+                      {t('maas.connection.accountUsageCredentialHelper')}
+                    </span>
+                  </label>
+                ) : null}
               </div>
             </div>
           </CollapsibleContent>
         </Collapsible>
 
-        <div
-          data-testid="maas-profile-actions"
-          className="grid gap-3 border-t border-border/55 pt-4"
-        >
-          {formError && <p className="text-xs text-destructive">{formError}</p>}
-
-          <div className="flex w-full justify-end gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={
-                !basicConfigurationComplete ||
-                !connection.connected ||
-                hasUnsavedBasicChanges ||
-                saving ||
-                checkMutation.isPending
-              }
-              onClick={handleCheckConnection}
-              className="flex-1 @3xl:flex-none"
-            >
-              {checkMutation.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Activity className="h-3.5 w-3.5" />
-              )}
-              {checkMutation.isPending ? t('maas.connection.testing') : testLabel}
-            </Button>
-            <Button
-              type="submit"
-              size="sm"
-              disabled={submitDisabled}
-              className="flex-1 @3xl:flex-none"
-            >
-              {saving ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Plug className="h-3.5 w-3.5" />
-              )}
-              {saving ? t('maas.connection.saving') : t('maas.connection.saveChanges')}
-            </Button>
-          </div>
-        </div>
+        {formError ? <p className="text-xs text-destructive">{formError}</p> : null}
       </form>
     </section>
   );
