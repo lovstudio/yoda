@@ -22,6 +22,7 @@ import {
   ComboboxInput,
   ComboboxItem,
   ComboboxList,
+  comboboxPinnedFooterClassNames,
   ComboboxTrigger,
   ComboboxValue,
 } from '@renderer/lib/ui/combobox';
@@ -277,15 +278,15 @@ export const ProjectSelector = observer(function ProjectSelector({
           showClear={!!value}
           placeholder={t('projects.searchProjects')}
         />
-        <ComboboxList className="pb-0">
+        <ComboboxList className={comboboxPinnedFooterClassNames.list}>
           {(group: { value: string; items: ProjectSelectorOption[] }) => (
             <ComboboxGroup
               key={group.value}
               items={group.items}
               className={
                 group.value === 'actions'
-                  ? 'sticky bottom-0 -mx-1 border-t border-border bg-background-quaternary px-1 py-1'
-                  : 'py-1'
+                  ? comboboxPinnedFooterClassNames.footer
+                  : comboboxPinnedFooterClassNames.options
               }
             >
               <ComboboxCollection>

@@ -8,6 +8,7 @@ import {
   ComboboxInput,
   ComboboxItem,
   ComboboxList,
+  comboboxPinnedFooterClassNames,
 } from './combobox';
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -123,15 +124,15 @@ export function ComboboxPopover<T extends ComboboxSelectOption>({
       {trigger}
       <ComboboxContent className={cn('min-w-(--anchor-width)', contentClassName)}>
         <ComboboxInput showTrigger={false} placeholder={placeholder} />
-        <ComboboxList className={'pb-0'}>
+        <ComboboxList className={comboboxPinnedFooterClassNames.list}>
           {(group: ItemGroup<T>) => (
             <ComboboxGroup
               key={group.value as string}
               items={group.items}
               className={
                 group.value === 'actions'
-                  ? 'sticky bottom-0 -mx-1 px-1 border-t border-border bg-popover pt-1 pb-1 rounded-b-md'
-                  : 'py-1'
+                  ? comboboxPinnedFooterClassNames.footer
+                  : comboboxPinnedFooterClassNames.options
               }
             >
               <ComboboxCollection>

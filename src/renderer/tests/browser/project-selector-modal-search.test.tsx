@@ -186,6 +186,24 @@ describe('ProjectSelector in a modal', () => {
     expect(projectOrder).toEqual(['blog', 'yoda', 'visualizer']);
   });
 
+  it('keeps the scroll area on the project group so the actions footer stays put', async () => {
+    await openProjectSearch('');
+    const list = document.querySelector<HTMLElement>('[data-slot="combobox-list"]');
+    const [projectGroup, actionsGroup] = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-slot="combobox-group"]')
+    );
+    if (!list || !projectGroup || !actionsGroup)
+      throw new Error('Expected a project group and an actions group in the popup');
+
+    // Tailwind utilities are not compiled in this environment, so assert the
+    // class contract rather than computed overflow.
+    expect(list).toHaveClass('overflow-hidden');
+    expect(projectGroup).toHaveClass('overflow-y-auto');
+    expect(projectGroup).toHaveClass('flex-1');
+    expect(actionsGroup).not.toHaveClass('sticky');
+    expect(actionsGroup).toHaveClass('shrink-0');
+  });
+
   it('moves the most recently picked project to the top', async () => {
     const items = await openProjectSearch('');
     const visualizer = items.find((item) => item.textContent?.includes('算法可视化'));

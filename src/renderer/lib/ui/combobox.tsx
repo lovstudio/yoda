@@ -143,6 +143,20 @@ function ComboboxList({ className, ...props }: ComboboxPrimitive.List.Props) {
   );
 }
 
+/**
+ * Class names for a popup that pins an actions footer under its options.
+ *
+ * The scroll area has to be the options group, not the list: a scrolling list
+ * puts its scrollbar next to the `sticky` footer too, so the popup reads as if
+ * the footer scrolls with the options. Apply all three together — the list only
+ * lays the two groups out, the options group scrolls, the footer holds its size.
+ */
+const comboboxPinnedFooterClassNames = {
+  list: 'flex flex-col overflow-hidden p-0',
+  options: 'min-h-0 flex-1 scroll-py-1 overflow-y-auto overscroll-contain p-1',
+  footer: 'shrink-0 border-t border-border p-1',
+} as const;
+
 function ComboboxItem({ className, children, ...props }: ComboboxPrimitive.Item.Props) {
   return (
     <ComboboxPrimitive.Item
@@ -271,6 +285,7 @@ function useComboboxAnchor() {
 
 export {
   Combobox,
+  comboboxPinnedFooterClassNames,
   ComboboxInput,
   ComboboxContent,
   ComboboxList,
