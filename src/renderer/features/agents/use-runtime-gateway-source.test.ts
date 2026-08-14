@@ -37,7 +37,9 @@ describe('workspace MaaS placement', () => {
       new URL('../../app/workspace-runtime-bar.tsx', import.meta.url),
       'utf8'
     );
-    const accountIndex = source.indexOf('{shortAccountWindow || officialCodexAccountAvailable');
+    const accountIndex = source.indexOf(
+      '{maasActiveForRuntime || shortAccountWindow || officialCodexAccountAvailable'
+    );
     const accountEnd = source.indexOf('<span className="flex-1" />', accountIndex);
     const popoverIndex = source.indexOf(
       '<Popover open={isMaasPopoverOpen} onOpenChange={setIsMaasPopoverOpen}>',

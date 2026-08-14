@@ -5,7 +5,7 @@ describe('MaaS Gateway entry-point wiring', () => {
   it('keeps MaaS as one global surface outside the Agent account popover', () => {
     const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
     const officialAccountStart = source.indexOf(
-      '{shortAccountWindow || officialCodexAccountAvailable'
+      '{maasActiveForRuntime || shortAccountWindow || officialCodexAccountAvailable'
     );
     const accountEnd = source.indexOf('<span className="flex-1" />', officialAccountStart);
     const maasPopoverStart = source.indexOf('<WorkspaceMaasPopover', accountEnd);

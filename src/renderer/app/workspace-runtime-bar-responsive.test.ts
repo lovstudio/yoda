@@ -18,9 +18,8 @@ describe('Workspace runtime bar responsive layout', () => {
       "const RUNTIME_BAR_ACTION_LABEL_CLASS = 'hidden @min-[1441px]:inline';"
     );
     expect(source).toContain('className="tabular-nums @max-[1440px]:hidden"');
-    expect(source).toContain(
-      'className="hidden min-w-4 text-center font-mono text-[10px] leading-4 tabular-nums @max-[1440px]:inline"'
-    );
+    expect(source).toContain("'absolute top-0 right-0 inline-flex h-3.5 min-w-3.5");
+    expect(source).toContain('@min-[1441px]:hidden');
     expect(source.match(/className=\{RUNTIME_BAR_ACTION_LABEL_CLASS\}/g)).toHaveLength(5);
     expect(source).toContain('triggerLabelClassName={RUNTIME_BAR_ACTION_LABEL_CLASS}');
     expect(skillPopoverSource).toContain('className={triggerLabelClassName}');
@@ -40,6 +39,7 @@ describe('Workspace runtime bar responsive layout', () => {
 
   it('progressively removes secondary session copy before compact status visuals', () => {
     expect(source).toContain('@max-[1120px]:hidden');
+    expect(source).toContain('max-w-40 truncate @max-[1440px]:hidden');
     expect(source).toContain('truncate font-medium text-foreground @max-[720px]:hidden');
     expect(source).toContain("compact ? 'h-1 w-9 @max-[720px]:hidden'");
   });

@@ -126,7 +126,7 @@ type PendingAcceptanceTask = {
 type AgentPanelTab = 'all' | 'working' | 'needs-reply' | 'pending-acceptance';
 
 const RUNTIME_BAR_ACTION_CLASS =
-  'flex h-6 min-w-7 shrink-0 items-center justify-center gap-1 rounded-md px-1.5 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border';
+  'relative flex h-6 w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border @min-[1441px]:w-auto @min-[1441px]:gap-1 @min-[1441px]:px-1.5';
 const RUNTIME_BAR_ACTION_LABEL_CLASS = 'hidden @min-[1441px]:inline';
 
 function agentSessionKey(
@@ -1415,14 +1415,23 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         >
           <Bot className="size-3.5" />
           <span className="tabular-nums @max-[1440px]:hidden">{agentTriggerText}</span>
-          <span className="hidden min-w-4 text-center font-mono text-[10px] leading-4 tabular-nums @max-[1440px]:inline">
+          <span
+            className={cn(
+              'absolute top-0 right-0 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-background-secondary px-0.5 font-mono text-[8px] leading-none tabular-nums ring-1 ring-border/60 @min-[1441px]:hidden',
+              attentionAgentCount > 0
+                ? 'text-amber-600 dark:text-amber-300'
+                : workingAgentCount > 0
+                  ? 'text-primary'
+                  : 'text-foreground-passive'
+            )}
+          >
             {agentSessionCount}
           </span>
           {attentionAgentCount > 0 || workingAgentCount > 0 ? (
             <span
               aria-hidden
               className={cn(
-                'size-1.5 rounded-full',
+                'hidden size-1.5 rounded-full @min-[1441px]:inline-block',
                 attentionAgentCount > 0 ? 'bg-amber-500' : 'bg-primary'
               )}
             />
@@ -1760,7 +1769,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         >
           <Cloud aria-hidden className="size-3.5" />
           {maasPresentation.providerName ? (
-            <span className="inline-block max-w-40 truncate @max-[1120px]:hidden">
+            <span className="inline-block max-w-40 truncate @max-[1440px]:hidden">
               {t('workspaceRuntime.maas.providerSuffix', {
                 provider: maasPresentation.providerName,
               })}
@@ -1773,7 +1782,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           <span
             aria-hidden
             className={cn(
-              'size-1.5 rounded-full',
+              'absolute top-1 right-0.5 size-1.5 rounded-full @min-[1441px]:static',
               globalMaasBinding.data?.effective
                 ? 'bg-emerald-500'
                 : globalMaasBinding.data?.enabled
@@ -1797,11 +1806,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           </PopoverContent>
         ) : null}
       </Popover>
-      <span
-        aria-hidden
-        data-slot="workspace-runtime-group-divider"
-        className="mx-1 h-3.5 w-px shrink-0 bg-border/70"
-      />
       <button
         type="button"
         title={t('workspaceRuntime.doctor')}

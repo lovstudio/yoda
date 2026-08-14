@@ -10,14 +10,14 @@ describe('Workspace runtime bar visual rhythm', () => {
 
   it('uses one consistent compact action geometry', () => {
     expect(source).toContain(
-      'flex h-6 min-w-7 shrink-0 items-center justify-center gap-1 rounded-md px-1.5'
+      'relative flex h-6 w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0'
     );
+    expect(source).toContain('@min-[1441px]:w-auto');
   });
 
-  it('uses fixed spacing and a single divider between status and utility actions', () => {
+  it('uses fixed spacing without inserting an oversized group break', () => {
     expect(source).toContain('items-center gap-0.5 overflow-hidden whitespace-nowrap');
-    expect(source).toContain('data-slot="workspace-runtime-group-divider"');
-    expect(source).toContain('className="mx-1 h-3.5 w-px shrink-0 bg-border/70"');
+    expect(source).not.toContain('workspace-runtime-group-divider');
   });
 
   it('uses the pressed surface only for open or toggle state', () => {
@@ -26,9 +26,11 @@ describe('Workspace runtime bar visual rhythm', () => {
     expect(source).toContain("terminalActive && 'bg-background-2 text-foreground'");
   });
 
-  it('keeps the notification count legible without a dominant solid badge', () => {
-    expect(notificationSource).toContain('bg-foreground/10');
-    expect(notificationSource).toContain('h-4 min-w-4');
+  it('overlays compact counters instead of widening their action buttons', () => {
+    expect(notificationSource).toContain('absolute top-0 right-0');
+    expect(notificationSource).toContain('h-3.5 min-w-3.5');
+    expect(source).toContain('absolute top-0 right-0 inline-flex h-3.5 min-w-3.5');
+    expect(source).toContain('absolute top-1 right-0.5 size-1.5');
     expect(notificationSource).not.toContain('bg-foreground px-1 text-center');
   });
 });

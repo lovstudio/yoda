@@ -78,7 +78,7 @@ export function WorkspaceNotificationCenter({
         <Bell aria-hidden className="size-3.5" />
         <span className={triggerLabelClassName}>{t('workspaceRuntime.notifications.title')}</span>
         {unreadCount > 0 ? (
-          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground/10 px-1 font-mono text-[9px] font-semibold leading-none text-foreground tabular-nums">
+          <span className="absolute top-0 right-0 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-background-secondary px-0.5 font-mono text-[8px] font-semibold leading-none text-foreground tabular-nums ring-1 ring-border/60 @min-[1441px]:static @min-[1441px]:h-4 @min-[1441px]:min-w-4 @min-[1441px]:px-1 @min-[1441px]:text-[9px]">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         ) : null}
