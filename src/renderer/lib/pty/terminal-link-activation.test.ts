@@ -18,8 +18,8 @@ describe('terminal link activation', () => {
     expect(isTerminalFileLinkActivation(mouseEvent({ button: 1 }))).toBe(false);
   });
 
-  it('keeps web links behind the platform modifier', () => {
-    expect(isTerminalLinkActivation(mouseEvent())).toBe(false);
-    expect(isTerminalLinkActivation(mouseEvent({ ctrlKey: true, metaKey: true }))).toBe(true);
+  it('opens web links with an ordinary primary click', () => {
+    expect(isTerminalLinkActivation(mouseEvent())).toBe(true);
+    expect(isTerminalLinkActivation(mouseEvent({ button: 1 }))).toBe(false);
   });
 });

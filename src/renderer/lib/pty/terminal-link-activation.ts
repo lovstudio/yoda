@@ -1,10 +1,7 @@
 import type { Terminal } from '@xterm/xterm';
 
-const IS_MAC_PLATFORM =
-  typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
-
 export function isTerminalLinkActivation(event: MouseEvent): boolean {
-  return event.button === 0 && (IS_MAC_PLATFORM ? event.metaKey : event.ctrlKey);
+  return event.button === 0;
 }
 
 /** Smart file paths behave like ordinary links; no keyboard modifier is required. */
@@ -13,7 +10,7 @@ export function isTerminalFileLinkActivation(event: MouseEvent): boolean {
 }
 
 export function getTerminalLinkActivationHint(): string {
-  return IS_MAC_PLATFORM ? 'Hold Cmd and click to open' : 'Hold Ctrl and click to open';
+  return 'Click to open';
 }
 
 const HOVER_TOOLTIP_DELAY_MS = 2000;
