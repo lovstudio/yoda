@@ -912,7 +912,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       data-yoda-surface="workspace-runtime-bar"
       className="@container flex h-8 min-w-0 shrink-0 items-center gap-0.5 overflow-hidden whitespace-nowrap border-t border-border bg-background-secondary px-1.5 text-[11px] text-foreground-muted"
     >
-      {!runtimeId ? renderConfigPopover() : null}
+      {renderConfigPopover()}
       {runtimeId ? (
         <div className="flex min-w-0 items-center gap-0.5 overflow-hidden @min-[1121px]:gap-1.5">
           <Popover open={isRuntimePopoverOpen} onOpenChange={setIsRuntimePopoverOpen}>
@@ -992,7 +992,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               />
             </PopoverContent>
           </Popover>
-          {renderConfigPopover()}
           <WorkspacePromptPopover
             runtimeId={runtimeId}
             projectId={activeProjectId}

@@ -60,7 +60,7 @@ describe('shared composer settings surfaces', () => {
 
     expect(configDefinitionIndex).toBeGreaterThan(0);
     expect(runtimeEntry).toBeGreaterThan(0);
-    expect(runtimeEntry).toBeLessThan(configRenderIndex);
+    expect(configRenderIndex).toBeLessThan(runtimeEntry);
     expect(configRenderIndex).toBeLessThan(promptIndex);
     expect(agentsIndex).toBeGreaterThan(configRenderIndex);
   });

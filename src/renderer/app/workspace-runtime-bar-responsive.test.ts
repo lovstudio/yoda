@@ -25,13 +25,19 @@ describe('Workspace runtime bar responsive layout', () => {
     expect(skillPopoverSource).toContain('className={triggerLabelClassName}');
   });
 
-  it('keeps configuration in the left group and aligns its popover to that group', () => {
+  it('keeps global configuration as the first footer action and aligns its popover left', () => {
+    const footerStart = source.indexOf('<footer');
+    const configRender = source.indexOf('{renderConfigPopover()}', footerStart);
+    const runtimeGroup = source.indexOf('{runtimeId ? (', footerStart);
     const configStart = source.indexOf(
       '<Popover open={isConfigPopoverOpen} onOpenChange={setIsConfigPopoverOpen}>'
     );
     const groupSpacer = source.indexOf('<span className="flex-1" />');
     const configEnd = source.indexOf('</Popover>', configStart);
 
+    expect(configRender).toBeGreaterThan(footerStart);
+    expect(configRender).toBeLessThan(runtimeGroup);
+    expect(source.match(/\{renderConfigPopover\(\)\}/g)).toHaveLength(1);
     expect(configStart).toBeGreaterThan(-1);
     expect(configStart).toBeLessThan(groupSpacer);
     expect(source.slice(configStart, configEnd)).toContain('align="start"');
