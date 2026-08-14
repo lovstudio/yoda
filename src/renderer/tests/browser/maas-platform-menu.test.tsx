@@ -806,6 +806,7 @@ describe('MaaS platform menu', () => {
   it('allows the bottom-bar selector to use a configured remote Profile directly', async () => {
     mocks.gatewayAvailability = 'not-installed';
     mocks.connections = [connection({ platformId: 'custom:first', displayName: 'First Custom' })];
+    const onManagePlatform = vi.fn();
     const { MaasGlobalSelector } = await import(
       '@renderer/features/maas/components/MaasGlobalSelector'
     );
@@ -813,6 +814,7 @@ describe('MaaS platform menu', () => {
       root.render(
         createElement(MaasGlobalSelector, {
           onOpenMarketplace: mocks.openMarketplace,
+          onManagePlatform,
         })
       )
     );
@@ -822,6 +824,12 @@ describe('MaaS platform menu', () => {
     );
     expect(enableCheckbox?.hasAttribute('data-disabled')).toBe(false);
     expect(host.querySelector('[data-maas-gateway-requirement]')).toBeNull();
+
+    const manageButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="maas.global.manage"]'
+    );
+    await act(async () => manageButton?.click());
+    expect(onManagePlatform).toHaveBeenCalledWith('custom:first');
   });
 });
 

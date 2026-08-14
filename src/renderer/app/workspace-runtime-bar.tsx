@@ -157,6 +157,18 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const [accountUsageWarningThresholdDraft, setAccountUsageWarningThresholdDraft] = useState('95');
   const notifiedAccountUsageWindowsRef = useRef(new Set<string>());
   const dismissMaasPopover = useCallback(() => setIsMaasPopoverOpen(false), []);
+  const openMaasManagement = useCallback(() => {
+    dismissMaasPopover();
+    appState.navigation.navigate('maas');
+  }, [dismissMaasPopover]);
+  const openMaasMarketplace = useCallback(() => {
+    dismissMaasPopover();
+    appState.navigation.navigate('library', { section: 'extensions' });
+  }, [dismissMaasPopover]);
+  const openMaasLogs = useCallback(() => {
+    dismissMaasPopover();
+    appState.sidePane.pinView('settings', { tab: 'ai-logs' });
+  }, [dismissMaasPopover]);
   useDismissOnWindowBlur(isMaasPopoverOpen, dismissMaasPopover);
   const resourceHistory = useSyncExternalStore(
     workspaceResourceHistoryStore.subscribe,
@@ -1829,10 +1841,8 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           </div>
           <div className="grid gap-3 p-3">
             <MaasGlobalSelector
-              onManagePlatform={() => appState.navigation.navigate('maas')}
-              onOpenMarketplace={() =>
-                appState.navigation.navigate('library', { section: 'extensions' })
-              }
+              onManagePlatform={openMaasManagement}
+              onOpenMarketplace={openMaasMarketplace}
             />
             <div className="flex gap-2">
               <Button
@@ -1840,7 +1850,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                 variant="outline"
                 size="sm"
                 className="flex-1"
-                onClick={() => appState.navigation.navigate('maas')}
+                onClick={openMaasManagement}
               >
                 {t('workspaceRuntime.maas.manage')}
               </Button>
@@ -1849,7 +1859,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                 variant="outline"
                 size="sm"
                 className="flex-1"
-                onClick={() => appState.sidePane.pinView('settings', { tab: 'ai-logs' })}
+                onClick={openMaasLogs}
               >
                 {t('workspaceRuntime.maas.openLogs')}
               </Button>
