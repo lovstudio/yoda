@@ -200,8 +200,13 @@ async function readBoundedHtml(response: Response): Promise<string> {
   }
 }
 
-function migrateLegacyCodexHistory(providerConfig: RuntimeCustomConfig | undefined): void {
-  const migration = migrateLegacyCodexMaasHistoryForConfig(providerConfig);
+function migrateLegacyCodexHistory(
+  providerConfig: RuntimeCustomConfig | undefined,
+  includeNativeProvider = false
+): void {
+  const migration = migrateLegacyCodexMaasHistoryForConfig(providerConfig, {
+    includeNativeProvider,
+  });
   if (migration.failed) {
     log.warn('Could not migrate legacy Codex MaaS thread metadata; will retry later', {
       rows: migration.rows,
@@ -532,7 +537,11 @@ export class MaasService {
     const settings = await appSettingsService.get('maas');
     const binding = settings.runtimeBindings.find((item) => item.runtimeId === 'codex');
     if (!binding) {
-      await codexMaasAuthSwitch.disable({ codexHome });
+      if (hasExternalAgentSyncConsent(settings)) {
+        await codexMaasAuthSwitch.enableOfficial({ codexHome });
+      } else {
+        await codexMaasAuthSwitch.disable({ codexHome });
+      }
       return;
     }
     if (!supportsMaasPlatformForRuntime('codex', binding.platformId)) {
@@ -558,7 +567,16 @@ export class MaasService {
   async reconcileActiveBindings(): Promise<void> {
     const settings = await appSettingsService.get('maas');
     const binding = settings.runtimeBindings.find((item) => item.runtimeId === 'codex');
-    if (!binding) return;
+    const currentConfig = (await runtimeOverrideSettings.getItem('codex')) ?? {};
+    migrateLegacyCodexHistory(currentConfig, hasExternalAgentSyncConsent(settings));
+    if (!binding) {
+      if (hasExternalAgentSyncConsent(settings)) {
+        await codexMaasAuthSwitch.enableOfficial({
+          codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+        });
+      }
+      return;
+    }
     if (!supportsMaasPlatformForRuntime('codex', binding.platformId)) {
       throw new Error('The active MaaS platform is not compatible with Codex.');
     }
@@ -570,7 +588,6 @@ export class MaasService {
       );
     }
 
-    const currentConfig = (await runtimeOverrideSettings.getItem('codex')) ?? {};
     let rollbackCodexAuth: CodexMaasAuthRollback | undefined;
 
     try {
@@ -686,7 +703,12 @@ export class MaasService {
           loginItemEnabled:
             input.loginItemEnabled ?? settings.externalAgentSyncLoginItemEnabled ?? true,
         });
+      } else {
+        rollbackCodexAuth = await codexMaasAuthSwitch.enableOfficial({
+          codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+        });
       }
+      if (input.enabled) migrateLegacyCodexHistory(currentConfig, true);
 
       await appSettingsService.update('maas', {
         externalAgentSyncEnabled: input.enabled,
@@ -898,7 +920,10 @@ export class MaasService {
 
     const settings = await appSettingsService.get('maas');
     const originalRuntimeOverrides = await runtimeOverrideSettings.getOverrides();
-    migrateLegacyCodexHistory(originalRuntimeOverrides.codex);
+    migrateLegacyCodexHistory(
+      originalRuntimeOverrides.codex,
+      hasExternalAgentSyncConsent(settings)
+    );
     const supportedRuntimeIds = RUNTIME_IDS.filter((runtimeId) =>
       supportsMaasRuntimeBinding(runtimeId)
     );
@@ -910,9 +935,10 @@ export class MaasService {
           const currentConfig = (await runtimeOverrideSettings.getItem(runtimeId)) ?? {};
           const binding = settings.runtimeBindings.find((item) => item.runtimeId === runtimeId);
           if (runtimeId === 'codex') {
-            rollbackCodexAuth = await codexMaasAuthSwitch.disable({
-              codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
-            });
+            const codexHome = resolveRuntimeStateDirectory('codex', currentConfig);
+            rollbackCodexAuth = hasExternalAgentSyncConsent(settings)
+              ? await codexMaasAuthSwitch.enableOfficial({ codexHome })
+              : await codexMaasAuthSwitch.disable({ codexHome });
           }
           if (binding || currentConfig.authProvider === 'yoda-maas') {
             await runtimeOverrideSettings.updateItem(
@@ -1029,7 +1055,7 @@ export class MaasService {
       );
       const currentConfig = (await runtimeOverrideSettings.getItem(input.runtimeId)) ?? {};
       if (input.runtimeId === 'codex') {
-        migrateLegacyCodexHistory(currentConfig);
+        migrateLegacyCodexHistory(currentConfig, hasExternalAgentSyncConsent(settings));
       }
 
       if (input.enabled) {
@@ -1082,9 +1108,10 @@ export class MaasService {
       }
 
       if (input.runtimeId === 'codex') {
-        rollbackCodexAuth = await codexMaasAuthSwitch.disable({
-          codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
-        });
+        const codexHome = resolveRuntimeStateDirectory('codex', currentConfig);
+        rollbackCodexAuth = hasExternalAgentSyncConsent(settings)
+          ? await codexMaasAuthSwitch.enableOfficial({ codexHome })
+          : await codexMaasAuthSwitch.disable({ codexHome });
       }
       await this.restoreRuntimeConfig(
         input.runtimeId,

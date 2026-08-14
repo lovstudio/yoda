@@ -13,6 +13,19 @@ import {
 import type * as ImageAttachments from './image-attachments';
 import { LocalConversationProvider } from './local-conversation';
 
+const CODEX_OFFICIAL_PROVIDER_ARGS = [
+  '-c',
+  'model_provider="custom"',
+  '-c',
+  'model_providers.custom.name="OpenAI"',
+  '-c',
+  'model_providers.custom.requires_openai_auth=true',
+  '-c',
+  'model_providers.custom.supports_websockets=true',
+  '-c',
+  'model_providers.custom.wire_api="responses"',
+];
+
 const mocks = vi.hoisted(() => ({
   appSettingsGet: vi.fn(),
   aiLogFinish: vi.fn(),
@@ -806,7 +819,7 @@ describe('LocalConversationProvider', () => {
         resumeSessionIdArg: true,
         initialPromptFlag: '',
       },
-      undefined
+      'custom'
     );
     expect(mocks.resolveLocalPtySpawn).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -817,7 +830,13 @@ describe('LocalConversationProvider', () => {
       })
     );
     expect(spawned).toHaveLength(2);
-    expect(spawned[1].options.args).toEqual(['resume', '--cd', '/workspace', 'codex-thread-1']);
+    expect(spawned[1].options.args).toEqual([
+      'resume',
+      '--cd',
+      '/workspace',
+      'codex-thread-1',
+      ...CODEX_OFFICIAL_PROVIDER_ARGS,
+    ]);
   });
 
   it('starts a fresh Codex session when the persisted thread is missing', async () => {
@@ -838,7 +857,7 @@ describe('LocalConversationProvider', () => {
     await provider.startSession(codexConversation, { cols: 80, rows: 24 }, true);
 
     expect(spawned).toHaveLength(1);
-    expect(spawned[0].options.args).toEqual([]);
+    expect(spawned[0].options.args).toEqual(CODEX_OFFICIAL_PROVIDER_ARGS);
     expect(mocks.ensureCodexResumeProviderCompatible).not.toHaveBeenCalled();
     expect(mocks.ensureCodexThreadUnarchived).not.toHaveBeenCalled();
     expect(mocks.aiLogStart).toHaveBeenCalledWith(
@@ -888,6 +907,7 @@ describe('LocalConversationProvider', () => {
       'read-only',
       '--ask-for-approval',
       'never',
+      ...CODEX_OFFICIAL_PROVIDER_ARGS,
     ]);
     expect(mocks.injectTuiStartupInput).toHaveBeenCalledWith({
       pty: spawned[0].pty,
@@ -950,7 +970,13 @@ describe('LocalConversationProvider', () => {
         providerVars: { CODEX_HOME: '/state/codex-account-a' },
       })
     );
-    expect(spawned[0].options.args).toEqual(['resume', '--cd', '/workspace', 'native-thread-1']);
+    expect(spawned[0].options.args).toEqual([
+      'resume',
+      '--cd',
+      '/workspace',
+      'native-thread-1',
+      ...CODEX_OFFICIAL_PROVIDER_ARGS,
+    ]);
   });
 
   it('binds a surviving tmux session to the current Codex fork instead of its imported root', async () => {
@@ -984,6 +1010,7 @@ describe('LocalConversationProvider', () => {
       '--cd',
       '/workspace',
       'current-fork-thread',
+      ...CODEX_OFFICIAL_PROVIDER_ARGS,
     ]);
     expect(mocks.resolveLocalPtySpawn).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1025,7 +1052,7 @@ describe('LocalConversationProvider', () => {
       expect(spawned[0].options.args[1]).toContain('hook-endpoint.json');
     }
     expect(spawned[0].options.args[1]).not.toContain('YODA_HOOK_PORT');
-    expect(spawned[0].options.args.slice(2)).toEqual(['Fix this']);
+    expect(spawned[0].options.args.slice(2)).toEqual(['Fix this', ...CODEX_OFFICIAL_PROVIDER_ARGS]);
   });
 
   it('launches Codex against the selected MaaS provider with a process-scoped key', async () => {
@@ -1055,9 +1082,9 @@ describe('LocalConversationProvider', () => {
     expect(spawned[0].options.args.join(' ')).not.toContain('yoda-maas');
     expect(spawned[0].options.args).toEqual(
       expect.arrayContaining([
-        'model_provider="zenmux"',
-        'model_providers.zenmux.base_url="https://zenmux.example.test/v1"',
-        'model_providers.zenmux.env_key="ZENMUX_API_KEY"',
+        'model_provider="custom"',
+        'model_providers.custom.base_url="https://zenmux.example.test/v1"',
+        'model_providers.custom.env_key="ZENMUX_API_KEY"',
         'model_catalog_json="/state/codex/.yoda/maas-model-catalog.json"',
       ])
     );
@@ -1140,7 +1167,7 @@ describe('LocalConversationProvider', () => {
 
     await provider.startSession(codexConversation, { cols: 80, rows: 24 }, false, 'Fix this');
 
-    expect(spawned[0].options.args).toEqual(['Fix this']);
+    expect(spawned[0].options.args).toEqual(['Fix this', ...CODEX_OFFICIAL_PROVIDER_ARGS]);
     expect(mocks.getRuntimeInferenceCredentials).not.toHaveBeenCalled();
     expect(mocks.buildAgentEnv).toHaveBeenCalledWith(
       expect.objectContaining({

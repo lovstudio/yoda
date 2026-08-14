@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -21,7 +21,7 @@ describe('legacy Codex MaaS history compatibility', () => {
     rmSync(directory, { recursive: true, force: true });
   });
 
-  it('retags legacy yoda-maas threads as openai in SQLite and rollout metadata', () => {
+  it('moves official and legacy Yoda sessions into one shared provider bucket', () => {
     const legacyRolloutPath = join(directory, 'legacy.jsonl');
     const nativeRolloutPath = join(directory, 'native.jsonl');
     const firstMeta = {
@@ -69,12 +69,19 @@ describe('legacy Codex MaaS history compatibility', () => {
     );
     db.close();
 
-    expect(migrateLegacyCodexMaasHistory({ statePath })).toEqual({ rows: 1, files: 1 });
+    const legacyBytes = Buffer.byteLength(readFileSync(legacyRolloutPath, 'utf8'));
+    const nativeBytes = Buffer.byteLength(nativeContents);
+    const migration = migrateLegacyCodexMaasHistory({ statePath, includeNativeProvider: true });
+    expect(migration).toMatchObject({ rows: 2, files: 2 });
+    expect(migration.backupPath && existsSync(migration.backupPath)).toBe(true);
 
     const migratedDb = new Database(statePath, { readonly: true });
     expect(
       migratedDb.prepare('SELECT model_provider FROM threads WHERE id = ?').get('legacy-thread')
-    ).toEqual({ model_provider: 'openai' });
+    ).toEqual({ model_provider: 'custom' });
+    expect(
+      migratedDb.prepare('SELECT model_provider FROM threads WHERE id = ?').get('native-thread')
+    ).toEqual({ model_provider: 'custom' });
     migratedDb.close();
 
     const records = readFileSync(legacyRolloutPath, 'utf8')
@@ -82,13 +89,15 @@ describe('legacy Codex MaaS history compatibility', () => {
       .split('\n')
       .map((line) => JSON.parse(line) as { type: string; payload: Record<string, unknown> });
     expect(records).toHaveLength(3);
-    expect(records[0]?.payload.model_provider).toBe('openai');
+    expect(records[0]?.payload.model_provider).toBe('custom');
     expect(records.at(-1)?.payload).toMatchObject({
       id: 'legacy-thread',
-      model_provider: 'openai',
+      model_provider: 'custom',
       git: { branch: 'feature/keep-me' },
     });
-    expect(readFileSync(nativeRolloutPath, 'utf8')).toBe(nativeContents);
+    expect(readFileSync(nativeRolloutPath, 'utf8')).toContain('"model_provider":"custom"');
+    expect(Buffer.byteLength(readFileSync(legacyRolloutPath, 'utf8'))).toBe(legacyBytes);
+    expect(Buffer.byteLength(readFileSync(nativeRolloutPath, 'utf8'))).toBe(nativeBytes);
 
     const onceMigrated = readFileSync(legacyRolloutPath, 'utf8');
     expect(migrateLegacyCodexMaasHistory({ statePath })).toEqual({ rows: 0, files: 0 });
@@ -97,6 +106,24 @@ describe('legacy Codex MaaS history compatibility', () => {
 
   it('is a no-op when Codex has not created a state database', () => {
     expect(migrateLegacyCodexMaasHistory({ statePath })).toEqual({ rows: 0, files: 0 });
+  });
+
+  it('leaves native OpenAI history alone until external history sync is enabled', () => {
+    const rolloutPath = join(directory, 'native-only.jsonl');
+    const contents = `${JSON.stringify({
+      type: 'session_meta',
+      payload: { id: 'native-only', model_provider: 'openai' },
+    })}\n`;
+    writeFileSync(rolloutPath, contents);
+    const db = new Database(statePath);
+    db.exec(
+      'CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL, model_provider TEXT NOT NULL)'
+    );
+    db.prepare('INSERT INTO threads VALUES (?, ?, ?)').run('native-only', rolloutPath, 'openai');
+    db.close();
+
+    expect(migrateLegacyCodexMaasHistory({ statePath })).toEqual({ rows: 0, files: 0 });
+    expect(readFileSync(rolloutPath, 'utf8')).toBe(contents);
   });
 
   it('retags the requested thread when its historical provider is no longer configured', () => {

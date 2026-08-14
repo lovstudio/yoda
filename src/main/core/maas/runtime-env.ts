@@ -17,7 +17,7 @@ import {
   supportsRuntimeMaasSwitch,
   type RuntimeId,
 } from '@shared/runtime-registry';
-import { resolveCodexMaasProviderSpec } from './codex-maas-provider';
+import { CODEX_SHARED_PROVIDER_ID, resolveCodexMaasProviderSpec } from './codex-maas-provider';
 
 export type MaasRuntimeCredentials = {
   platformId: MaasPlatformId;
@@ -95,6 +95,26 @@ export function resolveCodexMaasRuntimeArgs(
     '-c',
     `model_providers.${provider.providerId}.env_key=${formatTomlString(envKey)}`,
     ...(modelCatalogPath ? ['-c', `model_catalog_json=${formatTomlString(modelCatalogPath)}`] : []),
+  ];
+}
+
+/**
+ * Project Codex's built-in OpenAI account through the same provider id used by
+ * MaaS. Authentication remains owned by Codex via auth.json; only the history
+ * bucket changes.
+ */
+export function resolveCodexOfficialRuntimeArgs(): string[] {
+  return [
+    '-c',
+    `model_provider=${formatTomlString(CODEX_SHARED_PROVIDER_ID)}`,
+    '-c',
+    `model_providers.${CODEX_SHARED_PROVIDER_ID}.name="OpenAI"`,
+    '-c',
+    `model_providers.${CODEX_SHARED_PROVIDER_ID}.requires_openai_auth=true`,
+    '-c',
+    `model_providers.${CODEX_SHARED_PROVIDER_ID}.supports_websockets=true`,
+    '-c',
+    `model_providers.${CODEX_SHARED_PROVIDER_ID}.wire_api="responses"`,
   ];
 }
 

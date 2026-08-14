@@ -46,9 +46,10 @@ import {
   migrateLegacyCodexMaasHistoryForConfig,
 } from '@main/core/maas/codex-history-compat';
 import { ensureCodexMaasCompatibleModelCatalog } from '@main/core/maas/codex-maas-model-catalog';
-import { resolveCodexMaasProviderSpec } from '@main/core/maas/codex-maas-provider';
+import { CODEX_SHARED_PROVIDER_ID } from '@main/core/maas/codex-maas-provider';
 import {
   resolveCodexMaasRuntimeArgs,
+  resolveCodexOfficialRuntimeArgs,
   resolveMaasRuntimeEnv,
   rewriteCodexMaasModelArgs,
 } from '@main/core/maas/runtime-env';
@@ -411,10 +412,7 @@ export class LocalConversationProvider implements ConversationProvider {
         const compatibility = ensureCodexResumeProviderCompatibleForConfig(
           agentSessionId,
           sessionProviderConfig,
-          maasCredentials
-            ? resolveCodexMaasProviderSpec(maasCredentials.platformId, maasCredentials.displayName)
-                .providerId
-            : undefined
+          CODEX_SHARED_PROVIDER_ID
         );
         if (compatibility.status === 'repaired') {
           log.info('LocalConversationProvider: repaired stale Codex resume provider', {
@@ -556,14 +554,20 @@ export class LocalConversationProvider implements ConversationProvider {
             )
           : undefined;
       if (!this.ownsPendingStart(sessionId, startToken)) return;
-      const argsWithMaas =
-        conversation.runtimeId === 'codex' && maasCredentials
-          ? [
-              ...rewriteCodexMaasModelArgs(baseArgs, maasCredentials),
-              ...resolveCodexMaasRuntimeArgs(maasCredentials, codexMaasModelCatalogPath),
-            ]
-          : baseArgs;
-      const argsWithNotify = withCodexRuntimeNotifyArgs(conversation.runtimeId, argsWithMaas, port);
+      const argsWithProvider =
+        conversation.runtimeId !== 'codex'
+          ? baseArgs
+          : maasCredentials
+            ? [
+                ...rewriteCodexMaasModelArgs(baseArgs, maasCredentials),
+                ...resolveCodexMaasRuntimeArgs(maasCredentials, codexMaasModelCatalogPath),
+              ]
+            : [...baseArgs, ...resolveCodexOfficialRuntimeArgs()];
+      const argsWithNotify = withCodexRuntimeNotifyArgs(
+        conversation.runtimeId,
+        argsWithProvider,
+        port
+      );
 
       const retainedTmuxSessionName = reattachExistingTmuxSession
         ? this.tmuxSessionNames.get(sessionId)

@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   netFetch: vi.fn(),
   codexAuthDisable: vi.fn(),
   codexAuthEnable: vi.fn(),
+  codexAuthEnableOfficial: vi.fn(),
   codexAuthGetStatus: vi.fn(),
   codexAuthRollback: vi.fn(),
   migrateLegacyCodexMaasHistory: vi.fn(),
@@ -80,6 +81,7 @@ vi.mock('./codex-history-compat', () => ({
 vi.mock('./codex-maas-auth-switch', () => ({
   codexMaasAuthSwitch: {
     enable: mocks.codexAuthEnable,
+    enableOfficial: mocks.codexAuthEnableOfficial,
     disable: mocks.codexAuthDisable,
     getStatus: mocks.codexAuthGetStatus,
   },
@@ -104,6 +106,7 @@ describe('global MaaS binding', () => {
     mocks.secrets = {};
     vi.clearAllMocks();
     mocks.codexAuthEnable.mockResolvedValue(mocks.codexAuthRollback);
+    mocks.codexAuthEnableOfficial.mockResolvedValue(mocks.codexAuthRollback);
     mocks.codexAuthDisable.mockResolvedValue(mocks.codexAuthRollback);
     mocks.codexAuthGetStatus.mockResolvedValue({
       managed: false,
@@ -152,6 +155,39 @@ describe('global MaaS binding', () => {
       envKey: 'ZENMUX_API_KEY',
       apiKey: 'inference-secret',
       loginItemEnabled: true,
+    });
+  });
+
+  it('keeps official Codex in the shared history bucket when external sync has no MaaS binding', async () => {
+    mocks.settings.externalAgentSyncEnabled = true;
+    mocks.settings.externalAgentSyncVersion = 1;
+    const service = new MaasService();
+
+    await service.reconcileActiveBindings();
+
+    expect(mocks.migrateLegacyCodexMaasHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ authProvider: 'official-api' }),
+      { includeNativeProvider: true }
+    );
+    expect(mocks.codexAuthEnableOfficial).toHaveBeenCalledWith({
+      codexHome: expect.any(String),
+    });
+    expect(mocks.codexAuthEnable).not.toHaveBeenCalled();
+  });
+
+  it('enables external Codex sync in official mode before a MaaS Profile is active', async () => {
+    const service = new MaasService();
+
+    await expect(service.setCodexClientSync({ enabled: true })).resolves.toMatchObject({
+      success: true,
+    });
+
+    expect(mocks.codexAuthEnableOfficial).toHaveBeenCalledWith({
+      codexHome: expect.any(String),
+    });
+    expect(mocks.settings).toMatchObject({
+      externalAgentSyncEnabled: true,
+      externalAgentSyncVersion: 1,
     });
   });
 
@@ -551,10 +587,13 @@ describe('global MaaS binding', () => {
         endpoint: 'https://maas.example.test/v1',
       })
     );
-    expect(mocks.migrateLegacyCodexMaasHistory).toHaveBeenCalledWith({
-      authProvider: 'official-api',
-      defaultModel: 'gpt-5',
-    });
+    expect(mocks.migrateLegacyCodexMaasHistory).toHaveBeenCalledWith(
+      {
+        authProvider: 'official-api',
+        defaultModel: 'gpt-5',
+      },
+      { includeNativeProvider: false }
+    );
     expect(mocks.runtimeConfigs.claude).toMatchObject({
       authProvider: 'yoda-maas',
       maasPlatformId: 'zenmux',
@@ -814,6 +853,7 @@ describe('stored MaaS keys', () => {
     mocks.failRuntimeId = null;
     vi.clearAllMocks();
     mocks.codexAuthEnable.mockResolvedValue(mocks.codexAuthRollback);
+    mocks.codexAuthEnableOfficial.mockResolvedValue(mocks.codexAuthRollback);
     mocks.codexAuthDisable.mockResolvedValue(mocks.codexAuthRollback);
     mocks.netFetch.mockResolvedValue(new Response('{}', { status: 200 }));
   });

@@ -1,14 +1,37 @@
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeSync } from 'node:fs';
-import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  writeFileSync,
+  writeSync,
+} from 'node:fs';
+import { dirname, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { parse as parseToml } from 'smol-toml';
 import type { RuntimeCustomConfig } from '@shared/app-settings';
 import { resolveCodexStatePath } from '@main/core/session-title/codex-title-source';
 import { resolveRuntimeStateDirectory } from '../conversations/impl/runtime-env';
+import { CODEX_SHARED_PROVIDER_ID } from './codex-maas-provider';
 
 const LEGACY_PROVIDER_ID = 'yoda-maas';
 const NATIVE_PROVIDER_ID = 'openai';
 const CODEX_STATE_BUSY_TIMEOUT_MS = 5_000;
+const LEGACY_YODA_PROVIDER_IDS = new Set([
+  LEGACY_PROVIDER_ID,
+  NATIVE_PROVIDER_ID,
+  'zenmux',
+  'openrouter',
+  'siliconflow',
+  'litellm',
+  'newapi',
+  'cliproxyapi',
+]);
+const LEGACY_PROFILE_PROVIDER_PATTERN =
+  /^(?:zenmux|openrouter|siliconflow|litellm|newapi|cliproxyapi|custom)-[a-f0-9]{12}$/;
 
 type CodexThreadProviderRow = {
   id: string;
@@ -25,6 +48,7 @@ type SessionMeta = {
 export type CodexMaasHistoryMigrationResult = {
   rows: number;
   files: number;
+  backupPath?: string;
   failed?: true;
 };
 
@@ -39,20 +63,29 @@ export type CodexResumeProviderCompatibilityResult =
     };
 
 /**
- * One-time compatibility migration for threads created by the previous MaaS
- * launcher. OpenCodex's Design B keeps routed threads on the native `openai`
- * provider; mirror that outcome so Codex App can index and resume them.
+ * Move native OpenAI sessions and every provider id previously emitted by Yoda
+ * into one shared Codex history bucket. The target id is intentionally the same
+ * length as `openai`, so existing paginated rollout offsets remain valid.
  */
 export function migrateLegacyCodexMaasHistory({
   statePath = resolveCodexStatePath(),
+  includeNativeProvider = false,
 }: {
   statePath?: string;
+  includeNativeProvider?: boolean;
 } = {}): CodexMaasHistoryMigrationResult {
   if (!existsSync(statePath)) return { rows: 0, files: 0 };
 
-  const legacyRows = readThreadRowsByProvider(statePath, LEGACY_PROVIDER_ID);
+  const legacyRows = readThreadRowsForSharedProvider(statePath, includeNativeProvider);
   if (!legacyRows) return { rows: 0, files: 0, failed: true };
   if (legacyRows.length === 0) return { rows: 0, files: 0 };
+
+  let backup: CodexHistoryMigrationBackup;
+  try {
+    backup = createHistoryMigrationBackup(statePath, legacyRows);
+  } catch {
+    return { rows: 0, files: 0, failed: true };
+  }
 
   const compatibleRows: CodexThreadProviderRow[] = [];
   let files = 0;
@@ -63,7 +96,9 @@ export function migrateLegacyCodexMaasHistory({
       continue;
     }
     try {
-      if (migrateRolloutProvider(row.rolloutPath, row.id, LEGACY_PROVIDER_ID, NATIVE_PROVIDER_ID)) {
+      if (
+        migrateRolloutProvider(row.rolloutPath, row.id, row.modelProvider, CODEX_SHARED_PROVIDER_ID)
+      ) {
         compatibleRows.push(row);
         files += 1;
       } else {
@@ -75,7 +110,12 @@ export function migrateLegacyCodexMaasHistory({
   }
 
   if (compatibleRows.length === 0) {
-    return { rows: 0, files, ...(failed ? { failed: true as const } : {}) };
+    return {
+      rows: 0,
+      files,
+      backupPath: backup.root,
+      ...(failed ? { failed: true as const } : {}),
+    };
   }
 
   let db: Database.Database | undefined;
@@ -87,24 +127,35 @@ export function migrateLegacyCodexMaasHistory({
     );
     const migrateRows = db.transaction((rows: CodexThreadProviderRow[]) =>
       rows.reduce(
-        (count, row) => count + update.run(NATIVE_PROVIDER_ID, row.id, LEGACY_PROVIDER_ID).changes,
+        (count, row) =>
+          count + update.run(CODEX_SHARED_PROVIDER_ID, row.id, row.modelProvider).changes,
         0
       )
     );
     const rows = migrateRows(compatibleRows);
-    return { rows, files, ...(failed ? { failed: true as const } : {}) };
+    return {
+      rows,
+      files,
+      backupPath: backup.root,
+      ...(failed || rows !== compatibleRows.length ? { failed: true as const } : {}),
+    };
   } catch {
-    return { rows: 0, files, failed: true };
+    restoreHistoryMigrationBackup(backup);
+    return { rows: 0, files: 0, backupPath: backup.root, failed: true };
   } finally {
     db?.close();
   }
 }
 
 export function migrateLegacyCodexMaasHistoryForConfig(
-  providerConfig: RuntimeCustomConfig | undefined
+  providerConfig: RuntimeCustomConfig | undefined,
+  options?: { includeNativeProvider?: boolean }
 ): CodexMaasHistoryMigrationResult {
   const codexHome = resolveRuntimeStateDirectory('codex', providerConfig);
-  return migrateLegacyCodexMaasHistory({ statePath: resolveCodexStatePath(codexHome) });
+  return migrateLegacyCodexMaasHistory({
+    statePath: resolveCodexStatePath(codexHome),
+    includeNativeProvider: options?.includeNativeProvider,
+  });
 }
 
 /**
@@ -257,9 +308,9 @@ function readConfiguredProviders(
   }
 }
 
-function readThreadRowsByProvider(
+function readThreadRowsForSharedProvider(
   statePath: string,
-  providerId: string
+  includeNativeProvider: boolean
 ): CodexThreadProviderRow[] | undefined {
   let db: Database.Database | undefined;
   try {
@@ -268,28 +319,87 @@ function readThreadRowsByProvider(
     db.pragma(`busy_timeout = ${CODEX_STATE_BUSY_TIMEOUT_MS}`);
     const rows = db
       .prepare(
-        'SELECT id, rollout_path AS rolloutPath, model_provider AS modelProvider FROM threads WHERE model_provider = ?'
+        'SELECT id, rollout_path AS rolloutPath, model_provider AS modelProvider FROM threads WHERE model_provider != ?'
       )
-      .all(providerId);
+      .all(CODEX_SHARED_PROVIDER_ID);
     return rows.flatMap((row) => {
       if (!row || typeof row !== 'object') return [];
       const record = row as Record<string, unknown>;
       return typeof record.id === 'string' &&
         typeof record.rolloutPath === 'string' &&
         typeof record.modelProvider === 'string'
-        ? [
-            {
-              id: record.id,
-              rolloutPath: record.rolloutPath,
-              modelProvider: record.modelProvider,
-            },
-          ]
+        ? isLegacyYodaProviderId(record.modelProvider, includeNativeProvider)
+          ? [
+              {
+                id: record.id,
+                rolloutPath: record.rolloutPath,
+                modelProvider: record.modelProvider,
+              },
+            ]
+          : []
         : [];
     });
   } catch {
     return undefined;
   } finally {
     db?.close();
+  }
+}
+
+function isLegacyYodaProviderId(providerId: string, includeNativeProvider: boolean): boolean {
+  if (providerId === NATIVE_PROVIDER_ID) return includeNativeProvider;
+  return (
+    LEGACY_YODA_PROVIDER_IDS.has(providerId) || LEGACY_PROFILE_PROVIDER_PATTERN.test(providerId)
+  );
+}
+
+type CodexHistoryMigrationBackup = {
+  root: string;
+  rows: CodexThreadProviderRow[];
+};
+
+function createHistoryMigrationBackup(
+  statePath: string,
+  rows: CodexThreadProviderRow[]
+): CodexHistoryMigrationBackup {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const root = join(
+    dirname(statePath),
+    'yoda-backups',
+    'codex-unified-history-v1',
+    `${timestamp}-${randomUUID()}`
+  );
+  mkdirSync(root, { recursive: true, mode: 0o700 });
+  writeFileSync(
+    join(root, 'manifest.json'),
+    `${JSON.stringify(
+      {
+        version: 1,
+        createdAt: new Date().toISOString(),
+        statePath,
+        targetProviderId: CODEX_SHARED_PROVIDER_ID,
+        threads: rows.map((row) => ({
+          id: row.id,
+          rolloutPath: row.rolloutPath,
+          sourceProviderId: row.modelProvider,
+        })),
+      },
+      null,
+      2
+    )}\n`,
+    { encoding: 'utf8', mode: 0o600 }
+  );
+  return { root, rows };
+}
+
+function restoreHistoryMigrationBackup(backup: CodexHistoryMigrationBackup): void {
+  for (const row of backup.rows) {
+    if (!row.rolloutPath || !existsSync(row.rolloutPath)) continue;
+    try {
+      migrateRolloutProvider(row.rolloutPath, row.id, CODEX_SHARED_PROVIDER_ID, row.modelProvider);
+    } catch {
+      // The manifest remains available for a later recovery attempt.
+    }
   }
 }
 
@@ -380,7 +490,7 @@ function patchRolloutProvidersInPlace(
 ): boolean {
   const encodedFromProvider = JSON.stringify(fromProviderId);
   const providerPattern = new RegExp(
-    `("model_provider"\\s*:\\s*)${escapeRegExp(encodedFromProvider)}`
+    `("model_provider"\\s*:\\s*)${escapeRegExp(encodedFromProvider)}\\s*`
   );
   const patches: Array<{ offset: number; line: string }> = [];
   let byteOffset = 0;

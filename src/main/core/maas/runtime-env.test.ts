@@ -3,6 +3,7 @@ import {
   resolveCodexMaasModelId,
   resolveCodexMaasRuntimeArgs,
   resolveCodexNativeModelId,
+  resolveCodexOfficialRuntimeArgs,
   resolveMaasRuntimeEnv,
   resolveRestoredMaasRuntimeConfig,
   rewriteCodexMaasModelArgs,
@@ -29,13 +30,26 @@ describe('MaaS Agent Client runtime environment', () => {
       apiKey: 'super-secret',
     });
 
-    expect(args.join(' ')).toMatch(
-      /model_providers\.custom-[a-f0-9]{12}\.env_key="LOVSTUDIO_LLM_API_KEY"/
-    );
-    expect(args.join(' ')).toMatch(
-      /model_providers\.custom-[a-f0-9]{12}\.base_url="https:\/\/llm\.lovstudio\.test\/v1"/
+    expect(args.join(' ')).toContain('model_providers.custom.env_key="LOVSTUDIO_LLM_API_KEY"');
+    expect(args.join(' ')).toContain(
+      'model_providers.custom.base_url="https://llm.lovstudio.test/v1"'
     );
     expect(args.join(' ')).not.toContain('super-secret');
+  });
+
+  it('runs the native OpenAI account under the same shared history provider', () => {
+    expect(resolveCodexOfficialRuntimeArgs()).toEqual([
+      '-c',
+      'model_provider="custom"',
+      '-c',
+      'model_providers.custom.name="OpenAI"',
+      '-c',
+      'model_providers.custom.requires_openai_auth=true',
+      '-c',
+      'model_providers.custom.supports_websockets=true',
+      '-c',
+      'model_providers.custom.wire_api="responses"',
+    ]);
   });
 
   it('restores the provider prefix required by the ZenMux model namespace', () => {

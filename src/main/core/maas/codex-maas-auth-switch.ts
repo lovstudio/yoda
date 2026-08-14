@@ -4,7 +4,11 @@ import { dirname, join, resolve } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
 import { isValidMaasEnvKey, type MaasPlatformId } from '@shared/maas';
 import { encryptedAppSecretsStore } from '@main/core/secrets/encrypted-app-secrets-store';
-import { resolveCodexMaasProviderSpec, type CodexMaasProviderSpec } from './codex-maas-provider';
+import {
+  CODEX_SHARED_PROVIDER_ID,
+  resolveCodexMaasProviderSpec,
+  type CodexMaasProviderSpec,
+} from './codex-maas-provider';
 import {
   codexMaasUserEnvironment,
   LEGACY_CODEX_MAAS_API_KEY_ENV,
@@ -214,6 +218,90 @@ export class CodexMaasAuthSwitch {
         await this.secretStore.deleteSecret(secretKey);
       } else if (snapshotChanged && storedSnapshot) {
         await this.secretStore.setSecret(secretKey, storedSnapshot.serialized);
+      }
+    };
+  }
+
+  async enableOfficial({ codexHome }: { codexHome: string }): Promise<CodexMaasAuthRollback> {
+    const paths = resolveCodexPaths(codexHome);
+    const before = await readNativeFiles(paths);
+    const secretKey = snapshotSecretKey(paths.codexHome);
+    const storedSnapshot = await this.loadSnapshot(secretKey, paths.codexHome);
+    const originalSnapshot: CodexNativeFilesSnapshot = storedSnapshot?.snapshot ?? before;
+    const previousEnvironment = originalSnapshot.syncedEnvironment;
+    const environmentBefore = previousEnvironment
+      ? await this.userEnvironment.read(previousEnvironment.name)
+      : undefined;
+    const managedBefore = previousEnvironment
+      ? await this.userEnvironment.readManaged(previousEnvironment.name)
+      : undefined;
+    const restoredConfig = before.config.exists
+      ? restoreManagedMaasConfig(
+          before.config.content,
+          originalSnapshot.config.exists ? originalSnapshot.config.content : ''
+        )
+      : originalSnapshot.config.exists
+        ? originalSnapshot.config.content
+        : '';
+    const snapshotToStore: CodexNativeFilesSnapshot = {
+      ...originalSnapshot,
+      version: SNAPSHOT_VERSION,
+      syncedEnvironment: undefined,
+    };
+    const active: CodexNativeFilesSnapshot = {
+      ...snapshotToStore,
+      config: {
+        exists: true,
+        content: buildActiveOfficialConfig(restoredConfig),
+        mode: 0o600,
+      },
+    };
+
+    await this.secretStore.setSecret(secretKey, JSON.stringify(snapshotToStore));
+    try {
+      if (previousEnvironment) {
+        await this.userEnvironment.clearManaged(
+          previousEnvironment.name,
+          previousEnvironment.snapshot
+        );
+      }
+      await applyNativeFiles(paths, active);
+    } catch (error) {
+      await applyNativeFiles(paths, before).catch(() => undefined);
+      if (previousEnvironment && environmentBefore) {
+        if (managedBefore?.exists) {
+          await this.userEnvironment
+            .publishManaged(previousEnvironment.name, managedBefore.value)
+            .catch(() => undefined);
+        } else {
+          await this.userEnvironment
+            .restore(previousEnvironment.name, environmentBefore)
+            .catch(() => undefined);
+        }
+      }
+      if (storedSnapshot) {
+        await this.secretStore
+          .setSecret(secretKey, storedSnapshot.serialized)
+          .catch(() => undefined);
+      } else {
+        await this.secretStore.deleteSecret(secretKey).catch(() => undefined);
+      }
+      throw error;
+    }
+
+    return async () => {
+      await applyNativeFiles(paths, before);
+      if (previousEnvironment && environmentBefore) {
+        if (managedBefore?.exists) {
+          await this.userEnvironment.publishManaged(previousEnvironment.name, managedBefore.value);
+        } else {
+          await this.userEnvironment.restore(previousEnvironment.name, environmentBefore);
+        }
+      }
+      if (storedSnapshot) {
+        await this.secretStore.setSecret(secretKey, storedSnapshot.serialized);
+      } else {
+        await this.secretStore.deleteSecret(secretKey);
       }
     };
   }
@@ -451,6 +539,35 @@ function buildActiveMaasConfig(
   const result = `${trimTrailingBlankLines(lines).join('\n')}\n`.replace(/\n/g, eol);
   validateActiveMaasConfig(result, provider, envKey);
   return result;
+}
+
+function buildActiveOfficialConfig(content: string): string {
+  const eol = content.includes('\r\n') ? '\r\n' : '\n';
+  const currentModel = readRootString(content, 'model');
+  let lines = content.replace(/\r\n/g, '\n').split('\n');
+  lines = removeTable(lines, modelProviderTablePattern(CODEX_SHARED_PROVIDER_ID));
+  lines = removeRootAssignments(lines, ['model_provider', 'openai_base_url', 'model']);
+  lines = trimLeadingBlankLines(lines);
+  lines = trimTrailingBlankLines(lines);
+  lines.unshift(
+    YODA_CONFIG_MARKER,
+    `model_provider = ${formatTomlString(CODEX_SHARED_PROVIDER_ID)}`,
+    ...(currentModel
+      ? [`model = ${formatTomlString(resolveCodexNativeModelId(currentModel))}`]
+      : []),
+    ''
+  );
+  lines = trimTrailingBlankLines(lines);
+  lines.push(
+    '',
+    YODA_CONFIG_MARKER,
+    `[model_providers.${CODEX_SHARED_PROVIDER_ID}]`,
+    'name = "OpenAI"',
+    'requires_openai_auth = true',
+    'supports_websockets = true',
+    'wire_api = "responses"'
+  );
+  return `${trimTrailingBlankLines(lines).join('\n')}\n`.replace(/\n/g, eol);
 }
 
 function restoreRootProviderSelection(content: string, originalContent: string): string {
