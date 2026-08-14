@@ -3,6 +3,11 @@ import { SidebarStore } from '@renderer/features/sidebar/sidebar-store';
 import { WorkspaceStore } from '@renderer/features/workspaces/workspace-store';
 import { AgentRuntimeStore } from './agent-runtime-store';
 import { AppSidePaneStore } from './app-side-pane-store';
+import {
+  APP_STATE_HMR_SCHEMA_VERSION,
+  isReusableAppState,
+  needsFullReloadForRetainedAppState,
+} from './app-state-hmr';
 import { AppTabsStore } from './app-tabs-store';
 import { DependenciesStore } from './dependencies-store';
 import { NavigationHistoryStore } from './navigation-history-store';
@@ -12,6 +17,7 @@ import { SshConnectionStore } from './ssh-connection-store';
 import { UpdateStore } from './update-store';
 
 class AppState {
+  readonly hmrSchemaVersion = APP_STATE_HMR_SCHEMA_VERSION;
   readonly update: UpdateStore;
   readonly projects: ProjectManagerStore;
   readonly workspaces: WorkspaceStore;
@@ -56,12 +62,23 @@ type AppStateHotData = {
 };
 
 const hotData = import.meta.hot?.data as AppStateHotData | undefined;
+const retainedAppState = hotData?.appState;
+const canReuseRetainedAppState = isReusableAppState(retainedAppState);
+const needsFullReload = needsFullReloadForRetainedAppState(
+  retainedAppState,
+  import.meta.hot !== undefined
+);
 
-function isReusableAppState(value: AppState | undefined): value is AppState {
-  return value?.workspaces !== undefined && value.sidebar.taskPriorityMode !== undefined;
+// A fresh AppState must go through main.tsx bootstrap before it is usable. Keep
+// the old instance alive for this final HMR turn, then reload the renderer so
+// the new class fields/methods are constructed and persisted snapshots hydrate.
+if (needsFullReload) {
+  queueMicrotask(() => window.location.reload());
 }
 
-export const appState = isReusableAppState(hotData?.appState) ? hotData.appState : new AppState();
+export const appState = canReuseRetainedAppState
+  ? retainedAppState!
+  : (retainedAppState ?? new AppState());
 
 if (import.meta.hot) {
   import.meta.hot.dispose((data: AppStateHotData) => {

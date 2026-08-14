@@ -231,6 +231,8 @@
     "filterLocalShort": "Local",
     "filterSshShort": "SSH",
     "showMoreGroupItems": "Show {{count}} more tasks",
+    "loadMoreArchivedTasksFailed": "Could not load archived tasks",
+    "loadMoreArchivedTasksFailedDescription": "Try again. You can copy the error details for debugging.",
     "collapseGroupItems": "Show less",
     "expandAll": "Expand all",
     "collapseAll": "Collapse all",

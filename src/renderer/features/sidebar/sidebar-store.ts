@@ -1167,7 +1167,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
           limit,
           error,
         });
-        return 0;
+        throw error;
       })
       .finally(() => {
         if (this.sidebarArchivedLoadPromise === promise) {
