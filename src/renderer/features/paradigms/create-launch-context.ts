@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { Agent } from '@shared/agents';
 import type { Branch } from '@shared/git';
+import type { ParadigmStamp } from '@shared/paradigms/stamp';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { ensureUniqueTaskDisplayName } from '@shared/task-name';
 import { resolveAgentSlot } from '@renderer/app/agent-slot-resolution';
@@ -37,6 +38,8 @@ export interface CreateParadigmLaunchContextArgs {
   /** Images handed to the initial conversation; undefined when deferred. */
   sessionImagePaths: string[] | undefined;
   strategyKind: HomeProjectSubmitStrategy;
+  /** Recorded on every task this launch creates, so the canvas knows what drives it. */
+  paradigm: ParadigmStamp;
   agents: Agent[];
   slotAgentId: (slotKey: string) => string | null;
   /** Runtime a slot falls back to when its Agent follows the composer default. */
@@ -218,6 +221,7 @@ export function createParadigmLaunchContext(
       sourceBranch: taskSourceBranch(args.strategyKind),
       strategy: taskStrategy(args.strategyKind, taskName),
       parentTaskId: args.parentTaskId,
+      paradigm: args.paradigm,
       quickActionSource: request.quickActionSource
         ? { ...request.quickActionSource, conversationId }
         : undefined,
@@ -275,6 +279,7 @@ export function createParadigmLaunchContext(
         sourceBranch: taskSourceBranch(args.strategyKind),
         strategy: taskStrategy(args.strategyKind, taskName),
         parentTaskId: args.parentTaskId,
+        paradigm: args.paradigm,
       });
       return { projectId: project.data.id, taskId, promise };
     },
@@ -318,6 +323,9 @@ export function createParadigmLaunchContext(
             : branchNeedsCheckout(source, currentBranchName)
               ? ({ kind: 'checkout-existing' } as const)
               : ({ kind: 'no-worktree' } as const),
+        // A variant runs the paradigm being compared, not the comparison itself,
+        // so the wrapper states what each variant task actually is.
+        paradigm: request.paradigm,
         initialConversation: {
           id: conversationId,
           projectId: request.projectId,

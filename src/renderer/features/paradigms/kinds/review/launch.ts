@@ -1,4 +1,5 @@
 import { paradigmSlot, reviewParadigmKind } from '@shared/paradigms/kinds';
+import { defaultParadigmStamp } from '@shared/paradigms/stamp';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { agentSkillSelection, buildRequirementPrompt } from '../../agent-launch-settings';
@@ -14,6 +15,16 @@ const REVIEWER_SLOT = paradigmSlot('review', 'reviewer');
  */
 export const reviewLauncher: ParadigmLauncher = {
   descriptor: reviewParadigmKind,
+  stamp: (params) => {
+    const base = defaultParadigmStamp('review');
+    return {
+      ...base,
+      paradigmParams: {
+        ...(base.paradigmParams as object),
+        reviewerRuntime: params.reviewerRuntime,
+      },
+    };
+  },
   async launch(ctx, params) {
     const implementer = launchableSlot(ctx.resolveSlot(IMPLEMENTER_SLOT.storageKey));
     const reviewer = launchableSlot(

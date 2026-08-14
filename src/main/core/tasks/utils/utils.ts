@@ -103,5 +103,8 @@ export function mapTaskRowToTask(
     parentTaskId: row.parentTaskId ?? undefined,
     quickActionSource: quickActionSource(row.setupData),
     quickActionId: quickActionId(row.setupData),
+    paradigmId: row.paradigmId ?? undefined,
+    paradigmKind: row.paradigmKind ?? undefined,
+    paradigmParams: row.paradigmParams ?? undefined,
   };
 }

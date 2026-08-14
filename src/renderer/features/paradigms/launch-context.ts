@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { AgentTeam } from '@shared/agent-team';
 import type { Branch } from '@shared/git';
 import type { ParadigmKindDescriptor } from '@shared/paradigms/contract';
+import type { ParadigmStamp } from '@shared/paradigms/stamp';
 import type { RuntimeId } from '@shared/runtime-registry';
 import type { QuickActionTaskSource } from '@shared/tasks';
 import type { ResolvedAgentSlot } from '@renderer/app/agent-slot-resolution';
@@ -70,6 +71,11 @@ export interface ParadigmVariantLaunchRequest {
   strategyKind: TaskStrategyKind;
   baseBranch: Branch | null;
   nameSeed: string;
+  /**
+   * Recorded on the variant's task. A variant runs the paradigm under comparison,
+   * so this is the inner paradigm's stamp — not the comparison's.
+   */
+  paradigm: ParadigmStamp;
 }
 
 /**
@@ -169,6 +175,15 @@ export interface ParadigmLaunchContext {
 export interface ParadigmLauncher {
   descriptor: ParadigmKindDescriptor;
   launch(ctx: ParadigmLaunchContext, params: ParadigmLaunchParams): Promise<void>;
+  /**
+   * What to record on the tasks this launch creates. Defaults to the kind's own
+   * code-defined instance with its default params, which is right for every kind
+   * whose configuration is not yet user-editable.
+   *
+   * A kind states this itself rather than a central helper switching on kind id —
+   * that switch is what this refactor exists to delete.
+   */
+  stamp?(params: ParadigmLaunchParams): ParadigmStamp;
 }
 
 /** Narrows a resolved slot to one that can be launched. */

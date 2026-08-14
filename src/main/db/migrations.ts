@@ -208,6 +208,14 @@ function ensureAutomationRunCompatibility(connection: BetterSqlite3.Database): v
   connection.exec('ALTER TABLE automation_runs ADD conversation_id text');
 }
 
+function ensureTaskParadigmCompatibility(connection: BetterSqlite3.Database): void {
+  if (!tableExists(connection, 'tasks')) return;
+  for (const columnName of ['paradigm_id', 'paradigm_kind', 'paradigm_params']) {
+    if (columnExists(connection, 'tasks', columnName)) continue;
+    connection.exec(`ALTER TABLE tasks ADD ${quoteIdentifier(columnName)} text`);
+  }
+}
+
 export function getBundledMigrationCount(): number {
   return migrationEntries.length;
 }
@@ -241,6 +249,8 @@ export function runBundledMigrations(connection: BetterSqlite3.Database): void {
         ensureTeamOrchestrationCompatibility(connection);
       } else if (record.tag === '0056_cute_masque') {
         ensureAutomationRunCompatibility(connection);
+      } else if (record.tag === '0058_flippant_texas_twister') {
+        ensureTaskParadigmCompatibility(connection);
       } else {
         const sqlKey = Object.keys(sqlFiles).find((k) => k.includes(record.tag));
         if (!sqlKey) throw new Error(`Missing bundled SQL for migration: ${record.tag}`);

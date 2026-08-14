@@ -1,4 +1,5 @@
 import { compareParadigmKind, paradigmSlot } from '@shared/paradigms/kinds';
+import { defaultParadigmStamp } from '@shared/paradigms/stamp';
 import { rpc } from '@renderer/lib/ipc';
 import { requirementPromptBuilder } from '../../agent-launch-settings';
 import {
@@ -9,7 +10,8 @@ import {
 
 // Comparison wraps another paradigm rather than reimplementing one. Today the
 // wrapped kind is always `single`; `params.inner` makes it selectable.
-const INNER_SLOT = paradigmSlot('single', 'agent');
+const INNER_KIND = 'single';
+const INNER_SLOT = paradigmSlot(INNER_KIND, 'agent');
 
 /**
  * Multi-config comparison: every variant spawns its own independent task
@@ -38,6 +40,9 @@ export const compareLauncher: ParadigmLauncher = {
           strategyKind: variant.strategyKind,
           baseBranch: variant.baseBranch,
           nameSeed: `${ctx.baseName}-${index + 1}`,
+          // Each variant task *is* a run of the wrapped paradigm; the comparison
+          // is the window that tiles them, not something a task can be in.
+          paradigm: defaultParadigmStamp(INNER_KIND),
         });
       })
     );

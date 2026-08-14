@@ -1,4 +1,6 @@
 import { teamParadigmKind } from '@shared/paradigms/kinds';
+import { defaultParadigmStamp } from '@shared/paradigms/stamp';
+import { teamToParadigmParams } from '@shared/paradigms/team-adapter';
 import { invalidateTeamRoomQueries } from '@renderer/features/agent-room/team-room-queries';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
@@ -11,6 +13,16 @@ import type { ParadigmLauncher } from '../../launch-context';
  */
 export const teamLauncher: ParadigmLauncher = {
   descriptor: teamParadigmKind,
+  // A team *is* a paradigm instance, so the stamp names the real one rather than
+  // a synthesized built-in — the only kind where that is true today.
+  stamp: (params) =>
+    params.team
+      ? {
+          paradigmId: params.team.id,
+          paradigmKind: 'team',
+          paradigmParams: teamToParadigmParams(params.team),
+        }
+      : defaultParadigmStamp('team'),
   async launch(ctx, params) {
     const team = params.team;
     if (!team) return;

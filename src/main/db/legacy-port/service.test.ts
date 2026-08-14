@@ -74,7 +74,10 @@ function createAppDb(): Database.Database {
       diff_additions INTEGER,
       diff_deletions INTEGER,
       diff_captured_at TEXT,
-      parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL
+      parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+      paradigm_id TEXT,
+      paradigm_kind TEXT,
+      paradigm_params TEXT
     );
 
     CREATE TABLE conversations (

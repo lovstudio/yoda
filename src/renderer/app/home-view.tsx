@@ -70,7 +70,7 @@ import type {
   ParadigmLaunchParams,
   TaskStrategyKind,
 } from '@renderer/features/paradigms/launch-context';
-import { paradigmLauncher } from '@renderer/features/paradigms/registry';
+import { paradigmLauncher, paradigmLaunchStamp } from '@renderer/features/paradigms/registry';
 import { ParadigmSelector } from '@renderer/features/paradigms/selector';
 import {
   asMounted,
@@ -1093,6 +1093,7 @@ export const HomeComposer = observer(function HomeComposer({
         quickAction: quickActionMode,
       };
       const shared = {
+        paradigm: paradigmLaunchStamp(kindId, params),
         requirement,
         titlePrompt: trimmed || undefined,
         deferInitialPrompt,

@@ -379,6 +379,19 @@ export const tasks = sqliteTable(
     parentTaskId: text('parent_task_id').references((): AnySQLiteColumn => tasks.id, {
       onDelete: 'set null',
     }),
+    // Which development paradigm drives this task. Before these columns the
+    // paradigm was lost the instant a task was created, and the canvas had to
+    // guess by looking for a team room or a review orchestration row.
+    //
+    // Deliberately not a foreign key: code-defined instances (`builtin:*`) are not
+    // rows, so a reference would reject exactly the ids most tasks carry.
+    paradigmId: text('paradigm_id'),
+    /** ParadigmKindId, denormalized so canvas dispatch needs no join. */
+    paradigmKind: text('paradigm_kind').$type<ParadigmKindId>(),
+    // Params as of launch. Snapshotted rather than read through `paradigm_id` so
+    // renaming, re-parameterizing, or deleting the instance does not rewrite the
+    // history of tasks it already started.
+    paradigmParams: text('paradigm_params', { mode: 'json' }).$type<unknown>(),
   },
   (table) => ({
     projectIdIdx: index('idx_tasks_project_id').on(table.projectId),

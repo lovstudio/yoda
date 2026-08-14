@@ -82,6 +82,64 @@ function ensureBuiltinAgents(connection: BetterSqlite3.Database): void {
 }
 
 /**
+ * Labels pre-existing tasks with the paradigm that drove them.
+ *
+ * Tasks created before `tasks.paradigm_kind` existed carry no paradigm, so it is
+ * recovered from the side tables the canvas used to reverse-look-up: a team room
+ * means the task was run by a team, a review orchestration means the review loop,
+ * and everything else was a single Agent.
+ *
+ * `paradigm_id` is deliberately left null — the *kind* is recoverable, but which
+ * instance ran is not (a room does not record the team it came from). That
+ * asymmetry is exactly why the kind is its own column rather than a join.
+ *
+ * Team wins over review when a task somehow has both: a team may run a review
+ * loop internally, so the team is the outer paradigm.
+ */
+function tableExists(connection: BetterSqlite3.Database, tableName: string): boolean {
+  return (
+    connection
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
+      .get(tableName) !== undefined
+  );
+}
+
+/** @internal exposed for tests */
+export function ensureTaskParadigmBackfill(connection: BetterSqlite3.Database): void {
+  const BACKFILL_VERSION = '1';
+
+  const row = connection
+    .prepare(`SELECT value FROM kv WHERE key = 'task_paradigm_backfill_version'`)
+    .get() as { value: string } | undefined;
+  if (row?.value === BACKFILL_VERSION) return;
+  if (!tableExists(connection, 'tasks')) return;
+
+  // Each source is optional: this runs on the startup path, where throwing over a
+  // missing side table would mean the app does not open at all.
+  const sources: Array<[kind: string, table: string]> = [
+    ['team', 'team_rooms'],
+    ['review', 'review_orchestrations'],
+  ];
+
+  const backfill = connection.transaction(() => {
+    for (const [kind, table] of sources) {
+      if (!tableExists(connection, table)) continue;
+      connection.exec(
+        `UPDATE tasks SET paradigm_kind = '${kind}'
+          WHERE paradigm_kind IS NULL AND id IN (SELECT task_id FROM ${table})`
+      );
+    }
+    connection.exec(`UPDATE tasks SET paradigm_kind = 'single' WHERE paradigm_kind IS NULL`);
+    connection
+      .prepare(
+        `INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES ('task_paradigm_backfill_version', ?, unixepoch())`
+      )
+      .run(BACKFILL_VERSION);
+  });
+  backfill();
+}
+
+/**
  * Runs all pending migrations against the shared SQLite connection and validates
  * the schema contract. Call this once in main.ts before any db queries run.
  *
@@ -94,5 +152,6 @@ export async function initializeDatabase(): Promise<BetterSqlite3.Database> {
   runBundledMigrations(sqlite);
   ensureSearchIndex(sqlite);
   ensureBuiltinAgents(sqlite);
+  ensureTaskParadigmBackfill(sqlite);
   return sqlite;
 }

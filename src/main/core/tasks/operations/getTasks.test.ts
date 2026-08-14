@@ -181,7 +181,10 @@ function createSchema(sqlite: Database.Database): void {
       workspace_id TEXT,
       workspace_provider_data TEXT,
       sidebar_workspace_id TEXT,
-      parent_task_id TEXT
+      parent_task_id TEXT,
+      paradigm_id TEXT,
+      paradigm_kind TEXT,
+      paradigm_params TEXT
     );
     CREATE TABLE conversations (
       id TEXT PRIMARY KEY NOT NULL,

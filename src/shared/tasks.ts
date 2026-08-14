@@ -1,6 +1,8 @@
 import type { CreateConversationParams } from '@shared/conversations';
 import type { ProvisionStep } from '@shared/events/taskEvents';
 import type { Branch, CreateBranchError, FetchPrForReviewError, PushError } from '@shared/git';
+import type { ParadigmKindId } from '@shared/paradigms/contract';
+import type { ParadigmStamp } from '@shared/paradigms/stamp';
 import type { PullRequest } from '@shared/pull-requests';
 
 export type TaskLifecycleStatus = 'todo' | 'in_progress' | 'review' | 'done' | 'cancelled';
@@ -82,6 +84,14 @@ export type Task = {
   quickActionSource?: QuickActionTaskSource;
   /** Saved quick action that started this task, used to return to its live run. */
   quickActionId?: string;
+  /**
+   * The paradigm instance that launched this task, and its params as of then.
+   * Undefined only for tasks created before paradigms were recorded and never
+   * backfilled.
+   */
+  paradigmId?: string;
+  paradigmKind?: ParadigmKindId;
+  paradigmParams?: unknown;
 };
 
 /** Lightweight project-level totals used without materializing Task stores. */
@@ -144,6 +154,8 @@ export type CreateTaskParams = {
   quickActionSource?: QuickActionTaskSource;
   /** Saved quick action that started this task. */
   quickActionId?: string;
+  /** The development paradigm driving this task, recorded at launch. */
+  paradigm?: ParadigmStamp;
 };
 
 export type SetTaskParentError =
