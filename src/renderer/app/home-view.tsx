@@ -18,10 +18,8 @@ import {
   LocateFixed,
   Monitor,
   Puzzle,
-  Repeat2,
   Server,
   Settings2,
-  ShieldCheck,
   Wrench,
   X,
 } from 'lucide-react';
@@ -41,14 +39,9 @@ import {
 import { useTranslation } from 'react-i18next';
 import yodaLogoWhite from '@/assets/images/yoda/yoda_logo_white.svg';
 import yodaLogo from '@/assets/images/yoda/yoda_logo.svg';
-import {
-  BUILTIN_FEATURE_TEAM_ID,
-  BUILTIN_REVIEW_TEAM_ID,
-  BUILTIN_STARTUP_TEAM_ID,
-  type AgentTeam,
-} from '@shared/agent-team';
+import { BUILTIN_STARTUP_TEAM_ID, type AgentTeam } from '@shared/agent-team';
 import type { Agent } from '@shared/agents';
-import { FEATURE_WORKFLOW_STAGES, hasFeatureWorkflowContract } from '@shared/feature-workflow';
+import { hasFeatureWorkflowContract } from '@shared/feature-workflow';
 import type { Branch } from '@shared/git';
 import type {
   ParadigmAccent,
@@ -60,24 +53,25 @@ import {
   paradigmKindForRunMode,
   paradigmSlot,
   paradigmSlotByStorageKey,
+  runModeForParadigmKind,
   type LegacyRunMode,
 } from '@shared/paradigms/kinds';
 import type { ComposerDefaults, TaskOutputLanguage } from '@shared/project-settings';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
-import { REVIEW_MAX_ROUNDS } from '@shared/review-protocol';
 import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
 import { taskNameFromPrompt } from '@shared/task-name';
 import { resolveHomeProjectId } from '@renderer/app/home-project-selection';
-import { FeatureWorkflowPreview } from '@renderer/features/agent-room/feature-workflow-rail';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
 import { agentSkillSelection } from '@renderer/features/paradigms/agent-launch-settings';
 import { createParadigmLaunchContext } from '@renderer/features/paradigms/create-launch-context';
+import { teamDisplayName } from '@renderer/features/paradigms/entries';
 import type {
   CompareVariant,
   ParadigmLaunchParams,
   TaskStrategyKind,
 } from '@renderer/features/paradigms/launch-context';
 import { paradigmLauncher } from '@renderer/features/paradigms/registry';
+import { ParadigmSelector } from '@renderer/features/paradigms/selector';
 import {
   asMounted,
   getProjectManagerStore,
@@ -86,14 +80,11 @@ import {
   projectDisplayName,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
-import { useSkills } from '@renderer/features/skills/components/useSkills';
 import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { ProjectSelector } from '@renderer/features/tasks/create-task-modal/project-selector';
 import { useRuntimePermissionModes } from '@renderer/features/tasks/hooks/useRuntimePermissionModes';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { accountGreetingName } from '@renderer/lib/account-display';
-import { AgentSlotSelector } from '@renderer/lib/components/agent-slot/agent-slot-selector';
-import { AvatarValue } from '@renderer/lib/components/avatar-value';
 import { ProjectBranchMenuItems } from '@renderer/lib/components/project-branch-selector';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { toast } from '@renderer/lib/hooks/use-toast';
@@ -104,18 +95,9 @@ import { useWorkspaceLayoutContext } from '@renderer/lib/layout/layout-provider'
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
-import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/lib/ui/collapsible';
 import { ComboboxTrigger, ComboboxValue } from '@renderer/lib/ui/combobox';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@renderer/lib/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -277,14 +259,12 @@ function primarySlotKey(mode: HomeRunMode): string | null {
   return runModeParadigm(mode).slots[0]?.storageKey ?? null;
 }
 
-// Storage keys for the per-slot Agent selection. Derived from the descriptors so
-// the keys have exactly one definition; the literals themselves stay legacy
-// per-mode strings until the paradigm-params migration renames them.
+/**
+ * The base single-Agent seat. The composer reads it directly for the comparison
+ * variants, which all reuse that seat's Agent; every other seat is reached
+ * through its kind's descriptor.
+ */
 const NORMAL_PROMPT_KEY = paradigmSlot('single', 'agent').storageKey;
-const BUILD_PROMPT_KEY = paradigmSlot('app-build', 'agent').storageKey;
-const REVIEW_IMPLEMENTER_PROMPT_KEY = paradigmSlot('review', 'implementer').storageKey;
-const REVIEW_REVIEWER_PROMPT_KEY = paradigmSlot('review', 'reviewer').storageKey;
-const SPEC_PROMPT_KEY = paradigmSlot('spec', 'agent').storageKey;
 
 const ADVANCED_INPUT_CONTAINER_CLASS =
   'border-border bg-background-1 ring-1 ring-sky-500/15 focus-within:border-sky-500/30 focus-within:ring-sky-500/25';
@@ -669,6 +649,15 @@ export const HomeComposer = observer(function HomeComposer({
       else updateDraft({ runMode: next });
     },
     [runModeOverridden, setComposerDefault, updateDraft]
+  );
+  // The picker speaks paradigm kinds; the composer still persists the legacy run
+  // mode string, so the kind is translated back on the way in.
+  const setParadigmKind = useCallback(
+    (next: ParadigmKindId) => {
+      const runMode = runModeForParadigmKind(next);
+      if (runMode) setRunMode(runMode);
+    },
+    [setRunMode]
   );
   useEffect(() => {
     if (!homeParams.runMode) return;
@@ -1709,29 +1698,16 @@ export const HomeComposer = observer(function HomeComposer({
             {!taskScopedTarget && mounted && runMode === 'team' && (
               <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
             )}
-            <RunModeSelector
-              mode={runMode}
+            <ParadigmSelector
+              kindId={paradigmKindForRunMode(runMode)}
               summary={runModeSummary}
               teams={teams}
               selectedTeamId={selectedTeamId}
-              onChange={setRunMode}
+              agents={userAgents}
+              slotAgentId={slotAgentId}
+              onSlotAgentChange={setSlotAgent}
+              onChange={setParadigmKind}
               onSelectTeam={setSelectedTeamId}
-              renderConfiguration={(
-                configurationMode,
-                configurationTeamId,
-                onConfigurationChange
-              ) => (
-                <ModeConfigurationPanel
-                  mode={configurationMode}
-                  teams={teams}
-                  selectedTeamId={configurationTeamId ?? selectedTeamId}
-                  agents={userAgents}
-                  slotAgentId={slotAgentId}
-                  onSlotAgentChange={setSlotAgent}
-                  onConfigurationChange={onConfigurationChange}
-                  className="mt-2 border-t-0 pt-0"
-                />
-              )}
             />
             {renderComposerSettingsButton()}
             {!taskScopedTarget && runMode === 'normal' && renderAddCompareButton()}
@@ -1998,627 +1974,11 @@ interface EnvironmentSelectorProps extends RunHostSelectorProps {
   branchConfiguration?: EnvironmentBranchConfiguration;
 }
 
-interface RunModeOption {
-  // Stable per-entry id — what we key and select on. A single mode can surface as
-  // several entries (every Agent Team is its own `team` entry), so identity lives
-  // on the entry, not the mode; `mode` (+ `teamId`) still drive the run behavior.
-  id: string;
-  mode: HomeRunMode;
-  /** Set on `team` entries — the Agent Team this entry launches. */
-  teamId?: string;
-  /** Lucide icon for static entries. Mutually exclusive with `avatar`. */
-  icon?: ComponentType<{ className?: string }>;
-  /** Glyph, image URL, or data URL for team entries (matches AgentTeam.icon). */
-  avatar?: string;
-  /** i18n key for static entries. Mutually exclusive with `label`. */
-  labelKey?: string;
-  /** Literal label for team entries (the team name). */
-  label?: string;
-  descKey: string;
-  alpha?: boolean;
-}
-
-// Static entries. "Workflow" runs a single converged session; "compare" stands
-// alone because it fans the same task out across isolated branches. The
-// "Multi-agent" group sits between them and is built dynamically from the Agent
-// Teams (see buildRunModeGroups) — every team is its own independent entry.
-const WORKFLOW_RUN_MODE_OPTIONS: RunModeOption[] = [
-  {
-    id: 'normal',
-    mode: 'normal',
-    icon: Bot,
-    labelKey: 'home.modeNormal',
-    descKey: 'home.modeNormalDesc',
-  },
-  {
-    id: 'build',
-    mode: 'build',
-    icon: AppWindow,
-    labelKey: 'home.modeBuild',
-    descKey: 'home.modeBuildDesc',
-    alpha: true,
-  },
-  {
-    id: 'review-workflow',
-    mode: 'review',
-    icon: Repeat2,
-    labelKey: 'home.modeReview',
-    descKey: 'home.modeReviewDesc',
-  },
-  {
-    id: 'brainstorm',
-    mode: 'brainstorm',
-    icon: Lightbulb,
-    labelKey: 'home.modeBrainstorm',
-    descKey: 'home.modeBrainstormDesc',
-    alpha: true,
-  },
-];
-
-// Localized copy for the built-in teams so the zh/en picker reads naturally
-// rather than echoing the raw template name. User teams fall back to their name.
-const BUILTIN_TEAM_COPY: Record<string, { labelKey: string; descKey: string }> = {
-  [BUILTIN_FEATURE_TEAM_ID]: {
-    labelKey: 'home.modeTeamFeature',
-    descKey: 'home.modeTeamFeatureDesc',
-  },
-  [BUILTIN_REVIEW_TEAM_ID]: {
-    labelKey: 'home.modeTeamReview',
-    descKey: 'home.modeTeamReviewDesc',
-  },
-  [BUILTIN_STARTUP_TEAM_ID]: {
-    labelKey: 'home.modeTeamStartup',
-    descKey: 'home.modeTeamStartupDesc',
-  },
-};
-
-function teamToRunModeOption(team: AgentTeam): RunModeOption {
-  const copy = BUILTIN_TEAM_COPY[team.id];
-  return {
-    id: `team:${team.id}`,
-    mode: 'team',
-    teamId: team.id,
-    avatar: team.icon,
-    ...(copy ? { labelKey: copy.labelKey } : { label: team.name }),
-    descKey: copy?.descKey ?? 'home.modeTeamDesc',
-    // Honors the original "startup is alpha" call; the review team is GA.
-    alpha: team.id === BUILTIN_STARTUP_TEAM_ID,
-  };
-}
-
-// Display name for a team across the composer (picker + summary chip): localized
-// for built-ins, the user-given name otherwise.
-function teamDisplayName(team: AgentTeam, t: (key: string) => string): string {
-  const copy = BUILTIN_TEAM_COPY[team.id];
-  return copy ? t(copy.labelKey) : team.name;
-}
-
-// Multi-agent teams in a stable order: the review-loop team leads, the startup
-// company team follows, then any user-defined teams in list order. Feature is a
-// team under the hood but is intentionally surfaced in the Workflow group.
-function orderMultiAgentTeams(teams: AgentTeam[]): AgentTeam[] {
-  const pinned = [BUILTIN_REVIEW_TEAM_ID, BUILTIN_STARTUP_TEAM_ID];
-  const lead = pinned
-    .map((id) => teams.find((tm) => tm.id === id))
-    .filter((tm): tm is AgentTeam => Boolean(tm));
-  const rest = teams.filter((tm) => !pinned.includes(tm.id));
-  return [...lead, ...rest];
-}
-
-function buildRunModeGroups(
-  teams: AgentTeam[]
-): Array<{ labelKey: string; options: RunModeOption[] }> {
-  const feature = teams.find((team) => team.id === BUILTIN_FEATURE_TEAM_ID);
-  const workflowOptions = feature
-    ? [
-        WORKFLOW_RUN_MODE_OPTIONS[0],
-        teamToRunModeOption(feature),
-        ...WORKFLOW_RUN_MODE_OPTIONS.slice(1),
-      ]
-    : WORKFLOW_RUN_MODE_OPTIONS;
-  return [
-    { labelKey: 'home.modeGroupWorkflow', options: workflowOptions },
-    {
-      labelKey: 'home.modeGroupMultiAgent',
-      options: orderMultiAgentTeams(
-        teams.filter((team) => team.id !== BUILTIN_FEATURE_TEAM_ID)
-      ).map(teamToRunModeOption),
-    },
-  ];
-}
-
-// The entry that represents the committed (mode, selectedTeamId) pair. For `team`
-// the team id disambiguates which of the many team entries is active.
-function entryIdForState(
-  options: RunModeOption[],
-  mode: HomeRunMode,
-  selectedTeamId: string
-): string {
-  const match =
-    mode === 'team'
-      ? (options.find((o) => o.teamId === selectedTeamId) ?? options.find((o) => o.mode === 'team'))
-      : options.find((o) => o.mode === mode);
-  return (match ?? options[0]).id;
-}
-
-interface RunModeSelectorProps {
-  mode: HomeRunMode;
-  summary?: string | null;
-  teams: AgentTeam[];
-  selectedTeamId: string;
-  onChange: (mode: HomeRunMode) => void;
-  onSelectTeam: (teamId: string) => void;
-  renderConfiguration: (
-    mode: HomeRunMode,
-    teamId: string | undefined,
-    onConfigurationChange: () => void
-  ) => ReactNode;
-}
-
-function RunModeSelector({
-  mode,
-  summary,
-  teams,
-  selectedTeamId,
-  onChange,
-  onSelectTeam,
-  renderConfiguration,
-}: RunModeSelectorProps) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const groups = useMemo(() => buildRunModeGroups(teams), [teams]);
-  const options = useMemo(() => groups.flatMap((group) => group.options), [groups]);
-  // The mode change reshapes the whole development paradigm, so we stage it locally
-  // and only commit on explicit confirmation rather than applying on each click.
-  // We stage by entry id since a mode (notably `team`) spans many entries. Agent
-  // profile edits persist independently, but still require an explicit confirmation
-  // before the chooser can be treated as settled.
-  const [pendingId, setPendingId] = useState<string>(() =>
-    entryIdForState(options, mode, selectedTeamId)
-  );
-  const [configurationDirty, setConfigurationDirty] = useState(false);
-  const labelOf = (option: RunModeOption) =>
-    option.label ?? (option.labelKey ? t(option.labelKey) : '');
-  const current =
-    options.find((option) => option.id === entryIdForState(options, mode, selectedTeamId)) ??
-    options[0];
-  const pending = options.find((option) => option.id === pendingId) ?? options[0];
-  const CurrentIcon = current.icon;
-  const PendingIcon = pending.icon;
-  const dirty =
-    configurationDirty ||
-    pending.mode !== mode ||
-    (pending.mode === 'team' && pending.teamId !== selectedTeamId);
-  const isNonStandardMode = mode !== 'normal';
-
-  const handleOpenChange = (next: boolean) => {
-    if (next) {
-      setPendingId(entryIdForState(options, mode, selectedTeamId));
-      setConfigurationDirty(false);
-    }
-    setOpen(next);
-  };
-
-  const handleConfirm = () => {
-    if (pending.teamId) onSelectTeam(pending.teamId);
-    if (pending.mode !== mode) onChange(pending.mode);
-    setConfigurationDirty(false);
-    setOpen(false);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        render={
-          <button
-            type="button"
-            aria-label={t('home.modeAria')}
-            className={cn(
-              'flex h-7 min-w-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors',
-              isNonStandardMode
-                ? 'border-sky-500/25 bg-sky-500/10 text-sky-700 shadow-sm ring-1 ring-sky-500/15 hover:bg-sky-500/15 ydark:text-sky-300'
-                : 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15'
-            )}
-          >
-            {current.avatar !== undefined ? (
-              <AvatarValue
-                name={labelOf(current)}
-                value={current.avatar}
-                className="size-3.5 rounded-sm text-[10px]"
-              />
-            ) : (
-              CurrentIcon && <CurrentIcon className="size-3.5 shrink-0" />
-            )}
-            <span className="shrink-0">{labelOf(current)}</span>
-            {summary ? (
-              <>
-                <span
-                  className={cn(
-                    isNonStandardMode ? 'text-sky-600/45 ydark:text-sky-300/45' : 'text-primary/40'
-                  )}
-                >
-                  ·
-                </span>
-                <span
-                  className={cn(
-                    'min-w-0 max-w-[14rem] truncate font-normal',
-                    isNonStandardMode ? 'text-sky-700/80 ydark:text-sky-300/80' : 'text-primary/80'
-                  )}
-                >
-                  {summary}
-                </span>
-              </>
-            ) : null}
-            <ChevronDown
-              className={cn(
-                'size-3 shrink-0',
-                isNonStandardMode ? 'text-sky-700/70 ydark:text-sky-300/70' : 'text-primary/70'
-              )}
-            />
-          </button>
-        }
-      />
-      <DialogContent className="flex h-[min(70dvh,40rem)] w-[min(44rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] flex-col gap-0 p-0 sm:max-w-[44rem]">
-        <DialogHeader showCloseButton className="min-w-0 px-4 py-3">
-          <DialogTitle className="truncate text-sm font-semibold text-foreground">
-            {t('home.developmentParadigm')}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="flex min-h-0 flex-1 divide-x divide-border/60 border-t border-border/60">
-          <div
-            role="tablist"
-            aria-label={t('home.modeAria')}
-            aria-orientation="vertical"
-            className="flex w-44 shrink-0 flex-col gap-1 overflow-y-auto bg-background-1/50 p-2"
-          >
-            {groups.map((group, groupIndex) => (
-              <div
-                key={group.labelKey}
-                className={cn(
-                  'flex flex-col gap-0.5',
-                  groupIndex > 0 && 'mt-1 border-t border-border/60 pt-2'
-                )}
-              >
-                <span className="px-2.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-foreground-muted/70">
-                  {t(group.labelKey)}
-                </span>
-                {group.options.map((option) => {
-                  const Icon = option.icon;
-                  const active = option.id === pendingId;
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      title={t(option.descKey)}
-                      onClick={() => setPendingId(option.id)}
-                      className={cn(
-                        'flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors',
-                        active
-                          ? 'bg-primary/10 font-medium text-primary'
-                          : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
-                      )}
-                    >
-                      {option.avatar !== undefined ? (
-                        <AvatarValue
-                          name={labelOf(option)}
-                          value={option.avatar}
-                          className="size-4 rounded-sm text-[10px]"
-                        />
-                      ) : (
-                        Icon && (
-                          <Icon
-                            className={cn(
-                              'size-4 shrink-0',
-                              active ? 'text-primary' : 'text-foreground-muted'
-                            )}
-                          />
-                        )
-                      )}
-                      <span className="min-w-0 flex-1 truncate">{labelOf(option)}</span>
-                      {option.alpha && (
-                        <Badge variant="secondary" className="shrink-0 px-1 py-0 text-[9px]">
-                          {t('home.modeAlphaBadge')}
-                        </Badge>
-                      )}
-                      {active && <Check className="size-3.5 shrink-0 text-primary" />}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
-            <div className="flex items-center gap-2">
-              {pending.avatar !== undefined ? (
-                <AvatarValue
-                  name={labelOf(pending)}
-                  value={pending.avatar}
-                  className="size-4 rounded-sm text-[10px]"
-                />
-              ) : (
-                PendingIcon && <PendingIcon className="size-4 shrink-0 text-primary" />
-              )}
-              <span className="text-sm font-semibold text-foreground">{labelOf(pending)}</span>
-              {pending.alpha && (
-                <Badge variant="secondary" className="px-1 py-0 text-[9px]">
-                  {t('home.modeAlphaBadge')}
-                </Badge>
-              )}
-            </div>
-            <p className="text-xs text-foreground-muted">{t(pending.descKey)}</p>
-            {renderConfiguration(pending.mode, pending.teamId, () => setConfigurationDirty(true))}
-          </div>
-        </div>
-        <DialogFooter className="px-3 py-2.5">
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="flex h-8 items-center justify-center rounded-md border border-border bg-background-1 px-3 text-xs font-medium text-foreground transition-colors hover:bg-background-2"
-          >
-            {t('common.cancel')}
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={!dirty}
-            className="flex h-8 items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
-          >
-            {t('common.confirm')}
-          </button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 interface StrategyChipLabels {
   newBranchTitle: string;
   newBranchDesc: string;
   noWorktreeTitle: string;
   noWorktreeDesc: string;
-}
-
-interface ModeConfigurationPanelProps {
-  mode: HomeRunMode;
-  teams: AgentTeam[];
-  selectedTeamId: string;
-  agents: Agent[];
-  slotAgentId: (slotKey: string) => string | null;
-  onSlotAgentChange: (slotKey: string, agentId: string) => void;
-  onConfigurationChange: () => void;
-  className?: string;
-}
-
-function ModeConfigurationPanel({
-  mode,
-  teams,
-  selectedTeamId,
-  agents,
-  slotAgentId,
-  onSlotAgentChange,
-  onConfigurationChange,
-  className,
-}: ModeConfigurationPanelProps) {
-  const { t } = useTranslation();
-  const { navigate } = useNavigate();
-
-  // A slot card needs its Agent selection. `key` is the slot's stable key (the
-  // mode's prompt key, reused purely to key the per-slot selection).
-  const slotProps = (key: string) => {
-    const selectedAgentId = slotAgentId(key);
-    return {
-      agents,
-      selectedAgentId,
-      onSelectAgent: (agentId: string) => {
-        if (agentId === selectedAgentId) return;
-        onSlotAgentChange(key, agentId);
-        onConfigurationChange();
-      },
-      onConfigurationChange,
-    };
-  };
-
-  return (
-    // Slots stack as Agent cards (identity + configured skills) so every run
-    // mode shows the same reusable Agent profile.
-    <div className={cn('mt-3 border-t border-border/60 pt-3', className)}>
-      {mode === 'normal' && (
-        <div className="mt-2 flex flex-col gap-1.5">
-          <Agent icon={Bot} label={t('home.agentLabel')} {...slotProps(NORMAL_PROMPT_KEY)} />
-        </div>
-      )}
-
-      {mode === 'build' && (
-        <div className="flex flex-col gap-1.5">
-          <Agent icon={AppWindow} label={t('home.buildAgent')} {...slotProps(BUILD_PROMPT_KEY)} />
-          <p className="px-1 text-xs leading-relaxed text-foreground-muted">
-            {t('home.buildAgentHint')}
-          </p>
-        </div>
-      )}
-
-      {mode === 'brainstorm' && (
-        <div className="flex flex-col gap-1.5">
-          <Agent
-            icon={Lightbulb}
-            label={t('home.brainstormAgent')}
-            {...slotProps(SPEC_PROMPT_KEY)}
-          />
-        </div>
-      )}
-
-      {mode === 'review' && (
-        <div className="flex flex-col gap-1.5">
-          <Agent
-            icon={Bot}
-            label={t('home.reviewImplementer')}
-            {...slotProps(REVIEW_IMPLEMENTER_PROMPT_KEY)}
-          />
-          <Agent
-            icon={ShieldCheck}
-            label={t('home.reviewReviewer')}
-            {...slotProps(REVIEW_REVIEWER_PROMPT_KEY)}
-          />
-          <div className="px-1 text-xs text-foreground-muted">
-            {t('home.reviewRoundLimit', { count: REVIEW_MAX_ROUNDS })}
-          </div>
-        </div>
-      )}
-
-      {mode === 'team' &&
-        (() => {
-          // The team is chosen in the sidebar now; the panel just shows its roster.
-          const team = teams.find((tm) => tm.id === selectedTeamId) ?? teams[0];
-          const isFeatureWorkflow = Boolean(team && hasFeatureWorkflowContract(team));
-          return (
-            <div className="flex flex-col gap-2">
-              {team && (
-                <>
-                  {isFeatureWorkflow && <FeatureWorkflowPreview />}
-                  <div className="flex flex-col gap-0.5 border border-border/60 bg-background-1/40 p-2">
-                    {team.members.map((m) => {
-                      const featureStage = isFeatureWorkflow
-                        ? FEATURE_WORKFLOW_STAGES.find((stage) => stage.handle === m.handle)
-                        : undefined;
-                      return (
-                        <div key={m.handle} className="flex items-center gap-2 px-1 py-1 text-xs">
-                          <span className="min-w-0 flex-1 truncate text-foreground">
-                            {featureStage
-                              ? t(`featureWorkflow.stages.${featureStage.id}.title`)
-                              : m.displayName}
-                          </span>
-                          {m.role === 'leader' && (
-                            <span className="shrink-0 bg-primary/15 px-1.5 py-px text-[10px] text-primary">
-                              {t('home.teamLeader')}
-                            </span>
-                          )}
-                          <span className="shrink-0 font-mono text-[10px] text-foreground-muted">
-                            {getRuntime(m.runtime)?.name ?? m.runtime}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-              <button
-                type="button"
-                onClick={() => navigate('library', { section: 'agentTeams' })}
-                className="flex items-center gap-1.5 self-start rounded-md px-1 py-0.5 text-xs text-foreground-muted transition-colors hover:text-foreground"
-              >
-                <Settings2 className="size-3.5 shrink-0" />
-                <span>{t('home.teamManageHint')}</span>
-              </button>
-            </div>
-          );
-        })()}
-    </div>
-  );
-}
-
-interface AgentProps {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  /** User Agents this slot can pick from. */
-  agents: Agent[];
-  /** Currently selected Agent id for this slot, or null when none chosen yet. */
-  selectedAgentId: string | null;
-  onSelectAgent: (agentId: string) => void;
-  onConfigurationChange: () => void;
-}
-
-function Agent({
-  icon: Icon,
-  label,
-  agents,
-  selectedAgentId,
-  onSelectAgent,
-  onConfigurationChange,
-}: AgentProps) {
-  const { t } = useTranslation();
-  const { navigate } = useNavigate();
-  const showAgentModal = useShowModal('agentEditModal');
-  const { installedSkills } = useSkills();
-
-  const selectedAgent = selectedAgentId
-    ? (agents.find((a) => a.id === selectedAgentId) ?? null)
-    : null;
-  const resolveSkillName = (identifier: string) =>
-    installedSkills.find((skill) => skill.key === identifier || skill.id === identifier)
-      ?.displayName ?? identifier;
-  const skillNames = selectedAgent
-    ? [
-        ...selectedAgent.enabledSkillIds.map((identifier) => resolveSkillName(identifier)),
-        ...selectedAgent.manualSkillIds.map(
-          (identifier) => `${resolveSkillName(identifier)} · ${t('agentManager.skillModeManual')}`
-        ),
-      ]
-    : [];
-  const editAgent = () =>
-    selectedAgent &&
-    showAgentModal({ agent: selectedAgent, onSuccess: () => onConfigurationChange() });
-
-  return (
-    <div className="group flex min-w-0 flex-col gap-1.5 rounded-xl border border-border/60 bg-background-1 p-2 transition-colors hover:border-border focus-within:border-border-1">
-      {/* Subject row: avatar + (role eyebrow over agent name) + edit. Folding the
-          role label into the picker keeps the whole assignment on one row. */}
-      <div className="flex min-w-0 items-center gap-1">
-        <AgentSlotSelector
-          selectedAgent={selectedAgent}
-          agents={agents}
-          onSelectAgent={onSelectAgent}
-          onCreateAgent={() =>
-            showAgentModal({ onSuccess: (created) => onSelectAgent(created.id) })
-          }
-          onManageAgents={() => navigate('agentManager')}
-          eyebrow={
-            <span
-              title={label}
-              className="flex items-center gap-1 truncate text-[9.5px] font-semibold uppercase tracking-[0.12em] text-foreground-passive"
-            >
-              <Icon className="size-3 shrink-0" />
-              {label}
-            </span>
-          }
-          className="h-auto min-w-0 flex-1 rounded-lg border-transparent bg-transparent py-1 pl-1 pr-1.5 hover:bg-background-2/60"
-        />
-        {selectedAgent && (
-          <button
-            type="button"
-            onClick={editAgent}
-            aria-label={t('agentManager.editAgent')}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground"
-          >
-            <Settings2 className="size-3.5" />
-          </button>
-        )}
-      </div>
-
-      {selectedAgent && (
-        <>
-          {selectedAgent.description && (
-            <p className="line-clamp-2 px-1 text-xs leading-snug text-foreground-muted">
-              {selectedAgent.description}
-            </p>
-          )}
-          {skillNames.length > 0 && (
-            <div className="flex flex-wrap gap-1 px-1">
-              {skillNames.map((name, index) => (
-                <span
-                  key={`${name}-${index}`}
-                  className="max-w-40 truncate rounded-full bg-background-2/70 px-2 py-0.5 text-[10px] font-medium text-foreground-muted"
-                >
-                  {name}
-                </span>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
 }
 
 function TaskScopedProjectButton({ label, tooltip }: TaskScopedProjectButtonProps) {

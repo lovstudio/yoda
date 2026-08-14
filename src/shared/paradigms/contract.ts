@@ -96,6 +96,20 @@ export type ParadigmUnbornPolicy = 'degrade' | 'seed-commit';
 /** Visual weight of the composer input while the paradigm is selected. */
 export type ParadigmAccent = 'default' | 'advanced' | 'experimental';
 
+/**
+ * Which section of the paradigm picker a kind's entries land in. `null` keeps a
+ * kind out of the picker — `compare` is reached through the composer's own
+ * "compare" affordance instead of being chosen as a paradigm.
+ */
+export type ParadigmPickerGroup = 'workflow' | 'multi-agent';
+
+/**
+ * Where a kind's instances come from. `null` means the kind has exactly one
+ * implicit instance; `'agent-teams'` means each Agent Team is an instance, so the
+ * kind contributes one picker entry per team and none when there are no teams.
+ */
+export type ParadigmInstanceSource = 'agent-teams' | null;
+
 export interface ParadigmCapabilities {
   worktree: ParadigmWorktreeNeed;
   strategyField: ParadigmStrategyField;
@@ -119,6 +133,12 @@ export interface ParadigmKindDescriptor<Params = unknown> {
   labelKey: string;
   descriptionKey: string;
   iconId: ParadigmIconId;
+  /** Picker section, or null for kinds reached through another affordance. */
+  pickerGroup: ParadigmPickerGroup | null;
+  /** Rank inside the picker group. Instances may override it. */
+  pickerOrder: number;
+  /** Where the kind's instances come from; null = one implicit instance. */
+  instanceSource: ParadigmInstanceSource;
   slots: readonly ParadigmSlot[];
   capabilities: ParadigmCapabilities;
   paramsSchema: z.ZodType<Params>;

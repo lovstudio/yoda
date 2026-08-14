@@ -33,6 +33,9 @@ export const singleParadigmKind: ParadigmKindDescriptor = {
   labelKey: 'home.modeNormal',
   descriptionKey: 'home.modeNormalDesc',
   iconId: 'bot',
+  pickerGroup: 'workflow',
+  pickerOrder: 0,
+  instanceSource: null,
   slots: [
     {
       key: 'agent',
@@ -63,6 +66,9 @@ export const specParadigmKind: ParadigmKindDescriptor = {
   labelKey: 'home.modeBrainstorm',
   descriptionKey: 'home.modeBrainstormDesc',
   iconId: 'lightbulb',
+  pickerGroup: 'workflow',
+  pickerOrder: 40,
+  instanceSource: null,
   slots: [
     {
       key: 'agent',
@@ -95,6 +101,9 @@ export const reviewParadigmKind: ParadigmKindDescriptor = {
   labelKey: 'home.modeReview',
   descriptionKey: 'home.modeReviewDesc',
   iconId: 'repeat',
+  pickerGroup: 'workflow',
+  pickerOrder: 30,
+  instanceSource: null,
   slots: [
     {
       key: 'implementer',
@@ -134,6 +143,9 @@ export const appBuildParadigmKind: ParadigmKindDescriptor = {
   labelKey: 'home.modeBuild',
   descriptionKey: 'home.modeBuildDesc',
   iconId: 'app-window',
+  pickerGroup: 'workflow',
+  pickerOrder: 20,
+  instanceSource: null,
   slots: [
     {
       key: 'agent',
@@ -166,6 +178,9 @@ export const teamParadigmKind: ParadigmKindDescriptor = {
   labelKey: 'home.modeTeamDefault',
   descriptionKey: 'home.modeTeamDesc',
   iconId: 'git-fork',
+  pickerGroup: 'multi-agent',
+  pickerOrder: 0,
+  instanceSource: 'agent-teams',
   // The roster lives in params (one instance per Agent Team), not in fixed slots.
   slots: [],
   capabilities: {
@@ -194,6 +209,9 @@ export const compareParadigmKind: ParadigmKindDescriptor = {
   labelKey: 'home.modeCompare',
   descriptionKey: 'home.modeCompareDesc',
   iconId: 'columns',
+  pickerGroup: null,
+  pickerOrder: 0,
+  instanceSource: null,
   slots: [],
   capabilities: {
     worktree: 'optional',
