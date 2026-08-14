@@ -167,15 +167,6 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
 
   return (
     <div className="flex flex-col">
-      <SwitchRow
-        icon={ListOrdered}
-        label={t('sidebar.priorityMode')}
-        description={t('sidebar.priorityModeDescription')}
-        checked={sidebarStore.taskPriorityMode}
-        onCheckedChange={(checked) => sidebarStore.setTaskPriorityMode(checked)}
-      />
-      {sidebarStore.taskPriorityMode && <PriorityOrderCard />}
-      <PanelSeparator />
       <PanelRow label={t('sidebar.newTaskOpenMode')}>
         <ToggleGroup
           size="xs"
@@ -249,6 +240,14 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
           <ToggleGroupItem value="updated-at">{t('sidebar.sortByUpdatedAt')}</ToggleGroupItem>
         </ToggleGroup>
       </PanelRow>
+      <SwitchRow
+        icon={ListOrdered}
+        label={t('sidebar.priorityMode')}
+        description={t('sidebar.priorityModeDescription')}
+        checked={sidebarStore.taskPriorityMode}
+        onCheckedChange={(checked) => sidebarStore.setTaskPriorityMode(checked)}
+      />
+      {sidebarStore.taskPriorityMode && <PriorityOrderCard />}
       <PanelRow label={t('sidebar.branchDisplay')}>
         <ToggleGroup
           size="xs"

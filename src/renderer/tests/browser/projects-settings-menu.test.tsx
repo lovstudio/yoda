@@ -200,10 +200,17 @@ describe('ProjectsSettingsMenu', () => {
     await click(viewOptions);
 
     const popover = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
+    const popoverText = popover?.textContent ?? '';
     expect(popover?.textContent).toContain('sidebar.priorityOrderSummary:8');
     expect(popover?.textContent).not.toContain('sidebar.priorityGroups.awaiting-input');
     expect(popover?.textContent).not.toContain('sidebar.priorityGroups.archived');
     expect(popover?.textContent).not.toContain('sidebar.groupBy');
+    expect(popoverText.indexOf('sidebar.sortBy')).toBeLessThan(
+      popoverText.indexOf('sidebar.priorityMode')
+    );
+    expect(popoverText.indexOf('sidebar.priorityMode')).toBeLessThan(
+      popoverText.indexOf('sidebar.branchDisplay')
+    );
 
     const priorityOrderEntry = popover?.querySelector<HTMLButtonElement>(
       'button[aria-haspopup="dialog"]'
