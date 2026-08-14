@@ -448,10 +448,11 @@ export function usePty(
   );
 
   // URL activation funnel (smart web links, OSC 8 hyperlinks, link gestures):
-  // the injected webLinks handler wins, otherwise the system browser.
+  // honor the shared terminal-link default and fall back to the system browser
+  // on surfaces that do not provide Yoda's in-app web link handler.
   const openUrl = useCallback((url: string) => {
     const handler = webLinksRef.current?.onOpen;
-    if (handler) {
+    if (smartPathOpenModeRef.current === 'internal' && handler) {
       handler(url);
       return;
     }

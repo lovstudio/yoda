@@ -126,11 +126,13 @@ export function FilePathMenuItems({
   components: { Item, Separator },
   onRefresh,
   onAfterAction,
+  defaultOpenLabel,
 }: {
   target: FilePathTarget;
   components: MenuPrimitives;
   onRefresh?: RefreshFileAction;
   onAfterAction?: () => void;
+  defaultOpenLabel?: ReactNode;
 }) {
   const { t } = useTranslation();
   const actions = useFilePathActions(target);
@@ -164,7 +166,7 @@ export function FilePathMenuItems({
           }}
         >
           <ExternalLink className="size-4" />
-          {t('tasks.panel.openFile')}
+          {defaultOpenLabel ?? t('tasks.panel.openFile')}
         </Item>
       ) : null}
       {openInTargets.map((app) => (

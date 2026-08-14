@@ -1,13 +1,15 @@
-import { Copy, ExternalLink, FileText } from 'lucide-react';
+import { Copy, ExternalLink, FileText, Settings } from 'lucide-react';
 import { useEffect, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { FilePathMenuItems } from '@renderer/lib/components/file-path-actions';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
+import { appState } from '@renderer/lib/stores/app-state';
 import { cn } from '@renderer/utils/utils';
 import type { TerminalFileLinkOptions, TerminalFileLinkTarget } from './terminal-file-links';
 import type { TerminalLinkTarget } from './terminal-link-target';
+import type { TerminalWebLinkOptions } from './terminal-web-links';
 
 export interface TerminalLinkMenuState {
   target: TerminalLinkTarget;
@@ -19,10 +21,11 @@ export interface TerminalLinkMenuState {
 interface Props {
   state: TerminalLinkMenuState | null;
   fileLinks: TerminalFileLinkOptions | null;
+  webLinks: TerminalWebLinkOptions | null;
   onClose: () => void;
 }
 
-export function TerminalLinkMenu({ state, fileLinks, onClose }: Props) {
+export function TerminalLinkMenu({ state, fileLinks, webLinks, onClose }: Props) {
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -77,7 +80,7 @@ export function TerminalLinkMenu({ state, fileLinks, onClose }: Props) {
           />
         ) : null}
         {state?.target.kind === 'url' ? (
-          <UrlMenuItems url={state.target.url} onAfterAction={onClose} t={t} />
+          <UrlMenuItems url={state.target.url} webLinks={webLinks} onAfterAction={onClose} t={t} />
         ) : null}
       </div>
     </div>,
@@ -149,7 +152,7 @@ function FileMenuItems({
           }}
         >
           <FileText className="size-4" />
-          {t('fileActions.openInMainArea')}
+          {t('terminal.linkMenu.openInYoda')}
         </MenuItem>
       ) : null}
       {canOpenInEditor && absolutePath ? <MenuSeparator /> : null}
@@ -165,23 +168,38 @@ function FileMenuItems({
           }}
           components={{ Item: MenuItem, Separator: MenuSeparator }}
           onAfterAction={onAfterAction}
+          defaultOpenLabel={t('terminal.linkMenu.openWithDefaultApp')}
         />
       ) : null}
+      {canOpenInEditor || absolutePath ? <MenuSeparator /> : null}
+      <OpenTerminalLinkSettingsItem onAfterAction={onAfterAction} t={t} />
     </>
   );
 }
 
 function UrlMenuItems({
   url,
+  webLinks,
   onAfterAction,
   t,
 }: {
   url: string;
+  webLinks: TerminalWebLinkOptions | null;
   onAfterAction: () => void;
   t: (key: string) => string;
 }) {
   return (
     <>
+      <MenuItem
+        disabled={!webLinks}
+        onSelect={() => {
+          webLinks?.onOpen(url);
+          onAfterAction();
+        }}
+      >
+        <FileText className="size-4" />
+        {t('terminal.linkMenu.openInYoda')}
+      </MenuItem>
       <MenuItem
         onSelect={() => {
           void rpc.app.openExternal(url).catch(() => {});
@@ -189,7 +207,7 @@ function UrlMenuItems({
         }}
       >
         <ExternalLink className="size-4" />
-        {t('terminal.linkMenu.openUrl')}
+        {t('terminal.linkMenu.openWithDefaultApp')}
       </MenuItem>
       <MenuSeparator />
       <MenuItem
@@ -201,7 +219,29 @@ function UrlMenuItems({
         <Copy className="size-4" />
         {t('terminal.linkMenu.copyUrl')}
       </MenuItem>
+      <MenuSeparator />
+      <OpenTerminalLinkSettingsItem onAfterAction={onAfterAction} t={t} />
     </>
+  );
+}
+
+function OpenTerminalLinkSettingsItem({
+  onAfterAction,
+  t,
+}: {
+  onAfterAction: () => void;
+  t: (key: string) => string;
+}) {
+  return (
+    <MenuItem
+      onSelect={() => {
+        appState.navigation.navigate('settings', { tab: 'terminal' });
+        onAfterAction();
+      }}
+    >
+      <Settings className="size-4" />
+      {t('terminal.linkMenu.openSettings')}
+    </MenuItem>
   );
 }
 

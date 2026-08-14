@@ -8,6 +8,7 @@ import type { TerminalFileLinkTarget } from '@renderer/lib/pty/terminal-file-lin
 const mocks = vi.hoisted(() => ({
   openFile: vi.fn<(target: TerminalFileLinkTarget) => void>(),
   openUrl: vi.fn<(url: string) => void>(),
+  openExternal: vi.fn(async () => undefined),
 }));
 
 vi.mock('@renderer/lib/ipc', () => ({
@@ -17,7 +18,7 @@ vi.mock('@renderer/lib/ipc', () => ({
   rpc: {
     app: {
       clipboardWriteText: vi.fn(async () => ({ success: true })),
-      openExternal: vi.fn(async () => undefined),
+      openExternal: mocks.openExternal,
       openIn: vi.fn(async () => ({ success: true })),
     },
     appSettings: {
@@ -60,6 +61,7 @@ describe('terminal link primary click', () => {
   beforeEach(async () => {
     mocks.openFile.mockReset();
     mocks.openUrl.mockReset();
+    mocks.openExternal.mockClear();
     host = document.createElement('div');
     Object.assign(host.style, { width: '1000px', height: '400px' });
     document.body.appendChild(host);
@@ -141,5 +143,35 @@ describe('terminal link primary click', () => {
 
     expect(mouseDown.defaultPrevented).toBe(true);
     expect(mocks.openUrl).toHaveBeenCalledWith(url);
+  });
+
+  it('uses the system default app when terminal link behavior is external', async () => {
+    const url = 'https://lovstudio.ai/about';
+    await writeTerminal(pty, url);
+    window.dispatchEvent(
+      new CustomEvent('terminal-smart-path-open-mode-changed', {
+        detail: { smartPathOpenMode: 'external' },
+      })
+    );
+
+    const screen = host.querySelector<HTMLElement>('.xterm-screen');
+    if (!screen) throw new Error('xterm screen was not mounted');
+    const rect = screen.getBoundingClientRect();
+    const cellWidth = rect.width / pty.terminal.cols;
+    const cellHeight = rect.height / pty.terminal.rows;
+    const mouseDown = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 1,
+      clientX: rect.left + cellWidth * 8.5,
+      clientY: rect.top + cellHeight * 0.5,
+    });
+
+    screen.dispatchEvent(mouseDown);
+
+    expect(mouseDown.defaultPrevented).toBe(true);
+    expect(mocks.openExternal).toHaveBeenCalledWith(url);
+    expect(mocks.openUrl).not.toHaveBeenCalled();
   });
 });

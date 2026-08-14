@@ -1361,10 +1361,10 @@
       "linesUnit": "行",
       "autoCopySelected": "自动复制选中文本",
       "autoCopySelectedDescription": "在终端中选中文本后自动复制到剪贴板。",
-      "smartPathOpenMode": "智能路径默认打开位置",
-      "smartPathOpenModeDescription": "单击即可打开识别到的路径；默认在 Yoda 内查看，也可交给外部应用。",
-      "smartPathOpenInternal": "Yoda 内部",
-      "smartPathOpenExternal": "外部应用",
+      "smartPathOpenMode": "终端链接默认打开方式",
+      "smartPathOpenModeDescription": "设置单击终端中的网址与文件路径时，默认在 Yoda 内打开或交给系统默认应用。",
+      "smartPathOpenInternal": "在 Yoda 内打开",
+      "smartPathOpenExternal": "使用默认应用打开",
       "hotTerminalLimit": "后台终端缓存",
       "hotTerminalLimitDescription": "自动模式常驻最近 4 个终端渲染器；持续高输出或应用内存压力下会进一步回收。被回收的会话保留有界的滚动上下文检查点。",
       "hotTerminalAuto": "自动（最近 4 个）",
@@ -5539,9 +5539,11 @@
   },
   "terminal": {
     "linkMenu": {
-      "openUrl": "打开链接",
+      "openInYoda": "在 Yoda 内打开",
+      "openWithDefaultApp": "使用默认应用打开",
       "copyUrl": "复制链接",
-      "urlCopied": "链接已复制"
+      "urlCopied": "链接已复制",
+      "openSettings": "终端链接设置"
     }
   },
   "integrations": {

@@ -201,6 +201,7 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
         <TerminalLinkMenu
           state={linkMenu}
           fileLinks={fileLinks ?? null}
+          webLinks={webLinks ?? null}
           onClose={() => setLinkMenu(null)}
         />
       </div>
