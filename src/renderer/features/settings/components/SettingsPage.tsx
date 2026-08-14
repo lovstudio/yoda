@@ -44,6 +44,7 @@ import {
 import ModelsSettingsCard, { ModelCatalogAutomaticUpdateSetting } from './ModelsSettingsCard';
 import NotificationSettingsCard from './NotificationSettingsCard';
 import OpenInAppsSettingsCard from './OpenInAppsSettingsCard';
+import SidebarStatusBarSettingsRow from './SidebarStatusBarSettingsRow';
 import TaskAppearanceSettingsCard from './TaskAppearanceSettingsCard';
 import {
   AutoGenerateTaskNamesRow,
@@ -476,6 +477,7 @@ export function SettingsPage({
       description: t('settings.interfaceTab.description'),
       sections: [
         { id: 'theme', component: <ThemeCard /> },
+        { id: 'sidebar-status-bar', component: <SidebarStatusBarSettingsRow /> },
         { id: 'task-appearance', component: <TaskAppearanceSettingsCard /> },
       ],
     },

@@ -586,6 +586,18 @@ describe('SidebarStore task recency ordering', () => {
     expect(restored.taskGroupVisibleLimit).toBe(10);
   });
 
+  it('persists sidebar task redaction in snapshots', () => {
+    const store = makeSidebarStore([makeProject('project-1', [])]);
+    expect(store.redactTaskContent).toBe(false);
+
+    store.setRedactTaskContent(true);
+    expect(store.snapshot.redactTaskContent).toBe(true);
+
+    const restored = makeSidebarStore([makeProject('project-1', [])]);
+    restored.restoreSnapshot({ redactTaskContent: store.snapshot.redactTaskContent });
+    expect(restored.redactTaskContent).toBe(true);
+  });
+
   it('keeps a project visible while its sessions load when empty projects are hidden', () => {
     const project = makeProject('loading-project', [], 'loading');
     const store = makeSidebarStore([project]);

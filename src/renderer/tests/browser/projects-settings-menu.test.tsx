@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
     ],
     taskGroupVisibleLimit: 5,
     taskBranchDisplay: 'compact',
+    redactTaskContent: false,
     hideProjectsWithoutActiveTasks: false,
     hideTasksWithoutActiveConversations: false,
     sortNeedsReviewLast: false,
@@ -40,6 +41,7 @@ const mocks = vi.hoisted(() => ({
     moveTaskPriorityGroup: vi.fn(),
     resetTaskPriorityOrder: vi.fn(),
     setTaskBranchDisplay: vi.fn(),
+    setRedactTaskContent: vi.fn(),
     setProjectTypeFilter: vi.fn(),
     setSortNeedsReviewLast: vi.fn(),
     setSortArchivingLast: vi.fn(),
@@ -115,6 +117,7 @@ describe('ProjectsSettingsMenu', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.sidebarStore.taskPriorityMode = false;
+    mocks.sidebarStore.redactTaskContent = false;
     mocks.sidebarStore.setTaskGroupVisibleLimit = mocks.setTaskGroupVisibleLimit;
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -184,6 +187,39 @@ describe('ProjectsSettingsMenu', () => {
     await clickWithUserEvent(floatingOption);
 
     expect(mocks.updateInterface).toHaveBeenCalledWith({ newTaskOpenMode: 'modal' });
+  });
+
+  it('enables sidebar task redaction from view options', async () => {
+    const { ProjectsSettingsMenu } = await import(
+      '@renderer/features/sidebar/projects-group-label'
+    );
+    await act(async () => root.render(createElement(ProjectsSettingsMenu, { renderTrigger })));
+
+    const viewOptions = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="workspaces.viewOptions"]'
+    );
+    if (!viewOptions) throw new Error('View options trigger is missing');
+    await click(viewOptions);
+
+    const popover = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
+    const redactionSwitch = popover?.querySelector<HTMLElement>(
+      '[data-slot="switch"][aria-label="sidebar.privacyMode"]'
+    );
+    if (!redactionSwitch) throw new Error('Redaction mode switch is missing');
+
+    const popoverText = popover?.textContent ?? '';
+    expect(popoverText.indexOf('sidebar.expressMode')).toBeLessThan(
+      popoverText.indexOf('sidebar.privacySection')
+    );
+    expect(popoverText.indexOf('sidebar.privacySection')).toBeLessThan(
+      popoverText.indexOf('sidebar.privacyMode')
+    );
+    expect(popoverText.indexOf('sidebar.privacyMode')).toBeLessThan(
+      popoverText.indexOf('sidebar.clearManualOrder')
+    );
+    await click(redactionSwitch);
+
+    expect(mocks.sidebarStore.setRedactTaskContent).toHaveBeenCalledWith(true);
   });
 
   it('does not expose bulk project expansion controls', async () => {

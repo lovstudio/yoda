@@ -20,9 +20,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
-import { SidebarHelpMenu } from './sidebar-help-menu';
+import { cn } from '@renderer/utils/utils';
 
-export function SidebarAccountAnchor() {
+export function SidebarAccountAnchor({ compact = false }: { compact?: boolean }) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
   const { data: session } = useAccountSession();
@@ -51,7 +51,13 @@ export function SidebarAccountAnchor() {
   };
 
   return (
-    <div className="flex min-w-0 flex-1 items-center text-foreground-tertiary-muted">
+    <div
+      data-sidebar-status-content="account"
+      className={cn(
+        'flex min-w-0 items-center text-foreground-tertiary-muted',
+        compact ? 'shrink-0' : 'flex-1'
+      )}
+    >
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -59,14 +65,19 @@ export function SidebarAccountAnchor() {
               type="button"
               aria-label={t('sidebar.manageLovStudioAccount')}
               title={t('sidebar.manageLovStudioAccount')}
-              className="group/account flex min-w-0 flex-1 items-center gap-1.5 rounded-xl bg-background-tertiary-1/30 px-1 py-0.5 text-left backdrop-blur-sm transition-colors data-popup-open:bg-background-tertiary-1/55 data-popup-open:text-foreground-tertiary hover:bg-background-tertiary-1/55 hover:text-foreground-tertiary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className={cn(
+                'group/account flex min-w-0 items-center rounded-xl bg-background-tertiary-1/30 text-left backdrop-blur-sm transition-colors data-popup-open:bg-background-tertiary-1/55 data-popup-open:text-foreground-tertiary hover:bg-background-tertiary-1/55 hover:text-foreground-tertiary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                compact ? 'size-6 shrink-0 justify-center' : 'flex-1 gap-1.5 px-1 py-0.5'
+              )}
             />
           }
         >
           <AccountAvatar user={user} />
-          <span className="min-w-0 flex-1 truncate text-[11px] font-medium leading-4 text-foreground-tertiary">
-            {displayName}
-          </span>
+          {!compact && (
+            <span className="min-w-0 flex-1 truncate text-[11px] font-medium leading-4 text-foreground-tertiary">
+              {displayName}
+            </span>
+          )}
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-64">
           <div className="flex items-center gap-2 px-2 py-2">
@@ -105,7 +116,6 @@ export function SidebarAccountAnchor() {
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      <SidebarHelpMenu />
     </div>
   );
 }

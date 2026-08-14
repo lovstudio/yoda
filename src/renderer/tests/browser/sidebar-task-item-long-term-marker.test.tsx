@@ -10,10 +10,13 @@ const mocks = vi.hoisted(() => ({
   archiveQuick: vi.fn(),
   createSubtaskAndRun: vi.fn(),
   getTaskDeliverySummaries: vi.fn(),
+  openTaskWhenReady: vi.fn(),
   preloadTask: vi.fn(),
   provisionTask: vi.fn(),
   prewarmTask: vi.fn(),
   hoverIntent: undefined as (() => void) | undefined,
+  archivedAt: null as string | null,
+  redactTaskContent: false,
   taskPhase: null as 'idle' | null,
   taskState: 'unregistered' as 'unregistered' | 'unprovisioned',
   sessionStatusSummary: {
@@ -81,7 +84,7 @@ vi.mock('@renderer/features/tasks/components/use-task-menu-actions', () => ({
 }));
 
 vi.mock('@renderer/features/tasks/open-task-when-ready', () => ({
-  openTaskWhenReady: vi.fn(),
+  openTaskWhenReady: mocks.openTaskWhenReady,
 }));
 
 vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
@@ -99,6 +102,7 @@ vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
       id: 'task-1',
       name: 'Long-term task',
       status: 'todo',
+      archivedAt: mocks.archivedAt,
       isLongTerm: true,
       needsReview: false,
     },
@@ -125,6 +129,9 @@ vi.mock('@renderer/lib/stores/app-state', () => ({
   sidebarStore: {
     collapsedTaskIds: new Set<string>(),
     taskBranchDisplay: 'none',
+    get redactTaskContent() {
+      return mocks.redactTaskContent;
+    },
     toggleTaskCollapsed: mocks.toggleTaskCollapsed,
     holdTaskReflow: vi.fn(),
     releaseTaskReflow: vi.fn(),
@@ -156,13 +163,17 @@ describe('SidebarTaskItem long-term marker', () => {
     mocks.createSubtaskAndRun.mockClear();
     mocks.getTaskDeliverySummaries.mockReset();
     mocks.getTaskDeliverySummaries.mockResolvedValue([]);
+    mocks.openTaskWhenReady.mockReset();
+    mocks.openTaskWhenReady.mockResolvedValue(true);
     mocks.preloadTask.mockReset();
     mocks.provisionTask.mockReset();
     mocks.provisionTask.mockResolvedValue(undefined);
     mocks.prewarmTask.mockReset();
     mocks.hoverIntent = undefined;
+    mocks.archivedAt = null;
     mocks.taskPhase = null;
     mocks.taskState = 'unregistered';
+    mocks.redactTaskContent = false;
     mocks.sessionStatusSummary = {
       primaryStatus: null,
       totalCount: 0,
@@ -263,6 +274,38 @@ describe('SidebarTaskItem long-term marker', () => {
     });
 
     expect(mocks.provisionTask).toHaveBeenCalledWith('task-1');
+  });
+
+  it('opens an archived row for review without provisioning it', async () => {
+    mocks.taskState = 'unprovisioned';
+    mocks.taskPhase = 'idle';
+    mocks.archivedAt = '2026-08-14T10:00:00.000Z';
+    const { SidebarTaskItem } = await import('@renderer/features/sidebar/task-item');
+
+    await act(async () => {
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SidebarTaskItem, {
+            projectId: 'project-1',
+            taskId: 'task-1',
+          })
+        )
+      );
+    });
+
+    const row = host.querySelector<HTMLElement>('[data-sidebar-task-id="task-1"]');
+    expect(row).not.toBeNull();
+
+    await act(async () => {
+      row?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      row?.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
+    });
+
+    expect(mocks.provisionTask).not.toHaveBeenCalled();
+    expect(mocks.openTaskWhenReady).toHaveBeenCalledOnce();
+    expect(mocks.openTaskWhenReady).toHaveBeenCalledWith('project-1', 'task-1', mocks.navigate);
   });
 
   it('delegates direct archive navigation to the shared task action', async () => {
@@ -443,5 +486,30 @@ describe('SidebarTaskItem long-term marker', () => {
     await vi.waitFor(() => {
       expect(document.body.querySelector('[data-sidebar-task-hover-preview]')).toBeNull();
     });
+  });
+
+  it('lightly obscures task metadata and disables hover previews in redaction mode', async () => {
+    mocks.redactTaskContent = true;
+    const { SidebarTaskItem } = await import('@renderer/features/sidebar/task-item');
+
+    await act(async () => {
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SidebarTaskItem, {
+            projectId: 'project-1',
+            taskId: 'task-1',
+            rowVariant: 'flat',
+          })
+        )
+      );
+    });
+
+    const title = host.querySelector<HTMLElement>('[data-sidebar-task-content="title"]');
+    const project = host.querySelector<HTMLElement>('[data-sidebar-task-content="project"]');
+    expect(title?.classList.contains('blur-[2px]')).toBe(true);
+    expect(project?.classList.contains('blur-[2px]')).toBe(true);
+    expect(host.querySelector('[data-sidebar-task-hover-trigger="true"]')).toBeNull();
   });
 });

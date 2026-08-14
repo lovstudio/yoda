@@ -233,6 +233,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   taskPriorityOrder: SidebarTaskPriorityGroup[] = [...DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER];
   taskGroupVisibleLimit = DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT;
   taskBranchDisplay: SidebarBranchDisplay = 'compact';
+  redactTaskContent = false;
   pinnedCollapsed = false;
   projectsCollapsed = false;
   projectTypeFilter: ProjectTypeFilter = 'all';
@@ -819,6 +820,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       taskPriorityOrder: [...this.taskPriorityOrder],
       taskGroupVisibleLimit: this.taskGroupVisibleLimit,
       taskBranchDisplay: this.taskBranchDisplay,
+      redactTaskContent: this.redactTaskContent,
       pinnedProjectIds: [...this.pinnedProjectIds],
       pinnedCollapsed: this.pinnedCollapsed,
       projectsCollapsed: this.projectsCollapsed,
@@ -874,6 +876,9 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     if (snapshot.taskBranchDisplay !== undefined) {
       const v = parseSidebarBranchDisplay(snapshot.taskBranchDisplay);
       if (v !== undefined) this.taskBranchDisplay = v;
+    }
+    if (snapshot.redactTaskContent !== undefined) {
+      this.redactTaskContent = snapshot.redactTaskContent === true;
     }
     if (snapshot.pinnedProjectIds !== undefined) {
       this.pinnedProjectIds.replace(snapshot.pinnedProjectIds);
@@ -964,6 +969,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   setTaskBranchDisplay(display: SidebarBranchDisplay): void {
     this.taskBranchDisplay = display;
+  }
+
+  setRedactTaskContent(redacted: boolean): void {
+    this.redactTaskContent = redacted;
   }
 
   setNavSectionHidden(hidden: boolean): void {

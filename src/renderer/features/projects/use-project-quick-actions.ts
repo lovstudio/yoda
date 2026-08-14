@@ -115,17 +115,18 @@ export function useProjectQuickActions(projectId: string): ProjectQuickActionsMe
     [handleRunQuickAction, navigate, projectId, t]
   );
 
-  const canUseQuickActions = Boolean(projectStore && projectStore.state !== 'unregistered');
   return {
     onQuickActionsMenuOpen: () => {
       void settingsStore?.pageData.load();
     },
-    onCaptureAutomation: canUseQuickActions
-      ? () => showCaptureAutomation({ projectId, projectName: projectStore.displayName })
-      : undefined,
-    onManageQuickActions: canUseQuickActions
-      ? () => showManageQuickActions({ projectId })
-      : undefined,
+    onCaptureAutomation:
+      projectStore && projectStore.state !== 'unregistered'
+        ? () => showCaptureAutomation({ projectId, projectName: projectStore.displayName })
+        : undefined,
+    onManageQuickActions:
+      projectStore && projectStore.state !== 'unregistered'
+        ? () => showManageQuickActions({ projectId })
+        : undefined,
     quickActions,
     isQuickActionRunning: (action: QuickAction) => quickActionTargets.has(action.id),
     canRunQuickAction: (action: QuickAction) => action.kind === 'command' || Boolean(runtimeId),

@@ -29,7 +29,6 @@ import {
   taskIdleOpacityClassName,
   taskTitleStyleClassName,
 } from '@renderer/features/tasks/task-appearance-classes';
-import { beginTaskOpenTrace } from '@renderer/features/tasks/task-open-performance';
 import { taskOpenTransitionStore } from '@renderer/features/tasks/task-open-transition-store';
 import { TreeGuideSlot } from '@renderer/lib/components/tree-guide-slot';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
@@ -127,6 +126,8 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   );
 
   const taskName = task.data.name;
+  const redactTaskContent = sidebarStore.redactTaskContent;
+  const redactedContentClassName = redactTaskContent && 'blur-[2px] opacity-80';
   const treeDepth = rowVariant === 'underProject' ? Math.min(depth, TASK_TREE_MAX_VISUAL_DEPTH) : 0;
   // One guide slot per (visually capped) tree level. Without trail data (drag
   // ghost previewing a projected depth) fall back to a bare elbow.
@@ -135,7 +136,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
       ? (treeTrail?.slice(-treeDepth) ?? Array.from({ length: treeDepth }, () => false))
       : [];
   const hasChildren = rowVariant === 'underProject' && childCount > 0;
-  const canShowHoverPreview = !disableHoverPreview;
+  const canShowHoverPreview = !disableHoverPreview && !redactTaskContent;
   const isCollapsed = hasChildren && sidebarStore.collapsedTaskIds.has(taskId);
   // Root-level parents swap pl-8 for a project-style mini-button slot (same 32px
   // name offset), so the hover-only chevron aligns with the project row's chevron
@@ -155,7 +156,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const showMarkerAtCompactEdge = appearance.marker !== 'none' && rowVariant !== 'underProject';
 
   const handleProvision = () => {
-    if (task.state !== 'unprovisioned' || task.phase !== 'idle') return;
+    if (isArchived || task.state !== 'unprovisioned' || task.phase !== 'idle') return;
     void taskManager?.provisionTask(taskId).catch(() => {});
   };
 
@@ -177,7 +178,6 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     project?.state === 'unregistered' ? projectId : (project?.displayName ?? projectId);
 
   const handleOpenTask = () => {
-    beginTaskOpenTrace(projectId, taskId);
     void openTaskWhenReady(projectId, taskId, navigate);
   };
 
@@ -296,7 +296,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           // color, distinct branches differ.
           <span
             aria-hidden
-            title={branchName}
+            title={redactTaskContent ? undefined : branchName}
             style={{ backgroundColor: branchRailColor }}
             className={cn(
               'absolute inset-y-1.5 left-0.5 w-[3px] rounded-full',
@@ -330,10 +330,12 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           <div className="flex min-w-0 items-center gap-1">
             <span
               className={cn(
-                'min-w-0 truncate text-left transition-colors',
+                'min-w-0 truncate text-left transition-[color,filter,opacity]',
                 taskTitleStyleClassName(appearance.titleStyle),
+                redactedContentClassName,
                 (isBootstrapping || isOpening || isArchiving) && 'text-foreground/40'
               )}
+              data-sidebar-task-content="title"
             >
               {taskName}
             </span>
@@ -342,12 +344,18 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
                 {childCount}
               </span>
             )}
+            <RenderPrBadge task={task} />
             {rowVariant === 'flat' && (
-              <span className="shrink-0 truncate max-w-[8rem] rounded-sm bg-background-tertiary-2 px-1 text-[10px] uppercase tracking-wide text-foreground-tertiary">
+              <span
+                data-sidebar-task-content="project"
+                className={cn(
+                  'ml-auto max-w-24 shrink-0 truncate rounded-sm bg-background-tertiary-2 px-1 text-right text-[10px] uppercase tracking-wide text-foreground-tertiary',
+                  redactedContentClassName
+                )}
+              >
                 {projectName}
               </span>
             )}
-            <RenderPrBadge task={task} />
           </div>
           {branchDisplay === 'full' && branchName && (
             <div
@@ -357,7 +365,15 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               )}
             >
               <GitBranch className="size-3 shrink-0" />
-              <span className="min-w-0 truncate font-mono text-[10px] leading-4">{branchName}</span>
+              <span
+                data-sidebar-task-content="branch"
+                className={cn(
+                  'min-w-0 truncate font-mono text-[10px] leading-4',
+                  redactedContentClassName
+                )}
+              >
+                {branchName}
+              </span>
             </div>
           )}
         </div>

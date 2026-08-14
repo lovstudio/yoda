@@ -5,6 +5,7 @@ import {
   FolderTree,
   ListRestart,
   MessageSquareOff,
+  ScanText,
   Settings2,
   Zap,
   type LucideIcon,
@@ -99,6 +100,7 @@ export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu({
     ) ||
     sidebarStore.taskGroupVisibleLimit !== DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT ||
     sidebarStore.taskBranchDisplay !== 'compact' ||
+    sidebarStore.redactTaskContent ||
     sidebarStore.hideProjectsWithoutActiveTasks ||
     sidebarStore.hideTasksWithoutActiveConversations ||
     sidebarStore.sortArchivingLast ||
@@ -297,6 +299,15 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
         checked={expressMode}
         onCheckedChange={(checked) => updateHomeDraft({ expressMode: checked })}
       />
+      <PanelSeparator />
+      <SectionLabel>{t('sidebar.privacySection')}</SectionLabel>
+      <SwitchRow
+        icon={ScanText}
+        label={t('sidebar.privacyMode')}
+        description={t('sidebar.privacyModeDescription')}
+        checked={sidebarStore.redactTaskContent}
+        onCheckedChange={(checked) => sidebarStore.setRedactTaskContent(checked)}
+      />
       {!sidebarStore.taskPriorityMode && (
         <>
           <PanelSeparator />
@@ -432,6 +443,7 @@ function SwitchRow({
       <Switch
         size="sm"
         checked={checked}
+        aria-label={label}
         onCheckedChange={onCheckedChange}
         onClick={(e) => e.stopPropagation()}
       />

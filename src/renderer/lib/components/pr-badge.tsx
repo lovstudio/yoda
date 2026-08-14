@@ -46,22 +46,24 @@ export function PrBadge({ variant = 'default', pr, className }: PrBadgeProps) {
   return (
     <Popover>
       <PopoverTrigger openOnHover>{renderBadge()}</PopoverTrigger>
-      <PopoverContent>
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 justify-between no-wrap">
-            <div className="flex items-center gap-2  min-w-0">
-              <StatusIcon status={pr.status} className="size-3" />
-              <span className="text-sm text-foreground leading-snug truncate min-w-0">
+      <PopoverContent className="gap-2.5 p-3">
+        <div className="flex min-w-0 flex-col gap-2">
+          <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2">
+            <StatusIcon status={pr.status} className="size-3.5" />
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="min-w-0 truncate text-sm leading-snug text-foreground">
                 {pr.title}
               </span>
-              <PrNumberBadge number={getPrNumber(pr) ?? 0} />
+              <PrNumberBadge number={getPrNumber(pr) ?? 0} className="shrink-0 text-[10px]" />
+            </div>
+            <div className="flex shrink-0 items-center gap-0.5">
               <Tooltip>
                 <TooltipTrigger
                   render={
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      className="cursor-pointer"
+                      className="size-5 cursor-pointer"
                       onClick={() => rpc.app.openExternal(pr.url)}
                     >
                       <ExternalLink className="size-3.5" />
@@ -70,14 +72,14 @@ export function PrBadge({ variant = 'default', pr, className }: PrBadgeProps) {
                 />
                 <TooltipContent>{t('pullRequests.openOnGitHub')}</TooltipContent>
               </Tooltip>
+              <RelativeTime
+                value={pr.createdAt}
+                className="min-w-8 text-right text-[11px] text-foreground-passive"
+                compact
+              />
             </div>
-            <RelativeTime
-              value={pr.createdAt}
-              className="text-xs text-foreground-passive"
-              compact
-            />
           </div>
-          <PrMergeLine pr={pr} />
+          <PrMergeLine pr={pr} className="pl-[22px] text-[11px] leading-4" />
         </div>
       </PopoverContent>
     </Popover>
