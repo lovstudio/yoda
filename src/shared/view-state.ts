@@ -181,6 +181,7 @@ export const SIDEBAR_TASK_PRIORITY_GROUPS = [
   'working',
   'pending-review',
   'long-term',
+  'idle',
   'archived',
 ] as const;
 export type SidebarTaskPriorityGroup = (typeof SIDEBAR_TASK_PRIORITY_GROUPS)[number];

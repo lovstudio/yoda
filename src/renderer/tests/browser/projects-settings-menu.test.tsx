@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
       'working',
       'pending-review',
       'long-term',
+      'idle',
       'archived',
     ],
     taskGroupVisibleLimit: 5,

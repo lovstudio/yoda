@@ -185,6 +185,7 @@
       "working": "In progress",
       "pending-review": "Completed · Review",
       "long-term": "Long-term",
+      "idle": "Idle",
       "archived": "Archived"
     },
     "pinned": "Pinned",
