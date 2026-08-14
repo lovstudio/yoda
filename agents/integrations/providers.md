@@ -56,23 +56,22 @@ Each provider has a terminal output classifier in `src/main/core/conversations/i
   `gpt-5.6-sol` -> `openai/gpt-5.6-sol`) for both Yoda-launched sessions and
   persistent external-Client sync, then removes that prefix when the route is
   restored to native Codex.
-- By default, Yoda passes invocation-scoped Codex provider overrides and the
-  Profile key only to the child process it launches. MaaS exposes one global
+- By default, Yoda passes invocation-scoped provider overrides and the Profile
+  key only to the child process it launches. MaaS exposes one global
   external-Agent sync policy; when enabled, activating or switching a Profile
-  updates every supported Agent Client adapter. Codex CLI/App is the first
-  persistent adapter. Other Clients must remain visibly marked as planned until
-  their full configuration migration and rollback flows are implemented.
+  updates every supported Agent Client adapter. Codex CLI/App and Claude Code
+  have persistent configuration adapters with snapshot-backed rollback.
 - Global external-Agent sync is explicitly consented and visible in MaaS
-  settings. Codex CLI / App is the first adapter. It writes the active provider
-  and `experimental_bearer_token` to the user-level `config.toml`, with mode
-  `0600`, so the same configuration works on macOS, Windows, and Linux without
-  login-session environment propagation. The UI must disclose that this token
-  is plaintext and persistent. Cleanup restores the original Codex config.
-- Persistent sync requires the current global `externalAgentSyncVersion = 2`
-  consent. Version 1 represented the older macOS Keychain/LaunchAgent flow and
-  must not silently authorize plaintext config storage. Reconciliation removes
-  its managed environment/config state until the user explicitly enables the
-  new flow. New installations default to Yoda-only scope.
+  settings. Codex writes the active provider and `experimental_bearer_token` to
+  the user-level `config.toml`; Claude Code writes `ANTHROPIC_BASE_URL` and
+  `ANTHROPIC_AUTH_TOKEN` to the user-level `settings.json`. Both files use mode
+  `0600`, and cleanup restores the original managed fields without replacing
+  unrelated user configuration. The UI must disclose that these tokens are
+  plaintext and persistent.
+- Persistent sync requires the current global `externalAgentSyncVersion = 3`
+  consent. Earlier versions represented narrower sync contracts and must not
+  silently authorize the additional plaintext configuration target. New
+  installations default to Yoda-only scope.
 - `codex-maas-user-environment.ts` remains only for restoring or removing old
   managed environment state, including `YODA_MAAS_API_KEY`, during snapshot
   migration. Current Profiles must not publish credentials through it.
