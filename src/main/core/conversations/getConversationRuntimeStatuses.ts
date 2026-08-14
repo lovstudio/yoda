@@ -144,6 +144,12 @@ async function deriveStatus(args: {
           : await findClaudeTranscriptPathBySessionId(sessionId);
     if (filePath) {
       const verdict = await readClaudeTurnVerdictFile(filePath).catch(() => null);
+      // Deliberately no background-job seed here. Detached jobs are children of
+      // the CLI process, so a conversation with no live PTY has none of them
+      // left running — which is every conversation a cold load looks at. Parsing
+      // this transcript for them would buy a second full scan per conversation
+      // to publish zero; the run-state tailer establishes the real count as soon
+      // as the session starts or reattaches.
       if (verdict) {
         truth = verdict.state;
         if (
