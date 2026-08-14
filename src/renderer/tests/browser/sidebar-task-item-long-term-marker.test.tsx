@@ -15,6 +15,13 @@ const mocks = vi.hoisted(() => ({
   hoverIntent: undefined as (() => void) | undefined,
   taskPhase: null as 'idle' | null,
   taskState: 'unregistered' as 'unregistered' | 'unprovisioned',
+  sessionStatusSummary: {
+    primaryStatus: null as 'working' | 'completed' | null,
+    totalCount: 0,
+    attentionCount: 0,
+    workingCount: 0,
+    sessions: [],
+  },
 }));
 
 vi.mock('react-i18next', () => ({
@@ -38,7 +45,7 @@ vi.mock('@renderer/features/settings/use-app-settings-key', () => ({
 }));
 
 vi.mock('@renderer/features/sidebar/task-sidebar-agent-status', () => ({
-  TaskSidebarAgentStatus: () => null,
+  TaskSidebarAgentStatus: () => createElement('span', { 'data-testid': 'task-agent-status' }),
 }));
 
 vi.mock('@renderer/features/tasks/components/task-context-menu', () => ({
@@ -95,7 +102,7 @@ vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
     },
     conversationStats: {},
   }),
-  taskSessionStatusSummary: () => ({ primaryStatus: null }),
+  taskSessionStatusSummary: () => mocks.sessionStatusSummary,
 }));
 
 vi.mock('@renderer/lib/components/pr-badge', () => ({
@@ -153,6 +160,13 @@ describe('SidebarTaskItem long-term marker', () => {
     mocks.hoverIntent = undefined;
     mocks.taskPhase = null;
     mocks.taskState = 'unregistered';
+    mocks.sessionStatusSummary = {
+      primaryStatus: null,
+      totalCount: 0,
+      attentionCount: 0,
+      workingCount: 0,
+      sessions: [],
+    };
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -275,6 +289,70 @@ describe('SidebarTaskItem long-term marker', () => {
 
     expect(mocks.archiveQuick).toHaveBeenCalledOnce();
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('reveals archive on hover when the agent status is not working', async () => {
+    mocks.sessionStatusSummary = {
+      primaryStatus: 'completed',
+      totalCount: 1,
+      attentionCount: 1,
+      workingCount: 0,
+      sessions: [],
+    };
+    const { SidebarTaskItem } = await import('@renderer/features/sidebar/task-item');
+
+    await act(async () => {
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SidebarTaskItem, {
+            projectId: 'project-1',
+            taskId: 'task-1',
+          })
+        )
+      );
+    });
+
+    const row = host.querySelector<HTMLElement>('[data-sidebar-task-id="task-1"]');
+    const actions = host.querySelector<HTMLElement>('[data-sidebar-task-actions]');
+    const status = host.querySelector<HTMLElement>('[data-sidebar-task-status]');
+    expect(row).not.toBeNull();
+    expect(actions?.classList.contains('hidden')).toBe(true);
+    expect(actions?.classList.contains('group-hover/row:flex')).toBe(true);
+    expect(status?.classList.contains('flex')).toBe(true);
+    expect(status?.classList.contains('group-hover/row:hidden')).toBe(true);
+  });
+
+  it('keeps the working status visible on hover', async () => {
+    mocks.sessionStatusSummary = {
+      primaryStatus: 'working',
+      totalCount: 1,
+      attentionCount: 0,
+      workingCount: 1,
+      sessions: [],
+    };
+    const { SidebarTaskItem } = await import('@renderer/features/sidebar/task-item');
+
+    await act(async () => {
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SidebarTaskItem, {
+            projectId: 'project-1',
+            taskId: 'task-1',
+          })
+        )
+      );
+    });
+
+    const row = host.querySelector<HTMLElement>('[data-sidebar-task-id="task-1"]');
+    const actions = host.querySelector<HTMLElement>('[data-sidebar-task-actions]');
+    const status = host.querySelector<HTMLElement>('[data-sidebar-task-status]');
+    expect(row).not.toBeNull();
+    expect(actions?.className).toBe('items-center gap-0.5 hidden');
+    expect(status?.className).toBe('items-center flex');
   });
 
   it('opens the preview only after hovering the archive action', async () => {

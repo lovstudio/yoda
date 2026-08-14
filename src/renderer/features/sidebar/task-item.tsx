@@ -109,11 +109,12 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const isOpening =
     taskOpenTransitionStore.isPending(projectId, taskId) &&
     !taskOpenTransitionStore.hasFailed(projectId, taskId);
-  // Any displayed agent status pins the status slot: notifications are a
-  // click target (jump to the pending session) and the working spinner keeps
-  // its hover-to-interrupt affordance.
+  // A working session pins the status slot so its hover-to-interrupt affordance
+  // remains reachable. Attention/completed statuses stay visible at rest, but
+  // yield to the row actions on hover just like the idle relative timestamp.
   const statusSummary = taskSessionStatusSummary(task);
   const hasAgentNotification = statusSummary.primaryStatus !== null;
+  const hasWorkingAgent = statusSummary.workingCount > 0;
   const isIdle = !isBootstrapping && !isOpening && !hasAgentNotification;
   const appearance = resolveTaskAppearance(
     interfaceSettings?.taskAppearance ?? DEFAULT_TASK_APPEARANCE_SETTINGS,
@@ -365,11 +366,12 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         </div>
       </div>
       <div
+        data-sidebar-task-actions
         className={cn(
           'items-center gap-0.5',
           isMenuOpen || isArchiving || isHoverPreviewOpen
             ? 'flex'
-            : hasAgentNotification
+            : hasWorkingAgent
               ? 'hidden'
               : 'hidden group-hover/row:flex'
         )}
@@ -407,11 +409,12 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         ) : null}
       </div>
       <div
+        data-sidebar-task-status
         className={cn(
           'items-center',
           isMenuOpen || isArchiving || isHoverPreviewOpen
             ? 'hidden'
-            : hasAgentNotification
+            : hasWorkingAgent
               ? 'flex'
               : 'flex group-hover/row:hidden'
         )}
