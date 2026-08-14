@@ -5,6 +5,10 @@ import { asMounted, getProjectStore } from '@renderer/features/projects/stores/p
 import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { buildFilePathDefaultOpenRequest } from '@renderer/lib/components/file-path-open';
 import { rpc } from '@renderer/lib/ipc';
+import {
+  getTerminalFileLinkInternalDestination,
+  openTerminalGlobalFileInYoda,
+} from '@renderer/lib/pty/terminal-file-link-open';
 import type { TerminalFileLinkOptions } from '@renderer/lib/pty/terminal-file-links';
 
 /**
@@ -29,11 +33,19 @@ export function useWorkspaceFileLinks(
       workspaceRootAliases: projectRoot ? [projectRoot] : undefined,
       homeDir: typeof homeDir === 'string' ? homeDir : undefined,
       sshConnectionId: remoteConnectionId,
-      onOpen: ({ filePath, absolutePath, line, column, isDirectory }) => {
-        if (filePath) {
+      onOpen: (target) => {
+        const { absolutePath, line, column, isDirectory } = target;
+        const destination = getTerminalFileLinkInternalDestination(target, {
+          sshConnectionId: remoteConnectionId,
+        });
+        if (destination?.placement === 'workspace') {
           // Open into the sidebar so the pane stays visible.
-          provisionedTask.taskView.tabManager.openFileInSidebar(filePath, { line, column });
+          provisionedTask.taskView.tabManager.openFileInSidebar(destination.path, { line, column });
           provisionedTask.taskView.setSidebarCollapsed(false);
+          return;
+        }
+        if (destination?.placement === 'global') {
+          void openTerminalGlobalFileInYoda(destination.path);
           return;
         }
         if (absolutePath) {

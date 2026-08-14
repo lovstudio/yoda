@@ -2,11 +2,13 @@ import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { TerminalFileLinkOptions } from '@renderer/lib/pty/terminal-file-links';
 import { TerminalLinkMenu, type TerminalLinkMenuState } from '@renderer/lib/pty/terminal-link-menu';
 
 const mocks = vi.hoisted(() => ({
   clickThrough: vi.fn(),
   openInYoda: vi.fn<(url: string) => void>(),
+  openFileInYoda: vi.fn(),
   openExternal: vi.fn(async () => undefined),
   clipboardWriteText: vi.fn(async () => ({ success: true })),
   navigate: vi.fn(),
@@ -49,8 +51,14 @@ const menuState: TerminalLinkMenuState = {
   y: 40,
 };
 
-function MenuOverTerminal() {
-  const [state, setState] = useState<TerminalLinkMenuState | null>(menuState);
+function MenuOverTerminal({
+  initialState = menuState,
+  fileLinks = null,
+}: {
+  initialState?: TerminalLinkMenuState;
+  fileLinks?: TerminalFileLinkOptions | null;
+}) {
+  const [state, setState] = useState<TerminalLinkMenuState | null>(initialState);
 
   return (
     <>
@@ -59,7 +67,7 @@ function MenuOverTerminal() {
       </button>
       <TerminalLinkMenu
         state={state}
-        fileLinks={null}
+        fileLinks={fileLinks}
         webLinks={{ onOpen: mocks.openInYoda }}
         onClose={() => setState(null)}
       />
@@ -74,6 +82,7 @@ describe('TerminalLinkMenu', () => {
   beforeEach(async () => {
     mocks.clickThrough.mockReset();
     mocks.openInYoda.mockReset();
+    mocks.openFileInYoda.mockReset();
     mocks.openExternal.mockClear();
     mocks.clipboardWriteText.mockClear();
     mocks.navigate.mockReset();
@@ -111,6 +120,27 @@ describe('TerminalLinkMenu', () => {
       'terminal.linkMenu.copyUrl',
       'terminal.linkMenu.openSettings',
     ]);
+  });
+
+  it('offers and executes Yoda opening for a local absolute file', async () => {
+    const target = {
+      originalText: '/Users/mark/report.md:12',
+      absolutePath: '/Users/mark/report.md',
+      line: 12,
+    };
+    await act(async () =>
+      root.render(
+        <MenuOverTerminal
+          key="absolute-file"
+          initialState={{ target: { kind: 'file', target }, x: 40, y: 40 }}
+          fileLinks={{ workspaceRoot: '/repo', onOpen: mocks.openFileInYoda }}
+        />
+      )
+    );
+
+    await act(async () => clickMenuItem('terminal.linkMenu.openInYoda'));
+
+    expect(mocks.openFileInYoda).toHaveBeenCalledWith(target);
   });
 
   it('opens the URL inside Yoda', async () => {

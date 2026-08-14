@@ -7,6 +7,7 @@ import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { appState } from '@renderer/lib/stores/app-state';
 import { cn } from '@renderer/utils/utils';
+import { getTerminalFileLinkInternalDestination } from './terminal-file-link-open';
 import type { TerminalFileLinkOptions, TerminalFileLinkTarget } from './terminal-file-links';
 import type { TerminalLinkTarget } from './terminal-link-target';
 import type { TerminalWebLinkOptions } from './terminal-web-links';
@@ -139,12 +140,14 @@ function FileMenuItems({
   onAfterAction: () => void;
   t: (key: string) => string;
 }) {
-  const canOpenInEditor = Boolean(fileLinks && target.filePath);
+  const canOpenInYoda = Boolean(
+    fileLinks && getTerminalFileLinkInternalDestination(target, fileLinks)
+  );
   const absolutePath = target.absolutePath ?? null;
 
   return (
     <>
-      {canOpenInEditor ? (
+      {canOpenInYoda ? (
         <MenuItem
           onSelect={() => {
             fileLinks?.onOpen(target);
@@ -155,7 +158,7 @@ function FileMenuItems({
           {t('terminal.linkMenu.openInYoda')}
         </MenuItem>
       ) : null}
-      {canOpenInEditor && absolutePath ? <MenuSeparator /> : null}
+      {canOpenInYoda && absolutePath ? <MenuSeparator /> : null}
       {absolutePath ? (
         <FilePathMenuItems
           target={{
@@ -171,7 +174,7 @@ function FileMenuItems({
           defaultOpenLabel={t('terminal.linkMenu.openWithDefaultApp')}
         />
       ) : null}
-      {canOpenInEditor || absolutePath ? <MenuSeparator /> : null}
+      {canOpenInYoda || absolutePath ? <MenuSeparator /> : null}
       <OpenTerminalLinkSettingsItem onAfterAction={onAfterAction} t={t} />
     </>
   );

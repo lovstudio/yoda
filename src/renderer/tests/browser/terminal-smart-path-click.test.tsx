@@ -120,6 +120,35 @@ describe('terminal link primary click', () => {
     });
   });
 
+  it('keeps a local absolute file inside Yoda when the preference is internal', async () => {
+    const path = '/Users/mark/Documents/report.md:12';
+    await writeTerminal(pty, path);
+
+    const screen = host.querySelector<HTMLElement>('.xterm-screen');
+    if (!screen) throw new Error('xterm screen was not mounted');
+    const rect = screen.getBoundingClientRect();
+    const cellWidth = rect.width / pty.terminal.cols;
+    const cellHeight = rect.height / pty.terminal.rows;
+    const mouseDown = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 1,
+      clientX: rect.left + cellWidth * 10.5,
+      clientY: rect.top + cellHeight * 0.5,
+    });
+
+    screen.dispatchEvent(mouseDown);
+
+    expect(mouseDown.defaultPrevented).toBe(true);
+    expect(mocks.openFile).toHaveBeenCalledWith({
+      originalText: path,
+      absolutePath: '/Users/mark/Documents/report.md',
+      line: 12,
+    });
+    expect(mocks.openExternal).not.toHaveBeenCalled();
+  });
+
   it('opens a URL from a replayed conversation on an ordinary left click', async () => {
     const url = 'https://tolkiengateway.net/wiki/Portal%3AImages';
     const line = `Tolkien Gateway (${url})`;

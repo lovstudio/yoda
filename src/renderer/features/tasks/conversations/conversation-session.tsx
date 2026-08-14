@@ -25,6 +25,10 @@ import {
   type TerminalDimensions,
 } from '@renderer/lib/pty/pty-dimensions';
 import { PtyPane } from '@renderer/lib/pty/pty-pane';
+import {
+  getTerminalFileLinkInternalDestination,
+  openTerminalGlobalFileInYoda,
+} from '@renderer/lib/pty/terminal-file-link-open';
 import type { TerminalFileLinkOptions } from '@renderer/lib/pty/terminal-file-links';
 import { TerminalSearchOverlay } from '@renderer/lib/pty/terminal-search-overlay';
 import { useTerminalSearch } from '@renderer/lib/pty/use-terminal-search';
@@ -480,10 +484,18 @@ export const ConversationSession = observer(function ConversationSession({
       workspaceRootAliases: projectRoot ? [projectRoot] : undefined,
       homeDir: typeof homeDir === 'string' ? homeDir : undefined,
       sshConnectionId: remoteConnectionId,
-      onOpen: ({ filePath, absolutePath, line, column, isDirectory }) => {
-        if (filePath) {
-          provisioned.taskView.tabManager.openFileInSidebar(filePath, { line, column });
+      onOpen: (target) => {
+        const { absolutePath, line, column, isDirectory } = target;
+        const destination = getTerminalFileLinkInternalDestination(target, {
+          sshConnectionId: remoteConnectionId,
+        });
+        if (destination?.placement === 'workspace') {
+          provisioned.taskView.tabManager.openFileInSidebar(destination.path, { line, column });
           provisioned.taskView.setSidebarCollapsed(false);
+          return;
+        }
+        if (destination?.placement === 'global') {
+          void openTerminalGlobalFileInYoda(destination.path);
           return;
         }
         if (absolutePath) {

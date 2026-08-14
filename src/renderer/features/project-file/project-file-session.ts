@@ -61,24 +61,7 @@ function sessionKey(projectId: string | null, filePath: string): string {
   return `${projectId ?? ''}::${filePath}`;
 }
 
-/**
- * Opens (or focuses) the app tab for a project file (or a project-less
- * absolute path when `projectId` is null). Browser semantics: an existing tab
- * for the same file is activated instead of duplicated.
- */
-export function openProjectFileTab(projectId: string | null, filePath: string): void {
-  const existing = appState.appTabs.tabs.find(
-    (tab) =>
-      tab.viewId === 'file' &&
-      (tab.params.projectId ?? null) === projectId &&
-      tab.params.filePath === filePath
-  );
-  if (existing) {
-    appState.appTabs.activateTab(existing.id);
-    return;
-  }
-  appState.appTabs.openTab('file', projectId ? { projectId, filePath } : { filePath });
-}
+export { openProjectFileTab } from './project-file-navigation';
 
 export async function getProjectFileSession(
   projectId: string | null,

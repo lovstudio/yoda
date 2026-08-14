@@ -150,6 +150,7 @@ export interface TerminalFileLinkOptions {
   homeDir?: string;
   /** SSH connection used by shared remote file actions. */
   sshConnectionId?: string;
+  /** Open a supported file target inside Yoda; unsupported targets may use a platform fallback. */
   onOpen: (target: TerminalFileLinkTarget) => void;
 }
 

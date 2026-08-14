@@ -28,6 +28,10 @@ import { MarkdownEditorRenderer } from '@renderer/lib/editor/markdown-renderer';
 import { rpc } from '@renderer/lib/ipc';
 import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
 import { PtyPane } from '@renderer/lib/pty/pty-pane';
+import {
+  getTerminalFileLinkInternalDestination,
+  openTerminalGlobalFileInYoda,
+} from '@renderer/lib/pty/terminal-file-link-open';
 import type { TerminalFileLinkOptions } from '@renderer/lib/pty/terminal-file-links';
 import { OverviewPanel } from './overview-panel';
 
@@ -178,12 +182,20 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
       workspaceRootAliases: projectRoot ? [projectRoot] : undefined,
       homeDir: typeof homeDir === 'string' ? homeDir : undefined,
       sshConnectionId: remoteConnectionId,
-      onOpen: ({ filePath, absolutePath, line, column, isDirectory }) => {
-        if (filePath) {
+      onOpen: (target) => {
+        const { absolutePath, line, column, isDirectory } = target;
+        const destination = getTerminalFileLinkInternalDestination(target, {
+          sshConnectionId: remoteConnectionId,
+        });
+        if (destination?.placement === 'workspace') {
           // Open into the MAIN area — the whole point of pinning is keeping
           // this session visible while inspecting other content.
-          provisioned.taskView.tabManager.openFile(filePath, { line, column });
+          provisioned.taskView.tabManager.openFile(destination.path, { line, column });
           provisioned.taskView.setFocusedRegion('main');
+          return;
+        }
+        if (destination?.placement === 'global') {
+          void openTerminalGlobalFileInYoda(destination.path);
           return;
         }
         if (absolutePath) {
