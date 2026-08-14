@@ -47,37 +47,37 @@ import {
   BUILTIN_STARTUP_TEAM_ID,
   type AgentTeam,
 } from '@shared/agent-team';
-import { resolveAgentPermissionMode, type Agent } from '@shared/agents';
+import type { Agent } from '@shared/agents';
 import { FEATURE_WORKFLOW_STAGES, hasFeatureWorkflowContract } from '@shared/feature-workflow';
 import type { Branch } from '@shared/git';
 import type {
   ParadigmAccent,
   ParadigmKindDescriptor,
   ParadigmKindId,
-  ParadigmSlot,
 } from '@shared/paradigms/contract';
 import {
   paradigmKind,
   paradigmKindForRunMode,
+  paradigmSlot,
   paradigmSlotByStorageKey,
   type LegacyRunMode,
 } from '@shared/paradigms/kinds';
 import type { ComposerDefaults, TaskOutputLanguage } from '@shared/project-settings';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
-import { withSystemPrompt } from '@shared/prompt-format';
 import { REVIEW_MAX_ROUNDS } from '@shared/review-protocol';
 import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
-import { normalizeSkillSelection } from '@shared/skills/selection';
-import type { SkillSelectionInput } from '@shared/skills/types';
-import { ensureUniqueTaskDisplayName, taskNameFromPrompt } from '@shared/task-name';
-import type { QuickActionTaskSource } from '@shared/tasks';
+import { taskNameFromPrompt } from '@shared/task-name';
 import { resolveHomeProjectId } from '@renderer/app/home-project-selection';
 import { FeatureWorkflowPreview } from '@renderer/features/agent-room/feature-workflow-rail';
-import { invalidateTeamRoomQueries } from '@renderer/features/agent-room/team-room-queries';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
-import { createAiLabProject } from '@renderer/features/ai-lab/create-ai-lab-project';
-import { startAiLabBuildTask } from '@renderer/features/ai-lab/start-ai-lab-build-task';
-import { promptInvokesSkill } from '@renderer/features/projects/quick-action-source';
+import { agentSkillSelection } from '@renderer/features/paradigms/agent-launch-settings';
+import { createParadigmLaunchContext } from '@renderer/features/paradigms/create-launch-context';
+import type {
+  CompareVariant,
+  ParadigmLaunchParams,
+  TaskStrategyKind,
+} from '@renderer/features/paradigms/launch-context';
+import { paradigmLauncher } from '@renderer/features/paradigms/registry';
 import {
   asMounted,
   getProjectManagerStore,
@@ -87,7 +87,6 @@ import {
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useSkills } from '@renderer/features/skills/components/useSkills';
-import { initialConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { ProjectSelector } from '@renderer/features/tasks/create-task-modal/project-selector';
 import { useRuntimePermissionModes } from '@renderer/features/tasks/hooks/useRuntimePermissionModes';
@@ -149,14 +148,14 @@ import {
   DEFAULT_SUMMARY_OUTPUT_LANGUAGE,
   DEFAULT_TASK_OUTPUT_LANGUAGE,
 } from './composer-settings-content';
-import { resolveProjectSubmitSourceBranch } from './home-project-submit';
+import {
+  branchNeedsCheckout,
+  resolveProjectSubmitSourceBranch,
+  type HomeProjectSubmitStrategy,
+} from './home-project-submit';
 import { serializePromptWithTokens, type PromptToken } from './prompt-attachment-tokens';
 import { promptRewriteFailureDescription } from './submit-prompt-rewrite';
 
-type TaskStrategyKind = 'new-branch' | 'no-worktree';
-/** Strategy actually submitted to createTask — adds checkout-existing, which is
- *  derived (not forking + a non-current local or remote branch picked), never persisted. */
-type TaskSubmitStrategyKind = TaskStrategyKind | 'checkout-existing';
 /**
  * The composer's persisted run-mode values. Kept as the storage vocabulary; the
  * behavior behind each one lives in its paradigm kind descriptor
@@ -164,21 +163,6 @@ type TaskSubmitStrategyKind = TaskStrategyKind | 'checkout-existing';
  */
 type HomeRunMode = LegacyRunMode;
 type RunHostKind = 'local' | 'ssh';
-
-/**
- * One extra run environment in a multi-config comparison. Each variant is a copy
- * of the base composer config the user can tweak: a different project, runtime,
- * branch strategy, or prompt. On submit, the base config plus every variant each
- * spawn their own task, and a detached window tiles them side by side.
- */
-type CompareVariant = {
-  id: string;
-  projectId: string | null;
-  runtimeId: RuntimeId | null;
-  strategyKind: TaskStrategyKind;
-  /** Selected starting branch; null = the project's default branch. */
-  baseBranch: Branch | null;
-};
 
 type HomeComposerSubmitTarget =
   | { kind: 'new-task'; parentTask?: { projectId: string; taskId: string } }
@@ -191,15 +175,6 @@ export type HomeComposerSubmitResult =
 function branchLabel(branch: Branch | undefined, fallback = 'main'): string {
   if (!branch) return fallback;
   return branch.type === 'remote' ? `${branch.remote.name}/${branch.branch}` : branch.branch;
-}
-
-function branchNeedsCheckout(
-  branch: Branch | undefined,
-  currentBranchName: string | null
-): boolean {
-  if (!branch) return false;
-  if (branch.type === 'remote') return true;
-  return branch.branch !== currentBranchName;
 }
 
 type HomeComposerPromptHandle = {
@@ -293,13 +268,6 @@ function runModeParadigm(mode: HomeRunMode): ParadigmKindDescriptor {
   return paradigmKind(paradigmKindForRunMode(mode));
 }
 
-/** A kind's slot by role, e.g. `paradigmSlot('review', 'reviewer')`. */
-function paradigmSlot(kindId: ParadigmKindId, slotKey: string): ParadigmSlot {
-  const slot = paradigmKind(kindId).slots.find((candidate) => candidate.key === slotKey);
-  if (!slot) throw new Error(`Paradigm kind "${kindId}" has no "${slotKey}" slot`);
-  return slot;
-}
-
 /**
  * Storage key of the slot whose Agent stands in for the whole paradigm in the
  * composer (its implementer seat). null for kinds with no fixed slots — `team`
@@ -341,49 +309,6 @@ function getRunModeInputChrome(mode: HomeRunMode): RunModeInputChrome {
   return {
     containerClassName: PARADIGM_ACCENT_CONTAINER_CLASS[runModeParadigm(mode).capabilities.accent],
   };
-}
-
-function agentSkillSelection(agent: Agent | null): SkillSelectionInput | undefined {
-  if (!agent) return undefined;
-  return normalizeSkillSelection({
-    restriction: agent.skillPolicyMode === 'allowlist' ? 'allowlist' : undefined,
-    autoSkillKeys: agent.enabledSkillIds,
-    manualSkillKeys: agent.manualSkillIds,
-  });
-}
-
-function agentRuntimeSettings(agent: Agent | null, runtimeId: RuntimeId) {
-  return {
-    agent: agent
-      ? {
-          id: agent.id,
-          name: agent.name,
-          icon: agent.icon,
-        }
-      : undefined,
-    model: agent?.model,
-    reasoningEffort: runtimeId === 'codex' ? agent?.reasoningEffort : undefined,
-    permissionMode: agent ? resolveAgentPermissionMode(runtimeId, agent.accessMode) : undefined,
-  };
-}
-
-function buildRequirementPrompt(args: { requirement: string; systemPrompt: string }): string {
-  return withSystemPrompt(
-    args.systemPrompt,
-    [`User requirement:`, args.requirement || '(No explicit requirement was provided.)'].join('\n')
-  );
-}
-
-function buildSpecPrompt(args: { requirement: string; systemPrompt: string }): string {
-  return withSystemPrompt(
-    args.systemPrompt,
-    [
-      `Rough user requirement:`,
-      args.requirement || '(No explicit requirement was provided.)',
-      '',
-      `Start the spec session now. Ask only material clarifying questions before drafting final artifacts unless the user explicitly asks you to draft from the current information.`,
-    ].join('\n')
-  );
 }
 
 /**
@@ -963,14 +888,14 @@ export const HomeComposer = observer(function HomeComposer({
   // What actually gets submitted: the fork switch picks new-branch, otherwise
   // the selected branch decides between running in place and checking out an
   // existing local/remote source in a worktree.
-  const standardSubmitKind: TaskSubmitStrategyKind =
+  const standardSubmitKind: HomeProjectSubmitStrategy =
     effectiveStandardStrategyKind === 'new-branch' ? 'new-branch' : selectedBranchSubmitKind;
-  const reviewSubmitKind: TaskSubmitStrategyKind =
+  const reviewSubmitKind: HomeProjectSubmitStrategy =
     effectiveReviewStrategyKind === 'new-branch' ? 'new-branch' : selectedBranchSubmitKind;
   const paradigmCapabilities = runModeParadigm(runMode).capabilities;
   // Which branch strategy reaches createTask: fixed for paradigms that declare
   // their worktree need, otherwise whichever strategy field the paradigm reads.
-  const projectSubmitStrategyKind: TaskSubmitStrategyKind =
+  const projectSubmitStrategyKind: HomeProjectSubmitStrategy =
     paradigmCapabilities.worktree === 'required'
       ? 'new-branch'
       : paradigmCapabilities.worktree === 'never'
@@ -1133,11 +1058,6 @@ export const HomeComposer = observer(function HomeComposer({
     const trimmed = prompt.trim();
     setSubmitting(true);
     try {
-      // Every successful new-task submit lands on the new task; modal hosts close on it.
-      const goToTask = (projectId: string, taskId: string) => {
-        navigate('task', { projectId, taskId });
-        onSubmitted?.({ kind: 'task', projectId, taskId });
-      };
       // Attachment transport: inline sentinel tokens are replaced in place —
       // File tokens become @path mentions. When the user prefers image paths,
       // image tokens become backtick-wrapped @path text so Agent clients do not
@@ -1155,14 +1075,13 @@ export const HomeComposer = observer(function HomeComposer({
       const serialized = serializePromptWithTokens(prompt, promptTokens, {
         imagesAsPaths: attachImagesAsPaths,
       });
-      const rawRequirement = serialized.text.trim();
+      const requirement = serialized.text.trim();
       const deferInitialPrompt =
-        rawRequirement.length > 0 &&
+        requirement.length > 0 &&
         inputPromptLanguage !== 'skip' &&
         inputPromptLanguage !== 'prompt';
-      const requirement = rawRequirement;
       const requirementPromise = deferInitialPrompt
-        ? rewriteInputRequirement(rawRequirement).catch((error: unknown) => {
+        ? rewriteInputRequirement(requirement).catch((error: unknown) => {
             toast({
               title: t('home.promptRewriteFailed'),
               description: promptRewriteFailureDescription(error, t('common.unknownError')),
@@ -1171,345 +1090,85 @@ export const HomeComposer = observer(function HomeComposer({
             });
             return null;
           })
-        : Promise.resolve(rawRequirement);
+        : Promise.resolve(requirement);
       const imagePaths = serialized.imagePaths.length > 0 ? serialized.imagePaths : undefined;
-      const sessionImagePaths = deferInitialPrompt ? undefined : imagePaths;
-      const resetComposer = () => {
-        promptInputRef.current?.setValue('');
-        updateDraft({ prompt: '', promptTokens: [] });
-        clearPromptTokens();
-        setCompareVariants([]);
+
+      // Which paradigm runs. Comparison wraps the single-agent paradigm rather
+      // than being a mode of it, so it is selected here and nowhere else.
+      const kindId: ParadigmKindId =
+        compareActive && mounted ? 'compare' : paradigmKindForRunMode(runMode);
+      const params: ParadigmLaunchParams = {
+        reviewerRuntime,
+        team: activeTeam,
+        variants: compareVariants,
+        quickAction: quickActionMode,
       };
-      const reportFailures = (results: PromiseSettledResult<unknown>[]) => {
-        const failures = results.filter((result) => result.status === 'rejected');
-        if (failures.length > 0) {
-          const targetName = taskScopedTarget ? 'conversation' : 'task';
-          toast.error(
-            failures.length === 1
-              ? `One agent ${targetName} failed to start.`
-              : `${failures.length} agent ${targetName}s failed to start.`
-          );
-        }
-      };
-      const showDeferredPromptWaitToast = () => {
-        let toastId: ReturnType<typeof toast.loading> | undefined;
-        const timer = setTimeout(() => {
-          toastId = toast.loading(t('home.promptTranslationWaiting'), {
-            description: t('home.promptTranslationWaitingDescription'),
-          });
-        }, 350);
-        return () => {
-          clearTimeout(timer);
-          if (toastId !== undefined) toast.dismiss(toastId);
-        };
-      };
-      const injectDeferredPrompt = async (args: {
-        projectId: string;
-        taskId: string;
-        conversationId: string;
-        runtime: RuntimeId;
-        buildPrompt: (rewrittenRequirement: string) => string | undefined;
-      }): Promise<string | null> => {
-        const dismissWaitToast = showDeferredPromptWaitToast();
-        try {
-          const rewrittenRequirement = await requirementPromise;
-          if (rewrittenRequirement === null) return null;
-          const sent = await rpc.conversations.injectConversationPrompt({
-            projectId: args.projectId,
-            taskId: args.taskId,
-            conversationId: args.conversationId,
-            runtime: args.runtime,
-            prompt: args.buildPrompt(rewrittenRequirement),
-            imagePaths,
-          });
-          if (sent) return rewrittenRequirement;
-          toast.error(t('home.promptSendFailed'));
-          return null;
-        } catch {
-          toast.error(t('home.promptSendFailed'));
-          return null;
-        } finally {
-          dismissWaitToast();
-        }
-      };
-      const scheduleDeferredPrompt = (args: {
-        projectId: string;
-        taskId: string;
-        conversationId: string;
-        runtime: RuntimeId;
-        promise: Promise<unknown>;
-        buildPrompt: (rewrittenRequirement: string) => string | undefined;
-      }) => {
-        if (!deferInitialPrompt) return;
-        void args.promise
-          .then(() => injectDeferredPrompt(args))
-          .catch(() => {
-            // Creation failures are reported by the caller that owns the launch promise.
-          });
-      };
-      // Resolve a slot from its Agent profile. The fallback is only used for
-      // Agents intentionally configured to follow the run-mode default.
-      const resolveSlot = (slotKey: string, fallbackRuntime: RuntimeId | null) =>
-        resolveAgentSlot({
-          selectedAgentId: slotAgentId(slotKey),
-          agents: userAgents,
-          fallbackRuntime,
-        });
-      // Comparison is an explicit experiment surface: it intentionally runs a
-      // copy of the base Agent with the per-variant runtime selected there.
-      const resolveComparisonSlot = (runtimeOverride: RuntimeId | null) => {
-        const slot = resolveSlot(NORMAL_PROMPT_KEY, runtimeId);
-        return slot.agent && runtimeOverride ? { ...slot, provider: runtimeOverride } : slot;
+      const shared = {
+        requirement,
+        titlePrompt: trimmed || undefined,
+        deferInitialPrompt,
+        requirementPromise,
+        imagePaths,
+        sessionImagePaths: deferInitialPrompt ? undefined : imagePaths,
+        strategyKind: projectSubmitStrategyKind,
+        agents: userAgents,
+        slotAgentId,
+        composerRuntime: runtimeId,
+        selectedBranch,
+        currentBranchName,
+        parentTaskId: parentTarget?.taskId,
+        projectManager,
+        queryClient,
+        isAutoApproving: permissionModes.isDanger,
+        t,
+        focusTask: (projectId: string, taskId: string) => {
+          navigate('task', { projectId, taskId });
+          onSubmitted?.({ kind: 'task', projectId, taskId });
+        },
+        onConversationsStarted: (projectId: string, taskId: string, conversationIds: string[]) => {
+          onSubmitted?.({ kind: 'conversation', projectId, taskId, conversationIds });
+        },
+        resetComposer: () => {
+          promptInputRef.current?.setValue('');
+          updateDraft({ prompt: '', promptTokens: [] });
+          clearPromptTokens();
+          setCompareVariants([]);
+        },
       };
 
-      if (runMode === 'build') {
-        const slot = resolveSlot(BUILD_PROMPT_KEY, runtimeId);
-        if (!slot.provider) return;
-        const resolvedRequirement = deferInitialPrompt ? await requirementPromise : requirement;
-        if (!resolvedRequirement) return;
-        const projectName =
-          taskNameFromPrompt(resolvedRequirement) || t('home.defaultAppProjectName');
-        try {
-          const appProject = await createAiLabProject(projectName);
-          const taskName = ensureUniqueTaskDisplayName(
-            t('home.buildTaskName'),
-            Array.from(appProject.taskManager.tasks.values(), (task) => task.data.name)
-          );
-          const launch = await startAiLabBuildTask({
-            prompt: resolvedRequirement,
-            project: appProject,
-            taskName,
-            runtimeId: slot.provider,
-            ...agentRuntimeSettings(slot.agent, slot.provider),
-            systemPrompt: slot.systemPrompt,
-            imagePaths,
-            skillSelection: agentSkillSelection(slot.agent),
-          });
-          void launch.promise.catch((error: unknown) => {
-            toast.error(t('home.buildFailed'), {
-              description: error instanceof Error ? error.message : t('common.unknownError'),
-            });
-          });
-          goToTask(appProject.data.id, launch.taskId);
-          toast.success(t('home.buildStarted'), {
-            description: t('home.buildStartedDescription'),
-          });
-          resetComposer();
-        } catch (error) {
-          toast.error(t('home.buildFailed'), {
-            description: error instanceof Error ? error.message : t('common.unknownError'),
-          });
-        }
+      // A paradigm that scaffolds its own project has no task to name, no branch
+      // to resolve, and nothing to join.
+      if (paradigmCapabilities.target === 'new-project') {
+        await paradigmLauncher(kindId).launch(
+          createParadigmLaunchContext({
+            ...shared,
+            target: { kind: 'new-project' },
+            baseName: '',
+            provisionedTask: null,
+            project: null,
+            baseDefaultBranch: undefined,
+            parentBranchName: null,
+            parentTaskId: undefined,
+          }),
+          params
+        );
         return;
       }
 
       if (taskScopedTarget) {
         if (!targetProvisionedTask) return;
-        const conversationTitleInputs = Array.from(
-          targetProvisionedTask.conversations.conversations.values(),
-          (conversation) => ({
-            runtimeId: conversation.data.runtimeId,
-            title: conversation.data.title,
-          })
+        await paradigmLauncher(kindId).launch(
+          createParadigmLaunchContext({
+            ...shared,
+            target: taskScopedTarget,
+            baseName: '',
+            provisionedTask: targetProvisionedTask,
+            project: mounted ?? null,
+            baseDefaultBranch: undefined,
+            parentBranchName: parentBranchName ?? null,
+          }),
+          params
         );
-        const createdConversationIds: string[] = [];
-        const createTaskConversation = (args: {
-          provider: RuntimeId;
-          initialPrompt: string | undefined;
-          titlePrompt?: string;
-          model?: string | null;
-          reasoningEffort?: string | null;
-          permissionMode?: string;
-          skillSelection?: SkillSelectionInput;
-        }) => {
-          const conversationId = crypto.randomUUID();
-          const title = initialConversationTitle(
-            args.provider,
-            args.titlePrompt ?? args.initialPrompt,
-            conversationTitleInputs
-          );
-          conversationTitleInputs.push({ runtimeId: args.provider, title });
-          createdConversationIds.push(conversationId);
-          const promise = targetProvisionedTask.conversations.createConversation({
-            id: conversationId,
-            projectId: taskScopedTarget.projectId,
-            taskId: taskScopedTarget.taskId,
-            runtime: args.provider,
-            title,
-            initialPrompt: args.initialPrompt,
-            deferInitialPrompt,
-            imagePaths: sessionImagePaths,
-            model: args.model,
-            reasoningEffort: args.reasoningEffort,
-            permissionMode: args.permissionMode,
-            skillSelection: args.skillSelection,
-          });
-          return { conversationId, runtime: args.provider, promise };
-        };
-        const finishTaskConversationSubmit = () => {
-          void getTaskStore(taskScopedTarget.projectId, taskScopedTarget.taskId)?.setNeedsReview(
-            false
-          );
-          onSubmitted?.({
-            kind: 'conversation',
-            projectId: taskScopedTarget.projectId,
-            taskId: taskScopedTarget.taskId,
-            conversationIds: createdConversationIds,
-          });
-          resetComposer();
-        };
-
-        if (runMode === 'brainstorm') {
-          const slot = resolveSlot(SPEC_PROMPT_KEY, runtimeId);
-          if (!slot.provider) return;
-          const launch = createTaskConversation({
-            provider: slot.provider,
-            initialPrompt: buildSpecPrompt({
-              requirement,
-              systemPrompt: slot.systemPrompt,
-            }),
-            titlePrompt: trimmed || undefined,
-            ...agentRuntimeSettings(slot.agent, slot.provider),
-            skillSelection: agentSkillSelection(slot.agent),
-          });
-          finishTaskConversationSubmit();
-          scheduleDeferredPrompt({
-            projectId: taskScopedTarget.projectId,
-            taskId: taskScopedTarget.taskId,
-            conversationId: launch.conversationId,
-            runtime: launch.runtime,
-            promise: launch.promise,
-            buildPrompt: (rewrittenRequirement) =>
-              buildSpecPrompt({
-                requirement: rewrittenRequirement,
-                systemPrompt: slot.systemPrompt,
-              }),
-          });
-          void launch.promise.catch(() => {
-            toast.error('Agent conversation failed to start.');
-          });
-          return;
-        }
-
-        if (runMode === 'review') {
-          const implementerSlot = resolveSlot(REVIEW_IMPLEMENTER_PROMPT_KEY, runtimeId);
-          const reviewerSlot = resolveSlot(REVIEW_REVIEWER_PROMPT_KEY, reviewerRuntime);
-          if (!implementerSlot.provider || !reviewerSlot.provider) return;
-          const implementation = createTaskConversation({
-            provider: implementerSlot.provider,
-            initialPrompt: buildRequirementPrompt({
-              requirement,
-              systemPrompt: implementerSlot.systemPrompt,
-            }),
-            titlePrompt: trimmed || undefined,
-            ...agentRuntimeSettings(implementerSlot.agent, implementerSlot.provider),
-            skillSelection: agentSkillSelection(implementerSlot.agent),
-          });
-          finishTaskConversationSubmit();
-          const reviewerProvider = reviewerSlot.provider;
-          const reviewerSystemPrompt = reviewerSlot.systemPrompt;
-          const startReviewOrchestration = (resolvedRequirement: string) =>
-            rpc.reviewOrchestration.start({
-              projectId: taskScopedTarget.projectId,
-              taskId: taskScopedTarget.taskId,
-              implementerConversationId: implementation.conversationId,
-              requirement: resolvedRequirement,
-              reviewerRuntime: reviewerProvider,
-              reviewerSystemPrompt,
-              reviewerSkillSelection: agentSkillSelection(reviewerSlot.agent),
-              reviewerAutoApprove: permissionModes.isDanger(reviewerProvider),
-            });
-          const reviewPromise = deferInitialPrompt
-            ? implementation.promise
-                .then(() =>
-                  injectDeferredPrompt({
-                    projectId: taskScopedTarget.projectId,
-                    taskId: taskScopedTarget.taskId,
-                    conversationId: implementation.conversationId,
-                    runtime: implementation.runtime,
-                    buildPrompt: (rewrittenRequirement) =>
-                      buildRequirementPrompt({
-                        requirement: rewrittenRequirement,
-                        systemPrompt: implementerSlot.systemPrompt,
-                      }),
-                  })
-                )
-                .then((resolvedRequirement) => {
-                  if (resolvedRequirement === null) return undefined;
-                  return startReviewOrchestration(resolvedRequirement);
-                })
-            : implementation.promise.then(() => startReviewOrchestration(requirement));
-          void reviewPromise.catch((error: unknown) => {
-            toast.error(
-              error instanceof Error ? error.message : 'Review mode orchestration failed.'
-            );
-          });
-          return;
-        }
-
-        if (runMode === 'team') {
-          if (!activeTeam) return;
-          const createRoom = (resolvedRequirement: string) =>
-            rpc.teamRooms
-              .createRoomFromTeam({
-                projectId: taskScopedTarget.projectId,
-                taskId: taskScopedTarget.taskId,
-                teamId: activeTeam.id,
-                requirement: resolvedRequirement,
-              })
-              .then(() =>
-                invalidateTeamRoomQueries(
-                  queryClient,
-                  taskScopedTarget.projectId,
-                  taskScopedTarget.taskId
-                )
-              );
-          // Instantiate a chat room from the team template on this task; the
-          // conductor drives the iterative @-routing (members appear as the
-          // task's conversations).
-          try {
-            const resolvedRequirement = deferInitialPrompt ? await requirementPromise : requirement;
-            if (resolvedRequirement === null) return;
-            await createRoom(resolvedRequirement);
-            finishTaskConversationSubmit();
-          } catch (error) {
-            toast.error(
-              error instanceof Error ? error.message : 'Agent team orchestration failed.'
-            );
-          }
-          return;
-        }
-
-        const normalSlot = resolveSlot(NORMAL_PROMPT_KEY, runtimeId);
-        if (!normalSlot.provider) return;
-        const normalSystemPrompt = normalSlot.systemPrompt.trim();
-        const launch = createTaskConversation({
-          provider: normalSlot.provider,
-          initialPrompt: normalSystemPrompt
-            ? buildRequirementPrompt({ requirement, systemPrompt: normalSystemPrompt })
-            : requirement || undefined,
-          titlePrompt: trimmed || undefined,
-          ...agentRuntimeSettings(normalSlot.agent, normalSlot.provider),
-          skillSelection: agentSkillSelection(normalSlot.agent),
-        });
-        finishTaskConversationSubmit();
-        scheduleDeferredPrompt({
-          projectId: taskScopedTarget.projectId,
-          taskId: taskScopedTarget.taskId,
-          conversationId: launch.conversationId,
-          runtime: launch.runtime,
-          promise: launch.promise,
-          buildPrompt: (rewrittenRequirement) =>
-            normalSystemPrompt
-              ? buildRequirementPrompt({
-                  requirement: rewrittenRequirement,
-                  systemPrompt: normalSystemPrompt,
-                })
-              : rewrittenRequirement || undefined,
-        });
-        void launch.promise.catch(() => {
-          toast.error('Agent conversation failed to start.');
-        });
         return;
       }
 
@@ -1517,76 +1176,32 @@ export const HomeComposer = observer(function HomeComposer({
       const baseName =
         promptDisplayName || (await rpc.tasks.generateTaskName(trimmed ? { title: trimmed } : {}));
 
+      // No project selected: the task lands in the internal drafts project, which
+      // is an ordinary in-place task there — so it is a `new-task` launch with a
+      // fixed project rather than a target of its own.
       if (!mounted) {
-        const draftSlot = resolveSlot(
-          runMode === 'brainstorm' ? SPEC_PROMPT_KEY : NORMAL_PROMPT_KEY,
-          runtimeId
-        );
-        const draftRuntime = draftSlot.provider;
-        if (!draftRuntime) return;
         await projectManager.mountProject(INTERNAL_PROJECT_ID).catch(() => {});
         const internalProject = asMounted(projectManager.projects.get(INTERNAL_PROJECT_ID));
         if (!internalProject) {
           toast.error('Could not open the internal drafts project.');
           return;
         }
-        const existingDraftNames = Array.from(
-          internalProject.taskManager.tasks.values(),
-          (t) => t.data.name
+        await paradigmLauncher(kindId).launch(
+          createParadigmLaunchContext({
+            ...shared,
+            target: { kind: 'new-task', projectId: INTERNAL_PROJECT_ID },
+            baseName,
+            provisionedTask: null,
+            project: internalProject,
+            strategyKind: 'no-worktree',
+            selectedBranch: undefined,
+            baseDefaultBranch: { type: 'local', branch: 'main' },
+            currentBranchName: null,
+            parentBranchName: null,
+            parentTaskId: undefined,
+          }),
+          params
         );
-        const taskName = ensureUniqueTaskDisplayName(baseName, existingDraftNames);
-        const taskId = crypto.randomUUID();
-        const conversationId = crypto.randomUUID();
-        const draftSystemPrompt = draftSlot.systemPrompt.trim();
-        const initialPrompt =
-          runMode === 'brainstorm'
-            ? buildSpecPrompt({ requirement, systemPrompt: draftSlot.systemPrompt })
-            : draftSystemPrompt
-              ? buildRequirementPrompt({ requirement, systemPrompt: draftSystemPrompt })
-              : requirement || undefined;
-        const createPromise = internalProject.taskManager.createTask({
-          id: taskId,
-          projectId: INTERNAL_PROJECT_ID,
-          name: taskName,
-          sourceBranch: { type: 'local', branch: 'main' },
-          strategy: { kind: 'no-worktree' },
-          initialConversation: {
-            id: conversationId,
-            projectId: INTERNAL_PROJECT_ID,
-            taskId,
-            runtime: draftRuntime,
-            title: initialConversationTitle(draftRuntime, trimmed || undefined, []),
-            initialPrompt,
-            deferInitialPrompt,
-            imagePaths: sessionImagePaths,
-            ...agentRuntimeSettings(draftSlot.agent, draftRuntime),
-            skillSelection: agentSkillSelection(draftSlot.agent),
-          },
-        });
-        scheduleDeferredPrompt({
-          projectId: INTERNAL_PROJECT_ID,
-          taskId,
-          conversationId,
-          runtime: draftRuntime,
-          promise: createPromise,
-          buildPrompt: (rewrittenRequirement) =>
-            runMode === 'brainstorm'
-              ? buildSpecPrompt({
-                  requirement: rewrittenRequirement,
-                  systemPrompt: draftSlot.systemPrompt,
-                })
-              : draftSystemPrompt
-                ? buildRequirementPrompt({
-                    requirement: rewrittenRequirement,
-                    systemPrompt: draftSystemPrompt,
-                  })
-                : rewrittenRequirement || undefined,
-        });
-        void createPromise.catch(() => {
-          toast.error('Agent task failed to start.');
-        });
-        goToTask(INTERNAL_PROJECT_ID, taskId);
-        resetComposer();
         return;
       }
 
@@ -1595,7 +1210,7 @@ export const HomeComposer = observer(function HomeComposer({
       // first commit emit a ref change the store hasn't applied yet). Resolve
       // the selected branch from a fresh read so worktree modes get a valid source
       // branch instead of silently bailing here.
-      let baseDefaultBranch = projectSubmitSourceBranch;
+      let baseDefaultBranch = projectSubmitSourceBranch || undefined;
       if (!baseDefaultBranch) {
         const local = await rpc.repository.getLocalBranches(mounted.data.id);
         baseDefaultBranch = resolveProjectSubmitSourceBranch({
@@ -1608,400 +1223,18 @@ export const HomeComposer = observer(function HomeComposer({
       }
       if (!baseDefaultBranch) return;
 
-      const existingNames = Array.from(mounted.taskManager.tasks.values(), (t) => t.data.name);
-      const reservedNames = [...existingNames];
-      const reserveTaskName = (seed: string) => {
-        const taskName = ensureUniqueTaskDisplayName(seed, reservedNames);
-        reservedNames.push(taskName);
-        return taskName;
-      };
-      const createProjectTask = (args: {
-        provider: RuntimeId;
-        nameSeed: string;
-        initialPrompt: string | undefined;
-        titlePrompt?: string;
-        strategyKind: TaskSubmitStrategyKind;
-        parentTaskId?: string;
-        model?: string | null;
-        reasoningEffort?: string | null;
-        permissionMode?: string;
-        skillSelection?: SkillSelectionInput;
-        quickActionSource?: Omit<QuickActionTaskSource, 'conversationId'>;
-      }) => {
-        const taskId = crypto.randomUUID();
-        const conversationId = crypto.randomUUID();
-        const taskName = reserveTaskName(args.nameSeed);
-        const strategy =
-          args.strategyKind === 'no-worktree'
-            ? ({ kind: 'no-worktree' } as const)
-            : args.strategyKind === 'checkout-existing'
-              ? ({ kind: 'checkout-existing' } as const)
-              : ({ kind: 'new-branch', taskBranch: taskName, pushBranch: false } as const);
-        const promise = mounted.taskManager.createTask({
-          id: taskId,
-          projectId: mounted.data.id,
-          name: taskName,
-          sourceBranch:
-            args.strategyKind === 'new-branch'
-              ? (selectedBranch ?? baseDefaultBranch)
-              : args.strategyKind === 'checkout-existing'
-                ? (selectedBranch ?? baseDefaultBranch)
-                : parentBranchName
-                  ? { type: 'local', branch: parentBranchName }
-                  : (selectedBranch ?? baseDefaultBranch),
-          strategy,
-          parentTaskId: args.parentTaskId ?? parentTarget?.taskId,
-          quickActionSource: args.quickActionSource
-            ? { ...args.quickActionSource, conversationId }
-            : undefined,
-          initialConversation: {
-            id: conversationId,
-            projectId: mounted.data.id,
-            taskId,
-            runtime: args.provider,
-            title: initialConversationTitle(
-              args.provider,
-              args.titlePrompt ?? args.initialPrompt,
-              []
-            ),
-            initialPrompt: args.initialPrompt,
-            deferInitialPrompt,
-            imagePaths: sessionImagePaths,
-            model: args.model,
-            reasoningEffort: args.reasoningEffort,
-            permissionMode: args.permissionMode,
-            skillSelection: args.skillSelection,
-          },
-        });
-        return { taskId, taskName, conversationId, runtime: args.provider, promise };
-      };
-
-      if (runMode === 'brainstorm') {
-        const slot = resolveSlot(SPEC_PROMPT_KEY, runtimeId);
-        if (!slot.provider) return;
-        const task = createProjectTask({
-          provider: slot.provider,
-          nameSeed: `${baseName}-spec`,
-          initialPrompt: buildSpecPrompt({
-            requirement,
-            systemPrompt: slot.systemPrompt,
-          }),
-          titlePrompt: trimmed || undefined,
-          strategyKind: 'no-worktree',
-          ...agentRuntimeSettings(slot.agent, slot.provider),
-          skillSelection: agentSkillSelection(slot.agent),
-        });
-        goToTask(mounted.data.id, task.taskId);
-        scheduleDeferredPrompt({
-          projectId: mounted.data.id,
-          taskId: task.taskId,
-          conversationId: task.conversationId,
-          runtime: task.runtime,
-          promise: task.promise,
-          buildPrompt: (rewrittenRequirement) =>
-            buildSpecPrompt({
-              requirement: rewrittenRequirement,
-              systemPrompt: slot.systemPrompt,
-            }),
-        });
-        void task.promise.catch(() => {
-          toast.error('Agent task failed to start.');
-        });
-        resetComposer();
-        return;
-      }
-
-      // Multi-config comparison: the base config plus every variant each spawn
-      // their own independent task (possibly in different projects), then a
-      // detached window tiles them side by side. Each task is a normal task that
-      // also lands in its project's sidebar, so closing the window keeps them.
-      if (runMode === 'normal' && compareVariants.length > 0 && mounted) {
-        type CompareSpec = {
-          projectId: string;
-          provider: RuntimeId;
-          model: string | null | undefined;
-          skillSelection?: SkillSelectionInput;
-          systemPrompt: string;
-          strategyKind: TaskStrategyKind;
-          baseBranch: Branch | null;
-          nameSeed: string;
-        };
-        type CompareLaunch = {
-          projectId: string;
-          taskId: string;
-          conversationId: string;
-          runtime: RuntimeId;
-          systemPrompt: string;
-          promise: Promise<unknown>;
-        };
-
-        const createForSpec = async (spec: CompareSpec): Promise<CompareLaunch | null> => {
-          await projectManager.mountProject(spec.projectId).catch(() => {});
-          const target = asMounted(projectManager.projects.get(spec.projectId));
-          if (!target) return null;
-          // Selected branch: an explicit per-config branch wins; otherwise the
-          // routed project reuses the already-resolved branch and other projects
-          // start from their own current branch.
-          let targetCurrentBranch = spec.projectId === mounted.data.id ? currentBranchName : null;
-          const source =
-            spec.baseBranch ??
-            (spec.projectId === mounted.data.id
-              ? (selectedBranch ?? baseDefaultBranch)
-              : await rpc.repository.getLocalBranches(spec.projectId).then((local) => {
-                  targetCurrentBranch = local.currentBranch;
-                  return local.currentBranch
-                    ? ({ type: 'local' as const, branch: local.currentBranch } as const)
-                    : undefined;
-                }));
-          if (!source) return null;
-          const taskName = ensureUniqueTaskDisplayName(
-            spec.nameSeed,
-            Array.from(target.taskManager.tasks.values(), (task) => task.data.name)
-          );
-          const taskId = crypto.randomUUID();
-          const conversationId = crypto.randomUUID();
-          const strategy =
-            spec.strategyKind === 'new-branch'
-              ? ({ kind: 'new-branch', taskBranch: taskName, pushBranch: false } as const)
-              : branchNeedsCheckout(source, targetCurrentBranch)
-                ? ({ kind: 'checkout-existing' } as const)
-                : ({ kind: 'no-worktree' } as const);
-          const systemPrompt = spec.systemPrompt.trim();
-          const promise = target.taskManager.createTask({
-            id: taskId,
-            projectId: spec.projectId,
-            name: taskName,
-            sourceBranch: source,
-            strategy,
-            initialConversation: {
-              id: conversationId,
-              projectId: spec.projectId,
-              taskId,
-              runtime: spec.provider,
-              title: initialConversationTitle(
-                spec.provider,
-                trimmed || requirement || undefined,
-                []
-              ),
-              initialPrompt: systemPrompt
-                ? buildRequirementPrompt({ requirement, systemPrompt })
-                : requirement || undefined,
-              deferInitialPrompt,
-              imagePaths: sessionImagePaths,
-              model: spec.model,
-              skillSelection: spec.skillSelection,
-            },
-          });
-          return {
-            projectId: spec.projectId,
-            taskId,
-            conversationId,
-            runtime: spec.provider,
-            systemPrompt,
-            promise,
-          };
-        };
-
-        // Every config is an equal row in the list (the base was migrated in when
-        // compare mode was entered); they all share the composer prompt.
-        const specs: CompareSpec[] = compareVariants.flatMap((variant, index): CompareSpec[] => {
-          if (!variant.projectId) return [];
-          const slot = resolveComparisonSlot(variant.runtimeId);
-          if (!slot.provider) return [];
-          return [
-            {
-              projectId: variant.projectId,
-              provider: slot.provider,
-              ...agentRuntimeSettings(slot.agent, slot.provider),
-              skillSelection: agentSkillSelection(slot.agent),
-              systemPrompt: slot.systemPrompt,
-              strategyKind: variant.strategyKind,
-              baseBranch: variant.baseBranch,
-              nameSeed: `${baseName}-${index + 1}`,
-            },
-          ];
-        });
-
-        const results = (await Promise.all(specs.map(createForSpec))).filter(
-          (r): r is CompareLaunch => r !== null
-        );
-        if (results.length === 0) return;
-
-        resetComposer();
-        const base = results[0];
-        if (base) goToTask(base.projectId, base.taskId);
-        for (const result of results) {
-          scheduleDeferredPrompt({
-            projectId: result.projectId,
-            taskId: result.taskId,
-            conversationId: result.conversationId,
-            runtime: result.runtime,
-            promise: result.promise,
-            buildPrompt: (rewrittenRequirement) =>
-              result.systemPrompt
-                ? buildRequirementPrompt({
-                    requirement: rewrittenRequirement,
-                    systemPrompt: result.systemPrompt,
-                  })
-                : rewrittenRequirement || undefined,
-          });
-        }
-        void rpc.app.openComparisonWindow({
-          panes: results.map((r) => ({ projectId: r.projectId, taskId: r.taskId })),
-          layout: { kind: 'columns', count: results.length },
-        });
-        void Promise.allSettled(results.map((r) => r.promise)).then(reportFailures);
-        return;
-      }
-
-      if (runMode === 'review') {
-        const implementerSlot = resolveSlot(REVIEW_IMPLEMENTER_PROMPT_KEY, runtimeId);
-        const reviewerSlot = resolveSlot(REVIEW_REVIEWER_PROMPT_KEY, reviewerRuntime);
-        if (!implementerSlot.provider || !reviewerSlot.provider) return;
-        const implementation = createProjectTask({
-          provider: implementerSlot.provider,
-          nameSeed: `${baseName}-implement`,
-          initialPrompt: buildRequirementPrompt({
-            requirement,
-            systemPrompt: implementerSlot.systemPrompt,
-          }),
-          titlePrompt: trimmed || undefined,
-          strategyKind: reviewSubmitKind,
-          ...agentRuntimeSettings(implementerSlot.agent, implementerSlot.provider),
-          skillSelection: agentSkillSelection(implementerSlot.agent),
-        });
-        goToTask(mounted.data.id, implementation.taskId);
-        const reviewerProvider = reviewerSlot.provider;
-        const reviewerSystemPrompt = reviewerSlot.systemPrompt;
-        const startReviewOrchestration = (resolvedRequirement: string) =>
-          rpc.reviewOrchestration.start({
-            projectId: mounted.data.id,
-            taskId: implementation.taskId,
-            implementerConversationId: implementation.conversationId,
-            requirement: resolvedRequirement,
-            reviewerRuntime: reviewerProvider,
-            reviewerSystemPrompt,
-            reviewerSkillSelection: agentSkillSelection(reviewerSlot.agent),
-            reviewerAutoApprove: permissionModes.isDanger(reviewerProvider),
-          });
-        const reviewPromise = deferInitialPrompt
-          ? implementation.promise
-              .then(() =>
-                injectDeferredPrompt({
-                  projectId: mounted.data.id,
-                  taskId: implementation.taskId,
-                  conversationId: implementation.conversationId,
-                  runtime: implementation.runtime,
-                  buildPrompt: (rewrittenRequirement) =>
-                    buildRequirementPrompt({
-                      requirement: rewrittenRequirement,
-                      systemPrompt: implementerSlot.systemPrompt,
-                    }),
-                })
-              )
-              .then((resolvedRequirement) => {
-                if (resolvedRequirement === null) return undefined;
-                return startReviewOrchestration(resolvedRequirement);
-              })
-          : implementation.promise.then(() => startReviewOrchestration(requirement));
-        void reviewPromise.catch((error: unknown) => {
-          toast.error(error instanceof Error ? error.message : 'Review mode orchestration failed.');
-        });
-        resetComposer();
-        return;
-      }
-
-      if (runMode === 'team') {
-        if (!activeTeam) return;
-        const teamId = activeTeam.id;
-        // Bare task (no initial conversation) — the room conductor instantiates
-        // the team and populates the task's conversations via iterative @-routing.
-        const taskId = crypto.randomUUID();
-        const taskName = reserveTaskName(baseName);
-        const createPromise = mounted.taskManager.createTask({
-          id: taskId,
-          projectId: mounted.data.id,
-          name: taskName,
-          sourceBranch: selectedBranch ?? baseDefaultBranch,
-          strategy: { kind: 'new-branch', taskBranch: taskName, pushBranch: false },
-          parentTaskId: parentTarget?.taskId,
-        });
-        goToTask(mounted.data.id, taskId);
-        const createRoom = async (resolvedRequirement: string) => {
-          const roomId = await rpc.teamRooms.createRoomFromTeam({
-            projectId: mounted.data.id,
-            taskId,
-            teamId,
-            requirement: resolvedRequirement,
-          });
-          await invalidateTeamRoomQueries(queryClient, mounted.data.id, taskId);
-          return roomId;
-        };
-        const assertTaskReady = () => {
-          if (!asProvisioned(getTaskStore(mounted.data.id, taskId))) {
-            throw new Error(t('home.teamTaskSetupIncomplete'));
-          }
-        };
-        const roomPromise = deferInitialPrompt
-          ? createPromise.then(async () => {
-              assertTaskReady();
-              const resolvedRequirement = await requirementPromise;
-              if (resolvedRequirement === null) return undefined;
-              return createRoom(resolvedRequirement);
-            })
-          : createPromise.then(() => {
-              assertTaskReady();
-              return createRoom(requirement);
-            });
-        try {
-          const roomId = await roomPromise;
-          if (roomId !== undefined) resetComposer();
-        } catch (error) {
-          toast.error(error instanceof Error ? error.message : 'Agent team orchestration failed.');
-        }
-        return;
-      }
-
-      const normalSlot = resolveSlot(NORMAL_PROMPT_KEY, runtimeId);
-      if (!normalSlot.provider) return;
-      const normalSystemPrompt = normalSlot.systemPrompt.trim();
-      const task = createProjectTask({
-        provider: normalSlot.provider,
-        nameSeed: baseName,
-        initialPrompt: normalSystemPrompt
-          ? buildRequirementPrompt({ requirement, systemPrompt: normalSystemPrompt })
-          : requirement || undefined,
-        titlePrompt: trimmed || undefined,
-        strategyKind: standardSubmitKind,
-        ...agentRuntimeSettings(normalSlot.agent, normalSlot.provider),
-        skillSelection: agentSkillSelection(normalSlot.agent),
-        quickActionSource:
-          quickActionMode && requirement
-            ? {
-                prompt: requirement,
-                invokedSkill: promptInvokesSkill(requirement),
-              }
-            : undefined,
-      });
-      goToTask(mounted.data.id, task.taskId);
-      scheduleDeferredPrompt({
-        projectId: mounted.data.id,
-        taskId: task.taskId,
-        conversationId: task.conversationId,
-        runtime: task.runtime,
-        promise: task.promise,
-        buildPrompt: (rewrittenRequirement) =>
-          normalSystemPrompt
-            ? buildRequirementPrompt({
-                requirement: rewrittenRequirement,
-                systemPrompt: normalSystemPrompt,
-              })
-            : rewrittenRequirement || undefined,
-      });
-      void task.promise.catch(() => {
-        toast.error('Agent task failed to start.');
-      });
-      resetComposer();
+      await paradigmLauncher(kindId).launch(
+        createParadigmLaunchContext({
+          ...shared,
+          target: { kind: 'new-task', projectId: mounted.data.id },
+          baseName,
+          provisionedTask: null,
+          project: mounted,
+          baseDefaultBranch,
+          parentBranchName: parentBranchName ?? null,
+        }),
+        params
+      );
     } finally {
       setSubmitting(false);
     }
@@ -2021,12 +1254,12 @@ export const HomeComposer = observer(function HomeComposer({
     inputPromptLanguage,
     rewriteInputRequirement,
     clearPromptTokens,
-    reviewSubmitKind,
-    standardSubmitKind,
     projectSubmitSourceBranch,
     projectSubmitStrategyKind,
+    paradigmCapabilities,
     submitting,
     runMode,
+    compareActive,
     compareVariants,
     quickActionMode,
     reviewerRuntime,

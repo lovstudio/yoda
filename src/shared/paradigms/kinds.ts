@@ -1,7 +1,12 @@
 import { BUILTIN_AGENT_KEYS } from '../builtin-agents';
 import { DEFAULT_TEAM_COMMUNICATION_CONFIG } from '../team-communication';
 import { DEFAULT_ROUTING_HOP_LIMIT } from '../team-routing-limit';
-import { PARADIGM_KIND_IDS, type ParadigmKindDescriptor, type ParadigmKindId } from './contract';
+import {
+  PARADIGM_KIND_IDS,
+  type ParadigmKindDescriptor,
+  type ParadigmKindId,
+  type ParadigmSlot,
+} from './contract';
 import {
   appBuildParadigmParamsSchema,
   compareParadigmParamsSchema,
@@ -220,6 +225,13 @@ export const PARADIGM_KINDS: Record<ParadigmKindId, ParadigmKindDescriptor> = {
 
 export function paradigmKind(kindId: ParadigmKindId): ParadigmKindDescriptor {
   return PARADIGM_KINDS[kindId];
+}
+
+/** A kind's slot by role, e.g. `paradigmSlot('review', 'reviewer')`. */
+export function paradigmSlot(kindId: ParadigmKindId, slotKey: string): ParadigmSlot {
+  const slot = PARADIGM_KINDS[kindId].slots.find((candidate) => candidate.key === slotKey);
+  if (!slot) throw new Error(`Paradigm kind "${kindId}" has no "${slotKey}" slot`);
+  return slot;
 }
 
 /** Kinds in picker order: converged workflows first, then multi-agent. */

@@ -3,6 +3,18 @@ import type { Branch } from '@shared/git';
 export type HomeProjectSubmitStrategy = 'new-branch' | 'no-worktree' | 'checkout-existing';
 
 /**
+ * True when running on `branch` requires checking it out first — it is a remote
+ * branch, or a local one the worktree is not already sitting on.
+ */
+export function branchNeedsCheckout(
+  branch: Branch | undefined,
+  currentBranchName: string | null
+): boolean {
+  if (!branch) return false;
+  return branch.type === 'remote' || branch.branch !== currentBranchName;
+}
+
+/**
  * Resolves the task's source-branch metadata without requiring a real Git ref
  * for in-place tasks. LovCode can register an ordinary folder as a project; in
  * that case Yoda still runs the task at the project root and uses `baseRef`
