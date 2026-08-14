@@ -9,7 +9,6 @@ import {
   type TaskSessionVisibleStatus,
 } from '@renderer/features/tasks/stores/task-selectors';
 import { taskDeliverySummariesQuery } from '@renderer/features/tasks/task-delivery-summaries-query';
-import { appState } from '@renderer/lib/stores/app-state';
 import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { Spinner } from '@renderer/lib/ui/spinner';
@@ -60,7 +59,6 @@ export const TaskSidebarHoverPreview = observer(function TaskSidebarHoverPreview
   });
   const latestSummary = summaries?.find((summary) => summary.text.trim());
   const sessionStatus = taskSessionStatusSummary(task);
-  const backgroundJobCount = appState.agentRuntime.taskBackgroundJobCount(projectId, task.data.id);
   const sessionCount = Math.max(
     Object.values(task.conversationStats).reduce((total, count) => total + count, 0),
     summaries?.length ?? 0
@@ -141,10 +139,12 @@ export const TaskSidebarHoverPreview = observer(function TaskSidebarHoverPreview
           <MessageSquare className="size-3 shrink-0" />
           <span>{t('tasks.overview.sessions', { count: sessionCount })}</span>
         </span>
-        {backgroundJobCount > 0 && (
+        {sessionStatus.backgroundJobCount > 0 && (
           <span className="inline-flex min-w-0 shrink-0 items-center gap-1.5">
             <Cpu className="size-3 shrink-0" />
-            <span>{t('tasks.backgroundJobs.runningCount', { count: backgroundJobCount })}</span>
+            <span>
+              {t('tasks.backgroundJobs.runningCount', { count: sessionStatus.backgroundJobCount })}
+            </span>
           </span>
         )}
         {task.data.needsReview && (

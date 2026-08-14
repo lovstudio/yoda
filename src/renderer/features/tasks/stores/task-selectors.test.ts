@@ -5,12 +5,14 @@ import { summarizeTaskSessionStatuses, taskSessionStatusSummary } from './task-s
 
 const mocks = vi.hoisted(() => ({
   taskSessionStatuses: vi.fn(),
+  taskBackgroundJobCount: vi.fn(() => 0),
 }));
 
 vi.mock('@renderer/lib/stores/app-state', () => ({
   appState: {
     agentRuntime: {
       taskSessionStatuses: mocks.taskSessionStatuses,
+      taskBackgroundJobCount: mocks.taskBackgroundJobCount,
     },
   },
 }));
@@ -27,6 +29,9 @@ describe('taskSessionStatusSummary', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.taskSessionStatuses.mockReturnValue([]);
+    // `clearAllMocks` drops recorded calls, not implementations, so a return
+    // value set by one case would otherwise leak into the next.
+    mocks.taskBackgroundJobCount.mockReturnValue(0);
   });
 
   it('surfaces awaiting-input from global runtime state for unmounted sidebar tasks', () => {
@@ -91,7 +96,17 @@ describe('taskSessionStatusSummary', () => {
           lastInteractedAt: '2026-08-10T04:56:32.240Z',
         },
       ],
+      backgroundJobCount: 0,
     });
+  });
+
+  it('carries the task’s running detached job count', () => {
+    mocks.taskSessionStatuses.mockReturnValue([]);
+    mocks.taskBackgroundJobCount.mockReturnValue(2);
+
+    expect(taskSessionStatusSummary(createUnprovisionedTask(makeTask())).backgroundJobCount).toBe(
+      2
+    );
   });
 });
 

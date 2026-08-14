@@ -113,6 +113,8 @@ export type TaskSessionStatusSummary = {
   attentionCount: number;
   workingCount: number;
   sessions: TaskSessionStatusItem[];
+  /** Detached jobs still running across this task's sessions. */
+  backgroundJobCount: number;
 };
 
 /**
@@ -155,7 +157,8 @@ const TASK_SESSION_STATUS_PRIORITY: Record<TaskSessionVisibleStatus, number> = {
 
 /** Shared, lossless task-session aggregation used by every task surface. */
 export function summarizeTaskSessionStatuses(
-  sessions: TaskSessionStatusItem[]
+  sessions: TaskSessionStatusItem[],
+  backgroundJobCount = 0
 ): TaskSessionStatusSummary {
   const ordered = [...sessions].sort((left, right) => {
     const statusOrder =
@@ -173,6 +176,7 @@ export function summarizeTaskSessionStatuses(
     attentionCount: ordered.length - workingCount,
     workingCount,
     sessions: ordered,
+    backgroundJobCount,
   };
 }
 
@@ -215,7 +219,10 @@ export function taskSessionStatusSummary(store: TaskStore): TaskSessionStatusSum
     sessions.push({ conversationId, status });
   }
 
-  return summarizeTaskSessionStatuses(sessions);
+  return summarizeTaskSessionStatuses(
+    sessions,
+    appState.agentRuntime.taskBackgroundJobCount(task.projectId, task.id)
+  );
 }
 
 export type TaskViewKind =
