@@ -175,6 +175,19 @@ export class TaskViewStore {
       )
     );
 
+    // The sidebar strip has two independent tab sources: builtin feature cards
+    // and pinned task entities. Collapse only when their combined count changes
+    // to zero. Because this reaction does not fire immediately, the user can
+    // still open an already-empty sidebar to add a feature card.
+    this.disposers.push(
+      reaction(
+        () => this.sidebarPrefs.openSidebarGroups.length + this.tabManager.sidebarTabIds.length,
+        (tabCount) => {
+          if (tabCount === 0) this.setSidebarCollapsed(true);
+        }
+      )
+    );
+
     makeAutoObservable(this, {
       tabManager: false,
       terminalTabs: false,
