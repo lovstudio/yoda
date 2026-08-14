@@ -1,5 +1,5 @@
 import { Check, Copy, Loader2, Save } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   CLAUDE_DEFAULT_CLEANUP_PERIOD_DAYS,
@@ -26,18 +26,16 @@ export function ClaudeRetentionSettingsCard({
   const { toast } = useToast();
   const { data, isLoading, isSaving, error, saveError, save, resetSaveError } =
     useClaudeRetentionSettings();
-  const [draft, setDraft] = useState('');
-
-  useEffect(() => {
-    if (!data || draft) return;
-    setDraft(
-      String(
-        onboarding && !data.configured
-          ? CLAUDE_RECOMMENDED_CLEANUP_PERIOD_DAYS
-          : data.effectiveCleanupPeriodDays
-      )
-    );
-  }, [data, draft, onboarding]);
+  const [draftOverride, setDraft] = useState<string | null>(null);
+  const draft =
+    draftOverride ??
+    (data
+      ? String(
+          onboarding && !data.configured
+            ? CLAUDE_RECOMMENDED_CLEANUP_PERIOD_DAYS
+            : data.effectiveCleanupPeriodDays
+        )
+      : '');
 
   const days = Number(draft);
   const valid = Number.isInteger(days) && days >= 1;

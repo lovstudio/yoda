@@ -33,8 +33,14 @@ describe('app state HMR compatibility', () => {
   });
 
   it('requires a complete archive pagination capability even at the current schema version', () => {
-    const missingArchiveLoader = currentAppStateShape();
-    missingArchiveLoader.sidebar.loadMoreSidebarArchivedTasks = undefined;
+    const current = currentAppStateShape();
+    const missingArchiveLoader = {
+      ...current,
+      sidebar: {
+        taskPriorityMode: current.sidebar.taskPriorityMode,
+        sidebarArchivedTaskLoadState: current.sidebar.sidebarArchivedTaskLoadState,
+      },
+    };
 
     expect(isReusableAppState(missingArchiveLoader)).toBe(false);
   });
