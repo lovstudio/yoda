@@ -1,5 +1,7 @@
 import { Loader2 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
+
+type SessionOpeningPresentation = 'loading' | 'detail';
 
 export function SessionOpeningSurface({
   surface = 'task-session-opening',
@@ -10,6 +12,7 @@ export function SessionOpeningSurface({
   summary,
   statusIcon,
   actions,
+  presentation = 'loading',
 }: {
   surface?: string;
   title?: string;
@@ -19,7 +22,24 @@ export function SessionOpeningSurface({
   summary?: ReactNode;
   statusIcon?: ReactNode;
   actions?: ReactNode;
+  presentation?: SessionOpeningPresentation;
 }) {
+  if (presentation === 'loading') {
+    return (
+      <div
+        data-yoda-surface={surface}
+        data-session-opening-presentation="brand"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        aria-label={progressMessage}
+        className="flex h-full min-h-0 w-full min-w-0 items-center justify-center overflow-hidden bg-[var(--xterm-bg)]"
+      >
+        <YodaOpeningMark />
+      </div>
+    );
+  }
+
   return (
     <div
       data-yoda-surface={surface}
@@ -77,5 +97,51 @@ export function SessionOpeningSurface({
         </div>
       </div>
     </div>
+  );
+}
+
+function YodaOpeningMark() {
+  const id = useId().replace(/:/g, '');
+  const maskId = `session-opening-cowl-${id}`;
+  const glowId = `session-opening-glow-${id}`;
+
+  return (
+    <svg
+      data-yoda-opening-mark
+      viewBox="0 0 240 220"
+      className="yoda-session-opening-mark w-[72px] text-foreground"
+      aria-hidden
+      focusable="false"
+    >
+      <defs>
+        <radialGradient id={glowId} cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0" stopColor="var(--yoda-opening-presence)" stopOpacity="0.55" />
+          <stop offset="1" stopColor="var(--yoda-opening-presence)" stopOpacity="0" />
+        </radialGradient>
+        <mask id={maskId}>
+          <rect x="-60" y="-60" width="360" height="380" fill="#fff" />
+          <path fill="#000" d="M 167.2 120.4 A 50 50 0 1 0 72.8 120.4 L 120 256 Z" />
+        </mask>
+      </defs>
+      <path
+        mask={`url(#${maskId})`}
+        fill="currentColor"
+        d="M 156.4 21.3 L 228.2 162.9 A 34 34 0 0 1 200 216 L 40 216 A 34 34 0 0 1 11.8 162.9 L 83.6 21.3 A 44 44 0 0 1 156.4 21.3 Z"
+      />
+      <circle
+        className="yoda-session-opening-glow"
+        cx="120"
+        cy="104"
+        r="36"
+        fill={`url(#${glowId})`}
+      />
+      <circle
+        className="yoda-session-opening-dot"
+        cx="120"
+        cy="104"
+        r="13"
+        fill="var(--yoda-opening-presence)"
+      />
+    </svg>
   );
 }

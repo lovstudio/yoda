@@ -3,10 +3,12 @@ import {
   type Conversation,
   type ConversationAgent,
   type ConversationExecutionMode,
+  type ConversationResumeResult,
   type PendingInitialPrompt,
   type SessionRuntimeOverrides,
 } from '@shared/conversations';
 import type { SkillSessionPolicy } from '@shared/skills/types';
+import type { SessionOpenPerformanceTrace } from './session-open-performance';
 
 /**
  * Controls how a persisted conversation is brought back into the app process.
@@ -18,6 +20,13 @@ import type { SkillSessionPolicy } from '@shared/skills/types';
  */
 export type ConversationStartOptions = {
   reattachExistingTmuxSession?: boolean;
+  /** Optional diagnostics for an explicit renderer task-open; never persisted. */
+  performanceTrace?: SessionOpenPerformanceTrace;
+};
+
+/** Resume evidence paired with the exact PTY generation sampled before registration release. */
+export type GenerationBoundConversationResumeResult = ConversationResumeResult & {
+  generation: number;
 };
 
 export type ActiveConversationSession = {
@@ -34,6 +43,8 @@ export type ActiveConversationSession = {
   transportAttached?: boolean;
   /** Most recent detach or headless-input time used to age a detached tmux transport. */
   transportDetachedAt?: number;
+  /** This transport was created only to view an existing conversation. */
+  readOnlyResume?: boolean;
 };
 
 export interface ConversationProvider {

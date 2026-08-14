@@ -1,5 +1,7 @@
 import { PRODUCT_NAME } from '@shared/app-identity';
+import { isAgentSessionRunningStatus } from '@shared/events/agentEvents';
 import { getRuntime } from '@shared/runtime-registry';
+import type { ActiveConversationSession } from '@main/core/conversations/types';
 import type { ActiveAgentSessionSummary } from '@main/core/tasks/task-manager';
 import type {
   ActiveWorkspaceTerminalSession,
@@ -35,6 +37,33 @@ export type ActiveQuitSessionSummary = {
   terminalSessions: number;
   nonKeepableSessions: QuitSessionInfo[];
 };
+
+type RestartAgentSession = ActiveConversationSession & {
+  status: Parameters<typeof isAgentSessionRunningStatus>[0];
+};
+
+/**
+ * Quit keeps its existing running-only contract. Restart must also protect
+ * idle/completed tmux sessions: terminating them would destroy work that can
+ * otherwise survive the application relaunch, regardless of whether Yoda's
+ * transport is currently attached.
+ */
+export function resolveAgentSessionSummaryForShutdown(
+  restartRequested: boolean,
+  runningSummary: ActiveAgentSessionSummary,
+  agentSessions: readonly RestartAgentSession[]
+): ActiveAgentSessionSummary {
+  if (!restartRequested) return runningSummary;
+
+  const protectedSessions = agentSessions.filter(
+    (session) => session.detachable || isAgentSessionRunningStatus(session.status)
+  );
+  return {
+    running: protectedSessions.length,
+    keepable: protectedSessions.filter((session) => session.detachable).length,
+    nonKeepableSessions: protectedSessions.filter((session) => !session.detachable),
+  };
+}
 
 function pluralize(count: number, singular: string, plural: string): string {
   return count === 1 ? singular : plural;

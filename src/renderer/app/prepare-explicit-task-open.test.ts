@@ -67,6 +67,14 @@ describe('prepareExplicitTaskOpen', () => {
     expect(mocks.restoreTask).not.toHaveBeenCalled();
   });
 
+  it('point-loads an archived task without restoring it for a read-only open', async () => {
+    await prepareExplicitTaskOpen('project-1', 'task-1', { restoreArchived: false });
+
+    expect(mocks.mountProject).toHaveBeenCalledWith('project-1');
+    expect(mocks.ensureTaskLoaded).toHaveBeenCalledWith('task-1');
+    expect(mocks.restoreTask).not.toHaveBeenCalled();
+  });
+
   it('fails closed when the task cannot be point-loaded', async () => {
     mocks.ensureTaskLoaded.mockResolvedValue(false);
 

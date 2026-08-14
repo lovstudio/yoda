@@ -16,17 +16,33 @@ class TaskOpenTransitionStore {
   private readonly failedByTask = observable.map<string, symbol>();
   private readonly targetByTask = observable.map<string, TaskWindowTabTarget>();
   private readonly errorByTask = observable.map<string, string>();
+  private readonly sessionOpeningOwnersByTask = observable.map<string, Set<symbol>>();
+  private readonly sessionErrorOwnersByTask = observable.map<string, Set<symbol>>();
 
   constructor() {
-    makeObservable<this, 'pendingByTask' | 'failedByTask' | 'targetByTask' | 'errorByTask'>(this, {
+    makeObservable<
+      this,
+      | 'pendingByTask'
+      | 'failedByTask'
+      | 'targetByTask'
+      | 'errorByTask'
+      | 'sessionOpeningOwnersByTask'
+      | 'sessionErrorOwnersByTask'
+    >(this, {
       pendingByTask: observable,
       failedByTask: observable,
       targetByTask: observable,
       errorByTask: observable,
+      sessionOpeningOwnersByTask: observable,
+      sessionErrorOwnersByTask: observable,
       begin: action,
       complete: action,
       fail: action,
       dismissFailure: action,
+      reportSessionOpening: action,
+      clearSessionOpening: action,
+      reportSessionError: action,
+      clearSessionError: action,
     });
   }
 
@@ -80,6 +96,62 @@ class TaskOpenTransitionStore {
 
   isPending(projectId: string, taskId: string): boolean {
     return this.pendingByTask.has(taskOpenKey(projectId, taskId));
+  }
+
+  /**
+   * Keep the ordinary session-opening surface at TaskMainPanel, the nearest
+   * common ancestor of the terminal and its history dock. A mounted
+   * ConversationsPanel reports only readiness intent through an owner token;
+   * it never paints a second loader in its own, smaller coordinate space.
+   */
+  reportSessionOpening(projectId: string, taskId: string, owner: symbol, isOpening: boolean): void {
+    const key = taskOpenKey(projectId, taskId);
+    const existingOwners = this.sessionOpeningOwnersByTask.get(key);
+    if (!isOpening) {
+      if (!existingOwners) return;
+      existingOwners.delete(owner);
+      if (existingOwners.size === 0) this.sessionOpeningOwnersByTask.delete(key);
+      return;
+    }
+
+    if (existingOwners) {
+      existingOwners.add(owner);
+      return;
+    }
+    this.sessionOpeningOwnersByTask.set(key, observable.set([owner]));
+  }
+
+  clearSessionOpening(projectId: string, taskId: string, owner: symbol): void {
+    this.reportSessionOpening(projectId, taskId, owner, false);
+  }
+
+  isSessionOpening(projectId: string, taskId: string): boolean {
+    return (this.sessionOpeningOwnersByTask.get(taskOpenKey(projectId, taskId))?.size ?? 0) > 0;
+  }
+
+  reportSessionError(projectId: string, taskId: string, owner: symbol, hasError: boolean): void {
+    const key = taskOpenKey(projectId, taskId);
+    const existingOwners = this.sessionErrorOwnersByTask.get(key);
+    if (!hasError) {
+      if (!existingOwners) return;
+      existingOwners.delete(owner);
+      if (existingOwners.size === 0) this.sessionErrorOwnersByTask.delete(key);
+      return;
+    }
+
+    if (existingOwners) {
+      existingOwners.add(owner);
+      return;
+    }
+    this.sessionErrorOwnersByTask.set(key, observable.set([owner]));
+  }
+
+  clearSessionError(projectId: string, taskId: string, owner: symbol): void {
+    this.reportSessionError(projectId, taskId, owner, false);
+  }
+
+  hasSessionError(projectId: string, taskId: string): boolean {
+    return (this.sessionErrorOwnersByTask.get(taskOpenKey(projectId, taskId))?.size ?? 0) > 0;
   }
 
   hasFailed(projectId: string, taskId: string): boolean {

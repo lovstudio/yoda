@@ -93,6 +93,7 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
       ...session,
       status: 'working',
       pendingAction: null,
+      providerTurnConfirmed: false,
     });
   });
 
@@ -117,6 +118,7 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
         notificationType: 'permission_prompt',
         actionDescription: 'Allow this command?',
       },
+      providerTurnConfirmed: true,
     });
   });
 
@@ -130,6 +132,7 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
       ...session,
       status: 'awaiting-input',
       pendingAction: null,
+      providerTurnConfirmed: false,
     });
   });
 
@@ -152,8 +155,75 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
       ...session,
       status: 'idle',
       pendingAction: null,
+      providerTurnConfirmed: false,
     });
   });
+
+  it('broadcasts an authoritative fence when Codex confirms an already-working turn', () => {
+    agentSessionRuntimeStore.dispatch(
+      session,
+      { kind: 'turn-started', at: 1, force: true },
+      'renderer:working'
+    );
+    mocks.emit.mockClear();
+
+    agentSessionRuntimeStore.dispatch(session, { kind: 'turn-started', at: 2 }, 'codex-rollout');
+
+    expect(agentSessionRuntimeStore.getStatus(session)).toBe('working');
+    expect(agentSessionRuntimeStore.isProviderTurnConfirmed(session)).toBe(true);
+    expect(mocks.emit).toHaveBeenCalledWith(agentSessionStatusChangedChannel, {
+      ...session,
+      status: 'working',
+      pendingAction: null,
+      providerTurnConfirmed: true,
+    });
+  });
+
+  it('resets an authoritative fence for a new optimistic turn without a status change', () => {
+    agentSessionRuntimeStore.dispatch(
+      session,
+      { kind: 'turn-started', at: 1 },
+      'claude-transcript'
+    );
+    mocks.emit.mockClear();
+
+    agentSessionRuntimeStore.dispatch(
+      session,
+      { kind: 'turn-started', at: 2, force: true },
+      'renderer:working'
+    );
+
+    expect(agentSessionRuntimeStore.getStatus(session)).toBe('working');
+    expect(agentSessionRuntimeStore.isProviderTurnConfirmed(session)).toBe(false);
+    expect(mocks.emit).toHaveBeenCalledWith(agentSessionStatusChangedChannel, {
+      ...session,
+      status: 'working',
+      pendingAction: null,
+      providerTurnConfirmed: false,
+    });
+  });
+
+  it.each(['prompt-submit', 'awaiting-input-resolved'] as const)(
+    'accepts a real hook %s as authoritative turn evidence',
+    (type) => {
+      agentSessionRuntimeStore.setFromAgentEvent({
+        ...session,
+        type,
+        source: 'hook',
+        timestamp: 1,
+        payload: {},
+      });
+
+      expect(agentSessionRuntimeStore.getStatus(session)).toBe('working');
+      expect(agentSessionRuntimeStore.isProviderTurnConfirmed(session)).toBe(true);
+      expect(mocks.emit).toHaveBeenCalledWith(agentSessionStatusChangedChannel, {
+        ...session,
+        status: 'working',
+        pendingAction: null,
+        providerTurnConfirmed: true,
+      });
+    }
+  );
 
   it('turns authoritative completion into a notification event and sound signal', () => {
     agentSessionRuntimeStore.dispatch(

@@ -25,6 +25,8 @@ import {
 
 export type ArchivedSessionTranscriptModalArgs = {
   conversation: Conversation;
+  /** Task-level read-only review keeps lifecycle restoration in the explicit task menu. */
+  allowRestore?: boolean;
 };
 
 type Props = BaseModalProps<void> & ArchivedSessionTranscriptModalArgs;
@@ -34,7 +36,11 @@ type Props = BaseModalProps<void> & ArchivedSessionTranscriptModalArgs;
  * JSONL / Codex rollout) rendered without resuming the PTY or touching the
  * archive state — review first, restore only if needed.
  */
-export function ArchivedSessionTranscriptModal({ conversation, onClose }: Props) {
+export function ArchivedSessionTranscriptModal({
+  conversation,
+  allowRestore = true,
+  onClose,
+}: Props) {
   const { t } = useTranslation();
   const [transcript, setTranscript] = useState<ConversationTranscript | undefined>();
   const [busy, setBusy] = useState(false);
@@ -128,15 +134,17 @@ export function ArchivedSessionTranscriptModal({ conversation, onClose }: Props)
         )}
       </DialogContentArea>
       <DialogFooter>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          onClick={() => void handleRestore()}
-        >
-          <ArchiveRestore className="size-4" />
-          {t('tasks.archivedSession.restore')}
-        </Button>
+        {allowRestore ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void handleRestore()}
+          >
+            <ArchiveRestore className="size-4" />
+            {t('tasks.archivedSession.restore')}
+          </Button>
+        ) : null}
         <Button type="button" variant="outline" onClick={onClose}>
           {t('common.close')}
         </Button>

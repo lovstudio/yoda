@@ -29,6 +29,7 @@ export function ConversationSessionPendingState({
       heading={heading}
       description={description}
       progressMessage={description}
+      presentation={error ? 'detail' : 'loading'}
       statusIcon={
         error ? (
           <AlertCircle className="ml-auto size-3.5 text-status-cancelled" aria-hidden />

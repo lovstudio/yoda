@@ -31,3 +31,45 @@ describe('taskOpenTransitionStore failures', () => {
     expect(taskOpenTransitionStore.hasFailed(PROJECT_ID, TASK_ID)).toBe(false);
   });
 });
+
+describe('taskOpenTransitionStore session opening owners', () => {
+  it('keeps the task opening while any mounted conversation surface still needs it', () => {
+    const firstOwner = Symbol('first conversation panel');
+    const secondOwner = Symbol('second conversation panel');
+
+    taskOpenTransitionStore.reportSessionOpening(PROJECT_ID, TASK_ID, firstOwner, true);
+    taskOpenTransitionStore.reportSessionOpening(PROJECT_ID, TASK_ID, secondOwner, true);
+    expect(taskOpenTransitionStore.isSessionOpening(PROJECT_ID, TASK_ID)).toBe(true);
+
+    taskOpenTransitionStore.clearSessionOpening(PROJECT_ID, TASK_ID, firstOwner);
+    expect(taskOpenTransitionStore.isSessionOpening(PROJECT_ID, TASK_ID)).toBe(true);
+
+    taskOpenTransitionStore.reportSessionOpening(PROJECT_ID, TASK_ID, secondOwner, false);
+    expect(taskOpenTransitionStore.isSessionOpening(PROJECT_ID, TASK_ID)).toBe(false);
+  });
+
+  it('does not let a stale owner clear the current opening intent', () => {
+    const currentOwner = Symbol('current conversation panel');
+    const staleOwner = Symbol('stale conversation panel');
+
+    taskOpenTransitionStore.reportSessionOpening(PROJECT_ID, TASK_ID, currentOwner, true);
+    taskOpenTransitionStore.clearSessionOpening(PROJECT_ID, TASK_ID, staleOwner);
+    expect(taskOpenTransitionStore.isSessionOpening(PROJECT_ID, TASK_ID)).toBe(true);
+
+    taskOpenTransitionStore.clearSessionOpening(PROJECT_ID, TASK_ID, currentOwner);
+    expect(taskOpenTransitionStore.isSessionOpening(PROJECT_ID, TASK_ID)).toBe(false);
+  });
+
+  it('tracks error-detail owners independently from ordinary opening owners', () => {
+    const owner = Symbol('conversation error detail');
+
+    taskOpenTransitionStore.reportSessionOpening(PROJECT_ID, TASK_ID, owner, true);
+    taskOpenTransitionStore.reportSessionError(PROJECT_ID, TASK_ID, owner, true);
+    expect(taskOpenTransitionStore.isSessionOpening(PROJECT_ID, TASK_ID)).toBe(true);
+    expect(taskOpenTransitionStore.hasSessionError(PROJECT_ID, TASK_ID)).toBe(true);
+
+    taskOpenTransitionStore.clearSessionError(PROJECT_ID, TASK_ID, owner);
+    taskOpenTransitionStore.clearSessionOpening(PROJECT_ID, TASK_ID, owner);
+    expect(taskOpenTransitionStore.hasSessionError(PROJECT_ID, TASK_ID)).toBe(false);
+  });
+});

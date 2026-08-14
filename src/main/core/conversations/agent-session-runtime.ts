@@ -116,6 +116,8 @@ type Entry = {
   session: AgentSessionKey;
   state: RunState;
   watchdogProtected: boolean;
+  /** Provider-owned evidence exists for the currently running turn. */
+  providerTurnConfirmed: boolean;
 };
 
 const AUTHORITATIVE_RUN_STATE_SOURCES = new Set([
@@ -123,6 +125,21 @@ const AUTHORITATIVE_RUN_STATE_SOURCES = new Set([
   'claude-transcript',
   'claude-session-activity',
 ]);
+
+const AUTHORITATIVE_HOOK_TURN_SOURCES = new Set([
+  'hook:prompt-submit',
+  'hook:awaiting-input-resolved',
+]);
+
+function sourceConfirmsRunningTurn(source: string, event: RunStateEvent): boolean {
+  if (AUTHORITATIVE_RUN_STATE_SOURCES.has(source)) {
+    // A provider-owned awaiting-input verdict also proves that its enclosing
+    // turn exists. This matters when a cold tail scan lands directly on an
+    // unresolved tool without replaying its earlier turn-start row.
+    return event.kind === 'turn-started' || event.kind === 'awaiting-input';
+  }
+  return event.kind === 'turn-started' && AUTHORITATIVE_HOOK_TURN_SOURCES.has(source);
+}
 
 function notificationEventForRuntimeState(
   session: AgentSessionKey,
@@ -199,7 +216,12 @@ class AgentSessionRuntimeStore {
    * reducer and is logged here, so there is exactly one place to reason about
    * transitions and exactly one place to debug them.
    */
-  dispatch(session: AgentSessionKey, event: RunStateEvent, source: string): RunState {
+  dispatch(
+    session: AgentSessionKey,
+    event: RunStateEvent,
+    source: string,
+    options: { providerTurnConfirmed?: boolean } = {}
+  ): RunState {
     // A deterministic new turn is the first durable signal after an interrupt
     // marker. Clear it here so Codex/Claude truth sources can resume working
     // even when the prompt-submit hook was missed.
@@ -214,10 +236,21 @@ class AgentSessionRuntimeStore {
       isAgentSessionRunningStatus(next.status) &&
       (AUTHORITATIVE_RUN_STATE_SOURCES.has(source) ||
         (remainsRunning && previousEntry?.watchdogProtected === true));
-    this.entries.set(key, { session, state: next, watchdogProtected });
+    const providerTurnConfirmed = !isAgentSessionRunningStatus(next.status)
+      ? false
+      : options.providerTurnConfirmed !== undefined
+        ? options.providerTurnConfirmed
+        : sourceConfirmsRunningTurn(source, event)
+          ? true
+          : event.kind === 'turn-started'
+            ? false
+            : (previousEntry?.providerTurnConfirmed ?? false);
+    this.entries.set(key, { session, state: next, watchdogProtected, providerTurnConfirmed });
     const statusChanged = prev.status !== next.status;
     const pendingActionChanged = !samePendingAction(prev.pendingAction, next.pendingAction);
-    if (statusChanged || pendingActionChanged) {
+    const providerTurnConfirmedChanged =
+      (previousEntry?.providerTurnConfirmed ?? false) !== providerTurnConfirmed;
+    if (statusChanged || pendingActionChanged || providerTurnConfirmedChanged) {
       if (statusChanged) {
         log.debug('AgentRunState transition', {
           conversationId: session.conversationId,
@@ -232,7 +265,7 @@ class AgentSessionRuntimeStore {
       // the mount-independent AgentRuntimeStore is a separate renderer store and
       // only observes main-process broadcasts. Re-applying the same status to the
       // ConversationStore uses emit:false, so this round-trip cannot loop.
-      this.publishState(session, next);
+      this.publishState(session, next, providerTurnConfirmed);
       if (
         AUTHORITATIVE_RUN_STATE_SOURCES.has(source) &&
         ((statusChanged && next.status === 'completed') ||
@@ -250,19 +283,49 @@ class AgentSessionRuntimeStore {
   }
 
   /** Directly seed a status (used at session spawn). */
-  setStatus(session: AgentSessionKey, status: AgentSessionRuntimeStatus): void {
+  setStatus(
+    session: AgentSessionKey,
+    status: AgentSessionRuntimeStatus,
+    options: { providerTurnConfirmed?: boolean } = {}
+  ): void {
     const at = Date.now();
     const event = eventForRendererStatus(status, at);
     if (event) {
-      this.dispatch(session, event, `seed:${status}`);
+      this.dispatch(session, event, `seed:${status}`, options);
       return;
     }
     // idle/awaiting-input seed: set baseline directly via initial state.
     const key = keyFor(session);
-    const previous = this.entries.get(key)?.state;
+    const previousEntry = this.entries.get(key);
+    const previous = previousEntry?.state;
     const state = initialRunState(status, at);
-    this.entries.set(key, { session, state, watchdogProtected: false });
-    if (!previous || previous.status !== state.status) this.publishState(session, state);
+    const providerTurnConfirmed = isAgentSessionRunningStatus(status)
+      ? (options.providerTurnConfirmed ?? previousEntry?.providerTurnConfirmed ?? false)
+      : false;
+    this.entries.set(key, {
+      session,
+      state,
+      watchdogProtected: false,
+      providerTurnConfirmed,
+    });
+    if (
+      !previous ||
+      previous.status !== state.status ||
+      (previousEntry?.providerTurnConfirmed ?? false) !== providerTurnConfirmed
+    ) {
+      this.publishState(session, state, providerTurnConfirmed);
+    }
+  }
+
+  /** Confirm an already-running turn without manufacturing a status transition. */
+  setProviderTurnConfirmed(session: AgentSessionKey, confirmed: boolean): void {
+    const key = keyFor(session);
+    const entry = this.entries.get(key);
+    if (!entry || !isAgentSessionRunningStatus(entry.state.status)) return;
+    if (entry.providerTurnConfirmed === confirmed) return;
+    const next = { ...entry, providerTurnConfirmed: confirmed };
+    this.entries.set(key, next);
+    this.publishState(session, next.state, confirmed);
   }
 
   setFromAgentEvent(event: AgentEvent): void {
@@ -279,7 +342,7 @@ class AgentSessionRuntimeStore {
     const previous = this.entries.get(key)?.state;
     this.entries.delete(key);
     if (previous && isAgentSessionRunningStatus(previous.status)) {
-      this.publishState(session, initialRunState('idle', Date.now()));
+      this.publishState(session, initialRunState('idle', Date.now()), false);
     }
   }
 
@@ -293,6 +356,20 @@ class AgentSessionRuntimeStore {
 
   getState(session: AgentSessionKey): RunState {
     return this.entries.get(keyFor(session))?.state ?? initialRunState();
+  }
+
+  isProviderTurnConfirmed(session: AgentSessionKey): boolean {
+    return this.entries.get(keyFor(session))?.providerTurnConfirmed ?? false;
+  }
+
+  /** Force the current status + provider fence across IPC for renderer cold hydration. */
+  publishSnapshot(session: AgentSessionKey): void {
+    const entry = this.entries.get(keyFor(session));
+    this.publishState(
+      session,
+      entry?.state ?? initialRunState(),
+      entry?.providerTurnConfirmed ?? false
+    );
   }
 
   /** Snapshot of every tracked session's current status, for renderer cold-load. */
@@ -331,13 +408,18 @@ class AgentSessionRuntimeStore {
   }
 
   /** Keep renderer mirrors and main-process subscribers on one canonical state. */
-  private publishState(session: AgentSessionKey, state: RunState): void {
+  private publishState(
+    session: AgentSessionKey,
+    state: RunState,
+    providerTurnConfirmed: boolean
+  ): void {
     events.emit(agentSessionStatusChangedChannel, {
       projectId: session.projectId,
       taskId: session.taskId,
       conversationId: session.conversationId,
       status: state.status,
       pendingAction: state.pendingAction,
+      providerTurnConfirmed,
     });
     this.notifyListeners(session, state);
   }

@@ -70,6 +70,8 @@ export interface CodexRunStateContext {
   isResuming?: boolean;
   /** Persisted/resolved Codex thread id. Avoids cwd-based fallback collisions. */
   threadId?: string;
+  /** Initial rollout contents are history only; observe events appended after attach. */
+  readOnlyResume?: boolean;
 }
 
 export type RunStateDispatch = (event: RunStateEvent) => void;
@@ -220,6 +222,13 @@ class CodexRolloutTailer implements CodexRunStateWatcher {
         const lines = await readRecentRunStateLines(fileHandle, targetSize);
         this.offset = targetSize;
         this.initialized = true;
+        // Opening an inactive conversation is a viewing action. Codex rollouts
+        // can end with an unmatched historical task_started when the previous
+        // process was interrupted without writing task_complete/turn_aborted.
+        // Replaying that row here would manufacture a working transition merely
+        // because Yoda attached a terminal. Establish the byte baseline only;
+        // subsequent provider-written events remain authoritative.
+        if (this.ctx.readOnlyResume) return;
         for (const event of initialCodexTailEvents(
           lines ?? [],
           this.ctx.startedAtMs,
@@ -548,12 +557,16 @@ async function readRecentRunStateLines(file: FileHandle, size: number): Promise<
   let position = size;
   let scannedBytes = 0;
   let carry = Buffer.alloc(0);
+  let discardingOversizedLine = false;
   let uncertain = false;
 
   const collect = (line: Buffer): boolean => {
     if (line.length === 0) return false;
     if (line.length > MAX_RUN_STATE_LINE_BYTES) {
-      uncertain = true;
+      // Codex turn-boundary rows are tiny. Oversized JSONL rows are provider
+      // payloads (most commonly screenshots or tool output) and cannot replace
+      // the newest task_started/task_complete/turn_aborted boundary. Skip them
+      // without retaining or decoding the payload, then keep scanning backward.
       return false;
     }
     if (!RUN_STATE_LINE_MARKERS.some((marker) => line.includes(marker))) return false;
@@ -578,11 +591,24 @@ async function readRecentRunStateLines(file: FileHandle, size: number): Promise<
     if (bytesRead !== chunk.length) return null;
     position = start;
     scannedBytes += bytesRead;
-    const data = chunk.subarray(0, bytesRead);
+    let data = chunk.subarray(0, bytesRead);
+
+    if (discardingOversizedLine) {
+      // We entered this row from its tail while scanning backward. Discard whole
+      // chunks until the preceding newline exposes the row's start, then resume
+      // ordinary parsing with the older rows in that same chunk.
+      const rowStart = data.lastIndexOf(0x0a);
+      if (rowStart < 0) continue;
+      discardingOversizedLine = false;
+      carry = Buffer.alloc(0);
+      data = data.subarray(0, rowStart + 1);
+    }
 
     const lastSeparator = data.lastIndexOf(0x0a);
     if (lastSeparator < 0 && data.length + carry.length > MAX_RUN_STATE_LINE_BYTES) {
-      return null;
+      discardingOversizedLine = true;
+      carry = Buffer.alloc(0);
+      continue;
     }
 
     const combined = carry.length > 0 ? Buffer.concat([data, carry]) : data;
@@ -605,6 +631,7 @@ async function readRecentRunStateLines(file: FileHandle, size: number): Promise<
     carry = combined.subarray(0, firstSeparator);
   }
 
+  if (discardingOversizedLine) return null;
   if (carry.length > 0) collect(carry);
   if (uncertain) return null;
   return newestFirst.reverse();

@@ -199,6 +199,8 @@ export class LocalConversationProvider implements ConversationProvider {
     if (this.sessions.has(sessionId)) return;
     const existingStart = this.pendingStarts.get(sessionId);
     if (existingStart) return existingStart.completion;
+    const performanceTrace = startOptions?.performanceTrace;
+    const providerStartedAt = performanceTrace?.startSpan();
 
     const startToken = Symbol(sessionId);
     let resolveCompletion!: () => void;
@@ -579,7 +581,17 @@ export class LocalConversationProvider implements ConversationProvider {
         throw new TmuxReattachMissError();
       }
       if (tmuxSessionName && (reattachExistingTmuxSession || pendingAttempt?.attemptStartedAtMs)) {
-        const markers = await listTmuxSessionMarkersStrict(this.ctx);
+        const markers = performanceTrace
+          ? await performanceTrace.measure(
+              'tmux-marker-probe',
+              () => listTmuxSessionMarkersStrict(this.ctx),
+              (result) => ({
+                markerCount: result.length,
+                reattachExisting: reattachExistingTmuxSession,
+                transport: 'local',
+              })
+            )
+          : await listTmuxSessionMarkersStrict(this.ctx);
         if (!this.ownsPendingStart(sessionId, startToken)) return;
         const canonicalPane = markers.find((marker) => marker.sessionName === tmuxSessionName);
         if (reattachExistingTmuxSession && !canonicalPane) {
@@ -691,7 +703,15 @@ export class LocalConversationProvider implements ConversationProvider {
       ) {
         return;
       }
-      const pty = (() => {
+      if (providerStartedAt !== undefined) {
+        performanceTrace?.endSpan('provider-preflight', providerStartedAt, {
+          runtimeId: conversation.runtimeId,
+          tmuxEnabled: Boolean(tmuxSessionName),
+          reattachExisting: reattachExistingTmuxSession,
+          transport: 'local',
+        });
+      }
+      const spawnPty = () => {
         try {
           const resolved = resolveLocalPtySpawn({
             platform: process.platform,
@@ -747,8 +767,30 @@ export class LocalConversationProvider implements ConversationProvider {
           invocationLogFinished = true;
           throw error;
         }
-      })();
+      };
+      const pty = performanceTrace
+        ? performanceTrace.measureSync('provider-spawn', spawnPty, {
+            runtimeId: conversation.runtimeId,
+            tmuxEnabled: Boolean(tmuxSessionName),
+            reattachExisting: reattachExistingTmuxSession,
+            transport: 'local',
+          })
+        : spawnPty();
       spawnedPty = pty;
+      const performanceAttempt = reattachExistingTmuxSession ? 'reattach' : 'resume';
+      let firstOutputTrace = performanceTrace;
+      pty.onData((data) => {
+        if (!firstOutputTrace || data.length === 0) return;
+        const outputTrace = firstOutputTrace;
+        firstOutputTrace = undefined;
+        outputTrace.mark('pty-first-output', {
+          attempt: performanceAttempt,
+          byteLength: Buffer.byteLength(data, 'utf8'),
+          reattachExisting: reattachExistingTmuxSession,
+          runtimeId: conversation.runtimeId,
+          transport: 'local',
+        });
+      });
       const tmuxReattachPromise = reattachMarkerBaseline
         ? waitForTmuxReattach({ ctx: this.ctx, pty, baseline: reattachMarkerBaseline })
         : undefined;
@@ -877,35 +919,65 @@ export class LocalConversationProvider implements ConversationProvider {
 
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       registrationAttempted = true;
-      ptySessionRegistry.register(sessionId, pty, {
-        onFinalExit: (info, generation) => {
-          if (!shouldEmitAgentSessionExited) return;
-          events.emit(agentSessionExitedChannel, {
-            sessionId,
-            projectId: conversation.projectId,
-            conversationId: conversation.id,
-            taskId: conversation.taskId,
-            generation,
-            exitCode: info.exitCode,
-          });
-          snapshotConversationUsageOnSessionExit(conversation.id);
-          snapshotTaskDiffOnSessionExit(conversation.taskId);
-        },
-        registrationEpoch,
-        tmuxBacked: Boolean(tmuxSessionName),
-        onRendererIdle: tmuxSessionName
-          ? (generation) => this.detachRendererTransport(sessionId, pty, generation)
-          : undefined,
-      });
+      const registerPty = () =>
+        ptySessionRegistry.register(sessionId, pty, {
+          onFinalExit: (info, generation) => {
+            if (!shouldEmitAgentSessionExited) return;
+            events.emit(agentSessionExitedChannel, {
+              sessionId,
+              projectId: conversation.projectId,
+              conversationId: conversation.id,
+              taskId: conversation.taskId,
+              generation,
+              exitCode: info.exitCode,
+            });
+            snapshotConversationUsageOnSessionExit(conversation.id);
+            snapshotTaskDiffOnSessionExit(conversation.taskId);
+          },
+          registrationEpoch,
+          tmuxBacked: Boolean(tmuxSessionName),
+          initialDimensions: initialSize,
+          onRendererIdle: tmuxSessionName
+            ? (generation) => this.detachRendererTransport(sessionId, pty, generation)
+            : undefined,
+        });
+      if (performanceTrace) {
+        performanceTrace.measureSync('pty-registered', registerPty, () => ({
+          generation: ptySessionRegistry.getGeneration(sessionId),
+          runtimeId: conversation.runtimeId,
+          transport: 'local',
+        }));
+      } else {
+        registerPty();
+      }
       registrationCompleted = true;
       if (!this.ownsPendingStart(sessionId, startToken)) {
         ptySessionRegistry.unregister(sessionId);
         return;
       }
       if (tmuxReattachPromise) {
-        await tmuxReattachPromise;
+        if (performanceTrace) {
+          await performanceTrace.measure('tmux-reattach-confirm', () => tmuxReattachPromise, {
+            runtimeId: conversation.runtimeId,
+            transport: 'local',
+          });
+        } else {
+          await tmuxReattachPromise;
+        }
         if (!this.ownsPendingStart(sessionId, startToken)) return;
+      } else {
+        performanceTrace?.mark('tmux-reattach-confirm', {
+          skipped: true,
+          durationMs: 0,
+          transport: 'local',
+        });
       }
+      const readOnlyResume = Boolean(
+        effectiveIsResuming &&
+          !reattachExistingTmuxSession &&
+          !initialPrompt?.trim() &&
+          !pendingImagePaths?.length
+      );
       this.sessions.set(sessionId, pty);
       this.sessionInfos.set(sessionId, {
         sessionId,
@@ -915,15 +987,22 @@ export class LocalConversationProvider implements ConversationProvider {
         ...(pty.pid === undefined ? {} : { pid: pty.pid }),
         runtimeId: conversation.runtimeId,
         title: conversation.title,
+        ...(readOnlyResume ? { readOnlyResume: true as const } : {}),
       });
-      agentSessionRuntimeStore.setStatus(
-        {
-          projectId: conversation.projectId,
-          taskId: conversation.taskId,
-          conversationId: conversation.id,
-        },
-        initialPrompt?.trim() || pendingImagePaths ? 'working' : 'idle'
-      );
+      // Transport attachment is not an Agent run-state transition. In particular,
+      // a cold resume usually has no `initialPrompt` even when the surviving tmux
+      // process is in the middle of a turn. Preserve the existing provider-owned
+      // state unless this start actually submits new user input.
+      if (initialPrompt?.trim() || pendingImagePaths) {
+        agentSessionRuntimeStore.setStatus(
+          {
+            projectId: conversation.projectId,
+            taskId: conversation.taskId,
+            conversationId: conversation.id,
+          },
+          'working'
+        );
+      }
       if (startupInputPromise) {
         const delivered = await startupInputPromise;
         if (!this.ownsPendingStart(sessionId, startToken)) return;
@@ -962,7 +1041,8 @@ export class LocalConversationProvider implements ConversationProvider {
         effectiveIsResuming,
         agentSessionId,
         runtimeStateRoot,
-        statusMonitor
+        statusMonitor,
+        readOnlyResume
       );
       telemetryService.capture('agent_run_started', {
         provider: conversation.runtimeId,
@@ -971,6 +1051,15 @@ export class LocalConversationProvider implements ConversationProvider {
         conversation_id: conversation.id,
       });
       startCommitted = true;
+      if (providerStartedAt !== undefined) {
+        performanceTrace?.endSpan('provider-committed', providerStartedAt, {
+          generation: ptySessionRegistry.getGeneration(sessionId),
+          runtimeId: conversation.runtimeId,
+          tmuxEnabled: Boolean(tmuxSessionName),
+          reattachExisting: reattachExistingTmuxSession,
+          transport: 'local',
+        });
+      }
     } catch (error) {
       startFailed = true;
       rejectCompletion(error);
@@ -1030,7 +1119,8 @@ export class LocalConversationProvider implements ConversationProvider {
     isResuming: boolean,
     agentSessionId: string,
     stateRoot: string | undefined,
-    statusMonitor: RuntimeStatusMonitorId
+    statusMonitor: RuntimeStatusMonitorId,
+    readOnlyResume: boolean
   ): void {
     this.stopRunStateWatcher(conversation.id);
     runtimeStatusMonitorRegistry.set(conversation.id, statusMonitor);
@@ -1047,6 +1137,7 @@ export class LocalConversationProvider implements ConversationProvider {
           startedAtMs,
           isResuming,
           threadId: agentSessionId,
+          readOnlyResume,
         },
         (event) => agentSessionRuntimeStore.dispatch(session, event, 'codex-rollout'),
         stateRoot ? { statePath: resolveCodexStatePath(stateRoot) } : undefined

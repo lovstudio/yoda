@@ -16,6 +16,7 @@ import { agentHookService } from './core/agent-hooks/agent-hook-service';
 import { aiLabService } from './core/ai-lab/ai-lab-service';
 import {
   combineActiveSessionSummaries,
+  resolveAgentSessionSummaryForShutdown,
   resolveQuitAgentSessionsDecision,
 } from './core/app/quit-agent-sessions';
 import { appService } from './core/app/service';
@@ -421,8 +422,14 @@ app.on('before-quit', (event) => {
 
   event.preventDefault();
 
+  const runningAgentSummary = taskManager.getActiveAgentSessionSummary();
+  const agentSummary = resolveAgentSessionSummaryForShutdown(
+    restartRequested,
+    runningAgentSummary,
+    restartRequested ? taskManager.getAgentSessions() : []
+  );
   const summary = combineActiveSessionSummaries(
-    taskManager.getActiveAgentSessionSummary(),
+    agentSummary,
     workspaceTerminalService.getActiveSessionSummary()
   );
   if (summary.running <= 0) {

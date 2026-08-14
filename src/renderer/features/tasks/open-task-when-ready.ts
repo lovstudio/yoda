@@ -1,3 +1,4 @@
+import type { Conversation } from '@shared/conversations';
 import type { TaskWindowTabTarget } from '@shared/task-window';
 import {
   openProvisionedTaskTab,
@@ -11,22 +12,92 @@ import {
 } from '@renderer/features/tasks/stores/task-selectors';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import i18n from '@renderer/lib/i18n';
+import { rpc } from '@renderer/lib/ipc';
 import type { NavigateFnTyped } from '@renderer/lib/layout/navigation-provider';
+import { showModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { log } from '@renderer/utils/logger';
 import { resolveLastTaskSessionTarget } from './resolve-task-session-target';
-import { markTaskOpenTrace } from './task-open-performance';
+import {
+  beginTaskOpenTrace,
+  cancelTaskOpenTrace,
+  getTaskOpenPerformanceContext,
+  markTaskOpenTrace,
+} from './task-open-performance';
 import { taskOpenTransitionStore } from './task-open-transition-store';
 
 let latestOpenRequest = 0;
-/** Keep the old task intact for the normal sub-second path; only then show one semantic loader. */
+/**
+ * Keep the source visible only while the destination target/provisioning is
+ * genuinely unresolved. A resolved cold/evicted destination bypasses this
+ * timer and mounts its opaque staging route immediately.
+ */
 const TASK_OPEN_LOADING_THRESHOLD_MS = 900;
 /** Safety ceiling for genuine provisioning/startup failures, not the product latency target. */
 const TASK_OPEN_HARD_TIMEOUT_MS = 30_000;
+/** Absolute budget for destination layout, generation binding, parse, and staging paint. */
+const TASK_OPEN_SESSION_STAGING_BUDGET_MS = 1_500;
 const TASK_OPEN_CANCELLATION_POLL_MS = 25;
 
 class TaskOpenCancelledError extends Error {}
 class TaskOpenDeadlineError extends Error {}
+
+function isArchivedTaskStore(store: ReturnType<typeof getTaskStore>): boolean {
+  const data = store?.data;
+  return Boolean(data && 'archivedAt' in data && data.archivedAt);
+}
+
+function conversationActivityTime(conversation: Conversation): number {
+  for (const value of [
+    conversation.lastInteractedAt,
+    conversation.updatedAt,
+    conversation.archivedAt,
+    conversation.createdAt,
+  ]) {
+    if (!value) continue;
+    const timestamp = Date.parse(value);
+    if (!Number.isNaN(timestamp)) return timestamp;
+  }
+  return 0;
+}
+
+/**
+ * Archived task rows are a read-only review action. Opening their latest (or
+ * explicitly targeted) transcript must not restore the task, provision a
+ * workspace, or start an Agent session.
+ */
+async function openArchivedTaskTranscript(
+  projectId: string,
+  taskId: string,
+  explicitTarget?: TaskWindowTabTarget
+): Promise<boolean> {
+  const conversations = await rpc.conversations.getArchivedConversationsForTask(projectId, taskId);
+  const requestedConversationId =
+    explicitTarget?.kind === 'conversation' ? explicitTarget.conversationId : undefined;
+  const conversation = requestedConversationId
+    ? conversations.find(({ id }) => id === requestedConversationId)
+    : [...conversations].sort((left, right) => {
+        const timeOrder = conversationActivityTime(right) - conversationActivityTime(left);
+        return timeOrder !== 0 ? timeOrder : right.id.localeCompare(left.id);
+      })[0];
+
+  if (!conversation) {
+    toast({
+      title: i18n.t('tasks.archivedSession.viewTranscript'),
+      description: i18n.t('tasks.transcript.empty'),
+      debugInfo: {
+        stage: 'open-archived-task-transcript',
+        projectId,
+        taskId,
+        requestedConversationId: requestedConversationId ?? null,
+      },
+    });
+    return false;
+  }
+
+  showModal('archivedSessionTranscriptModal', { conversation, allowRestore: false });
+  return true;
+}
 
 type TaskTargetOpenOutcome =
   | { ok: true; selection: DeferredTaskTabSelection }
@@ -92,15 +163,6 @@ type TaskOpenFailureStage =
   | 'open-provisioned-target'
   | 'prepare-cold-task';
 
-function notifySessionOpenFailure(projectId: string, taskId: string, conversationId: string): void {
-  toast({
-    title: i18n.t('tasks.conversations.startingErrorTitle'),
-    description: i18n.t('tasks.conversations.startingErrorDescription'),
-    variant: 'destructive',
-    debugInfo: { projectId, taskId, conversationId },
-  });
-}
-
 function currentNavigationKey(): string {
   const viewId = appState.navigation.currentViewId;
   return `${viewId}:${JSON.stringify(appState.navigation.viewParamsStore[viewId] ?? {})}`;
@@ -157,9 +219,29 @@ export async function openTaskWhenReady(
   _navigate: NavigateFnTyped,
   explicitTarget?: TaskWindowTabTarget
 ): Promise<boolean> {
+  const traceContextId = beginTaskOpenTrace(projectId, taskId);
+  try {
+    const opened = await openTaskWhenReadyAfterTrace(projectId, taskId, _navigate, explicitTarget);
+    if (!opened) {
+      cancelTaskOpenTrace(projectId, taskId, { reason: 'task-open-not-committed' }, traceContextId);
+    }
+    return opened;
+  } catch (error) {
+    cancelTaskOpenTrace(projectId, taskId, { reason: 'task-open-rejected' }, traceContextId);
+    throw error;
+  }
+}
+
+async function openTaskWhenReadyAfterTrace(
+  projectId: string,
+  taskId: string,
+  _navigate: NavigateFnTyped,
+  explicitTarget?: TaskWindowTabTarget
+): Promise<boolean> {
   const request = ++latestOpenRequest;
   const startedAt = performance.now();
   const hardDeadline = startedAt + TASK_OPEN_HARD_TIMEOUT_MS;
+  const performanceContext = getTaskOpenPerformanceContext(projectId, taskId);
   let navigationLease = currentNavigationLease();
   const isCurrentRequest = () =>
     request === latestOpenRequest && isNavigationLeaseCurrent(navigationLease);
@@ -223,22 +305,6 @@ export async function openTaskWhenReady(
     selection: DeferredTaskTabSelection
   ): Promise<boolean> => {
     if (stagedRouteKey === JSON.stringify(stagingTarget)) return isCurrentRequest();
-    const remainingToLoader = Math.max(
-      0,
-      TASK_OPEN_LOADING_THRESHOLD_MS - (performance.now() - startedAt)
-    );
-    if (remainingToLoader > 0) {
-      try {
-        await waitForTaskOpenStep(
-          new Promise<void>((resolve) => setTimeout(resolve, remainingToLoader)),
-          isCurrentRequest,
-          hardDeadline
-        );
-      } catch (error) {
-        if (error instanceof TaskOpenCancelledError) return false;
-        throw error;
-      }
-    }
     if (!isCurrentRequest()) return false;
     if (!commitStagingRoute(stagingTarget, selection)) return false;
     // Let React commit the opaque destination and register its task-keyed pane
@@ -252,8 +318,25 @@ export async function openTaskWhenReady(
       Math.max(0, TASK_OPEN_LOADING_THRESHOLD_MS - (performance.now() - startedAt))
     );
   const remainingHardBudget = () => Math.max(0, hardDeadline - performance.now());
+  const remainingSessionStagingBudget = () =>
+    Math.min(TASK_OPEN_SESSION_STAGING_BUDGET_MS, remainingHardBudget());
   let target: TaskWindowTabTarget | undefined = explicitTarget;
-  let provisioned = asProvisioned(getTaskStore(projectId, taskId));
+  const initialTaskStore = getTaskStore(projectId, taskId);
+  if (isArchivedTaskStore(initialTaskStore)) {
+    const opened = await waitForTaskOpenStep(
+      openArchivedTaskTranscript(projectId, taskId, explicitTarget),
+      isCurrentRequest,
+      hardDeadline
+    );
+    cancelTaskOpenTrace(
+      projectId,
+      taskId,
+      { reason: 'archived-read-only' },
+      performanceContext?.contextId
+    );
+    return opened;
+  }
+  let provisioned = asProvisioned(initialTaskStore);
   markTaskOpenTrace(projectId, taskId, 'store-resolved', {
     provisioned: Boolean(provisioned),
     explicitTarget: explicitTarget?.kind ?? null,
@@ -297,11 +380,10 @@ export async function openTaskWhenReady(
       hotPty?.invalidateHotReveal();
       hasHotRevealClaim = false;
     };
-    // The 900ms boundary applies even after a hot claim succeeds: target
-    // hydration is an independent await and must not leave the source visible
-    // until the 30s hard deadline. Publishing its outcome here lets the timer
-    // stage the resolved target when available, or a target-less loader when it
-    // is still pending.
+    // Target hydration is independent of the hot generation claim. Publishing
+    // its outcome lets the safety timer stage a target-less loader only while
+    // hydration is still genuinely unknown. Once both outcomes are known, the
+    // resolved target bypasses the timer and mounts for staging immediately.
     void selectionPromise.then((outcome) => {
       if (outcome.ok && isCurrentRequest()) selectionForLoadingRoute = outcome.selection;
     });
@@ -362,23 +444,30 @@ export async function openTaskWhenReady(
         // Mount the real destination layout under the opaque opening surface
         // before measuring or resizing its terminal. This turns the route into
         // a staging host, not a channel for PTY bootstrap internals.
-        const frameReady = await provisioned.conversations.prepareConversationForOpen(
-          cachedConversation?.data.id ?? conversationId,
-          isCurrentRequest,
-          remainingHardBudget()
-        );
-        if (!frameReady) {
-          if (isCurrentRequest() && transitionLease) {
-            taskOpenTransitionStore.fail(
-              projectId,
-              taskId,
-              transitionLease,
-              target,
-              'canonical frame unavailable'
+        const frameReady = performanceContext
+          ? await provisioned.conversations.prepareConversationForOpen(
+              cachedConversation?.data.id ?? conversationId,
+              isCurrentRequest,
+              remainingSessionStagingBudget(),
+              performanceContext
+            )
+          : await provisioned.conversations.prepareConversationForOpen(
+              cachedConversation?.data.id ?? conversationId,
+              isCurrentRequest,
+              remainingSessionStagingBudget()
             );
-            notifySessionOpenFailure(projectId, taskId, conversationId);
-          }
-          return false;
+        if (!frameReady && isCurrentRequest()) {
+          // A busy TUI can keep producing complete frames without ever giving
+          // off-screen preparation its fallback quiet window. The destination
+          // is already mounted beneath TaskMainPanel's opaque opening surface,
+          // so hand readiness ownership to ConversationSession instead of
+          // converting a still-live session into a terminal navigation error.
+          // Its generation-aware visible-frame loop keeps the same full-panel
+          // surface in place and retries until a browser-painted frame or a
+          // real connection error becomes authoritative.
+          markTaskOpenTrace(projectId, taskId, 'canonical-frame-deferred', {
+            target: target.kind,
+          });
         }
       } else if (stagedRouteKey !== JSON.stringify(target) && !commitTaskRoute(target, selection)) {
         return false;
@@ -416,20 +505,41 @@ export async function openTaskWhenReady(
   // terminal frame is staged off-screen. Route state is the commit boundary,
   // not a progress channel for workspace/session bootstrap internals.
   const transitionLease = taskOpenTransitionStore.begin(projectId, taskId);
+  // Provisioning has no destination layout to stage yet. Preserve the current
+  // task for the short threshold, but do not make a fast provisioned target
+  // wait for it: waitForStagingRoute commits that target as soon as selection
+  // hydration completes.
   const loadingRouteTimer = scheduleLoadingRoute();
+  let pendingProvision: Promise<void> | null = null;
 
   try {
     await waitForTaskOpenStep(
-      prepareExplicitTaskOpen(projectId, taskId),
+      prepareExplicitTaskOpen(projectId, taskId, { restoreArchived: false }),
       isCurrentRequest,
       hardDeadline
     );
     markTaskOpenTrace(projectId, taskId, 'task-prepared');
     if (!isCurrentRequest()) return false;
 
+    if (isArchivedTaskStore(getTaskStore(projectId, taskId))) {
+      const opened = await waitForTaskOpenStep(
+        openArchivedTaskTranscript(projectId, taskId, explicitTarget),
+        isCurrentRequest,
+        hardDeadline
+      );
+      cancelTaskOpenTrace(
+        projectId,
+        taskId,
+        { reason: 'archived-read-only' },
+        performanceContext?.contextId
+      );
+      return opened;
+    }
+
     const taskManager = getTaskManagerStore(projectId);
     if (!taskManager) throw new Error(`Project ${projectId} could not be mounted`);
-    await waitForTaskOpenStep(taskManager.provisionTask(taskId), isCurrentRequest, hardDeadline);
+    pendingProvision = taskManager.provisionTask(taskId);
+    await waitForTaskOpenStep(pendingProvision, isCurrentRequest, hardDeadline);
     markTaskOpenTrace(projectId, taskId, 'task-provisioned');
     if (!isCurrentRequest()) return false;
 
@@ -468,23 +578,22 @@ export async function openTaskWhenReady(
 
     if (target.kind === 'conversation') {
       if (!(await waitForStagingRoute(target, selection))) return false;
-      const frameReady = await provisioned.conversations.prepareConversationForOpen(
-        target.conversationId,
-        isCurrentRequest,
-        remainingHardBudget()
-      );
-      if (!frameReady) {
-        if (isCurrentRequest()) {
-          taskOpenTransitionStore.fail(
-            projectId,
-            taskId,
-            transitionLease,
-            target,
-            'canonical frame unavailable'
+      const frameReady = performanceContext
+        ? await provisioned.conversations.prepareConversationForOpen(
+            target.conversationId,
+            isCurrentRequest,
+            remainingSessionStagingBudget(),
+            performanceContext
+          )
+        : await provisioned.conversations.prepareConversationForOpen(
+            target.conversationId,
+            isCurrentRequest,
+            remainingSessionStagingBudget()
           );
-          notifySessionOpenFailure(projectId, taskId, target.conversationId);
-        }
-        return false;
+      if (!frameReady && isCurrentRequest()) {
+        markTaskOpenTrace(projectId, taskId, 'canonical-frame-deferred', {
+          target: target.kind,
+        });
       }
       if (!isCurrentRequest()) return false;
     }
@@ -497,6 +606,16 @@ export async function openTaskWhenReady(
     return true;
   } catch (error) {
     if (error instanceof TaskOpenCancelledError || !isCurrentRequest()) return false;
+    if (error instanceof TaskOpenDeadlineError && pendingProvision) {
+      // The hard deadline bounds the opaque Logo, not the workspace operation.
+      // Keep the epoch-bound RPC alive so a late success can still transition
+      // the TaskStore to ready; only publish the existing retryable error view.
+      getTaskManagerStore(projectId)?.markProvisionPresentationTimedOut(
+        taskId,
+        pendingProvision,
+        TASK_OPEN_HARD_TIMEOUT_MS
+      );
+    }
     // Only a ready conversation has a hidden terminal worth preserving behind
     // the staging error surface. Provision/mount failures must release the
     // lease so the existing TaskProvisionRecovery UI can become reachable.

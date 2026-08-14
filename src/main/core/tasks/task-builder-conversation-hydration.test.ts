@@ -7,7 +7,6 @@ import {
   getConversationHydrationBarrier,
 } from '@main/core/conversations/conversation-hydration-barrier';
 import type { ConversationProvider } from '@main/core/conversations/types';
-import { TmuxReattachMissError } from '@main/core/pty/tmux-reattach';
 import {
   CONVERSATION_HYDRATION_CONCURRENCY,
   CONVERSATION_TMUX_MARKER_CACHE_TTL_MS,
@@ -19,7 +18,9 @@ const mocks = vi.hoisted(() => ({
   clearPendingInitialPrompt: vi.fn(),
   disposeExecutionContext: vi.fn(),
   getActiveConversation: vi.fn(),
+  killTmuxSessionStrict: vi.fn(),
   listTmuxSessionMarkers: vi.fn(),
+  listTmuxSessionMarkersStrict: vi.fn(),
 }));
 
 vi.mock('@main/core/conversations/pending-initial-prompt-store', () => ({
@@ -50,7 +51,10 @@ vi.mock('@main/core/execution-context/ssh-execution-context', () => ({
 
 vi.mock('@main/core/pty/tmux-session-name', () => ({
   decodeTmuxSessionName: (sessionName: string) => sessionName,
+  killTmuxSessionStrict: mocks.killTmuxSessionStrict,
   listTmuxSessionMarkers: mocks.listTmuxSessionMarkers,
+  listTmuxSessionMarkersStrict: mocks.listTmuxSessionMarkersStrict,
+  makeTmuxSessionName: (sessionId: string) => `tmux:${sessionId}`,
 }));
 
 vi.mock('@main/db/client', () => ({ db: {}, sqlite: {} }));
@@ -111,11 +115,12 @@ describe('persisted conversation hydration', () => {
     expect(mocks.clearPendingInitialPrompt).not.toHaveBeenCalled();
   });
 
-  it('starts pending prompts and reconnects only conversations with a live canonical tmux id', async () => {
+  it('starts pending prompts and refreshes live conversations before cold resume', async () => {
     const pending = conversation('pending', true);
     const live = conversation('live');
     const hibernated = conversation('hibernated');
     const startSession = vi.fn().mockResolvedValue(undefined);
+    const refreshLiveSession = vi.fn().mockResolvedValue(undefined);
 
     await hydratePersistedConversations(
       providerWith(startSession),
@@ -123,7 +128,8 @@ describe('persisted conversation hydration', () => {
       'test',
       Promise.resolve(
         new Set([makePtySessionId(live.projectId, live.taskId, live.id), 'non-canonical-id'])
-      )
+      ),
+      refreshLiveSession
     );
 
     expect(startSession).toHaveBeenCalledTimes(2);
@@ -138,8 +144,14 @@ describe('persisted conversation hydration', () => {
       undefined,
       undefined,
       undefined,
-      { model: undefined, reasoningEffort: undefined },
-      { reattachExistingTmuxSession: true }
+      { model: undefined, reasoningEffort: undefined }
+    );
+    expect(refreshLiveSession).toHaveBeenCalledOnce();
+    expect(refreshLiveSession).toHaveBeenCalledWith(live);
+    expect(refreshLiveSession.mock.invocationCallOrder[0]).toBeLessThan(
+      startSession.mock.invocationCallOrder.find(
+        (_, index) => startSession.mock.calls[index]?.[0].id === live.id
+      ) ?? Infinity
     );
     expect(mocks.clearPendingInitialPrompt).not.toHaveBeenCalled();
   });
@@ -202,7 +214,7 @@ describe('persisted conversation hydration', () => {
     await hydration;
   });
 
-  it('reattaches an attempted pending prompt when its canonical tmux pane survived', async () => {
+  it('replaces a surviving attempted session before retrying from durable state', async () => {
     let resolveMarkers!: (sessionIds: ReadonlySet<string>) => void;
     const markerLookup = new Promise<ReadonlySet<string>>((resolve) => {
       resolveMarkers = resolve;
@@ -215,12 +227,14 @@ describe('persisted conversation hydration', () => {
       },
     };
     const startSession = vi.fn().mockResolvedValue(undefined);
+    const refreshLiveSession = vi.fn().mockResolvedValue(undefined);
 
     const hydration = hydratePersistedConversations(
       providerWith(startSession),
       [attempted],
       'test',
-      markerLookup
+      markerLookup,
+      refreshLiveSession
     );
     await Promise.resolve();
     expect(startSession).not.toHaveBeenCalled();
@@ -231,7 +245,8 @@ describe('persisted conversation hydration', () => {
     await hydration;
 
     expect(startSession).toHaveBeenCalledOnce();
-    expect(startSession.mock.calls[0]?.[7]).toEqual({ reattachExistingTmuxSession: true });
+    expect(startSession.mock.calls[0]?.[7]).toBeUndefined();
+    expect(refreshLiveSession).toHaveBeenCalledWith(attempted);
     expect(mocks.clearPendingInitialPrompt).not.toHaveBeenCalled();
   });
 
@@ -324,15 +339,13 @@ describe('persisted conversation hydration', () => {
     await hydration;
   });
 
-  it('retries once without attach-only mode when strict tmux reattach misses', async () => {
+  it('does not resume with stale environment when replacing the live process fails', async () => {
     const attempted = {
-      ...conversation('reattach-miss', true),
-      pendingInitialPrompt: { prompt: 'Retry me', attemptStartedAtMs: 5_000 },
+      ...conversation('refresh-failed', true),
+      pendingInitialPrompt: { prompt: 'Keep pending', attemptStartedAtMs: 5_000 },
     };
-    const startSession = vi
-      .fn()
-      .mockRejectedValueOnce(new TmuxReattachMissError())
-      .mockResolvedValueOnce(undefined);
+    const startSession = vi.fn().mockResolvedValue(undefined);
+    const refreshLiveSession = vi.fn().mockRejectedValue(new Error('tmux kill failed'));
 
     await hydratePersistedConversations(
       providerWith(startSession),
@@ -340,12 +353,13 @@ describe('persisted conversation hydration', () => {
       'test',
       Promise.resolve(
         new Set([makePtySessionId(attempted.projectId, attempted.taskId, attempted.id)])
-      )
+      ),
+      refreshLiveSession
     );
 
-    expect(startSession).toHaveBeenCalledTimes(2);
-    expect(startSession.mock.calls[0]?.[7]).toEqual({ reattachExistingTmuxSession: true });
-    expect(startSession.mock.calls[1]?.[7]).toBeUndefined();
+    expect(refreshLiveSession).toHaveBeenCalledOnce();
+    expect(startSession).not.toHaveBeenCalled();
+    expect(mocks.clearPendingInitialPrompt).not.toHaveBeenCalled();
   });
 
   it('does not start or clear a prompt whose hydration was cancelled while markers loaded', async () => {
@@ -373,33 +387,35 @@ describe('persisted conversation hydration', () => {
     expect(mocks.clearPendingInitialPrompt).not.toHaveBeenCalled();
   });
 
-  it('does not retry or clear when cancellation lands during strict reattach', async () => {
+  it('does not resume or clear when cancellation lands during live-session refresh', async () => {
     const attempted = {
-      ...conversation('deleted-during-reattach', true),
-      pendingInitialPrompt: { prompt: 'Do not retry', attemptStartedAtMs: 5_000 },
+      ...conversation('deleted-during-refresh', true),
+      pendingInitialPrompt: { prompt: 'Do not resume', attemptStartedAtMs: 5_000 },
     };
-    let rejectAttach!: (error: Error) => void;
-    const startSession = vi.fn(
+    let finishRefresh!: () => void;
+    const refreshLiveSession = vi.fn(
       () =>
-        new Promise<void>((_resolve, reject) => {
-          rejectAttach = reject;
+        new Promise<void>((resolve) => {
+          finishRefresh = resolve;
         })
     );
+    const startSession = vi.fn().mockResolvedValue(undefined);
     const hydration = hydratePersistedConversations(
       providerWith(startSession),
       [attempted],
       'test',
       Promise.resolve(
         new Set([makePtySessionId(attempted.projectId, attempted.taskId, attempted.id)])
-      )
+      ),
+      refreshLiveSession
     );
-    await vi.waitFor(() => expect(startSession).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(refreshLiveSession).toHaveBeenCalledOnce());
 
     cancelConversationHydrationBarrier(attempted.projectId, attempted.taskId, attempted.id);
-    rejectAttach(new TmuxReattachMissError());
+    finishRefresh();
     await hydration;
 
-    expect(startSession).toHaveBeenCalledOnce();
+    expect(startSession).not.toHaveBeenCalled();
     expect(mocks.clearPendingInitialPrompt).not.toHaveBeenCalled();
   });
 

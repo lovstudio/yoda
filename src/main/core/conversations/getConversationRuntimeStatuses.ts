@@ -51,16 +51,20 @@ export async function getConversationRuntimeStatuses(
 
   for (const conversationId of conversationIds) {
     const row = conversationById.get(conversationId);
+    const session = { projectId, taskId, conversationId };
     statuses[conversationId] = await deriveStatus({
-      projectId,
-      taskId,
-      conversationId,
+      ...session,
       provider: row?.runtime ?? undefined,
       createdAt: row?.createdAt,
       title: row?.title,
       sessionSource: row?.sessionSource,
       cwd,
     });
+    // Keep the RPC return type status-only, while also delivering the current
+    // provider fence to a newly-created ConversationStore. Main emits this
+    // before the RPC response resolves, so the renderer's revision guard keeps
+    // the richer snapshot from being overwritten by the status-only payload.
+    agentSessionRuntimeStore.publishSnapshot(session);
   }
 
   return statuses;
@@ -111,7 +115,9 @@ async function deriveStatus(args: {
 
   // Live in-memory state (set this session via hooks/tailers). Used as the base
   // and as the fallback for providers without a file truth source.
-  const memory = agentSessionRuntimeStore.getStatus({ projectId, taskId, conversationId });
+  const session = { projectId, taskId, conversationId };
+  const memory = agentSessionRuntimeStore.getStatus(session);
+  const providerTurnWasConfirmed = agentSessionRuntimeStore.isProviderTurnConfirmed(session);
 
   // Truth source — overrides memory when available.
   let truth: AgentSessionRuntimeStatus | undefined;
@@ -184,12 +190,13 @@ async function deriveStatus(args: {
   // a main-process restart / HMR and missed hooks because it is re-derived from
   // the client's selected durable status source.
   //
-  // There is one local-UI caveat: for a mounted task, if there is neither a
-  // connected PTY nor an active provider session, a file-only `working` verdict
-  // is stale. Cold-load/unmounted tasks stay provider-authoritative so tmux
-  // sessions can still be shown as running without a connected PTY. An `idle`
-  // activity/rollout verdict must not erase a more specific terminal status
-  // already observed by the live reducer.
+  // A provider verdict normally stays authoritative across renderer transport
+  // attachment. The exception is an ordinary read-only Codex resume with no
+  // previously confirmed live turn: an unmatched historical task_started is
+  // transcript history, not evidence that this viewing action started work.
+  // Surviving tmux reattachments and already-confirmed turns remain authoritative.
+  // An `idle` activity/rollout verdict must not erase a more specific terminal
+  // status already observed by the live reducer.
   // Codex command approvals are visible immediately in the PTY classifier,
   // while the rollout remains `working` until the command receives an output
   // row. Preserve the live attention state during that short reconciliation
@@ -206,16 +213,35 @@ async function deriveStatus(args: {
         : (truth ?? memory);
   if (isAgentSessionRunningStatus(derived)) {
     const livePty = hasLivePty(projectId, taskId, conversationId);
-    if (truth === undefined) {
-      if (!livePty) derived = 'idle';
-    } else if (mountedTask && !livePty && !activeSession) {
+    if (truth === undefined && !livePty) derived = 'idle';
+    else if (
+      runtimeId === 'codex' &&
+      statusMonitor === 'rollout' &&
+      truth !== undefined &&
+      isAgentSessionRunningStatus(truth) &&
+      memory === 'idle' &&
+      !providerTurnWasConfirmed &&
+      (activeSession?.readOnlyResume === true || (mountedTask && !livePty && !activeSession))
+    ) {
+      // A cold view must not promote an unmatched historical task_started into
+      // a live turn. Preserve a status that was already running before the view,
+      // and allow the tailer/hook to confirm any event appended after attach.
       derived = 'idle';
     }
   }
 
+  const providerTurnConfirmed =
+    isAgentSessionRunningStatus(derived) &&
+    truth !== undefined &&
+    isAgentSessionRunningStatus(truth);
+
   // Self-heal the in-memory cache so other readers and the next cold load agree.
   if (derived !== memory) {
-    agentSessionRuntimeStore.setStatus({ projectId, taskId, conversationId }, derived);
+    agentSessionRuntimeStore.setStatus(session, derived, { providerTurnConfirmed });
+  } else if (providerTurnConfirmed) {
+    // A cold truth-source read can confirm the same optimistic `working` state.
+    // Promote the fence even though the status itself did not transition.
+    agentSessionRuntimeStore.setProviderTurnConfirmed(session, true);
   }
   return derived;
 }

@@ -11,6 +11,7 @@ import type {
   SidebarSnapshot,
 } from '@shared/view-state';
 import { captureException } from '@renderer/_legacy/errorTracking';
+import { wireSessionOpenPerformanceBridge } from '@renderer/features/tasks/session-open-performance-bridge';
 import { isAiLabWindowLaunch } from '@renderer/lib/ai-lab-window-launch-target';
 import { setupAppCommandProvider } from '@renderer/lib/commands/app-commands';
 import { setupViewCommandProvider } from '@renderer/lib/commands/registry';
@@ -49,6 +50,11 @@ async function bootstrap() {
   });
   const isPrimaryAppWindow =
     !isTaskWindowLaunch && !isComparisonWindowLaunch && !isAiLabWindowLaunch;
+  if (isPrimaryAppWindow) {
+    // Keep main-process resume/spawn/first-output stages in the same DevTools
+    // stream as renderer click/canonical-frame/paint timing.
+    wireSessionOpenPerformanceBridge();
+  }
   const launchTarget = getTaskWindowLaunchTarget();
   if (isPrimaryAppWindow) {
     // Subscribe happens during AppState construction. Hydrate the primary shell

@@ -20,19 +20,47 @@ describe('ConversationSessionPendingState', () => {
     host.remove();
   });
 
-  it('keeps a submitted session visible while its terminal starts', async () => {
+  it('shows only the Yoda mark while an existing session opens', async () => {
     await act(async () => {
       root.render(
         createElement(ConversationSessionPendingState, {
           title: 'Fix the blank session',
-          heading: 'Starting agent',
-          description: 'Your message was submitted.',
+          heading: 'Opening conversation',
+          description: 'Preparing the conversation.',
         })
       );
     });
 
-    expect(host.querySelector('[role="status"]')).not.toBeNull();
+    const status = host.querySelector('[role="status"]');
+    expect(status?.getAttribute('aria-label')).toBe('Preparing the conversation.');
+    expect(status?.textContent).toBe('');
+    expect(host.querySelector('[data-yoda-opening-mark]')).not.toBeNull();
+    expect(host.querySelector('.lucide-loader-circle')).toBeNull();
+  });
+
+  it('keeps recovery details and actions visible when opening fails', async () => {
+    await act(async () => {
+      root.render(
+        createElement(ConversationSessionPendingState, {
+          title: 'Fix the blank session',
+          heading: 'Opening needs attention',
+          description: 'The terminal did not finish preparing.',
+          error: {
+            retryLabel: 'Retry',
+            onRetry: () => {},
+            copyDebugLabel: 'Copy debug info',
+            debugCopiedLabel: 'Debug info copied',
+            debugCopied: false,
+            onCopyDebug: () => {},
+          },
+        })
+      );
+    });
+
+    expect(host.textContent).toContain('Opening needs attention');
+    expect(host.textContent).toContain('The terminal did not finish preparing.');
     expect(host.textContent).toContain('Fix the blank session');
-    expect(host.textContent).toContain('Your message was submitted.');
+    expect(host.textContent).toContain('Retry');
+    expect(host.querySelector('[data-yoda-opening-mark]')).toBeNull();
   });
 });

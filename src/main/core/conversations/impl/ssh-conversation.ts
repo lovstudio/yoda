@@ -140,6 +140,8 @@ export class SshConversationProvider implements ConversationProvider {
     if (this.sessions.has(sessionId)) return;
     const existingStart = this.pendingStarts.get(sessionId);
     if (existingStart) return existingStart.completion;
+    const performanceTrace = startOptions?.performanceTrace;
+    const providerStartedAt = performanceTrace?.startSpan();
 
     const startToken = Symbol(sessionId);
     let resolveCompletion!: () => void;
@@ -231,7 +233,17 @@ export class SshConversationProvider implements ConversationProvider {
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       if (reattachExistingTmuxSession) {
         if (!tmuxSessionName) throw new TmuxReattachMissError();
-        const markers = await listTmuxSessionMarkersStrict(this.ctx);
+        const markers = performanceTrace
+          ? await performanceTrace.measure(
+              'tmux-marker-probe',
+              () => listTmuxSessionMarkersStrict(this.ctx),
+              (result) => ({
+                markerCount: result.length,
+                reattachExisting: true,
+                transport: 'ssh',
+              })
+            )
+          : await listTmuxSessionMarkersStrict(this.ctx);
         if (!this.ownsPendingStart(sessionId, startToken)) return;
         reattachMarkerBaseline = markers.find((marker) => marker.sessionName === tmuxSessionName);
         if (!reattachMarkerBaseline) throw new TmuxReattachMissError();
@@ -273,12 +285,29 @@ export class SshConversationProvider implements ConversationProvider {
         return;
       }
 
-      const result = await openSsh2Pty(this.proxy.client, {
-        id: sessionId,
-        command: sshCommand,
-        cols: initialSize.cols,
-        rows: initialSize.rows,
-      });
+      if (providerStartedAt !== undefined) {
+        performanceTrace?.endSpan('provider-preflight', providerStartedAt, {
+          runtimeId: conversation.runtimeId,
+          tmuxEnabled: Boolean(tmuxSessionName),
+          reattachExisting: reattachExistingTmuxSession,
+          transport: 'ssh',
+        });
+      }
+      const openPty = () =>
+        openSsh2Pty(this.proxy.client, {
+          id: sessionId,
+          command: sshCommand,
+          cols: initialSize.cols,
+          rows: initialSize.rows,
+        });
+      const result = performanceTrace
+        ? await performanceTrace.measure('provider-spawn', openPty, {
+            runtimeId: conversation.runtimeId,
+            tmuxEnabled: Boolean(tmuxSessionName),
+            reattachExisting: reattachExistingTmuxSession,
+            transport: 'ssh',
+          })
+        : await openPty();
 
       if (!this.ownsPendingStart(sessionId, startToken)) {
         if (result.success) {
@@ -298,6 +327,20 @@ export class SshConversationProvider implements ConversationProvider {
 
       const pty = result.data;
       spawnedPty = pty;
+      const performanceAttempt = reattachExistingTmuxSession ? 'reattach' : 'resume';
+      let firstOutputTrace = performanceTrace;
+      pty.onData((data) => {
+        if (!firstOutputTrace || data.length === 0) return;
+        const outputTrace = firstOutputTrace;
+        firstOutputTrace = undefined;
+        outputTrace.mark('pty-first-output', {
+          attempt: performanceAttempt,
+          byteLength: Buffer.byteLength(data, 'utf8'),
+          reattachExisting: reattachExistingTmuxSession,
+          runtimeId: conversation.runtimeId,
+          transport: 'ssh',
+        });
+      });
       const tmuxReattachPromise = reattachMarkerBaseline
         ? waitForTmuxReattach({ ctx: this.ctx, pty, baseline: reattachMarkerBaseline })
         : undefined;
@@ -365,34 +408,58 @@ export class SshConversationProvider implements ConversationProvider {
 
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       registrationAttempted = true;
-      ptySessionRegistry.register(sessionId, pty, {
-        onFinalExit: (info, generation) => {
-          if (!shouldEmitAgentSessionExited) return;
-          events.emit(agentSessionExitedChannel, {
-            sessionId,
-            projectId: conversation.projectId,
-            conversationId: conversation.id,
-            taskId: conversation.taskId,
-            generation,
-            exitCode: info.exitCode,
-          });
-          snapshotConversationUsageOnSessionExit(conversation.id);
-          snapshotTaskDiffOnSessionExit(conversation.taskId);
-        },
-        registrationEpoch,
-        tmuxBacked: Boolean(tmuxSessionName),
-        onRendererIdle: tmuxSessionName
-          ? (generation) => this.detachRendererTransport(sessionId, pty, generation)
-          : undefined,
-      });
+      const registerPty = () =>
+        ptySessionRegistry.register(sessionId, pty, {
+          onFinalExit: (info, generation) => {
+            if (!shouldEmitAgentSessionExited) return;
+            events.emit(agentSessionExitedChannel, {
+              sessionId,
+              projectId: conversation.projectId,
+              conversationId: conversation.id,
+              taskId: conversation.taskId,
+              generation,
+              exitCode: info.exitCode,
+            });
+            snapshotConversationUsageOnSessionExit(conversation.id);
+            snapshotTaskDiffOnSessionExit(conversation.taskId);
+          },
+          registrationEpoch,
+          tmuxBacked: Boolean(tmuxSessionName),
+          initialDimensions: initialSize,
+          onRendererIdle: tmuxSessionName
+            ? (generation) => this.detachRendererTransport(sessionId, pty, generation)
+            : undefined,
+        });
+      if (performanceTrace) {
+        performanceTrace.measureSync('pty-registered', registerPty, () => ({
+          generation: ptySessionRegistry.getGeneration(sessionId),
+          runtimeId: conversation.runtimeId,
+          transport: 'ssh',
+        }));
+      } else {
+        registerPty();
+      }
       registrationCompleted = true;
       if (!this.ownsPendingStart(sessionId, startToken)) {
         ptySessionRegistry.unregister(sessionId);
         return;
       }
       if (tmuxReattachPromise) {
-        await tmuxReattachPromise;
+        if (performanceTrace) {
+          await performanceTrace.measure('tmux-reattach-confirm', () => tmuxReattachPromise, {
+            runtimeId: conversation.runtimeId,
+            transport: 'ssh',
+          });
+        } else {
+          await tmuxReattachPromise;
+        }
         if (!this.ownsPendingStart(sessionId, startToken)) return;
+      } else {
+        performanceTrace?.mark('tmux-reattach-confirm', {
+          skipped: true,
+          durationMs: 0,
+          transport: 'ssh',
+        });
       }
       this.sessions.set(sessionId, pty);
       this.sessionInfos.set(sessionId, {
@@ -403,14 +470,19 @@ export class SshConversationProvider implements ConversationProvider {
         runtimeId: conversation.runtimeId,
         title: conversation.title,
       });
-      agentSessionRuntimeStore.setStatus(
-        {
-          projectId: conversation.projectId,
-          taskId: conversation.taskId,
-          conversationId: conversation.id,
-        },
-        initialPrompt?.trim() ? 'working' : 'idle'
-      );
+      // Reattaching the SSH transport does not mean the Agent became idle. A
+      // resumed tmux process can still be working even though this invocation has
+      // no new prompt, so only publish a run-state transition for submitted input.
+      if (initialPrompt?.trim()) {
+        agentSessionRuntimeStore.setStatus(
+          {
+            projectId: conversation.projectId,
+            taskId: conversation.taskId,
+            conversationId: conversation.id,
+          },
+          'working'
+        );
+      }
       // Ssh2PtySession replays a close received during channel open in a
       // microtask after onExit subscribes. Do not acknowledge startup until
       // that replay has had a chance to invalidate the just-registered PTY.
@@ -437,6 +509,15 @@ export class SshConversationProvider implements ConversationProvider {
         conversation_id: conversation.id,
       });
       startCommitted = true;
+      if (providerStartedAt !== undefined) {
+        performanceTrace?.endSpan('provider-committed', providerStartedAt, {
+          generation: ptySessionRegistry.getGeneration(sessionId),
+          runtimeId: conversation.runtimeId,
+          tmuxEnabled: Boolean(tmuxSessionName),
+          reattachExisting: reattachExistingTmuxSession,
+          transport: 'ssh',
+        });
+      }
     } catch (error) {
       startFailed = true;
       rejectCompletion(error);

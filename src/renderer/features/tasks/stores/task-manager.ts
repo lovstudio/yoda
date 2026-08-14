@@ -30,6 +30,7 @@ import type { RepositoryStore } from '@renderer/features/projects/stores/reposit
 import { toast } from '@renderer/lib/hooks/use-toast';
 import i18n from '@renderer/lib/i18n';
 import { events, rpc } from '@renderer/lib/ipc';
+import { publishAgentRuntimeStatusPreview } from '@renderer/lib/stores/agent-runtime-status-bridge';
 import { appState } from '@renderer/lib/stores/app-state';
 import { viewStateCache } from '@renderer/lib/stores/view-state-cache';
 import { log } from '@renderer/utils/logger';
@@ -87,6 +88,27 @@ export async function markInitialConversationWorkingAfterProvision(
       error,
     });
   }
+}
+
+function initialConversationStartsImmediately(
+  initialConversation: CreateTaskParams['initialConversation']
+): initialConversation is NonNullable<CreateTaskParams['initialConversation']> {
+  if (!initialConversation || initialConversation.deferInitialPrompt) return false;
+  return Boolean(
+    initialConversation.initialPrompt?.trim() || initialConversation.imagePaths?.length
+  );
+}
+
+function publishInitialConversationStatusPreview(
+  initialConversation: NonNullable<CreateTaskParams['initialConversation']>,
+  status: 'idle' | 'working'
+): void {
+  publishAgentRuntimeStatusPreview({
+    projectId: initialConversation.projectId,
+    taskId: initialConversation.taskId,
+    conversationId: initialConversation.id,
+    status,
+  });
 }
 
 function formatCreateTaskError(error: CreateTaskError): string {
@@ -183,6 +205,12 @@ type TaskViewPreloadEntry = {
 
 const TASK_VIEW_PRELOAD_MAX_AGE_MS = 10_000;
 const TASK_VIEW_PRELOAD_LIMIT = 4;
+export const TASK_ENTRY_PRESENTATION_TIMEOUT_MS = 30_000;
+
+function backgroundTaskOperationTimeoutMessage(operation: 'creation' | 'setup'): string {
+  const seconds = Math.round(TASK_ENTRY_PRESENTATION_TIMEOUT_MS / 1000);
+  return `Task ${operation} is still running after ${seconds}s. It will continue in the background.`;
+}
 
 export class TaskManagerStore {
   private readonly projectId: string;
@@ -198,6 +226,7 @@ export class TaskManagerStore {
   private _disposed = false;
   private _teardownPromises = new Map<string, Promise<void>>();
   private _provisionPromises = new Map<string, Promise<void>>();
+  private _provisionTaskStores = new Map<string, TaskStore>();
   private _taskViewPreloads = new Map<string, TaskViewPreloadEntry>();
   private _prReloadPromise: Promise<void> | null = null;
   private _prReloadRequested = false;
@@ -771,6 +800,8 @@ export class TaskManagerStore {
 
   async createTask(params: CreateTaskParams) {
     const setupRequiresBranchName = createTaskStrategyRequiresBranchName(params.strategy);
+    const initialConversation = params.initialConversation;
+    const startsImmediately = initialConversationStartsImmediately(initialConversation);
     // Projectless (Drafts) tasks belong to the workspace they were created in;
     // tasks in a real project inherit the project's workspace in the sidebar.
     const sidebarWorkspaceId =
@@ -778,51 +809,72 @@ export class TaskManagerStore {
       (this.projectId === INTERNAL_PROJECT_ID
         ? appState.workspaces.activeWorkspace?.id
         : undefined);
+    const creatingTask = createUnregisteredTask({
+      id: params.id,
+      projectId: params.projectId,
+      lastInteractedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      name: params.name,
+      status: params.initialStatus ?? 'in_progress',
+      statusChangedAt: new Date().toISOString(),
+      isPinned: false,
+      isFavorite: false,
+      isLongTerm: false,
+      needsReview: false,
+      setupStatus: 'pending',
+      setupRequiresBranchName,
+      sidebarWorkspaceId,
+      quickActionId: params.quickActionId,
+    });
+    // Submission intent is already authoritative enough for an immediate
+    // renderer preview. Publish it before the task first enters the observable
+    // map, so the sidebar can never classify this task through an idle frame.
+    if (startsImmediately) {
+      publishInitialConversationStatusPreview(initialConversation, 'working');
+    }
     runInAction(() => {
-      this.tasks.set(
-        params.id,
-        createUnregisteredTask({
-          id: params.id,
-          projectId: params.projectId,
-          lastInteractedAt: new Date().toISOString(),
-          createdAt: new Date().toISOString(),
-          name: params.name,
-          status: params.initialStatus ?? 'in_progress',
-          statusChangedAt: new Date().toISOString(),
-          isPinned: false,
-          isFavorite: false,
-          isLongTerm: false,
-          needsReview: false,
-          setupStatus: 'pending',
-          setupRequiresBranchName,
-          sidebarWorkspaceId,
-          quickActionId: params.quickActionId,
-        })
-      );
+      this.tasks.set(params.id, creatingTask);
     });
 
     const sourceBranch = structuredClone(toJS(params.sourceBranch));
+    const presentationTimer = setTimeout(() => {
+      runInAction(() => {
+        const current = this.tasks.get(params.id);
+        if (current !== creatingTask || !isUnregistered(current) || current.phase !== 'creating') {
+          return;
+        }
+        current.phase = 'create-error';
+        current.errorMessage = backgroundTaskOperationTimeoutMessage('creation');
+      });
+    }, TASK_ENTRY_PRESENTATION_TIMEOUT_MS);
 
     const result = await rpc.tasks
       .createTask({ ...params, sourceBranch, sidebarWorkspaceId })
       .catch((e: unknown) => {
+        if (startsImmediately) {
+          publishInitialConversationStatusPreview(initialConversation, 'idle');
+        }
         // Network/IPC-level failure — surface as a generic error.
         const message = e instanceof Error ? e.message : String(e);
         runInAction(() => {
           const current = this.tasks.get(params.id);
-          if (current && isUnregistered(current)) {
+          if (current === creatingTask && isUnregistered(current)) {
             current.phase = 'create-error';
             current.errorMessage = message;
           }
         });
         throw e;
-      });
+      })
+      .finally(() => clearTimeout(presentationTimer));
 
     if (!result.success) {
+      if (startsImmediately) {
+        publishInitialConversationStatusPreview(initialConversation, 'idle');
+      }
       const message = formatCreateTaskError(result.error);
       runInAction(() => {
         const current = this.tasks.get(params.id);
-        if (current && isUnregistered(current)) {
+        if (current === creatingTask && isUnregistered(current)) {
           current.phase = 'create-error';
           current.errorMessage = message;
         }
@@ -830,9 +882,10 @@ export class TaskManagerStore {
       throw new Error(message);
     }
 
+    let didApplyCreateResult = false;
     runInAction(() => {
       const current = this.tasks.get(params.id);
-      if (current && isUnregistered(current)) {
+      if (current === creatingTask && isUnregistered(current)) {
         const receivedRenameWhileCreating =
           current.data.name !== params.name || current.data.isUserNamed !== undefined;
         const task = receivedRenameWhileCreating
@@ -847,8 +900,10 @@ export class TaskManagerStore {
         if (phase === 'naming-error') {
           current.errorMessage = setupErrorMessage(task);
         }
+        didApplyCreateResult = true;
       }
     });
+    if (!didApplyCreateResult) return;
 
     this._settingsStore.pageData.invalidate();
 
@@ -881,14 +936,66 @@ export class TaskManagerStore {
         }
       });
     }
+    if (task && isUnprovisioned(task)) {
+      // Bind the presentation deadline before _provisionTask crosses its
+      // mount/load awaits. A hung prerequisite must not leave the Logo with no
+      // epoch to transition into the existing recovery surface.
+      this._provisionTaskStores.set(taskId, task);
+    }
 
+    let presentationTimer: ReturnType<typeof setTimeout> | null = null;
     const promise = this._provisionTask(taskId).finally(() => {
+      if (presentationTimer !== null) clearTimeout(presentationTimer);
       if (this._provisionPromises.get(taskId) === promise) {
         this._provisionPromises.delete(taskId);
+        this._provisionTaskStores.delete(taskId);
       }
     });
     this._provisionPromises.set(taskId, promise);
+    presentationTimer = setTimeout(() => {
+      this.markProvisionPresentationTimedOut(taskId, promise, TASK_ENTRY_PRESENTATION_TIMEOUT_MS);
+    }, TASK_ENTRY_PRESENTATION_TIMEOUT_MS);
     return promise;
+  }
+
+  /**
+   * End only the renderer's opaque opening presentation. The epoch-bound RPC
+   * keeps running and remains deduplicated; a late success can still publish
+   * the provisioned task atomically, while a stale operation cannot mutate a
+   * replacement TaskStore with the same id.
+   */
+  markProvisionPresentationTimedOut(
+    taskId: string,
+    provision: Promise<void>,
+    timeoutMs: number
+  ): boolean {
+    if (this._provisionPromises.get(taskId) !== provision) return false;
+    const current = this.tasks.get(taskId);
+    if (
+      !current ||
+      this._provisionTaskStores.get(taskId) !== current ||
+      !isUnprovisioned(current) ||
+      current.phase !== 'provision'
+    ) {
+      return false;
+    }
+
+    let didMarkTimeout = false;
+    runInAction(() => {
+      if (
+        this._provisionPromises.get(taskId) === provision &&
+        this._provisionTaskStores.get(taskId) === current &&
+        this.tasks.get(taskId) === current &&
+        isUnprovisioned(current) &&
+        current.phase === 'provision'
+      ) {
+        current.phase = 'provision-error';
+        const seconds = Math.round(timeoutMs / 1000);
+        current.errorMessage = `Task setup is still running after ${seconds}s. It will continue in the background.`;
+        didMarkTimeout = true;
+      }
+    });
+    return didMarkTimeout;
   }
 
   private async _provisionTask(taskId: string): Promise<void> {
@@ -897,6 +1004,9 @@ export class TaskManagerStore {
 
     const task = this.tasks.get(taskId);
     if (!task || !isUnprovisioned(task)) return;
+    const expectedTask = this._provisionTaskStores.get(taskId);
+    if (expectedTask && expectedTask !== task) return;
+    if (!expectedTask) this._provisionTaskStores.set(taskId, task);
 
     if (task.phase !== 'provision') {
       runInAction(() => {
@@ -912,7 +1022,7 @@ export class TaskManagerStore {
       ]);
       runInAction(() => {
         const current = this.tasks.get(taskId);
-        if (current && isUnprovisioned(current) && !current.data.archivedAt) {
+        if (current === task && isUnprovisioned(current) && !current.data.archivedAt) {
           current.transitionToProvisioned(
             { ...current.data },
             result.path,
@@ -929,7 +1039,7 @@ export class TaskManagerStore {
     } catch (err: unknown) {
       runInAction(() => {
         const current = this.tasks.get(taskId);
-        if (current && isUnprovisioned(current) && !current.data.archivedAt) {
+        if (current === task && isUnprovisioned(current) && !current.data.archivedAt) {
           current.phase = 'provision-error';
           current.errorMessage = err instanceof Error ? err.message : String(err);
         }
@@ -1418,6 +1528,7 @@ export class TaskManagerStore {
     this._taskCountsReloadPromise = null;
     this._teardownPromises.clear();
     this._provisionPromises.clear();
+    this._provisionTaskStores.clear();
     for (const task of this.tasks.values()) task.dispose();
     runInAction(() => {
       this.tasks.clear();

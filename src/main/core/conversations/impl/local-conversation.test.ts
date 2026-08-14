@@ -3,13 +3,16 @@ import type { Conversation } from '@shared/conversations';
 import { agentSessionExitedChannel } from '@shared/events/agentEvents';
 import { ptyDataChannel, ptyExitChannel } from '@shared/events/ptyEvents';
 import { makePtySessionId } from '@shared/ptySessionId';
+import { sessionOpenPerformanceChannel } from '@shared/session-open-performance';
 import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-reconciler';
+import { createSessionOpenPerformanceTrace } from '@main/core/conversations/session-open-performance';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { Pty, PtyExitInfo } from '@main/core/pty/pty';
 import {
   PTY_RENDERER_DETACH_GRACE_MS,
   ptySessionRegistry,
 } from '@main/core/pty/pty-session-registry';
+import { TmuxReattachMissError } from '@main/core/pty/tmux-reattach';
 import type * as ImageAttachments from './image-attachments';
 import { LocalConversationProvider } from './local-conversation';
 
@@ -495,6 +498,134 @@ describe('LocalConversationProvider', () => {
     await vi.advanceTimersByTimeAsync(1_000);
 
     expect(spawned).toHaveLength(1);
+  });
+
+  it('reports provider spawn, registration, and the first non-empty PTY output', async () => {
+    const provider = createProvider();
+    const performanceTrace = createSessionOpenPerformanceTrace(
+      { contextId: 'task-open-1', clickAtEpochMs: Date.now() },
+      {
+        projectId: conversation.projectId,
+        taskId: conversation.taskId,
+        conversationId: conversation.id,
+        sessionId,
+      }
+    );
+    if (!performanceTrace) throw new Error('Expected performance trace');
+
+    await provider.startSession(
+      conversation,
+      { cols: 80, rows: 24 },
+      false,
+      'Fix this',
+      undefined,
+      undefined,
+      undefined,
+      { performanceTrace }
+    );
+    spawned[0].pty.emitData('');
+    spawned[0].pty.emitData('ready');
+    spawned[0].pty.emitData('later');
+
+    const entries = mocks.emitEvent.mock.calls
+      .filter(([channel]) => channel === sessionOpenPerformanceChannel)
+      .map(
+        ([, entry]) =>
+          entry as {
+            stage: string;
+            attempt?: string;
+            byteLength?: number;
+            reattachExisting?: boolean;
+            transport?: string;
+          }
+      );
+    expect(entries.map((entry) => entry.stage)).toEqual(
+      expect.arrayContaining([
+        'provider-preflight',
+        'provider-spawn',
+        'pty-registered',
+        'tmux-reattach-confirm',
+        'provider-committed',
+        'pty-first-output',
+      ])
+    );
+    expect(entries.filter((entry) => entry.stage === 'pty-first-output')).toEqual([
+      expect.objectContaining({
+        attempt: 'resume',
+        byteLength: 5,
+        reattachExisting: false,
+        transport: 'local',
+      }),
+    ]);
+  });
+
+  it('reports first output independently for a failed strict reattach and its fallback PTY', async () => {
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([
+      { sessionName: 'tmux-session', cwd: '/workspace', attachedClients: 0 },
+    ]);
+    mocks.waitForTmuxReattach.mockImplementationOnce(({ pty }: { pty: FakePty }) => {
+      pty.emitData('strict-output');
+      return Promise.reject(new TmuxReattachMissError());
+    });
+    const provider = createProvider();
+    const performanceTrace = createSessionOpenPerformanceTrace(
+      { contextId: 'task-open-fallback', clickAtEpochMs: Date.now() },
+      {
+        projectId: conversation.projectId,
+        taskId: conversation.taskId,
+        conversationId: conversation.id,
+        sessionId,
+      }
+    );
+    if (!performanceTrace) throw new Error('Expected performance trace');
+
+    await expect(
+      provider.startSession(
+        conversation,
+        { cols: 80, rows: 24 },
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { reattachExistingTmuxSession: true, performanceTrace }
+      )
+    ).rejects.toBeInstanceOf(TmuxReattachMissError);
+
+    await provider.startSession(
+      conversation,
+      { cols: 80, rows: 24 },
+      true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { performanceTrace }
+    );
+    spawned[1].pty.emitData('fallback-output');
+
+    const firstOutputEntries = mocks.emitEvent.mock.calls
+      .filter(
+        ([channel, entry]) =>
+          channel === sessionOpenPerformanceChannel &&
+          (entry as { stage?: string }).stage === 'pty-first-output'
+      )
+      .map(([, entry]) => entry);
+    expect(firstOutputEntries).toEqual([
+      expect.objectContaining({
+        attempt: 'reattach',
+        byteLength: 13,
+        reattachExisting: true,
+        transport: 'local',
+      }),
+      expect.objectContaining({
+        attempt: 'resume',
+        byteLength: 15,
+        reattachExisting: false,
+        transport: 'local',
+      }),
+    ]);
   });
 
   it('waits for an exact-generation reveal before spawning a replacement agent PTY', async () => {
@@ -1843,19 +1974,12 @@ describe('LocalConversationProvider', () => {
     expect(mocks.watchClaudeSessionActivity).not.toHaveBeenCalled();
   });
 
-  it('marks sessions without an initial prompt as idle until the renderer reports work', async () => {
+  it('does not clear provider run state when a resumed transport has no new prompt', async () => {
     const provider = createProvider();
 
     await provider.startSession(conversation, { cols: 80, rows: 24 }, true);
 
-    expect(mocks.setRuntimeStatus).toHaveBeenCalledWith(
-      {
-        projectId: conversation.projectId,
-        taskId: conversation.taskId,
-        conversationId: conversation.id,
-      },
-      'idle'
-    );
+    expect(mocks.setRuntimeStatus).not.toHaveBeenCalled();
   });
 
   it('cleans prepared Windows Claude settings after the PTY exits', async () => {

@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => ({
   restoreTask: vi.fn().mockResolvedValue({ restoredTaskIds: ['task-1'] }),
   viewStateSet: vi.fn(),
   viewStateGet: vi.fn(),
+  publishAgentRuntimeStatusPreview: vi.fn(),
 }));
 
 vi.mock('@renderer/lib/ipc', () => ({
@@ -103,6 +104,10 @@ vi.mock('@renderer/lib/stores/view-state-cache', () => ({
   },
 }));
 
+vi.mock('@renderer/lib/stores/agent-runtime-status-bridge', () => ({
+  publishAgentRuntimeStatusPreview: mocks.publishAgentRuntimeStatusPreview,
+}));
+
 vi.mock('@renderer/lib/stores/app-state', () => ({
   appState: {
     agentRuntime: {
@@ -142,6 +147,7 @@ beforeEach(() => {
     data: { taskPullRequests: [] },
   });
   mocks.restoreTask.mockReset().mockResolvedValue({ restoredTaskIds: ['task-1'] });
+  mocks.publishAgentRuntimeStatusPreview.mockReset();
 });
 
 describe('TaskManagerStore task rename events', () => {
@@ -196,6 +202,82 @@ describe('TaskManagerStore task rename events', () => {
     expect(task?.state).toBe('unprovisioned');
     expect(task?.data.name).toBe('User title');
     expect(task?.data.isUserNamed).toBe(true);
+    manager.dispose();
+  });
+});
+
+describe('TaskManagerStore initial runtime status', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    mocks.listeners.clear();
+    mocks.unsubscribers.length = 0;
+  });
+
+  it('publishes working before the create RPC settles for a submitted initial prompt', async () => {
+    let resolveCreate!: (value: Awaited<ReturnType<typeof mocks.createTask>>) => void;
+    mocks.createTask.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCreate = resolve;
+      })
+    );
+    const manager = createManager();
+    const params = makeCreateTaskParamsWithInitialPrompt('Immediate task');
+
+    const creating = manager.createTask(params);
+
+    expect(mocks.publishAgentRuntimeStatusPreview).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'conversation-1',
+      status: 'working',
+    });
+
+    resolveCreate({
+      success: false,
+      error: { type: 'project-not-found' },
+    });
+    await expect(creating).rejects.toThrow('Project not found.');
+    manager.dispose();
+  });
+
+  it('rolls the preview back when task creation fails', async () => {
+    mocks.createTask.mockResolvedValueOnce({
+      success: false,
+      error: { type: 'project-not-found' },
+    });
+    const manager = createManager();
+
+    await expect(
+      manager.createTask(makeCreateTaskParamsWithInitialPrompt('Failed task'))
+    ).rejects.toThrow('Project not found.');
+
+    expect(mocks.publishAgentRuntimeStatusPreview).toHaveBeenNthCalledWith(1, {
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'conversation-1',
+      status: 'working',
+    });
+    expect(mocks.publishAgentRuntimeStatusPreview).toHaveBeenNthCalledWith(2, {
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'conversation-1',
+      status: 'idle',
+    });
+    manager.dispose();
+  });
+
+  it('does not claim working while the initial prompt is intentionally deferred', async () => {
+    mocks.createTask.mockResolvedValueOnce({
+      success: false,
+      error: { type: 'project-not-found' },
+    });
+    const manager = createManager();
+    const params = makeCreateTaskParamsWithInitialPrompt('Deferred task');
+    if (params.initialConversation) params.initialConversation.deferInitialPrompt = true;
+
+    await expect(manager.createTask(params)).rejects.toThrow('Project not found.');
+
+    expect(mocks.publishAgentRuntimeStatusPreview).not.toHaveBeenCalled();
     manager.dispose();
   });
 });
@@ -917,6 +999,206 @@ describe('TaskManagerStore task view preload', () => {
   });
 });
 
+describe('TaskManagerStore task-entry presentation deadlines', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+    mocks.listeners.clear();
+    mocks.unsubscribers.length = 0;
+  });
+
+  it('ends a new-task Logo after 30s while accepting the same create RPC late success', async () => {
+    vi.useFakeTimers();
+    let finishCreate!: (result: Awaited<ReturnType<typeof mocks.createTask>>) => void;
+    mocks.createTask.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishCreate = resolve;
+      })
+    );
+    mocks.mountProject.mockResolvedValue(undefined);
+    mocks.viewStateGet.mockResolvedValue(undefined);
+    mocks.provisionTask.mockResolvedValue({
+      path: '/repo/task-1',
+      workspaceId: 'workspace-1',
+      sshConnectionId: undefined,
+      conversations: [],
+    });
+    const manager = createManager();
+    const creating = manager.createTask(makeCreateTaskParams('Slow task'));
+    const store = manager.tasks.get('task-1');
+    if (!store) throw new Error('Expected creating task store');
+    const activate = vi.fn();
+    const dispose = vi.fn();
+    const transitionToProvisioned = vi
+      .spyOn(store, 'transitionToProvisioned')
+      .mockImplementation(() => {
+        store.provisionedTask = { activate, dispose } as unknown as NonNullable<
+          TaskStore['provisionedTask']
+        >;
+        store.state = 'provisioned';
+        store.phase = null;
+        store.errorMessage = undefined;
+      });
+
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(store.state).toBe('unregistered');
+    expect(store.phase).toBe('create-error');
+    expect(store.errorMessage).toContain('continue in the background');
+    expect(mocks.createTask).toHaveBeenCalledOnce();
+    expect(transitionToProvisioned).not.toHaveBeenCalled();
+
+    finishCreate({ success: true, data: { task: makeTask('Slow task') } });
+    await creating;
+
+    expect(mocks.createTask).toHaveBeenCalledOnce();
+    expect(mocks.provisionTask).toHaveBeenCalledOnce();
+    expect(transitionToProvisioned).toHaveBeenCalledOnce();
+    expect(store.state).toBe('provisioned');
+    expect(store.phase).toBeNull();
+    expect(activate).toHaveBeenCalledOnce();
+    manager.dispose();
+  });
+
+  it('turns a slow cold provision into retryable error UI without starting a second RPC', async () => {
+    vi.useFakeTimers();
+    let finishProvision!: (result: Awaited<ReturnType<typeof mocks.provisionTask>>) => void;
+    mocks.provisionTask.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishProvision = resolve;
+      })
+    );
+    mocks.mountProject.mockResolvedValue(undefined);
+    mocks.viewStateGet.mockResolvedValue(undefined);
+    const manager = createManager();
+    const store = createUnprovisionedTask(makeTask('Cold task'));
+    manager.tasks.set('task-1', store);
+    const transitionToProvisioned = vi
+      .spyOn(store, 'transitionToProvisioned')
+      .mockImplementation(() => {});
+
+    const first = manager.provisionTask('task-1');
+    await vi.waitFor(() => expect(mocks.provisionTask).toHaveBeenCalledWith('task-1'));
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(store.phase).toBe('provision-error');
+    expect(store.errorMessage).toContain('continue in the background');
+    const retry = manager.provisionTask('task-1');
+    expect(retry).toBe(first);
+    expect(mocks.provisionTask).toHaveBeenCalledOnce();
+
+    finishProvision({
+      path: '/repo/task-1',
+      workspaceId: 'workspace-1',
+      sshConnectionId: undefined,
+      conversations: [],
+    });
+    await Promise.all([first, retry]);
+
+    expect(transitionToProvisioned).toHaveBeenCalledOnce();
+    manager.dispose();
+  });
+
+  it('ends the provision Logo when a prerequisite project mount itself hangs', async () => {
+    vi.useFakeTimers();
+    let finishMount!: () => void;
+    mocks.mountProject.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishMount = resolve;
+      })
+    );
+    mocks.viewStateGet.mockResolvedValue(undefined);
+    mocks.provisionTask.mockResolvedValue({
+      path: '/repo/task-1',
+      workspaceId: 'workspace-1',
+      sshConnectionId: undefined,
+      conversations: [],
+    });
+    const manager = createManager();
+    const store = createUnprovisionedTask(makeTask('Mount-blocked task'));
+    manager.tasks.set('task-1', store);
+    vi.spyOn(store, 'transitionToProvisioned').mockImplementation(() => {});
+
+    const provision = manager.provisionTask('task-1');
+    expect(store.phase).toBe('provision');
+    expect(mocks.provisionTask).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(store.phase).toBe('provision-error');
+    expect(store.errorMessage).toContain('continue in the background');
+    expect(mocks.provisionTask).not.toHaveBeenCalled();
+
+    finishMount();
+    await provision;
+    expect(mocks.provisionTask).toHaveBeenCalledOnce();
+    manager.dispose();
+  });
+
+  it('does not let an old provision failure overwrite a replacement task epoch', async () => {
+    let failProvision!: (error: Error) => void;
+    mocks.provisionTask.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        failProvision = reject;
+      })
+    );
+    mocks.mountProject.mockResolvedValue(undefined);
+    mocks.viewStateGet.mockResolvedValue(undefined);
+    const manager = createManager();
+    manager.tasks.set('task-1', createUnprovisionedTask(makeTask('Old epoch')));
+
+    const oldProvision = manager.provisionTask('task-1');
+    await vi.waitFor(() => expect(mocks.provisionTask).toHaveBeenCalledWith('task-1'));
+    const replacement = createUnprovisionedTask(makeTask('New epoch'));
+    replacement.phase = 'provision-error';
+    replacement.errorMessage = 'newer operation detail';
+    manager.tasks.set('task-1', replacement);
+
+    failProvision(new Error('old operation failed late'));
+    await expect(oldProvision).rejects.toThrow('old operation failed late');
+
+    expect(manager.tasks.get('task-1')).toBe(replacement);
+    expect(replacement.phase).toBe('provision-error');
+    expect(replacement.errorMessage).toBe('newer operation detail');
+    manager.dispose();
+  });
+
+  it('does not let an old create failure overwrite a replacement task epoch', async () => {
+    let failCreate!: (error: Error) => void;
+    mocks.createTask.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        failCreate = reject;
+      })
+    );
+    const manager = createManager();
+    const oldCreate = manager.createTask(makeCreateTaskParams('Old create'));
+    const replacement = createUnregisteredTask({
+      id: 'task-1',
+      projectId: 'project-1',
+      name: 'New create',
+      status: 'in_progress',
+      lastInteractedAt: '2026-06-05T10:00:00.000Z',
+      createdAt: '2026-06-05T10:00:00.000Z',
+      statusChangedAt: '2026-06-05T10:00:00.000Z',
+      isPinned: false,
+      isFavorite: false,
+      isLongTerm: false,
+      needsReview: false,
+    });
+    replacement.phase = 'create-error';
+    replacement.errorMessage = 'newer create detail';
+    manager.tasks.set('task-1', replacement);
+
+    failCreate(new Error('old create failed late'));
+    await expect(oldCreate).rejects.toThrow('old create failed late');
+
+    expect(manager.tasks.get('task-1')).toBe(replacement);
+    expect(replacement.phase).toBe('create-error');
+    expect(replacement.errorMessage).toBe('newer create detail');
+    manager.dispose();
+  });
+});
+
 describe('TaskManagerStore disposal', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -1003,6 +1285,20 @@ function makeCreateTaskParams(name: string): CreateTaskParams {
     name,
     sourceBranch: { type: 'local', branch: 'main' },
     strategy: { kind: 'no-worktree' },
+  };
+}
+
+function makeCreateTaskParamsWithInitialPrompt(name: string): CreateTaskParams {
+  return {
+    ...makeCreateTaskParams(name),
+    initialConversation: {
+      id: 'conversation-1',
+      projectId: 'project-1',
+      taskId: 'task-1',
+      runtime: 'codex',
+      title: 'Codex',
+      initialPrompt: 'Start this task',
+    },
   };
 }
 

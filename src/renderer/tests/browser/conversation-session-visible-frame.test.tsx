@@ -8,8 +8,11 @@ import type { FrontendPty } from '@renderer/lib/pty/pty';
 
 const mocks = vi.hoisted(() => ({
   completeTaskOpenTrace: vi.fn(),
+  logWarn: vi.fn(),
+  pendingProps: vi.fn(),
   ptyFocus: vi.fn(),
   provisioned: null as unknown,
+  agentStatus: 'idle' as 'idle' | 'working' | 'awaiting-input',
 }));
 
 vi.mock('react-i18next', () => ({
@@ -30,7 +33,7 @@ vi.mock('@renderer/features/tasks/hooks/use-attach-images-as-paths', () => ({
 }));
 
 vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
-  getConversationRuntimeStatus: () => 'idle',
+  getConversationRuntimeStatus: () => mocks.agentStatus,
   getTaskStore: () => undefined,
 }));
 
@@ -50,9 +53,21 @@ vi.mock('@renderer/lib/ipc', () => ({
 vi.mock('@renderer/lib/pty/pty-pane', async () => {
   const { createElement: create, forwardRef, useImperativeHandle } = await import('react');
   return {
-    PtyPane: forwardRef(function MockPtyPane(_props, ref) {
+    PtyPane: forwardRef(function MockPtyPane(
+      props: {
+        autoAcknowledgeFrame?: boolean;
+        allowAtomicLiveFrame?: boolean;
+        inputEnabled?: boolean;
+      },
+      ref
+    ) {
       useImperativeHandle(ref, () => ({ focus: mocks.ptyFocus }), []);
-      return create('div', { 'data-pty-pane': true });
+      return create('div', {
+        'data-pty-pane': true,
+        'data-auto-acknowledge-frame': String(props.autoAcknowledgeFrame),
+        'data-allow-atomic-live-frame': String(props.allowAtomicLiveFrame),
+        'data-input-enabled': String(props.inputEnabled),
+      });
     }),
   };
 });
@@ -74,7 +89,7 @@ vi.mock('@renderer/lib/pty/use-terminal-search', () => ({
 }));
 
 vi.mock('@renderer/utils/logger', () => ({
-  log: { level: 'info', debug: vi.fn() },
+  log: { level: 'info', debug: vi.fn(), warn: mocks.logWarn },
 }));
 
 vi.mock('@renderer/features/tasks/task-open-performance', () => ({
@@ -82,8 +97,17 @@ vi.mock('@renderer/features/tasks/task-open-performance', () => ({
 }));
 
 vi.mock('@renderer/features/tasks/conversations/conversation-session-pending-state', () => ({
-  ConversationSessionPendingState: () =>
-    createElement('div', { 'data-conversation-session-pending': true }, 'pending'),
+  ConversationSessionPendingState: (props: { error?: unknown }) => {
+    mocks.pendingProps(props);
+    return createElement(
+      'div',
+      {
+        'data-conversation-session-pending': true,
+        'data-conversation-session-error': String(Boolean(props.error)),
+      },
+      'pending'
+    );
+  },
 }));
 
 type Deferred<T> = {
@@ -133,6 +157,7 @@ describe('ConversationSession visible-frame generation retry', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.agentStatus = 'idle';
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -402,5 +427,557 @@ describe('ConversationSession visible-frame generation retry', () => {
       requestFrame.mockRestore();
       cancelFrame.mockRestore();
     }
+  });
+
+  it('delegates ordinary loading to its owner but keeps preparation errors inline', async () => {
+    const current = createVisibleFramePty(false);
+    const session = {
+      sessionId: 'project-1:task-1:conversation-1',
+      status: 'ready',
+      pty: current.pty as FrontendPty | null,
+      connectionError: null as string | null,
+      connect: vi.fn(async () => undefined),
+      reconnect: vi.fn(async () => undefined),
+    };
+    const conversation = {
+      data: {
+        id: 'conversation-1',
+        title: 'Externally staged frame',
+        projectId: 'project-1',
+        taskId: 'task-1',
+        runtimeId: 'codex',
+        sessionSource: { runtimeId: 'codex' },
+      },
+      session,
+      status: 'idle',
+      sessionExited: false,
+      sessionExitNoticeDismissed: false,
+      setWorking: vi.fn(),
+      clearWorking: vi.fn(),
+      dismissSessionExitNotice: vi.fn(),
+    } as unknown as ConversationStore;
+    mocks.provisioned = {
+      path: '/workspace/project-1',
+      conversations: {
+        reconcileSessionLiveness: vi.fn(async () => undefined),
+        resumeConversation: vi.fn(async () => true),
+        restartConversation: vi.fn(async () => undefined),
+        touchConversation: vi.fn(async () => undefined),
+      },
+      taskView: {
+        setFocusedRegion: vi.fn(),
+        setSidebarCollapsed: vi.fn(),
+        tabManager: { openFileInSidebar: vi.fn() },
+      },
+    };
+
+    const { ConversationSession } = await import(
+      '@renderer/features/tasks/conversations/conversation-session'
+    );
+    const renderSession = (isVisible: boolean) =>
+      root.render(
+        createElement(ConversationSession, {
+          // The production PtySession is MobX-observable. This focused test
+          // uses a plain object, so replace the prop identity when mutating it
+          // instead of relying on observer notifications that do not exist in
+          // the fixture.
+          conversation: { ...conversation, session } as unknown as ConversationStore,
+          isVisible,
+          autoFocus: false,
+          loadingSurface: 'external',
+        })
+      );
+
+    await act(async () => renderSession(true));
+    expect(host.querySelector('[data-pty-pane]')).not.toBeNull();
+    expect(host.querySelector('[data-pty-pane]')?.getAttribute('data-auto-acknowledge-frame')).toBe(
+      'true'
+    );
+    expect(
+      host.querySelector('[data-pty-pane]')?.getAttribute('data-allow-atomic-live-frame')
+    ).toBe('false');
+    expect(host.querySelector('[data-conversation-session-pending]')).toBeNull();
+
+    // A genuine PTY preparation error keeps the terminal available for
+    // diagnostics while replacing the owner's Logo with an actionable error.
+    session.connectionError = 'Frontend PTY preparation failed';
+    await act(async () => renderSession(true));
+    expect(host.querySelector('[data-pty-pane]')).not.toBeNull();
+    expect(
+      host
+        .querySelector('[data-conversation-session-pending]')
+        ?.getAttribute('data-conversation-session-error')
+    ).toBe('true');
+    session.connectionError = null;
+    await act(async () => renderSession(true));
+
+    // The destination remains mounted and measurable under TaskMainPanel's
+    // opaque Logo, but it must not start an autonomous five-second paint ACK.
+    await act(async () => renderSession(false));
+    expect(host.querySelector('[data-pty-pane]')?.getAttribute('data-auto-acknowledge-frame')).toBe(
+      'false'
+    );
+    await act(async () => renderSession(true));
+
+    session.status = 'disconnected';
+    session.pty = null;
+    session.connectionError = 'Frontend PTY preparation failed';
+    await act(async () => renderSession(false));
+
+    expect(host.querySelector('[data-conversation-session-pending]')).not.toBeNull();
+    expect(
+      host
+        .querySelector('[data-conversation-session-pending]')
+        ?.getAttribute('data-conversation-session-error')
+    ).toBe('true');
+    expect(mocks.pendingProps.mock.lastCall?.[0]?.error).toBeDefined();
+  });
+
+  it('keeps a slow canonical frame subscribed and reveals it when it eventually arrives', async () => {
+    vi.useFakeTimers();
+    try {
+      const current = createVisibleFramePty(false);
+      Object.assign(current.pty, { canonicalGeneration: 7 });
+      vi.mocked(current.pty.waitForVisibleFrame).mockResolvedValue(false);
+      const session = {
+        sessionId: 'project-1:task-1:conversation-timeout',
+        status: 'ready',
+        pty: current.pty,
+        connectionError: null as string | null,
+        connect: vi.fn(async () => undefined),
+        reconnect: vi.fn(async () => undefined),
+        reportConnectionError: vi.fn<(error: unknown) => void>(),
+      };
+      const conversation = {
+        data: {
+          id: 'conversation-timeout',
+          title: 'Bounded visible frame',
+          projectId: 'project-1',
+          taskId: 'task-1',
+          runtimeId: 'codex',
+          sessionSource: { runtimeId: 'codex' },
+        },
+        session,
+        status: 'idle',
+        sessionExited: false,
+        sessionExitNoticeDismissed: false,
+        setWorking: vi.fn(),
+        clearWorking: vi.fn(),
+        dismissSessionExitNotice: vi.fn(),
+      } as unknown as ConversationStore;
+      const restartConversation = vi.fn(async () => undefined);
+      mocks.provisioned = {
+        path: '/workspace/project-1',
+        conversations: {
+          reconcileSessionLiveness: vi.fn(async () => undefined),
+          resumeConversation: vi.fn(async () => true),
+          restartConversation,
+          touchConversation: vi.fn(async () => undefined),
+        },
+        taskView: {
+          setFocusedRegion: vi.fn(),
+          setSidebarCollapsed: vi.fn(),
+          tabManager: { openFileInSidebar: vi.fn() },
+        },
+      };
+
+      const { ConversationSession } = await import(
+        '@renderer/features/tasks/conversations/conversation-session'
+      );
+      const { taskOpenTransitionStore } = await import(
+        '@renderer/features/tasks/task-open-transition-store'
+      );
+      await act(async () => {
+        root.render(
+          createElement(ConversationSession, {
+            conversation,
+            isVisible: true,
+            autoFocus: false,
+            loadingSurface: 'external',
+          })
+        );
+      });
+      expect(host.querySelector('[data-conversation-session-pending]')).toBeNull();
+      expect(taskOpenTransitionStore.hasSessionError('project-1', 'task-1')).toBe(false);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_100);
+      });
+
+      expect(session.reportConnectionError).not.toHaveBeenCalled();
+      expect(session.connectionError).toBeNull();
+      expect(
+        host
+          .querySelector('[data-conversation-session-pending]')
+          ?.getAttribute('data-conversation-session-error')
+      ).toBe('true');
+      expect(taskOpenTransitionStore.hasSessionError('project-1', 'task-1')).toBe(true);
+      expect(vi.mocked(current.pty.waitForVisibleFrame).mock.calls.length).toBeGreaterThan(2);
+      expect(mocks.logWarn).toHaveBeenCalledOnce();
+      expect(mocks.logWarn).toHaveBeenCalledWith(
+        '[conversation-session] canonical frame is still pending',
+        expect.objectContaining({
+          sessionId: 'project-1:task-1:conversation-timeout',
+          generation: 7,
+          elapsedMs: expect.any(Number),
+        })
+      );
+
+      const retry = mocks.pendingProps.mock.lastCall?.[0]?.error as
+        | { onRetry: () => void }
+        | undefined;
+      const waitsBeforeRetry = vi.mocked(current.pty.waitForVisibleFrame).mock.calls.length;
+      const connectsBeforeRetry = session.connect.mock.calls.length;
+      await act(async () => retry?.onRetry());
+
+      expect(host.querySelector('[data-conversation-session-pending]')).toBeNull();
+      expect(taskOpenTransitionStore.hasSessionError('project-1', 'task-1')).toBe(false);
+      expect(vi.mocked(current.pty.waitForVisibleFrame).mock.calls.length).toBeGreaterThan(
+        waitsBeforeRetry
+      );
+      expect(session.connect).toHaveBeenCalledTimes(connectsBeforeRetry);
+      expect(session.reconnect).not.toHaveBeenCalled();
+      expect(restartConversation).not.toHaveBeenCalled();
+      expect(session.reportConnectionError).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_100);
+      });
+      expect(
+        host
+          .querySelector('[data-conversation-session-pending]')
+          ?.getAttribute('data-conversation-session-error')
+      ).toBe('true');
+      expect(taskOpenTransitionStore.hasSessionError('project-1', 'task-1')).toBe(true);
+      expect(mocks.logWarn).toHaveBeenCalledTimes(2);
+
+      await act(async () => current.emit(true));
+
+      expect(host.querySelector('[data-conversation-session-pending]')).toBeNull();
+      expect(taskOpenTransitionStore.hasSessionError('project-1', 'task-1')).toBe(false);
+      expect(session.reconnect).not.toHaveBeenCalled();
+      expect(restartConversation).not.toHaveBeenCalled();
+      expect(session.reportConnectionError).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resumes a recoverable snapshot and explicitly retries one false result', async () => {
+    vi.useFakeTimers();
+    try {
+      const current = createVisibleFramePty(true);
+      const session = {
+        sessionId: 'project-1:task-1:conversation-1',
+        status: 'ready',
+        pty: current.pty,
+        connectionError: null,
+        connect: vi.fn(async () => undefined),
+        reconnect: vi.fn(async () => undefined),
+      };
+      const conversation = {
+        data: {
+          id: 'conversation-1',
+          title: 'Recoverable renderer snapshot',
+          projectId: 'project-1',
+          taskId: 'task-1',
+          runtimeId: 'codex',
+          sessionSource: { runtimeId: 'codex' },
+        },
+        session,
+        status: 'idle',
+        sessionExited: false,
+        sessionExitNoticeDismissed: false,
+        setWorking: vi.fn(),
+        clearWorking: vi.fn(),
+        dismissSessionExitNotice: vi.fn(),
+      } as unknown as ConversationStore;
+      const resumeConversation = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+      const reconcileSessionLiveness = vi.fn(async () => undefined);
+      mocks.provisioned = {
+        path: '/workspace/project-1',
+        conversations: {
+          reconcileSessionLiveness,
+          resumeConversation,
+          restartConversation: vi.fn(async () => undefined),
+          touchConversation: vi.fn(async () => undefined),
+        },
+        taskView: {
+          setFocusedRegion: vi.fn(),
+          setSidebarCollapsed: vi.fn(),
+          tabManager: { openFileInSidebar: vi.fn() },
+        },
+      };
+
+      const { ConversationSession } = await import(
+        '@renderer/features/tasks/conversations/conversation-session'
+      );
+      await act(async () => {
+        root.render(
+          createElement(ConversationSession, {
+            conversation,
+            isVisible: true,
+            autoFocus: false,
+          })
+        );
+      });
+
+      expect(current.pty.hasRecoverableSnapshot).toBe(true);
+      expect(reconcileSessionLiveness).toHaveBeenCalledOnce();
+      expect(resumeConversation).toHaveBeenCalledOnce();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(150);
+      });
+      expect(resumeConversation).toHaveBeenCalledTimes(2);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      expect(resumeConversation).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('turns a permanently pending resume into one stopped state without retrying forever', async () => {
+    vi.useFakeTimers();
+    try {
+      const current = createVisibleFramePty(true);
+      const markSessionExited = vi.fn();
+      const conversation = {
+        data: {
+          id: 'conversation-1',
+          title: 'Pending backend resume',
+          projectId: 'project-1',
+          taskId: 'task-1',
+          runtimeId: 'codex',
+          sessionSource: { runtimeId: 'codex' },
+        },
+        session: {
+          sessionId: 'project-1:task-1:conversation-1',
+          status: 'ready',
+          pty: current.pty,
+          connectionError: null,
+          connect: vi.fn(async () => undefined),
+          reconnect: vi.fn(async () => undefined),
+        },
+        status: 'idle',
+        sessionExited: false,
+        sessionExitNoticeDismissed: false,
+        markSessionExited,
+        setWorking: vi.fn(),
+        clearWorking: vi.fn(),
+        dismissSessionExitNotice: vi.fn(),
+      } as unknown as ConversationStore;
+      const resumeConversation = vi.fn(() => new Promise<boolean>(() => {}));
+      mocks.provisioned = {
+        path: '/workspace/project-1',
+        conversations: {
+          reconcileSessionLiveness: vi.fn(async () => undefined),
+          resumeConversation,
+          restartConversation: vi.fn(async () => undefined),
+          touchConversation: vi.fn(async () => undefined),
+        },
+        taskView: {
+          setFocusedRegion: vi.fn(),
+          setSidebarCollapsed: vi.fn(),
+          tabManager: { openFileInSidebar: vi.fn() },
+        },
+      };
+
+      const { ConversationSession } = await import(
+        '@renderer/features/tasks/conversations/conversation-session'
+      );
+      await act(async () => {
+        root.render(
+          createElement(ConversationSession, {
+            conversation,
+            isVisible: true,
+            autoFocus: false,
+            loadingSurface: 'external',
+          })
+        );
+      });
+      expect(resumeConversation).toHaveBeenCalledOnce();
+      expect(markSessionExited).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_999);
+      });
+      expect(markSessionExited).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(markSessionExited).toHaveBeenCalledOnce();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(resumeConversation).toHaveBeenCalledOnce();
+      expect(markSessionExited).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('only enables atomic live frames after the provider confirms the running turn', async () => {
+    const current = createVisibleFramePty(true);
+    const conversation = {
+      data: {
+        id: 'conversation-1',
+        title: 'Live frame policy',
+        projectId: 'project-1',
+        taskId: 'task-1',
+        runtimeId: 'codex',
+        sessionSource: { runtimeId: 'codex' },
+      },
+      session: {
+        sessionId: 'project-1:task-1:conversation-1',
+        status: 'ready',
+        pty: current.pty,
+        connectionError: null,
+        connect: vi.fn(async () => undefined),
+        reconnect: vi.fn(async () => undefined),
+      },
+      status: 'idle',
+      providerTurnConfirmed: false,
+      sessionExited: false,
+      sessionExitNoticeDismissed: false,
+      setWorking: vi.fn(),
+      clearWorking: vi.fn(),
+      dismissSessionExitNotice: vi.fn(),
+    } as unknown as ConversationStore;
+    mocks.provisioned = {
+      path: '/workspace/project-1',
+      conversations: {
+        reconcileSessionLiveness: vi.fn(async () => undefined),
+        resumeConversation: vi.fn(async () => true),
+        restartConversation: vi.fn(async () => undefined),
+        touchConversation: vi.fn(async () => undefined),
+      },
+      taskView: {
+        setFocusedRegion: vi.fn(),
+        setSidebarCollapsed: vi.fn(),
+        tabManager: { openFileInSidebar: vi.fn() },
+      },
+    };
+
+    const { ConversationSession } = await import(
+      '@renderer/features/tasks/conversations/conversation-session'
+    );
+    let renderedConversation = conversation;
+    const renderSession = () =>
+      root.render(
+        createElement(ConversationSession, {
+          conversation: renderedConversation,
+          isVisible: true,
+          autoFocus: false,
+        })
+      );
+
+    await act(async () => renderSession());
+    expect(
+      host
+        .querySelector('[data-allow-atomic-live-frame]')
+        ?.getAttribute('data-allow-atomic-live-frame')
+    ).toBe('false');
+
+    mocks.agentStatus = 'working';
+    renderedConversation = {
+      ...conversation,
+      providerTurnConfirmed: false,
+    } as unknown as ConversationStore;
+    await act(async () => renderSession());
+    expect(
+      host
+        .querySelector('[data-allow-atomic-live-frame]')
+        ?.getAttribute('data-allow-atomic-live-frame')
+    ).toBe('false');
+
+    renderedConversation = {
+      ...conversation,
+      providerTurnConfirmed: true,
+    } as unknown as ConversationStore;
+    await act(async () => renderSession());
+    expect(
+      host
+        .querySelector('[data-allow-atomic-live-frame]')
+        ?.getAttribute('data-allow-atomic-live-frame')
+    ).toBe('true');
+
+    mocks.agentStatus = 'awaiting-input';
+    renderedConversation = {
+      ...conversation,
+      providerTurnConfirmed: true,
+    } as unknown as ConversationStore;
+    await act(async () => renderSession());
+    expect(
+      host
+        .querySelector('[data-allow-atomic-live-frame]')
+        ?.getAttribute('data-allow-atomic-live-frame')
+    ).toBe('true');
+  });
+
+  it('shows an external-writer state while keeping the transcript terminal read-only', async () => {
+    const current = createVisibleFramePty(true);
+    const conversation = {
+      data: {
+        id: 'conversation-1',
+        title: 'Externally owned conversation',
+        projectId: 'project-1',
+        taskId: 'task-1',
+        runtimeId: 'codex',
+        sessionSource: { runtimeId: 'codex', sessionId: 'thread-1' },
+      },
+      session: {
+        sessionId: 'project-1:task-1:conversation-1',
+        status: 'ready',
+        pty: current.pty,
+        connectionError: null,
+        connect: vi.fn(async () => undefined),
+        reconnect: vi.fn(async () => undefined),
+      },
+      status: 'idle',
+      sessionExited: false,
+      sessionResumeBlockReason: 'external-writer',
+      sessionExitNoticeDismissed: false,
+      setWorking: vi.fn(),
+      clearWorking: vi.fn(),
+      dismissSessionExitNotice: vi.fn(),
+    } as unknown as ConversationStore;
+    mocks.provisioned = {
+      path: '/workspace/project-1',
+      conversations: {
+        reconcileSessionLiveness: vi.fn(async () => undefined),
+        resumeConversation: vi.fn(async () => false),
+        restartConversation: vi.fn(async () => undefined),
+        touchConversation: vi.fn(async () => undefined),
+      },
+      taskView: {
+        setFocusedRegion: vi.fn(),
+        setSidebarCollapsed: vi.fn(),
+        tabManager: { openFileInSidebar: vi.fn() },
+      },
+    };
+
+    const { ConversationSession } = await import(
+      '@renderer/features/tasks/conversations/conversation-session'
+    );
+    await act(async () => {
+      root.render(
+        createElement(ConversationSession, {
+          conversation,
+          isVisible: true,
+          autoFocus: false,
+          loadingSurface: 'external',
+        })
+      );
+    });
+
+    expect(host.querySelector('[data-pty-pane]')?.getAttribute('data-input-enabled')).toBe('false');
+    expect(host.textContent).toContain('tasks.conversations.externalWriter');
+    expect(host.querySelector('[data-conversation-session-pending]')).toBeNull();
   });
 });

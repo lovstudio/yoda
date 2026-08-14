@@ -14,17 +14,19 @@ import {
   shouldClearPendingInitialPromptAfterStart,
 } from '@main/core/conversations/pending-initial-prompt';
 import { clearPendingInitialPrompt } from '@main/core/conversations/pending-initial-prompt-store';
-import type {
-  ConversationProvider,
-  ConversationStartOptions,
-} from '@main/core/conversations/types';
+import type { ConversationProvider } from '@main/core/conversations/types';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import { SshExecutionContext } from '@main/core/execution-context/ssh-execution-context';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { GitFetchService } from '@main/core/git/git-fetch-service';
 import type { GitRepositoryService } from '@main/core/git/repository-service';
-import { TmuxReattachMissError } from '@main/core/pty/tmux-reattach';
-import { decodeTmuxSessionName, listTmuxSessionMarkers } from '@main/core/pty/tmux-session-name';
+import {
+  decodeTmuxSessionName,
+  killTmuxSessionStrict,
+  listTmuxSessionMarkers,
+  listTmuxSessionMarkersStrict,
+  makeTmuxSessionName,
+} from '@main/core/pty/tmux-session-name';
 import type { TerminalProvider } from '@main/core/terminals/terminal-provider';
 import type { Workspace } from '@main/core/workspaces/workspace';
 import { workspaceRegistry } from '@main/core/workspaces/workspace-registry';
@@ -98,7 +100,7 @@ async function hydratePersistedConversation(
   provider: ConversationProvider,
   conversation: Conversation,
   logPrefix: string,
-  startOptions?: ConversationStartOptions
+  refreshLiveSession?: (conversation: Conversation) => Promise<void>
 ): Promise<void> {
   await withConversationHydrationSlot(() =>
     withConversationOperation(conversation, async () => {
@@ -107,7 +109,10 @@ async function hydratePersistedConversation(
       if (!persistedConversation || isConversationHydrationCancelled(conversation)) return;
       const pending = persistedConversation.pendingInitialPrompt;
       const start = hydratedConversationStart(persistedConversation);
-      const startOnce = async (options?: ConversationStartOptions): Promise<void> => {
+
+      try {
+        await refreshLiveSession?.(persistedConversation);
+        if (isConversationHydrationCancelled(conversation)) return;
         await provider.startSession(
           persistedConversation,
           undefined,
@@ -115,8 +120,7 @@ async function hydratePersistedConversation(
           start.initialPrompt,
           undefined,
           start.imagePaths,
-          { model: start.model, reasoningEffort: start.reasoningEffort },
-          options
+          { model: start.model, reasoningEffort: start.reasoningEffort }
         );
         if (isConversationHydrationCancelled(conversation)) return;
         if (
@@ -129,28 +133,10 @@ async function hydratePersistedConversation(
             deliveryToken: pending.deliveryToken,
           });
         }
-      };
-
-      try {
-        await startOnce(startOptions);
       } catch (error) {
-        let hydrationError = error;
-        if (
-          error instanceof TmuxReattachMissError &&
-          startOptions?.reattachExistingTmuxSession &&
-          pending &&
-          !isConversationHydrationCancelled(conversation)
-        ) {
-          try {
-            await startOnce();
-            return;
-          } catch (retryError) {
-            hydrationError = retryError;
-          }
-        }
         log.error(`${logPrefix}: failed to hydrate conversation`, {
           conversationId: persistedConversation.id,
-          error: String(hydrationError),
+          error: String(error),
         });
       }
     })
@@ -159,14 +145,17 @@ async function hydratePersistedConversation(
 
 /**
  * Restore only conversations that still need their first prompt delivered, or
- * conversations whose canonical tmux pane demonstrably survived. Historical
- * conversations without a live pane stay hibernated until explicitly opened.
+ * conversations whose canonical tmux pane demonstrably survived. A surviving
+ * process is replaced so the resumed thread receives the current runtime
+ * environment. Historical conversations without a live pane stay hibernated
+ * until explicitly opened.
  */
 export async function hydratePersistedConversations(
   provider: ConversationProvider,
   conversations: Conversation[],
   logPrefix: string,
-  liveTmuxSessionIds: Promise<ReadonlySet<string>> = Promise.resolve(new Set())
+  liveTmuxSessionIds: Promise<ReadonlySet<string>> = Promise.resolve(new Set()),
+  refreshLiveSession?: (conversation: Conversation) => Promise<void>
 ): Promise<void> {
   const hasLiveCanonicalSession = (
     sessionIds: ReadonlySet<string>,
@@ -176,8 +165,9 @@ export async function hydratePersistedConversations(
   const hydrations = conversations.map((conversation) => {
     const prompt = conversation.pendingInitialPrompt;
     // A prompt that has never been attempted starts immediately. Every other
-    // conversation waits for the bounded marker sample so a surviving pane is
-    // reattached instead of racing renderer resume or receiving a duplicate.
+    // conversation waits for the bounded marker sample. A surviving pane is
+    // replaced before resume so cold startup reads the current account and
+    // runtime environment instead of inheriting the old Agent process.
     const hydration =
       prompt && prompt.attemptStartedAtMs === undefined
         ? hydratePersistedConversation(provider, conversation, logPrefix)
@@ -188,7 +178,7 @@ export async function hydratePersistedConversations(
               provider,
               conversation,
               logPrefix,
-              live ? { reattachExistingTmuxSession: true } : undefined
+              live ? refreshLiveSession : undefined
             );
           });
     return registerConversationHydrationBarrier(conversation, Promise.resolve(hydration));
@@ -270,6 +260,31 @@ export function discoverLiveTmuxSessionIds(type: WorkspaceType): Promise<Readonl
     }
   );
   return sample;
+}
+
+async function replacePersistedConversationTmuxSession(
+  type: WorkspaceType,
+  conversation: Conversation
+): Promise<void> {
+  const ctx =
+    type.kind === 'ssh' ? new SshExecutionContext(type.proxy) : new LocalExecutionContext();
+  const sessionId = makePtySessionId(conversation.projectId, conversation.taskId, conversation.id);
+  const sessionName = makeTmuxSessionName(sessionId);
+  try {
+    try {
+      await killTmuxSessionStrict(ctx, sessionName);
+    } catch (error) {
+      let markers: Awaited<ReturnType<typeof listTmuxSessionMarkersStrict>>;
+      try {
+        markers = await listTmuxSessionMarkersStrict(ctx);
+      } catch {
+        throw error;
+      }
+      if (markers.some((marker) => marker.sessionName === sessionName)) throw error;
+    }
+  } finally {
+    ctx.dispose();
+  }
 }
 
 export type BuildTaskResult = {
@@ -444,7 +459,10 @@ export async function buildTaskFromWorkspace(
     conversationProvider,
     hydrate.conversations,
     logPrefix,
-    liveTmuxSessionIds
+    liveTmuxSessionIds,
+    tmuxEnabled
+      ? (conversation) => replacePersistedConversationTmuxSession(type, conversation)
+      : undefined
   ).catch((error) => {
     log.error(`${logPrefix}: failed to hydrate persisted conversations`, {
       error: String(error),

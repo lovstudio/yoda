@@ -1,5 +1,6 @@
 import { open, readFile, stat } from 'node:fs/promises';
-import type { Conversation } from '@shared/conversations';
+import type { Conversation, ConversationSurfaceAnchor } from '@shared/conversations';
+import { isAgentSessionRunningStatus } from '@shared/events/agentEvents';
 import type {
   MobileSessionTranscriptAgentPhase,
   MobileSessionTranscriptToolStatus,
@@ -8,6 +9,8 @@ import {
   readCodexThreadRolloutPath,
   resolveCodexStatePath,
 } from '@main/core/session-title/codex-title-source';
+import { agentSessionRuntimeStore } from './agent-session-runtime';
+import { readCodexTurnVerdictFile } from './codex-run-state-source';
 import { resolveAgentResumeSession } from './codex-session-id';
 import { getReservedCodexThreadIds } from './codex-thread-reservations';
 import { getConversationAgentSessionId } from './conversation-session-source';
@@ -17,6 +20,11 @@ const MAX_COMMAND_OUTPUT_CHARS = 16 * 1024;
 const MAX_HISTORY_CHARS = 2 * 1024 * 1024;
 const MAX_CACHED_ROLLOUTS = 3;
 const MOBILE_ROLLOUT_TAIL_MAX_BYTES = 8 * 1024 * 1024;
+const SURFACE_ANCHOR_MAX_SEGMENTS = 2;
+const SURFACE_ANCHOR_MAX_SEGMENT_CHARS = 160;
+const SURFACE_ANCHOR_MAX_TOTAL_CHARS = 240;
+const SURFACE_ANCHOR_MIN_VISIBLE_CHARS = 12;
+const SURFACE_ANCHOR_SHORT_FINAL_VISIBLE_CHARS = 24;
 
 type RolloutFileSnapshot = { raw: string; signature: string };
 type CachedValue<T> = { signature: string; value: Promise<T> };
@@ -181,6 +189,56 @@ export async function loadCodexRolloutTranscriptTailForConversation({
   }
   const transcript = parseCodexRolloutTranscript(snapshot.raw);
   return transcript.length > 0 ? transcript : null;
+}
+
+/**
+ * Reads only the bounded rollout tail and derives provider-visible evidence
+ * for the canonical terminal surface. Failures are deliberately conservative:
+ * a missing or unreadable transcript must not be mistaken for a new session.
+ */
+export async function loadCodexRolloutSurfaceAnchorForConversation({
+  conversation,
+  cwd,
+}: {
+  conversation: Conversation;
+  cwd: string;
+}): Promise<ConversationSurfaceAnchor> {
+  if (conversation.runtimeId !== 'codex') return { kind: 'unverifiable' };
+
+  try {
+    const session = {
+      projectId: conversation.projectId,
+      taskId: conversation.taskId,
+      conversationId: conversation.id,
+    };
+    // A provider-confirmed in-memory turn is the cheapest and strongest live
+    // signal. In particular, it remains O(1) when the latest task_started row
+    // sits behind a multi-megabyte tool/image payload near the rollout EOF.
+    if (
+      agentSessionRuntimeStore.isProviderTurnConfirmed(session) &&
+      isAgentSessionRunningStatus(agentSessionRuntimeStore.getStatus(session))
+    ) {
+      return { kind: 'live-turn' };
+    }
+
+    const context = await resolveCodexRolloutContext(conversation, cwd);
+    if (!context?.rolloutPath) return { kind: 'unverifiable' };
+
+    // Determine live-vs-settled from the bounded reverse scanner before
+    // allocating and decoding the 8 MiB transcript tail. A working cold turn
+    // therefore pays only for small fixed-size chunks; transcript parsing is
+    // reserved for settled turns whose final answer must be matched.
+    const verdict = await readCodexTurnVerdictFile(context.rolloutPath);
+    if (verdict?.state === 'working' || verdict?.state === 'awaiting-input') {
+      return { kind: 'live-turn' };
+    }
+    if (!verdict) return { kind: 'unverifiable' };
+
+    const snapshot = await readRolloutTailSnapshot(context.rolloutPath);
+    return parseCodexSettledRolloutSurfaceAnchor(snapshot.raw);
+  } catch {
+    return { kind: 'unverifiable' };
+  }
 }
 
 export async function loadCodexRolloutShareImagesTailForConversation({
@@ -402,6 +460,146 @@ export function parseCodexRolloutTranscript(raw: string): CodexRolloutTranscript
     .map(({ entry }) => entry);
 
   return compactIncrementalAssistantBlocks(entries);
+}
+
+/**
+ * Selects a strictly bounded surface anchor from a bounded rollout snapshot.
+ * A completed assistant answer is strongest. A short final answer is paired
+ * with its preceding user message so generic replies such as "Done" cannot
+ * unlock an unrelated frame; older rollouts fall back to the latest user text.
+ */
+export function parseCodexRolloutSurfaceAnchor(raw: string): ConversationSurfaceAnchor {
+  // An unfinished provider-owned turn is stronger evidence than transcript
+  // text for a live surface. Its user prompt and early commentary can already
+  // be outside the bottom viewport while Codex is still working, so requiring
+  // either as an on-screen anchor makes a healthy PTY impossible to reveal.
+  if (latestCodexTurnBoundary(raw) === 'started') return { kind: 'live-turn' };
+
+  return parseCodexSettledRolloutSurfaceAnchor(raw);
+}
+
+function parseCodexSettledRolloutSurfaceAnchor(raw: string): ConversationSurfaceAnchor {
+  const transcript = parseCodexRolloutTranscript(raw);
+  const latestUserIndex = findLatestEntryIndex(transcript, transcript.length - 1, 'user');
+  let finalIndex = -1;
+  for (let index = transcript.length - 1; index >= 0; index -= 1) {
+    const entry = transcript[index];
+    if (
+      entry?.role === 'assistant' &&
+      entry.agentPhase === 'final' &&
+      (latestUserIndex < 0 || index > latestUserIndex)
+    ) {
+      finalIndex = index;
+      break;
+    }
+  }
+
+  if (finalIndex >= 0) {
+    const finalEntry = transcript[finalIndex];
+    if (finalEntry) {
+      const finalSegment = surfaceAnchorSegment(
+        finalEntry.content,
+        SURFACE_ANCHOR_MAX_SEGMENT_CHARS
+      );
+      const finalVisibleChars = finalSegment ? countSurfaceAnchorVisibleChars(finalSegment) : 0;
+      if (finalSegment && finalVisibleChars >= SURFACE_ANCHOR_SHORT_FINAL_VISIBLE_CHARS) {
+        return { kind: 'anchor', segments: [finalSegment] };
+      }
+
+      const precedingUserIndex = findLatestEntryIndex(transcript, finalIndex - 1, 'user');
+      const precedingUser =
+        precedingUserIndex >= 0 ? (transcript[precedingUserIndex] ?? null) : null;
+      const perSegmentLimit = Math.min(
+        SURFACE_ANCHOR_MAX_SEGMENT_CHARS,
+        Math.floor(SURFACE_ANCHOR_MAX_TOTAL_CHARS / SURFACE_ANCHOR_MAX_SEGMENTS)
+      );
+      const userSegment = precedingUser
+        ? surfaceAnchorSegment(precedingUser.content, perSegmentLimit)
+        : null;
+      const shortFinalSegment = surfaceAnchorSegment(finalEntry.content, perSegmentLimit);
+      if (
+        userSegment &&
+        shortFinalSegment &&
+        countSurfaceAnchorVisibleChars(userSegment) >= SURFACE_ANCHOR_MIN_VISIBLE_CHARS &&
+        countSurfaceAnchorVisibleChars(shortFinalSegment) > 0
+      ) {
+        return { kind: 'anchor', segments: [userSegment, shortFinalSegment] };
+      }
+      if (finalSegment && finalVisibleChars >= SURFACE_ANCHOR_MIN_VISIBLE_CHARS) {
+        return { kind: 'anchor', segments: [finalSegment] };
+      }
+    }
+  }
+
+  const latestUser = latestUserIndex >= 0 ? (transcript[latestUserIndex] ?? null) : null;
+  const userSegment = latestUser
+    ? surfaceAnchorSegment(latestUser.content, SURFACE_ANCHOR_MAX_SEGMENT_CHARS)
+    : null;
+  return userSegment &&
+    countSurfaceAnchorVisibleChars(userSegment) >= SURFACE_ANCHOR_MIN_VISIBLE_CHARS
+    ? { kind: 'anchor', segments: [userSegment] }
+    : { kind: 'unverifiable' };
+}
+
+function latestCodexTurnBoundary(raw: string): 'started' | 'settled' | null {
+  let lineEnd = raw.length;
+  while (lineEnd > 0) {
+    const lineStart = raw.lastIndexOf('\n', lineEnd - 1) + 1;
+    const line = raw.slice(lineStart, lineEnd).trim();
+    lineEnd = lineStart === 0 ? 0 : lineStart - 1;
+    if (
+      !line.includes('"task_started"') &&
+      !line.includes('"task_complete"') &&
+      !line.includes('"turn_aborted"')
+    ) {
+      continue;
+    }
+
+    const parsed = safeParse(line);
+    const payload = parsed?.type === 'event_msg' ? objectValue(parsed.payload) : null;
+    if (payload?.type === 'task_started') return 'started';
+    if (payload?.type === 'task_complete' || payload?.type === 'turn_aborted') return 'settled';
+  }
+  return null;
+}
+
+function findLatestEntryIndex(
+  transcript: CodexRolloutTranscriptEntry[],
+  fromIndex: number,
+  role: CodexRolloutTranscriptEntryRole
+): number {
+  for (let index = fromIndex; index >= 0; index -= 1) {
+    const entry = transcript[index];
+    if (entry?.role === role) return index;
+  }
+  return -1;
+}
+
+function surfaceAnchorSegment(content: string, maxChars: number): string | null {
+  const visible = content
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/gu, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/gu, '$1')
+    .replace(/\[([^\]]+)\]\[[^\]]*\]/gu, '$1')
+    .replace(/<\/?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*?)?\/?>/gu, '')
+    .replace(/^\s*```[^\n]*$/gmu, '')
+    .replace(/^\s{0,3}(?:#{1,6}|>|[-+*]|\d+[.)])\s+/gmu, '')
+    .replace(/[`*_~]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!visible) return null;
+  if (visible.length <= maxChars) return visible;
+
+  const tail = visible.slice(-maxChars);
+  const firstBoundary = tail.search(/\s/u);
+  const bounded =
+    firstBoundary >= 0 && firstBoundary < maxChars / 3 ? tail.slice(firstBoundary + 1) : tail;
+  return bounded.trim() || tail.trim();
+}
+
+function countSurfaceAnchorVisibleChars(value: string): number {
+  return value.normalize('NFKC').match(/[\p{L}\p{N}]/gu)?.length ?? 0;
 }
 
 export function parseCodexRolloutShareImages(raw: string): CodexRolloutShareImageGroup[] {

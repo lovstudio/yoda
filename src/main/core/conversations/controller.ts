@@ -1,5 +1,6 @@
 import { createRPCController } from '@shared/ipc/rpc';
 import { makePtySessionId } from '@shared/ptySessionId';
+import type { SessionOpenPerformanceContext } from '@shared/session-open-performance';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { KeyedTtlSingleFlightCache } from '@main/lib/keyed-ttl-single-flight-cache';
@@ -52,7 +53,7 @@ import { getProjectConversationPrompts, getProjectPromptSources } from './projec
 import { getProjectSessionSources } from './project-sessions';
 import { renameConversation } from './renameConversation';
 import { restartConversation } from './restartConversation';
-import { resumeConversation } from './resumeConversation';
+import { resumeConversationWithResult } from './resumeConversation';
 import { rewritePrompt } from './rewritePrompt';
 import { getProjectDeliverySummaries, getTaskDeliverySummaries } from './session-summary-context';
 import { getSessionSummarySnapshot } from './session-summary-snapshot';
@@ -254,15 +255,16 @@ export const conversationController = createRPCController({
     projectId: string,
     taskId: string,
     conversationId: string,
-    initialSize?: { cols: number; rows: number }
+    initialSize?: { cols: number; rows: number },
+    performanceContext?: SessionOpenPerformanceContext
   ) => {
-    const running = await resumeConversation(projectId, taskId, conversationId, initialSize);
-    return {
-      running,
-      generation: ptySessionRegistry.getGeneration(
-        makePtySessionId(projectId, taskId, conversationId)
-      ),
-    };
+    return resumeConversationWithResult(
+      projectId,
+      taskId,
+      conversationId,
+      initialSize,
+      performanceContext
+    );
   },
   interruptConversation,
   getActiveRuntimeStatuses,

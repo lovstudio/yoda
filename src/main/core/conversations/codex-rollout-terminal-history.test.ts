@@ -19,6 +19,13 @@ vi.mock('./codex-thread-reservations', () => ({
   getReservedCodexThreadIds: mocks.getReservedCodexThreadIds,
 }));
 
+vi.mock('./agent-session-runtime', () => ({
+  agentSessionRuntimeStore: {
+    getStatus: vi.fn(() => 'idle'),
+    isProviderTurnConfirmed: vi.fn(() => false),
+  },
+}));
+
 beforeEach(() => {
   mocks.getReservedCodexThreadIds.mockReset();
   mocks.getReservedCodexThreadIds.mockResolvedValue(new Set());

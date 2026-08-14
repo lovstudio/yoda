@@ -18,7 +18,6 @@ export function shouldAutoResumeConversation({
       sessionId &&
       sessionStatus === 'ready' &&
       sessionPty &&
-      !sessionPty.hasRecoverableSnapshot &&
       sessionPty !== lastAutoResumePty
   );
 }
@@ -34,11 +33,5 @@ export function shouldProbeConversationSession({
   sessionStatus: string | undefined;
   sessionPty: FrontendPty | null;
 }): boolean {
-  return Boolean(
-    isVisible &&
-      sessionId &&
-      sessionStatus === 'ready' &&
-      sessionPty &&
-      !sessionPty.hasRecoverableSnapshot
-  );
+  return Boolean(isVisible && sessionId && sessionStatus === 'ready' && sessionPty);
 }

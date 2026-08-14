@@ -37,12 +37,43 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/toolti
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { log } from '@renderer/utils/logger';
 import { completeTaskOpenTrace } from '../task-open-performance';
+import { taskOpenTransitionStore } from '../task-open-transition-store';
 import type { ConversationStore } from './conversation-manager';
 import { ConversationSessionPendingState } from './conversation-session-pending-state';
 import {
   shouldAutoResumeConversation,
   shouldProbeConversationSession,
 } from './conversation-session-utils';
+
+const AUTO_RESUME_RETRY_DELAY_MS = 150;
+const AUTO_RESUME_MAX_ATTEMPTS = 2;
+const RESUME_ATTEMPT_TIMEOUT_MS = 2_000;
+const VISIBLE_FRAME_SLOW_WARNING_MS = 10_000;
+
+type BoundedPromiseOutcome<T> =
+  | { kind: 'resolved'; value: T }
+  | { kind: 'rejected'; error: unknown }
+  | { kind: 'timed-out' };
+
+function waitForBoundedPromise<T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<BoundedPromiseOutcome<T>> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (outcome: BoundedPromiseOutcome<T>) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(outcome);
+    };
+    const timeout = setTimeout(() => finish({ kind: 'timed-out' }), timeoutMs);
+    promise.then(
+      (value) => finish({ kind: 'resolved', value }),
+      (error: unknown) => finish({ kind: 'rejected', error })
+    );
+  });
+}
 
 export function getResumeInitialSize(
   pty: FrontendPty,
@@ -76,12 +107,15 @@ export const ConversationSession = observer(function ConversationSession({
   conversation,
   isVisible,
   autoFocus = false,
+  loadingSurface = 'inline',
 }: {
   conversation: ConversationStore;
   /** Resume the PTY session when visible (split-view panes are visible but not active). */
   isVisible: boolean;
   /** Focus the terminal when it becomes ready. */
   autoFocus?: boolean;
+  /** Let an owning pane render one loader across the terminal and its auxiliary chrome. */
+  loadingSurface?: 'inline' | 'external';
 }) {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
@@ -102,13 +136,33 @@ export const ConversationSession = observer(function ConversationSession({
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<{ focus: () => void }>(null);
+  const mountedRef = useRef(true);
   const focusPendingRef = useRef(false);
   const [visibleFrame, setVisibleFrame] = useState<{
     pty: FrontendPty | null;
     ready: boolean;
   }>({ pty: null, ready: false });
+  const [slowFrameVerification, setSlowFrameVerification] = useState<{
+    pty: FrontendPty;
+    generation: number;
+    elapsedMs: number;
+  } | null>(null);
+  const [frameVerificationRevision, setFrameVerificationRevision] = useState(0);
+  const frameVerificationErrorOwner = useRef(Symbol(`frame-verification:${projectId}:${taskId}`));
   const lastAutoResumePtyRef = useRef<FrontendPty | null>(null);
+  const autoResumeAttemptRef = useRef<{ pty: FrontendPty | null; count: number }>({
+    pty: null,
+    count: 0,
+  });
+  const [autoResumeRetryRevision, setAutoResumeRetryRevision] = useState(0);
   const suppressNextAutoResumeRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // An inactive task can remain mounted in a hosted/split pane. Revoke its
   // semantic frame during the layout phase so returning to that route starts
@@ -120,7 +174,26 @@ export const ConversationSession = observer(function ConversationSession({
     setVisibleFrame((current) =>
       current.pty === null && !current.ready ? current : { pty: null, ready: false }
     );
+    setSlowFrameVerification(null);
   }, [isVisible]);
+
+  // A transport/session transition supersedes local frame verification. Clear
+  // its independent detail state before a recovered transport can briefly
+  // inherit an earlier generation's slow warning.
+  useLayoutEffect(() => {
+    setSlowFrameVerification((current) => {
+      if (
+        current === null ||
+        (isVisible &&
+          sessionStatus === 'ready' &&
+          sessionPty === current.pty &&
+          !session?.connectionError)
+      ) {
+        return current;
+      }
+      return null;
+    });
+  }, [isVisible, session?.connectionError, sessionPty, sessionStatus]);
 
   const sessionStateTraceKey =
     log.level === 'debug'
@@ -205,7 +278,7 @@ export const ConversationSession = observer(function ConversationSession({
   }, [autoFocus, sessionId]);
 
   useEffect(() => {
-    if (!isVisible || !sessionPty || sessionStatus !== 'ready') return;
+    if (!isVisible || !sessionPty || sessionStatus !== 'ready' || session.connectionError) return;
     let active = true;
     let frameReportedReady = false;
     let dialogObserver: MutationObserver | null = null;
@@ -213,7 +286,9 @@ export const ConversationSession = observer(function ConversationSession({
     let focusAttempts = 0;
     let frameRetryRunning = false;
     let ensureFrameRetry = () => {};
-    const shouldContinue = () => active && isVisible;
+    let frameStartedAt = performance.now();
+    let slowFrameLogged = false;
+    const shouldContinue = () => active && isVisible && !session.connectionError;
     const completeReadyTrace = () => {
       completeTaskOpenTrace(projectId, taskId, {
         renderer: 'agents',
@@ -253,16 +328,26 @@ export const ConversationSession = observer(function ConversationSession({
     };
 
     setVisibleFrame({ pty: sessionPty, ready: false });
+    setSlowFrameVerification(null);
     const publishFrameState = (frameReady: boolean) => {
       if (!active) return;
       if (frameReady !== frameReportedReady) {
         frameReportedReady = frameReady;
         setVisibleFrame({ pty: sessionPty, ready: frameReady });
         if (frameReady) {
+          setSlowFrameVerification(null);
           focusCanonicalTerminal();
-        } else if (autoFocus) {
-          focusPendingRef.current = true;
-          focusAttempts = 0;
+        } else {
+          // A later backend generation starts a fresh verification attempt.
+          // Do not retain either the previous generation's slow detail or its
+          // elapsed-time budget while the new frame is still being parsed.
+          frameStartedAt = performance.now();
+          slowFrameLogged = false;
+          setSlowFrameVerification(null);
+          if (autoFocus) {
+            focusPendingRef.current = true;
+            focusAttempts = 0;
+          }
         }
       }
       // The same FrontendPty can advance to a later backend generation after
@@ -285,8 +370,25 @@ export const ConversationSession = observer(function ConversationSession({
       void (async () => {
         try {
           while (shouldContinue() && !frameReportedReady) {
-            const frameReady = await sessionPty.waitForVisibleFrame(shouldContinue);
-            if (!shouldContinue()) return;
+            const elapsedMs = performance.now() - frameStartedAt;
+            if (!slowFrameLogged && elapsedMs >= VISIBLE_FRAME_SLOW_WARNING_MS) {
+              slowFrameLogged = true;
+              log.warn('[conversation-session] canonical frame is still pending', {
+                projectId,
+                taskId,
+                conversationId: conversation.data.id,
+                sessionId,
+                generation: sessionPty.canonicalGeneration,
+                elapsedMs: Math.round(elapsedMs),
+              });
+              setSlowFrameVerification({
+                pty: sessionPty,
+                generation: sessionPty.canonicalGeneration,
+                elapsedMs: Math.round(elapsedMs),
+              });
+            }
+            const frameReady = await sessionPty.waitForVisibleFrame(shouldContinue, 5_000);
+            if (!shouldContinue() || frameReportedReady) return;
             publishFrameState(frameReady);
             if (frameReady) return;
             await new Promise<void>((resolve) => setTimeout(resolve, 100));
@@ -307,7 +409,19 @@ export const ConversationSession = observer(function ConversationSession({
       if (focusFrame !== null) cancelAnimationFrame(focusFrame);
       dialogObserver?.disconnect();
     };
-  }, [autoFocus, isVisible, projectId, sessionPty, sessionStatus, taskId]);
+  }, [
+    autoFocus,
+    conversation.data.id,
+    frameVerificationRevision,
+    isVisible,
+    projectId,
+    session,
+    session.connectionError,
+    sessionId,
+    sessionPty,
+    sessionStatus,
+    taskId,
+  ]);
 
   // The xterm callback above proves its rows painted, but setVisibleFrame is
   // still only a queued React update at that point. Keep the main-process
@@ -322,9 +436,8 @@ export const ConversationSession = observer(function ConversationSession({
   // The renderer store can survive while the main process replaces a PTY.
   // Ask the main-process registry once this exact visible terminal is ready so
   // an old exit banner is cleared immediately instead of waiting for another
-  // terminal event. A retained output consumer is already authoritative proof
-  // that this frontend is attached; hot task switches must not add another IPC
-  // probe before showing the cached terminal.
+  // terminal event. A renderer snapshot only proves that cached rows exist; it
+  // says nothing about whether the backend PTY is still live.
   useEffect(() => {
     if (
       !shouldProbeConversationSession({
@@ -339,13 +452,18 @@ export const ConversationSession = observer(function ConversationSession({
     void conversations.reconcileSessionLiveness(conversation.data.id);
   }, [conversation.data.id, conversations, isVisible, sessionId, sessionPty, sessionStatus]);
 
-  // Resume the PTY when visible + ready (once per session id).
+  // Resume every visible + ready FrontendPty. The operation is idempotent and
+  // is also required for a renderer carrying a recoverable cached snapshot.
   useEffect(() => {
+    let active = true;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     if (!isVisible) {
       lastAutoResumePtyRef.current = null;
+      autoResumeAttemptRef.current = { pty: null, count: 0 };
       suppressNextAutoResumeRef.current = false;
       return;
     }
+    if (conversation.sessionResumeBlockReason === 'external-writer') return;
     if (
       !sessionPty ||
       !shouldAutoResumeConversation({
@@ -363,6 +481,12 @@ export const ConversationSession = observer(function ConversationSession({
       lastAutoResumePtyRef.current = sessionPty;
       return;
     }
+    if (autoResumeAttemptRef.current.pty !== sessionPty) {
+      autoResumeAttemptRef.current = { pty: sessionPty, count: 0 };
+    }
+    if (autoResumeAttemptRef.current.count >= AUTO_RESUME_MAX_ATTEMPTS) return;
+    autoResumeAttemptRef.current.count += 1;
+    const attempt = autoResumeAttemptRef.current.count;
     lastAutoResumePtyRef.current = sessionPty;
     const initialSize = getResumeInitialSize(sessionPty, terminalContainerRef.current);
     log.debug('[conversation-session] resume requested', {
@@ -372,22 +496,57 @@ export const ConversationSession = observer(function ConversationSession({
       sessionId,
       initialSize: initialSize ?? null,
     });
-    void conversations.resumeConversation(conversation.data.id, initialSize).then((running) => {
+    void (async () => {
+      const outcome = await waitForBoundedPromise(
+        conversations.resumeConversation(conversation.data.id, initialSize),
+        RESUME_ATTEMPT_TIMEOUT_MS
+      );
+      if (outcome.kind !== 'resolved') {
+        log.warn('[conversation-session] resume did not settle successfully', {
+          projectId,
+          taskId,
+          conversationId: conversation.data.id,
+          sessionId,
+          attempt,
+          outcome: outcome.kind,
+          ...(outcome.kind === 'rejected' ? { error: outcome.error } : {}),
+        });
+        if (
+          active &&
+          mountedRef.current &&
+          conversation.session.pty === sessionPty &&
+          lastAutoResumePtyRef.current === sessionPty
+        ) {
+          // The backend call may still settle later, but the UI must have a
+          // terminal state now. A manual retry creates a newer manager lease,
+          // preventing the stale request from overwriting its result.
+          autoResumeAttemptRef.current = {
+            pty: sessionPty,
+            count: AUTO_RESUME_MAX_ATTEMPTS,
+          };
+          conversation.markSessionExited();
+        }
+        return;
+      }
+      const running = outcome.value;
       log.debug('[conversation-session] resume settled', {
         projectId,
         taskId,
         conversationId: conversation.data.id,
         sessionId,
         running,
+        attempt,
       });
-      if (!running && lastAutoResumePtyRef.current === sessionPty) {
-        if (conversation.data.sessionSource?.runtimeId === 'codex') {
+      if (!mountedRef.current || running || lastAutoResumePtyRef.current !== sessionPty) return;
+      if (!running) {
+        if (conversation.sessionResumeBlockReason === 'external-writer') {
           // The main process rejected an imported session before spawning a
           // replacement (for example, another Codex window still owns its
           // writer). Reconnect once to restore the rollout-history snapshot,
           // then keep that replacement PTY read-only until an explicit retry.
           suppressNextAutoResumeRef.current = true;
           void session.reconnect().catch((error) => {
+            if (!mountedRef.current) return;
             suppressNextAutoResumeRef.current = false;
             lastAutoResumePtyRef.current = null;
             log.debug('[conversation-session] history restore failed', {
@@ -397,13 +556,28 @@ export const ConversationSession = observer(function ConversationSession({
               error,
             });
           });
-        } else {
-          lastAutoResumePtyRef.current = null;
+        } else if (active && attempt < AUTO_RESUME_MAX_ATTEMPTS) {
+          // A false resume can be a short registry hand-off between backend
+          // generations. Clearing the ref alone is insufficient because no
+          // observable is guaranteed to change afterwards; schedule one
+          // bounded retry that explicitly re-enters this effect.
+          retryTimer = setTimeout(() => {
+            retryTimer = null;
+            if (!active || lastAutoResumePtyRef.current !== sessionPty) return;
+            lastAutoResumePtyRef.current = null;
+            setAutoResumeRetryRevision((revision) => revision + 1);
+          }, AUTO_RESUME_RETRY_DELAY_MS);
         }
       }
-    });
+    })();
+    return () => {
+      active = false;
+      if (retryTimer !== null) clearTimeout(retryTimer);
+    };
   }, [
+    autoResumeRetryRevision,
     conversation,
+    conversation.sessionResumeBlockReason,
     conversations,
     isVisible,
     projectId,
@@ -436,7 +610,21 @@ export const ConversationSession = observer(function ConversationSession({
       conversation.data.sessionSource?.runtimeId === 'codex'
         ? conversations.resumeConversation(conversation.data.id, initialSize)
         : conversations.restartConversation(conversation.data.id, initialSize);
-    void restart.finally(() => setIsRestarting(false));
+    void waitForBoundedPromise<boolean | void>(restart, RESUME_ATTEMPT_TIMEOUT_MS)
+      .then((outcome) => {
+        if (outcome.kind === 'resolved') return;
+        log.warn('[conversation-session] manual resume did not settle successfully', {
+          projectId,
+          taskId,
+          conversationId: conversation.data.id,
+          sessionId,
+          outcome: outcome.kind,
+          ...(outcome.kind === 'rejected' ? { error: outcome.error } : {}),
+        });
+        if (!mountedRef.current || conversation.session.sessionId !== sessionId) return;
+        conversation.markSessionExited();
+      })
+      .finally(() => setIsRestarting(false));
   };
 
   // Snapshot of the dead session for a bug report / paste into the agent.
@@ -465,6 +653,25 @@ export const ConversationSession = observer(function ConversationSession({
       `workspace: ${provisioned.path}`,
       `createdAt: ${data.createdAt ?? 'n/a'}`,
       `lastInteractedAt: ${data.lastInteractedAt ?? 'n/a'}`,
+    ];
+    void navigator.clipboard.writeText(lines.join('\n'));
+    setDebugCopied(true);
+    if (debugCopyResetRef.current) clearTimeout(debugCopyResetRef.current);
+    debugCopyResetRef.current = setTimeout(() => setDebugCopied(false), 1500);
+  };
+
+  const handleCopyExternalWriterDebugInfo = () => {
+    const { data, session: s } = conversation;
+    const lines = [
+      'Yoda — conversation is active in another Codex window',
+      `time: ${new Date().toISOString()}`,
+      `project: ${data.projectId}`,
+      `task: ${data.taskId}`,
+      `conversation: ${data.id}`,
+      `thread: ${data.sessionSource?.sessionId ?? 'n/a'}`,
+      `ptySession: ${s.sessionId}`,
+      `ptyStatus: ${s.status}`,
+      'reason: external-writer',
     ];
     void navigator.clipboard.writeText(lines.join('\n'));
     setDebugCopied(true);
@@ -515,6 +722,30 @@ export const ConversationSession = observer(function ConversationSession({
   );
   const webLinks = useWorkspaceWebLinks();
   const canonicalFrameVisible = visibleFrame.pty === sessionPty && visibleFrame.ready;
+  const hasSlowFrameVerification = Boolean(
+    isVisible &&
+      !session?.connectionError &&
+      sessionStatus === 'ready' &&
+      sessionPty &&
+      slowFrameVerification?.pty === sessionPty &&
+      !canonicalFrameVisible
+  );
+  const frameVerificationGeneration = hasSlowFrameVerification
+    ? slowFrameVerification?.generation
+    : undefined;
+  const frameVerificationElapsedMs = hasSlowFrameVerification
+    ? slowFrameVerification?.elapsedMs
+    : undefined;
+  useLayoutEffect(() => {
+    const owner = frameVerificationErrorOwner.current;
+    taskOpenTransitionStore.reportSessionError(projectId, taskId, owner, hasSlowFrameVerification);
+    return () => taskOpenTransitionStore.clearSessionError(projectId, taskId, owner);
+  }, [hasSlowFrameVerification, projectId, taskId]);
+  const isExternalWriter = conversation.sessionResumeBlockReason === 'external-writer';
+  const allowAtomicLiveFrame = Boolean(
+    conversation.providerTurnConfirmed &&
+      (agentStatus === 'working' || agentStatus === 'awaiting-input')
+  );
 
   const [startDebugCopied, setStartDebugCopied] = useState(false);
   const startDebugCopyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -527,7 +758,9 @@ export const ConversationSession = observer(function ConversationSession({
   const handleCopyStartDebugInfo = () => {
     const { data, session: s, status, sessionExited } = conversation;
     const lines = [
-      'Yoda — agent session terminal preparation failed',
+      hasSlowFrameVerification
+        ? 'Yoda — agent session terminal frame verification is slow'
+        : 'Yoda — agent session terminal preparation failed',
       `time: ${new Date().toISOString()}`,
       `runtime: ${agentConfig[data.runtimeId]?.name ?? data.runtimeId} (${data.runtimeId})`,
       `conversation: ${data.id}`,
@@ -536,6 +769,9 @@ export const ConversationSession = observer(function ConversationSession({
       `ptySession: ${s.sessionId}`,
       `ptyStatus: ${s.status}`,
       `ptyError: ${s.connectionError ?? 'n/a'}`,
+      `frameVerification: ${hasSlowFrameVerification ? 'slow' : 'n/a'}`,
+      `frameGeneration: ${frameVerificationGeneration ?? 'n/a'}`,
+      `frameElapsedMs: ${frameVerificationElapsedMs ?? 'n/a'}`,
       `agentStatus: ${status}`,
       `sessionExited: ${sessionExited}`,
       `visible: ${isVisible}`,
@@ -552,12 +788,28 @@ export const ConversationSession = observer(function ConversationSession({
   const handleRetryStart = () => {
     void session.connect().catch(() => {});
   };
+  const handleRetryFrameVerification = () => {
+    setSlowFrameVerification(null);
+    setFrameVerificationRevision((revision) => revision + 1);
+  };
 
   // Keep the terminal shell mounted while route visibility catches up. The
   // effects above still gate connect/resume demand on isVisible, so a brief
   // route transition cannot blank and remount the visual surface.
+  const hasStartError = Boolean(session?.connectionError);
+  const hasSessionDetailError = hasStartError || hasSlowFrameVerification;
   if (!sessionId || session?.status !== 'ready' || !session.pty) {
-    const hasStartError = Boolean(session?.connectionError);
+    if (!hasStartError && loadingSurface === 'external') {
+      return (
+        <div
+          ref={containerRef}
+          tabIndex={-1}
+          aria-hidden
+          data-conversation-session-external-pending
+          className="h-full min-h-0 w-full min-w-0 flex-1 bg-[var(--xterm-bg)] outline-none"
+        />
+      );
+    }
     return (
       <ConversationSessionPendingState
         title={conversation.data.title}
@@ -620,8 +872,27 @@ export const ConversationSession = observer(function ConversationSession({
           remoteConnectionId={remoteConnectionId}
           fileLinks={fileLinks}
           webLinks={webLinks}
+          autoAcknowledgeFrame={isVisible}
+          allowAtomicLiveFrame={allowAtomicLiveFrame}
+          inputEnabled={!isExternalWriter}
         />
-        {!canonicalFrameVisible ? (
+        {hasSessionDetailError ? (
+          <div className="absolute inset-0 z-10 flex bg-background">
+            <ConversationSessionPendingState
+              title={conversation.data.title}
+              heading={t('tasks.conversations.startingErrorTitle')}
+              description={t('tasks.conversations.startingErrorDescription')}
+              error={{
+                retryLabel: t('common.retry'),
+                onRetry: hasSlowFrameVerification ? handleRetryFrameVerification : handleRetryStart,
+                copyDebugLabel: t('common.copyDebugInfo'),
+                debugCopiedLabel: t('common.debugInfoCopied'),
+                debugCopied: startDebugCopied,
+                onCopyDebug: handleCopyStartDebugInfo,
+              }}
+            />
+          </div>
+        ) : loadingSurface === 'inline' && !canonicalFrameVisible ? (
           <div className="absolute inset-0 z-10 flex bg-background">
             <ConversationSessionPendingState
               title={conversation.data.title}
@@ -630,7 +901,60 @@ export const ConversationSession = observer(function ConversationSession({
             />
           </div>
         ) : null}
-        {conversation.sessionExited && !conversation.sessionExitNoticeDismissed ? (
+        {isExternalWriter ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-3 duration-300 animate-in fade-in-0 slide-in-from-bottom-2">
+            <div className="pointer-events-auto flex items-center gap-2.5 rounded-lg border border-border-primary/70 bg-background/85 py-1.5 pr-1.5 pl-3 shadow-sm ring-1 ring-foreground/5 backdrop-blur-md">
+              <span className="flex items-center gap-2 pr-0.5 text-sm text-foreground-passive">
+                <span
+                  className="relative flex size-2 shrink-0 items-center justify-center"
+                  aria-hidden
+                >
+                  <span className="absolute size-2 rounded-full bg-status-in-review/30" />
+                  <span className="size-1.5 rounded-full bg-status-in-review" />
+                </span>
+                <span className="font-medium text-foreground-muted">
+                  {t('tasks.conversations.externalWriter')}
+                </span>
+              </span>
+              <span className="h-4 w-px shrink-0 bg-border-primary/60" aria-hidden />
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      size="icon-xs"
+                      variant="ghost"
+                      onClick={handleCopyExternalWriterDebugInfo}
+                      aria-label={t('common.copyDebugInfo')}
+                    >
+                      {debugCopied ? (
+                        <Check className="size-3.5 text-status-done" aria-hidden />
+                      ) : (
+                        <Copy className="size-3.5" aria-hidden />
+                      )}
+                    </Button>
+                  }
+                />
+                <TooltipContent>
+                  {debugCopied ? t('common.debugInfoCopied') : t('common.copyDebugInfo')}
+                </TooltipContent>
+              </Tooltip>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleReloadExitedSession}
+                disabled={isRestarting}
+                className="h-7 gap-1.5"
+              >
+                {isRestarting ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <RotateCcw className="size-3.5" aria-hidden />
+                )}
+                {t('common.retry')}
+              </Button>
+            </div>
+          </div>
+        ) : conversation.sessionExited && !conversation.sessionExitNoticeDismissed ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-3 duration-300 animate-in fade-in-0 slide-in-from-bottom-2">
             <div className="pointer-events-auto flex items-center gap-2.5 rounded-lg border border-border-primary/70 bg-background/85 py-1.5 pr-1.5 pl-3 shadow-sm ring-1 ring-foreground/5 backdrop-blur-md">
               <span className="flex items-center gap-2 pr-0.5 text-sm text-foreground-passive">

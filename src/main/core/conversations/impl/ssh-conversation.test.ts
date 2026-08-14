@@ -2,16 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
 import { agentSessionExitedChannel } from '@shared/events/agentEvents';
 import { makePtySessionId } from '@shared/ptySessionId';
+import { sessionOpenPerformanceChannel } from '@shared/session-open-performance';
 import {
   registerConversationHydrationBarrier,
   wasConversationHydrationCancelled,
 } from '@main/core/conversations/conversation-hydration-barrier';
+import { createSessionOpenPerformanceTrace } from '@main/core/conversations/session-open-performance';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { Pty, PtyExitInfo } from '@main/core/pty/pty';
 import {
   PTY_RENDERER_DETACH_GRACE_MS,
   ptySessionRegistry,
 } from '@main/core/pty/pty-session-registry';
+import { TmuxReattachMissError } from '@main/core/pty/tmux-reattach';
 import type { SshClientProxy } from '@main/core/ssh/ssh-client-proxy';
 import { SshConversationProvider } from './ssh-conversation';
 
@@ -200,6 +203,10 @@ class FakePty implements Pty {
     if (this.bufferedExit) queueMicrotask(() => handler(this.bufferedExit as PtyExitInfo));
   }
 
+  emitData(data: string): void {
+    for (const handler of this.dataHandlers) handler(data);
+  }
+
   emitExit(info: PtyExitInfo = { exitCode: 0 }): void {
     for (const handler of this.exitHandlers) {
       handler(info);
@@ -357,6 +364,141 @@ describe('SshConversationProvider registration lifecycle', () => {
     expect(pty.killCalls).toBe(0);
   });
 
+  it('reports SSH spawn, registration, and the first non-empty PTY output', async () => {
+    const pty = new FakePty();
+    mocks.openSsh2Pty.mockResolvedValue({ success: true, data: pty });
+    provider = createProvider();
+    const performanceTrace = createSessionOpenPerformanceTrace(
+      { contextId: 'task-open-ssh-1', clickAtEpochMs: Date.now() },
+      {
+        projectId: conversation.projectId,
+        taskId: conversation.taskId,
+        conversationId: conversation.id,
+        sessionId,
+      }
+    );
+    if (!performanceTrace) throw new Error('Expected performance trace');
+
+    await provider.startSession(
+      conversation,
+      undefined,
+      false,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { performanceTrace }
+    );
+    pty.emitData('');
+    pty.emitData('ssh-ready');
+    pty.emitData('later');
+
+    const entries = mocks.emitEvent.mock.calls
+      .filter(([channel]) => channel === sessionOpenPerformanceChannel)
+      .map(
+        ([, entry]) =>
+          entry as {
+            stage: string;
+            attempt?: string;
+            byteLength?: number;
+            reattachExisting?: boolean;
+            transport?: string;
+          }
+      );
+    expect(entries.map((entry) => entry.stage)).toEqual(
+      expect.arrayContaining([
+        'provider-preflight',
+        'provider-spawn',
+        'pty-registered',
+        'tmux-reattach-confirm',
+        'provider-committed',
+        'pty-first-output',
+      ])
+    );
+    expect(entries.filter((entry) => entry.stage === 'pty-first-output')).toEqual([
+      expect.objectContaining({
+        attempt: 'resume',
+        byteLength: 9,
+        reattachExisting: false,
+        transport: 'ssh',
+      }),
+    ]);
+  });
+
+  it('reports first output independently for a failed strict reattach and its fallback PTY', async () => {
+    const reattachPty = new FakePty();
+    const fallbackPty = new FakePty();
+    mocks.openSsh2Pty
+      .mockResolvedValueOnce({ success: true, data: reattachPty })
+      .mockResolvedValueOnce({ success: true, data: fallbackPty });
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    mocks.listTmuxSessionMarkersStrict.mockResolvedValue([
+      { sessionName: 'tmux-session', cwd: '/remote/workspace', attachedClients: 0 },
+    ]);
+    mocks.waitForTmuxReattach.mockImplementationOnce(({ pty }: { pty: FakePty }) => {
+      pty.emitData('strict-output');
+      return Promise.reject(new TmuxReattachMissError());
+    });
+    provider = createProvider();
+    const performanceTrace = createSessionOpenPerformanceTrace(
+      { contextId: 'task-open-ssh-fallback', clickAtEpochMs: Date.now() },
+      {
+        projectId: conversation.projectId,
+        taskId: conversation.taskId,
+        conversationId: conversation.id,
+        sessionId,
+      }
+    );
+    if (!performanceTrace) throw new Error('Expected performance trace');
+
+    await expect(
+      provider.startSession(
+        conversation,
+        { cols: 80, rows: 24 },
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { reattachExistingTmuxSession: true, performanceTrace }
+      )
+    ).rejects.toBeInstanceOf(TmuxReattachMissError);
+
+    await provider.startSession(
+      conversation,
+      { cols: 80, rows: 24 },
+      true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { performanceTrace }
+    );
+    fallbackPty.emitData('fallback-output');
+
+    const firstOutputEntries = mocks.emitEvent.mock.calls
+      .filter(
+        ([channel, entry]) =>
+          channel === sessionOpenPerformanceChannel &&
+          (entry as { stage?: string }).stage === 'pty-first-output'
+      )
+      .map(([, entry]) => entry);
+    expect(firstOutputEntries).toEqual([
+      expect.objectContaining({
+        attempt: 'reattach',
+        byteLength: 13,
+        reattachExisting: true,
+        transport: 'ssh',
+      }),
+      expect.objectContaining({
+        attempt: 'resume',
+        byteLength: 15,
+        reattachExisting: false,
+        transport: 'ssh',
+      }),
+    ]);
+  });
+
   it('rejects startup when the SSH channel cannot be opened', async () => {
     mocks.openSsh2Pty.mockResolvedValue({
       success: false,
@@ -444,6 +586,7 @@ describe('SshConversationProvider registration lifecycle', () => {
       pty,
       baseline: { sessionName: 'tmux-session', cwd: '/remote/workspace', attachedClients: 0 },
     });
+    expect(mocks.setRuntimeStatus).not.toHaveBeenCalled();
   });
 
   it('rejects SSH startup when the strict tmux attach misses after the channel opens', async () => {

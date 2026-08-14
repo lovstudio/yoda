@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import {
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -51,14 +52,18 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
   const taskStore = getTaskStore(projectId, taskId);
   const taskManager = getTaskManagerStore(projectId);
   const kind = useTaskViewKind();
+  const isSessionOpening = taskOpenTransitionStore.isSessionOpening(projectId, taskId);
+  const hasSessionError = taskOpenTransitionStore.hasSessionError(projectId, taskId);
+  const didReadyTargetStagingFail = taskOpenTransitionStore.hasFailed(projectId, taskId);
   const openingMessageKey = stableTaskOpeningMessageKey(kind, {
     hasProject: Boolean(getProjectStore(projectId)),
     taskLoadState: taskManager?.taskLoadState,
     isTaskLoadPending: taskManager?.taskLoadPendingIds?.has(taskId) ?? false,
-    isTargetPending: taskOpenTransitionStore.isPending(projectId, taskId),
+    isTargetPending:
+      (taskOpenTransitionStore.isPending(projectId, taskId) || isSessionOpening) &&
+      (!hasSessionError || didReadyTargetStagingFail),
   });
   const isReadyTargetStaging = kind === 'ready' && Boolean(openingMessageKey);
-  const didReadyTargetStagingFail = taskOpenTransitionStore.hasFailed(projectId, taskId);
   const [debugCopied, setDebugCopied] = useState(false);
 
   useLayoutEffect(() => {
@@ -155,11 +160,12 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
         <ReadyTaskMainPanel />
       </div>
       {isReadyTargetStaging && openingMessage ? (
-        <div className="absolute inset-0 z-10">
+        <div data-task-opening-overlay className="absolute inset-0 z-10">
           <SessionOpeningSurface
             heading={openingMessage}
             description={openingDescription ?? openingMessage}
             progressMessage={openingDescription ?? openingMessage}
+            presentation={didReadyTargetStagingFail ? 'detail' : 'loading'}
             statusIcon={
               didReadyTargetStagingFail ? (
                 <span className="ml-auto font-mono text-xs text-foreground-destructive">!</span>
@@ -293,6 +299,40 @@ const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
  * task so resizing one task's drawer never leaks into another's.
  */
 const runtimeDrawerLayouts = new Map<string, Layout>();
+const TASK_MAIN_CONTENT_PANEL_ID = 'task-main-content';
+const TASK_TERMINAL_DRAWER_PANEL_ID = 'task-terminal-drawer';
+const CLOSED_DRAWER_LAYOUT: Layout = {
+  [TASK_MAIN_CONTENT_PANEL_ID]: 100,
+  [TASK_TERMINAL_DRAWER_PANEL_ID]: 0,
+};
+const DEFAULT_OPEN_DRAWER_LAYOUT: Layout = {
+  [TASK_MAIN_CONTENT_PANEL_ID]: 75,
+  [TASK_TERMINAL_DRAWER_PANEL_ID]: 25,
+};
+
+function resolveInitialDrawerLayout(taskId: string, drawerOpen: boolean): Layout {
+  if (!drawerOpen) return CLOSED_DRAWER_LAYOUT;
+
+  const remembered = runtimeDrawerLayouts.get(taskId);
+  const mainSize = remembered?.[TASK_MAIN_CONTENT_PANEL_ID];
+  const drawerSize = remembered?.[TASK_TERMINAL_DRAWER_PANEL_ID];
+  if (
+    mainSize !== undefined &&
+    drawerSize !== undefined &&
+    Number.isFinite(mainSize) &&
+    Number.isFinite(drawerSize) &&
+    mainSize > 0 &&
+    drawerSize > 0 &&
+    Math.abs(mainSize + drawerSize - 100) < 0.01
+  ) {
+    return {
+      [TASK_MAIN_CONTENT_PANEL_ID]: mainSize,
+      [TASK_TERMINAL_DRAWER_PANEL_ID]: drawerSize,
+    };
+  }
+
+  return DEFAULT_OPEN_DRAWER_LAYOUT;
+}
 
 /** Vertical split: `children` on top, the (collapsible) bottom drawer below. */
 const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
@@ -304,6 +344,10 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
   const { taskView } = useRequireProvisionedTask();
   const bottomPanelRef = usePanelRef();
   const verticalGroupRef = useRef<HTMLDivElement>(null);
+  const initialLayout = useMemo(
+    () => resolveInitialDrawerLayout(taskId, taskView.isTerminalDrawerOpen),
+    [taskId, taskView.isTerminalDrawerOpen]
+  );
   const isHandleDraggingRef = useRef(false);
   const headerResizeRef = useRef<{
     pointerId: number;
@@ -378,14 +422,18 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
       className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
       elementRef={verticalGroupRef}
       id={`task-main-vertical:${taskId}`}
-      defaultLayout={runtimeDrawerLayouts.get(taskId)}
+      // The panel primitive otherwise gives both children flex-grow: 1 until
+      // its layout effect registers their default sizes. That transient 50/50
+      // split is measurable by cold-session staging before the closed drawer
+      // reaches 0%, so provide the complete authoritative layout up front.
+      defaultLayout={initialLayout}
       resizeTargetMinimumSize={{ coarse: 1, fine: 1 }}
       onLayoutChanged={(next) => {
         runtimeDrawerLayouts.set(taskId, next);
       }}
     >
       <ResizablePanel
-        id="task-main-content"
+        id={TASK_MAIN_CONTENT_PANEL_ID}
         minSize="30%"
         className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
         data-yoda-animate={isHandleDragging ? 'false' : 'true'}
@@ -402,7 +450,7 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
         className={cn('z-10', taskView.isTerminalDrawerOpen ? 'flex' : 'hidden')}
       />
       <ResizablePanel
-        id="task-terminal-drawer"
+        id={TASK_TERMINAL_DRAWER_PANEL_ID}
         panelRef={bottomPanelRef}
         collapsible
         collapsedSize="0%"

@@ -69,7 +69,7 @@ describe('shouldAutoResumeConversation', () => {
     ).toBe(false);
   });
 
-  it('does not probe or resume a hot PTY with a retained output consumer', () => {
+  it('still probes and resumes a PTY with a recoverable renderer snapshot', () => {
     const pty = { hasRecoverableSnapshot: true } as FrontendPty;
 
     expect(
@@ -80,7 +80,7 @@ describe('shouldAutoResumeConversation', () => {
         sessionPty: pty,
         lastAutoResumePty: null,
       })
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldProbeConversationSession({
         isVisible: true,
@@ -88,7 +88,7 @@ describe('shouldAutoResumeConversation', () => {
         sessionStatus: 'ready',
         sessionPty: pty,
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('probes a cold ready PTY before its output consumer is established', () => {

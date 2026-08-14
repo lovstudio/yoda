@@ -19,9 +19,8 @@ import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { log } from '@renderer/utils/logger';
-import { SessionOpeningSurface } from '../components/session-opening-surface';
 import { taskOpenTransitionStore } from '../task-open-transition-store';
-import type { ConversationStore } from './conversation-manager';
+import type { ConversationManagerStore, ConversationStore } from './conversation-manager';
 import { ConversationSession } from './conversation-session';
 import { isConversationSurfaceVisible } from './conversation-surface-visibility';
 import { ConversationTree } from './conversation-tree';
@@ -57,6 +56,9 @@ export const ConversationsPanel = observer(function ConversationsPanel({
 
   const activeConversation: ConversationStore | undefined = tm.activeConversation;
   const activeDescriptor = tm.activeDescriptor;
+  const conversationLoadError = conversations.loadError;
+  const hasConversationLoadError =
+    conversationLoadError !== null && conversationLoadError !== undefined;
   const routeConversationId =
     params.tab?.kind === 'conversation' ? params.tab.conversationId : undefined;
   // A tab can be selected before its conversation store arrives from the
@@ -83,13 +85,59 @@ export const ConversationsPanel = observer(function ConversationsPanel({
     !hasConversationTabs &&
     (conversations.conversations.size > 0 || !conversations.hasAuthoritativeSnapshot);
   const isResolvingConversation =
-    isResolvingActiveConversation || isResolvingRouteConversation || isResolvingTaskSession;
+    !hasConversationLoadError &&
+    (isResolvingActiveConversation || isResolvingRouteConversation || isResolvingTaskSession);
   // A route can point at the next conversation while the tab manager still
   // exposes the previous active store. Do not let that stale session retain
-  // resize ownership or mount auxiliary UI beneath the opening surface.
-  const activeSessionId = isResolvingConversation
-    ? null
-    : (activeConversation?.session.sessionId ?? null);
+  // resize ownership or mount auxiliary UI beneath the opening surface. Hidden
+  // and staged panes stay registered for measurement but withhold backend
+  // resize ownership until the destination becomes visible.
+  const activeSessionId =
+    isVisible && !isResolvingConversation && !hasConversationLoadError
+      ? (activeConversation?.session.sessionId ?? null)
+      : null;
+  const activeSession =
+    isResolvingConversation || hasConversationLoadError
+      ? null
+      : (activeConversation?.session ?? null);
+  const activePty = activeSession?.status === 'ready' ? (activeSession.pty ?? null) : null;
+  const hasSessionStartError = Boolean(activeSession?.connectionError);
+  const hasSessionExited = Boolean(!isResolvingConversation && activeConversation?.sessionExited);
+  const isExternalWriter = activeConversation?.sessionResumeBlockReason === 'external-writer';
+  const sessionFramePainted = usePostPaintSessionFrame(
+    !isTaskOpenStaging && !hasSessionStartError,
+    activePty
+  );
+  const isSessionOpening =
+    !hasConversationLoadError &&
+    (isResolvingConversation ||
+      Boolean(
+        activeConversation &&
+          !hasSessionStartError &&
+          !hasSessionExited &&
+          !isExternalWriter &&
+          !sessionFramePainted
+      ));
+  const sessionOpeningOwner = useRef(Symbol(`session-opening:${projectId}:${taskId}`));
+
+  // TaskMainPanel owns the sole ordinary opening surface. Publish readiness in
+  // layout timing so its full-panel overlay is committed before the browser
+  // can paint a terminal-only intermediate frame. Connection errors clear this
+  // intent and remain visible through ConversationSession's detail surface.
+  useLayoutEffect(() => {
+    const owner = sessionOpeningOwner.current;
+    taskOpenTransitionStore.reportSessionOpening(projectId, taskId, owner, isSessionOpening);
+    taskOpenTransitionStore.reportSessionError(
+      projectId,
+      taskId,
+      owner,
+      hasSessionStartError || hasConversationLoadError
+    );
+    return () => {
+      taskOpenTransitionStore.clearSessionOpening(projectId, taskId, owner);
+      taskOpenTransitionStore.clearSessionError(projectId, taskId, owner);
+    };
+  }, [hasConversationLoadError, hasSessionStartError, isSessionOpening, projectId, taskId]);
   // PaneSizingProvider only validates resize ownership for the active session.
   // Supplying every open conversation used to resolve every tab before the
   // terminal could mount; one stable O(1) entry is sufficient here.
@@ -110,13 +158,15 @@ export const ConversationsPanel = observer(function ConversationsPanel({
         : params.tab.kind === 'room-member'
           ? `room-member:${params.tab.memberId}`
           : params.tab.kind;
-  const surface = isResolvingConversation
-    ? 'resolving'
-    : !hasConversationTabs
-      ? 'landing'
-      : activeConversation
-        ? 'session'
-        : 'blank';
+  const surface = hasConversationLoadError
+    ? 'load-error'
+    : isResolvingConversation
+      ? 'resolving'
+      : !hasConversationTabs
+        ? 'landing'
+        : activeConversation
+          ? 'session'
+          : 'blank';
   const panelStateTraceKey = isDebugTracing
     ? [
         projectId,
@@ -132,6 +182,7 @@ export const ConversationsPanel = observer(function ConversationsPanel({
         tm.activeConversationId ?? '',
         activeConversation?.session.sessionId ?? '',
         conversations.hasAuthoritativeSnapshot,
+        hasConversationLoadError,
         isResolvingActiveConversation,
         isResolvingRouteConversation,
         isResolvingTaskSession,
@@ -159,6 +210,7 @@ export const ConversationsPanel = observer(function ConversationsPanel({
       activeConversationId: tm.activeConversationId ?? null,
       activeSessionId: activeConversation?.session.sessionId ?? null,
       hasAuthoritativeSnapshot: conversations.hasAuthoritativeSnapshot,
+      hasLoadError: hasConversationLoadError,
       resolving: {
         activeConversation: isResolvingActiveConversation,
         routeConversation: isResolvingRouteConversation,
@@ -175,6 +227,7 @@ export const ConversationsPanel = observer(function ConversationsPanel({
     isResolvingRouteConversation,
     isResolvingTaskSession,
     isVisible,
+    hasConversationLoadError,
     panelStateTraceKey,
     projectId,
     provisioned.taskView.focusedRegion,
@@ -187,7 +240,10 @@ export const ConversationsPanel = observer(function ConversationsPanel({
   const containerRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-[var(--xterm-bg)]">
+    <div
+      data-conversations-panel-root
+      className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-[var(--xterm-bg)]"
+    >
       <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden px-2 pt-2">
         <div
           ref={containerRef}
@@ -203,8 +259,13 @@ export const ConversationsPanel = observer(function ConversationsPanel({
             activeSessionId={activeSessionId}
             registrationEnabled={!isInterfaceSettingsLoading}
           >
-            {isResolvingConversation ? (
-              <ConversationOpeningSurface />
+            {hasConversationLoadError ? (
+              <ConversationLoadErrorSurface
+                error={conversationLoadError}
+                conversations={conversations}
+              />
+            ) : isResolvingConversation ? (
+              <div aria-hidden className="min-h-0 min-w-0 flex-1" />
             ) : !hasConversationTabs ? (
               <ConversationLandingSurface projectId={projectId} taskId={taskId} />
             ) : (
@@ -214,6 +275,7 @@ export const ConversationsPanel = observer(function ConversationsPanel({
                     conversation={activeConversation}
                     isVisible={isVisible}
                     autoFocus={autoFocus}
+                    loadingSurface="external"
                   />
                 ) : null}
               </div>
@@ -221,35 +283,63 @@ export const ConversationsPanel = observer(function ConversationsPanel({
           </PaneSizingProvider>
         </div>
       </div>
-      {!isResolvingConversation && activeConversation ? (
-        <PostPaintSessionHistory
-          key={`${taskId}:${activeConversation.data.id}`}
-          enabled={!isTaskOpenStaging}
-          pty={activeConversation.session.pty ?? null}
+      {/*
+       * Reserve the dock's geometry from the moment this pane is known to be
+       * heading for a session, including while task-open staging measures it.
+       * Mounting it only after the conversation resolves made staging bind the
+       * backend TUI to a grid that was ~10 rows too tall, then shrink the pane
+       * one layout pass later: the second SIGWINCH makes the agent reprint its
+       * whole screen (duplicate banners in scrollback) and leaves the backend
+       * and xterm on different row counts until an unrelated resize.
+       */}
+      {!hasConversationLoadError && (isResolvingConversation || activeConversation) ? (
+        <DockedSessionHistory
+          key={activeConversation ? `${taskId}:${activeConversation.data.id}` : `${taskId}:pending`}
+          active={
+            !isResolvingConversation &&
+            activeConversation !== undefined &&
+            (sessionFramePainted || isExternalWriter)
+          }
         />
       ) : null}
     </div>
   );
 });
 
-function ConversationOpeningSurface() {
+function ConversationLoadErrorSurface({
+  error,
+  conversations,
+}: {
+  error: unknown;
+  conversations: ConversationManagerStore;
+}) {
   const { t } = useTranslation();
+  const [isRetrying, setIsRetrying] = useState(false);
+  const description = error instanceof Error ? error.message : String(error);
+  const handleRetry = () => {
+    if (isRetrying) return;
+    setIsRetrying(true);
+    void conversations
+      .retryLoad()
+      .catch(() => {})
+      .finally(() => setIsRetrying(false));
+  };
+
   return (
-    <SessionOpeningSurface
-      surface="conversation-session-pending"
-      heading={t('tasks.conversations.startingTitle')}
-      description={t('tasks.conversations.startingDescription')}
-      progressMessage={t('tasks.conversations.startingDescription')}
+    <EmptyState
+      label={t('common.error')}
+      description={description}
+      action={
+        <Button size="sm" variant="outline" disabled={isRetrying} onClick={handleRetry}>
+          {t('common.retry')}
+        </Button>
+      }
     />
   );
 }
 
-/**
- * Reserve the final transcript-dock geometry in the destination's first
- * layout, but keep its query and native content inactive until after the
- * terminal's canonical browser paint.
- */
-function PostPaintSessionHistory({ enabled, pty }: { enabled: boolean; pty: FrontendPty | null }) {
+/** Wait one browser paint beyond the PTY's canonical frame before revealing its final surface. */
+function usePostPaintSessionFrame(enabled: boolean, pty: FrontendPty | null): boolean {
   const reveal = useMemo(
     () => ({ enabled, pty, token: Symbol('session-history-reveal') }),
     [enabled, pty]
@@ -290,7 +380,7 @@ function PostPaintSessionHistory({ enabled, pty }: { enabled: boolean; pty: Fron
     };
   }, [enabled, pty, revealToken]);
 
-  return <DockedSessionHistory active={enabled && pty !== null && paintedToken === revealToken} />;
+  return enabled && pty !== null && paintedToken === revealToken;
 }
 
 const ConversationLandingSurface = observer(function ConversationLandingSurface({

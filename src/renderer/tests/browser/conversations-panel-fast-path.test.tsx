@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   conversationValues: vi.fn(),
   historyActive: vi.fn(),
   interfaceSettingsLoading: false,
+  loadError: null as unknown | null,
+  paneActiveSessionId: vi.fn(),
   paneSessionIds: vi.fn(),
   sessionProps: vi.fn(),
   sessionMounts: 0,
@@ -23,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   hosted: false,
   activePty: null as MockPty | null,
   provisioned: null as unknown,
+  retryLoad: vi.fn(),
   routeConversationId: 'conversation-1',
 }));
 
@@ -54,7 +57,11 @@ vi.mock('@renderer/features/tasks/conversations/session-history-panel', async ()
       mocks.historyActive(active);
       return create(
         'div',
-        { 'data-history-active': String(active) },
+        {
+          'data-session-history-dock': true,
+          'data-history-active': String(active),
+          style: { height: '157px' },
+        },
         active ? 'transcript content' : null
       );
     },
@@ -102,14 +109,17 @@ vi.mock('@renderer/lib/pty/pane-sizing-context', async () => {
     PaneSizingProvider: ({
       paneId,
       sessionIds,
+      activeSessionId,
       registrationEnabled,
       children,
     }: {
       paneId: string;
       sessionIds: string[];
+      activeSessionId: string | null;
       registrationEnabled?: boolean;
       children: React.ReactNode;
     }) => {
+      mocks.paneActiveSessionId(activeSessionId);
       mocks.paneSessionIds(sessionIds);
       return create(
         'div',
@@ -124,14 +134,14 @@ vi.mock('@renderer/lib/pty/pane-sizing-context', async () => {
   };
 });
 
-vi.mock('@renderer/features/tasks/components/session-opening-surface', () => ({
-  SessionOpeningSurface: () => createElement('div', null, 'opening'),
-}));
-
 vi.mock('@renderer/features/tasks/conversations/conversation-session', async () => {
   const { useEffect } = await import('react');
   return {
-    ConversationSession: (props: { isVisible: boolean; autoFocus: boolean }) => {
+    ConversationSession: (props: {
+      isVisible: boolean;
+      autoFocus: boolean;
+      loadingSurface?: 'inline' | 'external';
+    }) => {
       mocks.sessionProps(props);
       useEffect(() => {
         mocks.sessionMounts += 1;
@@ -169,16 +179,26 @@ describe('ConversationsPanel active-session fast path', () => {
     });
     mocks.historyActive.mockReset();
     mocks.interfaceSettingsLoading = false;
+    mocks.loadError = null;
+    mocks.paneActiveSessionId.mockReset();
     mocks.paneSessionIds.mockReset();
     mocks.sessionProps.mockReset();
     mocks.sessionMounts = 0;
     mocks.sessionUnmounts = 0;
     mocks.routeConversationId = 'conversation-1';
+    mocks.retryLoad.mockReset().mockResolvedValue(undefined);
     mocks.activePty = createMockPty(false);
 
     const conversation = {
       data: { id: 'conversation-1' },
-      session: { sessionId: 'session-1', pty: mocks.activePty },
+      sessionExited: false,
+      sessionResumeBlockReason: null,
+      session: {
+        sessionId: 'session-1',
+        status: 'ready',
+        pty: mocks.activePty,
+        connectionError: null,
+      },
     };
     const conversationMap = new Map();
     conversationMap.values = mocks.conversationValues;
@@ -213,6 +233,8 @@ describe('ConversationsPanel active-session fast path', () => {
       conversations: {
         conversations: conversationMap,
         hasAuthoritativeSnapshot: true,
+        loadError: mocks.loadError,
+        retryLoad: mocks.retryLoad,
       },
       taskView: {
         focusedRegion: 'main',
@@ -246,14 +268,22 @@ describe('ConversationsPanel active-session fast path', () => {
     );
     expect(mocks.conversationValues).not.toHaveBeenCalled();
     expect(mocks.archivedHook).not.toHaveBeenCalled();
+    expect(mocks.sessionProps.mock.lastCall?.[0]).toMatchObject({ loadingSurface: 'external' });
     expect(mocks.historyActive).toHaveBeenLastCalledWith(false);
-    expect(host.querySelector('[data-history-active="false"]')).not.toBeNull();
+    const reservedHistory = host.querySelector<HTMLElement>('[data-history-active="false"]');
+    expect(reservedHistory?.style.height).toBe('157px');
+    expect(host.querySelector('[data-conversation-opening-overlay]')).toBeNull();
+    const { taskOpenTransitionStore } = await import(
+      '@renderer/features/tasks/task-open-transition-store'
+    );
+    expect(taskOpenTransitionStore.isSessionOpening('project-1', 'task-1')).toBe(true);
     expect(host.textContent).not.toContain('transcript content');
 
     await act(async () => mocks.activePty?.emitVisibleFrame(true));
     await vi.waitFor(() => {
       expect(mocks.historyActive).toHaveBeenLastCalledWith(true);
       expect(host.querySelector('[data-history-active="true"]')).not.toBeNull();
+      expect(taskOpenTransitionStore.isSessionOpening('project-1', 'task-1')).toBe(false);
       expect(host.textContent).toContain('transcript content');
     });
   });
@@ -301,17 +331,28 @@ describe('ConversationsPanel active-session fast path', () => {
     expect(mocks.sessionProps.mock.lastCall?.[0]).toMatchObject({
       isVisible: false,
       autoFocus: false,
+      loadingSurface: 'external',
     });
     expect(mocks.sessionMounts).toBe(1);
+    expect(mocks.paneActiveSessionId).toHaveBeenLastCalledWith(null);
+    expect(taskOpenTransitionStore.isSessionOpening('project-1', 'task-1')).toBe(true);
+    expect(host.querySelector('[data-conversation-opening-overlay]')).toBeNull();
+    expect(host.querySelector<HTMLElement>('[data-session-history-dock]')?.style.height).toBe(
+      '157px'
+    );
 
     taskOpenTransitionStore.complete('project-1', 'task-1', lease);
     await act(async () => root.render(createElement(ConversationsPanel)));
     expect(mocks.sessionProps.mock.lastCall?.[0]).toMatchObject({
       isVisible: true,
       autoFocus: true,
+      loadingSurface: 'external',
     });
     expect(mocks.sessionMounts).toBe(1);
     expect(mocks.sessionUnmounts).toBe(0);
+    expect(mocks.paneActiveSessionId).toHaveBeenLastCalledWith('session-1');
+    expect(taskOpenTransitionStore.isSessionOpening('project-1', 'task-1')).toBe(true);
+    expect(host.querySelector('[data-conversation-opening-overlay]')).toBeNull();
   });
 
   it('activates history only after the current PTY reports a painted frame', async () => {
@@ -361,8 +402,13 @@ describe('ConversationsPanel active-session fast path', () => {
 
       await act(async () => firstPty.emitVisibleFrame(true));
       expect(mocks.historyActive).toHaveBeenLastCalledWith(false);
+      const { taskOpenTransitionStore } = await import(
+        '@renderer/features/tasks/task-open-transition-store'
+      );
+      expect(taskOpenTransitionStore.isSessionOpening('project-1', 'task-1')).toBe(true);
       await flushFrame();
       expect(mocks.historyActive).toHaveBeenLastCalledWith(true);
+      expect(taskOpenTransitionStore.isSessionOpening('project-1', 'task-1')).toBe(false);
 
       await act(async () => firstPty.emitVisibleFrame(false));
       expect(mocks.historyActive).toHaveBeenLastCalledWith(false);
@@ -397,7 +443,11 @@ describe('ConversationsPanel active-session fast path', () => {
     );
     await act(async () => root.render(createElement(ConversationsPanel)));
 
-    expect(host.textContent).toContain('opening');
+    const { taskOpenTransitionStore } = await import(
+      '@renderer/features/tasks/task-open-transition-store'
+    );
+    expect(taskOpenTransitionStore.isSessionOpening('project-1', 'task-1')).toBe(true);
+    expect(host.querySelector('[data-conversation-opening-overlay]')).toBeNull();
     expect(host.querySelector('[data-conversation-session]')).toBeNull();
     expect(
       host.querySelector('[data-pane-session-ids]')?.getAttribute('data-pane-session-ids')
@@ -406,5 +456,120 @@ describe('ConversationsPanel active-session fast path', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(mocks.historyActive).not.toHaveBeenCalled();
+  });
+
+  it('removes the root loader when the session needs to expose preparation diagnostics', async () => {
+    const activeConversation = (
+      mocks.provisioned as {
+        taskView: {
+          tabManager: {
+            activeConversation: {
+              session: {
+                status: string;
+                pty: MockPty | null;
+                connectionError: string | null;
+              };
+            };
+          };
+        };
+      }
+    ).taskView.tabManager.activeConversation;
+    activeConversation.session.status = 'disconnected';
+    activeConversation.session.pty = null;
+    activeConversation.session.connectionError = 'Frontend PTY preparation failed';
+
+    const { ConversationsPanel } = await import(
+      '@renderer/features/tasks/conversations/conversations-panel'
+    );
+    await act(async () => root.render(createElement(ConversationsPanel)));
+
+    const { taskOpenTransitionStore } = await import(
+      '@renderer/features/tasks/task-open-transition-store'
+    );
+    expect(host.querySelector('[data-conversation-opening-overlay]')).toBeNull();
+    expect(taskOpenTransitionStore.isSessionOpening('project-1', 'task-1')).toBe(false);
+    expect(mocks.sessionProps.mock.lastCall?.[0]).toMatchObject({ loadingSurface: 'external' });
+    expect(mocks.historyActive).toHaveBeenLastCalledWith(false);
+    expect(host.querySelector<HTMLElement>('[data-session-history-dock]')?.style.height).toBe(
+      '157px'
+    );
+  });
+
+  it('removes the root loader when a stopped session needs to expose its retry UI', async () => {
+    const activeConversation = (
+      mocks.provisioned as {
+        taskView: {
+          tabManager: {
+            activeConversation: {
+              sessionExited: boolean;
+            };
+          };
+        };
+      }
+    ).taskView.tabManager.activeConversation;
+    activeConversation.sessionExited = true;
+
+    const { ConversationsPanel } = await import(
+      '@renderer/features/tasks/conversations/conversations-panel'
+    );
+    await act(async () => root.render(createElement(ConversationsPanel)));
+
+    const { taskOpenTransitionStore } = await import(
+      '@renderer/features/tasks/task-open-transition-store'
+    );
+    expect(taskOpenTransitionStore.isSessionOpening('project-1', 'task-1')).toBe(false);
+    expect(mocks.sessionProps.mock.lastCall?.[0]).toMatchObject({ loadingSurface: 'external' });
+    expect(mocks.historyActive).toHaveBeenLastCalledWith(false);
+  });
+
+  it('replaces an unrecoverable snapshot loader with a retryable error surface', async () => {
+    const provisioned = mocks.provisioned as {
+      conversations: {
+        hasAuthoritativeSnapshot: boolean;
+        loadError: unknown | null;
+      };
+    };
+    provisioned.conversations.hasAuthoritativeSnapshot = false;
+    provisioned.conversations.loadError = new Error('Conversation snapshot unavailable');
+
+    const { ConversationsPanel } = await import(
+      '@renderer/features/tasks/conversations/conversations-panel'
+    );
+    await act(async () => root.render(createElement(ConversationsPanel)));
+
+    const { taskOpenTransitionStore } = await import(
+      '@renderer/features/tasks/task-open-transition-store'
+    );
+    expect(taskOpenTransitionStore.isSessionOpening('project-1', 'task-1')).toBe(false);
+    expect(taskOpenTransitionStore.hasSessionError('project-1', 'task-1')).toBe(true);
+    expect(host.textContent).toContain('Conversation snapshot unavailable');
+    expect(host.querySelector('[data-conversation-session]')).toBeNull();
+    expect(mocks.historyActive).not.toHaveBeenCalled();
+
+    const retryButton = host.querySelector<HTMLButtonElement>('button');
+    expect(retryButton?.textContent).toBe('common.retry');
+    await act(async () => retryButton?.click());
+    expect(mocks.retryLoad).toHaveBeenCalledOnce();
+
+    provisioned.conversations.loadError = null;
+    provisioned.conversations.hasAuthoritativeSnapshot = true;
+    await act(async () => root.render(createElement(ConversationsPanel, { forceVisible: true })));
+    expect(taskOpenTransitionStore.hasSessionError('project-1', 'task-1')).toBe(false);
+    expect(host.querySelector('[data-conversation-session]')).not.toBeNull();
+  });
+
+  it('clears its opening intent when the conversation surface unmounts', async () => {
+    const { ConversationsPanel } = await import(
+      '@renderer/features/tasks/conversations/conversations-panel'
+    );
+    const { taskOpenTransitionStore } = await import(
+      '@renderer/features/tasks/task-open-transition-store'
+    );
+
+    await act(async () => root.render(createElement(ConversationsPanel)));
+    expect(taskOpenTransitionStore.isSessionOpening('project-1', 'task-1')).toBe(true);
+
+    await act(async () => root.render(null));
+    expect(taskOpenTransitionStore.isSessionOpening('project-1', 'task-1')).toBe(false);
   });
 });

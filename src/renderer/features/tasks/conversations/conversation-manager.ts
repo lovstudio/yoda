@@ -1,6 +1,7 @@
 import { action, computed, makeObservable, observable, onBecomeObserved, runInAction } from 'mobx';
 import {
   type Conversation,
+  type ConversationResumeBlockReason,
   type CreateConversationParams,
   type ForkConversationAtPromptParams,
   type ForkConversationParams,
@@ -11,6 +12,7 @@ import {
   agentEventChannel,
   agentSessionExitedChannel,
   agentSessionStatusChangedChannel,
+  isAgentSessionRunningStatus,
   isAttentionNotification,
   type AgentEvent,
   type AgentSessionExited,
@@ -24,6 +26,7 @@ import {
 } from '@shared/events/conversationEvents';
 import { getAgentNotificationKind } from '@shared/notification-settings';
 import { makePtySessionId } from '@shared/ptySessionId';
+import type { SessionOpenPerformanceContext } from '@shared/session-open-performance';
 import { events, rpc } from '@renderer/lib/ipc';
 import { getPaneContainer } from '@renderer/lib/pty/pane-sizing-context';
 import type { FrontendPty } from '@renderer/lib/pty/pty';
@@ -42,7 +45,19 @@ export type AgentStatus = AgentSessionRuntimeStatus;
 
 const SOUND_DEDUPE_WINDOW_MS = 3_000;
 const STAGING_CANCELLATION_POLL_MS = 25;
+const STAGING_REVEAL_CLAIM_TIMEOUT_MS = 250;
+const CONVERSATION_SNAPSHOT_LOAD_TIMEOUT_MS = 3_000;
 const recentSoundEvents = new Map<string, number>();
+
+class ConversationSnapshotLoadTimeoutError extends Error {
+  constructor(projectId: string, taskId: string) {
+    super(
+      `Conversation snapshot load exceeded ${CONVERSATION_SNAPSHOT_LOAD_TIMEOUT_MS}ms ` +
+        `(project=${projectId}, task=${taskId})`
+    );
+    this.name = 'ConversationSnapshotLoadTimeoutError';
+  }
+}
 
 type StagingWaitOutcome<T> =
   | { readonly status: 'resolved'; readonly value: T }
@@ -93,6 +108,32 @@ function waitForStagingStep<T>(
   });
 }
 
+/** Bound the initial local snapshot RPC; late replies are ignored until an explicit retry. */
+function loadConversationSnapshotWithDeadline(
+  projectId: string,
+  taskId: string
+): Promise<Conversation[]> {
+  const request = rpc.conversations.getConversationsForTask(projectId, taskId);
+  return new Promise<Conversation[]>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new ConversationSnapshotLoadTimeoutError(projectId, taskId));
+    }, CONVERSATION_SNAPSHOT_LOAD_TIMEOUT_MS);
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      callback();
+    };
+    request.then(
+      (conversations) => finish(() => resolve(conversations)),
+      (error: unknown) => finish(() => reject(error))
+    );
+  });
+}
+
 function getConversationPaneDimensions(
   pty: FrontendPty,
   projectId: string,
@@ -120,15 +161,32 @@ async function waitForConversationPaneDimensions(
   shouldContinue: () => boolean,
   deadline: number
 ): Promise<{ cols: number; rows: number } | null> {
+  let previousDimensions: { cols: number; rows: number } | null = null;
   while (shouldContinue() && performance.now() < deadline) {
     const dimensions = getConversationPaneDimensions(pty, projectId, taskId);
-    if (dimensions) return dimensions;
+    // A newly mounted destination pane can report an intermediate non-zero
+    // height for one layout pass (for example 14 rows) before the task shell
+    // and reserved history dock reach their final geometry. Starting the TUI
+    // from that first sample makes xterm reflow locally to the later 43-row
+    // grid while the backend remains at 14 rows. Require the same measured
+    // grid across consecutive browser frames before binding a generation to
+    // it; this costs only a frame for an already-stable pane.
+    if (
+      dimensions &&
+      previousDimensions?.cols === dimensions.cols &&
+      previousDimensions.rows === dimensions.rows
+    ) {
+      return dimensions;
+    }
+    previousDimensions = dimensions;
 
     const nextLayout = new Promise<void>((resolve) => {
       if (typeof requestAnimationFrame === 'function') {
         requestAnimationFrame(() => resolve());
       } else {
-        setTimeout(resolve, 0);
+        // Node-focused store tests do not install a browser frame clock. Keep
+        // their fallback asynchronous without coupling it to fake timers.
+        void Promise.resolve().then(resolve);
       }
     });
     const advanced = await waitForStagingStep(nextLayout, shouldContinue, deadline);
@@ -164,6 +222,11 @@ export class ConversationManagerStore {
    * not mistake its temporary empty map for a deleted conversation list.
    */
   hasAuthoritativeSnapshot = false;
+  /**
+   * Terminal outcome for the latest authoritative snapshot request. Consumers
+   * must not translate a rejected load into an endless "resolving" state.
+   */
+  loadError: unknown | null = null;
   private offAgentEvents: (() => void) | null = null;
   private offAuthoritativeStatus: (() => void) | null = null;
   private offSessionExited: (() => void) | null = null;
@@ -187,6 +250,7 @@ export class ConversationManagerStore {
     makeObservable(this, {
       conversations: observable,
       hasAuthoritativeSnapshot: observable,
+      loadError: observable.ref,
       taskStatus: computed,
     });
     if (preloaded !== undefined) {
@@ -201,10 +265,20 @@ export class ConversationManagerStore {
     }
     onBecomeObserved(this, 'conversations', () => {
       if (this._loaded) return;
-      void this.load();
+      void this.load().catch((error: unknown) => {
+        log.warn('ConversationManagerStore: failed to load conversations', {
+          projectId: this.projectId,
+          taskId: this.taskId,
+          error,
+        });
+      });
     });
-    this.offAgentEvents = this.listenToAgentEvents();
     this.offAuthoritativeStatus = this.listenToAuthoritativeStatus();
+    // Install provider truth before the legacy/display event stream. Hook
+    // delivery sends status first and AgentEvent second; this ordering avoids
+    // a constructor-edge race where only the latter is observed and mistaken
+    // for a renderer prediction.
+    this.offAgentEvents = this.listenToAgentEvents();
     this.offSessionExited = this.listenToSessionExited();
     this.offConversationRenamed = this.listenToConversationRenamed();
     this.offConversationArchived = this.listenToConversationArchived();
@@ -234,13 +308,22 @@ export class ConversationManagerStore {
         return;
       }
       if (event.type === 'awaiting-input-resolved') {
-        conversationStore.setWorking({ force: true });
+        conversationStore.setWorking({
+          force: true,
+          // The main-process hook reducer publishes the authoritative fence
+          // immediately before forwarding this display event. Preserve that
+          // result; never promote a renderer-only event into provider truth.
+          providerTurnConfirmed: conversationStore.providerTurnConfirmed,
+        });
         return;
       }
       if (event.type === 'prompt-submit') {
         // UserPromptSubmit hook — a new turn started, no matter where the
         // prompt was typed (terminal TUI or Yoda input box).
-        conversationStore.setWorking({ force: true });
+        conversationStore.setWorking({
+          force: true,
+          providerTurnConfirmed: conversationStore.providerTurnConfirmed,
+        });
         return;
       }
       if (event.type === 'notification') {
@@ -286,8 +369,13 @@ export class ConversationManagerStore {
         conversationId: event.conversationId,
         status: event.status,
         hasPendingAction: Boolean(event.pendingAction),
+        providerTurnConfirmed: event.providerTurnConfirmed ?? false,
       });
-      conversationStore.applyAuthoritativeStatus(event.status, event.pendingAction);
+      conversationStore.applyAuthoritativeStatus(
+        event.status,
+        event.pendingAction,
+        event.providerTurnConfirmed ?? false
+      );
     });
   }
 
@@ -470,8 +558,10 @@ export class ConversationManagerStore {
     if (this._loaded) return;
 
     this._loaded = true;
-    this._loadPromise = rpc.conversations
-      .getConversationsForTask(this.projectId, this.taskId)
+    runInAction(() => {
+      this.loadError = null;
+    });
+    this._loadPromise = loadConversationSnapshotWithDeadline(this.projectId, this.taskId)
       .then(async (conversations) => {
         runInAction(() => {
           this.mergeConversations(conversations);
@@ -481,17 +571,32 @@ export class ConversationManagerStore {
             if (!this._belongsHere(store.data)) this.conversations.delete(id);
           }
           this.hasAuthoritativeSnapshot = true;
+          this.loadError = null;
         });
         await this.hydrateRuntimeStatuses(conversations.map((conversation) => conversation.id));
       })
       .catch((error: unknown) => {
-        this._loaded = false;
+        runInAction(() => {
+          this._loaded = false;
+          this.loadError = error;
+        });
         throw error;
       })
       .finally(() => {
         this._loadPromise = null;
       });
     return this._loadPromise;
+  }
+
+  /** Retry a failed authoritative snapshot without relying on observation firing again. */
+  retryLoad(): Promise<void> {
+    const pending = this._loadPromise;
+    if (!pending) return this.load();
+    // `loadError` is published from the rejection action immediately before
+    // the shared promise's finally clears `_loadPromise`. A very fast retry
+    // click must wait through that finally instead of receiving the same stale
+    // rejection again.
+    return pending.catch(() => undefined).then(() => this.load());
   }
 
   /** Ownership guard: conversations from other tasks must never enter this store. */
@@ -537,14 +642,12 @@ export class ConversationManagerStore {
       return false;
     }
 
-    const conversations = await rpc.conversations.getConversationsForTask(
-      this.projectId,
-      this.taskId
-    );
+    const conversations = await loadConversationSnapshotWithDeadline(this.projectId, this.taskId);
     runInAction(() => {
       this._loaded = true;
       this.mergeConversations(conversations);
       this.hasAuthoritativeSnapshot = true;
+      this.loadError = null;
     });
     await this.hydrateRuntimeStatuses(conversations.map((conversation) => conversation.id));
     return this.conversations.has(conversationId);
@@ -780,6 +883,7 @@ export class ConversationManagerStore {
       skipLiveProbe?: boolean;
       requireGenerationBoundResize?: boolean;
       shouldContinue?: () => boolean;
+      performanceContext?: SessionOpenPerformanceContext;
     } = {}
   ): Promise<boolean> {
     const store = this.conversations.get(conversationId);
@@ -837,23 +941,50 @@ export class ConversationManagerStore {
         if (!ownsResumeLease()) return true;
         store.session.pty?.expectCanonicalGeneration(existingState.generation);
         store.markSessionRunning(existingState.generation);
-        if (mountedSize && !options.requireGenerationBoundResize) {
+        const needsCodexSurfaceFence =
+          store.data.runtimeId === 'codex' &&
+          !store.session.pty?.hasCanonicalSurfaceFence(existingState.generation);
+        if (mountedSize && !options.requireGenerationBoundResize && !needsCodexSurfaceFence) {
           void rpc.pty.resize(sessionId, mountedSize.cols, mountedSize.rows);
         }
-        return true;
+        if (!needsCodexSurfaceFence) return true;
+        // A staging timeout can hand a live Codex PTY to the mounted surface
+        // before its transcript fence arrives. The active-session resume RPC
+        // does not respawn the Agent; it only supplies generation-bound
+        // rollout evidence so the visible-frame wait cannot fall back to an
+        // impossible quiet window under Codex's continuous idle redraws.
       }
 
-      const result = (await rpc.conversations.resumeConversation(
-        this.projectId,
-        this.taskId,
-        conversationId,
-        initialSize
-      )) as Awaited<ReturnType<typeof rpc.conversations.resumeConversation>> | boolean;
+      const result = (await (options.performanceContext
+        ? rpc.conversations.resumeConversation(
+            this.projectId,
+            this.taskId,
+            conversationId,
+            initialSize,
+            options.performanceContext
+          )
+        : rpc.conversations.resumeConversation(
+            this.projectId,
+            this.taskId,
+            conversationId,
+            initialSize
+          ))) as Awaited<ReturnType<typeof rpc.conversations.resumeConversation>> | boolean;
       // Renderer-only hot updates can temporarily talk to the previous main
       // process RPC, whose resume result was the running boolean itself.
       const running = typeof result === 'boolean' ? result : result.running;
       const generation = typeof result === 'boolean' ? undefined : result.generation;
+      const reason = typeof result === 'boolean' ? undefined : result.reason;
+      const surfaceAnchor =
+        typeof result !== 'boolean' && result.running ? result.surfaceAnchor : undefined;
       if (!running) {
+        if (reason === 'external-writer') {
+          if (ownsResumeLease()) {
+            store.setSessionResumeBlockReason(reason);
+            store.setSessionExited(false);
+          }
+          return false;
+        }
+        if (ownsResumeLease()) store.setSessionResumeBlockReason(null);
         if (generation !== undefined) {
           if (ownsResumeLease()) store.markSessionExited(generation);
         } else if (ownsUngeneratedFailureLease()) {
@@ -862,6 +993,8 @@ export class ConversationManagerStore {
         return false;
       }
       if (!ownsResumeLease()) return true;
+      const shouldBindSurfaceFence =
+        store.data.runtimeId === 'codex' && generation !== undefined && surfaceAnchor !== undefined;
       // Mount-time measurement can finish while the main process is still
       // creating the backend PTY. That early resize sees no registered PTY,
       // while initialSize may still be xterm's 80x24 fallback. Reapply the
@@ -870,7 +1003,7 @@ export class ConversationManagerStore {
       const mountedSize = options.requireGenerationBoundResize
         ? (initialSize ?? store.session.pty?.lastSentDims)
         : (store.session.pty?.lastSentDims ?? initialSize);
-      if (options.requireGenerationBoundResize) {
+      if (options.requireGenerationBoundResize || shouldBindSurfaceFence) {
         if (
           generation === undefined ||
           !mountedSize ||
@@ -883,8 +1016,11 @@ export class ConversationManagerStore {
       if (generation !== undefined) {
         store.session.pty?.expectCanonicalGeneration(generation);
       }
+      if (shouldBindSurfaceFence && generation !== undefined && surfaceAnchor) {
+        store.session.pty?.expectCanonicalSurfaceAnchor(generation, surfaceAnchor);
+      }
       store.markSessionRunning(generation ?? 0);
-      if (mountedSize && !options.requireGenerationBoundResize) {
+      if (mountedSize && !options.requireGenerationBoundResize && !shouldBindSurfaceFence) {
         void rpc.pty.resize(sessionId, mountedSize.cols, mountedSize.rows);
       }
       return true;
@@ -906,8 +1042,9 @@ export class ConversationManagerStore {
   async prepareConversationForOpen(
     conversationId: string,
     shouldContinue: () => boolean,
-    timeoutMs = 1_000
-  ): Promise<boolean> {
+    timeoutMs = 1_000,
+    performanceContext?: SessionOpenPerformanceContext
+  ): Promise<boolean | ConversationResumeBlockReason> {
     const store = this.conversations.get(conversationId);
     const deadline = performance.now() + Math.max(0, timeoutMs);
     const canContinue = () => shouldContinue() && performance.now() < deadline;
@@ -923,6 +1060,13 @@ export class ConversationManagerStore {
     let preparedPty: FrontendPty | null = null;
     let delivered = false;
     let cleanupDeferredUntilConnect = false;
+    // A staging deadline is not a navigation cancellation. The caller commits
+    // the already-mounted destination and lets ConversationSession continue
+    // the generation-aware visible-frame wait. Reclaiming its fresh renderer
+    // here can leave that visible surface with no xterm and no observable edge
+    // that would start another connection attempt.
+    const shouldHandOffRendererToVisibleSurface = () =>
+      !delivered && shouldContinue() && ownsPreparationLease();
     const discardCreatedRenderer = () => {
       if (rendererBeforePreparation || !ownsPreparationLease()) return;
       const candidate = preparedPty ?? store.session.pty;
@@ -997,6 +1141,28 @@ export class ConversationManagerStore {
         store.markSessionRunning(generation);
         return 'ready';
       };
+      const resumeAndBindSurfaceFence = async (): Promise<
+        { status: 'ready'; generation: number } | { status: 'external-writer' | 'stopped' }
+      > => {
+        const resumed = await waitForStagingStep(
+          this.resumeConversation(conversationId, initialSize, {
+            skipLiveProbe: true,
+            requireGenerationBoundResize: true,
+            shouldContinue: canContinue,
+            performanceContext,
+          }),
+          canContinue,
+          deadline
+        );
+        if (resumed.status !== 'resolved' || !canContinue()) return { status: 'stopped' };
+        if (!resumed.value) {
+          if (store.sessionResumeBlockReason === 'external-writer') {
+            return { status: 'external-writer' };
+          }
+          return { status: 'stopped' };
+        }
+        return { status: 'ready', generation: store.getSessionGeneration() };
+      };
 
       // Probe + generation-bound resize is retried at most once. A disappeared
       // generation falls through to the genuine stopped-session resume path.
@@ -1005,6 +1171,7 @@ export class ConversationManagerStore {
       let state = stateOutcome.value;
       let running = false;
       let runningGeneration: number | null = null;
+      let surfaceFenceGeneration: number | null = null;
       if (state?.live) {
         for (let attempt = 0; attempt < 2; attempt += 1) {
           const resized = await resizeGeneration(state.generation);
@@ -1026,21 +1193,43 @@ export class ConversationManagerStore {
         // With transcript fallback removed, the registry ring safely captures
         // startup output. Wait for resume to confirm the new generation before
         // subscribing, so an old final snapshot cannot satisfy first-frame prep.
-        const resumed = await waitForStagingStep(
-          this.resumeConversation(conversationId, initialSize, {
-            skipLiveProbe: true,
-            requireGenerationBoundResize: true,
-            shouldContinue: canContinue,
-          }),
-          canContinue,
-          deadline
-        );
-        if (resumed.status !== 'resolved' || !resumed.value || !canContinue()) return false;
+        const resumed = await resumeAndBindSurfaceFence();
+        if (resumed.status === 'external-writer') {
+          // The durable transcript renderer is already connected. Preserve it
+          // as the read-only destination and let the task route commit normally
+          // instead of misreporting a canonical-frame failure.
+          delivered = true;
+          return 'external-writer';
+        }
+        if (resumed.status !== 'ready') return false;
         running = true;
-        runningGeneration = store.getSessionGeneration();
+        runningGeneration = resumed.generation;
+        if (store.data.runtimeId === 'codex') surfaceFenceGeneration = resumed.generation;
       }
 
-      if (!running || store.session.pty !== pty || !ownsPreparationLease()) return false;
+      // A live main-process PTY with an evicted renderer bypasses the ordinary
+      // provider-resume path above. Cold Codex opens still need bounded rollout
+      // evidence, so ask the active-session resume controller for its anchor;
+      // that branch returns without spawning another Agent.
+      if (
+        store.data.runtimeId === 'codex' &&
+        runningGeneration !== null &&
+        surfaceFenceGeneration !== runningGeneration
+      ) {
+        const anchored = await resumeAndBindSurfaceFence();
+        if (anchored.status !== 'ready') return false;
+        runningGeneration = anchored.generation;
+        surfaceFenceGeneration = anchored.generation;
+      }
+
+      if (
+        !running ||
+        runningGeneration === null ||
+        store.session.pty !== pty ||
+        !ownsPreparationLease()
+      ) {
+        return false;
+      }
       let needsFirstFrame = true;
       while (canContinue()) {
         let frameReady = true;
@@ -1059,39 +1248,50 @@ export class ConversationManagerStore {
           frameReady = prepared.value;
         }
 
-        if (frameReady) {
+        if (frameReady && pty.canonicalGeneration === runningGeneration) {
+          const preparedGeneration = runningGeneration;
           const claimReady = await waitForStagingStep(
             pty.acquireCanonicalRevealClaim(
               shouldHoldRevealClaim,
-              Math.max(0, deadline - performance.now())
+              Math.min(STAGING_REVEAL_CLAIM_TIMEOUT_MS, Math.max(0, deadline - performance.now())),
+              { requireMountedFramePaint: true }
             ),
             canContinue,
             deadline
           );
           if (claimReady.status !== 'resolved' || !canContinue()) return false;
-          if (claimReady.value) {
+          if (claimReady.value && pty.canonicalGeneration === preparedGeneration) {
             delivered = true;
             return true;
           }
+          // The claim can legitimately succeed for G+1 if its sentinel arrives
+          // after G was prepared but before claimGenerationReveal samples the
+          // renderer. Never carry that newer claim across a G-sized staging
+          // transaction; release it and rebuild G+1 below.
+          if (claimReady.value) pty.releaseCanonicalRevealClaim();
         }
 
-        // `prepareFirstFrame(G)` and the exact-generation reveal claim are one
-        // atomic staging transaction. A G+1 registration can begin between
-        // them, making the claim correctly fail. Re-probe under the original
-        // absolute deadline, wait for registration to settle, and rebuild the
-        // hidden frame for the replacement generation instead of surfacing a
-        // false task-open failure.
+        // `prepareFirstFrame(G)` and the exact-generation painted reveal claim
+        // are one staging transaction. A G+1 registration can begin between
+        // preparation and claim, so re-probe once and rebuild only for a
+        // genuinely newer generation.
         stateOutcome = await probeSettledRegistration();
         if (stateOutcome.status !== 'resolved' || !canContinue()) return false;
         state = stateOutcome.value;
         if (!state?.live) return false;
 
-        if (runningGeneration !== state.generation || !frameReady) {
+        if (runningGeneration !== state.generation) {
           while (canContinue()) {
             const resized = await resizeGeneration(state.generation);
             if (resized === 'stopped') return false;
             if (resized === 'ready') {
               runningGeneration = state.generation;
+              if (store.data.runtimeId === 'codex') {
+                const anchored = await resumeAndBindSurfaceFence();
+                if (anchored.status !== 'ready') return false;
+                runningGeneration = anchored.generation;
+                surfaceFenceGeneration = anchored.generation;
+              }
               needsFirstFrame = true;
               break;
             }
@@ -1111,16 +1311,11 @@ export class ConversationManagerStore {
           continue;
         }
 
-        // A same-generation denial can be a short owner/IPC handoff. Keep the
-        // already prepared frame, but throttle retries so an immediately
-        // rejected claim cannot spin beyond the task-open budget.
-        const retryDelay = await waitForStagingStep(
-          new Promise<void>((resolve) => setTimeout(resolve, STAGING_CANCELLATION_POLL_MS)),
-          canContinue,
-          deadline
-        );
-        if (retryDelay.status !== 'resolved') return false;
-        needsFirstFrame = false;
+        // A busy same-generation TUI or a transient claim/paint miss must not
+        // keep the route transition alive. The real destination is already
+        // mounted; hand readiness to its generation-aware visible-frame retry
+        // loop, which preserves the Logo until a browser-painted frame exists.
+        return false;
       }
       return false;
     } catch (error) {
@@ -1132,7 +1327,9 @@ export class ConversationManagerStore {
       });
       return false;
     } finally {
-      if (!delivered) discardCreatedRenderer();
+      if (!delivered && !shouldHandOffRendererToVisibleSurface()) {
+        discardCreatedRenderer();
+      }
       if (
         !delivered &&
         !rendererBeforePreparation &&
@@ -1142,11 +1339,13 @@ export class ConversationManagerStore {
       ) {
         // connect() can itself be waiting on an eviction/settings barrier when
         // the absolute task-open deadline expires. Reclaim only if this request
-        // still owns the preparation lease after that shared promise settles.
+        // still owns the preparation lease after that shared promise settles,
+        // and only when its navigation was actually cancelled. A deadline with
+        // a current destination is the visible surface's connection handoff.
         cleanupDeferredUntilConnect = true;
         void connectPromise.then(
           () => {
-            discardCreatedRenderer();
+            if (!shouldHandOffRendererToVisibleSurface()) discardCreatedRenderer();
             if (ownsPreparationLease()) this.openPreparationLeases.delete(store);
           },
           () => {
@@ -1269,6 +1468,8 @@ export class ConversationStore {
   data: Conversation;
   session: PtySession;
   status: AgentStatus = 'idle';
+  /** Provider-owned evidence exists for the currently running turn. */
+  providerTurnConfirmed = false;
   seen = true;
   /** True while the archive flow (pre-archive command + archive) is in flight. */
   isArchiving = false;
@@ -1278,6 +1479,8 @@ export class ConversationStore {
    * Drives the "session exited → reload" affordance in the conversations panel.
    */
   sessionExited = false;
+  /** A provider-level ownership conflict that leaves durable history readable. */
+  sessionResumeBlockReason: ConversationResumeBlockReason | null = null;
   /** View-only dismissal; a new exit always makes the notice visible again. */
   sessionExitNoticeDismissed = false;
   lastNotificationType: NotificationType | null = null;
@@ -1299,11 +1502,14 @@ export class ConversationStore {
       data: observable,
       session: observable,
       status: observable,
+      providerTurnConfirmed: observable,
       seen: observable,
       isArchiving: observable,
       sessionExited: observable,
+      sessionResumeBlockReason: observable,
       sessionExitNoticeDismissed: observable,
       setSessionExited: action,
+      setSessionResumeBlockReason: action,
       markSessionRunning: action,
       markSessionExited: action,
       dismissSessionExitNotice: action,
@@ -1335,10 +1541,28 @@ export class ConversationStore {
     return null;
   }
 
-  setStatus(status: AgentStatus, options: { emit?: boolean } = {}) {
+  setStatus(
+    status: AgentStatus,
+    options: {
+      emit?: boolean;
+      providerTurnConfirmed?: boolean;
+      preserveProviderTurnConfirmed?: boolean;
+    } = {}
+  ) {
     const previousStatus = this.status;
-    const changed = previousStatus !== status;
+    const previousProviderTurnConfirmed = this.providerTurnConfirmed;
+    const providerTurnConfirmed = !isAgentSessionRunningStatus(status)
+      ? false
+      : options.providerTurnConfirmed !== undefined
+        ? options.providerTurnConfirmed
+        : options.preserveProviderTurnConfirmed || status === 'awaiting-input'
+          ? previousProviderTurnConfirmed
+          : false;
+    const statusChanged = previousStatus !== status;
+    const providerTurnConfirmedChanged = previousProviderTurnConfirmed !== providerTurnConfirmed;
+    const changed = statusChanged || providerTurnConfirmedChanged;
     this.status = status;
+    this.providerTurnConfirmed = providerTurnConfirmed;
     this.seen = status === 'idle' || status === 'working';
     if (status !== 'awaiting-input') {
       this.lastNotificationType = null;
@@ -1346,18 +1570,22 @@ export class ConversationStore {
     }
     if (changed) {
       this.onStatusChanged?.();
-      publishAgentRuntimeStatusPreview({
-        projectId: this.data.projectId,
-        taskId: this.data.taskId,
-        conversationId: this.data.id,
-        status,
-      });
+      if (statusChanged) {
+        publishAgentRuntimeStatusPreview({
+          projectId: this.data.projectId,
+          taskId: this.data.taskId,
+          conversationId: this.data.id,
+          status,
+        });
+      }
       log.debug('[conversation-status] transition', {
         projectId: this.data.projectId,
         taskId: this.data.taskId,
         conversationId: this.data.id,
         from: previousStatus,
         to: status,
+        providerTurnConfirmedFrom: previousProviderTurnConfirmed,
+        providerTurnConfirmedTo: providerTurnConfirmed,
         emitsStatusEvent: options.emit !== false,
       });
     }
@@ -1367,6 +1595,7 @@ export class ConversationStore {
         taskId: this.data.taskId,
         conversationId: this.data.id,
         status,
+        providerTurnConfirmed,
         ...(status === 'awaiting-input' && this.lastNotificationType
           ? {
               pendingAction: {
@@ -1380,7 +1609,9 @@ export class ConversationStore {
   }
 
   hydrateStatus(status: AgentStatus) {
-    this.setStatus(status, { emit: false });
+    // The main process publishes the provider fence immediately before this
+    // status-only RPC resolves. Preserve that richer event snapshot here.
+    this.setStatus(status, { emit: false, preserveProviderTurnConfirmed: true });
   }
 
   /**
@@ -1388,11 +1619,15 @@ export class ConversationStore {
    * Codex rollout tailer). Overrides optimistic local predictions. Does not
    * re-emit, since the main process is already the source.
    */
-  applyAuthoritativeStatus(status: AgentStatus, pendingAction?: PendingAction | null) {
+  applyAuthoritativeStatus(
+    status: AgentStatus,
+    pendingAction?: PendingAction | null,
+    providerTurnConfirmed = false
+  ) {
     if (status === 'awaiting-input') {
       this.lastNotificationType = pendingAction?.notificationType ?? 'elicitation_dialog';
       this.pendingActionDescription = pendingAction?.actionDescription?.trim() || null;
-      this.setStatus(status, { emit: false });
+      this.setStatus(status, { emit: false, providerTurnConfirmed });
       return;
     }
     if (status === 'working') {
@@ -1400,7 +1635,7 @@ export class ConversationStore {
       // real turn-start doesn't immediately flip back to awaiting-input.
       this.lastForceWorkingAt = Date.now();
     }
-    this.setStatus(status, { emit: false });
+    this.setStatus(status, { emit: false, providerTurnConfirmed });
   }
 
   setAwaitingInput(notificationType: NotificationType, context?: { actionDescription?: string }) {
@@ -1417,7 +1652,7 @@ export class ConversationStore {
     this.setStatus('awaiting-input');
   }
 
-  setWorking(options: { force?: boolean } = {}) {
+  setWorking(options: { force?: boolean; providerTurnConfirmed?: boolean } = {}) {
     if (
       !options.force &&
       this.status === 'awaiting-input' &&
@@ -1429,7 +1664,9 @@ export class ConversationStore {
       this.lastForceWorkingAt = Date.now();
     }
     this.lastNotificationType = null;
-    this.setStatus('working');
+    this.setStatus('working', {
+      providerTurnConfirmed: options.providerTurnConfirmed ?? false,
+    });
   }
 
   clearWorking() {
@@ -1448,7 +1685,12 @@ export class ConversationStore {
 
   setSessionExited(value: boolean) {
     this.sessionExited = value;
+    if (value) this.sessionResumeBlockReason = null;
     this.sessionExitNoticeDismissed = false;
+  }
+
+  setSessionResumeBlockReason(reason: ConversationResumeBlockReason | null) {
+    this.sessionResumeBlockReason = reason;
   }
 
   getSessionGeneration(): number {
@@ -1459,6 +1701,7 @@ export class ConversationStore {
     if (Number.isSafeInteger(generation) && generation > this.sessionGeneration) {
       this.sessionGeneration = generation;
     }
+    this.sessionResumeBlockReason = null;
     this.setSessionExited(false);
   }
 
@@ -1468,6 +1711,7 @@ export class ConversationStore {
       this.sessionGeneration = generation;
     }
     this.clearWorking();
+    this.sessionResumeBlockReason = null;
     this.sessionExited = true;
     this.sessionExitNoticeDismissed = false;
   }

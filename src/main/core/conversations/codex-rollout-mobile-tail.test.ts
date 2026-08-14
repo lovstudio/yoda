@@ -18,6 +18,13 @@ vi.mock('./getCodexSessionContext', () => ({
   })),
 }));
 
+vi.mock('./agent-session-runtime', () => ({
+  agentSessionRuntimeStore: {
+    getStatus: vi.fn(() => 'idle'),
+    isProviderTurnConfirmed: vi.fn(() => false),
+  },
+}));
+
 const temporaryDirectories: string[] = [];
 
 describe('bounded Codex rollout mobile readers', () => {

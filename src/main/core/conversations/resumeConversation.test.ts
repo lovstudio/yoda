@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makePtySessionId } from '@shared/ptySessionId';
+import { sessionOpenPerformanceChannel } from '@shared/session-open-performance';
 import type { Pty } from '@main/core/pty/pty';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { TmuxReattachMissError } from '@main/core/pty/tmux-reattach';
@@ -7,12 +8,14 @@ import {
   cancelConversationHydrationBarrier,
   registerConversationHydrationBarrier,
 } from './conversation-hydration-barrier';
-import { resumeConversation } from './resumeConversation';
+import { resumeConversation, resumeConversationWithResult } from './resumeConversation';
 
 const mocks = vi.hoisted(() => ({
   getActiveSessions: vi.fn(),
   hasExternalCodexThreadWriter: vi.fn(),
+  loadCodexRolloutSurfaceAnchor: vi.fn(),
   clearPendingInitialPrompt: vi.fn(),
+  emitEvent: vi.fn(),
   startSession: vi.fn(),
   resolveTask: vi.fn(),
   selectChain: {
@@ -34,7 +37,7 @@ vi.mock('@main/db/schema', () => ({
 
 vi.mock('@main/lib/events', () => ({
   events: {
-    emit: vi.fn(),
+    emit: mocks.emitEvent,
     on: vi.fn(() => vi.fn()),
   },
 }));
@@ -45,6 +48,10 @@ vi.mock('../projects/utils', () => ({
 
 vi.mock('./codex-thread-writer', () => ({
   hasExternalCodexThreadWriter: mocks.hasExternalCodexThreadWriter,
+}));
+
+vi.mock('./codex-rollout-terminal-history', () => ({
+  loadCodexRolloutSurfaceAnchorForConversation: mocks.loadCodexRolloutSurfaceAnchor,
 }));
 
 vi.mock('./pending-initial-prompt-store', () => ({
@@ -75,6 +82,7 @@ describe('resumeConversation', () => {
     vi.clearAllMocks();
     mocks.resolveTask.mockReturnValue({
       conversations: {
+        taskPath: '/repo/worktree',
         getActiveSessions: mocks.getActiveSessions,
         startSession: mocks.startSession,
         waitsForInitialPromptSessionBinding: (runtimeId: string) => runtimeId === 'codex',
@@ -90,6 +98,10 @@ describe('resumeConversation', () => {
       },
     ]);
     mocks.hasExternalCodexThreadWriter.mockResolvedValue(false);
+    mocks.loadCodexRolloutSurfaceAnchor.mockResolvedValue({
+      kind: 'anchor',
+      segments: ['The durable transcript answer is visible.'],
+    });
     mocks.getActiveSessions.mockReturnValue([]);
     mocks.startSession.mockImplementation(async () => {
       mocks.getActiveSessions.mockReturnValue([{ conversationId: 'conv-1' }]);
@@ -115,6 +127,42 @@ describe('resumeConversation', () => {
     ).resolves.toEqual([true, true]);
 
     expect(mocks.startSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports the correlated main-process resume stages in execution order', async () => {
+    await expect(
+      resumeConversation(
+        'project-1',
+        'task-1',
+        'conv-1',
+        { cols: 120, rows: 40 },
+        {
+          contextId: 'task-open-1',
+          clickAtEpochMs: Date.now(),
+        }
+      )
+    ).resolves.toBe(true);
+
+    const entries = mocks.emitEvent.mock.calls
+      .filter(([channel]) => channel === sessionOpenPerformanceChannel)
+      .map(([, entry]) => entry as { context_id: string; stage: string });
+    expect(entries.every((entry) => entry.context_id === 'task-open-1')).toBe(true);
+    expect(entries.map((entry) => entry.stage)).toEqual([
+      'resume-received',
+      'hydration-barrier',
+      'operation-lock',
+      'conversation-query',
+      'task-resolve',
+      'permission-reconcile',
+      'session-classified',
+      'surface-anchor',
+      'external-writer-probe',
+      'provider-start',
+      'resume-resolved',
+    ]);
+    expect(mocks.startSession.mock.calls[0]?.[7]).toEqual({
+      performanceTrace: expect.any(Object),
+    });
   });
 
   it('waits for attempted-prompt hydration before renderer resume inspects the session', async () => {
@@ -252,6 +300,101 @@ describe('resumeConversation', () => {
     await expect(resumeConversation('project-1', 'task-1', 'conv-1')).resolves.toBe(false);
   });
 
+  it('returns the transcript surface anchor for an already active Codex session', async () => {
+    mocks.selectChain.limit.mockResolvedValueOnce([
+      {
+        id: 'conv-1',
+        projectId: 'project-1',
+        taskId: 'task-1',
+        runtimeId: 'codex',
+      },
+    ]);
+    mocks.getActiveSessions.mockReturnValue([{ conversationId: 'conv-1' }]);
+
+    await expect(resumeConversationWithResult('project-1', 'task-1', 'conv-1')).resolves.toEqual({
+      generation: ptySessionRegistry.getGeneration(sessionId),
+      running: true,
+      surfaceAnchor: {
+        kind: 'anchor',
+        segments: ['The durable transcript answer is visible.'],
+      },
+    });
+
+    expect(mocks.loadCodexRolloutSurfaceAnchor).toHaveBeenCalledWith({
+      conversation: expect.objectContaining({ id: 'conv-1', runtimeId: 'codex' }),
+      cwd: '/repo/worktree',
+    });
+    expect(mocks.startSession).not.toHaveBeenCalled();
+  });
+
+  it('starts the provider without serially waiting for surface-anchor extraction', async () => {
+    let finishAnchor!: (value: { kind: 'anchor'; segments: string[] }) => void;
+    mocks.loadCodexRolloutSurfaceAnchor.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishAnchor = resolve;
+      })
+    );
+    mocks.selectChain.limit.mockResolvedValueOnce([
+      {
+        id: 'conv-1',
+        projectId: 'project-1',
+        taskId: 'task-1',
+        runtimeId: 'codex',
+      },
+    ]);
+
+    const resumed = resumeConversationWithResult('project-1', 'task-1', 'conv-1');
+    await vi.waitFor(() => expect(mocks.startSession).toHaveBeenCalledTimes(1));
+
+    finishAnchor({ kind: 'anchor', segments: ['The final frame evidence is now available.'] });
+    await expect(resumed).resolves.toEqual({
+      generation: ptySessionRegistry.getGeneration(sessionId),
+      running: true,
+      surfaceAnchor: {
+        kind: 'anchor',
+        segments: ['The final frame evidence is now available.'],
+      },
+    });
+  });
+
+  it('marks a fresh first-prompt start as having no historical surface anchor', async () => {
+    mocks.selectChain.limit.mockResolvedValueOnce([
+      {
+        id: 'conv-1',
+        projectId: 'project-1',
+        taskId: 'task-1',
+        runtimeId: 'codex',
+        pendingInitialPrompt: { prompt: 'Create the first turn' },
+      },
+    ]);
+
+    await expect(resumeConversationWithResult('project-1', 'task-1', 'conv-1')).resolves.toEqual({
+      generation: ptySessionRegistry.getGeneration(sessionId),
+      running: true,
+      surfaceAnchor: { kind: 'none' },
+    });
+
+    expect(mocks.loadCodexRolloutSurfaceAnchor).not.toHaveBeenCalled();
+  });
+
+  it('keeps a resumed session conservative when anchor extraction fails', async () => {
+    mocks.selectChain.limit.mockResolvedValueOnce([
+      {
+        id: 'conv-1',
+        projectId: 'project-1',
+        taskId: 'task-1',
+        runtimeId: 'codex',
+      },
+    ]);
+    mocks.loadCodexRolloutSurfaceAnchor.mockRejectedValueOnce(new Error('rollout unavailable'));
+
+    await expect(resumeConversationWithResult('project-1', 'task-1', 'conv-1')).resolves.toEqual({
+      generation: ptySessionRegistry.getGeneration(sessionId),
+      running: true,
+      surfaceAnchor: { kind: 'unverifiable' },
+    });
+  });
+
   it('does not resume a conversation cancelled while startup hydration was pending', async () => {
     let finishHydration!: () => void;
     void registerConversationHydrationBarrier(
@@ -356,7 +499,11 @@ describe('resumeConversation', () => {
     ]);
     mocks.hasExternalCodexThreadWriter.mockResolvedValueOnce(true);
 
-    await expect(resumeConversation('project-1', 'task-1', 'conv-1')).resolves.toBe(false);
+    await expect(resumeConversationWithResult('project-1', 'task-1', 'conv-1')).resolves.toEqual({
+      generation: ptySessionRegistry.getGeneration(sessionId),
+      running: false,
+      reason: 'external-writer',
+    });
 
     expect(mocks.hasExternalCodexThreadWriter).toHaveBeenCalledWith(sessionSource);
     expect(mocks.startSession).not.toHaveBeenCalled();
@@ -372,11 +519,26 @@ describe('resumeConversation', () => {
   });
 
   it('strictly reattaches a detached active tmux session', async () => {
+    mocks.selectChain.limit.mockResolvedValueOnce([
+      {
+        id: 'conv-1',
+        projectId: 'project-1',
+        taskId: 'task-1',
+        runtimeId: 'codex',
+      },
+    ]);
     mocks.getActiveSessions.mockReturnValue([
       { conversationId: 'conv-1', detachable: true, transportAttached: false },
     ]);
 
-    await expect(resumeConversation('project-1', 'task-1', 'conv-1')).resolves.toBe(true);
+    await expect(resumeConversationWithResult('project-1', 'task-1', 'conv-1')).resolves.toEqual({
+      generation: ptySessionRegistry.getGeneration(sessionId),
+      running: true,
+      surfaceAnchor: {
+        kind: 'anchor',
+        segments: ['The durable transcript answer is visible.'],
+      },
+    });
 
     expect(mocks.startSession).toHaveBeenCalledTimes(1);
     expect(mocks.startSession.mock.calls[0]?.[7]).toEqual({

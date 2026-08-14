@@ -301,7 +301,7 @@ describe('readCodexTurnVerdictFile', () => {
     dir = undefined;
   });
 
-  it('fails closed when an oversized row makes the newest turn ambiguous', async () => {
+  it('skips an oversized provider payload while preserving the newest active turn', async () => {
     dir = mkdtempSync(join(tmpdir(), 'yoda-codex-run-state-tail-'));
     const rolloutPath = join(dir, 'rollout.jsonl');
     writeFileSync(
@@ -316,7 +316,10 @@ describe('readCodexTurnVerdictFile', () => {
       })}\n`
     );
 
-    await expect(readCodexTurnVerdictFile(rolloutPath)).resolves.toBeNull();
+    await expect(readCodexTurnVerdictFile(rolloutPath)).resolves.toEqual({
+      state: 'working',
+      lastStartedAt: at,
+    });
   });
 
   it('fails closed when the newest turn boundary exceeds the total scan budget', async () => {

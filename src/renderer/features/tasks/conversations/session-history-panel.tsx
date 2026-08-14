@@ -195,7 +195,10 @@ export const DockedSessionHistory = observer(function DockedSessionHistory({
     height: dockHeight,
     maxHeight: `calc(100% - ${MIN_TERMINAL_VIEWPORT_HEIGHT_PX}px)`,
   };
-  if (!active) {
+  if (!active || !prompts.hasConversation) {
+    // Keep the reserved geometry even without a resolved conversation. Collapsing
+    // to zero height here would resize the terminal pane a second time and make
+    // the agent reprint its entire screen (see conversations-panel.tsx).
     return (
       <div
         aria-hidden="true"
@@ -206,8 +209,6 @@ export const DockedSessionHistory = observer(function DockedSessionHistory({
       />
     );
   }
-
-  if (!prompts.hasConversation) return null;
 
   const setRows = (next: number) => update({ dockSessionHistoryRows: clampDockRows(next) });
 
