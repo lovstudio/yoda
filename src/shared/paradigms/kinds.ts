@@ -7,6 +7,7 @@ import {
   type ParadigmKindId,
   type ParadigmSlot,
 } from './contract';
+import { builtinParadigmId } from './paradigm';
 import {
   appBuildParadigmParamsSchema,
   compareParadigmParamsSchema,
@@ -227,7 +228,7 @@ export const compareParadigmKind: ParadigmKindDescriptor = {
   paramsSchema: compareParadigmParamsSchema,
   defaultParams: {
     agents: {},
-    inner: { kindId: 'single', paradigmId: 'builtin:single' },
+    inner: { kindId: 'single', paradigmId: builtinParadigmId('single') },
     variants: [],
   },
 };

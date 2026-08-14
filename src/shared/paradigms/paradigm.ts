@@ -31,11 +31,22 @@ export interface ParadigmDraft {
   params: unknown;
 }
 
+/**
+ * Marks any code-defined instance, whichever collection it came from. Built-in
+ * Agent Teams already use this prefix (`builtin:review`), and once they are
+ * paradigm instances they must keep reading as built-in here.
+ */
 export const BUILTIN_PARADIGM_ID_PREFIX = 'builtin:';
 
-/** Stable id of the code-defined instance every kind ships with. */
+/**
+ * Stable id of the instance a kind ships with.
+ *
+ * The kind id sits behind its own segment because the built-in namespace is
+ * shared: `builtin:review` is already the review *team*, so a bare
+ * `builtin:<kindId>` would collide with it the moment teams become instances.
+ */
 export function builtinParadigmId(kindId: ParadigmKindId): string {
-  return `${BUILTIN_PARADIGM_ID_PREFIX}${kindId}`;
+  return `${BUILTIN_PARADIGM_ID_PREFIX}paradigm:${kindId}`;
 }
 
 export function isBuiltinParadigmId(id: string): boolean {

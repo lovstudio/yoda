@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   BUILTIN_FEATURE_TEAM_ID,
   BUILTIN_REVIEW_TEAM_ID,
+  BUILTIN_TEAMS,
   type AgentTeam,
 } from '@shared/agent-team';
 import { BUILTIN_PARADIGMS } from '@shared/paradigms/builtins';
@@ -81,7 +82,11 @@ describe('paradigm registry', () => {
     expect(BUILTIN_PARADIGMS.map((paradigm) => paradigm.kindId)).toEqual(
       PARADIGM_KIND_IDS.filter((kindId) => PARADIGM_KINDS[kindId].instanceSource === null)
     );
+    // Built-in Agent Teams share the `builtin:` namespace and are about to share
+    // the instance list too, so a kind's own id must not be able to name a team.
+    const teamIds = new Set(BUILTIN_TEAMS.map((team) => team.id));
     for (const paradigm of BUILTIN_PARADIGMS) {
+      expect(teamIds.has(paradigm.id), `${paradigm.id} collides with a built-in team`).toBe(false);
       expect(paradigm.id).toBe(builtinParadigmId(paradigm.kindId));
       expect(isBuiltinParadigmId(paradigm.id)).toBe(true);
       expect(paradigm.builtin).toBe(true);
