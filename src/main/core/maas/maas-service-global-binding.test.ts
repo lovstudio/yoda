@@ -19,6 +19,11 @@ const mocks = vi.hoisted(() => ({
   codexAuthGetStatus: vi.fn(),
   codexAuthRollback: vi.fn(),
   migrateLegacyCodexMaasHistory: vi.fn(),
+  invalidateRuntimeSessions: vi.fn(),
+}));
+
+vi.mock('@main/core/conversations/invalidate-runtime-sessions', () => ({
+  invalidateRuntimeSessions: mocks.invalidateRuntimeSessions,
 }));
 
 vi.mock('electron', () => ({
@@ -943,6 +948,11 @@ describe('stored MaaS keys', () => {
       loginItemEnabled: true,
     });
     expect(mocks.secrets['yoda-maas-inference-token:zenmux']).toBe('new-inference-secret');
+    expect(mocks.invalidateRuntimeSessions).toHaveBeenCalledWith({
+      runtimeIds: ['codex'],
+      authProviders: ['yoda-maas'],
+      reason: 'MaaS credentials changed',
+    });
   });
 
   it('rolls the key and connection back when active Codex environment publication fails', async () => {

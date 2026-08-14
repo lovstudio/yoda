@@ -39,6 +39,7 @@ import {
 } from '@shared/maas';
 import { isValidRuntimeId, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
 import { resolveRuntimeStateDirectory } from '@main/core/conversations/impl/runtime-env';
+import { invalidateRuntimeSessions } from '@main/core/conversations/invalidate-runtime-sessions';
 import { TTLCache } from '@main/core/utils/ttl-cache';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
@@ -948,6 +949,10 @@ export class MaasService {
           }
         }
         await appSettingsService.update('maas', { runtimeBindings: [] });
+        await invalidateRuntimeSessions({
+          runtimeIds: supportedRuntimeIds,
+          reason: 'MaaS global routing disabled',
+        });
         return { success: true };
       }
 
@@ -999,6 +1004,10 @@ export class MaasService {
       await appSettingsService.update('maas', {
         selectedPlatformId: input.platformId,
         runtimeBindings: nextBindings,
+      });
+      await invalidateRuntimeSessions({
+        runtimeIds: supportedRuntimeIds,
+        reason: 'MaaS global routing changed',
       });
       return { success: true };
     } catch (error) {
@@ -1100,6 +1109,10 @@ export class MaasService {
             ...settings.runtimeBindings.filter((item) => item.runtimeId !== input.runtimeId),
           ],
         });
+        await invalidateRuntimeSessions({
+          runtimeIds: [input.runtimeId],
+          reason: 'MaaS runtime routing enabled',
+        });
         return { success: true };
       }
 
@@ -1123,6 +1136,10 @@ export class MaasService {
         runtimeBindings: settings.runtimeBindings.filter(
           (item) => item.runtimeId !== input.runtimeId
         ),
+      });
+      await invalidateRuntimeSessions({
+        runtimeIds: [input.runtimeId],
+        reason: 'MaaS runtime routing disabled',
       });
       return { success: true };
     } catch (error) {
@@ -1412,6 +1429,15 @@ export class MaasService {
 
       this.recordsCacheByConnection.clear();
       telemetryService.capture('maas_platform_connected', { platform: templateId });
+
+      const affectedRuntimeIds = settings.runtimeBindings
+        .filter((binding) => binding.platformId === input.platformId)
+        .map((binding) => binding.runtimeId);
+      await invalidateRuntimeSessions({
+        runtimeIds: affectedRuntimeIds,
+        authProviders: ['yoda-maas'],
+        reason: 'MaaS credentials changed',
+      });
 
       return { success: true, connection: toConnection(connection, input.platformId) };
     } catch (error) {
