@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getDefaultPermissionModeId,
+  getNpmPackageForRuntime,
   getRuntimeAccountProfile,
   getRuntimePermissionModes,
   getUninstallCommandForRuntime,
@@ -26,10 +27,11 @@ describe('built-in runtimes', () => {
 describe('runtime update commands', () => {
   it('returns an explicitly registered runtime-native update command', () => {
     expect(getUpdateCommandForRuntime('codex')).toBe('codex update');
+    expect(getUpdateCommandForRuntime('claude')).toBe('claude update');
   });
 
   it('does not fall back to an install command', () => {
-    expect(getUpdateCommandForRuntime('claude')).toBeNull();
+    expect(getUpdateCommandForRuntime('cursor')).toBeNull();
   });
 });
 
@@ -40,8 +42,31 @@ describe('runtime version history', () => {
     );
   });
 
+  it('returns the registered official Claude Code release archive', () => {
+    expect(getVersionHistoryUrlForRuntime('claude')).toBe(
+      'https://github.com/anthropics/claude-code/releases'
+    );
+  });
+
   it('does not guess a release archive from a documentation URL', () => {
-    expect(getVersionHistoryUrlForRuntime('claude')).toBeNull();
+    expect(getVersionHistoryUrlForRuntime('cursor')).toBeNull();
+  });
+});
+
+describe('runtime npm packages', () => {
+  it('reads the package back from a registered npm install command', () => {
+    expect(getNpmPackageForRuntime('codex')).toBe('@openai/codex');
+    expect(getNpmPackageForRuntime('gemini')).toBe('@google/gemini-cli');
+    expect(getNpmPackageForRuntime('opencode')).toBe('opencode-ai');
+  });
+
+  it('keeps an explicit package for a CLI installed by a shell script', () => {
+    expect(getNpmPackageForRuntime('claude')).toBe('@anthropic-ai/claude-code');
+  });
+
+  it('does not invent a package for CLIs that npm does not publish', () => {
+    expect(getNpmPackageForRuntime('droid')).toBeNull();
+    expect(getNpmPackageForRuntime('kimi')).toBeNull();
   });
 });
 

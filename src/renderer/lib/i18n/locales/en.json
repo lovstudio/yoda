@@ -3834,6 +3834,7 @@
       "version": "Version",
       "versionMenu": "Version details",
       "latestVersionLabel": "Latest version",
+      "currentVersionLabel": "Installed version",
       "versionHistory": "View version history",
       "updateAvailable": "v{{version}} available",
       "model": "Model",

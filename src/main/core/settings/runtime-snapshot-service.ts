@@ -7,13 +7,14 @@ import { getUpdateCommandForRuntime, type RuntimeId } from '@shared/runtime-regi
 import type { RuntimeSnapshot } from '@shared/runtime-snapshot';
 import { getDependencyManager } from '@main/core/dependencies/dependency-manager';
 import { log } from '@main/lib/logger';
+import { getRuntimeLatestVersion } from './runtime-latest-version';
 import { runtimeOverrideSettings } from './runtime-settings-service';
 import {
   isNewerVersion,
-  parseCodexVersionInfo,
+  parseCodexVersionCache,
   parseRuntimeConfigText,
-  type CodexVersionInfo,
   type ParsedRuntimeConfig,
+  type RuntimeVersionInfo,
 } from './runtime-snapshot-parser';
 
 async function pathExists(filePath: string): Promise<boolean> {
@@ -79,15 +80,21 @@ async function loadNativeConfig(
 async function loadUpdateInfo(
   runtimeId: RuntimeId,
   connectionId?: string
-): Promise<CodexVersionInfo> {
-  if (runtimeId !== 'codex' || connectionId) {
-    return { latestVersion: null, lastCheckedAt: null };
+): Promise<RuntimeVersionInfo> {
+  // Remote runtimes are inspected through their own host; the local Codex
+  // cache and this machine's registry lookups say nothing about them.
+  if (connectionId) return { latestVersion: null, lastCheckedAt: null };
+
+  if (runtimeId === 'codex') {
+    const cached = await readFile(path.join(codexHome(), 'version.json'), 'utf8')
+      .then(parseCodexVersionCache)
+      .catch(() => null);
+    // The Codex cache only exists after its own update check ran. Fall through
+    // to the npm registry so the card is never empty.
+    if (cached?.latestVersion) return cached;
   }
-  try {
-    return parseCodexVersionInfo(await readFile(path.join(codexHome(), 'version.json'), 'utf8'));
-  } catch {
-    return { latestVersion: null, lastCheckedAt: null };
-  }
+
+  return (await getRuntimeLatestVersion(runtimeId)) ?? { latestVersion: null, lastCheckedAt: null };
 }
 
 function snapshotConfig(config: RuntimeCustomConfig | undefined): RuntimeSnapshot['config'] {

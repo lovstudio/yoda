@@ -143,6 +143,8 @@ describe('AgentInfoCard', () => {
     );
     expect(versionMenuContent?.textContent).toContain('agents.runtimeInfo.latestVersionLabel');
     expect(versionMenuContent?.textContent).toContain('v0.147.0');
+    expect(versionMenuContent?.textContent).toContain('agents.runtimeInfo.currentVersionLabel');
+    expect(versionMenuContent?.textContent).toContain('v0.146.0');
     await clickUser(findMenuItem('agents.runtimeInfo.versionHistory')!);
     expect(mocks.openExternal).toHaveBeenCalledWith('https://github.com/openai/codex/releases');
 

@@ -231,6 +231,7 @@ export const AgentInfoCard: React.FC<Props> = ({
           value={installation?.version ? `v${installation.version}` : t('agents.notDetected')}
           trailingAction={
             <VersionInfoDropdown
+              currentVersion={installation?.version ?? null}
               latestVersion={snapshot?.update.latestVersion ?? null}
               historyUrl={versionHistoryUrl}
             />
@@ -336,9 +337,11 @@ function RuntimeStateBadge({
 }
 
 function VersionInfoDropdown({
+  currentVersion,
   latestVersion,
   historyUrl,
 }: {
+  currentVersion: string | null;
   latestVersion: string | null;
   historyUrl: string | null;
 }) {
@@ -360,12 +363,14 @@ function VersionInfoDropdown({
       />
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="flex items-center justify-between gap-4 font-normal">
-            <span>{t('agents.runtimeInfo.latestVersionLabel')}</span>
-            <span className="font-mono text-foreground">
-              {latestVersion ? `v${latestVersion}` : '—'}
-            </span>
-          </DropdownMenuLabel>
+          <VersionInfoLabel
+            label={t('agents.runtimeInfo.latestVersionLabel')}
+            version={latestVersion}
+          />
+          <VersionInfoLabel
+            label={t('agents.runtimeInfo.currentVersionLabel')}
+            version={currentVersion}
+          />
         </DropdownMenuGroup>
         {historyUrl ? (
           <>
@@ -378,6 +383,18 @@ function VersionInfoDropdown({
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function VersionInfoLabel({ label, version }: { label: string; version: string | null }) {
+  const { t } = useTranslation();
+  return (
+    <DropdownMenuLabel className="flex items-center justify-between gap-4 font-normal">
+      <span>{label}</span>
+      <span className={cn('font-mono', version ? 'text-foreground' : 'text-foreground-passive')}>
+        {version ? `v${version}` : t('agents.notDetected')}
+      </span>
+    </DropdownMenuLabel>
   );
 }
 

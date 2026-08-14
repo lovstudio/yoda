@@ -160,12 +160,12 @@ describe('DependencyManager install', () => {
       runInstallCommand,
     });
 
-    const result = await manager.update('claude');
+    const result = await manager.update('cursor');
 
     expect(runInstallCommand).not.toHaveBeenCalled();
     expect(result).toEqual({
       success: false,
-      error: { type: 'no-install-command', id: 'claude' },
+      error: { type: 'no-install-command', id: 'cursor' },
     });
   });
 

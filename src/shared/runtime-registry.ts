@@ -66,6 +66,12 @@ export type RuntimeDefinition = {
   docUrl?: string;
   /** Official release archive used by the runtime info card's version menu. */
   versionHistoryUrl?: string;
+  /**
+   * npm package that publishes this CLI, used to look up the latest released
+   * version. Only needed when it cannot be derived from the npm install or
+   * uninstall command (for example a CLI installed by a shell script).
+   */
+  npmPackage?: string;
   installCommand?: string;
   /** Reliable command that removes an installation managed by its package manager. */
   uninstallCommand?: string;
@@ -407,7 +413,11 @@ export const RUNTIMES: RuntimeDefinition[] = [
     description:
       'CLI that uses Anthropic Claude for code edits, explanations, and structured refactors in the terminal.',
     docUrl: 'https://docs.anthropic.com/claude/docs/claude-code',
+    versionHistoryUrl: 'https://github.com/anthropics/claude-code/releases',
+    // The installer script and the npm package publish the same versions.
+    npmPackage: '@anthropic-ai/claude-code',
     installCommand: 'curl -fsSL https://claude.ai/install.sh | bash',
+    updateCommand: 'claude update',
     commands: ['claude'],
     versionArgs: ['--version'],
     cli: 'claude',
@@ -1225,6 +1235,26 @@ export function getUpdateCommandForRuntime(id: RuntimeId): string | null {
 
 export function getUninstallCommandForRuntime(id: RuntimeId): string | null {
   return PROVIDER_MAP.get(id)?.uninstallCommand ?? null;
+}
+
+const NPM_PACKAGE_COMMAND_PATTERN =
+  /\bnpm\s+(?:i|install|uninstall)\s+-g\s+(@[^\s@/]+\/[^\s@]+|[^\s@-][^\s@]*)/;
+
+/**
+ * npm package that publishes this CLI, or null when the runtime is not
+ * distributed through npm. An explicit `npmPackage` wins; otherwise it is read
+ * back from the registered npm install/uninstall command so the two can never
+ * disagree.
+ */
+export function getNpmPackageForRuntime(id: RuntimeId): string | null {
+  const runtime = PROVIDER_MAP.get(id);
+  if (!runtime) return null;
+  if (runtime.npmPackage) return runtime.npmPackage;
+  for (const command of [runtime.installCommand, runtime.uninstallCommand]) {
+    const match = command ? NPM_PACKAGE_COMMAND_PATTERN.exec(command) : null;
+    if (match) return match[1];
+  }
+  return null;
 }
 
 /**

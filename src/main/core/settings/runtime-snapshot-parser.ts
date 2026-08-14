@@ -5,7 +5,7 @@ export type ParsedRuntimeConfig = {
   provider: string | null;
 };
 
-export type CodexVersionInfo = {
+export type RuntimeVersionInfo = {
   latestVersion: string | null;
   lastCheckedAt: string | null;
 };
@@ -51,7 +51,7 @@ export function parseRuntimeConfigText(filePath: string, input: string): ParsedR
   return { model, provider };
 }
 
-export function parseCodexVersionInfo(input: string): CodexVersionInfo {
+export function parseCodexVersionCache(input: string): RuntimeVersionInfo {
   try {
     const value = JSON.parse(input) as Record<string, unknown>;
     return {
