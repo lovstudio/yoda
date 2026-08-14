@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MaasConnection, MaasGlobalBindingStatus } from '@shared/maas';
-import { getWorkspaceMaasAccountPresentation } from './workspace-runtime-bar-maas';
+import { getWorkspaceMaasPresentation } from './workspace-runtime-bar-maas';
 
 const zenmuxBinding: MaasGlobalBindingStatus = {
   platformId: 'zenmux',
@@ -23,32 +23,20 @@ const zenmuxConnection: MaasConnection = {
   error: null,
 };
 
-describe('getWorkspaceMaasAccountPresentation', () => {
-  it('uses the effective MaaS Profile as the current Codex account source', () => {
-    expect(getWorkspaceMaasAccountPresentation(zenmuxBinding, [zenmuxConnection], 'codex')).toEqual(
-      {
-        platformId: 'zenmux',
-        providerName: 'ZenMux Production',
-        endpoint: 'https://zenmux.example/v1',
-        envKey: 'ZENMUX_PRODUCTION_API_KEY',
-      }
-    );
+describe('getWorkspaceMaasPresentation', () => {
+  it('presents the enabled MaaS Profile as a global routing state', () => {
+    expect(getWorkspaceMaasPresentation(zenmuxBinding, [zenmuxConnection])).toEqual({
+      active: true,
+      providerName: 'ZenMux Production',
+    });
   });
 
-  it('does not replace official account state when MaaS is ineffective or excludes the Client', () => {
+  it('keeps disabled MaaS separate from Agent account presentation', () => {
     expect(
-      getWorkspaceMaasAccountPresentation(
-        { ...zenmuxBinding, effective: false },
-        [zenmuxConnection],
-        'codex'
+      getWorkspaceMaasPresentation(
+        { ...zenmuxBinding, platformId: null, enabled: false, effective: false, runtimeIds: [] },
+        [zenmuxConnection]
       )
-    ).toBeNull();
-    expect(
-      getWorkspaceMaasAccountPresentation(
-        { ...zenmuxBinding, runtimeIds: ['claude'] },
-        [zenmuxConnection],
-        'codex'
-      )
-    ).toBeNull();
+    ).toEqual({ active: false, providerName: null });
   });
 });

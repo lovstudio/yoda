@@ -32,34 +32,32 @@ describe('resolveDefaultGatewaySource', () => {
 });
 
 describe('workspace MaaS placement', () => {
-  it('renders the global MaaS selector inside the active account popover', () => {
+  it('renders global MaaS independently from the current Agent account', () => {
     const source = readFileSync(
       new URL('../../app/workspace-runtime-bar.tsx', import.meta.url),
       'utf8'
     );
-    const accountIndex = source.indexOf('{maasAccount ? (');
+    const accountIndex = source.indexOf('{shortAccountWindow || officialCodexAccountAvailable');
+    const accountEnd = source.indexOf('<span className="flex-1" />', accountIndex);
     const popoverIndex = source.indexOf(
       '<Popover open={isMaasPopoverOpen} onOpenChange={setIsMaasPopoverOpen}>',
-      accountIndex
+      accountEnd
     );
-    const selectorIndex = source.indexOf('<MaasGlobalSelector', popoverIndex);
-    const officialAccountIndex = source.indexOf(
-      'shortAccountWindow || officialCodexAccountAvailable',
-      selectorIndex
-    );
+    const selectorIndex = source.indexOf('<WorkspaceMaasPopover', popoverIndex);
     const spacerIndex = source.indexOf('<span className="flex-1" />');
     const terminalIndex = source.indexOf("title={t('workspaceRuntime.terminal')}", spacerIndex);
 
     expect(accountIndex).toBeGreaterThanOrEqual(0);
-    expect(popoverIndex).toBeGreaterThan(accountIndex);
+    expect(accountEnd).toBeGreaterThan(accountIndex);
+    expect(popoverIndex).toBeGreaterThan(accountEnd);
     expect(selectorIndex).toBeGreaterThan(popoverIndex);
-    expect(officialAccountIndex).toBeGreaterThan(selectorIndex);
-    expect(spacerIndex).toBeGreaterThan(selectorIndex);
+    expect(spacerIndex).toBeLessThan(selectorIndex);
     expect(terminalIndex).toBeGreaterThan(spacerIndex);
-    expect(source.match(/<MaasGlobalSelector/g)).toHaveLength(1);
-    expect(source).not.toContain('aria-label={maasTriggerLabel}');
-    expect(source).not.toContain('const maasPresentation = useMemo(');
-    expect(source).not.toContain('getWorkspaceMaasPresentation(');
+    expect(source.match(/<WorkspaceMaasPopover/g)).toHaveLength(1);
+    expect(source).toContain('aria-label={maasTriggerLabel}');
+    expect(source).toContain('const maasPresentation = useMemo(');
+    expect(source).toContain('getWorkspaceMaasPresentation(');
+    expect(source).not.toContain('maasAccount');
     expect(source).not.toContain('<GatewayRuntimeSources');
   });
 });

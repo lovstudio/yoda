@@ -24,7 +24,8 @@ export const MaasGlobalSelector: React.FC<{
   platformId?: MaasPlatformId;
   onManagePlatform?: (platformId: MaasPlatformId) => void;
   onOpenMarketplace?: () => void;
-}> = ({ platformId, onManagePlatform }) => {
+  showSelectedStatus?: boolean;
+}> = ({ platformId, onManagePlatform, showSelectedStatus = true }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const connections = useMaasConnections();
@@ -147,16 +148,18 @@ export const MaasGlobalSelector: React.FC<{
                     <span className="min-w-0 flex-1 truncate font-medium text-foreground">
                       {selectedProfile.platformName}
                     </span>
-                    <span
-                      className={cn(
-                        'shrink-0 truncate text-[10px]',
-                        selectedProfile.effective
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-amber-700 dark:text-amber-300'
-                      )}
-                    >
-                      {selectedProfile.status}
-                    </span>
+                    {showSelectedStatus ? (
+                      <span
+                        className={cn(
+                          'shrink-0 truncate text-[10px]',
+                          selectedProfile.effective
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-amber-700 dark:text-amber-300'
+                        )}
+                      >
+                        {selectedProfile.status}
+                      </span>
+                    ) : null}
                   </span>
                 ) : (
                   <span className="text-foreground-muted">{t('maas.global.disabled')}</span>

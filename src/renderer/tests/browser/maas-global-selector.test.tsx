@@ -101,6 +101,28 @@ describe('MaasGlobalSelector', () => {
     expect(mocks.managePlatform).toHaveBeenCalledWith('custom:first');
   });
 
+  it('can keep the selected Profile compact when status is shown by the parent surface', async () => {
+    const { MaasGlobalSelector } = await import(
+      '@renderer/features/maas/components/MaasGlobalSelector'
+    );
+    await act(async () =>
+      root.render(createElement(MaasGlobalSelector, { showSelectedStatus: false }))
+    );
+
+    const trigger = host.querySelector<HTMLButtonElement>(
+      '[data-slot="select-trigger"][aria-label="maas.global.title"]'
+    );
+    expect(trigger?.textContent).toContain('First Custom');
+    expect(trigger?.textContent).not.toContain('maas.global.effective');
+    expect(host.querySelector('[aria-label="maas.global.manage"]')).toBeNull();
+
+    await userEvent.click(trigger!);
+    const selectedOption = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-slot="select-item"]')
+    ).find((item) => item.textContent?.includes('First Custom'));
+    expect(selectedOption?.textContent).toContain('maas.global.effective');
+  });
+
   it('shows an unverified Profile as a disabled option when no configuration action is provided', async () => {
     mocks.binding = { platformId: null, enabled: false, effective: false, runtimeIds: [] };
     mocks.connections = [

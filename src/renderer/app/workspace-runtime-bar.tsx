@@ -35,7 +35,6 @@ import {
 } from '@shared/runtime-registry';
 import { YODA_ACCOUNT_USAGE_DOC_URL } from '@shared/urls';
 import { openTaskTarget } from '@renderer/app/open-task-target';
-import { MaasGlobalSelector } from '@renderer/features/maas/components/MaasGlobalSelector';
 import { useMaasConnections, useMaasGlobalBinding } from '@renderer/features/maas/useMaas';
 import {
   asMounted,
@@ -76,6 +75,7 @@ import {
 } from './composer-settings-content';
 import { startRendererPerformanceReporter } from './renderer-performance-reporter';
 import { rankWorkspaceAgentSessions } from './workspace-agent-sessions';
+import { WorkspaceMaasPopover } from './workspace-maas-popover';
 import { WorkspaceNotificationCenter } from './workspace-notification-center';
 import { WorkspacePromptPopover } from './workspace-prompt-popover';
 import type { WorkspaceResourceDetailKind } from './workspace-resource-details-modal';
@@ -95,7 +95,7 @@ import {
   getNextAccountResetCredit,
   getQuotaWindowLabel,
 } from './workspace-runtime-bar-format';
-import { getWorkspaceMaasAccountPresentation } from './workspace-runtime-bar-maas';
+import { getWorkspaceMaasPresentation } from './workspace-runtime-bar-maas';
 import { WorkspaceSkillPopover } from './workspace-skill-popover';
 
 type WorkspaceAgentSession = Omit<AppAgentSessionResource, 'runtimeId' | 'title' | 'taskTitle'> & {
@@ -158,11 +158,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const openMaasManagement = useCallback(() => {
     dismissBeforeSynchronousAction(dismissMaasPopover, () => {
       appState.navigation.navigate('maas');
-    });
-  }, [dismissMaasPopover]);
-  const openMaasMarketplace = useCallback(() => {
-    dismissBeforeSynchronousAction(dismissMaasPopover, () => {
-      appState.navigation.navigate('library', { section: 'extensions' });
     });
   }, [dismissMaasPopover]);
   const openMaasLogs = useCallback(() => {
@@ -296,17 +291,20 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const connectionId = provisionedTask?.workspace.sshConnectionId;
   const globalMaasBinding = useMaasGlobalBinding();
   const { data: maasConnections } = useMaasConnections();
-  const maasAccount = useMemo(
-    () => getWorkspaceMaasAccountPresentation(globalMaasBinding.data, maasConnections, runtimeId),
-    [globalMaasBinding.data, maasConnections, runtimeId]
+  const maasPresentation = useMemo(
+    () => getWorkspaceMaasPresentation(globalMaasBinding.data, maasConnections),
+    [globalMaasBinding.data, maasConnections]
   );
-  const maasAccountActive = maasAccount !== null;
-  const officialCodexAccountAvailable =
-    runtimeId === 'codex' && !connectionId && !globalMaasBinding.isLoading && !maasAccountActive;
-  const officialUsageUrl =
-    runtimeId && !maasAccountActive
-      ? getRuntimeAccountProfile(runtimeId).officialSubscription.usageUrl
-      : undefined;
+  const maasActiveForRuntime = Boolean(
+    runtimeId &&
+      globalMaasBinding.data?.enabled &&
+      globalMaasBinding.data.effective &&
+      globalMaasBinding.data.runtimeIds.includes(runtimeId)
+  );
+  const officialCodexAccountAvailable = runtimeId === 'codex' && !connectionId;
+  const officialUsageUrl = runtimeId
+    ? getRuntimeAccountProfile(runtimeId).officialSubscription.usageUrl
+    : undefined;
   const { data: sessionModelDetails } = useActiveSessionModelDetails({
     runtimeId,
     cwd: provisionedTask?.path,
@@ -353,15 +351,12 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   });
   const accountRateLimits = useMemo(
     () =>
-      !maasAccountActive &&
-      accountUsage &&
-      !accountUsage.error &&
-      accountUsage.rateLimits.length > 0
+      accountUsage && !accountUsage.error && accountUsage.rateLimits.length > 0
         ? accountUsage.rateLimits
-        : !maasAccountActive
-          ? (sessionContext?.rateLimits ?? [])
-          : [],
-    [accountUsage, maasAccountActive, sessionContext?.rateLimits]
+        : globalMaasBinding.data?.enabled
+          ? []
+          : (sessionContext?.rateLimits ?? []),
+    [accountUsage, globalMaasBinding.data?.enabled, sessionContext?.rateLimits]
   );
   const shortAccountWindow = accountRateLimits[0] ?? null;
   const accountUsageSupportsResetCreditDetails =
@@ -373,6 +368,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     setAccountUsageWarningThresholdDraft(String(accountUsageWarningThreshold));
   }, [accountUsageWarningThreshold]);
   const sessionHistoryDocked = interfaceSettings?.dockSessionHistory ?? true;
+  const maasTriggerLabel = maasPresentation.providerName
+    ? t('workspaceRuntime.maas.labelWithProvider', {
+        provider: maasPresentation.providerName,
+      })
+    : t('workspaceRuntime.maas.title');
   const { data: resourceSnapshot, refetch: refreshResourceSnapshot } = useQuery({
     queryKey: WORKSPACE_RESOURCE_QUERY_KEY,
     queryFn: () => rpc.app.getResourceSnapshot({ freshAgentProcesses: isAgentPopoverOpen }),
@@ -915,9 +915,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                 selectedModelSource="currentSession"
                 connectionId={connectionId}
                 authPresentation={
-                  maasAccount
+                  maasActiveForRuntime && maasPresentation.providerName
                     ? {
-                        value: maasAccount.providerName,
+                        value: maasPresentation.providerName,
                         detail: t('workspaceRuntime.maas.authenticationSource'),
                       }
                     : undefined
@@ -1082,145 +1082,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               </Popover>
             </>
           ) : null}
-          {maasAccount ? (
-            <>
-              <span aria-hidden className="@max-[1120px]:hidden">
-                ·
-              </span>
-              <Popover open={isMaasPopoverOpen} onOpenChange={setIsMaasPopoverOpen}>
-                <PopoverTrigger
-                  aria-label={t('workspaceRuntime.maas.accountTitle', {
-                    provider: maasAccount.providerName,
-                  })}
-                  className="flex h-5 min-w-0 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground transition-colors hover:bg-background-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
-                  title={t('workspaceRuntime.maas.accountTitle', {
-                    provider: maasAccount.providerName,
-                  })}
-                >
-                  <Cloud className="size-3.5 shrink-0" />
-                  <span className="max-w-36 truncate @max-[1120px]:hidden">
-                    {maasAccount.providerName}
-                  </span>
-                  <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
-                </PopoverTrigger>
-                {isMaasPopoverOpen ? (
-                  <PopoverContent
-                    align="start"
-                    side="top"
-                    sideOffset={8}
-                    className="max-h-[min(80vh,42rem)] w-[22rem] gap-0 overflow-y-auto overscroll-contain border border-border bg-background p-0 text-foreground shadow-lg"
-                  >
-                    <div className="flex items-start gap-2.5 p-3">
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background-2 text-foreground">
-                        <Cloud aria-hidden className="size-4" />
-                      </span>
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium">
-                          {maasAccount.providerName}
-                        </div>
-                        <div className="mt-0.5 text-xs text-foreground-passive">
-                          {t('workspaceRuntime.maas.accountDescription', {
-                            client: runtime?.name ?? runtimeId,
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="border-t border-border px-3 py-2.5 text-xs">
-                      <div className="flex items-start gap-3 py-1">
-                        <span className="w-20 shrink-0 text-foreground-passive">
-                          {t('workspaceRuntime.maas.profile')}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-right text-foreground">
-                          {maasAccount.providerName}
-                        </span>
-                      </div>
-                      <div className="flex items-start gap-3 py-1">
-                        <span className="w-20 shrink-0 text-foreground-passive">
-                          {t('workspaceRuntime.maas.endpoint')}
-                        </span>
-                        <span
-                          className="min-w-0 flex-1 truncate text-right font-mono text-[11px] text-foreground"
-                          title={maasAccount.endpoint ?? undefined}
-                        >
-                          {maasAccount.endpoint ?? '—'}
-                        </span>
-                      </div>
-                      <div className="flex items-start gap-3 py-1">
-                        <span className="w-20 shrink-0 text-foreground-passive">
-                          {t('workspaceRuntime.maas.environmentKey')}
-                        </span>
-                        <span
-                          className="min-w-0 flex-1 truncate text-right font-mono text-[11px] text-foreground"
-                          title={maasAccount.envKey ?? undefined}
-                        >
-                          {maasAccount.envKey ?? '—'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="border-t border-border px-3 py-2.5">
-                      <p className="rounded-md bg-background-2 px-2.5 py-2 text-[11px] leading-relaxed text-foreground-passive">
-                        {t('workspaceRuntime.maas.officialQuotaUnavailable', {
-                          provider: maasAccount.providerName,
-                        })}
-                      </p>
-                    </div>
-                    <div className="border-t border-border p-3">
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-xs font-medium">
-                            {t('workspaceRuntime.maas.title')}
-                          </div>
-                          <div className="mt-0.5 text-[11px] leading-4 text-foreground-passive">
-                            {t('workspaceRuntime.maas.description')}
-                          </div>
-                        </div>
-                        <span
-                          className={cn(
-                            'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium',
-                            globalMaasBinding.data?.effective
-                              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                              : globalMaasBinding.data?.enabled
-                                ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                                : 'bg-background-2 text-foreground-muted'
-                          )}
-                        >
-                          {globalMaasBinding.data?.effective
-                            ? t('workspaceRuntime.maas.effective')
-                            : globalMaasBinding.data?.enabled
-                              ? t('workspaceRuntime.maas.needsAttention')
-                              : t('workspaceRuntime.maas.disabled')}
-                        </span>
-                      </div>
-                      <MaasGlobalSelector
-                        onManagePlatform={openMaasManagement}
-                        onOpenMarketplace={openMaasMarketplace}
-                      />
-                      <div className="mt-3 flex gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="flex-1"
-                          onClick={openMaasManagement}
-                        >
-                          {t('workspaceRuntime.maas.manage')}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="flex-1"
-                          onClick={openMaasLogs}
-                        >
-                          {t('workspaceRuntime.maas.openLogs')}
-                        </Button>
-                      </div>
-                    </div>
-                  </PopoverContent>
-                ) : null}
-              </Popover>
-            </>
-          ) : shortAccountWindow || officialCodexAccountAvailable ? (
+          {shortAccountWindow || officialCodexAccountAvailable ? (
             <>
               <span aria-hidden className="@max-[1120px]:hidden">
                 ·
@@ -1814,6 +1676,54 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             })}
           />
         </PopoverContent>
+      </Popover>
+      <Popover open={isMaasPopoverOpen} onOpenChange={setIsMaasPopoverOpen}>
+        <PopoverTrigger
+          aria-label={maasTriggerLabel}
+          className={cn(
+            RUNTIME_BAR_ACTION_CLASS,
+            maasPresentation.active ? 'bg-background-2 text-foreground' : 'text-foreground-passive'
+          )}
+          title={maasTriggerLabel}
+        >
+          <Cloud aria-hidden className="size-3.5" />
+          {maasPresentation.providerName ? (
+            <span className="inline-block max-w-40 truncate @max-[1120px]:hidden">
+              {t('workspaceRuntime.maas.providerSuffix', {
+                provider: maasPresentation.providerName,
+              })}
+            </span>
+          ) : (
+            <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>
+              {t('workspaceRuntime.maas.title')}
+            </span>
+          )}
+          <span
+            aria-hidden
+            className={cn(
+              'size-1.5 rounded-full',
+              globalMaasBinding.data?.effective
+                ? 'bg-emerald-500'
+                : globalMaasBinding.data?.enabled
+                  ? 'bg-amber-500'
+                  : 'bg-foreground-disabled'
+            )}
+          />
+        </PopoverTrigger>
+        {isMaasPopoverOpen ? (
+          <PopoverContent
+            align="end"
+            side="top"
+            sideOffset={8}
+            className="w-[21rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+          >
+            <WorkspaceMaasPopover
+              binding={globalMaasBinding.data}
+              onManage={openMaasManagement}
+              onOpenLogs={openMaasLogs}
+            />
+          </PopoverContent>
+        ) : null}
       </Popover>
       <button
         type="button"
