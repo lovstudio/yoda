@@ -288,6 +288,7 @@ export const ProjectSelector = observer(function ProjectSelector({
                     key={item.value}
                     value={item}
                     disabled={item.kind === 'browse' && browsing}
+                    className="border-l-2 border-transparent transition-[background-color,border-color] data-highlighted:border-foreground/70 data-highlighted:bg-background-3"
                     aria-label={
                       item.kind === 'projectless'
                         ? `${item.label}: ${item.description}`
