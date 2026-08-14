@@ -48,9 +48,9 @@ Each provider has a terminal output classifier in `src/main/core/conversations/i
   target can be a remote service or a user-selected local gateway; the optional
   `lovstudio.maas-gateway` Marketplace extension is not a MaaS prerequisite.
 - Every MaaS Profile owns its provider environment key, such as
-  `ZENMUX_API_KEY` or `LOVSTUDIO_LLM_API_KEY`. Yoda keeps the actual key in its
-  encrypted secret store; never write the key itself to `config.toml` or CLI
-  arguments.
+  `ZENMUX_API_KEY` or `LOVSTUDIO_LLM_API_KEY`. For Yoda-launched sessions, Yoda
+  keeps the actual key in its encrypted secret store and passes it only through
+  the child process environment; never put it in CLI arguments or logs.
 - Codex-native model ids stay native for direct providers. At the ZenMux
   boundary, Yoda restores the catalog namespace (for example,
   `gpt-5.6-sol` -> `openai/gpt-5.6-sol`) for both Yoda-launched sessions and
@@ -62,23 +62,20 @@ Each provider has a terminal output classifier in `src/main/core/conversations/i
   updates every supported Agent Client adapter. Codex CLI/App is the first
   persistent adapter. Other Clients must remain visibly marked as planned until
   their full configuration migration and rollback flows are implemented.
-- Global external-Agent sync is explicitly consented and visible in MaaS settings. Yoda keeps
-  a restorable snapshot and offers an immediate cleanup action. On macOS it
-  stores an explicitly consented copy in Keychain and installs a secret-free
-  LaunchAgent so external Codex instances keep working after Yoda quits or the
-  user logs in again. The UI must explain that this is persistent and should
-  be cleared before Yoda is disabled or uninstalled. Cleanup restores the
-  original Codex config and login-session environment and removes both the
-  Keychain item and LaunchAgent. Already-running Clients retain the environment
-  inherited when they launched.
-- Persistent sync requires the current global `externalAgentSyncVersion`
-  consent. Older per-Profile `syncToAgentClientVersion` consent may be read once
-  for compatibility, but the next global toggle migrates it into the MaaS-level
-  setting and removes the legacy flags. New installations default to Yoda-only
-  scope.
-- `codex-maas-user-environment.ts` also restores or removes the old
-  `YODA_MAAS_API_KEY` login-session value during v3 snapshot migration; current
-  Profiles must not reuse that legacy variable.
+- Global external-Agent sync is explicitly consented and visible in MaaS
+  settings. Codex CLI / App is the first adapter. It writes the active provider
+  and `experimental_bearer_token` to the user-level `config.toml`, with mode
+  `0600`, so the same configuration works on macOS, Windows, and Linux without
+  login-session environment propagation. The UI must disclose that this token
+  is plaintext and persistent. Cleanup restores the original Codex config.
+- Persistent sync requires the current global `externalAgentSyncVersion = 2`
+  consent. Version 1 represented the older macOS Keychain/LaunchAgent flow and
+  must not silently authorize plaintext config storage. Reconciliation removes
+  its managed environment/config state until the user explicitly enables the
+  new flow. New installations default to Yoda-only scope.
+- `codex-maas-user-environment.ts` remains only for restoring or removing old
+  managed environment state, including `YODA_MAAS_API_KEY`, during snapshot
+  migration. Current Profiles must not publish credentials through it.
 - Never store a third-party MaaS key in Codex `auth.json`. That file belongs to
   the user's native OpenAI/ChatGPT login.
 - `tasks.autoTrustWorktrees` applies to both Claude Code and Codex. Before launch,

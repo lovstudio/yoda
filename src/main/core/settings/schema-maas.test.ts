@@ -41,7 +41,7 @@ describe('MaaS settings schema', () => {
     const maas = maasSettingsSchema.parse({
       selectedPlatformId: 'zenmux',
       externalAgentSyncEnabled: true,
-      externalAgentSyncVersion: 1,
+      externalAgentSyncVersion: 2,
       connections: [
         {
           platformId: 'zenmux',
@@ -58,8 +58,21 @@ describe('MaaS settings schema', () => {
     });
 
     expect(maas.externalAgentSyncEnabled).toBe(true);
-    expect(maas.externalAgentSyncVersion).toBe(1);
+    expect(maas.externalAgentSyncVersion).toBe(2);
     expect(maas.connections[0]?.syncToAgentClientVersion).toBeUndefined();
+  });
+
+  it('retains the legacy sync version so MaaS can require renewed plaintext consent', () => {
+    const maas = maasSettingsSchema.parse({
+      selectedPlatformId: 'zenmux',
+      externalAgentSyncEnabled: true,
+      externalAgentSyncVersion: 1,
+      connections: [],
+      runtimeBindings: [],
+    });
+
+    expect(maas.externalAgentSyncEnabled).toBe(true);
+    expect(maas.externalAgentSyncVersion).toBe(1);
   });
 
   it('rejects an empty Custom instance suffix', () => {

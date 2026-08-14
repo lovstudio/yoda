@@ -116,7 +116,7 @@ describe('Codex MaaS native authentication switch', () => {
     authSwitch = new CodexMaasAuthSwitch(secrets, userEnvironment);
   });
 
-  it('points Codex at the configured MaaS endpoint without replacing the OpenAI account', async () => {
+  it('persists the MaaS bearer token in Codex config without replacing the OpenAI account', async () => {
     await enableMaas(authSwitch, codexHome, {
       platformId: 'zenmux',
       displayName: 'OpenAI',
@@ -124,10 +124,7 @@ describe('Codex MaaS native authentication switch', () => {
 
     expect(await readFile(authPath, 'utf8')).toBe(originalAuth);
     await expect(readFile(tokenPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
-    expect(userEnvironment.get('ZENMUX_API_KEY')).toEqual({
-      exists: true,
-      value: 'upstream-secret',
-    });
+    expect(userEnvironment.get('ZENMUX_API_KEY')).toEqual({ exists: false });
     const activeConfig = await readFile(configPath, 'utf8');
     expect(activeConfig).toContain('# Auto-injected by Yoda MaaS\r\n');
     expect(activeConfig).toContain('model_provider = "yoda"\r\n');
@@ -136,21 +133,20 @@ describe('Codex MaaS native authentication switch', () => {
     expect(activeConfig).toContain('name = "ZenMux"\r\n');
     expect(activeConfig).toContain(`base_url = "${MAAS_ENDPOINT}"\r\n`);
     expect(activeConfig).toContain('wire_api = "responses"\r\n');
-    expect(activeConfig).toContain('env_key = "ZENMUX_API_KEY"\r\n');
-    expect(activeConfig).not.toContain('experimental_bearer_token');
+    expect(activeConfig).not.toContain('env_key =');
+    expect(activeConfig).toContain('experimental_bearer_token = "upstream-secret"\r\n');
     expect(activeConfig).not.toContain('[model_providers.yoda.auth]\r\n');
     expect(activeConfig).not.toContain('command = ');
     expect(activeConfig).not.toContain('requires_openai_auth');
-    expect(activeConfig).not.toContain('upstream-secret');
     expect(activeConfig).toContain('[features]\r\nfast_mode = true\r\n');
     expect((await stat(configPath)).mode & 0o777).toBe(0o600);
     expect(secrets.secrets.size).toBe(1);
     await expect(authSwitch.getStatus({ codexHome })).resolves.toEqual({
       managed: true,
       configManaged: true,
-      environmentPublished: true,
+      environmentPublished: false,
       persistentCredentialStored: true,
-      envKey: 'ZENMUX_API_KEY',
+      envKey: null,
     });
 
     await authSwitch.disable({ codexHome });
@@ -180,7 +176,6 @@ describe('Codex MaaS native authentication switch', () => {
       platformId: 'profile:new-zenmux',
       displayName: 'My ZenMux',
       endpoint: 'https://zenmux.ai/api/v1',
-      envKey: 'MY_ZENMUX_API_KEY',
     });
 
     expect(await readFile(configPath, 'utf8')).toContain('model = "openai/gpt-5.6-sol"');
@@ -224,13 +219,10 @@ describe('Codex MaaS native authentication switch', () => {
     expect(activeConfig).toContain('model_provider = "yoda"');
     expect(activeConfig).toContain('[model_providers.yoda]');
     expect(activeConfig).toContain('base_url = "https://second.example.test/v1"');
-    expect(activeConfig).toContain('env_key = "OPENROUTER_API_KEY"');
+    expect(activeConfig).toContain('experimental_bearer_token = "upstream-secret"');
     expect(activeConfig.match(/\[model_providers\.yoda\]/g)).toHaveLength(1);
     expect(activeConfig).not.toContain('https://first.example.test/v1');
-    expect(userEnvironment.get('OPENROUTER_API_KEY')).toEqual({
-      exists: true,
-      value: 'upstream-secret',
-    });
+    expect(userEnvironment.get('OPENROUTER_API_KEY')).toEqual({ exists: false });
     expect(userEnvironment.get('ZENMUX_API_KEY')).toEqual({ exists: false });
 
     await authSwitch.disable({ codexHome });
@@ -338,7 +330,7 @@ describe('Codex MaaS native authentication switch', () => {
     expect(activeConfig.match(/\[model_providers\.yoda\.auth\]/g) ?? []).toHaveLength(0);
     expect(activeConfig.match(/^ZENMUX_API_KEY\s*=/gm)).toHaveLength(1);
     expect(activeConfig).toContain(`base_url = "${MAAS_ENDPOINT}"`);
-    expect(activeConfig).toContain('env_key = "ZENMUX_API_KEY"');
+    expect(activeConfig).toContain('experimental_bearer_token = "upstream-secret"');
     expect(activeConfig).toContain('/usr/bin/old-helper');
     expect(activeConfig).toContain('KEEP_ME = "yes"');
     expect(activeConfig).toContain('ZENMUX_API_KEY = "old-secret"');
@@ -403,13 +395,13 @@ describe('Codex MaaS native authentication switch', () => {
     expect(disabledConfig).not.toContain('[model_providers.yoda]');
   });
 
-  it('restores a user-owned session variable after global synchronization is disabled', async () => {
+  it('does not replace a user-owned session variable while global synchronization is enabled', async () => {
     userEnvironment.set('ZENMUX_API_KEY', { exists: true, value: 'user-owned-secret' });
 
     await enableMaas(authSwitch, codexHome);
     expect(userEnvironment.get('ZENMUX_API_KEY')).toEqual({
       exists: true,
-      value: 'upstream-secret',
+      value: 'user-owned-secret',
     });
 
     await authSwitch.disable({ codexHome });
@@ -444,7 +436,7 @@ describe('Codex MaaS native authentication switch', () => {
     await expect(readFile(tokenPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     const activeConfig = await readFile(configPath, 'utf8');
     expect(activeConfig).toContain('base_url = "https://second.example.test/v1"');
-    expect(activeConfig).toContain('env_key = "ZENMUX_API_KEY"');
+    expect(activeConfig).toContain('experimental_bearer_token = "upstream-secret"');
     expect(activeConfig).not.toContain('legacy-upstream-secret');
 
     await authSwitch.disable({ codexHome });
@@ -466,7 +458,6 @@ function enableMaas(
     platformId?: MaasPlatformId;
     displayName?: string;
     endpoint?: string;
-    envKey?: string;
     apiKey?: string;
   } = {}
 ) {
@@ -475,9 +466,6 @@ function enableMaas(
     platformId: overrides.platformId ?? 'zenmux',
     displayName: overrides.displayName,
     endpoint: overrides.endpoint ?? MAAS_ENDPOINT,
-    envKey:
-      overrides.envKey ??
-      (overrides.platformId === 'openrouter' ? 'OPENROUTER_API_KEY' : 'ZENMUX_API_KEY'),
     apiKey: overrides.apiKey ?? 'upstream-secret',
   });
 }

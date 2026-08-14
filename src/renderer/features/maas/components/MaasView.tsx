@@ -175,21 +175,16 @@ const ExternalAgentSyncSettingsCard: React.FC = observer(() => {
   const showConfirm = useShowModal('confirmActionModal');
   const status = statusQuery.data;
   const enabled = status?.enabled === true;
-  const loginItemEnabled = status?.loginItemEnabled ?? true;
   const published = Boolean(
-    status?.enabled &&
-      status.managed &&
-      status.configManaged &&
-      status.environmentPublished &&
-      (!loginItemEnabled || status.persistentCredentialStored)
+    status?.enabled && status.managed && status.configManaged && status.persistentCredentialStored
   );
   const partial = statusQuery.isError || Boolean(enabled && status?.platformId && !published);
   const codexDetected = appState.dependencies.agentStatuses.codex?.status === 'available';
   const claudeDetected = appState.dependencies.agentStatuses.claude?.status === 'available';
 
-  const applySync = (next: boolean, nextLoginItemEnabled = loginItemEnabled) => {
+  const applySync = (next: boolean) => {
     setSync.mutate(
-      { enabled: next, loginItemEnabled: nextLoginItemEnabled },
+      { enabled: next },
       {
         onSuccess: () =>
           toast({ title: t(`maas.clientSync.${next ? 'enabledToast' : 'disabledToast'}`) }),
@@ -201,10 +196,6 @@ const ExternalAgentSyncSettingsCard: React.FC = observer(() => {
           }),
       }
     );
-  };
-
-  const handleLoginItemToggle = (next: boolean) => {
-    applySync(enabled, next);
   };
 
   const handleToggle = (next: boolean) => {
@@ -252,16 +243,10 @@ const ExternalAgentSyncSettingsCard: React.FC = observer(() => {
               {t('maas.clientSync.title')}
             </h3>
             <p className="mt-0.5 text-xs leading-relaxed text-foreground-muted">
-              {published && status?.envKey
-                ? t(
-                    loginItemEnabled
-                      ? 'maas.clientSync.activeDetail'
-                      : 'maas.clientSync.activeSessionDetail',
-                    {
-                      profile: status.displayName ?? status.platformId,
-                      envKey: status.envKey,
-                    }
-                  )
+              {published
+                ? t('maas.clientSync.activeDetail', {
+                    profile: status?.displayName ?? status?.platformId,
+                  })
                 : partial
                   ? t('maas.clientSync.partialDetail')
                   : enabled
@@ -344,27 +329,9 @@ const ExternalAgentSyncSettingsCard: React.FC = observer(() => {
             ) : null}
           </div>
         </div>
-        <div className="mt-3 flex items-start justify-between gap-4 rounded-xl border border-border/50 bg-background-1/70 px-3 py-2.5">
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-foreground">
-              {t('maas.clientSync.loginItemTitle')}
-            </p>
-            <p className="mt-0.5 text-[10px] leading-relaxed text-foreground-muted">
-              {t('maas.clientSync.loginItemDescription')}
-            </p>
-          </div>
-          <Switch
-            size="sm"
-            checked={loginItemEnabled}
-            disabled={statusQuery.isLoading || setSync.isPending || status?.supported === false}
-            aria-label={t('maas.clientSync.loginItemToggle')}
-            onCheckedChange={handleLoginItemToggle}
-            className="mt-0.5 shrink-0"
-          />
-        </div>
         {enabled ? (
           <p className="mt-2.5 text-[10px] leading-relaxed text-foreground-muted">
-            {t(loginItemEnabled ? 'maas.clientSync.risk' : 'maas.clientSync.currentSessionNotice')}
+            {t('maas.clientSync.risk')}
           </p>
         ) : null}
       </div>

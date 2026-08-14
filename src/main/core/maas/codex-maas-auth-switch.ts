@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { chmod, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
-import { isValidMaasEnvKey, type MaasPlatformId } from '@shared/maas';
+import type { MaasPlatformId } from '@shared/maas';
 import { encryptedAppSecretsStore } from '@main/core/secrets/encrypted-app-secrets-store';
 import {
   CODEX_SHARED_PROVIDER_ID,
@@ -18,8 +18,8 @@ import {
 } from './codex-maas-user-environment';
 import { resolveCodexMaasModelId, resolveCodexNativeModelId } from './runtime-env';
 
-const SNAPSHOT_VERSION = 5;
-const LEGACY_SNAPSHOT_VERSIONS = new Set([1, 2, 3, 4]);
+const SNAPSHOT_VERSION = 6;
+const LEGACY_SNAPSHOT_VERSIONS = new Set([1, 2, 3, 4, 5]);
 const SECRET_PREFIX = 'yoda-maas-codex-native-files';
 const YODA_CONFIG_MARKER = '# Auto-injected by Yoda MaaS';
 const YODA_PROVIDER_TOKEN_FILENAME = '.yoda-maas-provider-token';
@@ -82,19 +82,17 @@ export class CodexMaasAuthSwitch {
     }
 
     const current = await readNativeFiles(paths);
-    const syncedEnvironment = storedSnapshot.snapshot.syncedEnvironment;
-    const environmentPublished = syncedEnvironment
-      ? (await this.userEnvironment.read(syncedEnvironment.name)).exists
-      : false;
-    const persistentCredentialStored = syncedEnvironment
-      ? await this.userEnvironment.isManaged(syncedEnvironment.name)
+    const configManaged =
+      current.config.exists && current.config.content.includes(YODA_CONFIG_MARKER);
+    const persistentCredentialStored = current.config.exists
+      ? configManaged && hasManagedBearerToken(current.config.content)
       : false;
     return {
       managed: true,
-      configManaged: current.config.exists && current.config.content.includes(YODA_CONFIG_MARKER),
-      environmentPublished,
+      configManaged,
+      environmentPublished: false,
       persistentCredentialStored,
-      envKey: syncedEnvironment?.name ?? null,
+      envKey: null,
     };
   }
 
@@ -103,20 +101,15 @@ export class CodexMaasAuthSwitch {
     platformId,
     displayName,
     endpoint,
-    envKey,
     apiKey,
-    loginItemEnabled = true,
   }: {
     codexHome: string;
     platformId: MaasPlatformId;
     displayName?: string;
     endpoint: string;
-    envKey: string;
     apiKey: string;
-    loginItemEnabled?: boolean;
   }): Promise<CodexMaasAuthRollback> {
     const baseUrl = normalizeEndpoint(endpoint);
-    validateEnvKey(envKey);
     if (!apiKey) throw new Error('A non-empty MaaS API key is required.');
     const paths = resolveCodexPaths(codexHome);
     const before = await readNativeFiles(paths);
@@ -127,7 +120,7 @@ export class CodexMaasAuthSwitch {
     const snapshotMigrated = storedSnapshot?.migrated ?? false;
     const previousEnvironment = originalSnapshot.syncedEnvironment;
     const environmentNames = new Set(
-      [previousEnvironment?.name, envKey].filter((value): value is string => Boolean(value))
+      [previousEnvironment?.name].filter((value): value is string => Boolean(value))
     );
     const environmentBefore = new Map<string, EnvironmentVariableSnapshot>();
     for (const name of environmentNames) {
@@ -140,17 +133,12 @@ export class CodexMaasAuthSwitch {
         await this.userEnvironment.readManaged(previousEnvironment.name)
       );
     }
-    const syncedEnvironment =
-      previousEnvironment?.name === envKey
-        ? previousEnvironment
-        : { name: envKey, snapshot: environmentBefore.get(envKey) ?? { exists: false } };
     const snapshotToStore: CodexNativeFilesSnapshot = {
       ...originalSnapshot,
       version: SNAPSHOT_VERSION,
-      syncedEnvironment,
+      syncedEnvironment: undefined,
     };
-    const snapshotChanged =
-      snapshotCreated || snapshotMigrated || previousEnvironment?.name !== envKey;
+    const snapshotChanged = snapshotCreated || snapshotMigrated || Boolean(previousEnvironment);
 
     const provider = resolveCodexMaasProviderSpec(platformId, displayName);
     const active: CodexNativeFilesSnapshot = {
@@ -167,12 +155,12 @@ export class CodexMaasAuthSwitch {
           provider,
           platformId,
           baseUrl,
-          envKey
+          apiKey
         ),
         mode: 0o600,
       },
-      // v2 used this file for command-auth. Current profiles keep the upstream
-      // credential in Yoda's encrypted store and inject it only into Codex.
+      // v2 used this file for command-auth. Current persistent sync uses the
+      // Codex-supported inline bearer-token field in config.toml instead.
       token: originalSnapshot.token,
     };
 
@@ -181,13 +169,12 @@ export class CodexMaasAuthSwitch {
     }
 
     try {
-      if (previousEnvironment && previousEnvironment.name !== envKey) {
+      if (previousEnvironment) {
         await this.userEnvironment.clearManaged(
           previousEnvironment.name,
           previousEnvironment.snapshot
         );
       }
-      await this.userEnvironment.publishManaged(envKey, apiKey, loginItemEnabled);
       await applyNativeFiles(paths, active);
     } catch (error) {
       await applyNativeFiles(paths, before).catch(() => undefined);
@@ -489,7 +476,7 @@ function buildRegisteredMaasConfig(
   content: string,
   provider: CodexMaasProviderSpec,
   endpoint: string,
-  envKey: string
+  apiKey: string
 ): string {
   const eol = content.includes('\r\n') ? '\r\n' : '\n';
   let lines = content.replace(/\r\n/g, '\n').split('\n');
@@ -502,11 +489,11 @@ function buildRegisteredMaasConfig(
     `name = ${formatTomlString(provider.name)}`,
     `base_url = ${formatTomlString(endpoint.replace(/\/+$/, ''))}`,
     'wire_api = "responses"',
-    `env_key = ${formatTomlString(envKey)}`
+    `experimental_bearer_token = ${formatTomlString(apiKey)}`
   );
 
   const result = `${trimTrailingBlankLines(lines).join('\n')}\n`.replace(/\n/g, eol);
-  validateRegisteredMaasConfig(result, provider, envKey);
+  validateRegisteredMaasConfig(result, provider, apiKey);
   return result;
 }
 
@@ -515,7 +502,7 @@ function buildActiveMaasConfig(
   provider: CodexMaasProviderSpec,
   platformId: MaasPlatformId,
   endpoint: string,
-  envKey: string
+  apiKey: string
 ): string {
   const eol = content.includes('\r\n') ? '\r\n' : '\n';
   const currentModel = readRootString(content, 'model');
@@ -525,7 +512,7 @@ function buildActiveMaasConfig(
         resolveCodexNativeModelId(currentModel)
       )
     : undefined;
-  let lines = buildRegisteredMaasConfig(content, provider, endpoint, envKey)
+  let lines = buildRegisteredMaasConfig(content, provider, endpoint, apiKey)
     .replace(/\r\n/g, '\n')
     .split('\n');
   lines = removeRootAssignments(lines, ['model_provider', 'openai_base_url', 'model']);
@@ -538,7 +525,7 @@ function buildActiveMaasConfig(
     ''
   );
   const result = `${trimTrailingBlankLines(lines).join('\n')}\n`.replace(/\n/g, eol);
-  validateActiveMaasConfig(result, provider, envKey);
+  validateActiveMaasConfig(result, provider, apiKey);
   return result;
 }
 
@@ -714,7 +701,7 @@ function modelProviderTablePattern(providerId: string): RegExp {
 function validateRegisteredMaasConfig(
   content: string,
   provider: CodexMaasProviderSpec,
-  envKey: string
+  apiKey: string
 ): void {
   const parsed = parseToml(content) as Record<string, unknown>;
   const modelProviders = asRecord(parsed.model_providers);
@@ -725,8 +712,8 @@ function validateRegisteredMaasConfig(
     typeof providerConfig?.base_url !== 'string' ||
     providerConfig?.wire_api !== 'responses' ||
     providerConfig?.requires_openai_auth !== undefined ||
-    providerConfig?.env_key !== envKey ||
-    providerConfig?.experimental_bearer_token !== undefined ||
+    providerConfig?.env_key !== undefined ||
+    providerConfig?.experimental_bearer_token !== apiKey ||
     providerConfig?.auth !== undefined
   ) {
     throw new Error('Generated Codex MaaS provider config is invalid.');
@@ -736,18 +723,12 @@ function validateRegisteredMaasConfig(
 function validateActiveMaasConfig(
   content: string,
   provider: CodexMaasProviderSpec,
-  envKey: string
+  apiKey: string
 ): void {
-  validateRegisteredMaasConfig(content, provider, envKey);
+  validateRegisteredMaasConfig(content, provider, apiKey);
   const parsed = parseToml(content) as Record<string, unknown>;
   if (parsed.model_provider !== provider.providerId) {
     throw new Error('Generated Codex MaaS provider config is invalid.');
-  }
-}
-
-function validateEnvKey(envKey: string): void {
-  if (!isValidMaasEnvKey(envKey)) {
-    throw new Error('Invalid MaaS environment variable name.');
   }
 }
 
@@ -761,6 +742,20 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+function hasManagedBearerToken(content: string): boolean {
+  try {
+    const parsed = parseToml(content) as Record<string, unknown>;
+    const modelProviders = asRecord(parsed.model_providers);
+    const providerConfig = asRecord(modelProviders?.[CODEX_SHARED_PROVIDER_ID]);
+    return (
+      typeof providerConfig?.experimental_bearer_token === 'string' &&
+      providerConfig.experimental_bearer_token.length > 0
+    );
+  } catch {
+    return false;
+  }
 }
 
 function trimTrailingBlankLines(lines: string[]): string[] {

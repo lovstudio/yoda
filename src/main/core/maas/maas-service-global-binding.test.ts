@@ -157,15 +157,13 @@ describe('global MaaS binding', () => {
       platformId: 'zenmux',
       displayName: 'ZenMux',
       endpoint: 'https://zenmux.ai/api/v1',
-      envKey: 'ZENMUX_API_KEY',
       apiKey: 'inference-secret',
-      loginItemEnabled: true,
     });
   });
 
   it('keeps official Codex in the shared history bucket when external sync has no MaaS binding', async () => {
     mocks.settings.externalAgentSyncEnabled = true;
-    mocks.settings.externalAgentSyncVersion = 1;
+    mocks.settings.externalAgentSyncVersion = 2;
     const service = new MaasService();
 
     await service.reconcileActiveBindings();
@@ -192,7 +190,7 @@ describe('global MaaS binding', () => {
     });
     expect(mocks.settings).toMatchObject({
       externalAgentSyncEnabled: true,
-      externalAgentSyncVersion: 1,
+      externalAgentSyncVersion: 2,
     });
   });
 
@@ -230,7 +228,6 @@ describe('global MaaS binding', () => {
       endpoint: 'https://zenmux.ai/api/v1',
       envKey: 'ZENMUX_API_KEY',
       apiKey: 'inference-secret',
-      loginItemEnabled: true,
       syncToAgentClient: true,
     });
 
@@ -241,9 +238,7 @@ describe('global MaaS binding', () => {
       platformId: 'zenmux',
       displayName: 'ZenMux',
       endpoint: 'https://zenmux.ai/api/v1',
-      envKey: 'ZENMUX_API_KEY',
       apiKey: 'inference-secret',
-      loginItemEnabled: true,
     });
   });
 
@@ -265,7 +260,6 @@ describe('global MaaS binding', () => {
       apiKey: 'inference-secret',
       envKey: 'ZENMUX_API_KEY',
       syncToAgentClient: false,
-      loginItemEnabled: true,
     });
 
     await expect(service.reconcileCodexStateRoot('/state/account-c')).resolves.toBeUndefined();
@@ -277,6 +271,8 @@ describe('global MaaS binding', () => {
   it('requires fresh consent before upgrading a legacy Codex Profile to persistent sync', async () => {
     mocks.settings = {
       selectedPlatformId: 'zenmux',
+      externalAgentSyncEnabled: true,
+      externalAgentSyncVersion: 1,
       connections: [
         {
           platformId: 'zenmux',
@@ -314,7 +310,6 @@ describe('global MaaS binding', () => {
       apiKey: 'legacy-inference-secret',
       envKey: 'ZENMUX_API_KEY',
       syncToAgentClient: false,
-      loginItemEnabled: true,
     });
 
     await service.reconcileActiveBindings();
@@ -418,21 +413,12 @@ describe('global MaaS binding', () => {
       platformId: 'zenmux',
       displayName: 'ZenMux',
       endpoint: 'https://zenmux.ai/api/v1',
-      envKey: 'ZENMUX_API_KEY',
       apiKey: 'inference-secret',
-      loginItemEnabled: true,
     });
     expect(mocks.settings).toMatchObject({
       externalAgentSyncEnabled: true,
-      externalAgentSyncVersion: 1,
+      externalAgentSyncVersion: 2,
     });
-
-    await expect(
-      new MaasService().setCodexClientSync({ enabled: true, loginItemEnabled: false })
-    ).resolves.toMatchObject({ success: true });
-    expect(mocks.codexAuthEnable).toHaveBeenLastCalledWith(
-      expect.objectContaining({ loginItemEnabled: false })
-    );
     expect(mocks.settings.externalAgentSyncLoginItemEnabled).toBe(false);
   });
 
@@ -464,7 +450,7 @@ describe('global MaaS binding', () => {
     expect(mocks.codexAuthEnable).not.toHaveBeenCalled();
     expect(mocks.settings).toMatchObject({
       externalAgentSyncEnabled: true,
-      externalAgentSyncVersion: 1,
+      externalAgentSyncVersion: 2,
     });
 
     await expect(
@@ -475,9 +461,7 @@ describe('global MaaS binding', () => {
       platformId: 'zenmux',
       displayName: 'ZenMux',
       endpoint: 'https://zenmux.ai/api/v1',
-      envKey: 'ZENMUX_API_KEY',
       apiKey: 'inference-secret',
-      loginItemEnabled: true,
     });
   });
 
@@ -831,7 +815,7 @@ describe('stored MaaS keys', () => {
     mocks.settings = {
       selectedPlatformId: 'zenmux',
       externalAgentSyncEnabled: true,
-      externalAgentSyncVersion: 1,
+      externalAgentSyncVersion: 2,
       connections: [
         {
           platformId: 'zenmux',
@@ -980,9 +964,7 @@ describe('stored MaaS keys', () => {
       platformId: 'zenmux',
       displayName: 'ZenMux Production',
       endpoint: 'https://new.zenmux.example/v1',
-      envKey: 'ZENMUX_API_KEY',
       apiKey: 'new-inference-secret',
-      loginItemEnabled: true,
     });
     expect(mocks.secrets['yoda-maas-inference-token:zenmux']).toBe('new-inference-secret');
     expect(mocks.invalidateRuntimeSessions).toHaveBeenCalledWith({

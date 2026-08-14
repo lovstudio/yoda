@@ -132,8 +132,10 @@ type MaasInferenceCredentials = {
   apiKey: string;
   envKey?: string;
   syncToAgentClient?: boolean;
-  loginItemEnabled?: boolean;
 };
+
+const EXTERNAL_AGENT_SYNC_VERSION = 2;
+const CODEX_CONFIG_SYNC_PLATFORMS = new Set<NodeJS.Platform>(['darwin', 'win32', 'linux']);
 
 function secretKey(platformId: MaasPlatformId): string {
   return `${SECRET_PREFIX}:${platformId}`;
@@ -316,12 +318,12 @@ function getConnectedPlatformByTemplate(
 
 function hasExternalAgentSyncConsent(settings: MaasSettings): boolean {
   if (settings.externalAgentSyncEnabled !== undefined) {
-    return settings.externalAgentSyncEnabled === true && settings.externalAgentSyncVersion === 1;
+    return (
+      settings.externalAgentSyncEnabled === true &&
+      settings.externalAgentSyncVersion === EXTERNAL_AGENT_SYNC_VERSION
+    );
   }
-  return settings.connections.some(
-    (connection) =>
-      connection.syncToAgentClient === true && connection.syncToAgentClientVersion === 1
-  );
+  return false;
 }
 
 function withoutLegacyClientSync(
@@ -605,6 +607,10 @@ export class MaasService {
         await codexMaasAuthSwitch.enableOfficial({
           codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
         });
+      } else {
+        await codexMaasAuthSwitch.disable({
+          codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+        });
       }
       return;
     }
@@ -654,21 +660,17 @@ export class MaasService {
     const enabled = hasExternalAgentSyncConsent(settings);
 
     return {
-      supported: process.platform === 'darwin',
+      supported: CODEX_CONFIG_SYNC_PLATFORMS.has(process.platform),
       enabled,
       managed: nativeStatus.managed,
       configManaged: nativeStatus.configManaged,
       environmentPublished: nativeStatus.environmentPublished,
       persistentCredentialStored: nativeStatus.persistentCredentialStored,
-      loginItemEnabled: settings.externalAgentSyncLoginItemEnabled ?? true,
+      loginItemEnabled: false,
       platformId: connection?.platformId ?? null,
       displayName: connection?.displayName ?? null,
-      envKey:
-        nativeStatus.envKey ??
-        (connection
-          ? resolveMaasEnvKey(connection.platformId, connection.displayName, connection.envKey)
-          : null),
-      persistsAfterQuit: settings.externalAgentSyncLoginItemEnabled ?? true,
+      envKey: null,
+      persistsAfterQuit: true,
     };
   }
 
@@ -679,8 +681,8 @@ export class MaasService {
   }> {
     // Codex is the first external Agent Client adapter. Keep consent global so
     // future adapters can join this switch without moving it back into a Profile.
-    if (process.platform !== 'darwin') {
-      return { success: false, error: 'Persistent Codex Client sync currently requires macOS.' };
+    if (!CODEX_CONFIG_SYNC_PLATFORMS.has(process.platform)) {
+      return { success: false, error: 'Persistent Codex Client sync is not supported here.' };
     }
     if (typeof input.enabled !== 'boolean') {
       return { success: false, error: 'Invalid Codex Client sync state.' };
@@ -725,14 +727,7 @@ export class MaasService {
           platformId: activeCodexBinding.platformId,
           displayName: connection.displayName,
           endpoint: connection.endpoint,
-          envKey: resolveMaasEnvKey(
-            activeCodexBinding.platformId,
-            connection.displayName,
-            connection.envKey
-          ),
           apiKey,
-          loginItemEnabled:
-            input.loginItemEnabled ?? settings.externalAgentSyncLoginItemEnabled ?? true,
         });
       } else {
         rollbackCodexAuth = await codexMaasAuthSwitch.enableOfficial({
@@ -743,9 +738,8 @@ export class MaasService {
 
       await appSettingsService.update('maas', {
         externalAgentSyncEnabled: input.enabled,
-        externalAgentSyncVersion: input.enabled ? 1 : undefined,
-        externalAgentSyncLoginItemEnabled:
-          input.loginItemEnabled ?? settings.externalAgentSyncLoginItemEnabled ?? true,
+        externalAgentSyncVersion: input.enabled ? EXTERNAL_AGENT_SYNC_VERSION : undefined,
+        externalAgentSyncLoginItemEnabled: false,
         connections: withoutLegacyClientSync(settings.connections),
       });
       const status = await this.getCodexClientSyncStatus().catch((statusError) => {
@@ -1287,7 +1281,6 @@ export class MaasService {
       apiKey,
       envKey: resolveMaasEnvKey(platformId, connection.displayName, connection.envKey),
       syncToAgentClient: hasExternalAgentSyncConsent(settings),
-      loginItemEnabled: settings.externalAgentSyncLoginItemEnabled ?? true,
     };
   }
 
@@ -1304,9 +1297,7 @@ export class MaasService {
       platformId,
       displayName: credentials.displayName,
       endpoint: credentials.endpoint,
-      envKey: resolveMaasEnvKey(platformId, credentials.displayName, credentials.envKey),
       apiKey: credentials.apiKey,
-      loginItemEnabled: credentials.loginItemEnabled ?? true,
     });
   }
 

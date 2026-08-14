@@ -2,6 +2,7 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { userEvent } from 'vitest/browser';
 import type { CliProxyApiManagedStatus } from '@shared/cliproxyapi-managed';
 import type { LiteLlmManagedStatus } from '@shared/litellm-managed';
 import type {
@@ -85,7 +86,7 @@ const mocks = vi.hoisted(() => ({
     configManaged: false,
     environmentPublished: false,
     persistentCredentialStored: false,
-    loginItemEnabled: true,
+    loginItemEnabled: false,
     platformId: null,
     displayName: null,
     envKey: null,
@@ -276,7 +277,7 @@ describe('MaaS platform menu', () => {
       configManaged: false,
       environmentPublished: false,
       persistentCredentialStored: false,
-      loginItemEnabled: true,
+      loginItemEnabled: false,
       platformId: null,
       displayName: null,
       envKey: null,
@@ -711,10 +712,7 @@ describe('MaaS platform menu', () => {
     expect(syncSwitch).not.toBeNull();
     await act(async () => syncSwitch?.click());
     expect(mocks.showConfirm).toHaveBeenCalledOnce();
-    expect(mocks.setCodexClientSync).toHaveBeenCalledWith(
-      { enabled: true, loginItemEnabled: true },
-      expect.any(Object)
-    );
+    expect(mocks.setCodexClientSync).toHaveBeenCalledWith({ enabled: true }, expect.any(Object));
     expect(mocks.connectPlatform).not.toHaveBeenCalled();
   });
 
@@ -724,12 +722,12 @@ describe('MaaS platform menu', () => {
       enabled: true,
       managed: true,
       configManaged: true,
-      environmentPublished: true,
+      environmentPublished: false,
       persistentCredentialStored: true,
-      loginItemEnabled: true,
+      loginItemEnabled: false,
       platformId: 'zenmux',
       displayName: 'ZenMux',
-      envKey: 'ZENMUX_API_KEY',
+      envKey: null,
       persistsAfterQuit: true,
     };
     const { MaasView } = await import('@renderer/features/maas/components/MaasView');
@@ -743,20 +741,14 @@ describe('MaaS platform menu', () => {
     expect(syncSettings?.querySelector('[data-slot="switch"][data-checked]')).not.toBeNull();
   });
 
-  it('enables the Yoda login item by default and lets the user make sync session-only', async () => {
+  it('does not expose the retired macOS login-item control', async () => {
     const { MaasView } = await import('@renderer/features/maas/components/MaasView');
     await act(async () => root.render(createElement(MaasView, { embedded: true })));
 
     const loginItemSwitch = host.querySelector<HTMLElement>(
       '[data-slot="switch"][aria-label="maas.clientSync.loginItemToggle"]'
     );
-    expect(loginItemSwitch?.hasAttribute('data-checked')).toBe(true);
-
-    await act(async () => loginItemSwitch?.click());
-    expect(mocks.setCodexClientSync).toHaveBeenCalledWith(
-      { enabled: false, loginItemEnabled: false },
-      expect.any(Object)
-    );
+    expect(loginItemSwitch).toBeNull();
   });
 
   it('keeps the inactive sync summary quiet and non-actionable', async () => {
@@ -815,9 +807,35 @@ describe('MaaS platform menu', () => {
     );
   });
 
-  it('allows the bottom-bar selector to use a configured remote Profile directly', async () => {
+  it('allows the bottom-bar selector to switch between configured remote Profiles', async () => {
     mocks.gatewayAvailability = 'not-installed';
-    mocks.connections = [connection({ platformId: 'custom:first', displayName: 'First Custom' })];
+    const successfulTest = {
+      ok: true,
+      error: null,
+      checkedAt: '2026-08-13T00:00:00.000Z',
+      samples: [{ durationMs: 12, ok: true, error: null }],
+      averageLatencyMs: 12,
+    };
+    mocks.connections = [
+      connection({
+        platformId: 'custom:first',
+        displayName: 'First Custom',
+        lastCheckedAt: successfulTest.checkedAt,
+        lastTest: successfulTest,
+      }),
+      connection({
+        platformId: 'custom:second',
+        displayName: 'Second Custom',
+        lastCheckedAt: successfulTest.checkedAt,
+        lastTest: successfulTest,
+      }),
+    ];
+    mocks.globalBinding = {
+      platformId: 'custom:first',
+      enabled: true,
+      effective: true,
+      runtimeIds: ['codex'],
+    };
     const onManagePlatform = vi.fn();
     const { MaasGlobalSelector } = await import(
       '@renderer/features/maas/components/MaasGlobalSelector'
@@ -831,11 +849,21 @@ describe('MaaS platform menu', () => {
       )
     );
 
-    const enableCheckbox = host.querySelector<HTMLElement>(
-      '[data-slot="checkbox"][aria-label="maas.global.toggleAria"]'
+    const selector = host.querySelector<HTMLButtonElement>(
+      '[data-slot="select-trigger"][aria-label="maas.global.title"]'
     );
-    expect(enableCheckbox?.hasAttribute('data-disabled')).toBe(false);
+    expect(selector?.textContent).toContain('First Custom');
     expect(host.querySelector('[data-maas-gateway-requirement]')).toBeNull();
+
+    await userEvent.click(selector!);
+    const secondProfile = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-slot="select-item"]')
+    ).find((item) => item.textContent?.includes('Second Custom'));
+    await userEvent.click(secondProfile!);
+    expect(mocks.setGlobalBinding).toHaveBeenCalledWith(
+      { platformId: 'custom:second', enabled: true },
+      expect.any(Object)
+    );
 
     const manageButton = host.querySelector<HTMLButtonElement>(
       'button[aria-label="maas.global.manage"]'

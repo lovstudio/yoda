@@ -299,7 +299,7 @@ export const maasSettingsSchema = z.object({
   runtimeBindings: z.array(maasRuntimeBindingSchema).default([]),
   /** Explicit consent to publish the active MaaS route outside Yoda. */
   externalAgentSyncEnabled: z.boolean().optional(),
-  externalAgentSyncVersion: z.literal(1).optional(),
+  externalAgentSyncVersion: z.union([z.literal(1), z.literal(2)]).optional(),
   externalAgentSyncLoginItemEnabled: z.boolean().optional(),
 });
 
