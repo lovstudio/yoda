@@ -1,6 +1,7 @@
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
+import { ChevronRight } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import {
   Fragment,
@@ -19,7 +20,8 @@ import {
   teamRoomTaskKey,
   useTeamRoomTaskKeys,
 } from '@renderer/features/agent-room/team-room-queries';
-import { type SidebarGroupKey, type SidebarRow } from '@renderer/features/sidebar/sidebar-store';
+import { sidebarGroupId, type SidebarGroupKey } from '@renderer/features/sidebar/sidebar-group';
+import { type SidebarRow } from '@renderer/features/sidebar/sidebar-store';
 import {
   canMoveConversationToTask,
   conversationTransferFromPayload,
@@ -65,6 +67,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
   const { params: projectParams } = useParams('project');
   const taskGroupVisibleLimit = sidebarStore.taskGroupVisibleLimit;
   const taskPriorityMode = sidebarStore.taskPriorityMode;
+  const collapsedTaskGroupSignature = [...sidebarStore.collapsedTaskGroupIds].sort().join('\0');
   const pinnedCollapsed = sidebarStore.pinnedCollapsed;
   const projectsCollapsed = sidebarStore.projectsCollapsed;
   const { activeId, dndEnabled, dropTargetProjectId, taskProjection } = useSidebarDnd();
@@ -94,8 +97,13 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
       ? filterTaskDescendantRows(rows, draggingTask.projectId, draggingTask.taskId)
       : rows;
   const renderRows = useMemo(
-    () => limitTaskGroupRows(displayRows, visibleTaskCountByGroupId, taskGroupVisibleLimit),
-    [displayRows, taskGroupVisibleLimit, visibleTaskCountByGroupId]
+    () =>
+      limitTaskGroupRows(
+        collapseTaskGroupRows(displayRows, collapsedTaskGroupSignature),
+        visibleTaskCountByGroupId,
+        taskGroupVisibleLimit
+      ),
+    [collapsedTaskGroupSignature, displayRows, taskGroupVisibleLimit, visibleTaskCountByGroupId]
   );
   const pinnedRows = useMemo(
     () =>
@@ -331,6 +339,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
         teamRoomTaskKeys={teamRoomTaskKeys}
         onToggleTaskGroup={revealMoreTaskGroupItems}
         onTogglePinnedTaskGroup={revealMorePinnedTaskGroupItems}
+        collapsedTaskGroupSignature={collapsedTaskGroupSignature}
       />
     );
 
@@ -452,6 +461,7 @@ type SidebarNavigationRowContentProps = {
   teamRoomTaskKeys: ReadonlySet<string>;
   onToggleTaskGroup: (groupId: string) => void;
   onTogglePinnedTaskGroup: (groupId: string) => void;
+  collapsedTaskGroupSignature: string;
 };
 
 const SidebarNavigationRowContent = memo(function SidebarNavigationRowContent({
@@ -463,6 +473,7 @@ const SidebarNavigationRowContent = memo(function SidebarNavigationRowContent({
   teamRoomTaskKeys,
   onToggleTaskGroup,
   onTogglePinnedTaskGroup,
+  collapsedTaskGroupSignature,
 }: SidebarNavigationRowContentProps) {
   const { t } = useTranslation();
 
@@ -498,6 +509,7 @@ const SidebarNavigationRowContent = memo(function SidebarNavigationRowContent({
         taskProjection={taskProjection}
         teamRoomTaskKeys={teamRoomTaskKeys}
         onToggleTaskGroup={onToggleTaskGroup}
+        collapsedTaskGroupSignature={collapsedTaskGroupSignature}
       />
     </div>
   );
@@ -511,6 +523,7 @@ type SidebarRowContentProps = {
   taskProjection: TreeProjection | null;
   teamRoomTaskKeys: ReadonlySet<string>;
   onToggleTaskGroup: (groupId: string) => void;
+  collapsedTaskGroupSignature: string;
 };
 
 // The virtualizer re-renders its parent on every scroll frame. Keep the row's
@@ -524,6 +537,7 @@ const SidebarRowContent = memo(function SidebarRowContent({
   taskProjection,
   teamRoomTaskKeys,
   onToggleTaskGroup,
+  collapsedTaskGroupSignature,
 }: SidebarRowContentProps) {
   if (row.kind === 'task-group-toggle') {
     return (
@@ -540,9 +554,18 @@ const SidebarRowContent = memo(function SidebarRowContent({
 
   const dndId = rowToDndId(row);
   if (row.kind === 'group') {
+    const collapsed = collapsedTaskGroupSignature.split('\0').includes(sidebarGroupId(row.group));
     return (
-      <div data-sidebar-row={dndId} className="min-w-0 overflow-hidden">
-        <SidebarGroupHeader group={row.group} />
+      <div
+        data-sidebar-row={dndId}
+        data-sidebar-group-id={sidebarGroupId(row.group)}
+        className="min-w-0 overflow-hidden"
+      >
+        <SidebarGroupHeader
+          group={row.group}
+          collapsed={collapsed}
+          onToggle={() => sidebarStore.toggleTaskGroupCollapsed(row.group)}
+        />
       </div>
     );
   }
@@ -691,6 +714,24 @@ function limitTaskGroupRows(
   return limitedRows;
 }
 
+function collapseTaskGroupRows(rows: SidebarRow[], collapsedTaskGroupSignature: string) {
+  if (!collapsedTaskGroupSignature) return rows;
+  const collapsedTaskGroupIds = new Set(collapsedTaskGroupSignature.split('\0'));
+  const visibleRows: SidebarRow[] = [];
+  let groupCollapsed = false;
+
+  for (const row of rows) {
+    if (row.kind === 'group') {
+      groupCollapsed = collapsedTaskGroupIds.has(sidebarGroupId(row.group));
+      visibleRows.push(row);
+      continue;
+    }
+    if (!groupCollapsed) visibleRows.push(row);
+  }
+
+  return visibleRows;
+}
+
 function appendLimitedTaskRows(
   target: SidebarRenderableRow[],
   taskRows: Extract<SidebarRow, { kind: 'task' }>[],
@@ -811,7 +852,15 @@ function visibleTaskRowsCountForTarget(
   );
 }
 
-function SidebarGroupHeader({ group }: { group: SidebarGroupKey }) {
+function SidebarGroupHeader({
+  group,
+  collapsed,
+  onToggle,
+}: {
+  group: SidebarGroupKey;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
   const { t } = useTranslation();
   const label =
     group.kind === 'type'
@@ -823,12 +872,24 @@ function SidebarGroupHeader({ group }: { group: SidebarGroupKey }) {
         : t(`sidebar.priorityGroups.${group.priority}`);
 
   return (
-    <div className="flex h-8 items-center gap-2 px-2 text-xs font-medium uppercase tracking-wide text-foreground-tertiary-muted select-none">
+    <button
+      type="button"
+      aria-expanded={!collapsed}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onToggle}
+      className="group/task-group flex h-8 w-full items-center gap-1 rounded-md px-2 text-left text-xs font-medium uppercase tracking-wide text-foreground-tertiary-muted transition-colors hover:bg-background-tertiary-1 hover:text-foreground-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 select-none"
+    >
+      <ChevronRight
+        className={cn(
+          'size-3 shrink-0 text-foreground-tertiary-passive transition-transform duration-150',
+          !collapsed && 'rotate-90'
+        )}
+      />
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {group.kind === 'priority' && (
         <span className="font-mono text-[10px] text-foreground-passive">{group.count}</span>
       )}
-    </div>
+    </button>
   );
 }
 

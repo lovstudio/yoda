@@ -210,6 +210,8 @@ export type SidebarSnapshot = {
   taskOrderByParent?: Record<string, string[]>;
   /** Task ids whose subtask subtree is collapsed in the sidebar (default expanded). */
   collapsedTaskIds?: string[];
+  /** Task group ids collapsed in grouped sidebar modes (default expanded). */
+  collapsedTaskGroupIds?: string[];
   projectActivityById?: Record<string, string>;
   taskSortBy?: SidebarTaskSortBy;
   taskGroupBy?: SidebarTaskGroupBy;

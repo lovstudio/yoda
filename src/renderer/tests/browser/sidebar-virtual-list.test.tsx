@@ -4,7 +4,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SidebarPinnedTaskList } from '@renderer/features/sidebar/pinned-task-list';
 import { SidebarDndProvider } from '@renderer/features/sidebar/sidebar-dnd-context';
-import type { PinnedSidebarEntry, SidebarRow } from '@renderer/features/sidebar/sidebar-store';
+import { sidebarGroupId, type SidebarGroupKey } from '@renderer/features/sidebar/sidebar-group';
+import { type PinnedSidebarEntry, type SidebarRow } from '@renderer/features/sidebar/sidebar-store';
 import { SidebarVirtualList } from '@renderer/features/sidebar/sidebar-virtual-list';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -14,13 +15,16 @@ const mocks = vi.hoisted(() => ({
     sidebarRows: SidebarRow[];
     pinnedSidebarEntries: PinnedSidebarEntry[];
     pinnedCollapsed: boolean;
+    projectsCollapsed: boolean;
     taskPriorityMode: boolean;
+    collapsedTaskGroupIds: Set<string>;
     sidebarArchivedTaskLoadState: 'idle' | 'loading' | 'error';
     taskGroupVisibleLimit: number;
     taskGroupBy: 'project';
     holdTaskReflow: ReturnType<typeof vi.fn>;
     releaseTaskReflow: ReturnType<typeof vi.fn>;
     togglePinnedCollapsed: ReturnType<typeof vi.fn>;
+    toggleTaskGroupCollapsed: ReturnType<typeof vi.fn>;
     ensureTaskExpanded: ReturnType<typeof vi.fn>;
     setChildTaskOrder: ReturnType<typeof vi.fn>;
     setTaskOrder: ReturnType<typeof vi.fn>;
@@ -63,19 +67,32 @@ vi.mock('@tanstack/react-virtual', async (importOriginal) => {
 
 vi.mock('@renderer/lib/stores/app-state', async () => {
   const { observable } = (await vi.importActual('mobx')) as {
-    observable: <T extends object>(value: T) => T;
+    observable: {
+      <T extends object>(value: T): T;
+      set<T>(): Set<T>;
+    };
   };
   const sidebarStore = observable({
     sidebarRows: [] as SidebarRow[],
     pinnedSidebarEntries: [] as PinnedSidebarEntry[],
     pinnedCollapsed: false,
+    projectsCollapsed: false,
     taskPriorityMode: false,
+    collapsedTaskGroupIds: observable.set<string>(),
     sidebarArchivedTaskLoadState: 'idle' as const,
     taskGroupVisibleLimit: 5,
     taskGroupBy: 'project' as const,
     holdTaskReflow: vi.fn(),
     releaseTaskReflow: vi.fn(),
     togglePinnedCollapsed: vi.fn(),
+    toggleTaskGroupCollapsed: vi.fn((group: SidebarGroupKey) => {
+      const groupId = sidebarGroupId(group);
+      if (sidebarStore.collapsedTaskGroupIds.has(groupId)) {
+        sidebarStore.collapsedTaskGroupIds.delete(groupId);
+      } else {
+        sidebarStore.collapsedTaskGroupIds.add(groupId);
+      }
+    }),
     ensureTaskExpanded: vi.fn(),
     setChildTaskOrder: vi.fn(),
     setTaskOrder: vi.fn(),
@@ -83,7 +100,13 @@ vi.mock('@renderer/lib/stores/app-state', async () => {
     loadMoreSidebarArchivedTasks: mocks.loadMoreSidebarArchivedTasks,
   });
   mocks.sidebarStore = sidebarStore;
-  return { sidebarStore };
+  return {
+    sidebarStore,
+    appState: {
+      sidebar: sidebarStore,
+      sidePane: { pinTaskView: vi.fn() },
+    },
+  };
 });
 
 vi.mock('react-i18next', () => ({
@@ -217,7 +240,9 @@ describe('SidebarVirtualList', () => {
       mocks.sidebarStore.sidebarRows = [projectRow];
       mocks.sidebarStore.pinnedSidebarEntries = [];
       mocks.sidebarStore.pinnedCollapsed = false;
+      mocks.sidebarStore.projectsCollapsed = false;
       mocks.sidebarStore.taskPriorityMode = false;
+      mocks.sidebarStore.collapsedTaskGroupIds.clear();
       mocks.sidebarStore.sidebarArchivedTaskLoadState = 'idle';
       mocks.loadMoreSidebarArchivedTasks.mockReset().mockResolvedValue(0);
       mocks.staleVirtualItemKey = null;
@@ -265,6 +290,66 @@ describe('SidebarVirtualList', () => {
 
     expect(document.body.textContent).not.toContain('sidebar.pinned');
     expect(document.querySelector('[data-testid="task-task-1"]')).not.toBeNull();
+  });
+
+  it('collapses and expands task groups from the group header', async () => {
+    const workingGroup: SidebarRow = {
+      kind: 'group',
+      group: { kind: 'priority', priority: 'working', count: 1 },
+    };
+    runInAction(() => {
+      mocks.sidebarStore.taskPriorityMode = true;
+      mocks.sidebarStore.sidebarRows = [workingGroup, taskRow];
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const groupButton = document.querySelector<HTMLButtonElement>(
+      '[data-sidebar-group-id="priority:working"] button'
+    );
+    expect(groupButton?.getAttribute('aria-expanded')).toBe('true');
+    expect(document.querySelector('[data-testid="task-task-1"]')).not.toBeNull();
+
+    await act(async () => {
+      groupButton?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(groupButton?.getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('[data-testid="task-task-1"]')).toBeNull();
+
+    await act(async () => {
+      groupButton?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(groupButton?.getAttribute('aria-expanded')).toBe('true');
+    expect(document.querySelector('[data-testid="task-task-1"]')).not.toBeNull();
+  });
+
+  it('collapses every project and task row inside a type group', async () => {
+    const localGroup: SidebarRow = {
+      kind: 'group',
+      group: { kind: 'type', type: 'local' },
+    };
+    runInAction(() => {
+      mocks.sidebarStore.sidebarRows = [localGroup, projectRow, taskRow];
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const groupButton = document.querySelector<HTMLButtonElement>(
+      '[data-sidebar-group-id="type:local"] button'
+    );
+    expect(document.querySelector('[data-testid="project-project-1"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="task-task-1"]')).not.toBeNull();
+
+    await act(async () => {
+      groupButton?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(document.querySelector('[data-testid="project-project-1"]')).toBeNull();
+    expect(document.querySelector('[data-testid="task-task-1"]')).toBeNull();
   });
 
   it('reveals ten additional rows per group click', async () => {

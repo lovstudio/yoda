@@ -12,6 +12,7 @@ import {
   type TaskStore,
 } from '@renderer/features/tasks/stores/task';
 import type { WorkspaceStore } from '@renderer/features/workspaces/workspace-store';
+import type { SidebarGroupKey } from './sidebar-group';
 import { normalizeSidebarTaskPriorityOrder, SidebarStore, type SidebarRow } from './sidebar-store';
 
 const mocks = vi.hoisted(() => ({
@@ -668,6 +669,24 @@ describe('SidebarStore subtask tree rows', () => {
     });
     expect(restored.taskOrderByParent).toEqual({ parent: ['c2', 'c1'] });
     expect(restored.collapsedTaskIds.has('parent')).toBe(true);
+  });
+
+  it('persists collapsed task groups and expands the selected group', () => {
+    const store = makeSidebarStore([makeProject('project-1', [])]);
+    const localGroup: SidebarGroupKey = { kind: 'type', type: 'local' };
+    store.applyGroupBy('type');
+    store.toggleTaskGroupCollapsed(localGroup);
+
+    const snapshot = store.snapshot;
+    expect(snapshot.collapsedTaskGroupIds).toEqual(['type:local']);
+
+    const restored = makeSidebarStore([makeProject('project-1', [])]);
+    restored.applyGroupBy('type');
+    restored.restoreSnapshot({ collapsedTaskGroupIds: snapshot.collapsedTaskGroupIds });
+    expect(restored.collapsedTaskGroupIds.has('type:local')).toBe(true);
+
+    restored.revealSelection('project-1');
+    expect(restored.collapsedTaskGroupIds.has('type:local')).toBe(false);
   });
 
   it('orders siblings by the per-parent manual order', () => {

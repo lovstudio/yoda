@@ -29,6 +29,7 @@ import { rpc } from '@renderer/lib/ipc';
 import type { AgentRuntimeStore } from '@renderer/lib/stores/agent-runtime-store';
 import type { Snapshottable } from '@renderer/lib/stores/snapshottable';
 import { log } from '@renderer/utils/logger';
+import { sidebarGroupId, type ActivityBucket, type SidebarGroupKey } from './sidebar-group';
 
 function parseSidebarTaskSortBy(value: unknown): SidebarTaskSortBy | undefined {
   return value === 'created-at' || value === 'updated-at' ? value : undefined;
@@ -99,8 +100,6 @@ export function normalizeSidebarTaskPriorityOrder(value: unknown): SidebarTaskPr
   return normalized;
 }
 
-export type ActivityBucket = 'today' | 'thisWeek' | 'thisMonth' | 'earlier';
-
 const SQLITE_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
 function parseSidebarInstant(instant: string): number {
@@ -149,15 +148,6 @@ export function getSortInstant(task: TaskStore, kind: 'created' | 'updated'): st
   }
   return '';
 }
-
-export type SidebarGroupKey =
-  | { kind: 'type'; type: 'local' | 'ssh' }
-  | { kind: 'activity'; bucket: ActivityBucket }
-  | {
-      kind: 'priority';
-      priority: SidebarTaskPriorityGroup;
-      count: number;
-    };
 
 export type SidebarRow =
   | { kind: 'project'; projectId: string }
@@ -212,6 +202,8 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   taskOrderByParent: Record<string, string[]> = {};
   /** Tasks whose subtask subtree is collapsed (default expanded). */
   collapsedTaskIds = observable.set<string>();
+  /** Task-list groups collapsed in type, activity, or priority grouping modes. */
+  collapsedTaskGroupIds = observable.set<string>();
   /**
    * Monotonic per-project "last activity" stamp used to order projects in
    * `updated-at` mode. It only ever moves forward: a new task or a newer task
@@ -265,6 +257,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       expandedProjectIds: false,
       pinnedProjectIds: false,
       collapsedTaskIds: false,
+      collapsedTaskGroupIds: false,
       sidebarRows: computed,
       pinnedSidebarEntries: computed,
     });
@@ -801,6 +794,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       taskOrderByProject: { ...this.taskOrderByProject },
       taskOrderByParent: { ...this.taskOrderByParent },
       collapsedTaskIds: [...this.collapsedTaskIds],
+      collapsedTaskGroupIds: [...this.collapsedTaskGroupIds],
       projectActivityById: { ...this.projectActivityById },
       taskSortBy: this.taskSortBy,
       taskGroupBy: this.taskGroupBy,
@@ -835,6 +829,9 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     }
     if (snapshot.collapsedTaskIds !== undefined) {
       this.collapsedTaskIds.replace(snapshot.collapsedTaskIds);
+    }
+    if (snapshot.collapsedTaskGroupIds !== undefined) {
+      this.collapsedTaskGroupIds.replace(snapshot.collapsedTaskGroupIds);
     }
     if (snapshot.projectActivityById !== undefined) {
       this.projectActivityById = { ...snapshot.projectActivityById };
@@ -897,6 +894,19 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   toggleProjectsCollapsed(): void {
     this.projectsCollapsed = !this.projectsCollapsed;
+  }
+
+  toggleTaskGroupCollapsed(group: SidebarGroupKey): void {
+    const groupId = sidebarGroupId(group);
+    if (this.collapsedTaskGroupIds.has(groupId)) {
+      this.collapsedTaskGroupIds.delete(groupId);
+    } else {
+      this.collapsedTaskGroupIds.add(groupId);
+    }
+  }
+
+  ensureTaskGroupExpanded(group: SidebarGroupKey): void {
+    this.collapsedTaskGroupIds.delete(sidebarGroupId(group));
   }
 
   /** Called on first load when no snapshot exists — expand all known projects. */
@@ -1036,6 +1046,9 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       this.projectsCollapsed = false;
     }
 
+    const targetGroup = this.taskGroupForSelection(project, task);
+    if (targetGroup) this.ensureTaskGroupExpanded(targetGroup);
+
     this.ensureProjectExpanded(projectId);
     if (!task || !mountedProject) return;
 
@@ -1046,6 +1059,28 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       const parent = tasks.get(parentTaskId);
       parentTaskId = parent ? registeredTaskData(parent)?.parentTaskId : undefined;
     }
+  }
+
+  private taskGroupForSelection(
+    project: ProjectStore,
+    task: TaskStore | undefined
+  ): SidebarGroupKey | null {
+    if (this.taskPriorityMode) {
+      return task ? { kind: 'priority', priority: this.taskPriorityGroup(task), count: 0 } : null;
+    }
+    if (this.taskGroupBy === 'type') {
+      return {
+        kind: 'type',
+        type: project.state === 'unregistered' ? 'local' : project.data!.type,
+      };
+    }
+    if (this.taskGroupBy === 'activity' && task) {
+      return {
+        kind: 'activity',
+        bucket: activityBucketFor(getSortInstant(task, 'updated')),
+      };
+    }
+    return null;
   }
 
   /**
