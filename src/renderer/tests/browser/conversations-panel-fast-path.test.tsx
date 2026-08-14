@@ -452,10 +452,12 @@ describe('ConversationsPanel active-session fast path', () => {
     expect(
       host.querySelector('[data-pane-session-ids]')?.getAttribute('data-pane-session-ids')
     ).toBe('');
-    expect(mocks.historyActive).not.toHaveBeenCalled();
+    // The dock reserves its geometry from the start, but must stay inactive so
+    // no transcript mounts before the routed conversation resolves.
+    expect(mocks.historyActive).not.toHaveBeenCalledWith(true);
 
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(mocks.historyActive).not.toHaveBeenCalled();
+    expect(mocks.historyActive).not.toHaveBeenCalledWith(true);
   });
 
   it('removes the root loader when the session needs to expose preparation diagnostics', async () => {
