@@ -22,6 +22,7 @@ import { RenameProjectModal } from '@renderer/features/projects/components/renam
 import { LocalAgentSessionModal } from '@renderer/features/projects/components/sessions-view/local-agent-session-modal';
 import { ShareProjectConfigModal } from '@renderer/features/projects/components/settings-view/share-project-config-modal';
 import { DreamSkinEditorModal } from '@renderer/features/settings/components/DreamSkinEditorModal';
+import { PriorityOrderModal } from '@renderer/features/sidebar/priority-order-modal';
 import { CreateSkillModal } from '@renderer/features/skills/components/CreateSkillModal';
 import { ForkSkillModal } from '@renderer/features/skills/components/ForkSkillModal';
 import { ReviseSkillModal } from '@renderer/features/skills/components/ReviseSkillModal';
@@ -114,6 +115,7 @@ export const modalRegistry = {
   manageQuickActionsModal: createModal(ManageQuickActionsModal, { size: 'md' }),
   integrationSetupModal: createModal(IntegrationSetupModal, { size: 'md' }),
   dreamSkinEditorModal: createModal(DreamSkinEditorModal, { size: 'xl' }),
+  priorityOrderModal: createModal(PriorityOrderModal, { size: 'sm' }),
   addRemoteModal: createModal(AddRemoteModal),
   quitAgentSessionsModal: createModal(QuitAgentSessionsModal, { size: 'md' }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

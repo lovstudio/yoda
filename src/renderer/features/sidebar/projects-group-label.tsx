@@ -1,7 +1,6 @@
 import {
   Archive,
-  ArrowDown,
-  ArrowUp,
+  ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
   EyeOff,
@@ -9,7 +8,6 @@ import {
   ListOrdered,
   ListRestart,
   MessageSquareOff,
-  MoreHorizontal,
   Settings2,
   Zap,
   type LucideIcon,
@@ -24,11 +22,11 @@ import {
   type SidebarBranchDisplay,
   type SidebarTaskGroupBy,
   type SidebarTaskGroupVisibleLimit,
-  type SidebarTaskPriorityGroup,
   type SidebarTaskSortBy,
 } from '@shared/view-state';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
+import { showModal } from '@renderer/lib/modal/modal-provider';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
 import {
@@ -38,12 +36,6 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@renderer/lib/ui/context-menu';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@renderer/lib/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import {
   Select,
@@ -182,7 +174,7 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
         checked={sidebarStore.taskPriorityMode}
         onCheckedChange={(checked) => sidebarStore.setTaskPriorityMode(checked)}
       />
-      {sidebarStore.taskPriorityMode && <PriorityOrderPanel />}
+      {sidebarStore.taskPriorityMode && <PriorityOrderCard />}
       <PanelSeparator />
       <PanelRow label={t('sidebar.newTaskOpenMode')}>
         <ToggleGroup
@@ -352,79 +344,29 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
   );
 });
 
-const PriorityOrderPanel = observer(function PriorityOrderPanel() {
+const PriorityOrderCard = observer(function PriorityOrderCard() {
   const { t } = useTranslation();
-  const movableGroups: SidebarTaskPriorityGroup[] = sidebarStore.taskPriorityOrder.filter(
-    (group) => group !== 'archived'
-  );
 
   return (
-    <div className="mt-1 rounded-md bg-background-tertiary-1 p-1">
-      <div className="flex h-7 items-center justify-between px-1.5">
-        <span className="text-xs font-medium text-foreground-muted">
+    <button
+      type="button"
+      aria-haspopup="dialog"
+      className="group mt-1 flex w-full items-center gap-2 rounded-md border border-border/70 bg-background-tertiary-1 px-2 py-2 text-left outline-none transition-colors hover:border-border hover:bg-background-quaternary-1 focus-visible:ring-1 focus-visible:ring-ring"
+      onClick={() => showModal('priorityOrderModal', {})}
+    >
+      <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-background text-foreground-muted ring-1 ring-border/70">
+        <ListOrdered className="size-3.5" />
+      </div>
+      <span className="min-w-0 flex-1">
+        <span className="block text-xs font-medium text-foreground">
           {t('sidebar.priorityOrder')}
         </span>
-        <Button
-          variant="ghost"
-          size="xs"
-          className="h-6 px-1.5 text-foreground-muted"
-          onClick={() => sidebarStore.resetTaskPriorityOrder()}
-        >
-          <ListRestart className="size-3" />
-          {t('sidebar.priorityReset')}
-        </Button>
-      </div>
-      {sidebarStore.taskPriorityOrder.map((group) => {
-        const index = movableGroups.indexOf(group);
-        const archived = group === 'archived';
-        return (
-          <div key={group} className="flex h-7 items-center gap-2 rounded px-1.5 text-xs">
-            <span className="w-4 shrink-0 text-center font-mono text-foreground-passive">
-              {sidebarStore.taskPriorityOrder.indexOf(group) + 1}
-            </span>
-            <span className="min-w-0 flex-1 truncate">{t(`sidebar.priorityGroups.${group}`)}</span>
-            {archived ? (
-              <span className="text-[10px] text-foreground-passive">
-                {t('sidebar.priorityArchivedLink')}
-              </span>
-            ) : (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      className="size-6 p-0 text-foreground-muted"
-                      aria-label={t('sidebar.priorityReorder', {
-                        group: t(`sidebar.priorityGroups.${group}`),
-                      })}
-                    />
-                  }
-                >
-                  <MoreHorizontal className="size-3.5" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-32">
-                  <DropdownMenuItem
-                    disabled={index <= 0}
-                    onClick={() => sidebarStore.moveTaskPriorityGroup(group, -1)}
-                  >
-                    <ArrowUp />
-                    {t('sidebar.priorityMoveUp')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={index < 0 || index >= movableGroups.length - 1}
-                    onClick={() => sidebarStore.moveTaskPriorityGroup(group, 1)}
-                  >
-                    <ArrowDown />
-                    {t('sidebar.priorityMoveDown')}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
-        );
-      })}
-    </div>
+        <span className="block truncate text-[11px] text-foreground-passive">
+          {t('sidebar.priorityOrderSummary', { count: sidebarStore.taskPriorityOrder.length })}
+        </span>
+      </span>
+      <ChevronRight className="size-3.5 shrink-0 text-foreground-passive transition-transform group-hover:translate-x-0.5 group-hover:text-foreground-muted" />
+    </button>
   );
 });
 

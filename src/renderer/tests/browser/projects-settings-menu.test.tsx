@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { userEvent } from 'vitest/browser';
+import { modalStore } from '@renderer/lib/modal/modal-store';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -121,6 +122,7 @@ describe('ProjectsSettingsMenu', () => {
   });
 
   afterEach(async () => {
+    modalStore.closeModal();
     await act(async () => root.unmount());
     document
       .querySelectorAll('[data-slot="popover-content"], [data-slot="select-content"]')
@@ -184,7 +186,7 @@ describe('ProjectsSettingsMenu', () => {
     expect(mocks.updateInterface).toHaveBeenCalledWith({ newTaskOpenMode: 'modal' });
   });
 
-  it('shows the adjustable priority order when priority mode is enabled', async () => {
+  it('opens the priority order in a compact modal entry when priority mode is enabled', async () => {
     mocks.sidebarStore.taskPriorityMode = true;
     const { ProjectsSettingsMenu } = await import(
       '@renderer/features/sidebar/projects-group-label'
@@ -198,8 +200,49 @@ describe('ProjectsSettingsMenu', () => {
     await click(viewOptions);
 
     const popover = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
-    expect(popover?.textContent).toContain('sidebar.priorityGroups.awaiting-input');
-    expect(popover?.textContent).toContain('sidebar.priorityGroups.archived');
+    expect(popover?.textContent).toContain('sidebar.priorityOrderSummary:8');
+    expect(popover?.textContent).not.toContain('sidebar.priorityGroups.awaiting-input');
+    expect(popover?.textContent).not.toContain('sidebar.priorityGroups.archived');
     expect(popover?.textContent).not.toContain('sidebar.groupBy');
+
+    const priorityOrderEntry = popover?.querySelector<HTMLButtonElement>(
+      'button[aria-haspopup="dialog"]'
+    );
+    if (!priorityOrderEntry) throw new Error('Priority order modal entry is missing');
+    await click(priorityOrderEntry);
+
+    expect(modalStore.activeModalId).toBe('priorityOrderModal');
+  });
+
+  it('keeps the complete priority order controls inside the modal', async () => {
+    const { PriorityOrderModal } = await import('@renderer/features/sidebar/priority-order-modal');
+    const { Dialog, DialogContent } = await import('@renderer/lib/ui/dialog');
+    const onClose = vi.fn();
+
+    await act(async () =>
+      root.render(
+        createElement(
+          Dialog,
+          { open: true },
+          createElement(
+            DialogContent,
+            {},
+            createElement(PriorityOrderModal, { onClose, onSuccess: vi.fn() })
+          )
+        )
+      )
+    );
+
+    const dialog = document.querySelector<HTMLElement>('[data-slot="dialog-content"]');
+    expect(dialog?.textContent).toContain('sidebar.priorityGroups.awaiting-input');
+    expect(dialog?.textContent).toContain('sidebar.priorityGroups.archived');
+
+    const resetButton = Array.from(dialog?.querySelectorAll('button') ?? []).find((button) =>
+      button.textContent?.includes('sidebar.priorityReset')
+    );
+    if (!resetButton) throw new Error('Priority order reset button is missing');
+    await click(resetButton);
+
+    expect(mocks.sidebarStore.resetTaskPriorityOrder).toHaveBeenCalledOnce();
   });
 });
