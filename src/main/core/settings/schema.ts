@@ -22,6 +22,7 @@ import {
   MAX_CUSTOM_MODELS_PER_PROVIDER,
 } from '@shared/model-provider-catalog';
 import { openInAppIdSchema } from '@shared/openInApps';
+import { LEGACY_RUN_MODES } from '@shared/paradigms/kinds';
 import { promptPrincipleSchema, taskOutputLanguageValues } from '@shared/project-settings';
 import { runtimeIdSchema } from '@shared/runtime-id-schema';
 import { RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES } from '@shared/runtime-model-candidates';
@@ -595,7 +596,7 @@ export const interfaceSettingsSchema = z.object({
 
 export const browserPreviewSettingsSchema = z.object({ enabled: z.boolean() });
 
-const homeRunModeSchema = z.enum(['normal', 'build', 'brainstorm', 'review', 'team']);
+const homeRunModeSchema = z.enum(LEGACY_RUN_MODES);
 const teamRuntimeSelectionSchema = z.object({
   ceo: runtimeIdSchema,
   product: runtimeIdSchema,

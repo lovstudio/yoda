@@ -1,4 +1,5 @@
 import z from 'zod';
+import { LEGACY_RUN_MODES } from './paradigms/kinds';
 import {
   PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES,
   PROMPT_SOURCE_DEFAULT_TIMEOUT_SECONDS,
@@ -127,7 +128,7 @@ export const projectDocsSettingsSchema = z.object({
 
 export type ProjectDocsSettings = z.infer<typeof projectDocsSettingsSchema>;
 
-export const composerRunModeValues = ['normal', 'build', 'brainstorm', 'review', 'team'] as const;
+export const composerRunModeValues = LEGACY_RUN_MODES;
 export const composerStrategyKindValues = ['new-branch', 'no-worktree'] as const;
 export const taskOutputLanguageValues = ['skip', 'app', 'prompt', 'en', 'zh-CN'] as const;
 export type TaskOutputLanguage = (typeof taskOutputLanguageValues)[number];

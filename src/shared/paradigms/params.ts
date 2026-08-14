@@ -1,0 +1,91 @@
+import { z } from 'zod';
+import { runtimeIdSchema } from '../runtime-id-schema';
+import { TEAM_COMMUNICATION_MODES } from '../team-communication';
+import { PARADIGM_KIND_IDS } from './contract';
+
+/**
+ * Per-kind parameter schemas.
+ *
+ * Params are the paradigm *instance's* configuration — the part a user edits,
+ * duplicates, and carries into a task. Everything a kind needs to launch that
+ * is not ambient environment state belongs here, so that duplicating a paradigm
+ * duplicates its behavior and a task can snapshot exactly how it was launched.
+ */
+
+/**
+ * Agent picked per slot, keyed by `ParadigmSlot.storageKey`. The array shape is
+ * inherited from the composer draft, where a slot may hold several Agents whose
+ * system prompts are concatenated.
+ */
+export const paradigmSlotAgentsSchema = z.record(z.string(), z.array(z.string()));
+
+export type ParadigmSlotAgents = z.infer<typeof paradigmSlotAgentsSchema>;
+
+const withSlots = <T extends z.ZodRawShape>(shape: T) =>
+  z.object({ agents: paradigmSlotAgentsSchema.default({}), ...shape });
+
+export const singleParadigmParamsSchema = withSlots({});
+export type SingleParadigmParams = z.infer<typeof singleParadigmParamsSchema>;
+
+export const specParadigmParamsSchema = withSlots({});
+export type SpecParadigmParams = z.infer<typeof specParadigmParamsSchema>;
+
+export const appBuildParadigmParamsSchema = withSlots({});
+export type AppBuildParadigmParams = z.infer<typeof appBuildParadigmParamsSchema>;
+
+export const reviewParadigmParamsSchema = withSlots({
+  /** Runtime the reviewer seat spawns on; null inherits the global default. */
+  reviewerRuntime: runtimeIdSchema.nullable().default(null),
+});
+export type ReviewParadigmParams = z.infer<typeof reviewParadigmParamsSchema>;
+
+const teamMemberSchema = z.object({
+  handle: z.string(),
+  displayName: z.string(),
+  icon: z.string().optional(),
+  role: z.enum(['leader', 'worker']),
+  runtime: runtimeIdSchema,
+  agentRef: z.string().optional(),
+  systemPrompt: z.string().optional(),
+});
+
+const teamCommunicationSchema = z.object({
+  mode: z.enum(TEAM_COMMUNICATION_MODES),
+  syncToRoom: z.boolean(),
+  sharedFilePath: z.string(),
+  githubRepository: z.string(),
+  githubIssueNumber: z.number().nullable(),
+  githubPullRequestNumber: z.number().nullable(),
+});
+
+export const teamParadigmParamsSchema = withSlots({
+  routing: z.enum(['review-loop', 'fan-out', 'sequential', 'freeform']),
+  communication: teamCommunicationSchema,
+  /** Max conductor routing deliveries per human prompt. null = unlimited. */
+  routingHopLimit: z.number().nullable(),
+  members: z.array(teamMemberSchema),
+});
+export type TeamParadigmParams = z.infer<typeof teamParadigmParamsSchema>;
+
+/**
+ * `compare` composes rather than reimplements: it wraps another paradigm and
+ * runs it once per variant. Keeping the inner paradigm as a reference is what
+ * stops this kind from drifting into a near-duplicate of `single` — which is
+ * exactly why the original `compare` run mode had to be retired.
+ */
+export const compareParadigmParamsSchema = withSlots({
+  inner: z.object({
+    kindId: z.enum(PARADIGM_KIND_IDS),
+    paradigmId: z.string(),
+  }),
+  variants: z.array(
+    z.object({
+      id: z.string(),
+      projectId: z.string().nullable(),
+      runtimeId: runtimeIdSchema.nullable(),
+      strategyKind: z.enum(['new-branch', 'no-worktree']).nullable(),
+      baseBranch: z.string().nullable(),
+    })
+  ),
+});
+export type CompareParadigmParams = z.infer<typeof compareParadigmParamsSchema>;

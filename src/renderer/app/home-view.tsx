@@ -48,9 +48,20 @@ import {
   type AgentTeam,
 } from '@shared/agent-team';
 import { resolveAgentPermissionMode, type Agent } from '@shared/agents';
-import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
 import { FEATURE_WORKFLOW_STAGES, hasFeatureWorkflowContract } from '@shared/feature-workflow';
 import type { Branch } from '@shared/git';
+import type {
+  ParadigmAccent,
+  ParadigmKindDescriptor,
+  ParadigmKindId,
+  ParadigmSlot,
+} from '@shared/paradigms/contract';
+import {
+  paradigmKind,
+  paradigmKindForRunMode,
+  paradigmSlotByStorageKey,
+  type LegacyRunMode,
+} from '@shared/paradigms/kinds';
 import type { ComposerDefaults, TaskOutputLanguage } from '@shared/project-settings';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { withSystemPrompt } from '@shared/prompt-format';
@@ -146,7 +157,12 @@ type TaskStrategyKind = 'new-branch' | 'no-worktree';
 /** Strategy actually submitted to createTask — adds checkout-existing, which is
  *  derived (not forking + a non-current local or remote branch picked), never persisted. */
 type TaskSubmitStrategyKind = TaskStrategyKind | 'checkout-existing';
-type HomeRunMode = 'normal' | 'build' | 'brainstorm' | 'review' | 'team';
+/**
+ * The composer's persisted run-mode values. Kept as the storage vocabulary; the
+ * behavior behind each one lives in its paradigm kind descriptor
+ * (`src/shared/paradigms/kinds.ts`), reached via {@link runModeParadigm}.
+ */
+type HomeRunMode = LegacyRunMode;
 type RunHostKind = 'local' | 'ssh';
 
 /**
@@ -272,24 +288,36 @@ const MAX_COMPARE_VARIANTS = 5;
 const DEFAULT_REVIEWER_RUNTIME: RuntimeId = 'claude';
 type ExplicitTaskOutputLanguage = Extract<TaskOutputLanguage, 'en' | 'zh-CN'>;
 
-const NORMAL_PROMPT_KEY = 'normal:agent';
-const BUILD_PROMPT_KEY = 'build:agent';
-const REVIEW_IMPLEMENTER_PROMPT_KEY = 'review:implementer';
-const REVIEW_REVIEWER_PROMPT_KEY = 'review:reviewer';
-const SPEC_PROMPT_KEY = 'brainstorm:agent';
-
-/** The built-in Agent preset a slot defaults to when nothing is selected. */
-const SLOT_DEFAULT_BUILTIN_KEY: Record<string, string> = {
-  [NORMAL_PROMPT_KEY]: BUILTIN_AGENT_KEYS.general,
-  [BUILD_PROMPT_KEY]: BUILTIN_AGENT_KEYS.general,
-  [SPEC_PROMPT_KEY]: BUILTIN_AGENT_KEYS.spec,
-  [REVIEW_IMPLEMENTER_PROMPT_KEY]: BUILTIN_AGENT_KEYS.reviewImplementer,
-  [REVIEW_REVIEWER_PROMPT_KEY]: BUILTIN_AGENT_KEYS.reviewReviewer,
-};
-
-function defaultBuiltinKeyForSlot(slotKey: string): string | undefined {
-  return SLOT_DEFAULT_BUILTIN_KEY[slotKey];
+/** The paradigm kind behind a persisted run mode. */
+function runModeParadigm(mode: HomeRunMode): ParadigmKindDescriptor {
+  return paradigmKind(paradigmKindForRunMode(mode));
 }
+
+/** A kind's slot by role, e.g. `paradigmSlot('review', 'reviewer')`. */
+function paradigmSlot(kindId: ParadigmKindId, slotKey: string): ParadigmSlot {
+  const slot = paradigmKind(kindId).slots.find((candidate) => candidate.key === slotKey);
+  if (!slot) throw new Error(`Paradigm kind "${kindId}" has no "${slotKey}" slot`);
+  return slot;
+}
+
+/**
+ * Storage key of the slot whose Agent stands in for the whole paradigm in the
+ * composer (its implementer seat). null for kinds with no fixed slots — `team`
+ * carries its roster in params instead.
+ */
+function primarySlotKey(mode: HomeRunMode): string | null {
+  return runModeParadigm(mode).slots[0]?.storageKey ?? null;
+}
+
+// Storage keys for the per-slot Agent selection. Derived from the descriptors so
+// the keys have exactly one definition; the literals themselves stay legacy
+// per-mode strings until the paradigm-params migration renames them.
+const NORMAL_PROMPT_KEY = paradigmSlot('single', 'agent').storageKey;
+const BUILD_PROMPT_KEY = paradigmSlot('app-build', 'agent').storageKey;
+const REVIEW_IMPLEMENTER_PROMPT_KEY = paradigmSlot('review', 'implementer').storageKey;
+const REVIEW_REVIEWER_PROMPT_KEY = paradigmSlot('review', 'reviewer').storageKey;
+const SPEC_PROMPT_KEY = paradigmSlot('spec', 'agent').storageKey;
+
 const ADVANCED_INPUT_CONTAINER_CLASS =
   'border-border bg-background-1 ring-1 ring-sky-500/15 focus-within:border-sky-500/30 focus-within:ring-sky-500/25';
 
@@ -302,33 +330,17 @@ function getGreetingKey(hour: number): string {
   return 'home.greeting.lateNight';
 }
 
-function getRunModeInputChrome(mode: HomeRunMode): RunModeInputChrome {
-  switch (mode) {
-    case 'brainstorm':
-      return {
-        containerClassName: ADVANCED_INPUT_CONTAINER_CLASS,
-      };
-    case 'review':
-      return {
-        containerClassName: ADVANCED_INPUT_CONTAINER_CLASS,
-      };
-    case 'team':
-      return {
-        containerClassName: ADVANCED_INPUT_CONTAINER_CLASS,
-      };
-    case 'build':
-      return {
-        containerClassName:
-          'border-amber-500/30 bg-amber-500/[0.035] ring-1 ring-amber-500/15 focus-within:border-amber-500/45 focus-within:ring-amber-500/25',
-      };
-    case 'normal':
-      return {
-        containerClassName: 'border-border bg-background-1',
-      };
-  }
+const PARADIGM_ACCENT_CONTAINER_CLASS: Record<ParadigmAccent, string> = {
+  default: 'border-border bg-background-1',
+  advanced: ADVANCED_INPUT_CONTAINER_CLASS,
+  experimental:
+    'border-amber-500/30 bg-amber-500/[0.035] ring-1 ring-amber-500/15 focus-within:border-amber-500/45 focus-within:ring-amber-500/25',
+};
 
-  const exhaustive: never = mode;
-  return exhaustive;
+function getRunModeInputChrome(mode: HomeRunMode): RunModeInputChrome {
+  return {
+    containerClassName: PARADIGM_ACCENT_CONTAINER_CLASS[runModeParadigm(mode).capabilities.accent],
+  };
 }
 
 function agentSkillSelection(agent: Agent | null): SkillSelectionInput | undefined {
@@ -795,7 +807,7 @@ export const HomeComposer = observer(function HomeComposer({
     (slotKey: string): string | null => {
       const explicit = selectedAgentIdsByMode[slotKey]?.[0];
       if (explicit) return explicit;
-      const builtinKey = defaultBuiltinKeyForSlot(slotKey);
+      const builtinKey = paradigmSlotByStorageKey(slotKey)?.defaultBuiltinAgentKey;
       if (!builtinKey) return null;
       return userAgents.find((a) => a.slug === builtinKey)?.id ?? null;
     },
@@ -818,15 +830,8 @@ export const HomeComposer = observer(function HomeComposer({
         ) ?? null
       );
     }
-    const slotKey =
-      runMode === 'build'
-        ? BUILD_PROMPT_KEY
-        : runMode === 'brainstorm'
-          ? SPEC_PROMPT_KEY
-          : runMode === 'review'
-            ? REVIEW_IMPLEMENTER_PROMPT_KEY
-            : NORMAL_PROMPT_KEY;
-    const agentId = slotAgentId(slotKey);
+    const slotKey = primarySlotKey(runMode);
+    const agentId = slotKey ? slotAgentId(slotKey) : null;
     return agentId ? (userAgents.find((agent) => agent.id === agentId) ?? null) : null;
   }, [activeTeam, runMode, slotAgentId, userAgents]);
   const composerSkillSelection = useMemo(() => agentSkillSelection(composerAgent), [composerAgent]);
@@ -840,16 +845,10 @@ export const HomeComposer = observer(function HomeComposer({
       return activeTeam ? teamDisplayName(activeTeam, t) : null;
     }
 
-    // Single-Agent modes (normal / build / brainstorm / review): the implementer slot's
-    // resolved runtime · model.
-    const slotKey =
-      runMode === 'build'
-        ? BUILD_PROMPT_KEY
-        : runMode === 'brainstorm'
-          ? SPEC_PROMPT_KEY
-          : runMode === 'review'
-            ? REVIEW_IMPLEMENTER_PROMPT_KEY
-            : NORMAL_PROMPT_KEY;
+    // Single-Agent paradigms: the primary (implementer) slot's resolved
+    // runtime · model.
+    const slotKey = primarySlotKey(runMode);
+    if (!slotKey) return null;
     const resolved = resolveAgentSlot({
       selectedAgentId: slotAgentId(slotKey),
       agents: userAgents,
@@ -968,13 +967,16 @@ export const HomeComposer = observer(function HomeComposer({
     effectiveStandardStrategyKind === 'new-branch' ? 'new-branch' : selectedBranchSubmitKind;
   const reviewSubmitKind: TaskSubmitStrategyKind =
     effectiveReviewStrategyKind === 'new-branch' ? 'new-branch' : selectedBranchSubmitKind;
+  const paradigmCapabilities = runModeParadigm(runMode).capabilities;
+  // Which branch strategy reaches createTask: fixed for paradigms that declare
+  // their worktree need, otherwise whichever strategy field the paradigm reads.
   const projectSubmitStrategyKind: TaskSubmitStrategyKind =
-    runMode === 'team'
+    paradigmCapabilities.worktree === 'required'
       ? 'new-branch'
-      : runMode === 'review'
-        ? reviewSubmitKind
-        : runMode === 'brainstorm'
-          ? 'no-worktree'
+      : paradigmCapabilities.worktree === 'never'
+        ? 'no-worktree'
+        : paradigmCapabilities.strategyField === 'review'
+          ? reviewSubmitKind
           : standardSubmitKind;
   const projectSubmitSourceBranch =
     mounted &&
@@ -1045,11 +1047,13 @@ export const HomeComposer = observer(function HomeComposer({
     setOverride: (value) => setComposerDefault('summaryLanguage', value),
     hasProject: hasProjectOverrideTarget,
   });
-  const modeCanRunWithoutProject =
-    runMode === 'normal' || runMode === 'brainstorm' || runMode === 'build';
+  const modeCanRunWithoutProject = paradigmCapabilities.projectless;
+  // Only a paradigm that refuses to degrade on an unborn repo needs a real
+  // branch up front; the rest silently fall back to running in place.
   const modeRequiresWorktree =
     !taskScopedTarget &&
-    (runMode === 'team' || (runMode === 'review' && effectiveReviewStrategyKind === 'new-branch'));
+    paradigmCapabilities.unbornPolicy === 'seed-commit' &&
+    projectSubmitStrategyKind === 'new-branch';
   const appPromptLanguage = useMemo(
     () => explicitTaskOutputLanguageFromI18n(i18n.resolvedLanguage ?? i18n.language),
     [i18n.language, i18n.resolvedLanguage]
@@ -1072,18 +1076,14 @@ export const HomeComposer = observer(function HomeComposer({
     [appPromptLanguage, inputPromptLanguage, runtimeId, selectedProjectId]
   );
   // A slot can run only when it has an Agent assigned (the Agent supplies the
-  // runtime + prompt). Each mode requires all its slots filled.
+  // runtime + prompt). Every slot the paradigm declares must be filled.
   const hasSlotAgent = (slotKey: string) => !!slotAgentId(slotKey);
   const modeHasAgents =
-    runMode === 'review'
-      ? hasSlotAgent(REVIEW_IMPLEMENTER_PROMPT_KEY) && hasSlotAgent(REVIEW_REVIEWER_PROMPT_KEY)
-      : runMode === 'team'
-        ? Boolean(activeTeam && activeTeam.members.length > 0)
-        : runMode === 'brainstorm'
-          ? hasSlotAgent(SPEC_PROMPT_KEY)
-          : runMode === 'build'
-            ? hasSlotAgent(BUILD_PROMPT_KEY)
-            : hasSlotAgent(NORMAL_PROMPT_KEY);
+    runMode === 'team'
+      ? // The team roster is params, not fixed slots — it moves under the
+        // paradigm's params once instances land.
+        Boolean(activeTeam && activeTeam.members.length > 0)
+      : runModeParadigm(runMode).slots.every((slot) => hasSlotAgent(slot.storageKey));
   // Multi-config compare only fires in plain (normal, non-task-scoped) submits;
   // every variant must target a real project before it can spawn a task.
   const compareActive = runMode === 'normal' && !taskScopedTarget && compareVariants.length > 0;
@@ -1110,13 +1110,16 @@ export const HomeComposer = observer(function HomeComposer({
   // submit through a modal that seeds the first commit (creating the repo if
   // needed), then proceeds.
   const needsInitialCommit = !!mounted && modeRequiresWorktree && isUnborn && !!selectedProjectId;
+  // A paradigm that scaffolds its own project has no project/branch to validate;
+  // it only needs a requirement to build from.
+  const scaffoldsOwnProject = paradigmCapabilities.target === 'new-project';
   const canSubmit =
     !submitting &&
     modeHasAgents &&
     !featureWorkflowNeedsBrief &&
     compareVariantsReady &&
-    (runMode !== 'build' || promptHasText) &&
-    (runMode === 'build'
+    (!scaffoldsOwnProject || promptHasText) &&
+    (scaffoldsOwnProject
       ? true
       : taskScopedTarget
         ? !!targetProvisionedTask
@@ -2207,38 +2210,44 @@ export const HomeComposer = observer(function HomeComposer({
     </button>
   );
 
+  // The fork/branch row is shown for paradigms that read a persisted strategy
+  // field, and edits whichever field the paradigm declares. Paradigms with a
+  // fixed worktree need (spec, team, app-build) have nothing to configure here.
+  const strategyFieldConfig =
+    paradigmCapabilities.strategyField === 'standard'
+      ? {
+          strategyKind: effectiveStandardStrategyKind,
+          setStrategyKind,
+          forkLabels: strategyLabels,
+          forkAriaLabel: t('home.strategyAria'),
+        }
+      : paradigmCapabilities.strategyField === 'review'
+        ? {
+            strategyKind: effectiveReviewStrategyKind,
+            setStrategyKind: setReviewStrategyKind,
+            forkLabels: reviewStrategyLabels,
+            forkAriaLabel: t('home.reviewStrategyAria'),
+          }
+        : null;
+
   const environmentBranchConfiguration: EnvironmentBranchConfiguration | undefined =
-    !taskScopedTarget && mounted && runMode === 'normal'
+    !taskScopedTarget && mounted && strategyFieldConfig
       ? {
           projectId: mounted.data.id,
-          strategyKind: effectiveStandardStrategyKind,
+          strategyKind: strategyFieldConfig.strategyKind,
           locked: Boolean(parentBranchName),
           forkDisabled: isUnborn,
           branchValue: selectedBranch,
           branchLabel: selectedBranchLabel,
           branchRunsInPlace: selectedBranchRunsInPlace,
           onBranchChange: setBaseBranch,
-          onForkChange: (forked) => setStrategyKind(forked ? 'new-branch' : 'no-worktree'),
-          forkLabels: strategyLabels,
+          onForkChange: (forked) =>
+            strategyFieldConfig.setStrategyKind(forked ? 'new-branch' : 'no-worktree'),
+          forkLabels: strategyFieldConfig.forkLabels,
           baseBranchAriaLabel: t('home.baseBranchAria'),
-          forkAriaLabel: t('home.strategyAria'),
+          forkAriaLabel: strategyFieldConfig.forkAriaLabel,
         }
-      : !taskScopedTarget && mounted && runMode === 'review'
-        ? {
-            projectId: mounted.data.id,
-            strategyKind: effectiveReviewStrategyKind,
-            locked: Boolean(parentBranchName),
-            forkDisabled: isUnborn,
-            branchValue: selectedBranch,
-            branchLabel: selectedBranchLabel,
-            branchRunsInPlace: selectedBranchRunsInPlace,
-            onBranchChange: setBaseBranch,
-            onForkChange: (forked) => setReviewStrategyKind(forked ? 'new-branch' : 'no-worktree'),
-            forkLabels: reviewStrategyLabels,
-            baseBranchAriaLabel: t('home.baseBranchAria'),
-            forkAriaLabel: t('home.reviewStrategyAria'),
-          }
-        : undefined;
+      : undefined;
 
   return (
     <div data-yoda-surface="home-composer" className={className}>
@@ -2298,8 +2307,8 @@ export const HomeComposer = observer(function HomeComposer({
           projectPath={skillProjectPath}
           imagesAsPaths={attachImagesAsPaths}
           skillSelection={composerSkillSelection}
-          placeholder={runMode === 'build' ? t('home.buildPromptPlaceholder') : undefined}
-          disabled={runMode === 'build' && submitting}
+          placeholder={scaffoldsOwnProject ? t('home.buildPromptPlaceholder') : undefined}
+          disabled={scaffoldsOwnProject && submitting}
           runHostKind={runHostKind}
           containerClassName={promptInputChrome.containerClassName}
           canSubmit={canSubmit}
@@ -2406,7 +2415,7 @@ export const HomeComposer = observer(function HomeComposer({
         )}
         {compareVariants.length === 0 && (
           <div className="flex flex-wrap items-center gap-2">
-            {runMode === 'build' ? null : isProjectLocked ? (
+            {scaffoldsOwnProject ? null : isProjectLocked ? (
               <TaskScopedProjectButton
                 label={lockedProjectName ?? selectedProjectId ?? ''}
                 tooltip={
@@ -2449,7 +2458,7 @@ export const HomeComposer = observer(function HomeComposer({
                 </Tooltip>
               </div>
             )}
-            {runMode !== 'build' && (
+            {!scaffoldsOwnProject && (
               <EnvironmentSelector
                 kind={runHostKind}
                 onSelectKind={isProjectLocked ? undefined : selectRunHostProject}
@@ -2457,8 +2466,8 @@ export const HomeComposer = observer(function HomeComposer({
               />
             )}
             {runMode === 'brainstorm' && <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>}
-            {runMode === 'build' && <Chip icon={AppWindow}>{t('home.buildDestination')}</Chip>}
-            {runMode === 'build' && submitting && (
+            {scaffoldsOwnProject && <Chip icon={AppWindow}>{t('home.buildDestination')}</Chip>}
+            {scaffoldsOwnProject && submitting && (
               <span className="flex h-7 items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2.5 text-xs font-medium text-amber-700 ydark:text-amber-300">
                 <Loader2 className="size-3.5 animate-spin" />
                 {t('home.buildGenerating')}
