@@ -17,7 +17,6 @@ type CheckpointWrite = {
   data: string;
   sequence: number;
   byteLength: number;
-  canonicalAfterParse: boolean;
 };
 
 type SequenceMarker = {
@@ -38,16 +37,6 @@ type CheckpointQueueItem = CheckpointWrite | SequenceMarker | CheckpointResize |
 
 export const PTY_CHECKPOINT_PARSER_HIGH_WATERMARK_BYTES = 384 * 1024;
 export const PTY_CHECKPOINT_PARSER_LOW_WATERMARK_BYTES = 96 * 1024;
-
-const SYNCHRONIZED_OUTPUT_START = '\x1b[?2026h';
-const SYNCHRONIZED_OUTPUT_END = '\x1b[?2026l';
-const SYNCHRONIZED_OUTPUT_CURSOR_SHOW = '\x1b[?25h';
-const SYNCHRONIZED_OUTPUT_SCAN_OVERLAP =
-  Math.max(
-    SYNCHRONIZED_OUTPUT_START.length,
-    SYNCHRONIZED_OUTPUT_END.length,
-    SYNCHRONIZED_OUTPUT_CURSOR_SHOW.length
-  ) - 1;
 
 type PtyRenderCheckpointTrackerOptions = {
   onBackpressureChange?: (backpressured: boolean, pendingBytes: number) => void;
@@ -104,12 +93,17 @@ export class PtyRenderCheckpointTracker {
   private parserBackpressured = false;
   private readonly generation: number;
   private canonical: boolean;
-  private scannedCanonical: boolean;
-  private synchronizedOutputOpen = false;
-  private synchronizedOutputCursorShown = false;
-  private synchronizedOutputScanTail = '';
   private readonly scrollbackLines: number;
   private sequence: number;
+  /**
+   * The effective grid after every resize already accepted into the ordered
+   * parser queue. This intentionally advances when a resize is queued rather
+   * than when xterm finishes applying it: a repeated renderer measurement can
+   * then stay an O(1) no-op without allocating the lazy parser or invalidating
+   * an otherwise canonical serialized seed.
+   */
+  private targetCols: number;
+  private targetRows: number;
 
   constructor(
     checkpoint: PtyRenderCheckpoint,
@@ -117,9 +111,10 @@ export class PtyRenderCheckpointTracker {
   ) {
     this.generation = checkpoint.generation;
     this.canonical = checkpoint.canonical;
-    this.scannedCanonical = checkpoint.canonical;
     this.scrollbackLines = checkpoint.scrollbackLines;
     this.sequence = checkpoint.sequence;
+    this.targetCols = checkpoint.cols;
+    this.targetRows = checkpoint.rows;
     // Most evicted sessions are idle. Keep their already-canonical serialized
     // state as-is so reopening can return it without parsing and serializing it
     // once in main before the renderer parses it again. A headless terminal is
@@ -129,16 +124,15 @@ export class PtyRenderCheckpointTracker {
 
   write(data: string, sequence: number, knownByteLength?: number): void {
     if (this.disposed || !data || sequence < this.sequence) return;
-    // Raw PTY output starts untrusted, then becomes canonical again only after
-    // a complete DEC synchronized-output transaction (including cursor-show)
-    // has crossed the headless parser callback. Scan ingress order here and
-    // attach that resulting provenance to the queued parser job so later
-    // partial writes cannot accidentally inherit an earlier completed frame.
-    const canonicalAfterParse = this.scanCanonicalPayload(data);
+    // A synchronized-output transaction proves only that one redraw is atomic;
+    // agent startup, loading, and error screens use the same boundary. Main has
+    // no provider-owned semantic-ready signal, so any raw backend output
+    // permanently downgrades this tracker. Only an untouched renderer-authored
+    // canonical seed may retain the semantic fast path.
     this.canonical = false;
     const byteLength = knownByteLength ?? Buffer.byteLength(data, 'utf8');
     this.adjustParserPendingBytes(byteLength);
-    this.queue.push({ data, sequence, byteLength, canonicalAfterParse });
+    this.queue.push({ data, sequence, byteLength });
     this.pump();
   }
 
@@ -149,7 +143,6 @@ export class PtyRenderCheckpointTracker {
   markSequence(sequence: number): void {
     if (this.disposed || sequence <= this.sequence) return;
     this.canonical = false;
-    this.scannedCanonical = false;
     this.queue.push({ sequence });
     this.pump();
   }
@@ -165,8 +158,10 @@ export class PtyRenderCheckpointTracker {
     ) {
       return;
     }
+    if (cols === this.targetCols && rows === this.targetRows) return;
+    this.targetCols = cols;
+    this.targetRows = rows;
     this.canonical = false;
-    this.scannedCanonical = false;
     this.queue.push({ cols, rows });
     this.pump();
   }
@@ -238,7 +233,6 @@ export class PtyRenderCheckpointTracker {
     this.terminal.write(item.data, () => {
       if (this.disposed) return;
       this.sequence = Math.max(this.sequence, item.sequence);
-      this.canonical = item.canonicalAfterParse;
       this.adjustParserPendingBytes(-item.byteLength);
       this.active = false;
       this.pump();
@@ -283,44 +277,6 @@ export class PtyRenderCheckpointTracker {
   private adjustParserPendingBytes(delta: number): void {
     this.parserPendingBytes = Math.max(0, this.parserPendingBytes + delta);
     this.updateBackpressure();
-  }
-
-  /** Track DEC synchronized-output markers across arbitrary PTY chunk boundaries. */
-  private scanCanonicalPayload(data: string): boolean {
-    this.scannedCanonical = false;
-    const scan = this.synchronizedOutputScanTail + data;
-    let offset = 0;
-    while (offset < scan.length) {
-      const startIndex = scan.indexOf(SYNCHRONIZED_OUTPUT_START, offset);
-      const endIndex = scan.indexOf(SYNCHRONIZED_OUTPUT_END, offset);
-      const cursorIndex = scan.indexOf(SYNCHRONIZED_OUTPUT_CURSOR_SHOW, offset);
-      const nextIndex = Math.min(
-        startIndex < 0 ? Number.POSITIVE_INFINITY : startIndex,
-        endIndex < 0 ? Number.POSITIVE_INFINITY : endIndex,
-        cursorIndex < 0 ? Number.POSITIVE_INFINITY : cursorIndex
-      );
-      if (!Number.isFinite(nextIndex)) break;
-      if (nextIndex === startIndex) {
-        this.synchronizedOutputOpen = true;
-        this.synchronizedOutputCursorShown = false;
-        this.scannedCanonical = false;
-        offset = startIndex + SYNCHRONIZED_OUTPUT_START.length;
-        continue;
-      }
-      if (nextIndex === cursorIndex) {
-        if (this.synchronizedOutputOpen) this.synchronizedOutputCursorShown = true;
-        offset = cursorIndex + SYNCHRONIZED_OUTPUT_CURSOR_SHOW.length;
-        continue;
-      }
-      if (nextIndex === endIndex && this.synchronizedOutputOpen) {
-        this.scannedCanonical = this.synchronizedOutputCursorShown;
-        this.synchronizedOutputOpen = false;
-        this.synchronizedOutputCursorShown = false;
-      }
-      offset = endIndex + SYNCHRONIZED_OUTPUT_END.length;
-    }
-    this.synchronizedOutputScanTail = scan.slice(-SYNCHRONIZED_OUTPUT_SCAN_OVERLAP);
-    return this.scannedCanonical && !this.synchronizedOutputOpen;
   }
 
   private updateBackpressure(): void {

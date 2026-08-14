@@ -324,6 +324,7 @@ export class SshTerminalProvider implements TerminalProvider {
         preserveBufferOnExit: policy.preserveBufferOnExit,
         registrationEpoch,
         tmuxBacked: Boolean(tmuxSessionName),
+        initialDimensions: initialSize,
       });
       registrationCompleted = true;
       if (!this.isCurrentStart(sessionId, operation)) {

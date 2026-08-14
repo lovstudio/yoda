@@ -64,6 +64,15 @@ export function getPaneContainer(paneId: string): HTMLDivElement | null {
 
 export interface PaneSizingContextValue {
   /**
+   * The session that currently owns this pane's backend resize authority.
+   *
+   * A terminal can mount and measure while task-open staging deliberately keeps
+   * this null. Consumers must observe the later ownership handoff even when the
+   * pane's pixel geometry did not change, otherwise xterm and the backend TUI
+   * can remain on different row counts until an unrelated layout resize.
+   */
+  activeSessionId: string | null;
+  /**
    * Called by a terminal after every resize. The report is forwarded only when
    * reportSessionId is the pane's current active session; stale reports from a
    * terminal being unmounted are ignored.
@@ -180,8 +189,14 @@ export function PaneSizingProvider({
   );
 
   const value = useMemo(
-    () => ({ reportDimensions, getCurrentDimensions, containerRef, measureCurrentDimensions }),
-    [reportDimensions, getCurrentDimensions, measureCurrentDimensions]
+    () => ({
+      activeSessionId: validActiveSessionId,
+      reportDimensions,
+      getCurrentDimensions,
+      containerRef,
+      measureCurrentDimensions,
+    }),
+    [validActiveSessionId, reportDimensions, getCurrentDimensions, measureCurrentDimensions]
   );
 
   return (

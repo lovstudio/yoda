@@ -95,7 +95,8 @@ describe('resolveSshCommand', () => {
 
     expect(result).toContain('tmux -L yoda -f /dev/null has-session -t "agent-session"');
     expect(result).toContain('tmux -L yoda -f /dev/null new-session -d -s "agent-session"');
-    expect(result).toContain('tmux -L yoda -f /dev/null attach-session -t "agent-session"');
+    expect(result).toContain('tmux -L yoda -f /dev/null -T sync attach-session -t "agent-session"');
+    expect(result).toContain('else tmux -L yoda -f /dev/null attach-session -t "agent-session"');
     expect(result).toContain('"copy-mode -H -e"');
     expect(result).toContain('claude');
     expect(result).toContain('--resume');
@@ -150,8 +151,12 @@ describe('resolveSshCommand', () => {
       zshProfile
     );
 
-    const [existingPaneBranch] = result.split('; else ');
-    expect(existingPaneBranch).toContain('then tmux -L yoda -f /dev/null attach-session');
+    const existingPaneBranch = result;
+    expect(existingPaneBranch).toContain(
+      'then if tmux -L yoda -f /dev/null display-message -p "#{version}" 2>/dev/null | awk'
+    );
+    expect(existingPaneBranch).toContain('then tmux -L yoda -f /dev/null -T sync attach-session');
+    expect(existingPaneBranch).toContain('else tmux -L yoda -f /dev/null attach-session');
     expect(existingPaneBranch).not.toContain('kill-session');
   });
 

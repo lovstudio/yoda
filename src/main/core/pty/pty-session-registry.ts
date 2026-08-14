@@ -18,7 +18,7 @@ import {
 } from '@shared/terminal-settings';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
-import type { Pty, PtyExitInfo } from './pty';
+import type { Pty, PtyDimensions, PtyExitInfo } from './pty';
 import { PtyRenderCheckpointTracker } from './pty-render-checkpoint';
 import { TmuxTerminalReplyFilter } from './tmux-terminal-reply-filter';
 
@@ -69,6 +69,8 @@ type SessionState = {
   readonly tmuxInputFilter: TmuxTerminalReplyFilter | null;
   readonly tmuxBacked: boolean;
   readonly onRendererIdle: ((generation: number) => void) | undefined;
+  /** Last grid successfully requested from this exact backend PTY instance. */
+  backendDimensions: PtyDimensions | null;
   renderCheckpoint: PtyRenderCheckpointTracker | null;
   rendererDetachTimer: ReturnType<typeof setTimeout> | null;
   live: boolean;
@@ -429,6 +431,8 @@ export class PtySessionRegistry {
       registrationEpoch?: number;
       tmuxBacked?: boolean;
       onRendererIdle?: (generation: number) => void;
+      /** Exact grid used to create or attach this backend PTY. */
+      initialDimensions?: PtyDimensions;
     }
   ): void {
     if (this.hasGenerationRevealClaims(sessionId)) {
@@ -452,6 +456,7 @@ export class PtySessionRegistry {
       tmuxInputFilter: options?.tmuxBacked ? new TmuxTerminalReplyFilter() : null,
       tmuxBacked: options?.tmuxBacked === true,
       onRendererIdle: options?.onRendererIdle,
+      backendDimensions: options?.initialDimensions ? { ...options.initialDimensions } : null,
       renderCheckpoint: null,
       rendererDetachTimer: null,
       live: true,
@@ -627,6 +632,24 @@ export class PtySessionRegistry {
   }
 
   /**
+   * Resize the currently live PTY and its checkpoint as one registry-owned
+   * operation. This compatibility path intentionally remains available while
+   * a replacement registration is pending: terminal providers can issue their
+   * initial resize against the captured live state without ever mutating the
+   * replacement generation. Renderer task-open staging should instead use the
+   * generation-bound resizeForRenderer path below.
+   */
+  resizeCurrent(
+    sessionId: string,
+    cols: number,
+    rows: number
+  ): { generation: number; changed: boolean } | null {
+    const state = this.sessions.get(sessionId);
+    if (!state?.live) return null;
+    return this.resizeLiveState(sessionId, state, cols, rows);
+  }
+
+  /**
    * Resize exactly the renderer-owned PTY generation. The generation check,
    * backend resize, and checkpoint update are synchronous so a stale renderer
    * cannot mutate a replacement session's terminal grid.
@@ -642,7 +665,22 @@ export class PtySessionRegistry {
     if (
       !state?.live ||
       (registration !== undefined && registration.expiresAt > Date.now()) ||
-      state.generation !== expectedGeneration ||
+      state.generation !== expectedGeneration
+    ) {
+      return null;
+    }
+
+    return this.resizeLiveState(sessionId, state, cols, rows);
+  }
+
+  private resizeLiveState(
+    sessionId: string,
+    state: SessionState,
+    cols: number,
+    rows: number
+  ): { generation: number; changed: boolean } | null {
+    if (
+      !state.live ||
       !Number.isSafeInteger(cols) ||
       cols < 2 ||
       !Number.isSafeInteger(rows) ||
@@ -651,18 +689,24 @@ export class PtySessionRegistry {
       return null;
     }
 
+    const generation = state.generation;
+    if (state.backendDimensions?.cols === cols && state.backendDimensions.rows === rows) {
+      return { generation, changed: false };
+    }
+
     const resized = state.pty.resize(cols, rows);
     if (
       resized === false ||
       this.sessions.get(sessionId) !== state ||
       !state.live ||
-      state.generation !== expectedGeneration
+      state.generation !== generation
     ) {
       return null;
     }
 
+    state.backendDimensions = { cols, rows };
     state.renderCheckpoint?.resize(cols, rows);
-    return { generation: state.generation, changed: true };
+    return { generation, changed: true };
   }
 
   /**

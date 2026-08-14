@@ -121,6 +121,25 @@ describe('PaneSizingProvider active-session resize ownership', () => {
     expect(mocks.resize).toHaveBeenCalledWith('second', 110, 28);
   });
 
+  it('publishes the resize owner so a mounted terminal can re-report unchanged geometry', () => {
+    renderProvider(['session'], null);
+    expect(currentContext().activeSessionId).toBeNull();
+
+    // The terminal may already have measured the final pane while task-open
+    // staging withheld backend resize ownership.
+    currentContext().reportDimensions('session', 128, 43);
+    expect(mocks.resize).not.toHaveBeenCalled();
+
+    // Pixel geometry stays exactly the same. usePty observes this context edge
+    // and schedules the otherwise-missing second report.
+    renderProvider(['session'], 'session');
+    expect(currentContext().activeSessionId).toBe('session');
+    currentContext().reportDimensions('session', 128, 43);
+
+    expect(mocks.resize).toHaveBeenCalledOnce();
+    expect(mocks.resize).toHaveBeenCalledWith('session', 128, 43);
+  });
+
   it('ignores reports when there is no valid active session', () => {
     renderProvider(['first'], null);
     currentContext().reportDimensions('first', 80, 20);

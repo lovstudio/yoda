@@ -1,6 +1,7 @@
 import { SerializeAddon } from '@xterm/addon-serialize';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { Terminal, type ITerminalOptions } from '@xterm/xterm';
+import type { ConversationSurfaceAnchor } from '@shared/conversations';
 import {
   PTY_CONSUMER_HEARTBEAT_INTERVAL_MS,
   ptyDataChannel,
@@ -46,12 +47,20 @@ export const TERMINAL_LINE_HEIGHT = 1.0;
  */
 export const XTERM_WRITE_CHUNK_CODE_UNITS = 64 * 1024;
 const FIRST_FRAME_TIMEOUT_MS = 5_000;
-const SYNCHRONIZED_FIRST_FRAME_QUIET_MS = 120;
+/**
+ * A frame that was already proven canonical while hidden only needs a short
+ * DOM-settlement window after it is reparented. A synchronized-output boundary
+ * by itself is not that proof: Codex also wraps startup/loading/error redraws
+ * in DEC 2026 transactions.
+ */
+const PREPARED_FRAME_SETTLEMENT_QUIET_MS = 120;
 const FALLBACK_FIRST_FRAME_QUIET_MS = 700;
+const PTY_SUBSCRIBE_ATTEMPT_TIMEOUT_MS = 3_000;
 const FIRST_FRAME_CANCELLATION_POLL_MS = 25;
 const PTY_CONSUMER_RELEASE_TIMEOUT_MS = 250;
 const MIN_FIRST_FRAME_NON_EMPTY_LINES = 3;
 const MIN_FIRST_FRAME_VISIBLE_CHARACTERS = 24;
+const CANONICAL_SURFACE_SCAN_MAX_ROWS = 512;
 
 /** DEC synchronized-output boundaries used by both Codex and Claude TUIs. */
 const SYNCHRONIZED_OUTPUT_START = '\x1b[?2026h';
@@ -75,6 +84,7 @@ type PendingConnectAttempt = {
   cancelled: boolean;
   snapshotResolved: boolean;
   unsubscribeRequested: boolean;
+  cancelSubscribeWait: (() => void) | null;
   stopListening: () => void;
 };
 
@@ -91,6 +101,12 @@ type ViewportContent = {
   readonly visibleCharacters: number;
 };
 
+type ExpectedCanonicalSurfaceAnchor = {
+  readonly generation: number;
+  readonly kind: ConversationSurfaceAnchor['kind'];
+  readonly segments: readonly string[];
+};
+
 type OutputActivityOutcome = 'activity' | 'elapsed' | 'cancelled';
 
 type CanonicalRevealClaim = {
@@ -101,6 +117,45 @@ type CanonicalRevealClaim = {
   cancellationTimer: ReturnType<typeof setInterval>;
   expiryTimer: ReturnType<typeof setTimeout>;
 };
+
+type MountFrameOptions = {
+  /**
+   * Whether this DOM host may autonomously publish a visible-frame ACK.
+   * Task-open staging passes a live predicate that stays false while the
+   * outer semantic loading surface is opaque; its manager requests one
+   * explicit claimed paint only after canonical preparation has completed.
+   */
+  autoAcknowledgeFrame?: boolean | (() => boolean);
+  /**
+   * Whether a known-live/working provider may use a complete DEC 2026 frame as
+   * first-frame readiness without waiting for terminal silence. Keep this a
+   * live predicate so React can revoke the permission as runtime state changes.
+   * Historical and unknown-runtime sessions leave it disabled.
+   */
+  allowAtomicLiveFrame?: boolean | (() => boolean);
+};
+
+type VisibleFrameAckOptions = {
+  /** Additional ownership/navigation predicate for one bounded ACK attempt. */
+  shouldContinue?: () => boolean;
+  /** Bound an explicit staging paint by the caller's absolute open deadline. */
+  timeoutMs?: number;
+};
+
+type FrontendPtyOptions = {
+  scrollbackLines?: number;
+  /** Surface a terminal-output subscription failure to the owning PtySession. */
+  onConnectionError?: (error: unknown) => void;
+};
+
+/** Normalize provider markdown and terminal wrapping into one comparable text stream. */
+function normalizeCanonicalSurfaceText(value: string): string {
+  return value
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[\p{Cf}\p{Cc}]+/gu, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
 
 // Serialize one evicted renderer per browser idle slice. SerializeAddon must
 // read xterm's in-memory buffer on this thread, but a policy change can evict
@@ -257,10 +312,27 @@ export class FrontendPty {
   private canonicalGenerationBaseline = '';
   private canonicalGenerationHasPayload = false;
   private expectedCanonicalGeneration: number | null = null;
+  /** Provider transcript evidence required for the first visible frame of one generation. */
+  private expectedCanonicalSurfaceAnchor: ExpectedCanonicalSurfaceAnchor | null = null;
+  /** Latest output revision whose bytes have crossed xterm's parser boundary. */
+  private canonicalParserDrainedRevision = -1;
+  /** Exact parsed revision whose canonical buffer contains every ordered anchor segment. */
+  private canonicalSurfaceAnchorMatchedRevision: number | null = null;
+  /**
+   * Exact revision already accepted by the surface-fence verifier.
+   *
+   * waitForCanonicalOutput() is the single owner of provider-fence semantics.
+   * Once it has accepted a revision, the visible ACK loop must move on to the
+   * DOM paint fence: re-entering the verifier for the same revision produces an
+   * unbounded verify/re-verify cycle in which nothing ever paints.
+   */
+  private canonicalSurfaceFenceVerifiedRevision: number | null = null;
   /** A source-grid checkpoint needs backend output after being fit to another grid. */
   private canonicalOutputRequiredAfterRevision: number | null = null;
   private preparedCanonicalGeneration: number | null = null;
   private preparedCanonicalRevision: number | null = null;
+  /** Whether the prepared revision bypassed silence under a live-runtime fence. */
+  private preparedCanonicalAtomicLive = false;
   /** This exact live generation has already crossed a visible canonical paint. */
   private hasShownCanonicalFrame = false;
   private synchronizedOutputOpen = false;
@@ -284,6 +356,12 @@ export class FrontendPty {
   private visibleFrameSettlementOutputRevision = 0;
   private visibleFrameMountGeneration = 0;
   private visibleFrameAckMountGenerationInFlight = 0;
+  private mountAutoAcknowledgeFrame: (() => boolean) | null = null;
+  private mountAllowAtomicLiveFrame: (() => boolean) | null = null;
+  /** Exact revision currently crossing the live-frame DOM paint fence. */
+  private atomicLiveFramePaintRevision: number | null = null;
+  private atomicLiveFramePaintGeneration: number | null = null;
+  private visibleFrameVisibilityListener: (() => void) | null = null;
   private visibleFrameWaiters = new Set<(ready: boolean) => void>();
   private visibleFrameStateListeners = new Set<(ready: boolean) => void>();
   /** Explicit parser suspension; normal hot-cache unmounts continue parsing off-screen. */
@@ -362,6 +440,7 @@ export class FrontendPty {
     this.hasShownCanonicalFrame = false;
     this.preparedCanonicalGeneration = null;
     this.preparedCanonicalRevision = null;
+    this.preparedCanonicalAtomicLive = false;
   }
 
   /**
@@ -375,8 +454,44 @@ export class FrontendPty {
    */
   async acquireCanonicalRevealClaim(
     shouldContinue: () => boolean = () => true,
-    timeoutMs = 250
+    timeoutMs = 250,
+    options: { requireMountedFramePaint?: boolean } = {}
   ): Promise<boolean> {
+    const startedAt = performance.now();
+    const finishClaim = async (): Promise<boolean> => {
+      if (!options.requireMountedFramePaint) return true;
+      const deadline = startedAt + timeoutMs;
+      const claim = this.canonicalRevealClaim;
+      if (
+        performance.now() >= deadline ||
+        !claim ||
+        claim.generation !== this.outputGeneration ||
+        !this.hasClaimableCanonicalFrame()
+      ) {
+        this.releaseCanonicalRevealClaim();
+        return false;
+      }
+      const stillOwnsClaim = () =>
+        shouldContinue() &&
+        this.canonicalRevealClaim === claim &&
+        claim.generation === this.outputGeneration;
+      while (stillOwnsClaim() && performance.now() < deadline) {
+        // Chromium does not promise a compositor paint for a hidden document.
+        // Hold this single claim until visibility returns or the original task-
+        // open deadline expires; returning false immediately would make the
+        // manager spin through fresh claims while the app stays backgrounded.
+        const canPaint = await this.waitForDocumentPaintOpportunity(stillOwnsClaim, deadline);
+        if (!canPaint) break;
+        const painted = await this.completeVisibleFrameAck(this.mountGeneration, {
+          shouldContinue: stillOwnsClaim,
+          timeoutMs: Math.max(0, deadline - performance.now()),
+        });
+        if (painted) return true;
+        if (typeof document === 'undefined' || document.visibilityState !== 'hidden') break;
+      }
+      this.releaseCanonicalRevealClaim();
+      return false;
+    };
     const existing = this.canonicalRevealClaim;
     if (existing) {
       if (
@@ -386,7 +501,7 @@ export class FrontendPty {
         shouldContinue()
       ) {
         existing.shouldContinue = shouldContinue;
-        return true;
+        return finishClaim();
       }
       this.releaseCanonicalRevealClaim();
     }
@@ -458,7 +573,7 @@ export class FrontendPty {
     };
     this.canonicalRevealClaim = claim;
     this.canonicalRevealClaimRequiredGeneration = null;
-    return true;
+    return finishClaim();
   }
 
   /** Release the exact-generation lease after visible paint or abort. */
@@ -527,7 +642,7 @@ export class FrontendPty {
   constructor(
     readonly sessionId: string,
     theme?: SessionTheme,
-    options?: { scrollbackLines?: number }
+    private readonly options: FrontendPtyOptions = {}
   ) {
     const terminalTheme = buildTheme(theme);
     this.ownedContainer = document.createElement('div');
@@ -541,7 +656,7 @@ export class FrontendPty {
       cols: 120,
       rows: 32,
       scrollback: normalizeTerminalScrollbackLines(
-        options?.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK_LINES
+        options.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK_LINES
       ),
       // A real PTY's termios owns newline translation. Rewriting bare LF here
       // changes terminal control semantics and can corrupt cursor-based TUIs.
@@ -723,6 +838,18 @@ export class FrontendPty {
     let outcome: ConnectOutcome;
     try {
       outcome = await promise;
+    } catch (error) {
+      if (!this.isDisposed && !this.isDisposing) {
+        try {
+          this.options.onConnectionError?.(error);
+        } catch (callbackError) {
+          log.warn('[pty-renderer] connection error callback failed', {
+            sessionId: this.sessionId,
+            error: callbackError,
+          });
+        }
+      }
+      throw error;
     } finally {
       if (this.connectPromise === promise) this.connectPromise = null;
     }
@@ -854,6 +981,7 @@ export class FrontendPty {
     ) {
       this.preparedCanonicalGeneration = null;
       this.preparedCanonicalRevision = null;
+      this.preparedCanonicalAtomicLive = false;
     }
     // Backend generations are monotonic. A late resize/probe completion from
     // G must never lower the expectation after a G+1 sentinel or subscription
@@ -863,6 +991,53 @@ export class FrontendPty {
       this.outputGeneration,
       generation
     );
+  }
+
+  /**
+   * Bind provider transcript evidence to one backend generation.
+   *
+   * `anchor` is a positive text fast path; an independently provider-confirmed
+   * live turn may supersede it when a newer prompt has already moved the text
+   * out of the viewport. `none` is an explicit new-session declaration and
+   * therefore continues to require the provider turn fence. `live-turn` is
+   * provider-owned proof that a restored turn is still open, so its exact
+   * generation may use a complete cursor-ready DEC frame without searching for
+   * transcript text that has scrolled away.
+   * `unverifiable` has no text fast path; it still requires an exact-generation,
+   * parser-drained, cursor-complete synchronized frame and the bounded quiet
+   * fallback, so missing transcript evidence cannot strand a healthy session.
+   */
+  expectCanonicalSurfaceAnchor(generation: number, surfaceAnchor: ConversationSurfaceAnchor): void {
+    if (!Number.isSafeInteger(generation) || generation < this.outputGeneration) return;
+    const segments =
+      surfaceAnchor.kind === 'anchor'
+        ? surfaceAnchor.segments.map(normalizeCanonicalSurfaceText).filter(Boolean)
+        : [];
+    this.expectedCanonicalSurfaceAnchor = {
+      generation,
+      kind:
+        surfaceAnchor.kind === 'anchor' && segments.length === 0
+          ? 'unverifiable'
+          : surfaceAnchor.kind,
+      segments,
+    };
+    this.canonicalSurfaceAnchorMatchedRevision = null;
+    this.canonicalSurfaceFenceVerifiedRevision = null;
+    this.preparedCanonicalGeneration = null;
+    this.preparedCanonicalRevision = null;
+    this.preparedCanonicalAtomicLive = false;
+    this.expectCanonicalGeneration(generation);
+    if (
+      generation === this.outputGeneration &&
+      this.canonicalParserDrainedRevision >= this.outputRevision
+    ) {
+      this.refreshCanonicalSurfaceAnchorMatch(generation, this.outputRevision);
+    }
+  }
+
+  /** Whether main has bound provider surface evidence to this exact generation. */
+  hasCanonicalSurfaceFence(generation: number): boolean {
+    return this.expectedCanonicalSurfaceAnchor?.generation === generation;
   }
 
   private async prepareFirstFrameOnce(
@@ -943,6 +1118,7 @@ export class FrontendPty {
       cancelled: false,
       snapshotResolved: false,
       unsubscribeRequested: false,
+      cancelSubscribeWait: null,
       stopListening,
     };
     this.pendingConnectAttempt = attempt;
@@ -957,15 +1133,18 @@ export class FrontendPty {
       flushGateOpen: this.hasFlushed,
     });
 
-    let result: Awaited<ReturnType<typeof rpc.pty.subscribe>>;
+    let result: Awaited<ReturnType<typeof rpc.pty.subscribe>> | null;
     try {
-      result = await rpc.pty.subscribe(this.sessionId, attempt.consumerId);
+      result = await this.waitForSubscribeAttempt(
+        attempt,
+        rpc.pty.subscribe(this.sessionId, attempt.consumerId)
+      );
     } catch (error) {
       this.cancelConnectAttempt(attempt);
       throw error;
     }
 
-    if (attempt.cancelled || this.isDisposed) {
+    if (!result || attempt.cancelled || this.isDisposed) {
       this.cancelConnectAttempt(attempt);
       return 'cancelled';
     }
@@ -1030,6 +1209,7 @@ export class FrontendPty {
           ) {
             this.terminal.resize(mountedDimensions.cols, mountedDimensions.rows);
           }
+          this.noteCanonicalParserDrained(snapshot.generation, initialSnapshotRevision);
           this.initialSnapshotParserDrained = true;
           // A compact checkpoint was serialized from a fully parsed xterm at
           // this exact generation/sequence watermark. Requiring another
@@ -1045,6 +1225,7 @@ export class FrontendPty {
           ) {
             this.preparedCanonicalGeneration = snapshot.generation;
             this.preparedCanonicalRevision = initialSnapshotRevision;
+            this.preparedCanonicalAtomicLive = false;
           }
           if (!checkpointGridMatchesTarget) {
             // Resizing serialized alternate-screen cells cannot invent the
@@ -1076,8 +1257,10 @@ export class FrontendPty {
     } else if (snapshot.sequence > 0) {
       this.noteOutputActivity();
       this.acknowledgeOutput(snapshot.generation, snapshot.sequence);
+      this.noteCanonicalParserDrained(snapshot.generation, this.outputRevision);
       this.initialSnapshotParserDrained = true;
     } else {
+      this.noteCanonicalParserDrained(snapshot.generation, this.outputRevision);
       this.initialSnapshotParserDrained = true;
     }
 
@@ -1089,6 +1272,53 @@ export class FrontendPty {
       this.scheduleVisibleFrameAck(this.mountGeneration);
     }
     return 'connected';
+  }
+
+  private waitForSubscribeAttempt(
+    attempt: PendingConnectAttempt,
+    request: ReturnType<typeof rpc.pty.subscribe>
+  ): Promise<Awaited<typeof request> | null> {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+      const cleanup = () => {
+        if (timeoutTimer !== null) clearTimeout(timeoutTimer);
+        if (attempt.cancelSubscribeWait === cancelWait) {
+          attempt.cancelSubscribeWait = null;
+        }
+      };
+      const finish = (value: Awaited<typeof request> | null) => {
+        if (settled) {
+          // A timeout/unmount can race a main handler that creates the consumer
+          // immediately before returning. Repeat unsubscribe after the late
+          // reply so that ordering cannot strand that consumer in main.
+          if (value) void rpc.pty.unsubscribe(this.sessionId, attempt.consumerId).catch(() => {});
+          return;
+        }
+        settled = true;
+        cleanup();
+        resolve(value);
+      };
+      const fail = (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      };
+      const cancelWait = () => finish(null);
+      attempt.cancelSubscribeWait = cancelWait;
+      timeoutTimer = setTimeout(() => {
+        if (settled) return;
+        const error = new Error(
+          `PTY output subscription timed out after ${PTY_SUBSCRIBE_ATTEMPT_TIMEOUT_MS} ms`
+        );
+        // Reject this one explicit attempt before cancellation so connect()
+        // cannot classify it as a remount cancellation and auto-retry.
+        fail(error);
+        this.cancelConnectAttempt(attempt);
+      }, PTY_SUBSCRIBE_ATTEMPT_TIMEOUT_MS);
+      request.then(finish, fail);
+    });
   }
 
   private cancelPendingConnect(): void {
@@ -1104,6 +1334,7 @@ export class FrontendPty {
     attempt.cancelled = true;
     attempt.pendingEvents.length = 0;
     attempt.stopListening();
+    attempt.cancelSubscribeWait?.();
     if (this.pendingConnectAttempt === attempt) this.pendingConnectAttempt = null;
     if (attempt.unsubscribeRequested) return;
     attempt.unsubscribeRequested = true;
@@ -1162,8 +1393,10 @@ export class FrontendPty {
 
     this.lastOutputSequence = event.sequence;
     if (!this.isMounted) this.hiddenOutputCodeUnits += event.data.length;
-    this.noteOutputActivity();
-    this.observeCanonicalPayload(event.data, this.outputRevision);
+    this.noteOutputActivity({ deferAtomicPaintInvalidation: true });
+    const eventRevision = this.outputRevision;
+    this.observeCanonicalPayload(event.data, eventRevision);
+    this.reconcileAtomicLivePaintAfterAcceptedOutput();
     this.writeOrBuffer(
       event.data,
       {
@@ -1171,6 +1404,7 @@ export class FrontendPty {
         sequence: event.sequence,
       },
       () => {
+        this.noteCanonicalParserDrained(event.generation, eventRevision);
         if (this.isVisibleMountLease(this.mountGeneration)) {
           this.scheduleVisibleFrameAck(this.mountGeneration);
         }
@@ -1284,10 +1518,18 @@ export class FrontendPty {
       this.expectedCanonicalGeneration = generation;
     }
     if (this.canonicalStateGeneration === generation) return;
+    // Keep provider evidence bound to the generation that produced it. The
+    // generation mismatch fails closed below, while hasCanonicalSurfaceFence()
+    // lets the renderer distinguish "freshly checked but unverifiable" from
+    // "main has not supplied evidence for this replacement yet".
     this.hasShownCanonicalFrame = false;
     this.preparedCanonicalGeneration = null;
     this.preparedCanonicalRevision = null;
+    this.preparedCanonicalAtomicLive = false;
     this.canonicalStateGeneration = generation;
+    this.canonicalParserDrainedRevision = -1;
+    this.canonicalSurfaceAnchorMatchedRevision = null;
+    this.canonicalSurfaceFenceVerifiedRevision = null;
     this.canonicalGenerationBaseline = this.readViewportContent().signature;
     this.canonicalGenerationHasPayload = false;
     this.synchronizedOutputOpen = false;
@@ -1296,6 +1538,8 @@ export class FrontendPty {
     this.synchronizedOutputCompletedWithCursorRevision = null;
     this.synchronizedOutputScanTail = '';
     this.canonicalOutputRequiredAfterRevision = null;
+    this.atomicLiveFramePaintGeneration = null;
+    this.atomicLiveFramePaintRevision = null;
   }
 
   private observeCanonicalPayload(data: string, revision: number): void {
@@ -1325,10 +1569,9 @@ export class FrontendPty {
         continue;
       }
       if (nextIndex === endIndex && this.synchronizedOutputOpen) {
+        const completedWithCursor = this.synchronizedOutputCursorShown;
         this.synchronizedOutputCompletedRevision = revision;
-        this.synchronizedOutputCompletedWithCursorRevision = this.synchronizedOutputCursorShown
-          ? revision
-          : null;
+        this.synchronizedOutputCompletedWithCursorRevision = completedWithCursor ? revision : null;
         this.synchronizedOutputOpen = false;
         this.synchronizedOutputCursorShown = false;
       }
@@ -1337,11 +1580,16 @@ export class FrontendPty {
     this.synchronizedOutputScanTail = scan.slice(-SYNCHRONIZED_OUTPUT_SCAN_OVERLAP);
   }
 
-  private noteOutputActivity(): void {
+  private noteOutputActivity(options: { deferAtomicPaintInvalidation?: boolean } = {}): void {
+    const defersCurrentAtomicPaint =
+      options.deferAtomicPaintInvalidation === true &&
+      this.atomicLiveFramePaintGeneration !== null &&
+      this.atomicLiveFramePaintRevision !== null;
     if (
       (this.preparedCanonicalRevision !== null || this.visibleFrameSettlementPending) &&
       this.isVisibleMountLease(this.mountGeneration) &&
-      this.visibleFrameMountGeneration !== this.mountGeneration
+      this.visibleFrameMountGeneration !== this.mountGeneration &&
+      !defersCurrentAtomicPaint
     ) {
       // The prepared frame was exposed synchronously, but has not crossed its
       // render/paint ACK yet. Hide it before any newer bytes reach xterm so a
@@ -1385,6 +1633,64 @@ export class FrontendPty {
     };
   }
 
+  /** Read only the canonical bottom viewport while preserving soft-wrap ordering. */
+  private readCanonicalSurfaceViewport(): string {
+    const buffer = this.terminal.buffer.active;
+    const logicalLines: string[] = [];
+    const start = Math.max(0, buffer.baseY);
+    const end = Math.min(
+      buffer.length,
+      start + Math.min(this.terminal.rows, CANONICAL_SURFACE_SCAN_MAX_ROWS)
+    );
+    for (let row = start; row < end; row += 1) {
+      const line = buffer.getLine(row);
+      if (!line) continue;
+      const text = line.translateToString(true);
+      if (line.isWrapped && logicalLines.length > 0) {
+        logicalLines[logicalLines.length - 1] += text;
+      } else {
+        logicalLines.push(text);
+      }
+    }
+    return normalizeCanonicalSurfaceText(logicalLines.join('\n'));
+  }
+
+  private refreshCanonicalSurfaceAnchorMatch(generation: number, revision: number): void {
+    if (generation !== this.outputGeneration || revision > this.outputRevision) return;
+    this.canonicalParserDrainedRevision = Math.max(this.canonicalParserDrainedRevision, revision);
+    const expected = this.expectedCanonicalSurfaceAnchor;
+    if (
+      !expected ||
+      expected.generation !== generation ||
+      expected.kind !== 'anchor' ||
+      expected.segments.length === 0
+    ) {
+      this.canonicalSurfaceAnchorMatchedRevision = null;
+      return;
+    }
+
+    const canonicalViewport = this.readCanonicalSurfaceViewport();
+    let offset = 0;
+    for (const segment of expected.segments) {
+      const index = canonicalViewport.indexOf(segment, offset);
+      if (index < 0) {
+        this.canonicalSurfaceAnchorMatchedRevision = null;
+        return;
+      }
+      offset = index + segment.length;
+    }
+    this.canonicalSurfaceAnchorMatchedRevision = revision;
+  }
+
+  private noteCanonicalParserDrained(generation: number, revision: number): void {
+    this.refreshCanonicalSurfaceAnchorMatch(generation, revision);
+    // A complete raw DEC transaction may temporarily preserve an older
+    // painted candidate while xterm parses the replacement. Revalidate as
+    // soon as that replacement drains so an anchor-less loading/error frame is
+    // hidden before the browser can paint it.
+    this.reconcileAtomicLivePaintAfterAcceptedOutput();
+  }
+
   private hasCanonicalViewport(): boolean {
     if (
       this.resetBeforeNextLiveGeneration ||
@@ -1404,6 +1710,173 @@ export class FrontendPty {
       (this.synchronizedOutputCompletedRevision === this.outputRevision ||
         viewport.signature !== this.canonicalGenerationBaseline)
     );
+  }
+
+  private shouldAllowAtomicLiveFrame(): boolean {
+    try {
+      return this.mountAllowAtomicLiveFrame?.() ?? false;
+    } catch {
+      return false;
+    }
+  }
+
+  private hasAtomicLiveFence(generation: number): boolean {
+    const expected = this.expectedCanonicalSurfaceAnchor;
+    if (expected && expected.generation === generation) {
+      if (expected.kind === 'anchor') return true;
+      if (expected.kind === 'live-turn') return true;
+      if (expected.kind === 'unverifiable') return this.shouldAllowAtomicLiveFrame();
+      // An explicitly new session has no historical replay to verify, but it
+      // must still wait for the provider-owned turn-start fence.
+    } else if (expected && expected.generation !== generation) {
+      return false;
+    }
+    return this.shouldAllowAtomicLiveFrame();
+  }
+
+  /**
+   * Some provider fences must remain fail-closed until a newer frame arrives:
+   * a new session has not proved that its first turn started, and a live turn
+   * still needs one complete provider-owned redraw. Transcript anchors are
+   * different: they are a positive fast path, not a permanent veto. A settled
+   * answer can legitimately live in scrollback outside the bottom viewport,
+   * while `unverifiable` only means the bounded transcript probe had no text
+   * evidence. Both may fall back to an exact-generation, cursor-complete DEC
+   * frame after the normal quiet fence.
+   */
+  private hasBlockingCanonicalSurfaceFence(generation: number): boolean {
+    const expected = this.expectedCanonicalSurfaceAnchor;
+    if (!expected) return false;
+    if (expected.generation !== generation) return true;
+    return expected.kind === 'none' || expected.kind === 'live-turn';
+  }
+
+  private hasStructuralCanonicalSurfaceFallback(generation: number, revision: number): boolean {
+    const expected = this.expectedCanonicalSurfaceAnchor;
+    return (
+      expected !== null &&
+      expected.generation === generation &&
+      (expected.kind === 'anchor' || expected.kind === 'unverifiable') &&
+      this.canonicalParserDrainedRevision >= revision &&
+      this.synchronizedOutputCompletedWithCursorRevision === revision
+    );
+  }
+
+  private isAtomicLiveRevisionReady(generation: number, revision: number): boolean {
+    const expected = this.expectedCanonicalSurfaceAnchor;
+    if (expected && expected.generation === generation) {
+      if (expected.kind === 'anchor') {
+        return (
+          this.canonicalParserDrainedRevision >= revision &&
+          (this.canonicalSurfaceAnchorMatchedRevision === revision ||
+            this.shouldAllowAtomicLiveFrame()) &&
+          this.synchronizedOutputCompletedWithCursorRevision === revision
+        );
+      }
+      if (expected.kind === 'live-turn') {
+        return (
+          this.canonicalParserDrainedRevision >= revision &&
+          this.synchronizedOutputCompletedWithCursorRevision === revision
+        );
+      }
+      if (expected.kind === 'unverifiable') {
+        return (
+          this.shouldAllowAtomicLiveFrame() &&
+          this.canonicalParserDrainedRevision >= revision &&
+          this.synchronizedOutputCompletedWithCursorRevision === revision
+        );
+      }
+    } else if (expected && expected.generation !== generation) {
+      return false;
+    }
+    return (
+      this.shouldAllowAtomicLiveFrame() &&
+      this.synchronizedOutputCompletedWithCursorRevision === revision
+    );
+  }
+
+  /**
+   * `null` means the provider-owned live fence or structural atomic frame is
+   * incomplete; `0` means this exact revision may proceed to the DOM paint
+   * fence. Provider readiness now owns semantic filtering, so adding another
+   * wall-clock delay here would only recreate high-frequency starvation.
+   */
+  private atomicLiveFrameGraceRemaining(generation: number, revision: number): number | null {
+    if (!this.hasAtomicLiveFence(generation)) {
+      return null;
+    }
+    if (
+      generation <= 0 ||
+      generation !== this.outputGeneration ||
+      this.canonicalStateGeneration !== generation ||
+      this.synchronizedOutputOpen ||
+      !this.isAtomicLiveRevisionReady(generation, revision) ||
+      revision !== this.outputRevision ||
+      this.resetBeforeNextLiveGeneration ||
+      (this.expectedCanonicalGeneration !== null &&
+        generation !== this.expectedCanonicalGeneration) ||
+      this.terminalWriteActive ||
+      this.terminalWriteQueue.length > 0 ||
+      this.pendingWrites.length > 0 ||
+      this.suspendedWrites.length > 0 ||
+      !this.hasResolvedInitialSnapshot ||
+      !this.initialSnapshotParserDrained ||
+      !this.hasCanonicalViewport()
+    ) {
+      return null;
+    }
+    return 0;
+  }
+
+  /**
+   * A painted atomic candidate remains safe while later same-generation output
+   * is itself a complete synchronized transaction. We acknowledge the exact
+   * candidate revision's DOM render; newer live revisions may queue behind it
+   * without forcing the browser to find an impossible global-silence window.
+   */
+  private isAtomicLivePaintLeaseSafe(generation: number, revision: number): boolean {
+    if (
+      this.atomicLiveFramePaintGeneration !== generation ||
+      this.atomicLiveFramePaintRevision !== revision ||
+      this.outputGeneration !== generation ||
+      this.canonicalStateGeneration !== generation ||
+      !this.hasAtomicLiveFence(generation) ||
+      this.resetBeforeNextLiveGeneration ||
+      this.synchronizedOutputOpen ||
+      (this.expectedCanonicalGeneration !== null && generation !== this.expectedCanonicalGeneration)
+    ) {
+      return false;
+    }
+    if (this.outputRevision === revision) return true;
+
+    // The candidate revision already crossed the provider/transcript fence.
+    // A later complete DEC synchronized transaction keeps xterm's DOM on that
+    // old complete frame until the parser commits the replacement atomically.
+    // Do not demand that the replacement parser drain between two browser
+    // frames: at 60 Hz that quiet window does not exist and would starve a
+    // perfectly valid session forever. Split/open transactions still revoke
+    // the lease synchronously through `synchronizedOutputOpen` above.
+    if (this.synchronizedOutputCompletedWithCursorRevision !== this.outputRevision) return false;
+    if (this.canonicalParserDrainedRevision < this.outputRevision) return true;
+
+    // Once xterm has parsed the replacement, provider-turn fences may accept
+    // any complete same-generation frame. Transcript fences are stricter:
+    // refreshCanonicalSurfaceAnchorMatch() must have found the anchor again in
+    // the replacement viewport, otherwise reconcileAtomicLivePaint... hides
+    // the container before that DOM revision reaches a browser paint.
+    return this.isAtomicLiveRevisionReady(generation, this.outputRevision);
+  }
+
+  private reconcileAtomicLivePaintAfterAcceptedOutput(): void {
+    const generation = this.atomicLiveFramePaintGeneration;
+    const revision = this.atomicLiveFramePaintRevision;
+    if (generation === null || revision === null) return;
+    if (this.isAtomicLivePaintLeaseSafe(generation, revision)) return;
+    this.atomicLiveFramePaintGeneration = null;
+    this.atomicLiveFramePaintRevision = null;
+    if (this.isVisibleMountLease(this.mountGeneration) && !this.isVisibleFrameReady()) {
+      this.ownedContainer.style.visibility = 'hidden';
+    }
   }
 
   /** Wait for output from the requested live generation rather than a transcript fallback. */
@@ -1427,15 +1900,84 @@ export class FrontendPty {
       if (
         this.preparedCanonicalGeneration === generation &&
         this.preparedCanonicalRevision === revision &&
-        this.hasCanonicalViewport()
+        this.hasCanonicalViewport() &&
+        (this.expectedCanonicalSurfaceAnchor === null ||
+          this.isAtomicLiveRevisionReady(generation, revision))
       ) {
+        this.canonicalSurfaceFenceVerifiedRevision = revision;
         return true;
       }
       if (this.hasCanonicalViewport() && !this.synchronizedOutputOpen) {
-        const quietMs =
-          this.synchronizedOutputCompletedWithCursorRevision === revision
-            ? SYNCHRONIZED_FIRST_FRAME_QUIET_MS
-            : FALLBACK_FIRST_FRAME_QUIET_MS;
+        const atomicLiveGraceMs = this.atomicLiveFrameGraceRemaining(generation, revision);
+        if (atomicLiveGraceMs !== null) {
+          if (atomicLiveGraceMs > 0) {
+            const graceOutcome = await this.waitForOutputActivityOrDelay(
+              revision,
+              atomicLiveGraceMs,
+              shouldContinue,
+              deadline
+            );
+            if (graceOutcome === 'cancelled') return false;
+            if (graceOutcome === 'activity') continue;
+          }
+
+          const finalRevisionBeforeDrain = this.outputRevision;
+          const finalParserDrained = await this.waitForPromiseWithin(
+            this.waitForTerminalWrites(),
+            shouldContinue,
+            deadline
+          );
+          if (!finalParserDrained) return false;
+          if (
+            finalRevisionBeforeDrain !== this.outputRevision ||
+            generation !== this.outputGeneration ||
+            revision !== this.outputRevision ||
+            this.atomicLiveFrameGraceRemaining(generation, revision) !== 0
+          ) {
+            continue;
+          }
+          this.preparedCanonicalGeneration = generation;
+          this.preparedCanonicalRevision = revision;
+          this.preparedCanonicalAtomicLive = true;
+          this.canonicalSurfaceFenceVerifiedRevision = revision;
+          return true;
+        }
+
+        if (this.hasBlockingCanonicalSurfaceFence(generation)) {
+          // New/live sessions still require their provider-owned fence. A
+          // settled transcript anchor is handled below as a positive fast path
+          // with a structural fallback, so scrollback cannot strand the task.
+          const fencedActivity = await this.waitForOutputActivityOrDelay(
+            revision,
+            Math.max(0, deadline - performance.now()),
+            shouldContinue,
+            deadline
+          );
+          if (fencedActivity !== 'activity') return false;
+          continue;
+        }
+
+        if (
+          this.expectedCanonicalSurfaceAnchor !== null &&
+          !this.hasStructuralCanonicalSurfaceFallback(generation, revision)
+        ) {
+          const fencedActivity = await this.waitForOutputActivityOrDelay(
+            revision,
+            Math.max(0, deadline - performance.now()),
+            shouldContinue,
+            deadline
+          );
+          if (fencedActivity !== 'activity') return false;
+          continue;
+        }
+
+        // DEC synchronized output proves that one terminal redraw ended
+        // atomically; it does not prove the provider finished restoring the
+        // conversation. In particular, Codex emits complete synchronized
+        // loading frames before replaying history. Keep the semantic first-
+        // frame guard conservative until a provider-owned readiness fence is
+        // available.
+        const quietMs = FALLBACK_FIRST_FRAME_QUIET_MS;
         const quietOutcome = await this.waitForOutputActivityOrDelay(
           revision,
           quietMs,
@@ -1462,6 +2004,8 @@ export class FrontendPty {
         }
         this.preparedCanonicalGeneration = generation;
         this.preparedCanonicalRevision = revision;
+        this.preparedCanonicalAtomicLive = false;
+        this.canonicalSurfaceFenceVerifiedRevision = revision;
         return true;
       }
 
@@ -1546,6 +2090,43 @@ export class FrontendPty {
       }, FIRST_FRAME_CANCELLATION_POLL_MS);
       timeoutTimer = setTimeout(() => finish(false), Math.max(0, deadline - performance.now()));
       if (this.terminalRenderRevision > observedRevision) finish(true);
+    });
+  }
+
+  private waitForDocumentPaintOpportunity(
+    shouldContinue: () => boolean,
+    deadline: number
+  ): Promise<boolean> {
+    if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
+      return Promise.resolve(shouldContinue() && performance.now() < deadline);
+    }
+    if (!shouldContinue() || performance.now() >= deadline) return Promise.resolve(false);
+
+    return new Promise((resolve) => {
+      let pollTimer: ReturnType<typeof setInterval> | null = null;
+      let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+      let settled = false;
+      const cleanup = () => {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+        if (pollTimer !== null) clearInterval(pollTimer);
+        if (timeoutTimer !== null) clearTimeout(timeoutTimer);
+      };
+      const finish = (visible: boolean) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(visible && shouldContinue() && performance.now() < deadline);
+      };
+      const onVisibilityChange = () => {
+        if (document.visibilityState !== 'hidden') finish(true);
+      };
+
+      document.addEventListener('visibilitychange', onVisibilityChange);
+      pollTimer = setInterval(() => {
+        if (!shouldContinue() || performance.now() >= deadline) finish(false);
+      }, FIRST_FRAME_CANCELLATION_POLL_MS);
+      timeoutTimer = setTimeout(() => finish(false), Math.max(0, deadline - performance.now()));
+      onVisibilityChange();
     });
   }
 
@@ -1655,6 +2236,49 @@ export class FrontendPty {
     );
   }
 
+  private shouldAutoAcknowledgeFrame(mountLease: number): boolean {
+    if (mountLease !== this.mountGeneration) return false;
+    try {
+      return this.mountAutoAcknowledgeFrame?.() ?? true;
+    } catch {
+      return false;
+    }
+  }
+
+  private clearVisibleFrameVisibilityListener(): void {
+    const listener = this.visibleFrameVisibilityListener;
+    if (!listener || typeof document === 'undefined') return;
+    document.removeEventListener('visibilitychange', listener);
+    this.visibleFrameVisibilityListener = null;
+  }
+
+  /**
+   * A hidden Chromium document cannot produce a meaningful paint ACK and may
+   * throttle rAF for seconds. Do not occupy the single in-flight slot while it
+   * is hidden; arm one lease-bound listener and retry immediately on visibility.
+   */
+  private scheduleVisibleFrameAckWhenDocumentVisible(mountLease: number): boolean {
+    if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
+      this.clearVisibleFrameVisibilityListener();
+      return false;
+    }
+    if (this.visibleFrameVisibilityListener !== null) return true;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') return;
+      this.clearVisibleFrameVisibilityListener();
+      if (
+        this.isVisibleMountLease(mountLease) &&
+        !this.isVisibleFrameReady() &&
+        this.shouldAutoAcknowledgeFrame(mountLease)
+      ) {
+        this.scheduleVisibleFrameAck(mountLease);
+      }
+    };
+    this.visibleFrameVisibilityListener = onVisibilityChange;
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return true;
+  }
+
   private publishVisibleFrameState(ready: boolean): void {
     for (const listener of this.visibleFrameStateListeners) listener(ready);
   }
@@ -1689,28 +2313,53 @@ export class FrontendPty {
   private scheduleVisibleFrameAck(mountLease: number): void {
     if (
       !this.isVisibleMountLease(mountLease) ||
+      this.isVisibleFrameReady() ||
+      !this.shouldAutoAcknowledgeFrame(mountLease) ||
       this.visibleFrameAckMountGenerationInFlight === mountLease
     ) {
       return;
     }
+    if (this.scheduleVisibleFrameAckWhenDocumentVisible(mountLease)) return;
     this.visibleFrameAckMountGenerationInFlight = mountLease;
-    void this.completeVisibleFrameAck(mountLease).finally(() => {
+    void this.completeVisibleFrameAck(mountLease, {
+      // Read the live React-owned predicate throughout the attempt. A task can
+      // enter staging after an ACK was scheduled; that edge must cancel the
+      // old autonomous attempt before it can publish readiness under the Logo.
+      shouldContinue: () => this.shouldAutoAcknowledgeFrame(mountLease),
+    }).finally(() => {
       if (this.visibleFrameAckMountGenerationInFlight === mountLease) {
         this.visibleFrameAckMountGenerationInFlight = 0;
+      }
+      if (
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'hidden' &&
+        this.isVisibleMountLease(mountLease) &&
+        !this.isVisibleFrameReady() &&
+        this.shouldAutoAcknowledgeFrame(mountLease)
+      ) {
+        this.scheduleVisibleFrameAckWhenDocumentVisible(mountLease);
       }
     });
   }
 
-  private async completeVisibleFrameAck(mountLease: number): Promise<void> {
-    const isCurrentMount = () => this.isVisibleMountLease(mountLease);
-    const deadline = performance.now() + FIRST_FRAME_TIMEOUT_MS;
+  private async completeVisibleFrameAck(
+    mountLease: number,
+    options: VisibleFrameAckOptions = {}
+  ): Promise<boolean> {
+    const isCurrentMount = () =>
+      this.isVisibleMountLease(mountLease) &&
+      (options.shouldContinue?.() ?? true) &&
+      (typeof document === 'undefined' || document.visibilityState !== 'hidden');
+    const deadline =
+      performance.now() + Math.min(FIRST_FRAME_TIMEOUT_MS, options.timeoutMs ?? Infinity);
     while (isCurrentMount() && performance.now() < deadline) {
       // A cold visible mount starts before listener-first subscription resolves.
       // Keep it hidden until the snapshot and any events crossing that boundary
       // have entered the same ordered parser queue.
-      if (!this.hasResolvedInitialSnapshot) return;
+      if (!this.hasResolvedInitialSnapshot) return false;
 
       const preparedRevision = this.preparedCanonicalRevision;
+      const preparedAtomicLive = this.preparedCanonicalAtomicLive;
       // A terminal generation that has already been shown is a live terminal,
       // not a startup transaction. It may be continuously producing output,
       // so waiting for a 120/700 ms quiet window can starve until the five-
@@ -1727,27 +2376,39 @@ export class FrontendPty {
         this.pendingWrites.length === 0 &&
         this.suspendedWrites.length === 0
       ) {
+        const hotGeneration = this.outputGeneration;
+        const hotRevision = this.outputRevision;
+        const hotVisualRevision = this.visualFrameRevision;
+        const isHotFrameCurrent = () =>
+          isCurrentMount() &&
+          this.outputGeneration === hotGeneration &&
+          this.outputRevision === hotRevision &&
+          this.visualFrameRevision === hotVisualRevision &&
+          !this.synchronizedOutputOpen;
         const renderRevision = this.terminalRenderRevision;
         this.redrawViewportFromBuffer();
         const rendered = await this.waitForTerminalRenderAfter(
           renderRevision,
-          isCurrentMount,
+          isHotFrameCurrent,
           deadline
         );
         if (!rendered) break;
         const rowsCommitted = await this.waitForPromiseWithin(
           new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
-          isCurrentMount,
+          isHotFrameCurrent,
           deadline
         );
-        if (!rowsCommitted || !isCurrentMount()) break;
+        if (!rowsCommitted || !isHotFrameCurrent()) break;
         this.ownedContainer.style.visibility = '';
         const painted = await this.waitForPromiseWithin(
           new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
-          isCurrentMount,
+          isHotFrameCurrent,
           deadline
         );
-        if (!painted || !isCurrentMount()) break;
+        if (!painted || !isHotFrameCurrent()) {
+          this.ownedContainer.style.visibility = 'hidden';
+          break;
+        }
         if (!this.commitVisibleFrame(mountLease)) break;
         for (const resolve of this.visibleFrameWaiters) resolve(true);
         this.visibleFrameWaiters.clear();
@@ -1760,13 +2421,28 @@ export class FrontendPty {
             : null,
         });
         if (visibleMount) this.debugVisibleMount = null;
-        return;
+        return true;
       }
 
       if (preparedRevision !== null && this.outputRevision !== preparedRevision) {
         // Output changed after off-screen preparation. Keep the routed terminal
         // hidden until the new generation/frame reaches canonical readiness too.
         this.ownedContainer.style.visibility = 'hidden';
+        if (
+          preparedAtomicLive &&
+          this.preparedCanonicalGeneration === this.outputGeneration &&
+          this.hasAtomicLiveFence(this.outputGeneration)
+        ) {
+          // A continuously repainting live TUI can replace a complete atomic
+          // preparation before the visible ACK loop observes it. Do not chase
+          // exact revisions through waitForCanonicalOutput(): discard the stale
+          // preparation and let the next loop drain and validate the current
+          // revision before acquiring its atomic DOM-paint lease.
+          this.preparedCanonicalGeneration = null;
+          this.preparedCanonicalRevision = null;
+          this.preparedCanonicalAtomicLive = false;
+          continue;
+        }
         const canonical = await this.waitForCanonicalOutput(isCurrentMount, deadline);
         if (!canonical) break;
         continue;
@@ -1774,6 +2450,7 @@ export class FrontendPty {
 
       const stableRevision = this.outputRevision;
       const stableVisualRevision = this.visualFrameRevision;
+      const stableGeneration = this.outputGeneration;
       const parserDrained = await this.waitForPromiseWithin(
         this.waitForTerminalWrites(),
         isCurrentMount,
@@ -1788,25 +2465,100 @@ export class FrontendPty {
         continue;
       }
 
-      if (this.visibleFrameSettlementPending) {
-        const outputChangedDuringSettlement =
-          this.outputRevision !== this.visibleFrameSettlementOutputRevision;
-        const quietMs = outputChangedDuringSettlement
-          ? this.synchronizedOutputCompletedWithCursorRevision === this.outputRevision
-            ? SYNCHRONIZED_FIRST_FRAME_QUIET_MS
-            : FALLBACK_FIRST_FRAME_QUIET_MS
-          : SYNCHRONIZED_FIRST_FRAME_QUIET_MS;
-        const settled = await this.waitForPromiseWithin(
-          new Promise<void>((resolve) => setTimeout(resolve, quietMs)),
+      const preparedConservatively = preparedRevision === stableRevision && !preparedAtomicLive;
+      let atomicLiveGraceMs = preparedConservatively
+        ? null
+        : this.atomicLiveFrameGraceRemaining(this.outputGeneration, stableRevision);
+      if (
+        atomicLiveGraceMs === null &&
+        this.expectedCanonicalSurfaceAnchor !== null &&
+        this.canonicalSurfaceFenceVerifiedRevision !== stableRevision
+      ) {
+        // completeVisibleFrameAck can be scheduled directly from a parser
+        // callback without going through prepareFirstFrame(). Route every
+        // explicit fence through the same verifier: new/live sessions remain
+        // fail-closed, while settled anchors may cross its cursor-complete,
+        // parser-drained quiet fallback when text lives only in scrollback.
+        //
+        // Skip the verifier once it has already accepted this exact revision.
+        // waitForCanonicalOutput() only records a *prepared* revision, which
+        // preparedConservatively then reads as "no atomic-live grace", routing
+        // the loop straight back into the verifier. Re-verifying an accepted
+        // revision spins forever and the terminal never reaches its DOM paint.
+        const canonical = await this.waitForCanonicalOutput(isCurrentMount, deadline);
+        if (!canonical) break;
+        continue;
+      }
+      if (preparedAtomicLive && atomicLiveGraceMs === null) {
+        // Runtime state revoked the live-frame permission after preparation.
+        // Downgrade to the normal semantic quiet fence before this revision can
+        // paint; a stale React predicate must never leave a fast-path lease.
+        const quietOutcome = await this.waitForOutputActivityOrDelay(
+          stableRevision,
+          FALLBACK_FIRST_FRAME_QUIET_MS,
           isCurrentMount,
           deadline
         );
-        if (!settled) break;
+        if (quietOutcome === 'cancelled') break;
+        if (quietOutcome === 'activity') continue;
+        const downgradedDrainRevision = this.outputRevision;
+        const downgradedParserDrained = await this.waitForPromiseWithin(
+          this.waitForTerminalWrites(),
+          isCurrentMount,
+          deadline
+        );
         if (
+          !downgradedParserDrained ||
+          downgradedDrainRevision !== this.outputRevision ||
           stableRevision !== this.outputRevision ||
-          stableVisualRevision !== this.visualFrameRevision
+          stableVisualRevision !== this.visualFrameRevision ||
+          !this.hasCanonicalViewport()
         ) {
           continue;
+        }
+        this.preparedCanonicalAtomicLive = false;
+        atomicLiveGraceMs = null;
+      }
+      if (atomicLiveGraceMs !== null && atomicLiveGraceMs > 0) {
+        const graceOutcome = await this.waitForOutputActivityOrDelay(
+          stableRevision,
+          atomicLiveGraceMs,
+          isCurrentMount,
+          deadline
+        );
+        if (graceOutcome === 'cancelled') break;
+        // Re-enter through parser drain even when only the wall-clock grace
+        // elapsed; the current revision and queue state are re-read together.
+        continue;
+      }
+      const atomicLivePaintRevision = atomicLiveGraceMs === 0 ? stableRevision : null;
+
+      if (this.visibleFrameSettlementPending) {
+        if (atomicLivePaintRevision === null) {
+          const outputChangedDuringSettlement =
+            this.outputRevision !== this.visibleFrameSettlementOutputRevision;
+          const frameWasPreparedAtCurrentRevision =
+            preparedRevision !== null &&
+            preparedRevision === this.outputRevision &&
+            !preparedAtomicLive;
+          const quietMs = outputChangedDuringSettlement
+            ? frameWasPreparedAtCurrentRevision &&
+              this.synchronizedOutputCompletedWithCursorRevision === this.outputRevision
+              ? PREPARED_FRAME_SETTLEMENT_QUIET_MS
+              : FALLBACK_FIRST_FRAME_QUIET_MS
+            : PREPARED_FRAME_SETTLEMENT_QUIET_MS;
+          const settled = await this.waitForPromiseWithin(
+            new Promise<void>((resolve) => setTimeout(resolve, quietMs)),
+            isCurrentMount,
+            deadline
+          );
+          if (!settled) break;
+          if (
+            stableRevision !== this.outputRevision ||
+            stableVisualRevision !== this.visualFrameRevision
+          ) {
+            continue;
+          }
         }
         if (this.savedAtBottom) {
           this.terminal.scrollToBottom();
@@ -1835,26 +2587,56 @@ export class FrontendPty {
       }
 
       const renderRevision = this.terminalRenderRevision;
+      this.atomicLiveFramePaintGeneration =
+        atomicLivePaintRevision === null ? null : stableGeneration;
+      this.atomicLiveFramePaintRevision = atomicLivePaintRevision;
       this.redrawViewportFromBuffer();
-      const rendered = await this.waitForTerminalRenderAfter(
-        renderRevision,
-        isCurrentMount,
-        deadline
-      );
-      if (!rendered) break;
-      const rowsCommitted = await this.waitForPromiseWithin(
-        new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
-        isCurrentMount,
-        deadline
-      );
+      let rendered: boolean;
+      let rowsCommitted: boolean;
+      if (atomicLivePaintRevision !== null) {
+        // refresh() schedules xterm before this callback. For a continuously
+        // repainting live TUI, combine render observation with the first of the
+        // two browser frames; a separate render wait would require three rAFs
+        // and make a stable window impossible at ~25 Hz.
+        rowsCommitted = await this.waitForPromiseWithin(
+          new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+          isCurrentMount,
+          deadline
+        );
+        rendered = rowsCommitted && this.terminalRenderRevision > renderRevision;
+      } else {
+        rendered = await this.waitForTerminalRenderAfter(renderRevision, isCurrentMount, deadline);
+        rowsCommitted =
+          rendered &&
+          (await this.waitForPromiseWithin(
+            new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+            isCurrentMount,
+            deadline
+          ));
+      }
+      if (!rendered) {
+        this.atomicLiveFramePaintGeneration = null;
+        this.atomicLiveFramePaintRevision = null;
+        if (isCurrentMount()) continue;
+        break;
+      }
       if (!rowsCommitted) break;
       if (
-        stableRevision !== this.outputRevision ||
-        stableVisualRevision !== this.visualFrameRevision
+        atomicLivePaintRevision !== null
+          ? !this.isAtomicLivePaintLeaseSafe(stableGeneration, atomicLivePaintRevision)
+          : stableGeneration !== this.outputGeneration ||
+            stableRevision !== this.outputRevision ||
+            stableVisualRevision !== this.visualFrameRevision
       ) {
-        if (preparedRevision !== null || this.visibleFrameSettlementPending) {
+        if (
+          preparedRevision !== null ||
+          this.visibleFrameSettlementPending ||
+          atomicLivePaintRevision !== null
+        ) {
           this.ownedContainer.style.visibility = 'hidden';
         }
+        this.atomicLiveFramePaintGeneration = null;
+        this.atomicLiveFramePaintRevision = null;
         continue;
       }
 
@@ -1870,15 +2652,26 @@ export class FrontendPty {
       );
       if (!painted) break;
       if (
-        stableRevision !== this.outputRevision ||
-        stableVisualRevision !== this.visualFrameRevision
+        atomicLivePaintRevision !== null
+          ? !this.isAtomicLivePaintLeaseSafe(stableGeneration, atomicLivePaintRevision)
+          : stableGeneration !== this.outputGeneration ||
+            stableRevision !== this.outputRevision ||
+            stableVisualRevision !== this.visualFrameRevision
       ) {
-        if (preparedRevision !== null || this.visibleFrameSettlementPending) {
+        if (
+          preparedRevision !== null ||
+          this.visibleFrameSettlementPending ||
+          atomicLivePaintRevision !== null
+        ) {
           this.ownedContainer.style.visibility = 'hidden';
         }
+        this.atomicLiveFramePaintGeneration = null;
+        this.atomicLiveFramePaintRevision = null;
         continue;
       }
 
+      this.atomicLiveFramePaintGeneration = null;
+      this.atomicLiveFramePaintRevision = null;
       if (!this.commitVisibleFrame(mountLease)) break;
       this.visibleFrameSettlementPending = false;
       this.hasShownCanonicalFrame =
@@ -1886,6 +2679,7 @@ export class FrontendPty {
       if (this.hasShownCanonicalFrame) this.expectedCanonicalGeneration = null;
       this.preparedCanonicalGeneration = null;
       this.preparedCanonicalRevision = null;
+      this.preparedCanonicalAtomicLive = false;
       for (const resolve of this.visibleFrameWaiters) resolve(true);
       this.visibleFrameWaiters.clear();
       const visibleMount =
@@ -1906,7 +2700,7 @@ export class FrontendPty {
         usedFallback: false,
       });
       if (visibleMount) this.debugVisibleMount = null;
-      return;
+      return true;
     }
 
     // Never reveal an unacknowledged terminal scene. The React owner keeps its
@@ -1930,6 +2724,9 @@ export class FrontendPty {
       pendingWriteCount: this.pendingWrites.length,
     });
     if (visibleMount) this.debugVisibleMount = null;
+    this.atomicLiveFramePaintGeneration = null;
+    this.atomicLiveFramePaintRevision = null;
+    return false;
   }
 
   /**
@@ -1954,6 +2751,7 @@ export class FrontendPty {
               );
             }
           }
+          this.noteCanonicalParserDrained(this.outputGeneration, this.outputRevision);
         },
         writes.find((write) => write.onFirstChunkWritten)?.onFirstChunkWritten
       );
@@ -2024,9 +2822,24 @@ export class FrontendPty {
    * If targetDims are provided the terminal is resized BEFORE the appendChild
    * to eliminate the flash caused by a post-mount resize.
    */
-  mount(mountTarget: HTMLElement, targetDims?: { cols: number; rows: number }): number {
+  mount(
+    mountTarget: HTMLElement,
+    targetDims?: { cols: number; rows: number },
+    options: MountFrameOptions = {}
+  ): number {
+    this.clearVisibleFrameVisibilityListener();
     const mountLease = ++this.mountGeneration;
     const visibleMount = mountTarget !== ensureXtermHost();
+    const autoAcknowledgeFrame = options.autoAcknowledgeFrame ?? true;
+    this.mountAutoAcknowledgeFrame =
+      typeof autoAcknowledgeFrame === 'function'
+        ? autoAcknowledgeFrame
+        : () => autoAcknowledgeFrame;
+    const allowAtomicLiveFrame = options.allowAtomicLiveFrame ?? false;
+    this.mountAllowAtomicLiveFrame =
+      typeof allowAtomicLiveFrame === 'function'
+        ? allowAtomicLiveFrame
+        : () => allowAtomicLiveFrame;
     if (visibleMount) {
       this.debugVisibleMount = { lease: mountLease, startedAt: performance.now() };
       console.log('[DEBUG][agent-session-load] visible mount requested:', {
@@ -2107,10 +2920,15 @@ export class FrontendPty {
    */
   unmount(mountLease?: number): void {
     if (mountLease !== undefined && mountLease !== this.mountGeneration) return;
+    this.clearVisibleFrameVisibilityListener();
     this.invalidateVisibleFrame({ hide: false });
     this.mountGeneration += 1;
     this.replayToken += 1;
     this.visibleFrameSettlementPending = false;
+    this.mountAutoAcknowledgeFrame = null;
+    this.mountAllowAtomicLiveFrame = null;
+    this.atomicLiveFramePaintGeneration = null;
+    this.atomicLiveFramePaintRevision = null;
     this.ownedContainer.style.visibility = '';
     // Keep cached terminals synchronized while they live in the off-screen
     // host. Xterm's IntersectionObserver pauses DOM rendering there. Otherwise
@@ -2149,6 +2967,7 @@ export class FrontendPty {
   private async disposeOnce(options?: { checkpoint?: boolean }): Promise<void> {
     if (this.isDisposed || this.isDisposing) return;
     this.isDisposing = true;
+    this.clearVisibleFrameVisibilityListener();
     this.releaseCanonicalRevealClaim();
     const connectedConsumerId = this.connectedConsumerId;
     const shouldCheckpoint = Boolean(options?.checkpoint && this.hasRecoverableSnapshot);

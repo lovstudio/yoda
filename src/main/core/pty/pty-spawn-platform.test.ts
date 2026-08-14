@@ -344,8 +344,12 @@ describe('resolveLocalPtySpawn - POSIX', () => {
       },
     });
 
-    const [existingPaneBranch] = result.args[1].split('; else ');
-    expect(existingPaneBranch).toContain('then tmux -L yoda -f /dev/null attach-session');
+    const existingPaneBranch = result.args[1];
+    expect(existingPaneBranch).toContain(
+      'then if tmux -L yoda -f /dev/null display-message -p "#{version}" 2>/dev/null | awk'
+    );
+    expect(existingPaneBranch).toContain('then tmux -L yoda -f /dev/null -T sync attach-session');
+    expect(existingPaneBranch).toContain('else tmux -L yoda -f /dev/null attach-session');
     expect(existingPaneBranch).not.toContain('kill-session');
   });
 });

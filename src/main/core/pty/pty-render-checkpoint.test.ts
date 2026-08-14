@@ -122,7 +122,7 @@ describe('PtyRenderCheckpointTracker', () => {
     });
   });
 
-  it('restores canonical provenance only after a complete synchronized frame parses', async () => {
+  it('does not promote a synchronized loading redraw to semantic canonical provenance', async () => {
     tracker = new PtyRenderCheckpointTracker({
       buffer: '\x1bcSTABLE FRAME',
       generation: 9,
@@ -133,17 +133,15 @@ describe('PtyRenderCheckpointTracker', () => {
       scrollbackLines: 456,
     });
 
-    tracker.write('\x1b[?20', 21);
-    tracker.write('26h\x1b[2J\x1b[H╭─ New frame ─╮\r\n│ Ready for input │', 22);
-    expect((await tracker.snapshot()).canonical).toBe(false);
-
-    tracker.write('\r\n╰─ Idle ─────────╯\x1b[?25', 23);
-    tracker.write('h\x1b[?2026l', 24);
+    tracker.write(
+      '\x1b[?2026h\x1b[2J\x1b[HLoading agent…\r\nRestoring session…\r\nPlease wait…\x1b[?25h\x1b[?2026l',
+      21
+    );
     const completed = await tracker.snapshot();
 
-    expect(completed.sequence).toBe(24);
-    expect(completed.canonical).toBe(true);
-    expect(completed.buffer).toContain('New frame');
+    expect(completed.sequence).toBe(21);
+    expect(completed.canonical).toBe(false);
+    expect(completed.buffer).toContain('Loading agent');
   });
 
   it('never trusts a synchronized repaint that remains open past a snapshot', async () => {
@@ -193,6 +191,63 @@ describe('PtyRenderCheckpointTracker', () => {
     });
     expect(snapshot.buffer).toContain('REDRAW AT NEW GRID');
     expect(snapshot.buffer).not.toContain('OLD GRID');
+  });
+
+  it('keeps an idle canonical seed untouched when resized to its existing grid', async () => {
+    const checkpoint = {
+      buffer: '\x1bcCANONICAL FRAME',
+      generation: 12,
+      sequence: 40,
+      cols: 100,
+      rows: 30,
+      canonical: true,
+      scrollbackLines: 250,
+    } as const;
+    tracker = new PtyRenderCheckpointTracker(checkpoint);
+
+    tracker.resize(100, 30);
+
+    await expect(tracker.snapshot()).resolves.toEqual(checkpoint);
+    expect(
+      (
+        tracker as unknown as {
+          terminal: unknown;
+          queue: unknown[];
+          seedCheckpoint: unknown;
+        }
+      ).terminal
+    ).toBeNull();
+    expect(
+      (tracker as unknown as { queue: unknown[]; seedCheckpoint: unknown }).queue
+    ).toHaveLength(0);
+    expect((tracker as unknown as { seedCheckpoint: unknown }).seedCheckpoint).toEqual(checkpoint);
+  });
+
+  it('compares repeated resizes with the last queued grid while preserving queue order', async () => {
+    tracker = new PtyRenderCheckpointTracker({
+      buffer: `\x1bc${'SEED '.repeat(20_000)}`,
+      generation: 13,
+      sequence: 50,
+      cols: 80,
+      rows: 24,
+      canonical: true,
+      scrollbackLines: 300,
+    });
+
+    tracker.resize(120, 36);
+    tracker.resize(120, 36);
+    tracker.resize(80, 24);
+    tracker.write('\x1b[2J\x1b[HREDRAW AT FINAL GRID', 51);
+
+    const snapshot = await tracker.snapshot();
+    expect(snapshot).toMatchObject({
+      generation: 13,
+      sequence: 51,
+      cols: 80,
+      rows: 24,
+      canonical: false,
+    });
+    expect(snapshot.buffer).toContain('REDRAW AT FINAL GRID');
   });
 
   it('accounts for seed and queued VT bytes and releases parser backpressure after drain', async () => {

@@ -161,6 +161,19 @@ export interface UsePtyOptions {
   fileLinks?: TerminalFileLinkOptions | null;
   /** Overrides URL link activation (smart web links + OSC 8 hyperlinks); defaults to the system browser. */
   webLinks?: TerminalWebLinkOptions | null;
+  /**
+   * Whether this mounted host may autonomously acknowledge a browser-painted
+   * frame. Task-open staging disables this until its exact-generation claim
+   * requests one explicit paint beneath the outer semantic loading surface.
+   */
+  autoAcknowledgeFrame?: boolean;
+  /**
+   * Allow a provider-confirmed working session to use complete atomic redraws
+   * instead of terminal silence for its first visible frame.
+   */
+  allowAtomicLiveFrame?: boolean;
+  /** Keep scrollback and selection available while suppressing PTY input. */
+  inputEnabled?: boolean;
 }
 
 export interface UseTerminalReturn {
@@ -168,6 +181,7 @@ export interface UseTerminalReturn {
   setTheme: (theme: SessionTheme) => void;
   sendInput: (data: string, options?: { track?: boolean }) => void;
   getLinkTargetAtEvent: (event: MouseEvent) => TerminalLinkTarget | null;
+  activateLinkTargetAtEvent: (event: MouseEvent) => boolean;
 }
 
 /**
@@ -202,6 +216,9 @@ export function usePty(
     pasteImagesAsPaths,
     fileLinks,
     webLinks,
+    autoAcknowledgeFrame = true,
+    allowAtomicLiveFrame = false,
+    inputEnabled = true,
   } = options;
 
   // Stable refs for callbacks so the effect doesn't re-run on every render.
@@ -228,6 +245,12 @@ export function usePty(
   webLinksRef.current = webLinks ?? null;
   const themeRef = useRef(theme);
   themeRef.current = theme;
+  const autoAcknowledgeFrameRef = useRef(autoAcknowledgeFrame);
+  autoAcknowledgeFrameRef.current = autoAcknowledgeFrame;
+  const allowAtomicLiveFrameRef = useRef(allowAtomicLiveFrame);
+  allowAtomicLiveFrameRef.current = allowAtomicLiveFrame;
+  const inputEnabledRef = useRef(inputEnabled);
+  inputEnabledRef.current = inputEnabled;
 
   // When inside a PaneSizingProvider, only the pane's active session is resized.
   // Background PTYs keep the size that matches their off-screen xterm grid until
@@ -388,6 +411,18 @@ export function usePty(
     });
   }, []);
 
+  // Task-open staging mounts the destination xterm before granting that
+  // session backend resize ownership. Its first measurement still resizes the
+  // local xterm grid, but PaneSizingProvider correctly rejects the backend
+  // report while activeSessionId is null. Geometry can remain identical when
+  // staging completes, so ResizeObserver has no reason to fire again. Re-run
+  // the canonical measurement on the ownership edge itself; per-session resize
+  // dedup keeps the already-synchronized path free of redundant IPC.
+  useLayoutEffect(() => {
+    if (paneSizing?.activeSessionId !== sessionId) return;
+    scheduleCommit();
+  }, [paneSizing?.activeSessionId, scheduleCommit, sessionId]);
+
   const applyTheme = useCallback(
     (t?: SessionTheme) => {
       if (!termRef.current) return;
@@ -416,6 +451,7 @@ export function usePty(
 
   const sendInput = useCallback(
     (data: string, options?: { track?: boolean }) => {
+      if (!inputEnabledRef.current) return;
       const shouldTrack = options?.track ?? true;
       if (shouldTrack) {
         const submittedMessages = submittedInputBufferRef.current.feed(data);
@@ -505,6 +541,26 @@ export function usePty(
     return getTerminalLinkTargetAtCell(terminal, cell.row + 1, position, fileLinksRef.current);
   }, []);
 
+  // Keep primary-click activation on the React host instead of burying it in
+  // the long-lived terminal mount effect. The host handler refreshes with HMR,
+  // while an already-mounted xterm intentionally survives renderer updates.
+  const activateLinkTargetAtEvent = (event: MouseEvent): boolean => {
+    const target = getLinkTargetAtEvent(event);
+    const shouldOpen =
+      target?.kind === 'file'
+        ? isTerminalFileLinkActivation(event)
+        : target?.kind === 'url' && isTerminalLinkActivation(event);
+    if (!target || !shouldOpen) return false;
+
+    termRef.current?.clearSelection();
+    if (target.kind === 'file') {
+      openFileTarget(target.target);
+    } else {
+      openUrl(target.url);
+    }
+    return true;
+  };
+
   const pasteFromClipboard = useCallback(() => {
     const target = termRef.current;
     navigator.clipboard
@@ -570,7 +626,10 @@ export function usePty(
       frontendPty.terminal.options.macOptionClickForcesSelection = true;
 
       // Mount: pre-resize then appendChild (flash-free).
-      const activeMountLease = frontendPty.mount(container as HTMLElement, targetDims);
+      const activeMountLease = frontendPty.mount(container as HTMLElement, targetDims, {
+        autoAcknowledgeFrame: () => autoAcknowledgeFrameRef.current,
+        allowAtomicLiveFrame: () => allowAtomicLiveFrameRef.current,
+      });
       mountLease = activeMountLease;
 
       // Always sync after mounting — targetDims may be stale if the pane was
@@ -867,31 +926,9 @@ export function usePty(
           }, 50);
         };
 
-        const openLinkTarget = (target: TerminalLinkTarget) => {
-          if (target.kind === 'file') {
-            openFileTarget(target.target);
-            return;
-          }
-
-          openUrl(target.url);
-        };
-
         const handleSelectionGestureStart = (event: MouseEvent | TouchEvent) => {
           if (!(event.target instanceof Node)) return;
           if (!terminalElement.contains(event.target)) return;
-          if (event instanceof MouseEvent) {
-            const linkTarget = getLinkTargetAtEvent(event);
-            const shouldOpen =
-              linkTarget?.kind === 'file'
-                ? isTerminalFileLinkActivation(event)
-                : linkTarget?.kind === 'url' && isTerminalLinkActivation(event);
-            if (linkTarget && shouldOpen) {
-              terminal.clearSelection();
-              stopMouseModeEvent(event);
-              openLinkTarget(linkTarget);
-              return;
-            }
-          }
           selectionGestureStart = terminal.getSelection();
           if (event instanceof MouseEvent && shouldCapturePlainDragSelection(event)) {
             const anchor = getBufferCellFromMouseEvent(terminal, terminalElement, event);
@@ -1091,5 +1128,5 @@ export function usePty(
     applyTheme(theme);
   }, [theme, applyTheme]);
 
-  return { focus, setTheme, sendInput, getLinkTargetAtEvent };
+  return { focus, setTheme, sendInput, getLinkTargetAtEvent, activateLinkTargetAtEvent };
 }

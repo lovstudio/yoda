@@ -5,6 +5,7 @@ const TMUX_SESSION_PREFIX = 'yoda-';
 const YODA_TMUX_SOCKET_NAME = 'yoda';
 
 const YODA_TMUX_SERVER_ARGS = ['-L', YODA_TMUX_SOCKET_NAME, '-f', '/dev/null'] as const;
+const YODA_TMUX_CLIENT_FEATURES = ['-T', 'sync'] as const;
 const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const TMUX_SEND_TIMEOUT_MS = 2_000;
 const TMUX_SEND_MAX_BUFFER = 4_096;
@@ -36,6 +37,26 @@ function tmuxShellPrefix(): string {
 
 function tmuxCommandShellLine(command: string): string {
   return `${tmuxShellPrefix()} ${command}`;
+}
+
+function tmuxAttachShellLine(command: string): string {
+  // The agent TUI may use synchronized updates internally, but tmux consumes
+  // those markers. Advertise support on Yoda's outer client so tmux restores
+  // an atomic frame boundary around the redraw it forwards to the PTY. tmux
+  // 3.2 and 3.3 encode that feature with a legacy DCS sequence unsupported by
+  // xterm.js; 3.4+ uses DEC mode 2026. Query the running server (which can
+  // outlive a binary upgrade) and retain the original attach path otherwise.
+  const synchronizedAttach = `${tmuxShellPrefix()} ${YODA_TMUX_CLIENT_FEATURES.join(' ')} ${command}`;
+  const compatibleAttach = tmuxCommandShellLine(command);
+  const readServerVersion = tmuxCommandShellLine(
+    `display-message -p ${JSON.stringify('#{version}')}`
+  );
+  const supportsDecSynchronizedOutput =
+    `${readServerVersion} 2>/dev/null | ` +
+    `awk '{ split($1, version, "."); major = version[1] + 0; minor = version[2] + 0; ` +
+    `supported = major > 3 || (major == 3 && minor >= 4) } ` +
+    `END { exit supported ? 0 : 1 }'`;
+  return `if ${supportsDecSynchronizedOutput}; then ${synchronizedAttach}; else ${compatibleAttach}; fi`;
 }
 
 function quotePosixValue(value: string): string {
@@ -90,7 +111,7 @@ export function buildTmuxShellLine(
   const trackClient = tmuxCommandShellLine(
     `set-window-option -t ${quotedName} aggressive-resize on`
   );
-  const attach = tmuxCommandShellLine(`attach-session -t ${quotedName}`);
+  const attach = tmuxAttachShellLine(`attach-session -t ${quotedName}`);
   const markIdentity = sessionIdentity
     ? tmuxCommandShellLine(
         `set-option -t ${quotedName} ${YODA_TMUX_SESSION_IDENTITY_OPTION} ${quotePosixValue(sessionIdentity)}`

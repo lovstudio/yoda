@@ -76,10 +76,12 @@ export const ptyController = createRPCController({
 
   /** Resize a PTY session to the given terminal dimensions. */
   resize: (sessionId: string, cols: number, rows: number) => {
-    const pty = ptySessionRegistry.get(sessionId);
-    if (!pty) return err({ type: 'not_found' as const });
-    if (pty.resize(cols, rows) === false) return err({ type: 'resize_failed' as const });
-    return ok();
+    const resized = ptySessionRegistry.resizeCurrent(sessionId, cols, rows);
+    if (resized) return ok();
+
+    const diagnostics = ptySessionRegistry.getDiagnostics(sessionId);
+    if (diagnostics?.live !== true) return err({ type: 'not_found' as const });
+    return err({ type: 'resize_failed' as const });
   },
 
   /** Resize only when the renderer still owns the live PTY generation. */

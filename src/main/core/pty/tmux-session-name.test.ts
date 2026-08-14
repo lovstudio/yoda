@@ -18,8 +18,93 @@ describe('buildTmuxShellLine', () => {
 
     expect(line).toContain('tmux -L yoda -f /dev/null has-session -t "agent-session"');
     expect(line).toContain('tmux -L yoda -f /dev/null new-session -d -s "agent-session"');
-    expect(line).toContain('tmux -L yoda -f /dev/null attach-session -t "agent-session"');
+    expect(line).toContain('tmux -L yoda -f /dev/null -T sync attach-session -t "agent-session"');
+    expect(line).toContain('else tmux -L yoda -f /dev/null attach-session -t "agent-session"');
   });
+
+  it('advertises synchronized updates only after a server-version gate and retains a fallback', () => {
+    const lines = [
+      buildTmuxShellLine('agent-session', 'codex resume current-thread'),
+      buildTmuxShellLine(
+        'agent-session',
+        'codex resume current-thread',
+        undefined,
+        undefined,
+        'current-thread'
+      ),
+      buildTmuxShellLine(
+        'agent-session',
+        'codex resume current-thread',
+        undefined,
+        undefined,
+        'current-thread',
+        [],
+        true
+      ),
+    ];
+
+    for (const line of lines) {
+      const synchronizedAttachCommands = line.match(
+        /tmux -L yoda -f \/dev\/null -T sync attach-session/g
+      );
+      const compatibleAttachCommands = line.match(/tmux -L yoda -f \/dev\/null attach-session/g);
+      const versionProbes = line.match(
+        /tmux -L yoda -f \/dev\/null display-message -p "#\{version\}" 2>\/dev\/null \| awk/g
+      );
+      const synchronizedClientFlags = line.match(/ -T sync/g);
+
+      expect(synchronizedAttachCommands?.length).toBeGreaterThan(0);
+      expect(compatibleAttachCommands).toHaveLength(synchronizedAttachCommands?.length ?? 0);
+      expect(versionProbes).toHaveLength(synchronizedAttachCommands?.length ?? 0);
+      expect(synchronizedClientFlags).toHaveLength(synchronizedAttachCommands?.length ?? 0);
+      expect(line).not.toContain('tmux -L yoda -f /dev/null -T sync new-session');
+      expect(line).not.toContain('tmux -L yoda -f /dev/null -T sync set-option');
+      expect(line).not.toContain('tmux -L yoda -f /dev/null -T sync has-session');
+    }
+  });
+
+  it.each([
+    { serverVersion: '3.5a', expectedFeatureFlag: '-T sync attach-session' },
+    { serverVersion: '3.4', expectedFeatureFlag: '-T sync attach-session' },
+    { serverVersion: '3.3a', expectedFeatureFlag: 'attach-session' },
+    { serverVersion: '3.2', expectedFeatureFlag: 'attach-session' },
+    { serverVersion: 'unknown', expectedFeatureFlag: 'attach-session' },
+  ])(
+    'executes exactly one $expectedFeatureFlag path for tmux $serverVersion',
+    ({ serverVersion, expectedFeatureFlag }) => {
+      if (process.platform === 'win32') return;
+      const line = buildTmuxShellLine(
+        'agent-session',
+        'codex resume current-thread',
+        undefined,
+        undefined,
+        'current-thread',
+        [],
+        true
+      );
+      const script = `
+tmux() {
+  case " $* " in
+    *" display-message -p #{version} "*) printf '%s\\n' '${serverVersion}'; return 0 ;;
+    *" has-session "*) return 0 ;;
+    *" attach-session "*) printf '%s\\n' "$*"; return 0 ;;
+    *) return 0 ;;
+  esac
+}
+${line}
+`;
+
+      const result = spawnSync('/bin/sh', ['-c', script], { encoding: 'utf8' });
+      const attachCalls = result.stdout.trim().split('\n').filter(Boolean);
+
+      expect(result.status, result.stderr).toBe(0);
+      expect(attachCalls).toHaveLength(1);
+      expect(attachCalls[0]).toContain(expectedFeatureFlag);
+      if (expectedFeatureFlag === 'attach-session') {
+        expect(attachCalls[0]).not.toContain('-T sync');
+      }
+    }
+  );
 
   it('hides tmux status before attaching to Yoda-managed sessions', () => {
     const line = buildTmuxShellLine('agent-session', 'claude --resume abc');
@@ -27,7 +112,7 @@ describe('buildTmuxShellLine', () => {
     expect(line).toContain('tmux -L yoda -f /dev/null set-option -t "agent-session" status off');
     expect(
       line.indexOf('tmux -L yoda -f /dev/null set-option -t "agent-session" status off')
-    ).toBeLessThan(line.indexOf('tmux -L yoda -f /dev/null attach-session -t "agent-session"'));
+    ).toBeLessThan(line.indexOf('tmux -L yoda -f /dev/null display-message -p "#{version}"'));
   });
 
   it('enables mouse scroll without showing the copy-mode position indicator', () => {
@@ -121,8 +206,12 @@ describe('buildTmuxShellLine', () => {
       true
     );
 
-    const [existingPaneBranch] = line.split('; else ');
-    expect(existingPaneBranch).toContain('then tmux -L yoda -f /dev/null attach-session');
+    const existingPaneBranch = line;
+    expect(existingPaneBranch).toContain(
+      'then if tmux -L yoda -f /dev/null display-message -p "#{version}" 2>/dev/null | awk'
+    );
+    expect(existingPaneBranch).toContain('then tmux -L yoda -f /dev/null -T sync attach-session');
+    expect(existingPaneBranch).toContain('else tmux -L yoda -f /dev/null attach-session');
     expect(existingPaneBranch).not.toContain('kill-session');
     expect(existingPaneBranch).not.toContain('@yoda_agent_session_id');
     expect(line).toContain('else exit 75');

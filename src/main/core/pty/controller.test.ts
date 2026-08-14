@@ -329,6 +329,44 @@ describe('ptyController.getSessionState', () => {
 });
 
 describe('ptyController.resize', () => {
+  it('keeps the compact checkpoint aligned with a successful legacy resize', async () => {
+    const sessionId = 'project-current-resize:task-current-resize:conversation-current-resize';
+    const pty = new FakePty();
+    ptySessionRegistry.register(sessionId, pty);
+    expect(
+      ptySessionRegistry.saveRenderCheckpoint(sessionId, {
+        buffer: '\x1bcLEGACY GRID',
+        generation: 1,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 500,
+      })
+    ).toBe(true);
+
+    // Canonical terminal providers use this endpoint for their initial sizing.
+    // A pending replacement registration must not reject the still-current
+    // live transport; resizeCurrent fences the captured state instead.
+    const replacementEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    expect(ptyController.resize(sessionId, 128, 43)).toEqual({
+      success: true,
+      data: undefined,
+    });
+    expect(pty.resize).toHaveBeenCalledWith(128, 43);
+    ptySessionRegistry.cancelRegistration(sessionId, replacementEpoch);
+    await expect(
+      ptySessionRegistry.subscribeForRenderer(sessionId, 'legacy-resize-renderer')
+    ).resolves.toMatchObject({
+      generation: 1,
+      checkpointCanonical: false,
+      checkpointDimensions: { cols: 128, rows: 43 },
+    });
+
+    ptySessionRegistry.unsubscribe(sessionId, 'legacy-resize-renderer');
+    ptySessionRegistry.unregister(sessionId);
+  });
+
   it('reports backend resize failure from the legacy endpoint', () => {
     const sessionId = 'project-resize:task-resize:conversation-resize';
     const pty = new FakePty();

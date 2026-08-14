@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     dispose: ReturnType<typeof vi.fn>;
     disposeAndWait: ReturnType<typeof vi.fn>;
     mounted: boolean;
+    failConnection: (error: unknown) => void;
   }>,
   getTerminalSettings: vi.fn(async () => ({})),
   throwOnConstruct: false,
@@ -36,15 +37,25 @@ vi.mock('@renderer/lib/pty/pty', () => ({
     mounted = false;
     hasRecoverableSnapshot = true;
     terminal = { options: { fontFamily: '' } };
+    private readonly onConnectionError?: (error: unknown) => void;
 
-    constructor() {
+    constructor(
+      _sessionId: string,
+      _theme?: unknown,
+      options?: { onConnectionError?: (error: unknown) => void }
+    ) {
       if (mocks.throwOnConstruct) throw new Error('xterm preparation failed');
+      this.onConnectionError = options?.onConnectionError;
       mocks.instances.push(this);
     }
 
     setScrollbackLines() {}
     takeHiddenOutputCodeUnits() {
       return 0;
+    }
+
+    failConnection(error: unknown) {
+      this.onConnectionError?.(error);
     }
   },
 }));
@@ -147,6 +158,27 @@ describe('PtySession connection lifecycle', () => {
 
     expect(session.status).toBe('ready');
     expect(session.connectionError).toBeNull();
+  });
+
+  it('surfaces a late output-subscription failure without an automatic retry storm', async () => {
+    const session = new PtySession('failed-output-subscription');
+    await session.connect();
+    const failedRenderer = mocks.instances.at(-1);
+
+    failedRenderer?.failConnection(new Error('PTY output subscription timed out'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(failedRenderer?.dispose).toHaveBeenCalledOnce();
+    expect(session.pty).toBeNull();
+    expect(session.connectionError).toContain('PTY output subscription timed out');
+    expect(mocks.instances).toHaveLength(1);
+
+    await session.connect();
+    expect(mocks.instances).toHaveLength(2);
+    expect(session.pty).not.toBeNull();
+    expect(session.connectionError).toBeNull();
+    session.dispose();
   });
 
   it('tracks command process exit without waiting for a terminal surface to mount', () => {

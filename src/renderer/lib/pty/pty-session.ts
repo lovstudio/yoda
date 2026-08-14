@@ -145,7 +145,9 @@ export class PtySession {
     try {
       if (this.evictionBarrier) await this.evictionBarrier;
       if (this.disposed || !this.connectionRequested) return;
-      pty = new FrontendPty(this.sessionId);
+      pty = new FrontendPty(this.sessionId, undefined, {
+        onConnectionError: (error) => this.handleFrontendConnectionError(pty, error),
+      });
       this.pty = pty;
       PtySession.touchHotSession(this);
       runInAction(() => {
@@ -206,6 +208,40 @@ export class PtySession {
       });
       throw error;
     }
+  }
+
+  /**
+   * Output subscription starts only after usePty mounts and measures xterm, so
+   * failures happen after frontend preparation reached `ready`. Remove the
+   * failed renderer and expose the existing retry UI, but keep status stable:
+   * ConversationSession's visibility effect keys on status and would otherwise
+   * turn a timeout into an unbounded automatic reconnect loop.
+   */
+  private handleFrontendConnectionError(candidate: FrontendPty | null, error: unknown): void {
+    if (this.disposed || !candidate || this.pty !== candidate) return;
+    candidate.dispose();
+    PtySession.hotSessions = PtySession.hotSessions.filter((session) => session !== this);
+    PtySession.refreshAutoPressureMonitor();
+    runInAction(() => {
+      if (this.pty === candidate) this.pty = null;
+      this.connectionError = getConnectionErrorMessage(error);
+    });
+    log.warn('PtySession: frontend PTY output subscription failed', {
+      sessionId: this.sessionId,
+      error,
+    });
+  }
+
+  /**
+   * Surface a bounded canonical-frame failure without destroying the live PTY.
+   * The retry action clears this through connect(), while output can keep
+   * parsing in the background for diagnostics and a subsequent retry.
+   */
+  reportConnectionError(error: unknown): void {
+    if (this.disposed) return;
+    runInAction(() => {
+      this.connectionError = getConnectionErrorMessage(error);
+    });
   }
 
   async reconnect() {

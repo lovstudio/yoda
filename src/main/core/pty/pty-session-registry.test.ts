@@ -212,7 +212,7 @@ describe('PtySessionRegistry', () => {
     vi.useRealTimers();
     const registry = new PtySessionRegistry();
     const pty = new FakePty();
-    registry.register('session', pty);
+    registry.register('session', pty, { initialDimensions: { cols: 80, rows: 24 } });
     expect(
       registry.saveRenderCheckpoint('session', {
         buffer: '\x1bcOLD GRID',
@@ -230,12 +230,81 @@ describe('PtySessionRegistry', () => {
       changed: true,
     });
     expect(pty.resize).toHaveBeenCalledWith(140, 42);
+    expect(registry.resizeForRenderer('session', 1, 140, 42)).toEqual({
+      generation: 1,
+      changed: false,
+    });
+    expect(pty.resize).toHaveBeenCalledOnce();
 
     await expect(registry.subscribeForRenderer('session', 'renderer')).resolves.toMatchObject({
       generation: 1,
       sequence: 0,
       checkpointCanonical: false,
       checkpointDimensions: { cols: 140, rows: 42 },
+    });
+    registry.unsubscribe('session', 'renderer');
+  });
+
+  it('skips an exact same-grid backend resize and preserves the canonical checkpoint seed', async () => {
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    registry.register('session', pty, { initialDimensions: { cols: 128, rows: 43 } });
+    const checkpoint = {
+      buffer: '\x1bcCANONICAL SAME GRID',
+      generation: 1,
+      sequence: 0,
+      cols: 128,
+      rows: 43,
+      canonical: true,
+      scrollbackLines: 500,
+    } as const;
+    expect(registry.saveRenderCheckpoint('session', checkpoint)).toBe(true);
+
+    expect(registry.resizeForRenderer('session', 1, 128, 43)).toEqual({
+      generation: 1,
+      changed: false,
+    });
+    expect(pty.resize).not.toHaveBeenCalled();
+
+    await expect(registry.subscribeForRenderer('session', 'renderer')).resolves.toEqual({
+      buffer: checkpoint.buffer,
+      generation: 1,
+      sequence: 0,
+      checkpointCanonical: true,
+      checkpointDimensions: { cols: 128, rows: 43 },
+    });
+    registry.unsubscribe('session', 'renderer');
+  });
+
+  it('resizes the current live generation and its checkpoint during replacement registration', async () => {
+    vi.useRealTimers();
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    registry.register('session', pty);
+    expect(
+      registry.saveRenderCheckpoint('session', {
+        buffer: '\x1bcCURRENT GRID',
+        generation: 1,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 500,
+      })
+    ).toBe(true);
+
+    const replacementEpoch = registry.beginRegistration('session');
+    expect(registry.resizeCurrent('session', 132, 41)).toEqual({
+      generation: 1,
+      changed: true,
+    });
+    expect(pty.resize).toHaveBeenCalledWith(132, 41);
+    registry.cancelRegistration('session', replacementEpoch);
+
+    await expect(registry.subscribeForRenderer('session', 'renderer')).resolves.toMatchObject({
+      generation: 1,
+      checkpointCanonical: false,
+      checkpointDimensions: { cols: 132, rows: 41 },
     });
     registry.unsubscribe('session', 'renderer');
   });
@@ -266,6 +335,40 @@ describe('PtySessionRegistry', () => {
     await expect(registry.subscribeForRenderer('session', 'renderer')).resolves.toMatchObject({
       checkpointCanonical: true,
       checkpointDimensions: { cols: 80, rows: 24 },
+    });
+    registry.unsubscribe('session', 'renderer');
+  });
+
+  it('does not commit a failed backend grid and retries the same target', async () => {
+    vi.useRealTimers();
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    registry.register('session', pty, { initialDimensions: { cols: 80, rows: 24 } });
+    expect(
+      registry.saveRenderCheckpoint('session', {
+        buffer: '\x1bcSTABLE GRID',
+        generation: 1,
+        sequence: 0,
+        cols: 80,
+        rows: 24,
+        canonical: true,
+        scrollbackLines: 500,
+      })
+    ).toBe(true);
+
+    pty.resize.mockReturnValueOnce(false).mockReturnValueOnce(true);
+    expect(registry.resizeForRenderer('session', 1, 120, 30)).toBeNull();
+    expect(registry.resizeForRenderer('session', 1, 120, 30)).toEqual({
+      generation: 1,
+      changed: true,
+    });
+    expect(pty.resize).toHaveBeenCalledTimes(2);
+    expect(pty.resize).toHaveBeenNthCalledWith(1, 120, 30);
+    expect(pty.resize).toHaveBeenNthCalledWith(2, 120, 30);
+
+    await expect(registry.subscribeForRenderer('session', 'renderer')).resolves.toMatchObject({
+      checkpointCanonical: false,
+      checkpointDimensions: { cols: 120, rows: 30 },
     });
     registry.unsubscribe('session', 'renderer');
   });

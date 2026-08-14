@@ -255,6 +255,7 @@ export class LocalTerminalProvider implements TerminalProvider {
         preserveBufferOnExit: policy.preserveBufferOnExit,
         registrationEpoch: operation.registrationEpoch,
         tmuxBacked: Boolean(tmuxSessionName),
+        initialDimensions: initialSize,
       });
       registrationCompleted = true;
       if (!this.isCurrentStart(sessionId, operation)) {

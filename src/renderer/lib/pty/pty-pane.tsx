@@ -32,6 +32,12 @@ type Props = {
   pasteImagesAsPaths?: boolean;
   fileLinks?: TerminalFileLinkOptions | null;
   webLinks?: TerminalWebLinkOptions | null;
+  /** Disable autonomous frame ACK while an outer task-opening surface is opaque. */
+  autoAcknowledgeFrame?: boolean;
+  /** Allow a provider-confirmed working session to reveal its latest complete atomic frame. */
+  allowAtomicLiveFrame?: boolean;
+  /** Keep the terminal readable/selectable without forwarding input. */
+  inputEnabled?: boolean;
 };
 
 const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
@@ -53,6 +59,9 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
       pasteImagesAsPaths,
       fileLinks,
       webLinks,
+      autoAcknowledgeFrame,
+      allowAtomicLiveFrame,
+      inputEnabled,
     },
     ref
   ) => {
@@ -61,7 +70,7 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
 
     const theme: SessionTheme = { override: themeOverride };
 
-    const { focus, sendInput, getLinkTargetAtEvent } = usePty(
+    const { focus, sendInput, getLinkTargetAtEvent, activateLinkTargetAtEvent } = usePty(
       {
         sessionId,
         pty,
@@ -76,6 +85,9 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
         pasteImagesAsPaths,
         fileLinks,
         webLinks,
+        autoAcknowledgeFrame,
+        allowAtomicLiveFrame,
+        inputEnabled,
       },
       containerRef
     );
@@ -101,6 +113,18 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
       if (event.button !== 2) return;
       event.preventDefault();
       event.stopPropagation();
+    };
+
+    const handleMouseDownCapture: React.MouseEventHandler<HTMLDivElement> = (event) => {
+      if (event.button === 2) {
+        handleSecondaryMouseEvent(event);
+        return;
+      }
+      if (!activateLinkTargetAtEvent(event.nativeEvent)) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.nativeEvent.stopImmediatePropagation();
     };
 
     const handleDrop: React.DragEventHandler<HTMLDivElement> = (event) => {
@@ -191,7 +215,7 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
             overflow: 'hidden',
             filter: contentFilter || undefined,
           }}
-          onMouseDownCapture={handleSecondaryMouseEvent}
+          onMouseDownCapture={handleMouseDownCapture}
           onMouseDown={handleMouseDown}
           onMouseUpCapture={handleSecondaryMouseEvent}
           onContextMenuCapture={handleContextMenu}
