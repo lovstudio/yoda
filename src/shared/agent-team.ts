@@ -8,7 +8,7 @@ import {
   FEATURE_PRODUCT_DESIGN_PROMPT,
   FEATURE_QUALITY_PROMPT,
 } from './feature-workflow';
-import type { RuntimeId } from './runtime-registry';
+import { isValidRuntimeId, type RuntimeId } from './runtime-registry';
 import {
   DEFAULT_TEAM_COMMUNICATION_CONFIG,
   type TeamCommunicationConfig,
@@ -31,7 +31,9 @@ export type TeamMemberRole = 'leader' | 'worker';
  * - `sequential`: leader advances one evidence-backed stage at a time.
  * - `freeform`: no scripted routing — just the generic teammate etiquette.
  */
-export type TeamRouting = 'review-loop' | 'fan-out' | 'sequential' | 'freeform';
+export const TEAM_ROUTINGS = ['review-loop', 'fan-out', 'sequential', 'freeform'] as const;
+
+export type TeamRouting = (typeof TEAM_ROUTINGS)[number];
 
 export interface AgentTeamMember {
   /** Stable id within the team; also the slot key suffix at launch. */
@@ -234,6 +236,47 @@ export const BUILTIN_TEAMS: AgentTeam[] = [
 
 export function isBuiltinTeamId(id: string): boolean {
   return id.startsWith('builtin:');
+}
+
+/**
+ * The roster invariants: every handle unique and non-empty, every runtime real,
+ * exactly one leader.
+ *
+ * This is shared rather than service-local because a team is also a paradigm
+ * instance, and the paradigms write path validates through the kind's params
+ * schema. Were the invariants to stay behind `agentTeamsService`, writing the
+ * same team through `paradigms.update` would quietly skip them.
+ *
+ * Deliberately total: it repairs rather than rejects, because it also runs on the
+ * read path, where the alternative to a repaired roster is a lost one.
+ */
+export function normalizeTeamMembers(members: readonly AgentTeamMember[]): AgentTeamMember[] {
+  const seen = new Set<string>();
+  const clean = members.map((member, index) => {
+    let handle = (member.handle || `member-${index + 1}`).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    if (!handle) handle = `member-${index + 1}`;
+    while (seen.has(handle)) handle = `${handle}-${index + 1}`;
+    seen.add(handle);
+    return {
+      handle,
+      displayName: member.displayName?.trim() || handle,
+      icon: member.icon?.trim() || undefined,
+      role: member.role === 'leader' ? 'leader' : 'worker',
+      runtime: isValidRuntimeId(member.runtime) ? member.runtime : 'claude',
+      agentRef: member.agentRef,
+      systemPrompt: member.systemPrompt,
+    } satisfies AgentTeamMember;
+  });
+  // Exactly one leader: the first one declared, else the first member.
+  const leaderIndex = clean.findIndex((member) => member.role === 'leader');
+  return clean.map((member, index) => ({
+    ...member,
+    role: index === (leaderIndex === -1 ? 0 : leaderIndex) ? 'leader' : 'worker',
+  }));
+}
+
+export function normalizeTeamRouting(value: unknown): TeamRouting {
+  return TEAM_ROUTINGS.includes(value as TeamRouting) ? (value as TeamRouting) : 'freeform';
 }
 
 /** The leader member of a team (first leader, or the first member as a fallback). */

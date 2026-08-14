@@ -3,72 +3,39 @@ import { desc, eq } from 'drizzle-orm';
 import {
   BUILTIN_TEAMS,
   isBuiltinTeamId,
+  normalizeTeamMembers,
+  normalizeTeamRouting,
   type AgentTeam,
   type AgentTeamDraft,
-  type AgentTeamMember,
-  type TeamRouting,
 } from '@shared/agent-team';
-import { isValidRuntimeId } from '@shared/runtime-registry';
 import { normalizeTeamCommunicationConfig } from '@shared/team-communication';
 import { normalizeRoutingHopLimit } from '@shared/team-routing-limit';
 import { db } from '@main/db/client';
 import { agentTeams, type AgentTeamRow } from '@main/db/schema';
-
-const ROUTINGS: TeamRouting[] = ['review-loop', 'fan-out', 'sequential', 'freeform'];
 
 function rowToTeam(row: AgentTeamRow): AgentTeam {
   return {
     id: row.id,
     name: row.name,
     icon: row.icon,
-    routing: ROUTINGS.includes(row.routing as TeamRouting)
-      ? (row.routing as TeamRouting)
-      : 'freeform',
+    routing: normalizeTeamRouting(row.routing),
     routingHopLimit: normalizeRoutingHopLimit(row.routingHopLimit),
     communication: normalizeTeamCommunicationConfig(row.communication),
     builtin: false,
-    members: Array.isArray(row.members) ? row.members : [],
+    members: normalizeTeamMembers(Array.isArray(row.members) ? row.members : []),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
-}
-
-/** Normalize members: valid runtime, non-empty handle, exactly one leader. */
-function sanitizeMembers(members: AgentTeamMember[]): AgentTeamMember[] {
-  const seen = new Set<string>();
-  const clean = members
-    .map((m, i) => {
-      let handle = (m.handle || `member-${i + 1}`).toLowerCase().replace(/[^a-z0-9_-]/g, '');
-      if (!handle) handle = `member-${i + 1}`;
-      while (seen.has(handle)) handle = `${handle}-${i + 1}`;
-      seen.add(handle);
-      return {
-        handle,
-        displayName: m.displayName.trim() || handle,
-        icon: m.icon?.trim() || undefined,
-        role: m.role === 'leader' ? 'leader' : 'worker',
-        runtime: isValidRuntimeId(m.runtime) ? m.runtime : 'claude',
-        agentRef: m.agentRef,
-        systemPrompt: m.systemPrompt,
-      } satisfies AgentTeamMember;
-    })
-    .filter(Boolean);
-  // Force exactly one leader.
-  const leaderIdx = clean.findIndex((m) => m.role === 'leader');
-  return clean.map((m, i) => ({
-    ...m,
-    role: i === (leaderIdx === -1 ? 0 : leaderIdx) ? 'leader' : 'worker',
-  }));
 }
 
 function sanitizeDraft(draft: AgentTeamDraft): AgentTeamDraft {
   return {
     name: draft.name.trim() || 'Untitled team',
     icon: draft.icon.trim() || '👥',
-    routing: ROUTINGS.includes(draft.routing) ? draft.routing : 'freeform',
+    routing: normalizeTeamRouting(draft.routing),
     communication: normalizeTeamCommunicationConfig(draft.communication),
     routingHopLimit: normalizeRoutingHopLimit(draft.routingHopLimit),
-    members: sanitizeMembers(draft.members),
+    members: normalizeTeamMembers(draft.members),
   };
 }
 

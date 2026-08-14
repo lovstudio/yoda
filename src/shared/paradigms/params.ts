@@ -1,6 +1,17 @@
 import { z } from 'zod';
+import {
+  normalizeTeamMembers,
+  normalizeTeamRouting,
+  TEAM_ROUTINGS,
+  type AgentTeamMember,
+} from '../agent-team';
 import { runtimeIdSchema } from '../runtime-id-schema';
-import { TEAM_COMMUNICATION_MODES } from '../team-communication';
+import {
+  normalizeTeamCommunicationConfig,
+  TEAM_COMMUNICATION_MODES,
+  type TeamCommunicationConfig,
+} from '../team-communication';
+import { normalizeRoutingHopLimit } from '../team-routing-limit';
 import { PARADIGM_KIND_IDS } from './contract';
 
 /**
@@ -58,12 +69,30 @@ const teamCommunicationSchema = z.object({
   githubPullRequestNumber: z.number().nullable(),
 });
 
+/**
+ * Team params repair rather than reject.
+ *
+ * A team is the one paradigm whose params carry irreplaceable user data — the
+ * roster. A strict schema would turn a single unreadable field (a runtime that
+ * has since been removed, say) into a failed parse, and a failed parse falls
+ * back to the kind's defaults, whose roster is empty. Normalizing first means the
+ * worst case is a repaired member, not a deleted team.
+ *
+ * These are the same normalizers `agentTeamsService` has always applied on read,
+ * lifted so both write paths share them.
+ */
 export const teamParadigmParamsSchema = withSlots({
-  routing: z.enum(['review-loop', 'fan-out', 'sequential', 'freeform']),
-  communication: teamCommunicationSchema,
+  routing: z.preprocess(normalizeTeamRouting, z.enum(TEAM_ROUTINGS)),
+  communication: z.preprocess(
+    (value) => normalizeTeamCommunicationConfig(value as Partial<TeamCommunicationConfig> | null),
+    teamCommunicationSchema
+  ),
   /** Max conductor routing deliveries per human prompt. null = unlimited. */
-  routingHopLimit: z.number().nullable(),
-  members: z.array(teamMemberSchema),
+  routingHopLimit: z.preprocess(normalizeRoutingHopLimit, z.number().nullable()),
+  members: z.preprocess(
+    (value) => normalizeTeamMembers(Array.isArray(value) ? (value as AgentTeamMember[]) : []),
+    z.array(teamMemberSchema)
+  ),
 });
 export type TeamParadigmParams = z.infer<typeof teamParadigmParamsSchema>;
 
