@@ -50,6 +50,7 @@ import { runtimeOverrideSettings } from '../settings/runtime-settings-service';
 import { appSettingsService } from '../settings/settings-service';
 import { migrateLegacyCodexMaasHistoryForConfig } from './codex-history-compat';
 import { codexMaasAuthSwitch, type CodexMaasAuthRollback } from './codex-maas-auth-switch';
+import { fetchNewApiUsageSummary } from './new-api-usage';
 import {
   buildOpenRouterUsageSummary,
   openRouterUsageUrl,
@@ -508,6 +509,27 @@ function sumNullable(
     hasValue = true;
   }
   return hasValue ? total : null;
+}
+
+function emptyUsageSummary(platformId: MaasPlatformId): MaasUsageSummary {
+  return {
+    platformId,
+    recordCount: 0,
+    totalRecords: 0,
+    totalInputTokens: null,
+    totalOutputTokens: null,
+    totalCostUsd: null,
+    totalCreditsUsd: null,
+    remainingCreditsUsd: null,
+    keyLimitUsd: null,
+    keyLimitRemainingUsd: null,
+    usageDailyUsd: null,
+    usageWeeklyUsd: null,
+    usageMonthlyUsd: null,
+    source: 'none',
+    fetchedAt: null,
+    period: null,
+  };
 }
 
 function isFreshPlatformInfoSnapshot(
@@ -1711,31 +1733,22 @@ export class MaasService {
   async getUsageSummary(input: MaasUsageSummaryInput): Promise<MaasUsageSummary> {
     const kind = input.kind ?? 'all';
     const settings = await appSettingsService.get('maas');
-    if (!getConnectedPlatform(settings, input.platformId)) {
-      return {
-        platformId: input.platformId,
-        recordCount: 0,
-        totalRecords: 0,
-        totalInputTokens: null,
-        totalOutputTokens: null,
-        totalCostUsd: null,
-        totalCreditsUsd: null,
-        remainingCreditsUsd: null,
-        keyLimitUsd: null,
-        keyLimitRemainingUsd: null,
-        usageDailyUsd: null,
-        usageWeeklyUsd: null,
-        usageMonthlyUsd: null,
-        source: 'none',
-        fetchedAt: null,
-        period: null,
-      };
+    const connection = getConnectedPlatform(settings, input.platformId);
+    if (!connection) return emptyUsageSummary(input.platformId);
+
+    const templateId = getMaasPlatformTemplateId(input.platformId);
+    if (templateId === 'openrouter') {
+      return this.fetchOpenRouterUsageSummary(connection, input.platformId);
     }
 
-    if (getMaasPlatformTemplateId(input.platformId) === 'openrouter') {
-      return this.fetchOpenRouterUsageSummary(
-        getConnectedPlatform(settings, input.platformId)!,
-        input.platformId
+    if (templateId !== 'zenmux') {
+      const apiKey = await readPlatformSecret(connection.platformId, 'primary');
+      return (
+        (await fetchNewApiUsageSummary({
+          endpoint: connection.endpoint,
+          apiKey: apiKey ?? '',
+          platformId: input.platformId,
+        })) ?? emptyUsageSummary(input.platformId)
       );
     }
 
@@ -1806,9 +1819,12 @@ export class MaasService {
     }
 
     if (getMaasPlatformTemplateId(platformId) !== 'zenmux') {
-      throw new Error(
-        `${getMaasPlatformDefinition(platformId).name} real usage history is not available yet. ZenMux usage data is loaded from its Management API.`
-      );
+      return {
+        records: [],
+        source: 'none',
+        fetchedAt: null,
+        period: null,
+      };
     }
 
     const cacheKey = `${platformId}:${connection.endpoint}:${connection.keyFingerprint ?? ''}`;

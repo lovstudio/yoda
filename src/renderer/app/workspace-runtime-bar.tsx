@@ -1893,7 +1893,9 @@ function WorkspaceMaasUsageContent({
       ? t('workspaceRuntime.maasUsageSourceZenmux')
       : usage?.source === 'openrouter-key' || usage?.source === 'openrouter-key-and-credits'
         ? t('workspaceRuntime.maasUsageSourceOpenRouter')
-        : t('workspaceRuntime.maasUsageSourceUnavailable');
+        : usage?.source === 'new-api-token'
+          ? t('workspaceRuntime.maasUsageSourceNewApi')
+          : t('workspaceRuntime.maasUsageSourceUnavailable');
 
   return (
     <>

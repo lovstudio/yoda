@@ -5492,6 +5492,7 @@
     "maasUsageDescription": "This session is routed through {{provider}}. Values come directly from the provider.",
     "maasUsageSourceZenmux": "Management stats",
     "maasUsageSourceOpenRouter": "Key API",
+    "maasUsageSourceNewApi": "Token API",
     "maasUsageSourceUnavailable": "Unavailable",
     "maasUsageLoading": "Reading provider usage…",
     "maasUsageUnavailable": "Usage request failed",

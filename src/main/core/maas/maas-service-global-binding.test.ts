@@ -1127,4 +1127,56 @@ describe('stored MaaS keys', () => {
       connected: true,
     });
   });
+
+  it('reads a Custom New API Profile through its token usage endpoint', async () => {
+    const platformId = 'profile:7ebb50b0-b1e3-43b0-828e-4b5d0b07d7f2' as const;
+    mocks.settings = {
+      selectedPlatformId: platformId,
+      connections: [
+        {
+          platformId,
+          displayName: 'LovBrowser',
+          endpoint: 'https://newapi.1234bot.com/v1',
+          keyFingerprint: 'lo...et',
+          inferenceKeyFingerprint: 'lo...et',
+          connectedAt: '2026-08-14T00:00:00.000Z',
+          lastCheckedAt: '2026-08-14T00:00:00.000Z',
+          lastTest: null,
+        },
+      ],
+      runtimeBindings: [],
+    };
+    mocks.secrets = { [`yoda-maas-token:${platformId}`]: 'lovbrowser-secret' };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: { quota_per_unit: 500_000, quota_display_type: 'USD' },
+          })
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: { usage: 1_500_000, remain: 3_500_000 } }))
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await expect(new MaasService().getUsageSummary({ platformId })).resolves.toMatchObject({
+        platformId,
+        totalCostUsd: 3,
+        remainingCreditsUsd: 7,
+        totalCreditsUsd: 10,
+        source: 'new-api-token',
+      });
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        new URL('https://newapi.1234bot.com/api/usage/token/'),
+        { headers: { Authorization: 'Bearer lovbrowser-secret' } }
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
