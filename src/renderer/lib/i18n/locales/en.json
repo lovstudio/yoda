@@ -173,7 +173,7 @@
     "priorityModeDisable": "Restore the normal task order",
     "priorityModeDescription": "Groups tasks across projects by live session status. Turning it off restores the current grouping, manual order, and drag behavior.",
     "priorityOrder": "Priority order",
-    "priorityOrderSummary": "{{count}} groups · Click to configure",
+    "priorityOrderSummary": "{{count}} groups",
     "priorityOrderDescription": "Set the sidebar order for each task status. Archived always remains last.",
     "priorityOrderGroups": "Task status",
     "priorityReset": "Reset",

@@ -5,7 +5,6 @@ import {
   ChevronsUpDown,
   EyeOff,
   FolderTree,
-  ListOrdered,
   ListRestart,
   MessageSquareOff,
   Settings2,
@@ -240,8 +239,8 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
           <ToggleGroupItem value="updated-at">{t('sidebar.sortByUpdatedAt')}</ToggleGroupItem>
         </ToggleGroup>
       </PanelRow>
-      <SwitchRow
-        icon={ListOrdered}
+      <PanelSwitchRow
+        id="sidebar-priority-mode"
         label={t('sidebar.priorityMode')}
         description={t('sidebar.priorityModeDescription')}
         checked={sidebarStore.taskPriorityMode}
@@ -350,21 +349,14 @@ const PriorityOrderCard = observer(function PriorityOrderCard() {
     <button
       type="button"
       aria-haspopup="dialog"
-      className="group mt-1 flex w-full items-center gap-2 rounded-md border border-border/70 bg-background-tertiary-1 px-2 py-2 text-left outline-none transition-colors hover:border-border hover:bg-background-quaternary-1 focus-visible:ring-1 focus-visible:ring-ring"
+      className="group mx-2 flex h-8 w-[calc(100%-1rem)] items-center gap-2 rounded-sm bg-background-tertiary-1/45 px-2 text-left text-xs text-foreground-muted outline-none transition-colors hover:bg-background-tertiary-1 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
       onClick={() => showModal('priorityOrderModal', {})}
     >
-      <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-background text-foreground-muted ring-1 ring-border/70">
-        <ListOrdered className="size-3.5" />
-      </div>
-      <span className="min-w-0 flex-1">
-        <span className="block text-xs font-medium text-foreground">
-          {t('sidebar.priorityOrder')}
-        </span>
-        <span className="block truncate text-[11px] text-foreground-passive">
-          {t('sidebar.priorityOrderSummary', { count: sidebarStore.taskPriorityOrder.length })}
-        </span>
+      <span className="min-w-0 flex-1 truncate">{t('sidebar.priorityOrder')}</span>
+      <span className="shrink-0 text-[11px] text-foreground-passive">
+        {t('sidebar.priorityOrderSummary', { count: sidebarStore.taskPriorityOrder.length })}
       </span>
-      <ChevronRight className="size-3.5 shrink-0 text-foreground-passive transition-transform group-hover:translate-x-0.5 group-hover:text-foreground-muted" />
+      <ChevronRight className="size-3 shrink-0 text-foreground-passive transition-transform group-hover:translate-x-0.5 group-hover:text-foreground-muted" />
     </button>
   );
 });
@@ -374,6 +366,48 @@ function PanelRow({ label, children }: { label: string; children: ReactNode }) {
     <div className="flex h-8 items-center justify-between gap-2 px-2">
       <span className="text-xs text-foreground-muted">{label}</span>
       {children}
+    </div>
+  );
+}
+
+function PanelSwitchRow({
+  id,
+  label,
+  description,
+  checked,
+  onCheckedChange,
+}: {
+  id: string;
+  label: string;
+  description?: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  const labelElement = (
+    <label htmlFor={id} className="cursor-default text-xs text-foreground-muted">
+      {label}
+    </label>
+  );
+
+  return (
+    <div className="flex h-8 items-center justify-between gap-2 px-2">
+      {description ? (
+        <Tooltip>
+          <TooltipTrigger render={labelElement} />
+          <TooltipContent side="left" align="start" className="max-w-72">
+            {description}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        labelElement
+      )}
+      <Switch
+        id={id}
+        size="sm"
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        aria-label={label}
+      />
     </div>
   );
 }

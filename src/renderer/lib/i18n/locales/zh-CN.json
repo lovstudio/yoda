@@ -173,7 +173,7 @@
     "priorityModeDisable": "恢复正常任务顺序",
     "priorityModeDescription": "跨项目按实时会话状态分组；关闭后恢复当前分组、手工排序与拖拽顺序。",
     "priorityOrder": "优先级顺序",
-    "priorityOrderSummary": "{{count}} 个分组，点击配置",
+    "priorityOrderSummary": "{{count}} 个分组",
     "priorityOrderDescription": "设置不同任务状态在侧栏中的显示顺序。已归档始终固定在末尾。",
     "priorityOrderGroups": "任务状态",
     "priorityReset": "重置",
