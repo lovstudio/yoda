@@ -58,7 +58,7 @@ describe('conversation tab context menu', () => {
     expect(copy.some((item) => isValidElement(item) && item.key === 'copy-link')).toBe(true);
   });
 
-  it('reloads only the renderer view and leaves the Agent session running', () => {
+  it('restarts the Agent session so reload uses the current runtime environment', () => {
     const reloadConversationView = vi.fn();
     const restartConversation = vi.fn();
     const provisioned = {
@@ -91,7 +91,7 @@ describe('conversation tab context menu', () => {
     expect(isValidElement<{ onClick: () => void }>(reloadItem)).toBe(true);
     if (isValidElement<{ onClick: () => void }>(reloadItem)) reloadItem.props.onClick();
 
-    expect(reloadConversationView).toHaveBeenCalledWith('conversation-1');
-    expect(restartConversation).not.toHaveBeenCalled();
+    expect(restartConversation).toHaveBeenCalledWith('conversation-1');
+    expect(reloadConversationView).not.toHaveBeenCalled();
   });
 });
