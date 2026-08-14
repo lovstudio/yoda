@@ -56,6 +56,30 @@ describe('New API usage', () => {
     });
   });
 
+  it('does not expose New API unlimited-quota sentinel values as a negative balance', () => {
+    expect(
+      buildNewApiUsageSummary(
+        'profile:lovbrowser',
+        {
+          code: true,
+          data: {
+            unlimited_quota: true,
+            total_used: 191_101_642,
+            total_available: -191_277_616,
+            total_granted: -175_974,
+          },
+        },
+        500_000,
+        '2026-08-14T00:00:00.000Z'
+      )
+    ).toMatchObject({
+      totalCostUsd: 382.203284,
+      remainingCreditsUsd: null,
+      totalCreditsUsd: null,
+      source: 'new-api-token',
+    });
+  });
+
   it('uses the inference key as a bearer token after detecting New API', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

@@ -19,6 +19,7 @@ export type NewApiTokenUsageResponse = {
     total_granted?: number;
     total_used?: number;
     total_available?: number;
+    unlimited_quota?: boolean;
     accessed_at?: number;
     expired_at?: number;
   };
@@ -65,17 +66,20 @@ export function buildNewApiUsageSummary(
   quotaPerUnit: number,
   fetchedAt: string
 ): MaasUsageSummary {
+  const unlimitedQuota = response.data?.unlimited_quota === true;
   const grantedQuota = nullableFiniteNumber(response.data?.total_granted);
-  const availableQuota =
-    nullableFiniteNumber(response.data?.total_available) ??
-    nullableFiniteNumber(response.data?.remain);
+  const availableQuota = unlimitedQuota
+    ? null
+    : (nullableFiniteNumber(response.data?.total_available) ??
+      nullableFiniteNumber(response.data?.remain));
   const usedQuota =
     nullableFiniteNumber(response.data?.total_used) ??
     nullableFiniteNumber(response.data?.usage) ??
     (grantedQuota != null && availableQuota != null ? grantedQuota - availableQuota : null);
-  const totalQuota =
-    grantedQuota ??
-    (usedQuota != null && availableQuota != null ? usedQuota + availableQuota : null);
+  const totalQuota = unlimitedQuota
+    ? null
+    : (grantedQuota ??
+      (usedQuota != null && availableQuota != null ? usedQuota + availableQuota : null));
 
   if (usedQuota == null && availableQuota == null && totalQuota == null) {
     throw new Error('New API token usage did not return quota values.');
