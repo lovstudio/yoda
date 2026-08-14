@@ -49,6 +49,9 @@ vi.mock('@renderer/lib/ui/context-menu', async () => {
     ContextMenuContent: createContainer('context-menu-content', create),
     ContextMenuItem: createItem('context-menu-item', create),
     ContextMenuSeparator: () => create('hr'),
+    ContextMenuSub: createContainer('context-menu-sub', create),
+    ContextMenuSubContent: createContainer('context-menu-sub-content', create),
+    ContextMenuSubTrigger: createContainer('context-menu-sub-trigger', create),
     ContextMenuTrigger: createContainer('context-menu-trigger', create),
   };
 });
@@ -60,6 +63,9 @@ vi.mock('@renderer/lib/ui/dropdown-menu', async () => {
     DropdownMenuContent: createContainer('dropdown-menu-content', create),
     DropdownMenuItem: createItem('dropdown-menu-item', create),
     DropdownMenuSeparator: () => create('hr'),
+    DropdownMenuSub: createContainer('dropdown-menu-sub', create),
+    DropdownMenuSubContent: createContainer('dropdown-menu-sub-content', create),
+    DropdownMenuSubTrigger: createContainer('dropdown-menu-sub-trigger', create),
     DropdownMenuTrigger: ({ render }: { render: ReactElement }) =>
       create('span', { 'data-slot': 'dropdown-menu-trigger' }, render),
   };

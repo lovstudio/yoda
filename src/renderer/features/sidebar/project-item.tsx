@@ -46,7 +46,6 @@ import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
 import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
-import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
 import { ProjectActionsMenu, ProjectContextMenu } from './project-menu';
 import { SidebarItemMiniButton, SidebarMenuButton, SidebarMenuRow } from './sidebar-primitives';

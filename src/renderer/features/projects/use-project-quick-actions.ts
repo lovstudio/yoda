@@ -34,7 +34,6 @@ export function useProjectQuickActions(projectId: string): ProjectQuickActionsMe
   const project = asMounted(projectStore);
   const settingsStore = getProjectSettingsStore(projectId);
   const quickActions = settingsStore?.settings?.quickActions ?? [];
-  const repository = getRepositoryStore(projectId);
   const connectionId = project?.data.type === 'ssh' ? project.data.connectionId : undefined;
   const { runtimeId } = useEffectiveRuntime(connectionId);
   const quickActionTargets = new Map(
