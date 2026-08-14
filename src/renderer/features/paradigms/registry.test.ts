@@ -4,8 +4,10 @@ import {
   BUILTIN_REVIEW_TEAM_ID,
   type AgentTeam,
 } from '@shared/agent-team';
+import { BUILTIN_PARADIGMS } from '@shared/paradigms/builtins';
 import { PARADIGM_KIND_IDS, type ParadigmKindId } from '@shared/paradigms/contract';
 import { PARADIGM_KINDS } from '@shared/paradigms/kinds';
+import { builtinParadigmId, isBuiltinParadigmId } from '@shared/paradigms/paradigm';
 import { DEFAULT_TEAM_COMMUNICATION_CONFIG } from '@shared/team-communication';
 import { DEFAULT_ROUTING_HOP_LIMIT } from '@shared/team-routing-limit';
 import en from '@renderer/lib/i18n/locales/en.json';
@@ -70,6 +72,25 @@ describe('paradigm registry', () => {
     for (const kindId of PARADIGM_KIND_IDS) {
       const kind = PARADIGM_KINDS[kindId];
       expect(() => kind.paramsSchema.parse(kind.defaultParams), `${kindId} defaults`).not.toThrow();
+    }
+  });
+
+  it('ships one built-in instance per self-contained kind and none for the rest', () => {
+    // A kind sourcing its instances elsewhere (today: one per Agent Team) must not
+    // also get a synthesized builtin, or the picker grows a phantom entry.
+    expect(BUILTIN_PARADIGMS.map((paradigm) => paradigm.kindId)).toEqual(
+      PARADIGM_KIND_IDS.filter((kindId) => PARADIGM_KINDS[kindId].instanceSource === null)
+    );
+    for (const paradigm of BUILTIN_PARADIGMS) {
+      expect(paradigm.id).toBe(builtinParadigmId(paradigm.kindId));
+      expect(isBuiltinParadigmId(paradigm.id)).toBe(true);
+      expect(paradigm.builtin).toBe(true);
+      // Empty label/icon are what make a builtin fall back to its kind's copy.
+      expect(paradigm.label).toBe('');
+      expect(paradigm.icon).toBe('');
+      expect(() =>
+        PARADIGM_KINDS[paradigm.kindId].paramsSchema.parse(paradigm.params)
+      ).not.toThrow();
     }
   });
 });

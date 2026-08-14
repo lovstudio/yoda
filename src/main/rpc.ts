@@ -32,6 +32,7 @@ import { mcpController } from './core/mcp/controller';
 import { mobileGatewayController } from './core/mobile-gateway/controller';
 import { mondayController } from './core/monday/controller';
 import { notionController } from './core/notion/controller';
+import { paradigmsController } from './core/paradigms/controller';
 import { plainController } from './core/plain/controller';
 import { planeController } from './core/plane/controller';
 import { pluginsController } from './core/plugins/controller';
@@ -96,6 +97,7 @@ export const rpcRouter = createRPCRouter({
   notion: notionController,
   plane: planeController,
   plain: plainController,
+  paradigms: paradigmsController,
   plugins: pluginsController,
   promptLibrary: promptLibraryController,
   quickActions: quickActionsController,

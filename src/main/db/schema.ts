@@ -9,6 +9,7 @@ import {
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 import type { AgentTeamMember } from '@shared/agent-team';
+import type { ParadigmKindId } from '@shared/paradigms/contract';
 import type { AgentAccountProviderId } from '@shared/runtime-registry';
 import type { SkillSelectionInput } from '@shared/skills/types';
 import type { TaskNamingContextSnapshot, TaskNamingStatus } from '@shared/task-naming';
@@ -1051,6 +1052,34 @@ export const agentTeams = sqliteTable('agent_teams', {
     .$onUpdate(() => new Date().toISOString()),
 });
 
+// User-defined development paradigm instances. A paradigm's *kind* is code (see
+// `src/shared/paradigms/kinds.ts`); a row here is one configured, renameable,
+// duplicable instance of a kind. Built-in instances live in code, not here —
+// same split as agent_teams above, so `builtin` needs no column.
+export const paradigms = sqliteTable('paradigms', {
+  id: text('id').primaryKey(),
+  /** ParadigmKindId — which kind's protocol this instance runs. */
+  kindId: text('kind_id').notNull().$type<ParadigmKindId>(),
+  /** Empty falls back to the kind's own localized label. */
+  label: text('label').notNull().default(''),
+  /** Emoji/glyph, image URL, or data URL. Empty falls back to the kind icon. */
+  icon: text('icon').notNull().default(''),
+  /** Validated against the kind's `paramsSchema` on the way in and out. */
+  params: text('params', { mode: 'json' })
+    .notNull()
+    .$type<unknown>()
+    .default(sql`'{}'`),
+  /** Picker rank within the kind's group; ties break on updatedAt. */
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: text('created_at')
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at')
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`)
+    .$onUpdate(() => new Date().toISOString()),
+});
+
 export const kv = sqliteTable(
   'kv',
   {
@@ -1315,6 +1344,8 @@ export type AgentRow = typeof agents.$inferSelect;
 export type AgentInsert = typeof agents.$inferInsert;
 export type AgentTeamRow = typeof agentTeams.$inferSelect;
 export type AgentTeamInsert = typeof agentTeams.$inferInsert;
+export type ParadigmRow = typeof paradigms.$inferSelect;
+export type ParadigmInsert = typeof paradigms.$inferInsert;
 export type AppSecretRow = typeof appSecrets.$inferSelect;
 export type AppSecretInsert = typeof appSecrets.$inferInsert;
 export type TeamRoomRow = typeof teamRooms.$inferSelect;
