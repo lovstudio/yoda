@@ -1,10 +1,10 @@
 import { Loader2, MessageCircleQuestionMark, Square } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { AgentStatus } from '@renderer/features/tasks/conversations/conversation-manager';
+import type { AgentDisplayStatus } from '@shared/agent-background-jobs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 
-export type AgentIndicatorStatus = AgentStatus | null;
+export type AgentIndicatorStatus = AgentDisplayStatus | null;
 
 interface AgentStatusIndicatorProps {
   status: AgentIndicatorStatus;
@@ -68,6 +68,19 @@ export function AgentStatusIndicator({
       case 'working':
         return (
           <Loader2 className={cn('size-3.5 motion-safe:animate-spin text-primary', className)} />
+        );
+      // The turn is over; only a detached job is left. Same spinner vocabulary
+      // as `working` because something is genuinely still running, but muted and
+      // slowed so it never competes with the agent's own activity.
+      case 'background':
+        return (
+          <Loader2
+            className={cn(
+              'size-3.5 motion-safe:animate-spin [animation-duration:2.4s] text-foreground-passive',
+              className
+            )}
+            aria-label={statusLabel}
+          />
         );
       case 'awaiting-input':
         return (

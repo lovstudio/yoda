@@ -1,11 +1,9 @@
+import type { AgentDisplayStatus } from '@shared/agent-background-jobs';
 import type { RuntimeId } from '@shared/runtime-registry';
 import type { Task } from '@shared/tasks';
 import { isUnmountedProject } from '@renderer/features/projects/stores/project';
 import { getProjectManagerStore } from '@renderer/features/projects/stores/project-selectors';
-import type {
-  AgentStatus,
-  ConversationStore,
-} from '@renderer/features/tasks/conversations/conversation-manager';
+import type { ConversationStore } from '@renderer/features/tasks/conversations/conversation-manager';
 import type { DiffViewStore } from '@renderer/features/tasks/diff-view/stores/diff-view-store';
 import type { FileModelLifecycleStore } from '@renderer/features/tasks/editor/stores/file-model-lifecycle-store';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -99,7 +97,7 @@ export function isTaskDescendantOf(
   });
 }
 
-export type TaskSessionVisibleStatus = Exclude<AgentStatus, 'idle'>;
+export type TaskSessionVisibleStatus = Exclude<AgentDisplayStatus, 'idle'>;
 
 export type TaskSessionStatusItem = {
   conversationId: string;
@@ -122,7 +120,7 @@ export type TaskSessionStatusSummary = {
  * ConversationStore remains a hydration fallback and metadata owner; it is
  * not a competing live status source for rendered surfaces.
  */
-export function getConversationRuntimeStatus(conversation: ConversationStore): AgentStatus {
+export function getConversationRuntimeStatus(conversation: ConversationStore): AgentDisplayStatus {
   return (
     appState.agentRuntime.sessionStatus(
       conversation.data.projectId,
@@ -135,7 +133,7 @@ export function getConversationRuntimeStatus(conversation: ConversationStore): A
 /** Display status shared by every mounted conversation surface. */
 export function getConversationIndicatorStatus(
   conversation: ConversationStore
-): AgentStatus | null {
+): AgentDisplayStatus | null {
   return (
     appState.agentRuntime.sessionStatus(
       conversation.data.projectId,
@@ -150,6 +148,9 @@ const TASK_SESSION_STATUS_PRIORITY: Record<TaskSessionVisibleStatus, number> = {
   error: 1,
   completed: 2,
   working: 3,
+  // Ranked immediately below `working` everywhere: in-flight work the user is
+  // not being asked to do anything about.
+  background: 4,
 };
 
 /** Shared, lossless task-session aggregation used by every task surface. */

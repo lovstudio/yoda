@@ -67,7 +67,7 @@ export interface ActiveFile {
   prNumber?: number;
 }
 
-export type BottomPanelTab = 'terminals' | 'scripts' | 'session';
+export type BottomPanelTab = 'terminals' | 'scripts' | 'session' | 'background';
 
 /** Persisted per-task bottom drawer chrome. */
 export type TaskBottomPanelSnapshot = {

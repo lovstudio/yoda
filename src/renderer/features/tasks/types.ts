@@ -19,6 +19,7 @@ export type SessionPanelSection =
   | 'conversation'
   | 'transcript'
   | 'tasks'
+  | 'background'
   | 'overview'
   // Harness blinds (the agent runtime view), migrated from the retired
   // harness tab into the same accordion as first-class sections.
@@ -43,6 +44,7 @@ export const SESSION_PANEL_UNITS = [
   'conversation',
   'transcript',
   'tasks',
+  'background',
   'persona',
   'memory',
   'tools',
@@ -71,6 +73,8 @@ export function sessionPanelUnitLabelKey(unit: SessionPanelUnit): string {
       return 'tasks.sessionPanel.transcript';
     case 'tasks':
       return 'tasks.sessionPanel.tasks';
+    case 'background':
+      return 'tasks.sessionPanel.background';
     case 'persona':
       return 'tasks.panel.persona';
     case 'memory':

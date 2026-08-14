@@ -1,4 +1,5 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
+import { deriveAgentDisplayStatus, type AgentDisplayStatus } from '@shared/agent-background-jobs';
 import {
   agentSessionStatusChangedChannel,
   isAgentSessionRunningStatus,
@@ -15,7 +16,7 @@ export type AgentRuntimeSnapshot = {
 
 export type TaskAgentRuntimeSession = {
   conversationId: string;
-  status: Exclude<AgentSessionRuntimeStatus, 'idle'>;
+  status: Exclude<AgentDisplayStatus, 'idle'>;
 };
 
 export type RunningAgentRuntimeSession = {
@@ -33,8 +34,12 @@ function taskKeyFromStatusKey(statusKey: string): string {
   return statusKey.slice(0, statusKey.lastIndexOf('\0'));
 }
 
-/** Statuses that mean "the agent wants the user's attention" (unread candidates). */
-function isAttentionStatus(status: AgentSessionRuntimeStatus): boolean {
+/**
+ * Statuses that mean "the agent wants the user's attention" (unread candidates).
+ * `background` is deliberately absent: a detached job is work in progress, not
+ * something the user is being asked to look at.
+ */
+function isAttentionStatus(status: AgentDisplayStatus): boolean {
   return status === 'awaiting-input' || status === 'completed' || status === 'error';
 }
 
@@ -54,6 +59,13 @@ function isAttentionStatus(status: AgentSessionRuntimeStatus): boolean {
 export class AgentRuntimeStore {
   /** conversationKey -> status, where conversationKey = `${projectId}\0${taskId}\0${conversationId}`. */
   private statuses = observable.map<string, AgentSessionRuntimeStatus>();
+  /**
+   * conversationKey -> number of still-running detached jobs. Kept apart from
+   * {@link statuses} on purpose: that map encodes `idle` as "no entry", and an
+   * idle session that still owns a background job is exactly the case this
+   * feature exists for — storing it there would erase it. Zero deletes the key.
+   */
+  private backgroundCounts = observable.map<string, number>();
   /** Task ids the user has opened; cleared for a task when it re-enters an attention status. */
   private seenTaskIds = observable.set<string>();
   /** Active/attention session keys grouped by task, avoiding a global scan per sidebar row. */
@@ -75,8 +87,16 @@ export class AgentRuntimeStore {
   async start(): Promise<void> {
     if (this.off) return;
     this.off = events.on(agentSessionStatusChangedChannel, (event) => {
-      this.applyStatus(event.projectId, event.taskId, event.conversationId, event.status);
+      this.applyStatus(
+        event.projectId,
+        event.taskId,
+        event.conversationId,
+        event.status,
+        event.backgroundJobCount
+      );
     });
+    // Renderer-side predictions carry no job information; `undefined` leaves the
+    // last known count alone rather than optimistically clearing it.
     this.offPreview = subscribeAgentRuntimeStatusPreview((event) => {
       this.applyStatus(event.projectId, event.taskId, event.conversationId, event.status);
     });
@@ -95,6 +115,7 @@ export class AgentRuntimeStore {
     this.offPreview = null;
     this.projectHydrationEnabled = false;
     this.statuses.clear();
+    this.backgroundCounts.clear();
     this.seenTaskIds.clear();
     this.statusKeysByTask.clear();
     this.statusRevisions.clear();
@@ -105,10 +126,16 @@ export class AgentRuntimeStore {
     taskId: string,
     conversationId: string,
     status: AgentSessionRuntimeStatus,
+    backgroundJobCount?: number,
     markAttentionUnread = true
   ): void {
     const key = `${taskKey(projectId, taskId)}\0${conversationId}`;
     runInAction(() => {
+      // Counts first: index membership below depends on them.
+      if (backgroundJobCount !== undefined) {
+        if (backgroundJobCount > 0) this.backgroundCounts.set(key, backgroundJobCount);
+        else this.backgroundCounts.delete(key);
+      }
       this.applyStatusInAction(key, status);
       if (this.pendingHydrations > 0) {
         this.statusRevisions.set(key, ++this.revision);
@@ -121,28 +148,57 @@ export class AgentRuntimeStore {
   }
 
   private applyStatusInAction(key: string, status: AgentSessionRuntimeStatus): void {
-    if (status === 'idle') {
-      this.removeStatus(key);
-      return;
-    }
-
-    const task = taskKeyFromStatusKey(key);
-    let keys = this.statusKeysByTask.get(task);
-    if (!keys) {
-      keys = observable.set<string>();
-      this.statusKeysByTask.set(task, keys);
-    }
-    this.statuses.set(key, status);
-    keys.add(key);
+    if (status === 'idle') this.statuses.delete(key);
+    else this.statuses.set(key, status);
+    this.reindex(key);
   }
 
   private removeStatus(key: string): void {
     this.statuses.delete(key);
+    this.reindex(key);
+  }
+
+  /**
+   * A conversation stays in the per-task index while it has anything worth
+   * showing. Background jobs count on their own: an `idle` session holds no
+   * entry in {@link statuses}, and dropping it from the index would hide the one
+   * case this feature exists for — a finished turn with live detached work.
+   */
+  private reindex(key: string): void {
     const task = taskKeyFromStatusKey(key);
+    const tracked = this.statuses.has(key) || this.backgroundCounts.has(key);
     const keys = this.statusKeysByTask.get(task);
-    if (!keys) return;
-    keys.delete(key);
-    if (keys.size === 0) this.statusKeysByTask.delete(task);
+    if (!tracked) {
+      if (!keys) return;
+      keys.delete(key);
+      if (keys.size === 0) this.statusKeysByTask.delete(task);
+      return;
+    }
+    if (keys) keys.add(key);
+    else this.statusKeysByTask.set(task, observable.set<string>([key]));
+  }
+
+  /** Display status for one conversation: run status, plus its detached jobs. */
+  private displayStatus(key: string): AgentDisplayStatus {
+    return deriveAgentDisplayStatus(
+      this.statuses.get(key) ?? 'idle',
+      this.backgroundCounts.get(key) ?? 0
+    );
+  }
+
+  /** Still-running detached jobs for one conversation. */
+  sessionBackgroundJobCount(projectId: string, taskId: string, conversationId: string): number {
+    return this.backgroundCounts.get(`${taskKey(projectId, taskId)}\0${conversationId}`) ?? 0;
+  }
+
+  /** Still-running detached jobs across every session of one task. */
+  taskBackgroundJobCount(projectId: string, taskId: string): number {
+    const task = taskKey(projectId, taskId);
+    let total = 0;
+    for (const key of this.statusKeysByTask.get(task) ?? []) {
+      total += this.backgroundCounts.get(key) ?? 0;
+    }
+    return total;
   }
 
   /** Re-scan one mounted remote project's host after its SSH context is ready. */
@@ -191,22 +247,26 @@ export class AgentRuntimeStore {
   }
 
   /** Aggregate status for a task, mirroring `ConversationManagerStore.taskStatus`. */
-  taskStatus(projectId: string, taskId: string): AgentSessionRuntimeStatus | null {
+  taskStatus(projectId: string, taskId: string): AgentDisplayStatus | null {
     const task = taskKey(projectId, taskId);
     let hasWorking = false;
     let hasAwaiting = false;
     let hasError = false;
     let hasCompleted = false;
+    let hasBackground = false;
     for (const key of this.statusKeysByTask.get(task) ?? []) {
-      const status = this.statuses.get(key);
-      if (!status) continue;
+      const status = this.displayStatus(key);
       if (status === 'working') hasWorking = true;
       else if (status === 'awaiting-input') hasAwaiting = true;
       else if (status === 'error') hasError = true;
       else if (status === 'completed') hasCompleted = true;
+      else if (status === 'background') hasBackground = true;
     }
     if (hasAwaiting) return 'awaiting-input';
     if (hasWorking) return 'working';
+    // Ranked directly below `working`: still in-flight work, but nothing the
+    // user has to act on, so it yields to a session asking for attention.
+    if (hasBackground) return 'background';
     if (hasError) return 'error';
     if (hasCompleted) return 'completed';
     return null;
@@ -223,8 +283,8 @@ export class AgentRuntimeStore {
     const unread = !this.seenTaskIds.has(task);
     const sessions: TaskAgentRuntimeSession[] = [];
     for (const key of this.statusKeysByTask.get(task) ?? []) {
-      const status = this.statuses.get(key);
-      if (!status || status === 'idle') continue;
+      const status = this.displayStatus(key);
+      if (status === 'idle') continue;
       if ((status === 'error' || status === 'completed') && !unread) continue;
       sessions.push({ conversationId: key.slice(prefix.length), status });
     }
@@ -252,10 +312,10 @@ export class AgentRuntimeStore {
     projectId: string,
     taskId: string,
     conversationId: string
-  ): Exclude<AgentSessionRuntimeStatus, 'idle'> | null {
+  ): Exclude<AgentDisplayStatus, 'idle'> | null {
     const task = taskKey(projectId, taskId);
-    const status = this.statuses.get(`${task}\0${conversationId}`) ?? null;
-    if (!status || status === 'idle') return null;
+    const status = this.displayStatus(`${task}\0${conversationId}`);
+    if (status === 'idle') return null;
     if ((status === 'error' || status === 'completed') && this.seenTaskIds.has(task)) {
       return null;
     }
@@ -281,9 +341,14 @@ export class AgentRuntimeStore {
     });
   }
 
+  /**
+   * Whether the agent itself is mid-turn. `background` is deliberately not
+   * "running": the turn is over and only a detached job is left, which nothing
+   * can be interrupted or waited on through the session.
+   */
   isTaskRunning(projectId: string, taskId: string): boolean {
     const status = this.taskStatus(projectId, taskId);
-    return status !== null && isAgentSessionRunningStatus(status);
+    return status !== null && status !== 'background' && isAgentSessionRunningStatus(status);
   }
 
   /** A task is unread when it has an attention-worthy status and hasn't been opened. */

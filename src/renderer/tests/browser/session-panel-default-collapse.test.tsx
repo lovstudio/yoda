@@ -61,6 +61,15 @@ vi.mock('@renderer/features/tasks/transcript-panel', () => ({
   useConversationTranscript: mocks.useConversationTranscript,
 }));
 
+// Like every other blind's panel: stubbed so this test stays about collapse
+// behaviour. Left real, its `appState` import would drag the whole store graph
+// (and the real i18n bootstrap) in behind the `react-i18next` stub above.
+vi.mock('@renderer/features/tasks/background-jobs-panel', () => ({
+  BackgroundJobsContent: () => null,
+  BackgroundJobsCount: () => null,
+  useConversationBackgroundJobs: () => [],
+}));
+
 describe('SessionPanel default section', () => {
   let host: HTMLDivElement;
   let root: Root;

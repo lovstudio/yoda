@@ -1,4 +1,5 @@
 import {
+  Cpu,
   FoldHorizontal,
   MessageSquareText,
   Plus,
@@ -13,6 +14,7 @@ import { Activity, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BottomPanelTab } from '@shared/view-state';
 import { tabDragSource, tabDropIndex, useTabDropZone } from '@renderer/app/tab-drag';
+import { BackgroundJobsPanel } from '@renderer/features/tasks/background-jobs-panel';
 import { SessionHistoryPanel } from '@renderer/features/tasks/conversations/session-history-panel';
 import {
   useRequireProvisionedTask,
@@ -54,6 +56,12 @@ const MODES: {
     icon: <MessageSquareText className="size-3" />,
     labelKey: 'tasks.bottomPanel.session',
     descKey: 'tasks.bottomPanel.cardDescSession',
+  },
+  {
+    id: 'background',
+    icon: <Cpu className="size-3" />,
+    labelKey: 'tasks.bottomPanel.background',
+    descKey: 'tasks.bottomPanel.cardDescBackground',
   },
 ];
 
@@ -185,6 +193,9 @@ export const BottomPanel = observer(function BottomPanel({
         </Activity>
         <Activity mode={tab === 'session' ? 'visible' : 'hidden'}>
           <SessionHistoryPanel active={taskView.isTerminalDrawerOpen && tab === 'session'} />
+        </Activity>
+        <Activity mode={tab === 'background' ? 'visible' : 'hidden'}>
+          <BackgroundJobsPanel active={taskView.isTerminalDrawerOpen && tab === 'background'} />
         </Activity>
         {/* Empty state: feature cards for every available mode, like the sidebar. */}
         {!tab ? (

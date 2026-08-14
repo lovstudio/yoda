@@ -1,3 +1,4 @@
+import { countRunningBackgroundJobs, type BackgroundJob } from '@shared/agent-background-jobs';
 import {
   initialRunState,
   reduceRunState,
@@ -118,6 +119,12 @@ type Entry = {
   watchdogProtected: boolean;
   /** Provider-owned evidence exists for the currently running turn. */
   providerTurnConfirmed: boolean;
+  /**
+   * Detached jobs this session still owns. Independent of `state`: a settled
+   * turn can legitimately have live jobs, which is the whole point of tracking
+   * them separately (see `shared/agent-background-jobs.ts`).
+   */
+  backgroundJobs: BackgroundJob[];
 };
 
 const AUTHORITATIVE_RUN_STATE_SOURCES = new Set([
@@ -245,12 +252,36 @@ class AgentSessionRuntimeStore {
           : event.kind === 'turn-started'
             ? false
             : (previousEntry?.providerTurnConfirmed ?? false);
-    this.entries.set(key, { session, state: next, watchdogProtected, providerTurnConfirmed });
+    // Detached jobs outlive turn transitions by definition, so they survive
+    // every event EXCEPT the CLI process going away: background shells are its
+    // children and die with it, and a dead CLI will never write their
+    // completion notification. Without this the panel would keep showing
+    // phantom jobs — the same class of bug as a zombie `working` status.
+    const backgroundJobs =
+      event.kind === 'process-exited' ? [] : (previousEntry?.backgroundJobs ?? []);
+    this.entries.set(key, {
+      session,
+      state: next,
+      watchdogProtected,
+      providerTurnConfirmed,
+      backgroundJobs,
+    });
     const statusChanged = prev.status !== next.status;
     const pendingActionChanged = !samePendingAction(prev.pendingAction, next.pendingAction);
     const providerTurnConfirmedChanged =
       (previousEntry?.providerTurnConfirmed ?? false) !== providerTurnConfirmed;
-    if (statusChanged || pendingActionChanged || providerTurnConfirmedChanged) {
+    // A terminal status survives `process-exited` unchanged, so the clearing
+    // above would otherwise never be broadcast and every surface would keep a
+    // phantom background count.
+    const backgroundJobsChanged =
+      countRunningBackgroundJobs(previousEntry?.backgroundJobs ?? []) !==
+      countRunningBackgroundJobs(backgroundJobs);
+    if (
+      statusChanged ||
+      pendingActionChanged ||
+      providerTurnConfirmedChanged ||
+      backgroundJobsChanged
+    ) {
       if (statusChanged) {
         log.debug('AgentRunState transition', {
           conversationId: session.conversationId,
@@ -307,6 +338,7 @@ class AgentSessionRuntimeStore {
       state,
       watchdogProtected: false,
       providerTurnConfirmed,
+      backgroundJobs: previousEntry?.backgroundJobs ?? [],
     });
     if (
       !previous ||
@@ -315,6 +347,51 @@ class AgentSessionRuntimeStore {
     ) {
       this.publishState(session, state, providerTurnConfirmed);
     }
+  }
+
+  /**
+   * Record the session's detached jobs (background shells, monitors, async
+   * sub-agents).
+   *
+   * Publishes directly instead of going through {@link dispatch}: this is not a
+   * status transition, and `dispatch`'s publish gate only fires on a changed
+   * status / pendingAction / provider fence, so a pure count change would be
+   * swallowed. Only a changed running-count is published — job bookkeeping that
+   * leaves the count alone is invisible to every status surface.
+   */
+  setBackgroundJobs(session: AgentSessionKey, jobs: BackgroundJob[]): void {
+    const key = keyFor(session);
+    const entry = this.entries.get(key);
+    const previousCount = countRunningBackgroundJobs(entry?.backgroundJobs ?? []);
+    const nextCount = countRunningBackgroundJobs(jobs);
+    if (!entry) {
+      // No turn has been observed yet; seed a baseline so the jobs are not lost.
+      this.entries.set(key, {
+        session,
+        state: initialRunState(),
+        watchdogProtected: false,
+        providerTurnConfirmed: false,
+        backgroundJobs: jobs,
+      });
+    } else {
+      this.entries.set(key, { ...entry, backgroundJobs: jobs });
+    }
+    if (previousCount === nextCount) return;
+    log.debug('AgentRunState background jobs changed', {
+      conversationId: session.conversationId,
+      from: previousCount,
+      to: nextCount,
+    });
+    const published = this.entries.get(key);
+    this.publishState(
+      session,
+      published?.state ?? initialRunState(),
+      published?.providerTurnConfirmed ?? false
+    );
+  }
+
+  getBackgroundJobs(session: AgentSessionKey): BackgroundJob[] {
+    return this.entries.get(keyFor(session))?.backgroundJobs ?? [];
   }
 
   /** Confirm an already-running turn without manufacturing a status transition. */
@@ -413,6 +490,10 @@ class AgentSessionRuntimeStore {
     state: RunState,
     providerTurnConfirmed: boolean
   ): void {
+    // Read the count here rather than threading it through every caller: each
+    // publish path writes its entry first, and a removed session correctly
+    // reports zero.
+    const key = keyFor(session);
     events.emit(agentSessionStatusChangedChannel, {
       projectId: session.projectId,
       taskId: session.taskId,
@@ -420,6 +501,7 @@ class AgentSessionRuntimeStore {
       status: state.status,
       pendingAction: state.pendingAction,
       providerTurnConfirmed,
+      backgroundJobCount: countRunningBackgroundJobs(this.entries.get(key)?.backgroundJobs ?? []),
     });
     this.notifyListeners(session, state);
   }

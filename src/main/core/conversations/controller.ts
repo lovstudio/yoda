@@ -5,6 +5,10 @@ import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { KeyedTtlSingleFlightCache } from '@main/lib/keyed-ttl-single-flight-cache';
 import { archiveConversation } from './archiveConversation';
+import {
+  getConversationBackgroundJobOutputTail,
+  getConversationBackgroundJobs,
+} from './background-jobs';
 import { getClaudeStatusline, setClaudeStatusline } from './claude-statusline';
 import { createConversation } from './createConversation';
 import { deleteConversation } from './deleteConversation';
@@ -303,4 +307,6 @@ export const conversationController = createRPCController({
   getConversationTranscript,
   subscribeConversationTranscript,
   unsubscribeConversationTranscript,
+  getConversationBackgroundJobs,
+  getConversationBackgroundJobOutputTail,
 });

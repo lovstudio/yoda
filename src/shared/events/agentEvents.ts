@@ -105,6 +105,13 @@ export interface AgentSessionStatusChanged {
    * Optional for compatibility with an older main/renderer during dev HMR.
    */
   providerTurnConfirmed?: boolean;
+  /**
+   * Detached jobs (background shells, monitors, async sub-agents) still running
+   * for this conversation. A separate dimension from `status`: a settled turn
+   * can legitimately own live jobs — see `shared/agent-background-jobs.ts`.
+   * Undefined means "unknown", which readers treat as unchanged.
+   */
+  backgroundJobCount?: number;
 }
 
 export const agentSessionStatusChangedChannel = defineEvent<AgentSessionStatusChanged>(

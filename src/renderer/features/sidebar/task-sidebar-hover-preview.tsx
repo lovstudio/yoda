@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { GitBranch, MessageSquare } from 'lucide-react';
+import { Cpu, GitBranch, MessageSquare } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import type { TaskLifecycleStatus } from '@shared/tasks';
@@ -9,6 +9,7 @@ import {
   type TaskSessionVisibleStatus,
 } from '@renderer/features/tasks/stores/task-selectors';
 import { taskDeliverySummariesQuery } from '@renderer/features/tasks/task-delivery-summaries-query';
+import { appState } from '@renderer/lib/stores/app-state';
 import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { Spinner } from '@renderer/lib/ui/spinner';
@@ -35,6 +36,8 @@ const TASK_SESSION_DOT_CLASSES: Record<TaskSessionVisibleStatus, string> = {
   error: 'bg-foreground-destructive',
   completed: 'bg-status-done',
   working: 'bg-status-in-progress',
+  // Muted on purpose: real in-flight work, but nothing the user must act on.
+  background: 'bg-foreground-passive',
 };
 
 export const TaskSidebarHoverPreview = observer(function TaskSidebarHoverPreview({
@@ -57,6 +60,7 @@ export const TaskSidebarHoverPreview = observer(function TaskSidebarHoverPreview
   });
   const latestSummary = summaries?.find((summary) => summary.text.trim());
   const sessionStatus = taskSessionStatusSummary(task);
+  const backgroundJobCount = appState.agentRuntime.taskBackgroundJobCount(projectId, task.data.id);
   const sessionCount = Math.max(
     Object.values(task.conversationStats).reduce((total, count) => total + count, 0),
     summaries?.length ?? 0
@@ -137,6 +141,12 @@ export const TaskSidebarHoverPreview = observer(function TaskSidebarHoverPreview
           <MessageSquare className="size-3 shrink-0" />
           <span>{t('tasks.overview.sessions', { count: sessionCount })}</span>
         </span>
+        {backgroundJobCount > 0 && (
+          <span className="inline-flex min-w-0 shrink-0 items-center gap-1.5">
+            <Cpu className="size-3 shrink-0" />
+            <span>{t('tasks.backgroundJobs.runningCount', { count: backgroundJobCount })}</span>
+          </span>
+        )}
         {task.data.needsReview && (
           <span className="shrink-0 text-status-in-review">{t('sidebar.needsReview')}</span>
         )}

@@ -2,6 +2,7 @@ import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import {
   ChevronDown,
   ChevronRight,
+  Cpu,
   FileText,
   Info,
   ListChecks,
@@ -25,6 +26,11 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
+import {
+  BackgroundJobsContent,
+  BackgroundJobsCount,
+  useConversationBackgroundJobs,
+} from '../background-jobs-panel';
 import { HarnessSection } from '../context-panel';
 import {
   SessionInfoPanel,
@@ -124,6 +130,15 @@ export const SessionPanel = observer(function SessionPanel() {
             key={unit}
             open={openSection === 'tasks'}
             title={t('tasks.sessionPanel.tasks')}
+          />
+        );
+      case 'background':
+        return (
+          <BackgroundBlind
+            key={unit}
+            open={openSection === 'background'}
+            active={panelActive && openSection === 'background'}
+            title={t('tasks.sessionPanel.background')}
           />
         );
       case 'persona':
@@ -347,6 +362,34 @@ const TranscriptBlind = observer(function TranscriptBlind({
       actions={<TranscriptFileActions feed={feed} />}
     >
       {() => <TranscriptContent feed={feed} />}
+    </Blind>
+  );
+});
+
+/**
+ * The 后台 blind: detached jobs this session left running after its turn ended.
+ * The badge reads the global runtime mirror, so a collapsed blind still shows
+ * that work is in flight; the list itself only loads while open.
+ */
+const BackgroundBlind = observer(function BackgroundBlind({
+  open,
+  active,
+  title,
+}: {
+  open: boolean;
+  active: boolean;
+  title: string;
+}) {
+  const jobs = useConversationBackgroundJobs(active);
+  return (
+    <Blind
+      id="background"
+      icon={<Cpu className="size-3.5" />}
+      title={title}
+      open={open}
+      count={<BackgroundJobsCount />}
+    >
+      {() => <BackgroundJobsContent jobs={jobs} />}
     </Blind>
   );
 });

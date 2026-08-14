@@ -1906,6 +1906,7 @@
       "agentStatus": {
         "idle": "空闲",
         "working": "工作中",
+        "background": "后台运行中",
         "awaiting-input": "等待输入",
         "error": "错误",
         "completed": "已完成"
@@ -2431,7 +2432,8 @@
           "description": "显示全部内容，几乎等同于实录"
         }
       },
-      "transcript": "实录"
+      "transcript": "实录",
+      "background": "后台"
     },
     "browser": {
       "title": "浏览器",
@@ -2522,7 +2524,32 @@
       "sessionOpenBranchFailed": "切入会话分支失败",
       "sessionCurrent": "当前会话",
       "sessionRestore": "恢复会话",
-      "sessionSwitch": "切换会话"
+      "sessionSwitch": "切换会话",
+      "background": "后台",
+      "cardDescBackground": "查看会话留下的后台作业"
+    },
+    "backgroundJobs": {
+      "empty": "暂无后台作业",
+      "emptyDescription": "这个会话没有启动过后台命令、监视器或后台智能体。",
+      "selectJob": "选择一个作业查看输出",
+      "runningCount": "后台 {{count}}",
+      "copyTaskId": "复制作业 ID",
+      "copyCommand": "复制命令",
+      "copyOutputPath": "复制输出路径",
+      "noOutputFile": "无输出文件",
+      "tailTruncated": "仅显示末尾",
+      "outputEmpty": "暂无输出",
+      "status": {
+        "running": "运行中",
+        "completed": "已完成",
+        "failed": "失败",
+        "stopped": "已停止"
+      },
+      "kind": {
+        "bash": "后台命令",
+        "monitor": "监视器",
+        "agent": "后台智能体"
+      }
     }
   },
   "commandPalette": {
@@ -5750,6 +5777,7 @@
   "agentStatus": {
     "interrupt": "打断",
     "working": "工作中",
+    "background": "后台运行中",
     "awaiting-input": "等待输入",
     "error": "错误",
     "completed": "已完成"

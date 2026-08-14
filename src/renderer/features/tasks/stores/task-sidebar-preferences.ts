@@ -20,7 +20,7 @@ const DEFAULT_SESSION_PANEL_OPEN_SECTION_IDS: string[] = [];
 const DEFAULT_BOTTOM_PANEL_OPEN = false;
 const DEFAULT_BOTTOM_PANEL_TAB: BottomPanelTab = 'terminals';
 const DEFAULT_BOTTOM_PANEL_FULL_WIDTH = true;
-const BOTTOM_PANEL_TABS = ['terminals', 'scripts', 'session'] as const;
+const BOTTOM_PANEL_TABS = ['terminals', 'scripts', 'session', 'background'] as const;
 
 function normalizeOpenSectionIds(value: string[]): string[] {
   return Array.from(new Set(value));

@@ -262,7 +262,12 @@ function releaseConversationTranscript(key: string, listener?: TranscriptChangeL
   entry.stop();
 }
 
-async function resolveTranscriptPath(
+/**
+ * Resolves the CLI's own on-disk transcript for a conversation, honouring the
+ * session source and runtime state root. Shared with the background-jobs reader,
+ * which parses the same file.
+ */
+export async function resolveTranscriptPath(
   projectId: string,
   taskId: string,
   conversationId: string

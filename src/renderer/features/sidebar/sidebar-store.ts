@@ -1,5 +1,4 @@
 import { computed, makeAutoObservable, observable, reaction, runInAction } from 'mobx';
-import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import { type LocalProject, type SshProject } from '@shared/projects';
 import {
   DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT,
@@ -24,6 +23,7 @@ import {
   unregisteredTaskData,
   type TaskStore,
 } from '@renderer/features/tasks/stores/task';
+import type { TaskSessionVisibleStatus } from '@renderer/features/tasks/stores/task-selectors';
 import type { WorkspaceStore } from '@renderer/features/workspaces/workspace-store';
 import { rpc } from '@renderer/lib/ipc';
 import type { AgentRuntimeStore } from '@renderer/lib/stores/agent-runtime-store';
@@ -355,9 +355,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     return Boolean(data && !data.archivedAt && (this.taskPriorityMode || !data.needsReview));
   }
 
-  private taskRuntimePriorityStatus(
-    task: TaskStore
-  ): Exclude<AgentSessionRuntimeStatus, 'idle'> | null {
+  private taskRuntimePriorityStatus(task: TaskStore): TaskSessionVisibleStatus | null {
     const identity = taskRuntimeIdentity(task);
     if (!identity) return null;
     const { projectId, id } = identity;
@@ -366,7 +364,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
         ({ conversationId, status }) => [conversationId, status] as const
       )
     );
-    const statuses: Exclude<AgentSessionRuntimeStatus, 'idle'>[] = [];
+    const statuses: TaskSessionVisibleStatus[] = [];
     if (task.state === 'provisioned' && task.provisionedTask) {
       for (const conversation of task.provisionedTask.conversations.conversations.values()) {
         const status = runtimeStatuses.get(conversation.data.id) ?? conversation.indicatorStatus;
@@ -382,11 +380,13 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       const retainedStatus = this.agentRuntime?.taskStatus?.(projectId, id);
       if (retainedStatus && retainedStatus !== 'idle') statuses.push(retainedStatus);
     }
-    const priority: Record<Exclude<AgentSessionRuntimeStatus, 'idle'>, number> = {
+    const priority: Record<TaskSessionVisibleStatus, number> = {
       'awaiting-input': 0,
       error: 1,
       completed: 2,
       working: 3,
+      // Directly after `working`, matching every other surface's ordering.
+      background: 4,
     };
     return statuses.sort((left, right) => priority[left] - priority[right])[0] ?? null;
   }
@@ -410,7 +410,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     ) {
       return 'error';
     }
-    if (runtimeStatus === 'working') return 'working';
+    // A finished turn that still owns a detached job keeps the task grouped as
+    // working: the task genuinely has work in flight, and letting it fall
+    // through would drop it past `completed` into `idle`.
+    if (runtimeStatus === 'working' || runtimeStatus === 'background') return 'working';
     if (!data) return 'idle';
     if (data.needsReview || data.status === 'review') return 'pending-review';
     if (runtimeStatus === 'completed' || data.status === 'done' || data.status === 'cancelled') {

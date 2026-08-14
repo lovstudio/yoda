@@ -1906,6 +1906,7 @@
       "agentStatus": {
         "idle": "Idle",
         "working": "Working",
+        "background": "Background",
         "awaiting-input": "Awaiting input",
         "error": "Error",
         "completed": "Completed"
@@ -2431,7 +2432,8 @@
           "description": "Show everything, nearly equivalent to the transcript"
         }
       },
-      "transcript": "Transcript"
+      "transcript": "Transcript",
+      "background": "Background"
     },
     "browser": {
       "title": "Browser",
@@ -2522,7 +2524,32 @@
       "sessionOpenBranchFailed": "Failed to switch conversation branch",
       "sessionCurrent": "Current conversation",
       "sessionRestore": "Restore conversation",
-      "sessionSwitch": "Switch conversation"
+      "sessionSwitch": "Switch conversation",
+      "background": "Background",
+      "cardDescBackground": "Jobs this session left running"
+    },
+    "backgroundJobs": {
+      "empty": "No background jobs",
+      "emptyDescription": "This session hasn't started any background commands, monitors, or agents.",
+      "selectJob": "Select a job to see its output",
+      "runningCount": "Background {{count}}",
+      "copyTaskId": "Copy job ID",
+      "copyCommand": "Copy command",
+      "copyOutputPath": "Copy output path",
+      "noOutputFile": "No output file",
+      "tailTruncated": "Tail only",
+      "outputEmpty": "No output yet",
+      "status": {
+        "running": "Running",
+        "completed": "Completed",
+        "failed": "Failed",
+        "stopped": "Stopped"
+      },
+      "kind": {
+        "bash": "Background command",
+        "monitor": "Monitor",
+        "agent": "Background agent"
+      }
     }
   },
   "commandPalette": {
@@ -5750,6 +5777,7 @@
   "agentStatus": {
     "interrupt": "Interrupt",
     "working": "Working",
+    "background": "Background",
     "awaiting-input": "Awaiting input",
     "error": "Error",
     "completed": "Completed"

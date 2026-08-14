@@ -1,5 +1,6 @@
 import { watch, type FSWatcher } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
+import type { BackgroundJob } from '@shared/agent-background-jobs';
 import type { RunStateEvent, RunStatus } from '@shared/events/agent-run-state';
 import {
   resolveClaudeTranscriptPath,
@@ -7,6 +8,10 @@ import {
 } from '@main/core/session-title/claude-title-source';
 import { log } from '@main/lib/logger';
 import { iterateLines } from '@main/utils/text-lines';
+import {
+  parseClaudeBackgroundJobs,
+  retireBackgroundJobsFromEarlierRuns,
+} from './claude-background-jobs';
 import { isInterruptedSinceLastPrompt } from './interrupt-marker';
 
 /**
@@ -205,6 +210,8 @@ export type RunStateDispatch = (event: RunStateEvent) => void;
  */
 export type RunStatusReader = () => RunStatus;
 
+export type BackgroundJobsListener = (jobs: BackgroundJob[]) => void;
+
 export interface ClaudeRunStateWatcher {
   stop(): void;
 }
@@ -227,13 +234,23 @@ export function watchClaudeRunState(
   ctx: ClaudeRunStateContext,
   dispatch: RunStateDispatch,
   getStatus?: RunStatusReader,
-  options: { sessionId?: string; claudeConfigDir?: string } = {}
+  options: {
+    sessionId?: string;
+    claudeConfigDir?: string;
+    /** Receives the session's detached jobs whenever the set or a status changes. */
+    onBackgroundJobs?: BackgroundJobsListener;
+    /** PTY start time, used to retire jobs a previous CLI process owned. */
+    sessionStartedAtMs?: number;
+  } = {}
 ): ClaudeRunStateWatcher {
   const sessionId = options.sessionId ?? ctx.conversationId;
   const transcriptPath = options.claudeConfigDir
     ? resolveClaudeTranscriptPathFromConfigDir(ctx.cwd, sessionId, options.claudeConfigDir)
     : resolveClaudeTranscriptPath(ctx.cwd, sessionId);
-  return new ClaudeTranscriptStateTailer(transcriptPath, ctx.conversationId, dispatch, getStatus);
+  return new ClaudeTranscriptStateTailer(transcriptPath, ctx.conversationId, dispatch, getStatus, {
+    ...(options.onBackgroundJobs ? { onBackgroundJobs: options.onBackgroundJobs } : {}),
+    sessionStartedAtMs: options.sessionStartedAtMs ?? 0,
+  });
 }
 
 class ClaudeTranscriptStateTailer implements ClaudeRunStateWatcher {
@@ -255,13 +272,20 @@ class ClaudeTranscriptStateTailer implements ClaudeRunStateWatcher {
   /** Previous classified state — needed to detect awaiting-input → working. */
   private lastState: ClaudeTurnState | undefined;
   private stopped = false;
+  private readonly onBackgroundJobs: BackgroundJobsListener | undefined;
+  private readonly sessionStartedAtMs: number;
+  /** Fingerprint of the last published job set, so an unchanged set is not republished. */
+  private lastBackgroundJobsFingerprint: string | undefined;
 
   constructor(
     private readonly filePath: string,
     private readonly conversationId: string,
     private readonly dispatch: RunStateDispatch,
-    private readonly getStatus?: RunStatusReader
+    private readonly getStatus?: RunStatusReader,
+    options: { onBackgroundJobs?: BackgroundJobsListener; sessionStartedAtMs?: number } = {}
   ) {
+    this.onBackgroundJobs = options.onBackgroundJobs;
+    this.sessionStartedAtMs = options.sessionStartedAtMs ?? 0;
     this.waitForFile();
   }
 
@@ -332,9 +356,29 @@ class ClaudeTranscriptStateTailer implements ClaudeRunStateWatcher {
       });
   }
 
+  /**
+   * Publishes the session's detached jobs. Deliberately runs BEFORE the
+   * turn-state dedup below: a background job starting or finishing leaves the
+   * turn verdict untouched, so the run-state fingerprint is unchanged and that
+   * early return would swallow every job update.
+   */
+  private publishBackgroundJobs(raw: string): void {
+    const listener = this.onBackgroundJobs;
+    if (!listener) return;
+    const jobs = retireBackgroundJobsFromEarlierRuns(
+      parseClaudeBackgroundJobs(raw),
+      this.sessionStartedAtMs
+    );
+    const fingerprint = jobs.map((job) => `${job.taskId}:${job.status}`).join(',');
+    if (fingerprint === this.lastBackgroundJobsFingerprint) return;
+    this.lastBackgroundJobsFingerprint = fingerprint;
+    listener(jobs);
+  }
+
   private async reclassify(): Promise<void> {
     const raw = await readFile(this.filePath, 'utf8').catch(() => undefined);
     if (raw === undefined || this.stopped) return;
+    this.publishBackgroundJobs(raw);
     const verdict = classifyClaudeTranscriptVerdict(raw);
     let state = verdict.state;
     // A `working` verdict frozen since before a user interrupt is stale (turn

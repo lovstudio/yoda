@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { AgentLocalUsage, RuntimeId } from '@shared/runtime-registry';
 import { TTLCache } from '@main/core/utils/ttl-cache';
 import { log } from '@main/lib/logger';
+import { readFileTail } from '@main/utils/file-lines';
 import { getModelPricing } from './model-pricing';
 
 const USAGE_LOOKBACK_DAYS = 30;
@@ -159,19 +160,6 @@ async function readClaudeUsage(): Promise<UsageTotals> {
   return totals;
 }
 
-async function readFileTail(filePath: string, bytes: number): Promise<string> {
-  const handle = await fs.open(filePath, 'r');
-  try {
-    const { size } = await handle.stat();
-    const start = Math.max(0, size - bytes);
-    const buffer = Buffer.alloc(size - start);
-    await handle.read(buffer, 0, buffer.length, start);
-    return buffer.toString('utf8');
-  } finally {
-    await handle.close();
-  }
-}
-
 /**
  * Codex rollout files log cumulative `token_count` events; the last one in a
  * file is that session's total. `input_tokens` already includes the cached
@@ -198,7 +186,7 @@ async function readCodexUsage(): Promise<UsageTotals> {
   for (const filePath of files) {
     let tail: string;
     try {
-      tail = await readFileTail(filePath, CODEX_TAIL_BYTES);
+      tail = (await readFileTail(filePath, CODEX_TAIL_BYTES)).text;
     } catch {
       continue;
     }

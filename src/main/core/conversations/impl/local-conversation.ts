@@ -1153,6 +1153,12 @@ export class LocalConversationProvider implements ConversationProvider {
         {
           sessionId: agentSessionId,
           claudeConfigDir: stateRoot,
+          // Detached jobs (background shells, monitors, async sub-agents) ride
+          // along on the same transcript read. Only this monitor reports them:
+          // the `activity` monitor has no transcript tailer, so those sessions
+          // simply show no background state.
+          onBackgroundJobs: (jobs) => agentSessionRuntimeStore.setBackgroundJobs(session, jobs),
+          sessionStartedAtMs: startedAtMs,
         }
       );
       this.runStateWatchers.set(conversation.id, [watcher]);

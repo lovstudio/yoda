@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { BackgroundJob, BackgroundJobStatus } from '@shared/agent-background-jobs';
 import {
   agentEventChannel,
   agentSessionStatusChangedChannel,
@@ -94,6 +95,7 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
       status: 'working',
       pendingAction: null,
       providerTurnConfirmed: false,
+      backgroundJobCount: 0,
     });
   });
 
@@ -119,6 +121,7 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
         actionDescription: 'Allow this command?',
       },
       providerTurnConfirmed: true,
+      backgroundJobCount: 0,
     });
   });
 
@@ -133,6 +136,7 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
       status: 'awaiting-input',
       pendingAction: null,
       providerTurnConfirmed: false,
+      backgroundJobCount: 0,
     });
   });
 
@@ -156,6 +160,7 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
       status: 'idle',
       pendingAction: null,
       providerTurnConfirmed: false,
+      backgroundJobCount: 0,
     });
   });
 
@@ -176,6 +181,7 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
       status: 'working',
       pendingAction: null,
       providerTurnConfirmed: true,
+      backgroundJobCount: 0,
     });
   });
 
@@ -200,6 +206,7 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
       status: 'working',
       pendingAction: null,
       providerTurnConfirmed: false,
+      backgroundJobCount: 0,
     });
   });
 
@@ -221,6 +228,7 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
         status: 'working',
         pendingAction: null,
         providerTurnConfirmed: true,
+        backgroundJobCount: 0,
       });
     }
   );
@@ -284,6 +292,92 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
       }),
       false
     );
+  });
+});
+
+describe('AgentSessionRuntimeStore background jobs', () => {
+  const job = (taskId: string, status: BackgroundJobStatus = 'running'): BackgroundJob => ({
+    taskId,
+    kind: 'bash',
+    status,
+    startedAt: 1,
+    command: `sleep 600 # ${taskId}`,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    agentSessionRuntimeStore.dispose();
+    vi.restoreAllMocks();
+  });
+
+  it('broadcasts a live job for a session that never ran a turn', () => {
+    agentSessionRuntimeStore.setBackgroundJobs(session, [job('b1')]);
+
+    expect(mocks.emit).toHaveBeenCalledWith(agentSessionStatusChangedChannel, {
+      ...session,
+      status: 'idle',
+      pendingAction: null,
+      providerTurnConfirmed: false,
+      backgroundJobCount: 1,
+    });
+  });
+
+  it('broadcasts a job change while the status stays settled', () => {
+    agentSessionRuntimeStore.setStatus(session, 'completed');
+    mocks.emit.mockClear();
+
+    agentSessionRuntimeStore.setBackgroundJobs(session, [job('b1')]);
+
+    expect(mocks.emit).toHaveBeenCalledWith(agentSessionStatusChangedChannel, {
+      ...session,
+      status: 'completed',
+      pendingAction: null,
+      providerTurnConfirmed: false,
+      backgroundJobCount: 1,
+    });
+  });
+
+  it('counts only running jobs and stays quiet when that count is unchanged', () => {
+    agentSessionRuntimeStore.setBackgroundJobs(session, [
+      job('b1'),
+      job('b2', 'completed'),
+      job('b3', 'stopped'),
+    ]);
+    mocks.emit.mockClear();
+
+    // More bookkeeping, same running count: no surface has anything to redraw.
+    agentSessionRuntimeStore.setBackgroundJobs(session, [
+      job('b1'),
+      job('b2', 'completed'),
+      job('b3', 'stopped'),
+      job('b4', 'failed'),
+    ]);
+
+    expect(mocks.emit).not.toHaveBeenCalled();
+
+    agentSessionRuntimeStore.setBackgroundJobs(session, [job('b1', 'completed')]);
+
+    expect(mocks.emit).toHaveBeenCalledWith(
+      agentSessionStatusChangedChannel,
+      expect.objectContaining({ backgroundJobCount: 0 })
+    );
+  });
+
+  it('drops the jobs when the CLI process exits', () => {
+    agentSessionRuntimeStore.setBackgroundJobs(session, [job('b1')]);
+
+    agentSessionRuntimeStore.dispatch(
+      session,
+      { kind: 'process-exited', at: 10 },
+      'claude-transcript'
+    );
+
+    // Background shells are children of the CLI: it dying takes them with it,
+    // and no completion notification is ever written for them.
+    expect(agentSessionRuntimeStore.getBackgroundJobs(session)).toEqual([]);
   });
 });
 

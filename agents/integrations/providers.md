@@ -82,6 +82,23 @@ Each provider has a terminal output classifier in `src/main/core/conversations/i
   `CODEX_HOME/config.toml`; Codex receives a
   `[projects."<absolute path>"] trust_level = "trusted"` entry without replacing
   unrelated config.
+- Claude can leave work running after its turn ends: `Bash` with `run_in_background`,
+  a `Monitor` watch, or an async sub-agent. The transcript is the signal source, and
+  `claude-background-jobs.ts` parses it off the same read the run-state tailer already
+  does. A launch shows up on the `tool_result` line (`toolUseResult.backgroundTaskId`,
+  Monitor's `taskId`, or an agent id) and is paired with its command via
+  `tool_use.id`. Completion arrives as a `<task-notification>`, which lands in three
+  unrelated line shapes (`queue-operation`, `attachment`, and a real `user` line) and
+  may repeat — match on the text containing `task-notification` and reconcile by
+  task id rather than dispatching on line type. A job is only believed to be alive
+  while the conversation still has a live PTY session; the CLI's temp tree is not
+  cleaned up on exit and cannot be used for liveness.
+- Background jobs are a separate dimension, never a sixth `AgentSessionRuntimeStatus`.
+  The turn genuinely completed, so the run status stays truthful and the display state
+  is derived by `deriveAgentDisplayStatus` in `src/shared/agent-background-jobs.ts`.
+  Folding them into `working` would offer an interrupt that cannot reach a detached
+  process, suppress the turn-completed notification, and let the silence reconciler
+  flip the status back on its own. Codex has no equivalent mechanism.
 - Agents with no CLI prompt flag (e.g., Amp, OpenCode) use keystroke injection — Yoda types the prompt into the TUI after startup.
 - `src/main/core/agent-hooks/service.ts` forwards hook events to renderer windows and can show OS notifications. Also writes hook config files (`.claude/settings.local.json`, `.codex/config.toml`) into worktrees.
 
