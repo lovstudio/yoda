@@ -2744,7 +2744,9 @@
     "openSession": "open session",
     "hideSession": "hide session",
     "composerPlaceholder": "Message the room — @mention a teammate, or /command…",
-    "cmd": { "stop": "Interrupt all running agents" },
+    "cmd": {
+      "stop": "Interrupt all running agents"
+    },
     "intro": {
       "title": "How this works",
       "review": {
@@ -2815,7 +2817,9 @@
         "waiting": "Waiting for input"
       }
     },
-    "settings": { "title": "Room settings" },
+    "settings": {
+      "title": "Room settings"
+    },
     "communication": {
       "mode": "Work record",
       "modes": {
@@ -2843,7 +2847,10 @@
       "feature": "Feature workflow",
       "freeform": "Freeform"
     },
-    "mode": { "review": "Review loop", "freeform": "Freeform" },
+    "mode": {
+      "review": "Review loop",
+      "freeform": "Freeform"
+    },
     "taskExisting": "Existing task",
     "taskNew": "New worktree",
     "selectProject": "Select a project",
@@ -3667,7 +3674,6 @@
     "disable": "Disable",
     "enable": "Enable",
     "installing": "Installing...",
-    "install": "Install",
     "triggerTest": {
       "title": "Trigger test",
       "hint": "Check whether this skill gets invoked when it should. Each query starts one headless Claude session and uses a small amount of quota; runs are manual only.",
@@ -5180,8 +5186,24 @@
       "clear": "Clear records",
       "mcpHint": "Cold sessions start {{serverCount}} configured MCP servers, which is part of this time.",
       "mcpManage": "Manage",
+      "lane": {
+        "ui": "Screen",
+        "frame": "Frame",
+        "open": "Open",
+        "session": "Session",
+        "client": "Client",
+        "pty": "Terminal"
+      },
+      "group": {
+        "frontend": "Foreground",
+        "backend": "Background"
+      },
+      "gap": {
+        "handoff": "{{from}} finished {{stage}}, then {{to}} took {{duration}} to react.",
+        "stall": "{{lane}} paused {{duration}} after {{stage}}."
+      },
       "slowestHint": "Longest step of this open",
-      "legend": "Filled bars are UI steps, muted bars are background steps.",
+      "legend": "Amber marks the slowest step; shaded bands are intervals with no activity.",
       "outcome": {
         "open": "In progress",
         "painted": "Rendered",
@@ -5897,10 +5919,9 @@
       "activeWorkflowLocked": "An active Feature workflow is using this Task. Archive its Room first."
     },
     "artifacts": {
-      "title": "Artifacts and evidence",
+      "title": "Name",
       "add": "Add artifact",
       "type": "Type",
-      "title": "Name",
       "uri": "File or link",
       "uriPlaceholder": "docs/features/example.md or https://…",
       "uriHint": "Use a project-relative path for files, or a full URL for external material.",

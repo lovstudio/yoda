@@ -1872,7 +1872,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               align="end"
               side="top"
               sideOffset={8}
-              className="w-[26rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+              className="w-[30rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
             >
               <WorkspaceTrajectoryPopover
                 trajectories={taskOpenTrajectories}

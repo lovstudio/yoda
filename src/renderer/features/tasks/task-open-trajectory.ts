@@ -1,9 +1,14 @@
 /**
- * Retains task-open stage marks so the workspace bar can render a waterfall of
- * where a single open actually spent its time. The DevTools console already
- * receives every mark, but a console line cannot answer "which step was the
- * long one" — the profiler needs the marks kept, ordered, and correlated across
- * the renderer/main split by the shared task-open context id.
+ * Retains task-open stage marks so the workspace bar can render where a single
+ * open actually spent its time. The DevTools console already receives every
+ * mark, but a console line cannot answer "which participant was busy and who
+ * was waiting on whom" — the profiler needs the marks kept, ordered, and
+ * correlated across the renderer/main split by the shared task-open context id.
+ *
+ * This module stores raw marks only. Lane assignment, per-lane durations, and
+ * idle-gap detection are derived at read time in `task-open-trajectory-lanes`,
+ * so a late-arriving main-process mark cannot bake a wrong duration into the
+ * store.
  */
 
 export type TaskOpenTrajectorySource = 'renderer' | 'main';
@@ -18,10 +23,8 @@ export type TaskOpenTrajectoryDetails = Record<
 export type TaskOpenTrajectoryStep = {
   stage: string;
   source: TaskOpenTrajectorySource;
-  /** Milliseconds between the click and this stage. */
+  /** Milliseconds between the click and this mark. */
   atMs: number;
-  /** Milliseconds spent since the previous step of the same source. */
-  durationMs: number;
   details: TaskOpenTrajectoryDetails;
 };
 
@@ -75,7 +78,7 @@ export function beginTaskOpenTrajectory(
     startedAtEpochMs,
     outcome: 'open',
     totalMs: null,
-    steps: [{ stage: 'click', source: 'renderer', atMs: 0, durationMs: 0, details: {} }],
+    steps: [{ stage: 'click', source: 'renderer', atMs: 0, details: {} }],
   };
   trajectories = [started, ...trajectories].slice(0, MAX_TRAJECTORIES);
   publish();
@@ -94,18 +97,13 @@ export function recordTaskOpenTrajectoryStep(
   if (!trajectory) return;
 
   // Main and renderer marks interleave, and a main event can be delivered after
-  // a later renderer mark. Order by elapsed time, not arrival, and measure each
-  // gap against its own process so an out-of-order delivery cannot report a
-  // negative duration.
-  const previousOfSource = trajectory.steps.filter((entry) => entry.source === step.source).at(-1);
-  const atMs = Math.max(0, step.atMs);
+  // a later renderer mark. Order by elapsed time, not arrival.
   const steps = [
     ...trajectory.steps,
     {
       stage: step.stage,
       source: step.source,
-      atMs,
-      durationMs: Math.max(0, atMs - (previousOfSource?.atMs ?? 0)),
+      atMs: Math.max(0, step.atMs),
       details: step.details ?? {},
     },
   ].sort((a, b) => a.atMs - b.atMs);
@@ -137,15 +135,4 @@ export function subscribeTaskOpenTrajectories(listener: () => void): () => void 
   return () => {
     listeners.delete(listener);
   };
-}
-
-/** The gap a reader should look at first: the longest step of the open. */
-export function slowestTaskOpenStep(
-  trajectory: TaskOpenTrajectory
-): TaskOpenTrajectoryStep | undefined {
-  return trajectory.steps.reduce<TaskOpenTrajectoryStep | undefined>(
-    (slowest, step) =>
-      slowest === undefined || step.durationMs > slowest.durationMs ? step : slowest,
-    undefined
-  );
 }

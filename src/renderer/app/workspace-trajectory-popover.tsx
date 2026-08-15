@@ -5,11 +5,18 @@ import { useMcps } from '@renderer/features/mcp/components/useMcps';
 import {
   clearTaskOpenTrajectories,
   getTaskOpenTrajectories,
-  slowestTaskOpenStep,
   subscribeTaskOpenTrajectories,
   type TaskOpenTrajectory,
-  type TaskOpenTrajectoryStep,
 } from '@renderer/features/tasks/task-open-trajectory';
+import {
+  analyzeTaskOpenTrajectory,
+  TASK_OPEN_LANE_GROUPS,
+  type TaskOpenAnalysis,
+  type TaskOpenGap,
+  type TaskOpenLaneId,
+  type TaskOpenLaneSegment,
+  type TaskOpenLaneTrack,
+} from '@renderer/features/tasks/task-open-trajectory-lanes';
 import { copyTextToClipboard, useToast } from '@renderer/lib/hooks/use-toast';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
@@ -31,60 +38,8 @@ export function formatTrajectoryDuration(ms: number): string {
   return `${(ms / 1_000).toFixed(ms < 10_000 ? 2 : 1)}s`;
 }
 
-/** Total the bars are scaled against — an open still running has no end yet. */
-function trajectorySpan(trajectory: TaskOpenTrajectory): number {
-  return Math.max(trajectory.totalMs ?? 0, trajectory.steps.at(-1)?.atMs ?? 0, 1);
-}
-
-function StepRow({
-  step,
-  span,
-  isSlowest,
-}: {
-  step: TaskOpenTrajectoryStep;
-  span: number;
-  isSlowest: boolean;
-}) {
-  const start = ((step.atMs - step.durationMs) / span) * 100;
-  const width = Math.max((step.durationMs / span) * 100, 0.75);
-
-  return (
-    <div className="flex items-center gap-2 py-[3px]">
-      <span
-        className={cn(
-          'w-[40%] shrink-0 truncate font-mono text-[10px]',
-          isSlowest ? 'text-foreground' : 'text-foreground-passive'
-        )}
-        title={step.stage}
-      >
-        {step.stage}
-      </span>
-      <span className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-background-2">
-        <span
-          className={cn(
-            'absolute inset-y-0 rounded-full',
-            isSlowest
-              ? 'bg-amber-500'
-              : step.source === 'main'
-                ? 'bg-foreground-disabled'
-                : 'bg-primary'
-          )}
-          style={{
-            left: `${Math.min(start, 99)}%`,
-            width: `${Math.min(width, 100 - Math.min(start, 99))}%`,
-          }}
-        />
-      </span>
-      <span
-        className={cn(
-          'w-12 shrink-0 text-right font-mono text-[10px] tabular-nums',
-          isSlowest ? 'text-foreground' : 'text-foreground-passive'
-        )}
-      >
-        {formatTrajectoryDuration(step.durationMs)}
-      </span>
-    </div>
-  );
+function percent(value: number, span: number): number {
+  return Math.min(100, Math.max(0, (value / span) * 100));
 }
 
 /**
@@ -98,6 +53,128 @@ function isColdSpawn(trajectory: TaskOpenTrajectory): boolean {
     if (step.stage === 'provider-spawn') spawned = true;
   }
   return spawned;
+}
+
+function LaneRow({
+  track,
+  analysis,
+  laneLabel,
+}: {
+  track: TaskOpenLaneTrack;
+  analysis: TaskOpenAnalysis;
+  laneLabel: (lane: TaskOpenLaneId) => string;
+}) {
+  const { spanMs, gaps, slowest } = analysis;
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-14 shrink-0 truncate text-[10px] text-foreground-passive">
+        {laneLabel(track.lane)}
+      </span>
+      <span className="relative h-3.5 min-w-0 flex-1 overflow-hidden rounded-sm bg-background-2">
+        {gaps.map((gap) => (
+          <span
+            key={`gap:${gap.startMs}`}
+            aria-hidden
+            className="absolute inset-y-0 bg-amber-500/15"
+            style={{
+              left: `${percent(gap.startMs, spanMs)}%`,
+              width: `${percent(gap.durationMs, spanMs)}%`,
+            }}
+          />
+        ))}
+        {track.segments.map((segment) => {
+          const isSlowest = segment === slowest;
+          const label = `${segment.step.stage} · ${formatTrajectoryDuration(segment.durationMs)} @ ${formatTrajectoryDuration(segment.step.atMs)}`;
+          if (segment.isLaneStart) {
+            return (
+              <span
+                key={`start:${segment.step.stage}:${segment.step.atMs}`}
+                title={label}
+                className="absolute inset-y-1 w-[3px] rounded-full bg-foreground-passive"
+                style={{ left: `calc(${percent(segment.step.atMs, spanMs)}% - 1px)` }}
+              />
+            );
+          }
+          return (
+            <span
+              key={`seg:${segment.step.stage}:${segment.step.atMs}`}
+              title={label}
+              className={cn(
+                'absolute inset-y-1 rounded-full',
+                isSlowest ? 'bg-amber-500' : 'bg-foreground-disabled'
+              )}
+              style={{
+                left: `${percent(segment.startMs, spanMs)}%`,
+                width: `max(2px, ${percent(segment.durationMs, spanMs)}%)`,
+              }}
+            />
+          );
+        })}
+      </span>
+    </div>
+  );
+}
+
+function GapFinding({
+  gap,
+  laneLabel,
+}: {
+  gap: TaskOpenGap;
+  laneLabel: (lane: TaskOpenLaneId) => string;
+}) {
+  const { t } = useTranslation();
+  const duration = formatTrajectoryDuration(gap.durationMs);
+
+  return (
+    <div className="flex items-start gap-1.5 text-[10px] leading-4 text-foreground-passive">
+      <span aria-hidden className="mt-1.5 size-1 shrink-0 rounded-full bg-amber-500" />
+      <span className="min-w-0">
+        {gap.kind === 'handoff'
+          ? t('workspaceRuntime.trajectory.gap.handoff', {
+              from: laneLabel(gap.fromLane),
+              to: laneLabel(gap.toLane),
+              stage: gap.fromStage,
+              duration,
+            })
+          : t('workspaceRuntime.trajectory.gap.stall', {
+              lane: laneLabel(gap.fromLane),
+              stage: gap.fromStage,
+              duration,
+            })}
+      </span>
+    </div>
+  );
+}
+
+function StepRow({
+  segment,
+  isSlowest,
+  laneLabel,
+}: {
+  segment: TaskOpenLaneSegment;
+  isSlowest: boolean;
+  laneLabel: (lane: TaskOpenLaneId) => string;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-2 py-[2px] font-mono text-[10px] tabular-nums',
+        isSlowest ? 'text-foreground' : 'text-foreground-passive'
+      )}
+    >
+      <span className="w-10 shrink-0 text-right">
+        {formatTrajectoryDuration(segment.step.atMs)}
+      </span>
+      <span className="w-14 shrink-0 truncate font-sans">{laneLabel(segment.lane)}</span>
+      <span className="min-w-0 flex-1 truncate" title={segment.step.stage}>
+        {segment.step.stage}
+      </span>
+      <span className="w-12 shrink-0 text-right">
+        {segment.isLaneStart ? '—' : formatTrajectoryDuration(segment.durationMs)}
+      </span>
+    </div>
+  );
 }
 
 export function WorkspaceTrajectoryPopover({
@@ -115,10 +192,14 @@ export function WorkspaceTrajectoryPopover({
   const selected =
     trajectories.find((trajectory) => trajectory.contextId === selectedContextId) ??
     trajectories[0];
-  const slowest = useMemo(() => (selected ? slowestTaskOpenStep(selected) : undefined), [selected]);
+  const analysis = useMemo(
+    () => (selected ? analyzeTaskOpenTrajectory(selected) : undefined),
+    [selected]
+  );
+  const laneLabel = (lane: TaskOpenLaneId) => t(`workspaceRuntime.trajectory.lane.${lane}`);
   const mcpCount = selected && isColdSpawn(selected) ? installed.length : 0;
 
-  if (!selected) {
+  if (!selected || !analysis) {
     return (
       <div className="p-4 text-xs text-foreground-passive">
         {t('workspaceRuntime.trajectory.empty')}
@@ -126,8 +207,8 @@ export function WorkspaceTrajectoryPopover({
     );
   }
 
-  const span = trajectorySpan(selected);
   const taskName = resolveTaskName(selected.projectId, selected.taskId);
+  const slowest = analysis.slowest;
 
   return (
     <>
@@ -142,14 +223,14 @@ export function WorkspaceTrajectoryPopover({
             </span>
             <span aria-hidden>·</span>
             <span>{t(`workspaceRuntime.trajectory.outcome.${selected.outcome}`)}</span>
-            {slowest && slowest.durationMs > 0 ? (
+            {slowest ? (
               <>
                 <span aria-hidden>·</span>
                 <Tooltip>
                   <TooltipTrigger
                     render={<span className="truncate underline decoration-dotted" />}
                   >
-                    {slowest.stage}
+                    {slowest.step.stage}
                   </TooltipTrigger>
                   <TooltipContent side="top">
                     {t('workspaceRuntime.trajectory.slowestHint')}
@@ -201,13 +282,38 @@ export function WorkspaceTrajectoryPopover({
         </DropdownMenu>
       </div>
 
-      <div className="max-h-72 overflow-y-auto px-3 py-2">
-        {selected.steps.map((step) => (
+      <div className="space-y-1.5 px-3 py-2">
+        {TASK_OPEN_LANE_GROUPS.map(({ group, lanes }) => {
+          const groupTracks = analysis.tracks.filter((track) => lanes.includes(track.lane));
+          if (groupTracks.length === 0) return null;
+          return (
+            <div key={group} className="space-y-0.5">
+              <div className="text-[9px] tracking-wide text-foreground-disabled uppercase">
+                {t(`workspaceRuntime.trajectory.group.${group}`)}
+              </div>
+              {groupTracks.map((track) => (
+                <LaneRow key={track.lane} track={track} analysis={analysis} laneLabel={laneLabel} />
+              ))}
+            </div>
+          );
+        })}
+      </div>
+
+      {analysis.gaps.length > 0 ? (
+        <div className="space-y-1 border-t border-border px-3 py-2">
+          {analysis.gaps.map((gap) => (
+            <GapFinding key={`${gap.startMs}:${gap.toStage}`} gap={gap} laneLabel={laneLabel} />
+          ))}
+        </div>
+      ) : null}
+
+      <div className="max-h-40 overflow-y-auto border-t border-border px-3 py-1.5">
+        {analysis.segments.map((segment) => (
           <StepRow
-            key={`${step.source}:${step.stage}:${step.atMs}`}
-            step={step}
-            span={span}
-            isSlowest={slowest !== undefined && step === slowest && step.durationMs > 0}
+            key={`${segment.lane}:${segment.step.stage}:${segment.step.atMs}`}
+            segment={segment}
+            isSlowest={segment === slowest}
+            laneLabel={laneLabel}
           />
         ))}
       </div>

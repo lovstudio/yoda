@@ -1,4 +1,5 @@
 import type { SessionOpenPerformanceContext } from '@shared/session-open-performance';
+import { setTaskOpenFrameMarkSink } from '@renderer/lib/perf/task-open-frame-marks';
 import {
   beginTaskOpenTrajectory,
   finishTaskOpenTrajectory,
@@ -207,6 +208,18 @@ export function markTaskOpenTrace(
   trace.lastMarkedAt = now;
   trace.hiddenDurationAtLastMarkMs = hiddenDurationMs;
 }
+
+/**
+ * The terminal frame loop knows nothing about tasks — it only knows which DOM
+ * host it is currently trying to paint. During a task open the visible host it
+ * is painting is the opening task's, so its waits belong to whichever trace is
+ * active.
+ */
+setTaskOpenFrameMarkSink((stage, details) => {
+  const trace = activeTrace;
+  if (!trace) return;
+  markTaskOpenTrace(trace.projectId, trace.taskId, stage, details);
+});
 
 export function cancelTaskOpenTrace(
   projectId: string,

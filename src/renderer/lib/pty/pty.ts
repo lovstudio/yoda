@@ -18,6 +18,11 @@ import {
   normalizeTerminalScrollbackLines,
 } from '@shared/terminal-settings';
 import { events, rpc } from '@renderer/lib/ipc';
+import {
+  markTaskOpenFrameStage,
+  type TaskOpenFrameDetails,
+  type TaskOpenFrameStage,
+} from '@renderer/lib/perf/task-open-frame-marks';
 import { cssVar } from '@renderer/utils/cssVars';
 import { log } from '@renderer/utils/logger';
 import { getCellMetrics } from './pty-dimensions';
@@ -2322,6 +2327,21 @@ export class FrontendPty {
     return true;
   }
 
+  /**
+   * Report a frame-loop wait to the task-open profiler. Gated on this lease
+   * owning the visible DOM host: an off-screen cache warming in the background
+   * is not what the user is waiting on, and attributing its waits to the open
+   * would invent dead air that never existed on screen.
+   */
+  private markVisibleFrameStage(
+    mountLease: number,
+    stage: TaskOpenFrameStage,
+    details?: TaskOpenFrameDetails
+  ): void {
+    if (this.debugVisibleMount?.lease !== mountLease) return;
+    markTaskOpenFrameStage(stage, { sessionId: this.sessionId, ...details });
+  }
+
   private scheduleVisibleFrameAck(mountLease: number): void {
     if (
       !this.isVisibleMountLease(mountLease) ||
@@ -2368,7 +2388,10 @@ export class FrontendPty {
       // A cold visible mount starts before listener-first subscription resolves.
       // Keep it hidden until the snapshot and any events crossing that boundary
       // have entered the same ordered parser queue.
-      if (!this.hasResolvedInitialSnapshot) return false;
+      if (!this.hasResolvedInitialSnapshot) {
+        this.markVisibleFrameStage(mountLease, 'frame-snapshot-wait');
+        return false;
+      }
 
       const preparedRevision = this.preparedCanonicalRevision;
       const preparedAtomicLive = this.preparedCanonicalAtomicLive;
@@ -2426,6 +2449,7 @@ export class FrontendPty {
         this.visibleFrameWaiters.clear();
         const visibleMount =
           this.debugVisibleMount?.lease === mountLease ? this.debugVisibleMount : null;
+        this.markVisibleFrameStage(mountLease, 'frame-painted', { path: 'hot' });
         console.log('[DEBUG][agent-session-load] hot visible frame painted:', {
           sessionId: this.sessionId,
           elapsedMs: visibleMount
@@ -2532,6 +2556,10 @@ export class FrontendPty {
         atomicLiveGraceMs = null;
       }
       if (atomicLiveGraceMs !== null && atomicLiveGraceMs > 0) {
+        this.markVisibleFrameStage(mountLease, 'frame-quiet-wait', {
+          reason: 'atomic-live-grace',
+          waitMs: Math.round(atomicLiveGraceMs),
+        });
         const graceOutcome = await this.waitForOutputActivityOrDelay(
           stableRevision,
           atomicLiveGraceMs,
@@ -2559,6 +2587,10 @@ export class FrontendPty {
               ? PREPARED_FRAME_SETTLEMENT_QUIET_MS
               : FALLBACK_FIRST_FRAME_QUIET_MS
             : PREPARED_FRAME_SETTLEMENT_QUIET_MS;
+          this.markVisibleFrameStage(mountLease, 'frame-quiet-wait', {
+            reason: 'settlement',
+            waitMs: quietMs,
+          });
           const settled = await this.waitForPromiseWithin(
             new Promise<void>((resolve) => setTimeout(resolve, quietMs)),
             isCurrentMount,
@@ -2588,6 +2620,10 @@ export class FrontendPty {
         this.canonicalOutputRequiredAfterRevision !== null ||
         this.preparedCanonicalGeneration !== null;
       if (this.synchronizedOutputOpen || (canonicalFrameRequired && !this.hasCanonicalViewport())) {
+        this.markVisibleFrameStage(mountLease, 'frame-canonical-wait', {
+          synchronizedOutputOpen: this.synchronizedOutputOpen,
+          outputGeneration: this.outputGeneration,
+        });
         const activity = await this.waitForOutputActivityOrDelay(
           stableRevision,
           Math.max(0, deadline - performance.now()),
@@ -2696,6 +2732,7 @@ export class FrontendPty {
       this.visibleFrameWaiters.clear();
       const visibleMount =
         this.debugVisibleMount?.lease === mountLease ? this.debugVisibleMount : null;
+      this.markVisibleFrameStage(mountLease, 'frame-painted', { path: 'canonical' });
       console.log('[DEBUG][agent-session-load] visible frame painted:', {
         sessionId: this.sessionId,
         elapsedMs: visibleMount
@@ -2725,6 +2762,10 @@ export class FrontendPty {
     // forcing React through an avoidable timeout/retry cycle.
     const visibleMount =
       this.debugVisibleMount?.lease === mountLease ? this.debugVisibleMount : null;
+    this.markVisibleFrameStage(mountLease, 'frame-unavailable', {
+      hasResolvedInitialSnapshot: this.hasResolvedInitialSnapshot,
+      queuedWriteCount: this.terminalWriteQueue.length,
+    });
     console.log('[DEBUG][agent-session-load] visible frame unavailable:', {
       sessionId: this.sessionId,
       elapsedMs: visibleMount
@@ -2854,6 +2895,10 @@ export class FrontendPty {
         : () => allowAtomicLiveFrame;
     if (visibleMount) {
       this.debugVisibleMount = { lease: mountLease, startedAt: performance.now() };
+      this.markVisibleFrameStage(mountLease, 'frame-mount', {
+        hasResolvedInitialSnapshot: this.hasResolvedInitialSnapshot,
+        suspendedWriteCount: this.suspendedWrites.length,
+      });
       console.log('[DEBUG][agent-session-load] visible mount requested:', {
         sessionId: this.sessionId,
         mountLease,
