@@ -22,9 +22,9 @@ describe('MaaS Gateway entry-point wiring', () => {
   it('dismisses the global model access popover when the app window loses focus', () => {
     const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
 
-    expect(source).toContain('useDismissOnWindowBlur(isMaasPopoverOpen, dismissMaasPopover)');
-    expect(source).toContain(
-      '<Popover open={isMaasPopoverOpen} onOpenChange={setIsMaasPopoverOpen}>'
+    expect(source).toMatch(/usePopoverDismiss\(\s*isMaasPopoverOpen,\s+setIsMaasPopoverOpen\s*\)/);
+    expect(source).toMatch(
+      /<Popover\s+open=\{isMaasPopoverOpen\}\s+onOpenChange=\{setIsMaasPopoverOpen\}\s+actionsRef=\{maasActionsRef\}/
     );
     expect(source).toContain('{isMaasPopoverOpen ? (');
     expect(source).toContain('aria-label={maasTriggerLabel}');
@@ -36,10 +36,10 @@ describe('MaaS Gateway entry-point wiring', () => {
     expect(source).toContain('onManage={openMaasManagement}');
     expect(source).toContain('onOpenLogs={openMaasLogs}');
     expect(source).toMatch(
-      /const openMaasManagement = useCallback\(\(\) => \{\s+dismissBeforeSynchronousAction\(dismissMaasPopover, \(\) => \{\s+appState\.navigation\.navigate\('maas'\);/
+      /const openMaasManagement = useCallback\(\(\) => \{\s+dismissMaasPopoverThen\(\(\) => \{\s+appState\.navigation\.navigate\('maas'\);/
     );
     expect(source).toMatch(
-      /const openMaasLogs = useCallback\(\(\) => \{\s+dismissBeforeSynchronousAction\(dismissMaasPopover, \(\) => \{\s+appState\.sidePane\.pinView\('settings', \{ tab: 'ai-logs' \}\);/
+      /const openMaasLogs = useCallback\(\(\) => \{\s+dismissMaasPopoverThen\(\(\) => \{\s+appState\.sidePane\.pinView\('settings', \{ tab: 'ai-logs' \}\);/
     );
   });
 

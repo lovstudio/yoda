@@ -41,10 +41,13 @@ describe('workspace MaaS placement', () => {
       '{maasActiveForRuntime || shortAccountWindow || officialCodexAccountAvailable'
     );
     const accountEnd = source.indexOf('<span className="flex-1" />', accountIndex);
-    const popoverIndex = source.indexOf(
-      '<Popover open={isMaasPopoverOpen} onOpenChange={setIsMaasPopoverOpen}>',
-      accountEnd
-    );
+    // The opening tag carries more props than fit on one line, so match the
+    // props that pin the placement rather than a formatted literal.
+    const popoverMatch =
+      /<Popover\s+open=\{isMaasPopoverOpen\}\s+onOpenChange=\{setIsMaasPopoverOpen\}/.exec(
+        source.slice(accountEnd)
+      );
+    const popoverIndex = popoverMatch ? accountEnd + popoverMatch.index : -1;
     const selectorIndex = source.indexOf('<WorkspaceMaasPopover', popoverIndex);
     const spacerIndex = source.indexOf('<span className="flex-1" />');
     const terminalIndex = source.indexOf("title={t('workspaceRuntime.terminal')}", spacerIndex);
