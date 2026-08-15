@@ -1,20 +1,14 @@
 import { getProjectManagerStore } from '@renderer/features/projects/stores/project-selectors';
 import { getTaskManagerStore } from '@renderer/features/tasks/stores/task-selectors';
 
-type PrepareExplicitTaskOpenOptions = {
-  /**
-   * Restoring is a lifecycle mutation, so read-only task opens must opt out.
-   * Explicit Restore actions retain the existing default behavior.
-   */
-  restoreArchived?: boolean;
-};
-
-/** Mounts and point-loads a task before an explicit open. */
-export async function prepareExplicitTaskOpen(
-  projectId: string,
-  taskId: string,
-  options: PrepareExplicitTaskOpenOptions = {}
-): Promise<void> {
+/**
+ * Mounts and point-loads a task before an explicit open.
+ *
+ * Opening never changes archive state. Archiving is organizational and an
+ * archived task opens and runs like any other, so restoring is left to the
+ * explicit Restore action instead of happening as a side effect of a click.
+ */
+export async function prepareExplicitTaskOpen(projectId: string, taskId: string): Promise<void> {
   const projectManager = getProjectManagerStore();
   const projectLoaded = await projectManager.ensureProjectLoaded(projectId);
   if (!projectLoaded) throw new Error(`Project ${projectId} could not be loaded`);
@@ -27,7 +21,4 @@ export async function prepareExplicitTaskOpen(
 
   const task = taskManager.tasks.get(taskId);
   if (!task || task.state === 'unregistered') throw new Error(`Task ${taskId} could not be loaded`);
-  if (options.restoreArchived !== false && 'archivedAt' in task.data && task.data.archivedAt) {
-    await taskManager.restoreTask(taskId);
-  }
 }

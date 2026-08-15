@@ -44,31 +44,18 @@ describe('prepareExplicitTaskOpen', () => {
     });
   });
 
-  it('awaits mount, point load, and canonical restore in order', async () => {
+  it('awaits mount before the point load', async () => {
     await prepareExplicitTaskOpen('project-1', 'task-1');
 
     expect(mocks.mountProject.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.ensureTaskLoaded.mock.invocationCallOrder[0]
     );
-    expect(mocks.ensureTaskLoaded.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.restoreTask.mock.invocationCallOrder[0]
-    );
   });
 
-  it('does not trust stale archived metadata when the canonical task is active', async () => {
-    mocks.getTaskManagerStore.mockReturnValue({
-      ensureTaskLoaded: mocks.ensureTaskLoaded,
-      restoreTask: mocks.restoreTask,
-      tasks: new Map([['task-1', { state: 'unprovisioned', data: { id: 'task-1' } }]]),
-    });
-
+  // Archiving is organizational, not a runtime state: an archived task opens and
+  // runs like any other, and opening one must never mutate its archive state.
+  it('point-loads an archived task without restoring it', async () => {
     await prepareExplicitTaskOpen('project-1', 'task-1');
-
-    expect(mocks.restoreTask).not.toHaveBeenCalled();
-  });
-
-  it('point-loads an archived task without restoring it for a read-only open', async () => {
-    await prepareExplicitTaskOpen('project-1', 'task-1', { restoreArchived: false });
 
     expect(mocks.mountProject).toHaveBeenCalledWith('project-1');
     expect(mocks.ensureTaskLoaded).toHaveBeenCalledWith('task-1');

@@ -1,4 +1,3 @@
-import type { Conversation } from '@shared/conversations';
 import type { TaskWindowTabTarget } from '@shared/task-window';
 import {
   openProvisionedTaskTab,
@@ -12,9 +11,7 @@ import {
 } from '@renderer/features/tasks/stores/task-selectors';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import i18n from '@renderer/lib/i18n';
-import { rpc } from '@renderer/lib/ipc';
 import type { NavigateFnTyped } from '@renderer/lib/layout/navigation-provider';
-import { showModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { log } from '@renderer/utils/logger';
 import { resolveLastTaskSessionTarget } from './resolve-task-session-target';
@@ -51,63 +48,6 @@ const TASK_OPEN_CANCELLATION_POLL_MS = 25;
 
 class TaskOpenCancelledError extends Error {}
 class TaskOpenDeadlineError extends Error {}
-
-function isArchivedTaskStore(store: ReturnType<typeof getTaskStore>): boolean {
-  const data = store?.data;
-  return Boolean(data && 'archivedAt' in data && data.archivedAt);
-}
-
-function conversationActivityTime(conversation: Conversation): number {
-  for (const value of [
-    conversation.lastInteractedAt,
-    conversation.updatedAt,
-    conversation.archivedAt,
-    conversation.createdAt,
-  ]) {
-    if (!value) continue;
-    const timestamp = Date.parse(value);
-    if (!Number.isNaN(timestamp)) return timestamp;
-  }
-  return 0;
-}
-
-/**
- * Archived task rows are a read-only review action. Opening their latest (or
- * explicitly targeted) transcript must not restore the task, provision a
- * workspace, or start an Agent session.
- */
-async function openArchivedTaskTranscript(
-  projectId: string,
-  taskId: string,
-  explicitTarget?: TaskWindowTabTarget
-): Promise<boolean> {
-  const conversations = await rpc.conversations.getArchivedConversationsForTask(projectId, taskId);
-  const requestedConversationId =
-    explicitTarget?.kind === 'conversation' ? explicitTarget.conversationId : undefined;
-  const conversation = requestedConversationId
-    ? conversations.find(({ id }) => id === requestedConversationId)
-    : [...conversations].sort((left, right) => {
-        const timeOrder = conversationActivityTime(right) - conversationActivityTime(left);
-        return timeOrder !== 0 ? timeOrder : right.id.localeCompare(left.id);
-      })[0];
-
-  if (!conversation) {
-    toast({
-      title: i18n.t('tasks.archivedSession.viewTranscript'),
-      description: i18n.t('tasks.transcript.empty'),
-      debugInfo: {
-        stage: 'open-archived-task-transcript',
-        projectId,
-        taskId,
-        requestedConversationId: requestedConversationId ?? null,
-      },
-    });
-    return false;
-  }
-
-  showModal('archivedSessionTranscriptModal', { conversation, allowRestore: false });
-  return true;
-}
 
 type TaskTargetOpenOutcome =
   | { ok: true; selection: DeferredTaskTabSelection }
@@ -338,20 +278,6 @@ async function openTaskWhenReadyAfterTrace(
     );
   let target: TaskWindowTabTarget | undefined = explicitTarget;
   const initialTaskStore = getTaskStore(projectId, taskId);
-  if (isArchivedTaskStore(initialTaskStore)) {
-    const opened = await waitForTaskOpenStep(
-      openArchivedTaskTranscript(projectId, taskId, explicitTarget),
-      isCurrentRequest,
-      hardDeadline
-    );
-    cancelTaskOpenTrace(
-      projectId,
-      taskId,
-      { reason: 'archived-read-only' },
-      performanceContext?.contextId
-    );
-    return opened;
-  }
   let provisioned = asProvisioned(initialTaskStore);
   markTaskOpenTrace(projectId, taskId, 'store-resolved', {
     provisioned: Boolean(provisioned),
@@ -530,27 +456,12 @@ async function openTaskWhenReadyAfterTrace(
 
   try {
     await waitForTaskOpenStep(
-      prepareExplicitTaskOpen(projectId, taskId, { restoreArchived: false }),
+      prepareExplicitTaskOpen(projectId, taskId),
       isCurrentRequest,
       hardDeadline
     );
     markTaskOpenTrace(projectId, taskId, 'task-prepared');
     if (!isCurrentRequest()) return false;
-
-    if (isArchivedTaskStore(getTaskStore(projectId, taskId))) {
-      const opened = await waitForTaskOpenStep(
-        openArchivedTaskTranscript(projectId, taskId, explicitTarget),
-        isCurrentRequest,
-        hardDeadline
-      );
-      cancelTaskOpenTrace(
-        projectId,
-        taskId,
-        { reason: 'archived-read-only' },
-        performanceContext?.contextId
-      );
-      return opened;
-    }
 
     const taskManager = getTaskManagerStore(projectId);
     if (!taskManager) throw new Error(`Project ${projectId} could not be mounted`);

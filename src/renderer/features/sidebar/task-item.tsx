@@ -186,8 +186,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const showMarkerInReservedSlot = appearance.marker !== 'none' && rowVariant === 'underProject';
   const showMarkerAtCompactEdge = appearance.marker !== 'none' && rowVariant !== 'underProject';
 
+  // Archived rows provision like any other: archiving is organizational, so it
+  // must not decide whether a task can open and run.
   const handleProvision = () => {
-    if (isArchived || task.state !== 'unprovisioned' || task.phase !== 'idle') return;
+    if (task.state !== 'unprovisioned' || task.phase !== 'idle') return;
     void taskManager?.provisionTask(taskId).catch(() => {});
   };
 

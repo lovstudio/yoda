@@ -63,13 +63,15 @@ describe('openCommandPaletteSearchTarget', () => {
     });
   });
 
-  it('awaits mount, point load, and restore before opening an archived conversation', async () => {
+  // Archiving is organizational, not a runtime state: an archived target opens
+  // like any other, and opening it must never mutate its archive state.
+  it('awaits mount and point load before opening an archived conversation', async () => {
     await openCommandPaletteSearchTarget(archivedConversation, navigate);
 
     expect(mocks.ensureProjectLoaded).toHaveBeenCalledWith('project-1');
     expect(mocks.mountProject).toHaveBeenCalledWith('project-1');
     expect(mocks.ensureTaskLoaded).toHaveBeenCalledWith('task-1');
-    expect(mocks.restoreTask).toHaveBeenCalledWith('task-1');
+    expect(mocks.restoreTask).not.toHaveBeenCalled();
     expect(mocks.openTaskTarget).toHaveBeenCalledWith(
       { projectId: 'project-1', taskId: 'task-1', conversationId: 'conversation-1' },
       navigate
@@ -78,9 +80,6 @@ describe('openCommandPaletteSearchTarget', () => {
       mocks.ensureTaskLoaded.mock.invocationCallOrder[0]
     );
     expect(mocks.ensureTaskLoaded.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.restoreTask.mock.invocationCallOrder[0]
-    );
-    expect(mocks.restoreTask.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.openTaskTarget.mock.invocationCallOrder[0]
     );
   });
@@ -95,13 +94,13 @@ describe('openCommandPaletteSearchTarget', () => {
     expect(mocks.openTaskTarget).not.toHaveBeenCalled();
   });
 
-  it('restores from canonical task state when search metadata is stale', async () => {
+  it('opens without restoring when search metadata disagrees with canonical state', async () => {
     await openCommandPaletteSearchTarget(
       { ...archivedConversation, taskArchived: false },
       navigate
     );
 
-    expect(mocks.restoreTask).toHaveBeenCalledWith('task-1');
+    expect(mocks.restoreTask).not.toHaveBeenCalled();
     expect(mocks.openTaskTarget).toHaveBeenCalledOnce();
   });
 });

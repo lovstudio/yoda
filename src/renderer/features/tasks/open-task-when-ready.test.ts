@@ -141,77 +141,36 @@ describe('openTaskWhenReady', () => {
     });
   });
 
-  it('opens an archived task as a read-only transcript without restoring or provisioning it', async () => {
-    const archivedTask = {
-      state: 'unprovisioned',
-      phase: 'idle',
-      data: { id: 'task-1', archivedAt: '2026-08-14T10:00:00.000Z' },
-    };
-    const olderConversation = {
-      id: 'conversation-older',
-      projectId: 'project-1',
-      taskId: 'task-1',
-      runtimeId: 'codex',
-      title: 'Older',
-      lastInteractedAt: '2026-08-13T10:00:00.000Z',
-      archivedAt: '2026-08-14T10:00:00.000Z',
-      isInitialConversation: true,
-    };
-    const latestConversation = {
-      ...olderConversation,
-      id: 'conversation-latest',
-      title: 'Latest',
-      lastInteractedAt: '2026-08-14T09:00:00.000Z',
-    };
-    mocks.getTaskStore.mockReturnValue(archivedTask);
-    mocks.getArchivedConversationsForTask.mockResolvedValue([
-      olderConversation,
-      latestConversation,
-    ]);
+  // Archiving is an organizational state, not a runtime one: an archived task
+  // opens, routes, and runs exactly like an active one. What opening must never
+  // do is unarchive the task as a side effect.
+  const archivedProvisioned = {
+    ...provisioned,
+    data: { id: 'task-1', archivedAt: '2026-08-14T10:00:00.000Z' },
+  };
+
+  it('opens an archived task through the normal path, not a transcript modal', async () => {
+    mocks.getTaskStore.mockReturnValue(archivedProvisioned);
 
     await expect(openTaskWhenReady('project-1', 'task-1', navigate)).resolves.toBe(true);
 
-    expect(mocks.getArchivedConversationsForTask).toHaveBeenCalledWith('project-1', 'task-1');
-    expect(mocks.showModal).toHaveBeenCalledWith('archivedSessionTranscriptModal', {
-      conversation: latestConversation,
-      allowRestore: false,
-    });
-    expect(mocks.prepareExplicitTaskOpen).not.toHaveBeenCalled();
-    expect(mocks.provisionTask).not.toHaveBeenCalled();
-    expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
-    expect(navigate).not.toHaveBeenCalled();
+    expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledWith(
+      'project-1',
+      'task-1',
+      conversationTarget
+    );
+    expect(mocks.showModal).not.toHaveBeenCalled();
+    expect(mocks.getArchivedConversationsForTask).not.toHaveBeenCalled();
   });
 
-  it('point-loads an unknown archived task without restoring it before read-only review', async () => {
-    const archivedTask = {
-      state: 'unprovisioned',
-      phase: 'idle',
-      data: { id: 'task-1', archivedAt: '2026-08-14T10:00:00.000Z' },
-    };
-    const conversation = {
-      id: 'conversation-1',
-      projectId: 'project-1',
-      taskId: 'task-1',
-      runtimeId: 'codex',
-      title: 'Archived session',
-      lastInteractedAt: '2026-08-14T09:00:00.000Z',
-      archivedAt: '2026-08-14T10:00:00.000Z',
-      isInitialConversation: true,
-    };
-    mocks.getTaskStore.mockReturnValueOnce(undefined).mockReturnValue(archivedTask);
-    mocks.getArchivedConversationsForTask.mockResolvedValue([conversation]);
+  it('provisions a cold archived task without unarchiving it', async () => {
+    mocks.getTaskStore.mockReturnValueOnce(undefined).mockReturnValue(archivedProvisioned);
 
     await expect(openTaskWhenReady('project-1', 'task-1', navigate)).resolves.toBe(true);
 
-    expect(mocks.prepareExplicitTaskOpen).toHaveBeenCalledWith('project-1', 'task-1', {
-      restoreArchived: false,
-    });
-    expect(mocks.showModal).toHaveBeenCalledWith('archivedSessionTranscriptModal', {
-      conversation,
-      allowRestore: false,
-    });
-    expect(mocks.provisionTask).not.toHaveBeenCalled();
-    expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
+    expect(mocks.prepareExplicitTaskOpen).toHaveBeenCalledWith('project-1', 'task-1');
+    expect(mocks.provisionTask).toHaveBeenCalledWith('task-1');
+    expect(mocks.showModal).not.toHaveBeenCalled();
   });
 
   it('switches a provisioned task after its cached generation fence', async () => {

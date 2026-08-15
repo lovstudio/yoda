@@ -183,24 +183,26 @@ describe('provisionTask', () => {
     expect(mocks.provisionTaskMock).not.toHaveBeenCalled();
   });
 
-  it('refuses to reprovision an archived task before loading runtime state', async () => {
+  it('provisions an archived task, because archiving is organizational', async () => {
     mocks.whereMock
       .mockReset()
-      .mockResolvedValueOnce([{ ...taskRow, archivedAt: '2026-08-01T00:00:00.000Z' }]);
+      .mockResolvedValueOnce([{ ...taskRow, archivedAt: '2026-08-01T00:00:00.000Z' }])
+      .mockResolvedValue([]);
 
-    await expect(provisionTask('task-1')).rejects.toThrow('Cannot provision archived task');
+    await expect(provisionTask('task-1')).resolves.toBeDefined();
 
-    expect(mocks.getProjectMock).not.toHaveBeenCalled();
-    expect(mocks.getTerminalsForTaskMock).not.toHaveBeenCalled();
-    expect(mocks.provisionTaskMock).not.toHaveBeenCalled();
+    expect(mocks.getProjectMock).toHaveBeenCalled();
+    expect(mocks.provisionTaskMock).toHaveBeenCalled();
   });
 
-  it('refuses to reprovision a task as soon as archive intent is persisted', async () => {
+  it('refuses to reprovision a task while its archive is still in flight', async () => {
     mocks.whereMock
       .mockReset()
       .mockResolvedValueOnce([{ ...taskRow, archiveRequestedAt: '2026-08-01T00:00:00.000Z' }]);
 
-    await expect(provisionTask('task-1')).rejects.toThrow('Cannot provision archived task');
+    await expect(provisionTask('task-1')).rejects.toThrow(
+      'Cannot provision a task while archiving is in flight'
+    );
 
     expect(mocks.getProjectMock).not.toHaveBeenCalled();
     expect(mocks.getTerminalsForTaskMock).not.toHaveBeenCalled();

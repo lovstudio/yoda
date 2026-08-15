@@ -13,8 +13,14 @@ import { mapTaskRowToTask } from './utils/utils';
 export async function provisionTask(taskId: string) {
   const [row] = await db.select().from(tasks).where(eq(tasks.id, taskId));
   if (!row) throw new Error(`Task not found: ${taskId}`);
-  if (row.archivedAt || row.archiveRequestedAt) {
-    throw new Error(`Cannot provision archived task: ${taskId}`);
+  // Archiving is an organizational state, not a runtime one: an archived task
+  // still provisions and runs on demand. Archiving reclaims the worktree but
+  // keeps the branch, so resolveTaskWorkDir rebuilds the checkout from it.
+  //
+  // An archive still in flight is the one exception — the saga is tearing this
+  // runtime down, so building it back up concurrently would race it.
+  if (row.archiveRequestedAt && !row.archivedAt) {
+    throw new Error(`Cannot provision a task while archiving is in flight: ${taskId}`);
   }
   if (row.setupStatus !== 'ready') {
     throw new Error(row.setupError || `Task setup is not ready: ${row.setupStatus}`);

@@ -296,14 +296,16 @@ export const TaskViewWrapperWithProviders = observer(function TaskViewWrapperWit
   // Auto-provision when the task view is rendered with an idle task — covers
   // session restore where the task wasn't in openTaskIds, direct navigation,
   // and any other path that lands on the task view before provisioning runs.
+  // Archived tasks included: archiving is organizational, so it must not decide
+  // whether a task can run. Provisioning rebuilds the worktree from the branch
+  // archiving left behind.
   useEffect(() => {
     if (kind !== 'idle') return;
-    if (taskStore && 'archivedAt' in taskStore.data && taskStore.data.archivedAt) return;
 
     getTaskManagerStore(projectId)
       ?.provisionTask(taskId)
       .catch(() => {});
-  }, [kind, projectId, taskId, taskStore]);
+  }, [kind, projectId, taskId]);
 
   if (kind !== 'ready') {
     return (
