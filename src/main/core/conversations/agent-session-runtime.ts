@@ -439,14 +439,20 @@ class AgentSessionRuntimeStore {
     return this.entries.get(keyFor(session))?.providerTurnConfirmed ?? false;
   }
 
-  /** Force the current status + provider fence across IPC for renderer cold hydration. */
+  /**
+   * Force the current status + provider fence across IPC for renderer cold hydration.
+   *
+   * A session this process never dispatched has no state to force. Publishing
+   * `initialRunState()` for it would not be a snapshot but an invention: an
+   * authoritative `idle` that erases a terminal status the renderer holds
+   * legitimately — a `completed` derived from the tmux marker + transcript on
+   * cold load, which this process's memory never saw. The status-only RPC
+   * return value already carries the derived verdict for that case.
+   */
   publishSnapshot(session: AgentSessionKey): void {
     const entry = this.entries.get(keyFor(session));
-    this.publishState(
-      session,
-      entry?.state ?? initialRunState(),
-      entry?.providerTurnConfirmed ?? false
-    );
+    if (!entry) return;
+    this.publishState(session, entry.state, entry.providerTurnConfirmed);
   }
 
   /** Snapshot of every tracked session's current status, for renderer cold-load. */

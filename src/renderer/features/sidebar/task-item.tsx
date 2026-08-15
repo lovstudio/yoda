@@ -41,6 +41,7 @@ import { PrBadge } from '../../lib/components/pr-badge';
 import { SidebarItemMiniButton, SidebarMenuRow } from './sidebar-primitives';
 import { TaskTreeToggleButton } from './task-tree-toggle-button';
 import { useSidebarHoverIntent } from './use-sidebar-hover-intent';
+import { useSidebarRowActivation, type SidebarRowActivation } from './use-sidebar-row-activation';
 
 interface SidebarTaskItemProps {
   taskId: string;
@@ -92,6 +93,23 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     void taskManager?.preloadTask(taskId);
   }, [taskManager, taskId]);
   const taskPreloadIntent = useSidebarHoverIntent(prepareTaskView);
+  const activateRow = useCallback(
+    ({ altKey }: SidebarRowActivation) => {
+      // Alt/Option pins the WHOLE task UI into the global side pane — opening
+      // it there behaves exactly like routing to the task, just wrapped in the
+      // pane (the self-contained pane auto-provisions and owns its tab strip).
+      if (altKey) {
+        appState.sidePane.pinTaskView(projectId, taskId);
+        return;
+      }
+      void openTaskWhenReady(projectId, taskId, navigate);
+    },
+    [navigate, projectId, taskId]
+  );
+  // Opening a task re-sorts its row into another priority group, so the row can
+  // move or unmount between press and release. Activate from the gesture rather
+  // than from the row's own `click`, which the DOM would never deliver.
+  const rowActivation = useSidebarRowActivation(activateRow);
   // Shared task-entity menu wiring (same items as every other task surface).
   const menuActions = useTaskMenuActions(projectId, taskId);
   // Driven by the store so any archive entry point (sidebar, tabs, modal)
@@ -179,20 +197,9 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const projectName =
     project?.state === 'unregistered' ? projectId : (project?.displayName ?? projectId);
 
-  const handleOpenTask = () => {
-    void openTaskWhenReady(projectId, taskId, navigate);
-  };
-
   const handleToggleSubtasks = () => {
     if (!hasChildren) return;
     sidebarStore.toggleTaskCollapsed(taskId);
-  };
-
-  // Alt/Option-click pins the WHOLE task UI into the global side pane — opening
-  // it there behaves exactly like routing to the task, just wrapped in the pane
-  // (the self-contained pane auto-provisions and owns its own tab strip).
-  const pinTaskToSidePane = () => {
-    appState.sidePane.pinTaskView(projectId, taskId);
   };
 
   const archiveAction = (
@@ -236,6 +243,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
       isActive={isActive}
       onPointerEnter={taskPreloadIntent.schedule}
       onPointerLeave={taskPreloadIntent.cancel}
+      onPointerDown={rowActivation.onPointerDown}
       onMouseDown={(e) => {
         if (e.button !== 0 || (e.target instanceof Element && e.target.closest('button'))) return;
         e.preventDefault();
@@ -245,15 +253,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         // opening surface instead of first painting the idle state.
         handleProvision();
       }}
-      onClick={(e) => {
-        // Alt/Option pins the task into the global side pane (landing
-        // on its session, like a normal open); a plain click navigates.
-        if (e.altKey) {
-          pinTaskToSidePane();
-          return;
-        }
-        handleOpenTask();
-      }}
+      onClick={rowActivation.onClick}
     >
       <div className="flex min-w-0 flex-1 items-center gap-1 self-stretch overflow-hidden">
         {hasRootToggle && (
