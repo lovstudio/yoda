@@ -983,22 +983,36 @@ export class PtySessionRegistry {
     this.scheduleConsumerLeaseSweep();
   }
 
+  /**
+   * Renew a consumer lease, and report whether that consumer still exists.
+   *
+   * The `known` flag is the only channel through which a renderer can learn that
+   * its registration is gone. Consumers are dropped for reasons the renderer
+   * never sees — an owner reload, a crashed frame, an expired lease — and a
+   * renderer holding a deleted consumerId receives no further output while
+   * believing it is still attached. Silently ignoring the heartbeat left that
+   * renderer waiting forever on bytes main had stopped delivering.
+   */
   heartbeat(
     sessionId: string,
     consumerId: string,
     generation: number,
     acknowledgedSequence: number
-  ): void {
-    if (!isValidPtyWatermark(generation) || !isValidPtyWatermark(acknowledgedSequence)) return;
+  ): { known: boolean } {
     const state = this.sessions.get(sessionId);
     const consumers = this.consumers.get(sessionId);
     const current = consumers?.get(consumerId);
-    if (!consumers || !current) return;
+    if (!consumers || !current) return { known: false };
+    // A malformed watermark says nothing about whether the consumer exists.
+    // Refuse the renewal, but do not report the registration as missing.
+    if (!isValidPtyWatermark(generation) || !isValidPtyWatermark(acknowledgedSequence)) {
+      return { known: true };
+    }
     const currentGeneration = state?.generation ?? current.generation;
     const nextAcknowledgedSequence =
       currentGeneration === generation
         ? Math.max(
-            current?.generation === generation ? current.acknowledgedSequence : 0,
+            current.generation === generation ? current.acknowledgedSequence : 0,
             Math.min(acknowledgedSequence, state?.sequence ?? acknowledgedSequence)
           )
         : 0;
@@ -1010,6 +1024,7 @@ export class PtySessionRegistry {
     });
     if (state) this.pruneAcknowledgedBatches(sessionId, state);
     this.scheduleConsumerLeaseSweep();
+    return { known: true };
   }
 
   unsubscribe(sessionId: string, consumerId: string): void {

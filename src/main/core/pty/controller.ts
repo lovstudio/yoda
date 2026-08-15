@@ -158,15 +158,22 @@ export const ptyController = createRPCController({
     return ok();
   },
 
-  /** Renew a renderer consumer lease and replay its latest parsed watermark. */
+  /**
+   * Renew a renderer consumer lease and replay its latest parsed watermark.
+   *
+   * `known: false` tells the renderer its registration no longer exists, which is
+   * the only way it can find out: consumers are released by owner reloads,
+   * crashes and lease expiry, none of which the renderer observes.
+   */
   heartbeatConsumer: (
     sessionId: string,
     consumerId: string,
     generation: number,
     acknowledgedSequence: number
   ) => {
-    ptySessionRegistry.heartbeat(sessionId, consumerId, generation, acknowledgedSequence);
-    return ok();
+    return ok(
+      ptySessionRegistry.heartbeat(sessionId, consumerId, generation, acknowledgedSequence)
+    );
   },
 
   /**

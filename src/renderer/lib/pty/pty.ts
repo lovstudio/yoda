@@ -140,6 +140,14 @@ const CANONICAL_STALL_RESYNC_MS = 2_500;
  */
 const MAX_CANONICAL_STALL_RESYNCS = 2;
 /**
+ * Why a re-subscribe was started.
+ *
+ * `canonical-stall` is inferred from silence and can be wrong, so it is budgeted.
+ * `consumer-lost` is main's own answer to a heartbeat — the registration is
+ * provably gone — so it is acted on immediately and never charged to that budget.
+ */
+type CanonicalResyncTrigger = 'canonical-stall' | 'consumer-lost';
+/**
  * Bound the subscribe round-trip generously. This is not a latency target: it
  * is the point at which we give up entirely, and giving up strands the caller
  * on its opening surface, because connect() rejections are intentionally
@@ -2317,13 +2325,21 @@ export class FrontendPty {
    *
    * Returns whether the read produced payload this generation had been missing.
    */
-  private async resynchronizeStalledGeneration(mountLease: number): Promise<boolean> {
+  private async resynchronizeStalledGeneration(
+    mountLease: number,
+    trigger: CanonicalResyncTrigger = 'canonical-stall'
+  ): Promise<boolean> {
     if (this.canonicalStallResyncPromise) return this.canonicalStallResyncPromise;
     if (this.isDisposed || this.connectedConsumerId === null) return false;
 
     const previousConsumerId = this.connectedConsumerId;
     const consumerId = globalThis.crypto.randomUUID();
-    this.canonicalStallResyncCount += 1;
+    // Only the fence's own retries spend its budget. A heartbeat repair answers a
+    // definite "your registration is gone" rather than a guess from silence, and
+    // it is already rate-limited to one per heartbeat interval — charging it here
+    // would let ordinary owner reloads exhaust the budget and push a healthy
+    // session into a degraded reveal.
+    if (trigger === 'canonical-stall') this.canonicalStallResyncCount += 1;
     const attempt = (async () => {
       let result: Awaited<ReturnType<typeof rpc.pty.subscribe>> | null = null;
       try {
@@ -2568,6 +2584,18 @@ export class FrontendPty {
     rpc.pty.acknowledgeOutput(this.sessionId, consumerId, generation, sequence).catch(() => {});
   }
 
+  /**
+   * Renew this renderer's consumer lease, and repair the session when main
+   * answers that the lease no longer exists.
+   *
+   * Consumers are released for reasons this renderer never observes: a reload of
+   * the owning window, a crashed frame, an expired lease. A renderer holding a
+   * released `consumerId` keeps its watermark, keeps believing it is attached,
+   * and receives nothing further — the silent divergence the canonical fence has
+   * to infer from 2.5 s of quiet. The heartbeat's answer is not an inference, so
+   * acting on it repairs the session at once and works whether or not anything
+   * is currently waiting for a frame.
+   */
   private startConsumerHeartbeat(): void {
     if (this.consumerHeartbeatTimer !== null) return;
     this.consumerHeartbeatTimer = setInterval(() => {
@@ -2581,6 +2609,19 @@ export class FrontendPty {
           this.acknowledgedGeneration,
           this.acknowledgedSequence
         )
+        .then((result) => {
+          if (result.success && result.data.known) return;
+          // Ignore an answer about a lease we have since replaced — a reconnect
+          // or an in-flight repair already owns the session.
+          if (!result.success || this.isDisposed || this.connectedConsumerId !== consumerId) return;
+          log.debug('[pty-renderer] consumer registration lost, resubscribing', {
+            sessionId: this.sessionId,
+          });
+          void this.resynchronizeStalledGeneration(
+            this.debugVisibleMount?.lease ?? this.mountGeneration,
+            'consumer-lost'
+          ).catch(() => {});
+        })
         .catch(() => {})
         .finally(() => {
           this.consumerHeartbeatInFlight = false;

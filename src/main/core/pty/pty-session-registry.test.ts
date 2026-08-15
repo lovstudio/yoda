@@ -1279,7 +1279,8 @@ describe('PtySessionRegistry', () => {
     registry.subscribe('session', 'consumer');
     registry.unsubscribe('session', 'consumer');
 
-    registry.heartbeat('session', 'consumer', 1, 0);
+    // The report back is the renderer's only way to learn it was detached.
+    expect(registry.heartbeat('session', 'consumer', 1, 0)).toEqual({ known: false });
     pty.emitData('x'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES));
 
     expect(pty.pause).not.toHaveBeenCalled();
@@ -1292,7 +1293,7 @@ describe('PtySessionRegistry', () => {
     registry.subscribe('session', 'consumer');
     vi.advanceTimersByTime(PTY_CONSUMER_LEASE_TIMEOUT_MS);
 
-    registry.heartbeat('session', 'consumer', 1, 0);
+    expect(registry.heartbeat('session', 'consumer', 1, 0)).toEqual({ known: false });
     pty.emitData('x'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES));
 
     expect(pty.pause).not.toHaveBeenCalled();
@@ -1306,7 +1307,11 @@ describe('PtySessionRegistry', () => {
     pty.emitData('x'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES));
 
     vi.advanceTimersByTime(PTY_CONSUMER_LEASE_TIMEOUT_MS - 1);
-    registry.heartbeat('session', 'consumer', 1, Number.POSITIVE_INFINITY);
+    // The renewal is refused, but the registration exists — reporting it missing
+    // would send the renderer resubscribing over a bad watermark alone.
+    expect(registry.heartbeat('session', 'consumer', 1, Number.POSITIVE_INFINITY)).toEqual({
+      known: true,
+    });
     vi.advanceTimersByTime(1);
 
     expect(pty.resume).toHaveBeenCalledTimes(1);
