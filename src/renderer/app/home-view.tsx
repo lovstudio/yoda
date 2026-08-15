@@ -52,7 +52,6 @@ import {
   paradigmKind,
   paradigmKindForRunMode,
   paradigmSlot,
-  paradigmSlotByStorageKey,
   runModeForParadigmKind,
   type LegacyRunMode,
 } from '@shared/paradigms/kinds';
@@ -64,14 +63,18 @@ import { resolveHomeProjectId } from '@renderer/app/home-project-selection';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
 import { agentSkillSelection } from '@renderer/features/paradigms/agent-launch-settings';
 import { createParadigmLaunchContext } from '@renderer/features/paradigms/create-launch-context';
-import { teamDisplayName } from '@renderer/features/paradigms/entries';
+import { selectByKind } from '@renderer/features/paradigms/entries';
 import type {
   CompareVariant,
   ParadigmLaunchParams,
   TaskStrategyKind,
 } from '@renderer/features/paradigms/launch-context';
-import { agentTeamsQueryKey } from '@renderer/features/paradigms/paradigm-queries';
+import {
+  agentTeamsQueryKey,
+  paradigmsQueryKey,
+} from '@renderer/features/paradigms/paradigm-queries';
 import { paradigmLauncher, paradigmLaunchStamp } from '@renderer/features/paradigms/registry';
+import { paradigmSeatAgentId } from '@renderer/features/paradigms/seats';
 import { ParadigmSelector } from '@renderer/features/paradigms/selector';
 import {
   asMounted,
@@ -117,6 +120,7 @@ import { MicroLabel } from '@renderer/lib/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
+import { formatModelLabel } from '@renderer/utils/format-model-label';
 import { cn } from '@renderer/utils/utils';
 import { resolveAgentSlot } from './agent-slot-resolution';
 import {
@@ -218,25 +222,6 @@ const HomeComposerPrompt = memo(
     return <ComposerPromptInput {...inputProps} value={value} onChange={setLocalValue} />;
   })
 );
-
-/**
- * Humanize a model id for the run-mode chip, e.g. `claude-opus-4-8` → `Opus 4.8`.
- * Falls back to the raw id when the shape is unfamiliar. `null` (runtime default)
- * is handled by the caller, not here.
- */
-function formatModelLabel(model: string): string {
-  const known = ['opus', 'sonnet', 'haiku', 'gpt', 'gemini', 'qwen', 'kimi', 'mistral'];
-  const segments = model.split(/[-_]/).filter(Boolean);
-  const tierIndex = segments.findIndex((segment) => known.includes(segment.toLowerCase()));
-  if (tierIndex === -1) return model;
-  const tier = segments[tierIndex];
-  const version = segments
-    .slice(tierIndex + 1)
-    .filter((segment) => /\d/.test(segment))
-    .join('.');
-  const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
-  return version ? `${tierLabel} ${version}` : tierLabel;
-}
 
 interface RunModeInputChrome {
   containerClassName: string;
@@ -698,6 +683,12 @@ export const HomeComposer = observer(function HomeComposer({
     queryKey: agentTeamsQueryKey,
     queryFn: () => rpc.agentTeams.list(),
   });
+  // Paradigm instances, for the seats the selected one carries. The picker reads
+  // the same query, so both resolve seats from one source.
+  const { data: paradigms = [] } = useQuery({
+    queryKey: paradigmsQueryKey,
+    queryFn: () => rpc.paradigms.list(),
+  });
   const queryClient = useQueryClient();
   // Which paradigm *instance* is selected. Empty means the current kind's own
   // built-in instance, which is what every kind but `team` has exactly one of.
@@ -716,19 +707,24 @@ export const HomeComposer = observer(function HomeComposer({
     () => draft?.selectedAgentIds ?? {},
     [draft?.selectedAgentIds]
   );
-  // Per-slot Agent selection. We reuse the persisted `selectedAgentIds`
-  // string→string[] map, keyed by each slot's prompt key. When a slot has no
-  // explicit selection, it defaults to the built-in Agent seeded for that slot
-  // (matched by slug), so every mode works out of the box.
+  // The paradigm instance this submit will run. Seats live on it, so resolving it
+  // here is what makes a duplicated paradigm launch with its own Agents rather
+  // than the ones its original was configured with.
+  const activeParadigm = useMemo(
+    () => selectByKind(paradigms, paradigmKindForRunMode(runMode), selectedParadigmId),
+    [paradigms, runMode, selectedParadigmId]
+  );
+  // Per-slot Agent selection, resolved against the selected instance first and
+  // the composer draft second — see `paradigmSeatAgentId`.
   const slotAgentId = useCallback(
-    (slotKey: string): string | null => {
-      const explicit = selectedAgentIdsByMode[slotKey]?.[0];
-      if (explicit) return explicit;
-      const builtinKey = paradigmSlotByStorageKey(slotKey)?.defaultBuiltinAgentKey;
-      if (!builtinKey) return null;
-      return userAgents.find((a) => a.slug === builtinKey)?.id ?? null;
-    },
-    [selectedAgentIdsByMode, userAgents]
+    (slotKey: string): string | null =>
+      paradigmSeatAgentId({
+        paradigm: activeParadigm,
+        slotStorageKey: slotKey,
+        draftAgents: selectedAgentIdsByMode,
+        agents: userAgents,
+      }),
+    [activeParadigm, selectedAgentIdsByMode, userAgents]
   );
   const setSlotAgent = useCallback(
     (slotKey: string, agentId: string) => {
@@ -753,29 +749,6 @@ export const HomeComposer = observer(function HomeComposer({
   }, [activeTeam, runMode, slotAgentId, userAgents]);
   const composerSkillSelection = useMemo(() => agentSkillSelection(composerAgent), [composerAgent]);
   const permissionModes = useRuntimePermissionModes();
-  const runModeSummary = useMemo(() => {
-    const runtimeName = (id: RuntimeId | null) => (id ? (getRuntime(id)?.name ?? id) : null);
-    const modelLabel = (model: string | null) =>
-      model ? formatModelLabel(model) : t('home.modelDefault');
-
-    if (runMode === 'team') {
-      return activeTeam ? teamDisplayName(activeTeam, t) : null;
-    }
-
-    // Single-Agent paradigms: the primary (implementer) slot's resolved
-    // runtime · model.
-    const slotKey = primarySlotKey(runMode);
-    if (!slotKey) return null;
-    const resolved = resolveAgentSlot({
-      selectedAgentId: slotAgentId(slotKey),
-      agents: userAgents,
-      fallbackRuntime: runtimeId,
-    });
-
-    const name = runtimeName(resolved.provider);
-    if (!name) return null;
-    return `${name} · ${modelLabel(resolved.agent?.model ?? null)}`;
-  }, [runMode, runtimeId, activeTeam, slotAgentId, userAgents, t]);
   const normalAgentRuntime = useMemo(
     () =>
       resolveAgentSlot({
@@ -1705,11 +1678,10 @@ export const HomeComposer = observer(function HomeComposer({
             <ParadigmSelector
               kindId={paradigmKindForRunMode(runMode)}
               paradigmId={selectedParadigmId}
-              summary={runModeSummary}
               teams={teams}
               agents={userAgents}
-              slotAgentId={slotAgentId}
-              onSlotAgentChange={setSlotAgent}
+              draftAgents={selectedAgentIdsByMode}
+              onDraftSlotAgentChange={setSlotAgent}
               onChange={setParadigm}
             />
             {renderComposerSettingsButton()}

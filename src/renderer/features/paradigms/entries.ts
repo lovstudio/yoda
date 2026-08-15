@@ -2,7 +2,6 @@ import {
   BUILTIN_FEATURE_TEAM_ID,
   BUILTIN_REVIEW_TEAM_ID,
   BUILTIN_STARTUP_TEAM_ID,
-  type AgentTeam,
 } from '@shared/agent-team';
 import type { ParadigmIconId, ParadigmKindId } from '@shared/paradigms/contract';
 import { paradigmKind } from '@shared/paradigms/kinds';
@@ -26,10 +25,16 @@ export interface ParadigmEntry {
   iconId: ParadigmIconId;
   /** Glyph, image URL, or data URL from the instance; wins over `iconId`. */
   avatar?: string;
-  /** i18n key, for entries whose label is localized copy. */
-  labelKey?: string;
-  /** Literal label, for user-named instances. */
-  label?: string;
+  /**
+   * The kind's name — the category this instance belongs to. Always present:
+   * an instance is always some way of working, and naming the category is what
+   * keeps a named team from reading as an unrelated one-off.
+   */
+  categoryKey: string;
+  /** The instance's own name, as an i18n key. Absent when it has none. */
+  nameKey?: string;
+  /** The instance's own name, literal. Absent when it has none. */
+  name?: string;
   descKey: string;
   alpha?: boolean;
   /** Code-defined instances can be duplicated but not renamed or removed. */
@@ -45,22 +50,22 @@ export interface ParadigmEntry {
  */
 const BUILTIN_TEAM_PRESENTATION: Record<
   string,
-  { labelKey: string; descKey: string; pickerOrder: number; alpha?: boolean }
+  { nameKey: string; descKey: string; pickerOrder: number; alpha?: boolean }
 > = {
   [BUILTIN_FEATURE_TEAM_ID]: {
-    labelKey: 'home.modeTeamFeature',
+    nameKey: 'home.modeTeamFeature',
     descKey: 'home.modeTeamFeatureDesc',
     // Converged enough to sit among the single-thread paradigms rather than after
     // them, which is where it has always been.
     pickerOrder: 10,
   },
   [BUILTIN_REVIEW_TEAM_ID]: {
-    labelKey: 'home.modeTeamReview',
+    nameKey: 'home.modeTeamReview',
     descKey: 'home.modeTeamReviewDesc',
     pickerOrder: 50,
   },
   [BUILTIN_STARTUP_TEAM_ID]: {
-    labelKey: 'home.modeTeamStartup',
+    nameKey: 'home.modeTeamStartup',
     descKey: 'home.modeTeamStartupDesc',
     pickerOrder: 51,
     // Honors the original "startup is alpha" call; the review team is GA.
@@ -71,10 +76,24 @@ const BUILTIN_TEAM_PRESENTATION: Record<
 /** User instances sort after every built-in, in list order. */
 const USER_ORDER_BASE = 100;
 
-/** Display name for a team across the composer: localized for built-ins. */
-export function teamDisplayName(team: AgentTeam, t: (key: string) => string): string {
-  const presentation = BUILTIN_TEAM_PRESENTATION[team.id];
-  return presentation ? t(presentation.labelKey) : team.name;
+/**
+ * How an entry reads: its category, qualified by its own name when it has one.
+ *
+ * "Category · name" rather than name alone, because a name on its own does not
+ * say what it will do — `Spec` is a team and `Review` is both a team and a
+ * single-thread loop, so the category is the part that disambiguates.
+ *
+ * `fallbackName` covers the instance that was never named: a kind's own built-in
+ * has no label, but the Agent sitting in it does, and that Agent is what tells
+ * two rows of the same category apart.
+ */
+export function paradigmEntryLabel(
+  entry: ParadigmEntry,
+  t: (key: string) => string,
+  fallbackName?: string | null
+): { category: string; name: string | null } {
+  const own = entry.name ?? (entry.nameKey ? t(entry.nameKey) : null);
+  return { category: t(entry.categoryKey), name: own || fallbackName || null };
 }
 
 /**
@@ -99,13 +118,16 @@ export function paradigmEntries(paradigms: readonly Paradigm[]): ParadigmEntry[]
           kindId: paradigm.kindId,
           iconId: kind.iconId,
           ...(paradigm.icon ? { avatar: paradigm.icon } : {}),
-          // An instance with no label of its own reads as its kind, which is what
-          // makes a code-defined instance need no copy.
+          // The category is the kind, always — an instance never stops being one
+          // way of working, whatever it is named.
+          categoryKey: kind.labelKey,
+          // Only an instance that was named carries a name. A kind's own built-in
+          // has none, and reads as the bare category rather than repeating it.
           ...(presentation
-            ? { labelKey: presentation.labelKey }
+            ? { nameKey: presentation.nameKey }
             : paradigm.label
-              ? { label: paradigm.label }
-              : { labelKey: kind.labelKey }),
+              ? { name: paradigm.label }
+              : {}),
           descKey: presentation?.descKey ?? kind.descriptionKey,
           ...((presentation?.alpha ?? kind.alpha) ? { alpha: true } : {}),
           builtin: paradigm.builtin,
@@ -129,8 +151,25 @@ export function paradigmEntryId(
   kindId: ParadigmKindId,
   paradigmId: string | undefined
 ): string | undefined {
-  const match =
-    entries.find((entry) => entry.kindId === kindId && entry.id === paradigmId) ??
-    entries.find((entry) => entry.kindId === kindId);
-  return (match ?? entries[0])?.id;
+  return selectByKind(entries, kindId, paradigmId)?.id;
+}
+
+/**
+ * The selected instance itself, resolved the same way the picker resolves its
+ * highlighted row.
+ *
+ * The composer needs the instance, not the row: seats and params live on it. Both
+ * callers go through one rule so the row the user sees highlighted is the instance
+ * that actually runs.
+ */
+export function selectByKind<T extends { id: string; kindId: ParadigmKindId }>(
+  candidates: readonly T[],
+  kindId: ParadigmKindId,
+  paradigmId: string | undefined
+): T | undefined {
+  return (
+    candidates.find((candidate) => candidate.kindId === kindId && candidate.id === paradigmId) ??
+    candidates.find((candidate) => candidate.kindId === kindId) ??
+    candidates[0]
+  );
 }

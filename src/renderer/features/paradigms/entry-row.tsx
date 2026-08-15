@@ -24,7 +24,8 @@ import { ParadigmIcon } from './icons';
  */
 export function ParadigmEntryRow({
   entry,
-  label,
+  category,
+  name,
   active,
   onSelect,
   onDuplicate,
@@ -32,7 +33,10 @@ export function ParadigmEntryRow({
   onRemove,
 }: {
   entry: ParadigmEntry;
-  label: string;
+  /** The kind's name. Leads the row: it says what this way of working is. */
+  category: string;
+  /** What this one is called, when it is called anything. */
+  name: string | null;
   active: boolean;
   onSelect: () => void;
   onDuplicate: () => void;
@@ -60,7 +64,7 @@ export function ParadigmEntryRow({
       >
         {entry.avatar !== undefined ? (
           <AvatarValue
-            name={label}
+            name={name ?? category}
             value={entry.avatar}
             className="size-4 rounded-sm text-[10px]"
           />
@@ -70,19 +74,30 @@ export function ParadigmEntryRow({
             className={cn('size-4 shrink-0', active ? 'text-primary' : 'text-foreground-muted')}
           />
         )}
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-        {entry.alpha && (
-          <Badge variant="secondary" className="shrink-0 px-1 py-0 text-[9px]">
-            {t('home.modeAlphaBadge')}
-          </Badge>
-        )}
+        {/* Category first, then what this one is called: a row is read as "which
+            way of working", and only then as "which one of those". */}
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="shrink-0">{category}</span>
+          {name && <span className="min-w-0 truncate font-normal opacity-60">{name}</span>}
+          {entry.alpha && (
+            <Badge variant="secondary" className="shrink-0 px-1 py-0 text-[9px]">
+              {t('home.modeAlphaBadge')}
+            </Badge>
+          )}
+        </span>
         {active && <Check className="size-3.5 shrink-0 text-primary" />}
       </button>
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label={t('common.more')}
           title={t('common.more')}
-          className="flex size-5 shrink-0 items-center justify-center rounded-sm text-foreground-passive opacity-0 transition-opacity hover:bg-background-1 hover:text-foreground focus-visible:opacity-100 group-hover/paradigm:opacity-100"
+          className={cn(
+            'flex size-5 shrink-0 items-center justify-center rounded-sm text-foreground-passive transition-opacity hover:bg-background-1 hover:text-foreground focus-visible:opacity-100 group-hover/paradigm:opacity-100',
+            // Kept visible on the selected row: duplicating is how a built-in
+            // becomes editable, so the way in cannot be hover-only on the one row
+            // the user is already looking at.
+            active ? 'opacity-70' : 'opacity-0'
+          )}
         >
           <MoreHorizontal className="size-3" />
         </DropdownMenuTrigger>
