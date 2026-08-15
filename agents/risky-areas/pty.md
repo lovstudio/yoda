@@ -55,3 +55,46 @@
   spawn must kill its own PTY without touching a newer generation
 - project-root terminals follow the global tmux policy, persist outside the
   task-terminal table, and must participate in detach/terminate app shutdown
+
+## The First-Frame Silence Fence Is A Known Defect
+
+`FALLBACK_FIRST_FRAME_QUIET_MS` in `src/renderer/lib/pty/pty.ts` uses terminal
+silence as a proxy for "the provider finished restoring the conversation". A
+streaming agent CLI never satisfies it on request — spinner, startup log and
+token stream all restart the window — so the fence costs the provider's whole
+startup, not its nominal 700 ms. Roughly six of the nine seconds of a cold task
+open were spent here.
+
+- do not treat the fence as tunable: a window short enough to be fast is also
+  short enough to reveal a loading frame. Every bound around it
+  (`CANONICAL_QUIET_HOLD_BUDGET_MS`, `CANONICAL_STALL_RESYNC_MS`,
+  `CANONICAL_FENCE_PARK_FLOOR_MS`) contains the unboundedness; none of them make
+  the proxy correct
+- the correct fixes are an explicit provider readiness signal (a final-frame /
+  restore-complete marker the fence can wait on) or reading history from the
+  transcript and leaving the PTY responsible for live output only
+- never let a wait's own bound sit at the cost of a measured healthy open — an
+  attempt that expires just short of committing pays for the whole attempt twice
+
+## Reading The Task-Open Trajectory
+
+`src/renderer/features/tasks/task-open-trajectory-lanes.ts` splits marks into six
+lanes by producer (`ui`/`frame`/`open` in the renderer, `session`/`client`/`pty`
+in main), so dead air across all lanes reads as a handoff instead of hiding
+inside one slow mark. What to look at first:
+
+- `repeats` — a wait entered once and a wait entered nine times are different
+  diagnoses. High repeats means something kept invalidating the condition, and
+  the interval that looks silent is actually a spin
+- `sinceOutputMs` — how long since the last byte. Large while a fence is waiting
+  means the provider already stopped and the fence is waiting on nothing
+- `heldMs` — how long a complete frame has been kept off screen. This is the
+  user-visible cost of refusing a frame we already have
+- `cursorComplete` / `anchorKind` / `anchorMatched` — which condition refused the
+  frame. "main had no transcript evidence" and "the evidence never appeared on
+  screen" have opposite fixes and are otherwise the same mark
+- gap `kind` — `handoff` crosses lanes (someone finished, someone else was late
+  to react), `stall` stays inside one lane (that lane was late to produce)
+
+Instrumentation can blind itself: a mark emitted after the trace closes is
+dropped, so a missing paint mark may mean ordering, not a missing paint.

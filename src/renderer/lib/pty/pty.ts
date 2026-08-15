@@ -59,6 +59,26 @@ const FIRST_FRAME_TIMEOUT_MS = 5_000;
  * in DEC 2026 transactions.
  */
 const PREPARED_FRAME_SETTLEMENT_QUIET_MS = 120;
+/**
+ * How long the terminal must stay silent before an unproven frame is accepted.
+ *
+ * This is a known-defective proxy, kept only because nothing better exists yet.
+ * Silence is being used to mean "the provider finished restoring the
+ * conversation", but a streaming agent CLI never goes quiet on request: it draws
+ * a spinner, a startup log or a token stream, restarting this window on every
+ * burst. So the wait is not 700 ms — it is however long the provider takes to
+ * stop writing, measured at ~5 s on a Codex resume that already had a
+ * cursor-complete frame in hand at 2.2 s. Every bound around it
+ * (CANONICAL_QUIET_HOLD_BUDGET_MS, CANONICAL_STALL_RESYNC_MS,
+ * CANONICAL_FENCE_PARK_FLOOR_MS) exists to contain that unboundedness, not to
+ * make the proxy correct.
+ *
+ * The real fix is not a better timeout: it is an explicit readiness signal from
+ * the provider — a final-frame / restore-complete marker the fence can wait on —
+ * or reading history from the transcript instead of the terminal, leaving the PTY
+ * responsible for live output only. Prefer either over tuning this number; a
+ * value low enough to be fast is also low enough to reveal a loading frame.
+ */
 const FALLBACK_FIRST_FRAME_QUIET_MS = 700;
 /**
  * How long the silence fence may keep a complete frame off screen.
