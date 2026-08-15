@@ -81,6 +81,15 @@ describe('openNewTask', () => {
     expect(mocks.showModal).toHaveBeenCalledWith('newTaskModal', {});
   });
 
+  it('inverts the preference for a one-off Alt click without persisting it', async () => {
+    mocks.getQueryData.mockReturnValue({ value: { newTaskOpenMode: 'modal' } });
+
+    await openNewTaskFromPreference('project-1', true);
+
+    expect(mocks.navigate).toHaveBeenCalledWith('home', { projectId: 'project-1' });
+    expect(mocks.showModal).not.toHaveBeenCalled();
+  });
+
   it('falls back to Home when settings are temporarily unavailable', async () => {
     mocks.getSettings.mockRejectedValue(new Error('settings unavailable'));
 

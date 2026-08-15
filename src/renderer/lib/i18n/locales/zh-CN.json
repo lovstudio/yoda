@@ -139,6 +139,8 @@
   },
   "sidebar": {
     "newTask": "新建任务",
+    "newTaskInMode": "新建任务（{{mode}}）",
+    "newTaskAltHint": "按住 Alt/Option 点击可改为在{{mode}}打开",
     "newTaskAndRun": "新建任务并启动 Session",
     "newTaskOpenMode": "新建任务打开方式",
     "newTaskOpenHome": "主页",

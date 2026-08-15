@@ -1,9 +1,8 @@
-import { AppWindow, FolderInput, Library, Search, Settings, SquarePen } from 'lucide-react';
+import { AppWindow, FolderInput, Library, Search, Settings } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { skillIssueAgentLabel } from '@shared/skills/validation';
-import { openNewTaskFromPreference } from '@renderer/app/open-new-task';
 import { useAiLabApps, useUpdateAiLabApp } from '@renderer/features/ai-lab/use-ai-lab';
 import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import {
@@ -26,6 +25,7 @@ import { appState, sidebarStore, workspaceStore } from '@renderer/lib/stores/app
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { cn } from '@renderer/utils/utils';
 import { GlobalSidePaneTarget } from './global-side-pane-target';
+import { NewTaskMenuButton } from './new-task-menu-button';
 import { SidebarDndProvider } from './sidebar-dnd-context';
 import {
   SidebarContainer,
@@ -171,9 +171,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
     skillIssueLabel && firstSkillIssue
       ? `${skillIssueLabel}\n${formatSkillIssueTitle(firstSkillIssue)}`
       : (skillIssueLabel ?? undefined);
-  const handleNewTask = React.useCallback(() => {
-    void openNewTaskFromPreference(currentProjectId);
-  }, [currentProjectId]);
 
   return (
     <div
@@ -208,18 +205,10 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 <div className="my-1 border-t border-border" />
               </>
             )}
-            <SidebarMenuButton
+            <NewTaskMenuButton
               isActive={isCurrentView(currentView, 'home')}
-              onClick={handleNewTask}
-              aria-label={t('sidebar.newTask')}
-              className="w-full justify-between"
-            >
-              <span className="flex items-center gap-2 min-w-0 w-full">
-                <SquarePen className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
-                <span className="truncate min-w-0">{t('sidebar.newTask')}</span>
-              </span>
-              <ShortcutHint settingsKey="newTask" />
-            </SidebarMenuButton>
+              currentProjectId={currentProjectId}
+            />
             <SidebarMenuButton
               onClick={() =>
                 showCommandPalette({

@@ -139,6 +139,8 @@
   },
   "sidebar": {
     "newTask": "New task",
+    "newTaskInMode": "New task ({{mode}})",
+    "newTaskAltHint": "Hold Alt/Option to open in {{mode}} instead",
     "newTaskAndRun": "New task and start session",
     "newTaskOpenMode": "New task opens in",
     "newTaskOpenHome": "Home",

@@ -38,8 +38,22 @@ export async function resolveNewTaskOpenMode(): Promise<NewTaskOpenMode> {
   );
 }
 
-export async function openNewTaskFromPreference(projectId?: string): Promise<void> {
-  openNewTask(await resolveNewTaskOpenMode(), projectId);
+export const NEW_TASK_OPEN_MODE_LABEL_KEYS: Record<NewTaskOpenMode, string> = {
+  home: 'sidebar.newTaskOpenHome',
+  modal: 'sidebar.newTaskOpenModal',
+};
+
+export function otherNewTaskOpenMode(mode: NewTaskOpenMode): NewTaskOpenMode {
+  return mode === 'home' ? 'modal' : 'home';
+}
+
+/**
+ * `invert` is the one-off escape hatch behind Alt/Option: open in the mode the
+ * preference is not set to, without touching the persisted preference.
+ */
+export async function openNewTaskFromPreference(projectId?: string, invert = false): Promise<void> {
+  const mode = await resolveNewTaskOpenMode();
+  openNewTask(invert ? otherNewTaskOpenMode(mode) : mode, projectId);
 }
 
 /**

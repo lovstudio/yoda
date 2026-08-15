@@ -25,13 +25,17 @@ describe('LeftSidebar app placement', () => {
 
   it('keeps the primary creation entry as a new task in every view', () => {
     const source = readFileSync(new URL('./left-sidebar.tsx', import.meta.url), 'utf8');
-
-    expect(source).toContain(
-      "import { openNewTaskFromPreference } from '@renderer/app/open-new-task';"
+    const buttonSource = readFileSync(
+      new URL('./new-task-menu-button.tsx', import.meta.url),
+      'utf8'
     );
-    expect(source).toContain('void openNewTaskFromPreference(currentProjectId);');
-    expect(source).toContain("aria-label={t('sidebar.newTask')}");
-    expect(source).toContain("{t('sidebar.newTask')}</span>");
+
+    expect(source).toContain("import { NewTaskMenuButton } from './new-task-menu-button';");
+    expect(source).toContain('<NewTaskMenuButton');
+    expect(buttonSource).toContain(
+      'void openNewTaskFromPreference(currentProjectId, event.altKey)'
+    );
+    expect(buttonSource).toContain("t('sidebar.newTask')");
     expect(source).not.toContain('openNewTaskFromCurrentContext');
     expect(source).not.toContain('createSubtaskAndRun');
   });
