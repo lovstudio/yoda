@@ -122,7 +122,9 @@ export function mergeSessionUsages(usages: SessionTokenUsage[]): SessionTokenUsa
   }
   return {
     total,
-    context: usages.at(-1)?.context ?? null,
+    // First non-null wins: the main transcript leads the path list, and a
+    // subagent's own window is not the session's context.
+    context: usages.find((usage) => usage.context)?.context ?? null,
     daily: sortedDaily(daily),
     byModel: sortedByModel(byModel),
   };

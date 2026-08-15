@@ -143,3 +143,111 @@ describe('parseClaudeUsage', () => {
     expect(parseClaudeUsage(raw)).toBeNull();
   });
 });
+
+describe('parseClaudeUsage context window', () => {
+  it('reads live context from the newest assistant message', () => {
+    const raw = [
+      assistantRow('msg-1', { input_tokens: 100, output_tokens: 50 }, DAY_ONE, 'claude-opus-5'),
+      assistantRow(
+        'msg-2',
+        {
+          input_tokens: 1_000,
+          output_tokens: 2_000,
+          cache_read_input_tokens: 40_000,
+          cache_creation_input_tokens: 3_000,
+        },
+        DAY_ONE,
+        'claude-opus-5'
+      ),
+    ].join('\n');
+
+    expect(parseClaudeUsage(raw)?.context).toEqual({
+      usedTokens: 46_000,
+      limitTokens: 200_000,
+      resetCount: 0,
+      lastResetAt: null,
+      rateLimits: [],
+    });
+  });
+
+  it('promotes the window to 1M once the session outgrows the standard one', () => {
+    const raw = assistantRow(
+      'msg-1',
+      { input_tokens: 1_000, cache_read_input_tokens: 300_000, output_tokens: 500 },
+      DAY_ONE,
+      'anthropic/claude-opus-5'
+    );
+
+    expect(parseClaudeUsage(raw)?.context).toMatchObject({
+      usedTokens: 301_500,
+      limitTokens: 1_000_000,
+    });
+  });
+
+  it('counts compact boundaries and drops back to the post-compaction size', () => {
+    const raw = [
+      assistantRow(
+        'msg-1',
+        { input_tokens: 1_000, cache_read_input_tokens: 160_000 },
+        DAY_ONE,
+        'claude-opus-5'
+      ),
+      JSON.stringify({
+        type: 'system',
+        subtype: 'compact_boundary',
+        timestamp: DAY_TWO,
+        compactMetadata: { trigger: 'auto', preTokens: 161_000, postTokens: 18_000 },
+      }),
+    ].join('\n');
+
+    expect(parseClaudeUsage(raw)?.context).toMatchObject({
+      usedTokens: 18_000,
+      resetCount: 1,
+      lastResetAt: DAY_TWO,
+    });
+  });
+
+  it('keeps the 1M window after compaction brings usage back down', () => {
+    const raw = [
+      JSON.stringify({
+        type: 'system',
+        subtype: 'compact_boundary',
+        timestamp: DAY_ONE,
+        compactMetadata: { trigger: 'auto', preTokens: 444_818, postTokens: 19_726 },
+      }),
+      assistantRow(
+        'msg-1',
+        { input_tokens: 1_000, cache_read_input_tokens: 120_000 },
+        DAY_TWO,
+        'claude-opus-5'
+      ),
+    ].join('\n');
+
+    expect(parseClaudeUsage(raw)?.context).toMatchObject({
+      usedTokens: 121_000,
+      limitTokens: 1_000_000,
+    });
+  });
+
+  it('ignores sidechain turns, which run on their own window', () => {
+    const raw = [
+      assistantRow(
+        'msg-1',
+        { input_tokens: 1_000, cache_read_input_tokens: 90_000 },
+        DAY_ONE,
+        'claude-opus-5'
+      ),
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: DAY_ONE,
+        isSidechain: true,
+        message: { id: 'msg-sub', model: 'claude-opus-5', usage: { input_tokens: 500 } },
+      }),
+    ].join('\n');
+
+    const usage = parseClaudeUsage(raw);
+
+    expect(usage?.total.input).toBe(1_500);
+    expect(usage?.context?.usedTokens).toBe(91_000);
+  });
+});
