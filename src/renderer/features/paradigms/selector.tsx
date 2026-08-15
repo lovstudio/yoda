@@ -18,6 +18,7 @@ import {
   DialogTrigger,
 } from '@renderer/lib/ui/dialog';
 import { Input } from '@renderer/lib/ui/input';
+import { Label } from '@renderer/lib/ui/label';
 import { cn } from '@renderer/utils/utils';
 import { ParadigmConfigurationPanel } from './configuration-panel';
 import {
@@ -136,9 +137,25 @@ export function ParadigmSelector({
     setEditDraft({ label: paradigmEntryOwnName(entry, t), icon: entry.avatar ?? '' });
   };
 
-  const commitEditing = async (id: string) => {
-    setEditingId(null);
-    await setPresentation(id, editDraft.label, editDraft.icon);
+  /**
+   * Writes the draft without leaving edit mode.
+   *
+   * Edits persist as they are made rather than on the way out: the avatar picker is
+   * a dialog of its own, and committing on blur tore this row down the instant it
+   * opened — taking the picker with it. Leaving edit mode is now only ever the
+   * user's own Enter or Escape, and nothing is riding on it.
+   */
+  const persistEditing = (id: string, draft = editDraft) => {
+    const entry = entries.find((candidate) => candidate.id === id);
+    // Nothing changed, nothing to write. Otherwise merely opening a shipped
+    // paradigm's editor and clicking away would store its displayed name as its
+    // own — freezing a localized label, or an Agent's name, as the instance's.
+    if (
+      !entry ||
+      (draft.label === paradigmEntryOwnName(entry, t) && draft.icon === (entry.avatar ?? ''))
+    )
+      return;
+    void setPresentation(id, draft.label, draft.icon);
   };
 
   const handleDuplicate = async (id: string) => {
@@ -258,12 +275,18 @@ export function ParadigmSelector({
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
             {pending && editingId === pending.id ? (
-              <div className="flex items-end gap-3 border border-border/60 bg-background-1/40 p-2">
+              <div className="flex items-end gap-3 rounded-xl border border-border bg-muted/15 p-3">
                 <AvatarInput
                   id="paradigm-avatar"
-                  name={editDraft.label}
+                  name={editDraft.label || (pendingLabel?.category ?? '')}
                   value={editDraft.icon}
-                  onChange={(icon) => setEditDraft((prev) => ({ ...prev, icon }))}
+                  onChange={(icon) => {
+                    const next = { ...editDraft, icon };
+                    setEditDraft(next);
+                    // The picker closes on select, so there is no blur to ride and
+                    // no reason to make the user confirm a choice they just made.
+                    persistEditing(pending.id, next);
+                  }}
                   inputLabel={t('home.paradigmAvatar')}
                   placeholder={t('common.avatarPlaceholder')}
                   uploadTitle={t('common.uploadPhoto')}
@@ -271,21 +294,29 @@ export function ParadigmSelector({
                   onFileError={showAvatarFileError}
                   appearance="profile"
                 />
-                <Input
-                  autoFocus
-                  aria-label={t('home.paradigmName')}
-                  value={editDraft.label}
-                  onChange={(event) =>
-                    setEditDraft((prev) => ({ ...prev, label: event.target.value }))
-                  }
-                  onBlur={() => void commitEditing(pending.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') void commitEditing(pending.id);
-                    if (event.key === 'Escape') setEditingId(null);
-                  }}
-                  placeholder={t('home.paradigmNamePlaceholder')}
-                  className="h-8 min-w-0 flex-1 text-sm"
-                />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Label htmlFor="paradigm-name" className="text-xs">
+                    {t('home.paradigmName')}
+                  </Label>
+                  <Input
+                    id="paradigm-name"
+                    autoFocus
+                    value={editDraft.label}
+                    onChange={(event) =>
+                      setEditDraft((prev) => ({ ...prev, label: event.target.value }))
+                    }
+                    onBlur={() => persistEditing(pending.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        persistEditing(pending.id);
+                        setEditingId(null);
+                      }
+                      if (event.key === 'Escape') setEditingId(null);
+                    }}
+                    placeholder={t('home.paradigmNamePlaceholder')}
+                    className="h-8 min-w-0 text-sm"
+                  />
+                </div>
               </div>
             ) : (
               pending &&

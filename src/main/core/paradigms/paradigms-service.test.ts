@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BUILTIN_REVIEW_TEAM_ID } from '@shared/agent-team';
+import { builtinParadigm } from '@shared/paradigms/builtins';
 import type { TeamParadigmParams } from '@shared/paradigms/params';
 import * as schema from '@main/db/schema';
 
@@ -198,6 +199,14 @@ describe('paradigms service: folding agent_teams in', () => {
     // Editing again rewrites the one overlay row rather than conflicting on it.
     await edit('Again', '');
     expect(sqlite.prepare('SELECT COUNT(*) AS n FROM paradigms').get()).toEqual({ n: 1 });
+
+    // Clearing the name and icon is the way back to what shipped — the only one
+    // there is, since a built-in cannot be deleted and re-created.
+    const shipped = builtinParadigm(BUILTIN_REVIEW_TEAM_ID);
+    const reset = await edit('', '');
+    expect(reset.label).toBe(shipped?.label);
+    expect(reset.icon).toBe(shipped?.icon);
+    expect(reset.customized).toBeUndefined();
 
     await expect(service.remove(BUILTIN_REVIEW_TEAM_ID)).rejects.toThrow(/cannot be removed/);
   });

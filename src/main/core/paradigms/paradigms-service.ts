@@ -64,12 +64,17 @@ function rowToParadigm(row: ParadigmRow): Paradigm {
  */
 function overlayBuiltin(builtin: Paradigm, row: ParadigmRow | undefined): Paradigm {
   if (!row) return builtin;
+  const named = row.label.length > 0;
   return {
     ...builtin,
-    label: row.label,
-    icon: row.icon,
+    // An emptied field is a reset, not a blank: a built-in's name and glyph are
+    // either the user's or the ones it shipped with, and clearing them is the only
+    // way back — there is no third state worth having, and a team with no name at
+    // all is one every room would display as nothing.
+    label: named ? row.label : builtin.label,
+    icon: row.icon || builtin.icon,
     params: readParams(builtin.kindId, row.params),
-    customized: true,
+    ...(named ? { customized: true } : {}),
     updatedAt: row.updatedAt,
   };
 }
