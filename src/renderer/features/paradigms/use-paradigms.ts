@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Paradigm, ParadigmDraft } from '@shared/paradigms/paradigm';
+import { withParadigmSlotAgent } from '@shared/paradigms/params';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { invalidateParadigmQueries, paradigmsQueryKey } from './paradigm-queries';
@@ -51,6 +52,28 @@ export function useParadigms() {
         id,
         draft: { kindId: existing.kindId, label, icon, params: existing.params },
       });
+    },
+    /**
+     * Assign an Agent to one of an instance's seats.
+     *
+     * This is what makes a duplicate more than a rename: the copy's seats live in
+     * its own params, so changing them cannot reach back into the original.
+     * Built-ins have no params to write — there is one per kind, so their seats
+     * stay in the composer draft and the caller keeps that path.
+     */
+    setSeatAgent: async (id: string, slotStorageKey: string, agentId: string) => {
+      const existing = paradigms.find((paradigm) => paradigm.id === id);
+      if (!existing || existing.builtin) return false;
+      await updateMutation.mutateAsync({
+        id,
+        draft: {
+          kindId: existing.kindId,
+          label: existing.label,
+          icon: existing.icon,
+          params: withParadigmSlotAgent(existing.params, slotStorageKey, agentId),
+        },
+      });
+      return true;
     },
     remove: removeMutation.mutateAsync,
     duplicate: duplicateMutation.mutateAsync,

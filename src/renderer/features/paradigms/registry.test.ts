@@ -1,14 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BUILTIN_FEATURE_TEAM_ID, BUILTIN_REVIEW_TEAM_ID, BUILTIN_TEAMS } from '@shared/agent-team';
+import type { Agent } from '@shared/agents';
 import { BUILTIN_PARADIGMS } from '@shared/paradigms/builtins';
 import { PARADIGM_KIND_IDS, type ParadigmKindId } from '@shared/paradigms/contract';
-import { PARADIGM_KINDS } from '@shared/paradigms/kinds';
+import { PARADIGM_KINDS, paradigmSlot } from '@shared/paradigms/kinds';
 import { builtinParadigmId, isBuiltinParadigmId, type Paradigm } from '@shared/paradigms/paradigm';
+import { withParadigmSlotAgent } from '@shared/paradigms/params';
 import en from '@renderer/lib/i18n/locales/en.json';
 import zh from '@renderer/lib/i18n/locales/zh-CN.json';
-import { paradigmEntries, paradigmEntryId } from './entries';
+import { paradigmEntries, paradigmEntryId, paradigmEntryLabel } from './entries';
 import { PARADIGM_ICONS } from './icons';
 import { PARADIGM_LAUNCHERS } from './registry';
+import { paradigmSeatAgentId } from './seats';
+
+const SINGLE_SEAT = paradigmSlot('single', 'agent').storageKey;
 
 // The launchers reach the main process and the renderer's global store, both of
 // which resolve off `window` at import time. The registry's shape is what is
@@ -131,20 +136,60 @@ describe('paradigm entries', () => {
     expect(entries.at(-1)?.id).toBe(mine.id);
   });
 
-  it('marks which rows can be edited, and names them from the instance or its kind', () => {
+  it('marks which rows can be edited, and reads each as its category plus its own name', () => {
     const entries = paradigmEntries(paradigms);
+    const t = (key: string) => key;
+
     const builtinSingle = entries.find((entry) => entry.id === builtinParadigmId('single'));
-    // A built-in carries no label of its own; it reads as its kind.
-    expect(builtinSingle?.labelKey).toBe(PARADIGM_KINDS.single.labelKey);
+    // Every row names its category, whatever it is itself called.
+    expect(builtinSingle?.categoryKey).toBe(PARADIGM_KINDS.single.labelKey);
+    // A kind's own built-in has no name of its own, so it reads as the bare
+    // category rather than repeating it.
+    expect(builtinSingle && paradigmEntryLabel(builtinSingle, t).name).toBeNull();
     expect(builtinSingle?.builtin).toBe(true);
 
     const feature = entries.find((entry) => entry.id === BUILTIN_FEATURE_TEAM_ID);
-    // Built-in teams get localized copy rather than echoing the template name.
-    expect(feature?.labelKey).toBe('home.modeTeamFeature');
+    // A team is one of many `team` instances, so it carries both: the category
+    // says it is multi-agent, the name says which team.
+    expect(feature?.categoryKey).toBe(PARADIGM_KINDS.team.labelKey);
+    expect(feature && paradigmEntryLabel(feature, t).name).toBe('home.modeTeamFeature');
 
     const user = entries.find((entry) => entry.id === mine.id);
-    expect(user?.label).toBe('My vibe');
+    expect(user && paradigmEntryLabel(user, t)).toEqual({
+      category: PARADIGM_KINDS.single.labelKey,
+      name: 'My vibe',
+    });
     expect(user?.builtin).toBe(false);
+  });
+
+  it('scopes seats to the instance, so a duplicate diverges from its original', () => {
+    const agents = [
+      { id: 'agent-a', slug: 'a' },
+      { id: 'agent-b', slug: 'b' },
+    ] as Agent[];
+    const configured: Paradigm = {
+      ...mine,
+      params: withParadigmSlotAgent(mine.params, SINGLE_SEAT, 'agent-b'),
+    };
+    const seat = (paradigm: Paradigm | undefined) =>
+      paradigmSeatAgentId({
+        paradigm,
+        slotStorageKey: SINGLE_SEAT,
+        draftAgents: { [SINGLE_SEAT]: ['agent-a'] },
+        agents,
+      });
+
+    // The instance's own assignment wins over the draft's — that is what makes a
+    // duplicated paradigm worth having.
+    expect(seat(configured)).toBe('agent-b');
+    // An unconfigured instance inherits the draft, so duplicating changes nothing
+    // until the copy is actually edited.
+    expect(seat(mine)).toBe('agent-a');
+    // A built-in has no params to write: there is one per kind, so the draft is
+    // already instance-scoped for it.
+    expect(seat(BUILTIN_PARADIGMS.find((p) => p.id === builtinParadigmId('single')))).toBe(
+      'agent-a'
+    );
   });
 
   it('resolves the active row by kind, disambiguated by instance', () => {

@@ -32,6 +32,35 @@ export const paradigmSlotAgentsSchema = z.record(z.string(), z.array(z.string())
 
 export type ParadigmSlotAgents = z.infer<typeof paradigmSlotAgentsSchema>;
 
+const paradigmAgentsCarrier = z.object({ agents: paradigmSlotAgentsSchema.default({}) });
+
+/**
+ * The seat assignments any kind's params carry.
+ *
+ * Every schema here is built on `withSlots`, so `agents` is the one field
+ * readable without knowing the kind — which is what lets a duplicated paradigm
+ * carry its own Agents instead of sharing one set per kind. Unreadable params
+ * yield no assignments rather than throwing: an unassigned seat falls back to its
+ * default, which is what an unconfigured instance does anyway.
+ */
+export function paradigmParamsAgents(params: unknown): ParadigmSlotAgents {
+  const parsed = paradigmAgentsCarrier.safeParse(params);
+  return parsed.success ? parsed.data.agents : {};
+}
+
+/** The same params with one seat reassigned; every other field is left alone. */
+export function withParadigmSlotAgent(
+  params: unknown,
+  slotStorageKey: string,
+  agentId: string
+): unknown {
+  const base = params && typeof params === 'object' ? (params as Record<string, unknown>) : {};
+  return {
+    ...base,
+    agents: { ...paradigmParamsAgents(params), [slotStorageKey]: [agentId] },
+  };
+}
+
 const withSlots = <T extends z.ZodRawShape>(shape: T) =>
   z.object({ agents: paradigmSlotAgentsSchema.default({}), ...shape });
 
