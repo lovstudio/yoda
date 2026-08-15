@@ -194,6 +194,49 @@ describe('New API usage', () => {
     });
   });
 
+  it('reports a rate-limited token read as such, carrying the provider retry window', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: { quota_per_unit: 500_000 } }))
+      .mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'Retry-After': '69' } }));
+
+    await expect(
+      fetchNewApiUsageSummary({
+        endpoint: 'https://newapi.1234bot.com/v1',
+        apiKey: 'inference-secret',
+        platformId: 'profile:lovbrowser',
+        fetchImpl,
+      })
+    ).rejects.toMatchObject({
+      name: 'MaasUsageRateLimitError',
+      retryAfterMs: 69_000,
+    });
+  });
+
+  it('keeps token usage visible when only the account read is rate limited', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: { quota_per_unit: 500_000 } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { usage: 1_500_000, remain: 3_500_000 } }))
+      .mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'Retry-After': '30' } }));
+
+    await expect(
+      fetchNewApiUsageSummary({
+        endpoint: 'https://newapi.1234bot.com/v1',
+        apiKey: 'inference-secret',
+        accountAccessToken: 'account-secret',
+        platformId: 'profile:lovbrowser',
+        fetchImpl,
+      })
+    ).resolves.toMatchObject({
+      totalCostUsd: 3,
+      remainingCreditsUsd: 7,
+      accountUsageStatus: 'error',
+      accountUsageError: 'New API usage API is rate limited (HTTP 429). Retry in 30s.',
+      source: 'new-api-token',
+    });
+  });
+
   it('returns an unsupported result when the custom endpoint is not New API', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({

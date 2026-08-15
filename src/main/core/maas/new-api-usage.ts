@@ -1,4 +1,9 @@
 import type { MaasPlatformId, MaasUsageSummary } from '@shared/maas';
+import {
+  MaasUsageRateLimitError,
+  maasUsageRateLimitMessage,
+  parseRetryAfterMs,
+} from './usage-rate-limit';
 
 export type NewApiStatusResponse = {
   success?: boolean;
@@ -40,6 +45,14 @@ type NewApiUsageResource = 'status' | 'token' | 'account';
 
 function nullableFiniteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function newApiRateLimitError(response: Response): MaasUsageRateLimitError {
+  const retryAfterMs = parseRetryAfterMs(response.headers);
+  return new MaasUsageRateLimitError(
+    maasUsageRateLimitMessage('New API', retryAfterMs),
+    retryAfterMs
+  );
 }
 
 function errorMessage(
@@ -192,10 +205,13 @@ async function fetchNewApiAccountUsage({
     return {
       ...tokenSummary,
       accountUsageStatus: 'error',
-      accountUsageError: `New API account usage returned ${response.status}: ${errorMessage(
-        body,
-        response.statusText || 'Request failed.'
-      )}`,
+      accountUsageError:
+        response.status === 429
+          ? newApiRateLimitError(response).message
+          : `New API account usage returned ${response.status}: ${errorMessage(
+              body,
+              response.statusText || 'Request failed.'
+            )}`,
     };
   }
 
@@ -239,6 +255,8 @@ export async function fetchNewApiUsageSummary({
     statusBody = null;
   }
 
+  if (statusResponse.status === 429) throw newApiRateLimitError(statusResponse);
+
   const quotaPerUnit = statusResponse.ok && statusBody ? getNewApiQuotaPerUnit(statusBody) : null;
   if (quotaPerUnit == null) return null;
   if (!apiKey.trim()) {
@@ -258,6 +276,7 @@ export async function fetchNewApiUsageSummary({
     body = null;
   }
 
+  if (response.status === 429) throw newApiRateLimitError(response);
   if (!response.ok) {
     throw new Error(
       `New API token usage returned ${response.status}: ${errorMessage(

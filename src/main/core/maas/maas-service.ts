@@ -70,11 +70,18 @@ import {
 import { getMaasPlatformInfoSnapshot, setMaasPlatformInfoSnapshot } from './platform-info-store';
 import { extractMaasProfileWebsiteMetadata } from './profile-website-metadata';
 import { resolveRestoredMaasRuntimeConfig, supportsMaasRuntimeBinding } from './runtime-env';
+import {
+  MAAS_USAGE_RATE_LIMIT_FALLBACK_MS,
+  MaasUsageRateLimitError,
+  maasUsageRateLimitMessage,
+  parseRetryAfterMs,
+} from './usage-rate-limit';
 
 const SECRET_PREFIX = 'yoda-maas-token';
 const INFERENCE_SECRET_PREFIX = 'yoda-maas-inference-token';
 const ACCOUNT_SECRET_PREFIX = 'yoda-maas-account-token';
 const REAL_RECORDS_CACHE_TTL_MS = 30_000;
+const REMOTE_USAGE_SUMMARY_CACHE_TTL_MS = 60_000;
 const PLATFORM_INFO_CACHE_TTL_MS = 24 * 60 * 60 * 1_000;
 const PLATFORM_DESCRIPTION_TIMEOUT_MS = 10_000;
 const PROFILE_WEBSITE_TIMEOUT_MS = 10_000;
@@ -589,6 +596,9 @@ function isFreshPlatformInfoSnapshot(
 
 export class MaasService {
   private readonly recordsCacheByConnection = new Map<string, TTLCache<RealRecordsResult>>();
+  private readonly remoteUsageCacheByConnection = new Map<string, TTLCache<MaasUsageSummary>>();
+  private readonly lastRemoteUsageByConnection = new Map<string, MaasUsageSummary>();
+  private readonly remoteUsageRateLimitedUntilByConnection = new Map<string, number>();
   private readonly platformInfoCacheById = new Map<
     MaasPlatformTemplateId,
     TTLCache<MaasPlatformInfoSnapshot>
@@ -1971,19 +1981,28 @@ export class MaasService {
 
     const templateId = getMaasPlatformTemplateId(input.platformId);
     if (templateId === 'openrouter') {
-      return this.fetchOpenRouterUsageSummary(connection, input.platformId);
+      return this.loadRemoteUsageSummary(connection, input.platformId, !!input.forceRefresh, () =>
+        this.fetchOpenRouterUsageSummary(connection, input.platformId)
+      );
     }
 
     if (templateId !== 'zenmux') {
-      const apiKey = await readPlatformSecret(connection.platformId, 'primary');
-      const accountAccessToken = await readPlatformSecret(connection.platformId, 'account');
-      return (
-        (await fetchNewApiUsageSummary({
-          endpoint: connection.endpoint,
-          apiKey: apiKey ?? '',
-          accountAccessToken: accountAccessToken ?? undefined,
-          platformId: input.platformId,
-        })) ?? emptyUsageSummary(input.platformId)
+      return this.loadRemoteUsageSummary(
+        connection,
+        input.platformId,
+        !!input.forceRefresh,
+        async () => {
+          const apiKey = await readPlatformSecret(connection.platformId, 'primary');
+          const accountAccessToken = await readPlatformSecret(connection.platformId, 'account');
+          return (
+            (await fetchNewApiUsageSummary({
+              endpoint: connection.endpoint,
+              apiKey: apiKey ?? '',
+              accountAccessToken: accountAccessToken ?? undefined,
+              platformId: input.platformId,
+            })) ?? emptyUsageSummary(input.platformId)
+          );
+        }
       );
     }
 
@@ -2076,6 +2095,59 @@ export class MaasService {
     }
 
     return cache.get(() => this.fetchZenmuxUsageRecords(connection));
+  }
+
+  /**
+   * Gateway usage endpoints are limited far more tightly than the inference
+   * endpoints they describe (a New API deployment allows roughly 20 reads per
+   * minute across every caller sharing that key). Every consumer of this summary
+   * is decorative, so reads are coalesced per connection, briefly reused, and —
+   * once the provider answers 429 — held off until its `Retry-After` passes
+   * while the last known figures keep their original `fetchedAt`.
+   */
+  private async loadRemoteUsageSummary(
+    connection: MaasPlatformConnection,
+    platformId: MaasPlatformId,
+    forceRefresh: boolean,
+    fetchSummary: () => Promise<MaasUsageSummary>
+  ): Promise<MaasUsageSummary> {
+    const cacheKey = `${platformId}:${connection.endpoint}:${connection.keyFingerprint ?? ''}`;
+    let cache = this.remoteUsageCacheByConnection.get(cacheKey);
+    if (!cache) {
+      cache = new TTLCache<MaasUsageSummary>(REMOTE_USAGE_SUMMARY_CACHE_TTL_MS);
+      this.remoteUsageCacheByConnection.set(cacheKey, cache);
+    }
+    if (forceRefresh) cache.invalidate();
+
+    const rateLimitedUntil = this.remoteUsageRateLimitedUntilByConnection.get(cacheKey);
+    if (rateLimitedUntil != null) {
+      if (Date.now() < rateLimitedUntil) {
+        const held = this.lastRemoteUsageByConnection.get(cacheKey);
+        if (held) return held;
+      } else {
+        this.remoteUsageRateLimitedUntilByConnection.delete(cacheKey);
+      }
+    }
+
+    try {
+      const summary = await cache.get(fetchSummary);
+      this.remoteUsageRateLimitedUntilByConnection.delete(cacheKey);
+      this.lastRemoteUsageByConnection.set(cacheKey, summary);
+      return summary;
+    } catch (error) {
+      if (!(error instanceof MaasUsageRateLimitError)) throw error;
+
+      this.remoteUsageRateLimitedUntilByConnection.set(
+        cacheKey,
+        Date.now() + (error.retryAfterMs ?? MAAS_USAGE_RATE_LIMIT_FALLBACK_MS)
+      );
+      const held = this.lastRemoteUsageByConnection.get(cacheKey);
+      if (held) {
+        log.info(`${platformId} usage API is rate limited; serving the last known figures.`);
+        return held;
+      }
+      throw error;
+    }
   }
 
   private async loadPlatformInfoSnapshot(
@@ -2217,6 +2289,13 @@ export class MaasService {
     }
 
     if (!response.ok) {
+      if (response.status === 429) {
+        const retryAfterMs = parseRetryAfterMs(response.headers);
+        throw new MaasUsageRateLimitError(
+          maasUsageRateLimitMessage('OpenRouter', retryAfterMs),
+          retryAfterMs
+        );
+      }
       throw new Error(
         `OpenRouter usage API returned ${response.status}: ${getErrorMessage(
           body as ZenmuxErrorBody | null,

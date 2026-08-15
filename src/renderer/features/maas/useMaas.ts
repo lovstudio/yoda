@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type {
   CliProxyApiManagedActionResult,
   CliProxyApiManagedStatus,
@@ -25,6 +25,7 @@ import type { NewApiManagedActionResult, NewApiManagedStatus } from '@shared/new
 import { rpc } from '@renderer/lib/ipc';
 
 const PAGE_SIZE = 24;
+const MAAS_USAGE_SUMMARY_STALE_MS = 60_000;
 const REAL_USAGE_QUERY_VERSION = 'provider-account-usage-v4';
 const PLATFORM_DESCRIPTION_QUERY_VERSION = 'official-page-description-v1';
 const MANAGED_GATEWAY_STARS_QUERY_VERSION = 'github-stars-v3';
@@ -54,8 +55,7 @@ export const maasQueryKeys = {
     platformId: MaasPlatformId | null | undefined,
     kind: MaasInvocationFilterKind,
     providerHints: readonly string[],
-    modelHints: readonly string[],
-    refreshSequence = 0
+    modelHints: readonly string[]
   ) =>
     [
       'maas',
@@ -65,7 +65,6 @@ export const maasQueryKeys = {
       kind,
       providerHints.join('|'),
       modelHints.join('|'),
-      refreshSequence,
     ] as const,
 };
 
@@ -596,28 +595,39 @@ export function useMaasUsageSummary(
     modelHints?: readonly string[];
   }
 ) {
-  const [refreshSequence, setRefreshSequence] = useState(0);
-  const reload = useCallback(() => setRefreshSequence((value) => value + 1), []);
+  // Provider usage endpoints are rate limited per key across every caller, so
+  // this read is cached rather than re-fetched on each mount, and an explicit
+  // refresh reuses the cache entry instead of keying a new one.
+  const forceRefreshRef = useRef(false);
   const providerHints = filters?.providerHints ?? [];
   const modelHints = filters?.modelHints ?? [];
 
   const query = useQuery<MaasUsageSummary>({
-    queryKey: maasQueryKeys.summary(platformId, kind, providerHints, modelHints, refreshSequence),
+    queryKey: maasQueryKeys.summary(platformId, kind, providerHints, modelHints),
     queryFn: () => {
       if (!platformId) throw new Error('A MaaS platform is required to read usage.');
+      const forceRefresh = forceRefreshRef.current;
+      forceRefreshRef.current = false;
       return rpc.maas.getUsageSummary({
         platformId,
         kind,
         providerHints,
         modelHints,
-        forceRefresh: refreshSequence > 0,
+        forceRefresh,
       }) as Promise<MaasUsageSummary>;
     },
     enabled: enabled && Boolean(platformId),
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnMount: 'always',
+    staleTime: MAAS_USAGE_SUMMARY_STALE_MS,
+    // A rate-limited read must not be retried; the provider answers 429 for the
+    // rest of its window and each attempt extends it.
+    retry: false,
   });
+
+  const refetch = query.refetch;
+  const reload = useCallback(() => {
+    forceRefreshRef.current = true;
+    void refetch();
+  }, [refetch]);
 
   return {
     summary: query.data ?? null,

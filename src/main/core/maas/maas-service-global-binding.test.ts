@@ -1342,6 +1342,57 @@ describe('stored MaaS keys', () => {
     }
   });
 
+  it('keeps the last known usage figures when the provider rate limits a refresh', async () => {
+    const platformId = 'profile:rate-limited' as const;
+    mocks.settings = {
+      selectedPlatformId: platformId,
+      connections: [
+        {
+          platformId,
+          displayName: 'LovBrowser',
+          endpoint: 'https://newapi.1234bot.com/v1',
+          keyFingerprint: 'lo...et',
+          inferenceKeyFingerprint: 'lo...et',
+          accountKeyFingerprint: null,
+          connectedAt: '2026-08-14T00:00:00.000Z',
+          lastCheckedAt: '2026-08-14T00:00:00.000Z',
+          lastTest: null,
+        },
+      ],
+      runtimeBindings: [],
+    };
+    mocks.secrets = { [`yoda-maas-token:${platformId}`]: 'lovbrowser-secret' };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: { quota_per_unit: 500_000, quota_display_type: 'USD' },
+          })
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: { usage: 1_500_000, remain: 3_500_000 } }))
+      )
+      .mockResolvedValue(new Response(null, { status: 429, headers: { 'Retry-After': '69' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const service = new MaasService();
+      const first = await service.getUsageSummary({ platformId });
+      expect(first).toMatchObject({ totalCostUsd: 3, remainingCreditsUsd: 7 });
+
+      // The rate-limited refresh must degrade to the figures already read, and
+      // must not restamp `fetchedAt` — the stale timestamp is the honest signal.
+      await expect(service.getUsageSummary({ platformId, forceRefresh: true })).resolves.toEqual(
+        first
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('reads New API account balance with a separately stored account access token', async () => {
     const platformId = 'profile:lovbrowser-account' as const;
     mocks.settings = {
