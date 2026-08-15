@@ -197,7 +197,7 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
     });
   }
 
-  // group 1 — rename, independent task markers
+  // group 1 — rename, list-placement markers (pin / favorite)
   items.push({
     key: 'rename',
     group: 1,
@@ -243,17 +243,9 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
           }
     );
   }
-  if (actions.canMarkLongTerm) {
-    items.push({
-      key: actions.isLongTerm ? 'unmark-long-term' : 'mark-long-term',
-      group: 1,
-      icon: Bookmark,
-      label: t(actions.isLongTerm ? 'tasks.context.unmarkLongTerm' : 'tasks.context.markLongTerm'),
-      onSelect: actions.isLongTerm ? actions.onUnmarkLongTerm : actions.onMarkLongTerm,
-    });
-  }
-  // group 2 — pending acceptance, then archive / restore. Archive is a flat
-  // pair: direct archive (note dialog, no skill) and, when configured, run the
+  // group 2 — lifecycle wind-down in the order a task actually travels: mark for
+  // review, mark long-term, then archive / restore. Archive is a flat pair:
+  // direct archive (note dialog, no skill) and, when configured, run the
   // pre-archive skill then archive.
   if (actions.canMarkReview) {
     items.push(
@@ -273,6 +265,15 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
             onSelect: actions.onMarkNeedsReview,
           }
     );
+  }
+  if (actions.canMarkLongTerm) {
+    items.push({
+      key: actions.isLongTerm ? 'unmark-long-term' : 'mark-long-term',
+      group: 2,
+      icon: Bookmark,
+      label: t(actions.isLongTerm ? 'tasks.context.unmarkLongTerm' : 'tasks.context.markLongTerm'),
+      onSelect: actions.isLongTerm ? actions.onUnmarkLongTerm : actions.onMarkLongTerm,
+    });
   }
   if (!actions.isArchived) {
     items.push({

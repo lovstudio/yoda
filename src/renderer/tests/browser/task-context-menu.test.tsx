@@ -158,7 +158,7 @@ describe('TaskContextMenuItems grouping', () => {
     host.remove();
   });
 
-  it('puts pending acceptance before archive actions below independent task markers', async () => {
+  it('groups the wind-down markers with archive in lifecycle order', async () => {
     const { TaskContextMenuItems } = await import(
       '@renderer/features/tasks/components/task-context-menu'
     );
@@ -199,14 +199,10 @@ describe('TaskContextMenuItems grouping', () => {
         'tasks.context.tileCandidates',
         'sidebar.reconnect',
       ],
-      [
-        'common.rename',
-        'tasks.context.pinTask',
-        'tasks.context.favoriteTask',
-        'tasks.context.markLongTerm',
-      ],
+      ['common.rename', 'tasks.context.pinTask', 'tasks.context.favoriteTask'],
       [
         'tasks.context.markForReview',
+        'tasks.context.markLongTerm',
         'tasks.context.archiveDirect',
         'tasks.context.archiveOptions',
       ],
