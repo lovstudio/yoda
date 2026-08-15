@@ -290,7 +290,7 @@ describe('DockedSessionHistory conversation tree menu', () => {
       expect(preview?.textContent).toContain(fullPrompt);
       expect(createdAt?.getAttribute('dateTime')).toBe(new Date(promptTimestamp).toISOString());
       expect(createdAt?.textContent).toMatch(/前$/);
-      expect(preview?.textContent).toContain('fork');
+      expect(preview?.querySelector('[data-session-prompt-fork-bubble]')).not.toBeNull();
       expect(preview?.textContent).not.toContain('tasks.sessionInfo.restoreContextAtPrompt');
       expect(
         preview?.querySelector('[data-session-prompt-preview-header]')?.classList.contains('h-9')
@@ -365,7 +365,8 @@ describe('DockedSessionHistory conversation tree menu', () => {
     const forkBubble = document.querySelector<HTMLElement>(
       '[data-session-prompt-preview] [data-session-prompt-fork-bubble]'
     );
-    expect(forkButton?.textContent).toContain('fork');
+    expect(forkButton?.textContent).toBe('');
+    expect(forkButton?.querySelector('svg')).not.toBeNull();
     expect(forkButton?.getAttribute('title')).toBe('包含此条回复及以上上下文');
     expect(forkButton?.getAttribute('aria-describedby')).toBe(forkBubble?.id);
     expect(forkBubble?.getAttribute('role')).toBe('tooltip');
@@ -430,11 +431,13 @@ describe('DockedSessionHistory conversation tree menu', () => {
       expect(pending?.tagName).toBe('BUTTON');
       expect(pending?.disabled).toBe(true);
       expect(pending?.getAttribute('aria-disabled')).toBe('true');
-      expect(pending?.textContent).toBe('fork');
+      expect(pending?.textContent).toBe('');
       expect(pending?.getAttribute('title')).toBe(
         'tasks.bottomPanel.sessionCheckpointUnavailableHint'
       );
-      expect(pending?.getAttribute('aria-label')).toBe('fork');
+      expect(pending?.getAttribute('aria-label')).toBe(
+        'tasks.bottomPanel.sessionCheckpointUnavailableLabel'
+      );
       const checkpointBubble = preview?.querySelector<HTMLElement>(
         '[data-session-prompt-checkpoint-bubble]'
       );

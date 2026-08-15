@@ -13,17 +13,9 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import type {
-  ClaudeSessionPrompt,
-  Conversation,
-  SessionCompaction,
-} from '@shared/conversations';
+import type { ClaudeSessionPrompt, Conversation } from '@shared/conversations';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { displaySessionPromptText } from '@renderer/features/tasks/context-panel-prompt-display';
-import {
-  compactionsBeforePrompt,
-  trailingCompactions,
-} from '@renderer/features/tasks/session-compactions';
 import { useSessionPrompts } from '@renderer/features/tasks/session-info-panel';
 import { buildPromptPreviewItems } from '@renderer/features/tasks/session-prompts-preview';
 import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
@@ -44,7 +36,6 @@ import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
-import { SessionCompactionMarker } from './session-compaction-marker';
 import { SessionPromptRestoreButton } from './session-prompt-restore-button';
 import { countSessionPromptTreeNodes, SessionPromptTreeView } from './session-prompt-tree';
 import { reopenArchivedConversation } from './use-archived-conversations';
@@ -59,14 +50,12 @@ import { useSessionPromptTree } from './use-session-prompt-tree';
  */
 export const SessionPromptList = observer(function SessionPromptList({
   prompts,
-  compactions,
   onRestorePrompt,
   restoringPromptId,
   className,
   style,
 }: {
   prompts: ClaudeSessionPrompt[];
-  compactions?: SessionCompaction[];
   onRestorePrompt?: (prompt: ClaudeSessionPrompt, index: number) => void;
   restoringPromptId?: string | null;
   className?: string;
@@ -97,12 +86,6 @@ export const SessionPromptList = observer(function SessionPromptList({
           prompts={prompts}
           prompt={prompt}
           index={index + 1}
-          precedingCompactions={compactionsBeforePrompt(compactions, index + 1)}
-          trailingCompactions={
-            index === prompts.length - 1
-              ? trailingCompactions(compactions, prompts.length)
-              : undefined
-          }
           onRestore={onRestorePrompt}
           restoringPromptId={restoringPromptId}
         />
@@ -146,7 +129,6 @@ export const SessionHistoryPanel = observer(function SessionHistoryPanel({
   return (
     <SessionPromptList
       prompts={prompts.prompts}
-      compactions={prompts.compactions}
       onRestorePrompt={prompts.requestRestorePrompt}
       restoringPromptId={prompts.restoringPromptId}
       className="h-full"
@@ -331,7 +313,6 @@ export const DockedSessionHistory = observer(function DockedSessionHistory({
           prompts.hasPrompts ? (
             <DockedSessionPromptPreview
               prompts={prompts.prompts}
-              compactions={prompts.compactions}
               tailCount={rows}
               onOpenAll={prompts.openPromptsModal}
               onRestorePrompt={prompts.requestRestorePrompt}
@@ -409,14 +390,12 @@ export const DockedSessionHistory = observer(function DockedSessionHistory({
 
 function DockedSessionPromptPreview({
   prompts,
-  compactions,
   tailCount,
   onOpenAll,
   onRestorePrompt,
   restoringPromptId,
 }: {
   prompts: ClaudeSessionPrompt[];
-  compactions: SessionCompaction[];
   tailCount: number;
   onOpenAll: () => void;
   onRestorePrompt: (prompt: ClaudeSessionPrompt, index: number) => void;
@@ -487,8 +466,8 @@ function SessionPromptRow({
   const selectedPromptDate = parsePromptTimestamp(selectedPrompt.timestamp);
   const selectedCanRestore = Boolean(onRestore && selectedPrompt.restoreTarget);
   const selectedIsRestoring = restoringPromptId === selectedPrompt.id;
-  const promptActionClassName =
-    'h-7 min-h-7 shrink-0 justify-start rounded-md border border-primary/35 bg-primary/10 px-2.5 py-0 text-left text-[11px] font-medium text-primary shadow-sm hover:bg-primary/15 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/60 disabled:border-border-primary/60 disabled:bg-background-2/60 disabled:text-foreground-passive disabled:hover:bg-background-2/60 disabled:hover:text-foreground-passive';
+  /** Geometry that keeps the fork icon identical to the toolbar's ghost icon buttons. */
+  const promptActionClassName = 'size-6 rounded-[min(var(--radius-md),8px)] hover:bg-background-1';
   const promptLengths = prompts.map((item) => displaySessionPromptText(item.text).trim().length);
   const maxPromptLength = Math.max(1, ...promptLengths);
   const [pointerPosition, setPointerPosition] = useState<{ x: number; y: number } | null>(null);
@@ -614,7 +593,6 @@ function SessionPromptRow({
       index={selectedIndex}
       isRestoring={selectedCanRestore ? selectedIsRestoring : undefined}
       onRestore={onRestore}
-      visibleLabel={t('tasks.bottomPanel.sessionBranchFromHere')}
       unavailableHint={
         selectedCanRestore ? undefined : t('tasks.bottomPanel.sessionCheckpointUnavailableHint')
       }
@@ -734,11 +712,12 @@ function SessionPromptRow({
                     }}
                   >
                     {copied ? (
-                      <Check className="size-3.5 text-status-done" aria-hidden="true" />
+                      <Check className="text-status-done" aria-hidden="true" />
                     ) : (
-                      <Copy className="size-3.5" aria-hidden="true" />
+                      <Copy aria-hidden="true" />
                     )}
                   </Button>
+                  {restoreButton}
                   <Button
                     type="button"
                     variant="ghost"
@@ -753,9 +732,8 @@ function SessionPromptRow({
                       openPromptInModal();
                     }}
                   >
-                    <Maximize2 className="size-3.5" aria-hidden="true" />
+                    <Maximize2 aria-hidden="true" />
                   </Button>
-                  {restoreButton}
                 </div>
               </div>
               <div
