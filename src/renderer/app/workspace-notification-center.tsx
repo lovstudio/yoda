@@ -12,8 +12,9 @@ import {
   MoreHorizontal,
   Trash2,
 } from 'lucide-react';
-import { useState, useSyncExternalStore } from 'react';
+import { useCallback, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useDismissOnWindowBlur } from '@renderer/lib/hooks/use-dismiss-on-window-blur';
 import { copyTextToClipboard, useToast } from '@renderer/lib/hooks/use-toast';
 import {
   workspaceNotificationStore,
@@ -54,6 +55,11 @@ export function WorkspaceNotificationCenter({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = notifications.find((notification) => notification.id === selectedId) ?? null;
   const unreadCount = notifications.filter((notification) => notification.readAt === null).length;
+  const dismissPanel = useCallback(() => {
+    setOpen(false);
+    setSelectedId(null);
+  }, []);
+  useDismissOnWindowBlur(open, dismissPanel);
 
   return (
     <Popover
@@ -98,7 +104,7 @@ export function WorkspaceNotificationCenter({
               setSelectedId(null);
             }}
             onOpenTarget={(target) => {
-              setOpen(false);
+              dismissPanel();
               onOpenTarget(target);
             }}
           />
