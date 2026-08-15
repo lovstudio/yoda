@@ -132,6 +132,7 @@ vi.mock('@renderer/lib/stores/app-state', () => ({
     get redactTaskContent() {
       return mocks.redactTaskContent;
     },
+    isProjectRedacted: () => mocks.redactTaskContent,
     toggleTaskCollapsed: mocks.toggleTaskCollapsed,
     holdTaskReflow: vi.fn(),
     releaseTaskReflow: vi.fn(),

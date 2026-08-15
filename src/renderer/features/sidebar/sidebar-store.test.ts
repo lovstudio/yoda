@@ -620,6 +620,36 @@ describe('SidebarStore task recency ordering', () => {
     expect(restored.redactTaskContent).toBe(true);
   });
 
+  it('exempts allowlisted projects from redaction and persists the allowlist', () => {
+    const store = makeSidebarStore([makeProject('project-1', []), makeProject('project-2', [])]);
+
+    // Allowlist membership alone changes nothing while privacy mode is off.
+    store.setProjectRedactionExempt('project-1', true);
+    expect(store.isProjectRedacted('project-1')).toBe(false);
+    expect(store.isProjectRedacted('project-2')).toBe(false);
+
+    store.setRedactTaskContent(true);
+    expect(store.isProjectRedacted('project-1')).toBe(false);
+    expect(store.isProjectRedacted('project-2')).toBe(true);
+
+    store.toggleProjectRedactionExempt('project-1');
+    expect(store.isProjectRedacted('project-1')).toBe(true);
+
+    store.setProjectRedactionExempt('project-2', true);
+    expect(store.snapshot.redactionExemptProjectIds).toEqual(['project-2']);
+
+    const restored = makeSidebarStore([makeProject('project-2', [])]);
+    restored.restoreSnapshot({
+      redactTaskContent: true,
+      redactionExemptProjectIds: store.snapshot.redactionExemptProjectIds,
+    });
+    expect(restored.isProjectRedactionExempt('project-2')).toBe(true);
+    expect(restored.isProjectRedacted('project-2')).toBe(false);
+
+    restored.clearRedactionExemptProjects();
+    expect(restored.isProjectRedacted('project-2')).toBe(true);
+  });
+
   it('keeps a project visible while its sessions load when empty projects are hidden', () => {
     const project = makeProject('loading-project', [], 'loading');
     const store = makeSidebarStore([project]);

@@ -1,6 +1,7 @@
 import {
   Archive,
   ChevronRight,
+  Eye,
   EyeOff,
   FolderTree,
   ListRestart,
@@ -308,6 +309,7 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
         checked={sidebarStore.redactTaskContent}
         onCheckedChange={(checked) => sidebarStore.setRedactTaskContent(checked)}
       />
+      {sidebarStore.redactTaskContent && <RedactionAllowlistRow />}
       {!sidebarStore.taskPriorityMode && (
         <>
           <PanelSeparator />
@@ -325,6 +327,47 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
         </>
       )}
     </div>
+  );
+});
+
+/**
+ * Privacy allowlist summary. Membership is edited from each project's own menu
+ * (that is where a project's identity lives), so this row only reports the count
+ * and offers a bulk clear.
+ */
+const RedactionAllowlistRow = observer(function RedactionAllowlistRow() {
+  const { t } = useTranslation();
+  const count = sidebarStore.redactionExemptProjectIds.size;
+
+  const row = (
+    <div className="flex h-8 items-center gap-2 px-2">
+      <Eye className="size-3.5 shrink-0 text-foreground-muted" />
+      <PanelFieldLabel>{t('sidebar.privacyExempt.panelLabel')}</PanelFieldLabel>
+      <span className="shrink-0 text-[11px] tabular-nums text-foreground-passive">
+        {count === 0
+          ? t('sidebar.privacyExempt.panelEmpty')
+          : t('sidebar.privacyExempt.panelCount', { count })}
+      </span>
+      {count > 0 && (
+        <Button
+          variant="ghost"
+          size="xs"
+          className="shrink-0 text-foreground-muted hover:text-foreground"
+          onClick={() => sidebarStore.clearRedactionExemptProjects()}
+        >
+          {t('sidebar.privacyExempt.clear')}
+        </Button>
+      )}
+    </div>
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={row} />
+      <TooltipContent side="left" align="start" className="max-w-72">
+        {t('sidebar.privacyExempt.panelHint')}
+      </TooltipContent>
+    </Tooltip>
   );
 });
 

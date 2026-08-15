@@ -212,7 +212,16 @@
     "branchDisplayFull": "Full",
     "privacySection": "Privacy",
     "privacyMode": "Privacy mode",
-    "privacyModeDescription": "Lightly blurs task titles, project tags, and branch names in the sidebar. Task hover previews stay hidden while it is on.",
+    "privacyModeDescription": "Lightly blurs project names, task titles, and branch names in the sidebar. Task hover previews stay hidden while it is on. Allowlisted projects are left alone.",
+    "privacyExempt": {
+      "addMenuLabel": "Add to privacy allowlist",
+      "removeMenuLabel": "Remove from privacy allowlist",
+      "panelLabel": "Allowlisted projects",
+      "panelHint": "Allowlisted projects and their tasks stay legible while privacy mode is on. Add or remove them from a project's context menu.",
+      "panelEmpty": "None",
+      "panelCount": "{{count}}",
+      "clear": "Clear"
+    },
     "activityBucket": {
       "today": "Today",
       "thisWeek": "This week",

@@ -49,6 +49,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/toolti
 import { cn } from '@renderer/utils/utils';
 import { ProjectActionsMenu, ProjectContextMenu } from './project-menu';
 import { SidebarItemMiniButton, SidebarMenuButton, SidebarMenuRow } from './sidebar-primitives';
+import { SIDEBAR_REDACTED_CLASS } from './sidebar-redaction';
 import { useSidebarHoverIntent } from './use-sidebar-hover-intent';
 
 const UNREGISTERED_PHASE_KEY: Record<UnregisteredProject['phase'], string> = {
@@ -282,6 +283,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   const canReconnect = sshConnectionState !== 'connected';
   const canPin = project.state !== 'unregistered';
   const isPinned = sidebarStore.isProjectPinned(projectId);
+  const isRedacted = sidebarStore.isProjectRedacted(projectId);
+  const redactedNameClassName = isRedacted && SIDEBAR_REDACTED_CLASS;
   const projectPath =
     project.data?.path ?? (project.errorCode === 'path-not-found' ? project.error : undefined);
   const ProjectIcon = isSshProject ? FolderInput : FolderClosed;
@@ -359,6 +362,14 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
       project.state === 'unregistered' ? undefined : () => void handleOpenArchivedTasks(),
     onPin: () => sidebarStore.setProjectPinned(projectId, true),
     onUnpin: () => sidebarStore.setProjectPinned(projectId, false),
+    // Offered only while privacy mode is on — outside it the allowlist has no
+    // observable effect, so the entry would be a dead control.
+    redaction: sidebarStore.redactTaskContent
+      ? {
+          exempt: sidebarStore.isProjectRedactionExempt(projectId),
+          onToggle: () => sidebarStore.toggleProjectRedactionExempt(projectId),
+        }
+      : undefined,
     onReconnect: sshConnectionId
       ? () => {
           void appState.sshConnections.connect(sshConnectionId).catch(() => {});
@@ -452,7 +463,15 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
           >
             {isSshProject ? (
               <span className="min-w-0 flex items-center gap-2 overflow-hidden">
-                <span className="truncate">{project.displayName}</span>
+                <span
+                  data-sidebar-project-content="name"
+                  className={cn(
+                    'truncate transition-[color,filter,opacity]',
+                    redactedNameClassName
+                  )}
+                >
+                  {project.displayName}
+                </span>
                 {isLoadingProjectSessions && (
                   <span className="shrink-0 text-xs text-foreground-tertiary-muted">
                     {t('sidebar.loadingSessions')}
@@ -462,7 +481,15 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
               </span>
             ) : (
               <span className="min-w-0 flex items-center gap-1.5 overflow-hidden">
-                <span className="truncate">{project.displayName}</span>
+                <span
+                  data-sidebar-project-content="name"
+                  className={cn(
+                    'truncate transition-[color,filter,opacity]',
+                    redactedNameClassName
+                  )}
+                >
+                  {project.displayName}
+                </span>
                 {isLoadingProjectSessions && (
                   <span className="shrink-0 text-xs text-foreground-tertiary-muted">
                     {t('sidebar.loadingSessions')}

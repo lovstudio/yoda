@@ -258,6 +258,12 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   taskGroupVisibleLimit = DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT;
   taskBranchDisplay: SidebarBranchDisplay = 'compact';
   redactTaskContent = false;
+  /**
+   * Privacy-mode allowlist: these projects (and every task under them) stay
+   * legible while redaction is on. Project ids are machine-local, so this list
+   * is deliberately not part of the portable settings archive.
+   */
+  redactionExemptProjectIds = observable.set<string>();
   pinnedCollapsed = false;
   projectsCollapsed = false;
   projectTypeFilter: ProjectTypeFilter = 'all';
@@ -296,6 +302,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       pinnedProjectIds: false,
       collapsedTaskIds: false,
       collapsedTaskGroupIds: false,
+      redactionExemptProjectIds: false,
       sidebarRows: computed,
       pinnedSidebarEntries: computed,
     });
@@ -853,6 +860,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       taskGroupVisibleLimit: this.taskGroupVisibleLimit,
       taskBranchDisplay: this.taskBranchDisplay,
       redactTaskContent: this.redactTaskContent,
+      redactionExemptProjectIds: [...this.redactionExemptProjectIds],
       pinnedProjectIds: [...this.pinnedProjectIds],
       pinnedCollapsed: this.pinnedCollapsed,
       projectsCollapsed: this.projectsCollapsed,
@@ -911,6 +919,9 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     }
     if (snapshot.redactTaskContent !== undefined) {
       this.redactTaskContent = snapshot.redactTaskContent === true;
+    }
+    if (snapshot.redactionExemptProjectIds !== undefined) {
+      this.redactionExemptProjectIds.replace(snapshot.redactionExemptProjectIds);
     }
     if (snapshot.pinnedProjectIds !== undefined) {
       this.pinnedProjectIds.replace(snapshot.pinnedProjectIds);
@@ -1005,6 +1016,33 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   setRedactTaskContent(redacted: boolean): void {
     this.redactTaskContent = redacted;
+  }
+
+  /** Whether this project sits on the privacy allowlist (never blurred). */
+  isProjectRedactionExempt(projectId: string): boolean {
+    return this.redactionExemptProjectIds.has(projectId);
+  }
+
+  /**
+   * Single answer to "should this project's rows be obscured?" — privacy mode
+   * on, minus the allowlist. Every sidebar surface reads this, so a project and
+   * its tasks are always redacted (or not) together.
+   */
+  isProjectRedacted(projectId: string): boolean {
+    return this.redactTaskContent && !this.redactionExemptProjectIds.has(projectId);
+  }
+
+  setProjectRedactionExempt(projectId: string, exempt: boolean): void {
+    if (exempt) this.redactionExemptProjectIds.add(projectId);
+    else this.redactionExemptProjectIds.delete(projectId);
+  }
+
+  toggleProjectRedactionExempt(projectId: string): void {
+    this.setProjectRedactionExempt(projectId, !this.redactionExemptProjectIds.has(projectId));
+  }
+
+  clearRedactionExemptProjects(): void {
+    this.redactionExemptProjectIds.clear();
   }
 
   setNavSectionHidden(hidden: boolean): void {

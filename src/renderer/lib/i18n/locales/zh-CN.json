@@ -212,7 +212,16 @@
     "branchDisplayFull": "完整",
     "privacySection": "隐私",
     "privacyMode": "隐私模式",
-    "privacyModeDescription": "轻度模糊侧边栏中的任务名称、项目标签和分支名称；开启期间不显示任务悬浮预览。",
+    "privacyModeDescription": "轻度模糊侧边栏中的项目名称、任务名称和分支名称；开启期间不显示任务悬浮预览。白名单项目不受影响。",
+    "privacyExempt": {
+      "addMenuLabel": "加入隐私白名单",
+      "removeMenuLabel": "移出隐私白名单",
+      "panelLabel": "白名单项目",
+      "panelHint": "白名单项目及其任务在隐私模式下保持可读。在项目右键菜单里增减。",
+      "panelEmpty": "无",
+      "panelCount": "{{count}} 个",
+      "clear": "清空"
+    },
     "activityBucket": {
       "today": "今天",
       "thisWeek": "本周",

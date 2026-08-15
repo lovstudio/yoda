@@ -6,6 +6,8 @@ import {
   Bot,
   CableIcon,
   Copy,
+  Eye,
+  EyeOff,
   FolderPen,
   Info,
   PencilLine,
@@ -57,6 +59,11 @@ interface ProjectMenuActions extends ProjectQuickActionsMenuActions {
   onCopyYodaLink?: () => void;
   onPin: () => void;
   onUnpin: () => void;
+  /**
+   * Privacy allowlist toggle. Only supplied while privacy mode is on — the
+   * entry is meaningless otherwise, so the menu simply omits it.
+   */
+  redaction?: { exempt: boolean; onToggle: () => void };
   onOpenDetails?: () => void;
   onCreateTask?: () => void;
   onCreateTaskAndRun?: () => void;
@@ -169,6 +176,18 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
             onSelect: actions.onPin,
           }
     );
+  }
+  if (actions.redaction) {
+    const { exempt, onToggle } = actions.redaction;
+    items.push({
+      key: 'redaction-exempt',
+      group: 3,
+      icon: exempt ? EyeOff : Eye,
+      label: exempt
+        ? t('sidebar.privacyExempt.removeMenuLabel')
+        : t('sidebar.privacyExempt.addMenuLabel'),
+      onSelect: onToggle,
+    });
   }
   if (actions.onRename) {
     items.push({

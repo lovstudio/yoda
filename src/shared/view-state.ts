@@ -222,8 +222,10 @@ export type SidebarSnapshot = {
   taskPriorityOrder?: SidebarTaskPriorityGroup[];
   taskGroupVisibleLimit?: SidebarTaskGroupVisibleLimit;
   taskBranchDisplay?: SidebarBranchDisplay;
-  /** Lightly blur task metadata in the sidebar for privacy-conscious captures. */
+  /** Lightly blur project and task metadata in the sidebar for privacy-conscious captures. */
   redactTaskContent?: boolean;
+  /** Projects allowed to stay legible while privacy mode is on (they and their tasks are never blurred). */
+  redactionExemptProjectIds?: string[];
   pinnedProjectIds?: string[];
   pinnedCollapsed?: boolean;
   projectsCollapsed?: boolean;

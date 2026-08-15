@@ -39,6 +39,7 @@ import { branchColor } from '@renderer/utils/branch-color';
 import { cn } from '@renderer/utils/utils';
 import { PrBadge } from '../../lib/components/pr-badge';
 import { SidebarItemMiniButton, SidebarMenuRow } from './sidebar-primitives';
+import { SIDEBAR_REDACTED_CLASS } from './sidebar-redaction';
 import { TaskTreeToggleButton } from './task-tree-toggle-button';
 import { useSidebarHoverIntent } from './use-sidebar-hover-intent';
 import { useSidebarRowActivation, type SidebarRowActivation } from './use-sidebar-row-activation';
@@ -146,8 +147,8 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   );
 
   const taskName = task.data.name;
-  const redactTaskContent = sidebarStore.redactTaskContent;
-  const redactedContentClassName = redactTaskContent && 'blur-[2px] opacity-80';
+  const redactTaskContent = sidebarStore.isProjectRedacted(projectId);
+  const redactedContentClassName = redactTaskContent && SIDEBAR_REDACTED_CLASS;
   const treeDepth = rowVariant === 'underProject' ? Math.min(depth, TASK_TREE_MAX_VISUAL_DEPTH) : 0;
   // One guide slot per (visually capped) tree level. Without trail data (drag
   // ghost previewing a projected depth) fall back to a bare elbow.
