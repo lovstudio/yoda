@@ -45,9 +45,16 @@ const LANE_BY_STAGE: Record<string, TaskOpenLaneId> = {
   'main-panel-committed': 'ui',
   'active-renderer-committed': 'ui',
   painted: 'ui',
+  // Renderer — React's readiness to accept a frame. Separate from the loop that
+  // produces one, so a backend-ready/frontend-not-listening stall reads as a
+  // handoff between two lanes instead of hiding inside one.
+  'verify-blocked': 'ui',
+  'verify-armed': 'ui',
+  'verify-retry': 'ui',
   // Renderer — the terminal's own frame-acknowledgement loop. Its waits are the
   // difference between "the backend delivered" and "the user can see it".
   'frame-mount': 'frame',
+  'frame-ack-blocked': 'frame',
   'frame-snapshot-wait': 'frame',
   'frame-canonical-wait': 'frame',
   'frame-quiet-wait': 'frame',

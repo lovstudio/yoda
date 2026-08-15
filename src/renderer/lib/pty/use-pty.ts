@@ -280,6 +280,14 @@ export function usePty(
   // Auto-copy on selection
   const autoCopyOnSelectionRef = useRef(false);
 
+  // The pty reads this gate through a callback, so it cannot notice the moment
+  // the answer flips. Tell it, or a refused ACK waits for the next output event
+  // — which a settled TUI never produces.
+  useEffect(() => {
+    if (!autoAcknowledgeFrame) return;
+    pty.notifyFrameAcknowledgementGateOpened();
+  }, [autoAcknowledgeFrame, pty]);
+
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
   // Sends the PTY resize immediately (deduped); called in the same tick as

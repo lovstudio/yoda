@@ -989,6 +989,26 @@ export class FrontendPty {
     return () => this.visibleFrameStateListeners.delete(listener);
   }
 
+  /**
+   * Re-arm the frame ACK now that the mount owner's readiness gate has opened.
+   *
+   * `autoAcknowledgeFrame` is a pull-only predicate: the loop asks whether the
+   * owner is ready at the moment it happens to be scheduled, and nothing asks
+   * again when the answer changes. Output events were assumed to cover that,
+   * but a settled TUI stops producing them — so a gate that opened just after a
+   * refused attempt waited out the owner's own retry period while the backend
+   * already had a frame in hand. The document-visibility path solves the same
+   * problem by listening for the gate to open; this is the equivalent push for
+   * the React half.
+   *
+   * Scheduling is idempotent, so an already-running attempt is left alone.
+   */
+  notifyFrameAcknowledgementGateOpened(): void {
+    if (this.isDisposed || this.isDisposing) return;
+    if (!this.isVisibleMountLease(this.mountGeneration)) return;
+    this.scheduleVisibleFrameAck(this.mountGeneration);
+  }
+
   /** Require the next canonical-frame wait to represent this exact backend generation. */
   expectCanonicalGeneration(generation: number): void {
     if (!Number.isSafeInteger(generation) || generation < 0) return;
@@ -2343,15 +2363,19 @@ export class FrontendPty {
   }
 
   private scheduleVisibleFrameAck(mountLease: number): void {
-    if (
-      !this.isVisibleMountLease(mountLease) ||
-      this.isVisibleFrameReady() ||
-      !this.shouldAutoAcknowledgeFrame(mountLease) ||
-      this.visibleFrameAckMountGenerationInFlight === mountLease
-    ) {
+    // Report why an ACK was refused. Every branch here used to return in
+    // silence, which is how a multi-second wait for the React gate could show
+    // up in the profiler as dead air belonging to nobody.
+    if (!this.isVisibleMountLease(mountLease) || this.isVisibleFrameReady()) return;
+    if (!this.shouldAutoAcknowledgeFrame(mountLease)) {
+      this.markVisibleFrameStage(mountLease, 'frame-ack-blocked', { reason: 'react-gate' });
       return;
     }
-    if (this.scheduleVisibleFrameAckWhenDocumentVisible(mountLease)) return;
+    if (this.visibleFrameAckMountGenerationInFlight === mountLease) return;
+    if (this.scheduleVisibleFrameAckWhenDocumentVisible(mountLease)) {
+      this.markVisibleFrameStage(mountLease, 'frame-ack-blocked', { reason: 'document-hidden' });
+      return;
+    }
     this.visibleFrameAckMountGenerationInFlight = mountLease;
     void this.completeVisibleFrameAck(mountLease, {
       // Read the live React-owned predicate throughout the attempt. A task can
@@ -2479,6 +2503,9 @@ export class FrontendPty {
           this.preparedCanonicalAtomicLive = false;
           continue;
         }
+        this.markVisibleFrameStage(mountLease, 'frame-canonical-wait', {
+          reason: 'revision-changed',
+        });
         const canonical = await this.waitForCanonicalOutput(isCurrentMount, deadline);
         if (!canonical) break;
         continue;
@@ -2521,6 +2548,9 @@ export class FrontendPty {
         // preparedConservatively then reads as "no atomic-live grace", routing
         // the loop straight back into the verifier. Re-verifying an accepted
         // revision spins forever and the terminal never reaches its DOM paint.
+        this.markVisibleFrameStage(mountLease, 'frame-canonical-wait', {
+          reason: 'surface-anchor-fence',
+        });
         const canonical = await this.waitForCanonicalOutput(isCurrentMount, deadline);
         if (!canonical) break;
         continue;

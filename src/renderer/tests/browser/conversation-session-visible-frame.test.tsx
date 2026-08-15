@@ -8,6 +8,7 @@ import type { FrontendPty } from '@renderer/lib/pty/pty';
 
 const mocks = vi.hoisted(() => ({
   completeTaskOpenTrace: vi.fn(),
+  markTaskOpenTrace: vi.fn(),
   logWarn: vi.fn(),
   pendingProps: vi.fn(),
   ptyFocus: vi.fn(),
@@ -94,6 +95,7 @@ vi.mock('@renderer/utils/logger', () => ({
 
 vi.mock('@renderer/features/tasks/task-open-performance', () => ({
   completeTaskOpenTrace: mocks.completeTaskOpenTrace,
+  markTaskOpenTrace: mocks.markTaskOpenTrace,
 }));
 
 vi.mock('@renderer/features/tasks/conversations/conversation-session-pending-state', () => ({

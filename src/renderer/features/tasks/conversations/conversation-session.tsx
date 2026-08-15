@@ -36,7 +36,7 @@ import { Button } from '@renderer/lib/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { log } from '@renderer/utils/logger';
-import { completeTaskOpenTrace } from '../task-open-performance';
+import { completeTaskOpenTrace, markTaskOpenTrace } from '../task-open-performance';
 import { taskOpenTransitionStore } from '../task-open-transition-store';
 import type { ConversationStore } from './conversation-manager';
 import { ConversationSessionPendingState } from './conversation-session-pending-state';
@@ -60,6 +60,18 @@ const RESUME_ATTEMPT_TIMEOUT_MS = 2_000;
  * the surface stays an opening surface and only gains a retry affordance.
  */
 const VISIBLE_FRAME_SLOW_NOTICE_MS = 30_000;
+
+/**
+ * How long one turn of the verification loop parks before re-checking.
+ *
+ * This is a polling period, not a budget: the pty bounds its own ACK attempt,
+ * and re-arming while one is in flight is a no-op. It used to be five seconds,
+ * on the assumption that later PTY output would re-arm sooner — true of a busy
+ * TUI, false of one that has finished drawing and gone quiet, where the period
+ * became the observed latency. Keep it short enough that a missed ACK costs
+ * about a second rather than five.
+ */
+const VISIBLE_FRAME_ACK_POLL_MS = 1_000;
 
 type BoundedPromiseOutcome<T> =
   | { kind: 'resolved'; value: T }
@@ -289,7 +301,21 @@ export const ConversationSession = observer(function ConversationSession({
   }, [autoFocus, sessionId]);
 
   useEffect(() => {
-    if (!isVisible || !sessionPty || sessionStatus !== 'ready' || session.connectionError) return;
+    // Nothing downstream of this effect can paint, so its own gate is the
+    // frontend's readiness to accept a frame the backend may already have
+    // produced. Name the blocking condition rather than returning in silence.
+    if (!isVisible || !sessionPty || sessionStatus !== 'ready' || session.connectionError) {
+      markTaskOpenTrace(projectId, taskId, 'verify-blocked', {
+        reason: !isVisible
+          ? 'not-visible'
+          : !sessionPty
+            ? 'no-pty'
+            : sessionStatus !== 'ready'
+              ? `session-${sessionStatus}`
+              : 'connection-error',
+      });
+      return;
+    }
     let active = true;
     let frameReportedReady = false;
     let dialogObserver: MutationObserver | null = null;
@@ -388,11 +414,15 @@ export const ConversationSession = observer(function ConversationSession({
     // A browser paint can be temporarily unavailable (background window,
     // resize transaction, or a generation that has not produced its complete
     // TUI yet). Keep retrying the ACK while this route owns the session. Later
-    // PTY output also schedules an immediate retry, so a five-second miss can
-    // never strand the loading surface over a subsequently valid terminal.
+    // PTY output and this owner's own readiness gate each schedule an immediate
+    // retry, so a missed poll can never strand the loading surface over a
+    // subsequently valid terminal.
     ensureFrameRetry = () => {
       if (!shouldContinue() || frameReportedReady || frameRetryRunning) return;
       frameRetryRunning = true;
+      markTaskOpenTrace(projectId, taskId, 'verify-armed', {
+        generation: sessionPty.canonicalGeneration,
+      });
       void (async () => {
         try {
           while (shouldContinue() && !frameReportedReady) {
@@ -413,10 +443,16 @@ export const ConversationSession = observer(function ConversationSession({
                 elapsedMs: Math.round(elapsedMs),
               });
             }
-            const frameReady = await sessionPty.waitForVisibleFrame(shouldContinue, 5_000);
+            const frameReady = await sessionPty.waitForVisibleFrame(
+              shouldContinue,
+              VISIBLE_FRAME_ACK_POLL_MS
+            );
             if (!shouldContinue() || frameReportedReady) return;
             publishFrameState(frameReady);
             if (frameReady) return;
+            markTaskOpenTrace(projectId, taskId, 'verify-retry', {
+              generation: sessionPty.canonicalGeneration,
+            });
             await new Promise<void>((resolve) => setTimeout(resolve, 100));
           }
         } finally {

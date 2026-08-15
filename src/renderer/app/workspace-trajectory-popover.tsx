@@ -7,11 +7,11 @@ import {
   getTaskOpenTrajectories,
   subscribeTaskOpenTrajectories,
   type TaskOpenTrajectory,
+  type TaskOpenTrajectoryDetails,
 } from '@renderer/features/tasks/task-open-trajectory';
 import {
   analyzeTaskOpenTrajectory,
   TASK_OPEN_LANE_GROUPS,
-  type TaskOpenAnalysis,
   type TaskOpenGap,
   type TaskOpenLaneId,
   type TaskOpenLaneSegment,
@@ -38,6 +38,14 @@ export function formatTrajectoryDuration(ms: number): string {
   return `${(ms / 1_000).toFixed(ms < 10_000 ? 2 : 1)}s`;
 }
 
+/**
+ * The lane-label column and the left edge of every track have to agree: the
+ * dead-air bands are one layer behind all the rows, so they can only line up
+ * with the tracks if both are positioned from the same offset.
+ */
+const LANE_LABEL_CLASS = 'w-16 shrink-0 truncate text-[10px] leading-4 text-foreground-passive';
+const TRACK_LEFT_CLASS = 'left-[4.5rem]';
+
 function percent(value: number, span: number): number {
   return Math.min(100, Math.max(0, (value / span) * 100));
 }
@@ -55,62 +63,114 @@ function isColdSpawn(trajectory: TaskOpenTrajectory): boolean {
   return spawned;
 }
 
+/**
+ * The one detail worth reading without opening the JSON: a stage that can be
+ * entered for several different causes says which one it was.
+ */
+function stepReason(details: TaskOpenTrajectoryDetails): string | undefined {
+  const reason = details.reason;
+  return typeof reason === 'string' ? reason : undefined;
+}
+
+function segmentLabel(segment: TaskOpenLaneSegment): string {
+  const reason = stepReason(segment.step.details);
+  const at = formatTrajectoryDuration(segment.step.atMs);
+  const waited = segment.isLaneStart
+    ? ''
+    : ` · waited ${formatTrajectoryDuration(segment.durationMs)}`;
+  return `${segment.step.stage}${reason ? ` (${reason})` : ''} @ ${at}${waited}`;
+}
+
+/**
+ * A lane is discrete marks joined by the time between them, not a run of filled
+ * bars. Filling each interval made every lane read as one solid block from end
+ * to end — the opposite of the question the chart exists to answer, which is
+ * *when* each participant did something and how long it then sat idle.
+ */
 function LaneRow({
   track,
-  analysis,
+  slowest,
+  spanMs,
   laneLabel,
 }: {
   track: TaskOpenLaneTrack;
-  analysis: TaskOpenAnalysis;
+  slowest: TaskOpenLaneSegment | undefined;
+  spanMs: number;
   laneLabel: (lane: TaskOpenLaneId) => string;
 }) {
-  const { spanMs, gaps, slowest } = analysis;
-
   return (
     <div className="flex items-center gap-2">
-      <span className="w-14 shrink-0 truncate text-[10px] text-foreground-passive">
-        {laneLabel(track.lane)}
-      </span>
-      <span className="relative h-3.5 min-w-0 flex-1 overflow-hidden rounded-sm bg-background-2">
-        {gaps.map((gap) => (
-          <span
-            key={`gap:${gap.startMs}`}
-            aria-hidden
-            className="absolute inset-y-0 bg-amber-500/15"
-            style={{
-              left: `${percent(gap.startMs, spanMs)}%`,
-              width: `${percent(gap.durationMs, spanMs)}%`,
-            }}
-          />
-        ))}
+      <span className={LANE_LABEL_CLASS}>{laneLabel(track.lane)}</span>
+      <span className="relative h-4 min-w-0 flex-1">
+        <span aria-hidden className="absolute inset-x-0 top-1/2 h-px bg-border/50" />
         {track.segments.map((segment) => {
           const isSlowest = segment === slowest;
-          const label = `${segment.step.stage} · ${formatTrajectoryDuration(segment.durationMs)} @ ${formatTrajectoryDuration(segment.step.atMs)}`;
-          if (segment.isLaneStart) {
-            return (
-              <span
-                key={`start:${segment.step.stage}:${segment.step.atMs}`}
-                title={label}
-                className="absolute inset-y-1 w-[3px] rounded-full bg-foreground-passive"
-                style={{ left: `calc(${percent(segment.step.atMs, spanMs)}% - 1px)` }}
-              />
-            );
-          }
           return (
-            <span
-              key={`seg:${segment.step.stage}:${segment.step.atMs}`}
-              title={label}
-              className={cn(
-                'absolute inset-y-1 rounded-full',
-                isSlowest ? 'bg-amber-500' : 'bg-foreground-disabled'
+            <span key={`${segment.step.stage}:${segment.step.atMs}`}>
+              {segment.isLaneStart ? null : (
+                <span
+                  aria-hidden
+                  className={cn(
+                    'absolute top-1/2 -translate-y-1/2 rounded-full',
+                    isSlowest ? 'h-[3px] bg-amber-500' : 'h-px bg-foreground-disabled'
+                  )}
+                  style={{
+                    left: `${percent(segment.startMs, spanMs)}%`,
+                    width: `${percent(segment.durationMs, spanMs)}%`,
+                  }}
+                />
               )}
-              style={{
-                left: `${percent(segment.startMs, spanMs)}%`,
-                width: `max(2px, ${percent(segment.durationMs, spanMs)}%)`,
-              }}
-            />
+              <span
+                title={segmentLabel(segment)}
+                className={cn(
+                  'absolute top-1/2 size-[7px] -translate-x-1/2 -translate-y-1/2 rounded-[2px]',
+                  isSlowest ? 'bg-amber-500' : 'bg-foreground-passive'
+                )}
+                style={{ left: `${percent(segment.step.atMs, spanMs)}%` }}
+              />
+            </span>
           );
         })}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Dead air belongs to the whole timeline, not to any one lane, so it is drawn
+ * once behind every track. Repeating it per row made all six rows look like the
+ * same full-width amber band.
+ */
+function GapBands({ gaps, spanMs }: { gaps: TaskOpenGap[]; spanMs: number }) {
+  return (
+    <div
+      aria-hidden
+      className={cn('pointer-events-none absolute inset-y-0 right-3', TRACK_LEFT_CLASS)}
+    >
+      {gaps.map((gap) => (
+        <span
+          key={`gap:${gap.startMs}`}
+          className="absolute inset-y-0 border-l border-amber-500/40 bg-amber-500/10"
+          style={{
+            left: `${percent(gap.startMs, spanMs)}%`,
+            width: `${percent(gap.durationMs, spanMs)}%`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function TimeAxis({ spanMs }: { spanMs: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-16 shrink-0" />
+      <span className="relative h-3 min-w-0 flex-1 font-mono text-[9px] tabular-nums text-foreground-disabled">
+        <span className="absolute left-0">0</span>
+        <span className="absolute left-1/2 -translate-x-1/2">
+          {formatTrajectoryDuration(spanMs / 2)}
+        </span>
+        <span className="absolute right-0">{formatTrajectoryDuration(spanMs)}</span>
       </span>
     </div>
   );
@@ -156,6 +216,8 @@ function StepRow({
   isSlowest: boolean;
   laneLabel: (lane: TaskOpenLaneId) => string;
 }) {
+  const reason = stepReason(segment.step.details);
+
   return (
     <div
       className={cn(
@@ -166,9 +228,10 @@ function StepRow({
       <span className="w-10 shrink-0 text-right">
         {formatTrajectoryDuration(segment.step.atMs)}
       </span>
-      <span className="w-14 shrink-0 truncate font-sans">{laneLabel(segment.lane)}</span>
-      <span className="min-w-0 flex-1 truncate" title={segment.step.stage}>
+      <span className="w-12 shrink-0 truncate font-sans">{laneLabel(segment.lane)}</span>
+      <span className="min-w-0 flex-1 truncate" title={segmentLabel(segment)}>
         {segment.step.stage}
+        {reason ? <span className="text-foreground-disabled"> · {reason}</span> : null}
       </span>
       <span className="w-12 shrink-0 text-right">
         {segment.isLaneStart ? '—' : formatTrajectoryDuration(segment.durationMs)}
@@ -282,21 +345,31 @@ export function WorkspaceTrajectoryPopover({
         </DropdownMenu>
       </div>
 
-      <div className="space-y-1.5 px-3 py-2">
-        {TASK_OPEN_LANE_GROUPS.map(({ group, lanes }) => {
-          const groupTracks = analysis.tracks.filter((track) => lanes.includes(track.lane));
-          if (groupTracks.length === 0) return null;
-          return (
-            <div key={group} className="space-y-0.5">
-              <div className="text-[9px] tracking-wide text-foreground-disabled uppercase">
-                {t(`workspaceRuntime.trajectory.group.${group}`)}
+      <div className="relative px-3 py-2">
+        <GapBands gaps={analysis.gaps} spanMs={analysis.spanMs} />
+        <div className="relative space-y-1.5">
+          <TimeAxis spanMs={analysis.spanMs} />
+          {TASK_OPEN_LANE_GROUPS.map(({ group, lanes }) => {
+            const groupTracks = analysis.tracks.filter((track) => lanes.includes(track.lane));
+            if (groupTracks.length === 0) return null;
+            return (
+              <div key={group} className="space-y-0.5">
+                <div className="text-[9px] tracking-wide text-foreground-disabled uppercase">
+                  {t(`workspaceRuntime.trajectory.group.${group}`)}
+                </div>
+                {groupTracks.map((track) => (
+                  <LaneRow
+                    key={track.lane}
+                    track={track}
+                    slowest={slowest}
+                    spanMs={analysis.spanMs}
+                    laneLabel={laneLabel}
+                  />
+                ))}
               </div>
-              {groupTracks.map((track) => (
-                <LaneRow key={track.lane} track={track} analysis={analysis} laneLabel={laneLabel} />
-              ))}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {analysis.gaps.length > 0 ? (

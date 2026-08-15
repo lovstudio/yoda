@@ -15,6 +15,8 @@
 export type TaskOpenFrameStage =
   /** A visible DOM host was handed to the terminal. */
   | 'frame-mount'
+  /** An ACK was refused before the loop could start; the detail says by what. */
+  | 'frame-ack-blocked'
   /** Parked because the output subscription has not delivered its snapshot. */
   | 'frame-snapshot-wait'
   /** Parked because this generation does not yet own a complete process frame. */
