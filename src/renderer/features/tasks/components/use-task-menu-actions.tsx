@@ -17,11 +17,12 @@ import {
   getTaskStore,
   taskChildren,
 } from '@renderer/features/tasks/stores/task-selectors';
+import { copyYodaLink } from '@renderer/lib/clipboard';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { log } from '@renderer/utils/logger';
-import { copyTaskLink, type TaskMenuActions } from './task-context-menu';
+import type { TaskMenuActions } from './task-context-menu';
 import {
   buildTaskMenuSessionFields,
   getTaskMenuConversation,
@@ -167,7 +168,7 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
     // Open the configurable archive dialog with an editable pre-archive
     // command and optional note.
     onArchiveWithSkill: () => showArchiveWithNote({ projectId, taskId, taskName, withSkill: true }),
-    onCopyYodaLink: () => void copyTaskLink(buildTaskDeepLink({ projectId, taskId }), t),
+    onCopyYodaLink: () => void copyYodaLink(buildTaskDeepLink({ projectId, taskId }), t),
     onRestore: () => void taskManager?.restoreTask(taskId),
     onReconnect: workspace?.connectionState != null ? () => workspace.reconnect() : undefined,
     onRestartSession:

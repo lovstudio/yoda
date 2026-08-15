@@ -2387,6 +2387,7 @@
       "createSubtaskAndRun": "新建子任务并启动 Session…",
       "setParent": "设置父任务…",
       "createParent": "增设父任务（分组）",
+      "projectMenu": "项目",
       "moveToProject": "移动到项目",
       "moveToProjectEmpty": "没有其他项目",
       "moveToProjectSearch": "搜索项目…",

@@ -48,6 +48,17 @@ vi.mock('@renderer/features/tasks/components/move-to-project-submenu', async () 
   };
 });
 
+vi.mock('@renderer/features/tasks/components/task-project-submenu', async () => {
+  const { createElement: create, Fragment } = await import('react');
+  const submenu = () =>
+    create(Fragment, null, create('hr'), create('button', null, 'tasks.context.projectMenu'));
+
+  return {
+    TaskProjectContextSubmenu: submenu,
+    TaskProjectDropdownSubmenu: submenu,
+  };
+});
+
 vi.mock('@renderer/lib/hooks/use-toast', () => ({ toast: vi.fn() }));
 vi.mock('@renderer/lib/ipc', () => ({ rpc: {} }));
 
@@ -213,6 +224,7 @@ describe('TaskContextMenuItems grouping', () => {
         'tasks.context.createParent',
       ],
       ['tasks.context.copyTaskId', 'tasks.context.copyTaskBasicInfo', 'tasks.context.copyYodaLink'],
+      ['tasks.context.projectMenu'],
       ['tasks.context.moveToProject', 'workspaces.moveToWorkspace'],
     ]);
   });
@@ -237,8 +249,9 @@ describe('TaskContextMenuItems grouping', () => {
       );
     });
 
-    expect(menuGroups(host).slice(-2)).toEqual([
+    expect(menuGroups(host).slice(-3)).toEqual([
       ['projects.tasks.restore'],
+      ['tasks.context.projectMenu'],
       ['tasks.context.moveToProject'],
     ]);
   });

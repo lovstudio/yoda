@@ -8,6 +8,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  Folder,
   FolderPen,
   Info,
   PencilLine,
@@ -39,6 +40,9 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@renderer/lib/ui/context-menu';
 import {
@@ -46,10 +50,13 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 
-interface ProjectMenuActions extends ProjectQuickActionsMenuActions {
+export interface ProjectMenuActions extends ProjectQuickActionsMenuActions {
   isPinned: boolean;
   canPin: boolean;
   isSsh: boolean;
@@ -349,57 +356,102 @@ export function ProjectContextMenu({ children, ...actions }: ProjectContextMenuP
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent>
-        {items.map((item, index) => {
-          const prev = items[index - 1];
-          const showSeparator = prev && prev.group !== item.group;
-          const workspaceAssign = item.key === 'remove-project' ? actions.onAssignWorkspace : null;
-          if (item.kind === 'quick-actions') {
-            return (
-              <React.Fragment key={item.key}>
-                {showSeparator && <ContextMenuSeparator />}
-                <ProjectQuickActionsContextSubmenu actions={actions} />
-              </React.Fragment>
-            );
-          }
-          if (item.kind === 'open-in' && actions.projectPath) {
-            return (
-              <React.Fragment key={item.key}>
-                {showSeparator && <ContextMenuSeparator />}
-                <OpenInContextSubmenu
-                  path={actions.projectPath}
-                  isRemote={actions.isSsh}
-                  sshConnectionId={actions.sshConnectionId ?? null}
-                />
-              </React.Fragment>
-            );
-          }
-          const Icon = item.icon;
-          if (!Icon || !item.label || !item.onSelect) return null;
+        <ProjectContextMenuItems actions={actions} items={items} />
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+/**
+ * The project menu's items, without a surrounding container. Shared by the
+ * project's own context menu and by the nested 「项目」 submenu so both surfaces
+ * offer exactly the same operations.
+ */
+function ProjectContextMenuItems({
+  actions,
+  items,
+}: {
+  actions: ProjectMenuActions;
+  items: MenuItemDescriptor[];
+}) {
+  return (
+    <>
+      {items.map((item, index) => {
+        const prev = items[index - 1];
+        const showSeparator = prev && prev.group !== item.group;
+        const workspaceAssign = item.key === 'remove-project' ? actions.onAssignWorkspace : null;
+        if (item.kind === 'quick-actions') {
           return (
             <React.Fragment key={item.key}>
               {showSeparator && <ContextMenuSeparator />}
-              {workspaceAssign && (
-                <WorkspaceAssignContextSubmenu
-                  currentWorkspaceId={actions.currentWorkspaceId ?? null}
-                  onAssign={workspaceAssign}
-                />
-              )}
-              <ContextMenuItem
-                disabled={item.disabled}
-                variant={item.variant}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  item.onSelect?.();
-                }}
-              >
-                <Icon className="size-4" />
-                {item.label}
-              </ContextMenuItem>
+              <ProjectQuickActionsContextSubmenu actions={actions} />
             </React.Fragment>
           );
-        })}
-      </ContextMenuContent>
-    </ContextMenu>
+        }
+        if (item.kind === 'open-in' && actions.projectPath) {
+          return (
+            <React.Fragment key={item.key}>
+              {showSeparator && <ContextMenuSeparator />}
+              <OpenInContextSubmenu
+                path={actions.projectPath}
+                isRemote={actions.isSsh}
+                sshConnectionId={actions.sshConnectionId ?? null}
+              />
+            </React.Fragment>
+          );
+        }
+        const Icon = item.icon;
+        if (!Icon || !item.label || !item.onSelect) return null;
+        return (
+          <React.Fragment key={item.key}>
+            {showSeparator && <ContextMenuSeparator />}
+            {workspaceAssign && (
+              <WorkspaceAssignContextSubmenu
+                currentWorkspaceId={actions.currentWorkspaceId ?? null}
+                onAssign={workspaceAssign}
+              />
+            )}
+            <ContextMenuItem
+              disabled={item.disabled}
+              variant={item.variant}
+              onClick={(e) => {
+                e.stopPropagation();
+                item.onSelect?.();
+              }}
+            >
+              <Icon className="size-4" />
+              {item.label}
+            </ContextMenuItem>
+          </React.Fragment>
+        );
+      })}
+    </>
+  );
+}
+
+/**
+ * The project menu nested one level down, for surfaces that belong to a project
+ * without being one (a task row). Quick actions stay at the host menu's top
+ * level — they are the project operations a user repeats — so they are dropped
+ * here instead of appearing twice.
+ */
+export function ProjectContextSubmenu({ actions }: { actions: ProjectMenuActions }) {
+  const { t } = useTranslation();
+  const items = useMenuItems(actions).filter((item) => item.kind !== 'quick-actions');
+  const scheduleMenuPrefetch = useProjectMenuPrefetchAfterPaint(() => {
+    actions.onQuickActionsMenuOpen?.();
+    actions.onMenuOpen?.();
+  });
+  return (
+    <ContextMenuSub onOpenChange={scheduleMenuPrefetch}>
+      <ContextMenuSubTrigger>
+        <Folder className="size-4" />
+        {t('tasks.context.projectMenu')}
+      </ContextMenuSubTrigger>
+      <ContextMenuSubContent className="min-w-48">
+        <ProjectContextMenuItems actions={actions} items={items} />
+      </ContextMenuSubContent>
+    </ContextMenuSub>
   );
 }
 
@@ -432,56 +484,92 @@ export function ProjectActionsMenu({
     >
       <DropdownMenuTrigger render={trigger} />
       <DropdownMenuContent align={align} className="min-w-44">
-        {items.map((item, index) => {
-          const prev = items[index - 1];
-          const showSeparator = prev && prev.group !== item.group;
-          const workspaceAssign = item.key === 'remove-project' ? actions.onAssignWorkspace : null;
-          if (item.kind === 'quick-actions') {
-            return (
-              <React.Fragment key={item.key}>
-                {showSeparator && <DropdownMenuSeparator />}
-                <ProjectQuickActionsDropdownSubmenu actions={actions} />
-              </React.Fragment>
-            );
-          }
-          if (item.kind === 'open-in' && actions.projectPath) {
-            return (
-              <React.Fragment key={item.key}>
-                {showSeparator && <DropdownMenuSeparator />}
-                <OpenInDropdownSubmenu
-                  path={actions.projectPath}
-                  isRemote={actions.isSsh}
-                  sshConnectionId={actions.sshConnectionId ?? null}
-                />
-              </React.Fragment>
-            );
-          }
-          const Icon = item.icon;
-          if (!Icon || !item.label || !item.onSelect) return null;
+        <ProjectDropdownMenuItems actions={actions} items={items} />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** Dropdown twin of {@link ProjectContextMenuItems}. */
+function ProjectDropdownMenuItems({
+  actions,
+  items,
+}: {
+  actions: ProjectMenuActions;
+  items: MenuItemDescriptor[];
+}) {
+  return (
+    <>
+      {items.map((item, index) => {
+        const prev = items[index - 1];
+        const showSeparator = prev && prev.group !== item.group;
+        const workspaceAssign = item.key === 'remove-project' ? actions.onAssignWorkspace : null;
+        if (item.kind === 'quick-actions') {
           return (
             <React.Fragment key={item.key}>
               {showSeparator && <DropdownMenuSeparator />}
-              {workspaceAssign && (
-                <WorkspaceAssignDropdownSubmenu
-                  currentWorkspaceId={actions.currentWorkspaceId ?? null}
-                  onAssign={workspaceAssign}
-                />
-              )}
-              <DropdownMenuItem
-                disabled={item.disabled}
-                variant={item.variant}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  item.onSelect?.();
-                }}
-              >
-                <Icon className="size-4" />
-                {item.label}
-              </DropdownMenuItem>
+              <ProjectQuickActionsDropdownSubmenu actions={actions} />
             </React.Fragment>
           );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
+        }
+        if (item.kind === 'open-in' && actions.projectPath) {
+          return (
+            <React.Fragment key={item.key}>
+              {showSeparator && <DropdownMenuSeparator />}
+              <OpenInDropdownSubmenu
+                path={actions.projectPath}
+                isRemote={actions.isSsh}
+                sshConnectionId={actions.sshConnectionId ?? null}
+              />
+            </React.Fragment>
+          );
+        }
+        const Icon = item.icon;
+        if (!Icon || !item.label || !item.onSelect) return null;
+        return (
+          <React.Fragment key={item.key}>
+            {showSeparator && <DropdownMenuSeparator />}
+            {workspaceAssign && (
+              <WorkspaceAssignDropdownSubmenu
+                currentWorkspaceId={actions.currentWorkspaceId ?? null}
+                onAssign={workspaceAssign}
+              />
+            )}
+            <DropdownMenuItem
+              disabled={item.disabled}
+              variant={item.variant}
+              onClick={(e) => {
+                e.stopPropagation();
+                item.onSelect?.();
+              }}
+            >
+              <Icon className="size-4" />
+              {item.label}
+            </DropdownMenuItem>
+          </React.Fragment>
+        );
+      })}
+    </>
+  );
+}
+
+/** Dropdown twin of {@link ProjectContextSubmenu}. */
+export function ProjectDropdownSubmenu({ actions }: { actions: ProjectMenuActions }) {
+  const { t } = useTranslation();
+  const items = useMenuItems(actions).filter((item) => item.kind !== 'quick-actions');
+  const scheduleMenuPrefetch = useProjectMenuPrefetchAfterPaint(() => {
+    actions.onQuickActionsMenuOpen?.();
+    actions.onMenuOpen?.();
+  });
+  return (
+    <DropdownMenuSub onOpenChange={scheduleMenuPrefetch}>
+      <DropdownMenuSubTrigger>
+        <Folder className="size-4" />
+        {t('tasks.context.projectMenu')}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="min-w-48">
+        <ProjectDropdownMenuItems actions={actions} items={items} />
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }

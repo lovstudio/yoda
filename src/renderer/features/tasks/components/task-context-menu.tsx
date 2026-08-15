@@ -35,6 +35,7 @@ import {
   WorkspaceAssignContextSubmenu,
   WorkspaceAssignDropdownSubmenu,
 } from '@renderer/features/workspaces/workspace-assign-submenu';
+import { copyText } from '@renderer/lib/clipboard';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import {
@@ -56,6 +57,7 @@ import {
   MoveToProjectDropdownSubmenu,
 } from './move-to-project-submenu';
 import { buildTaskBasicInfo, type TaskBasicInfoFields } from './task-menu-basic-info';
+import { TaskProjectContextSubmenu, TaskProjectDropdownSubmenu } from './task-project-submenu';
 
 interface TaskSessionInfoFields {
   runtimeId?: RuntimeId;
@@ -416,13 +418,6 @@ async function copyTaskBasicInfo(actions: TaskMenuActions, t: TFunction): Promis
   }
 }
 
-export async function copyTaskLink(link: string, t: TFunction): Promise<void> {
-  await copyText(link, t, {
-    success: t('tasks.context.yodaLinkCopied'),
-    failure: t('tasks.context.copyFailed'),
-  });
-}
-
 async function copyTaskId(actions: TaskMenuActions, t: TFunction): Promise<void> {
   try {
     const taskId = actions.taskId?.trim();
@@ -490,23 +485,6 @@ function firstTrimmed(...values: Array<string | undefined>): string | undefined 
   return undefined;
 }
 
-async function copyText(
-  value: string,
-  t: TFunction,
-  messages: { success: string; failure: string }
-) {
-  try {
-    await navigator.clipboard.writeText(value);
-    toast({ title: messages.success });
-  } catch {
-    toast({
-      title: t('auth.copyFailed'),
-      description: messages.failure,
-      variant: 'destructive',
-    });
-  }
-}
-
 function showCopyFailure(t: TFunction): void {
   toast({
     title: t('auth.copyFailed'),
@@ -563,6 +541,7 @@ export function TaskContextMenuItems(actions: TaskMenuActions) {
           <ProjectQuickActionsContextSubmenu actions={actions} />
         </>
       )}
+      {actions.projectId && <TaskProjectContextSubmenu projectId={actions.projectId} />}
       {actions.onMoveToProject && actions.projectId && (
         <MoveToProjectContextSubmenu
           currentProjectId={actions.projectId}
@@ -659,6 +638,7 @@ export function TaskActionsMenu({
             <ProjectQuickActionsDropdownSubmenu actions={actions} />
           </>
         )}
+        {actions.projectId && <TaskProjectDropdownSubmenu projectId={actions.projectId} />}
         {actions.onMoveToProject && actions.projectId && (
           <MoveToProjectDropdownSubmenu
             currentProjectId={actions.projectId}

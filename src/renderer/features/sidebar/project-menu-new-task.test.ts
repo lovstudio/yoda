@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-describe('sidebar project new task entry', () => {
+describe('project menu new task entry', () => {
   it('gives the floating-window preference priority over one-click creation', () => {
-    const source = readFileSync(new URL('./project-item.tsx', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('./use-project-menu-actions.ts', import.meta.url), 'utf8');
     const fallbackStart = source.indexOf("openMode === 'modal' ||");
     const fallbackEnd = source.indexOf('await createTaskAndRun();', fallbackStart);
     const fallback = source.slice(fallbackStart, fallbackEnd);

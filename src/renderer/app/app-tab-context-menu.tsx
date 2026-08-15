@@ -30,10 +30,7 @@ import { refreshProjectFile } from '@renderer/features/project-file/project-file
 import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { archiveConversationFlow } from '@renderer/features/tasks/archive-task';
-import {
-  copyTaskLink,
-  TaskContextMenuItems,
-} from '@renderer/features/tasks/components/task-context-menu';
+import { TaskContextMenuItems } from '@renderer/features/tasks/components/task-context-menu';
 import { useTaskMenuActions } from '@renderer/features/tasks/components/use-task-menu-actions';
 import { ConversationMoveSubmenu } from '@renderer/features/tasks/conversations/conversation-move-submenu';
 import {
@@ -51,6 +48,7 @@ import {
   type TabManagerStore,
 } from '@renderer/features/tasks/tabs/tab-manager-store';
 import { openTaskTabInWindow } from '@renderer/features/tasks/tabs/tab-meta';
+import { copyYodaLink } from '@renderer/lib/clipboard';
 import { FilePathMenuItems, type FilePathTarget } from '@renderer/lib/components/file-path-actions';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { APP_SHORTCUTS } from '@renderer/lib/hooks/useKeyboardShortcuts';
@@ -126,7 +124,7 @@ export const AppTabContextMenu = observer(function AppTabContextMenu({
   );
 });
 
-export type Translate = Parameters<typeof copyTaskLink>[1];
+export type Translate = Parameters<typeof copyYodaLink>[1];
 
 function buildTabSections(
   tab: AppTabEntry,
@@ -534,7 +532,7 @@ export function buildConversationSections(
     <ContextMenuItem
       key="copy-link"
       className="whitespace-nowrap"
-      onClick={() => void copyTaskLink(buildTaskDeepLink({ projectId, taskId, conversationId }), t)}
+      onClick={() => void copyYodaLink(buildTaskDeepLink({ projectId, taskId, conversationId }), t)}
     >
       <Link className="size-4" />
       {t('tasks.tabs.copyYodaLink')}

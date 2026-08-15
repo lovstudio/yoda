@@ -2387,6 +2387,7 @@
       "createSubtaskAndRun": "New subtask and start session...",
       "setParent": "Set parent task...",
       "createParent": "Add parent task (group)",
+      "projectMenu": "Project",
       "moveToProject": "Move to project",
       "moveToProjectEmpty": "No other projects",
       "moveToProjectSearch": "Search projects...",

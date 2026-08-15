@@ -16,8 +16,11 @@ vi.mock('@renderer/lib/stores/app-state', () => ({
   sidebarStore: { requestSelectionReveal: vi.fn() },
 }));
 
+vi.mock('@renderer/lib/clipboard', () => ({
+  copyYodaLink: vi.fn(),
+}));
+
 vi.mock('@renderer/features/tasks/components/task-context-menu', () => ({
-  copyTaskLink: vi.fn(),
   TaskContextMenu: () => null,
   TaskContextMenuItems: () => null,
 }));
