@@ -376,6 +376,33 @@ describe('DockedSessionHistory conversation tree menu', () => {
     expect(mocks.restoreCurrentPrompt).toHaveBeenCalledWith(secondPrompt, 2);
   });
 
+  it('keeps the history rail on the far side from the cursor', async () => {
+    const { DockedSessionHistory } = await import(
+      '@renderer/features/tasks/conversations/session-history-panel'
+    );
+    await act(async () => root.render(createElement(DockedSessionHistory)));
+
+    const promptText = host.querySelector<HTMLElement>('[data-slot="tooltip-trigger"]');
+    await act(async () => userEvent.hover(promptText!));
+
+    await vi.waitFor(() => {
+      const preview = document.querySelector<HTMLElement>('[data-session-prompt-preview]');
+      expect(preview).not.toBeNull();
+      // Tailwind is not compiled in browser tests, so assert the variant class.
+      expect(preview?.classList.contains('[[data-side=right]_&]:flex-row-reverse')).toBe(true);
+
+      // The mirror only holds if data-side carries the rendered side rather than
+      // the requested one, so tie the attribute to the popup's real geometry.
+      const popup = document.querySelector<HTMLElement>('[data-slot="tooltip-content"]');
+      const triggerRect = promptText!.getBoundingClientRect();
+      const anchorX = triggerRect.left + triggerRect.width / 2;
+      const opensRight = popup!.getBoundingClientRect().left >= anchorX;
+      expect(preview?.closest('[data-side]')?.getAttribute('data-side')).toBe(
+        opensRight ? 'right' : 'left'
+      );
+    });
+  });
+
   it('keeps the tree icon available while the current-path list is collapsed', async () => {
     const { DockedSessionHistory } = await import(
       '@renderer/features/tasks/conversations/session-history-panel'

@@ -653,7 +653,16 @@ function SessionPromptRow({
           showArrow={false}
           className="block w-[min(28rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border-primary/70 bg-background-quaternary p-0 text-foreground shadow-lg"
         >
-          <div data-session-prompt-preview className="flex min-w-0">
+          {/*
+            The rail sits on the far side from the cursor: the popup opens to the
+            right of the pointer (data-side=right) until it collides and flips
+            left, so mirroring the row keeps the pointer's travel path over the
+            prompt body instead of dragging across the bars and reselecting.
+          */}
+          <div
+            data-session-prompt-preview
+            className="flex min-w-0 [[data-side=right]_&]:flex-row-reverse"
+          >
             <aside
               data-session-prompt-history-bars
               className="flex w-16 shrink-0 items-center justify-center px-2 py-3"
