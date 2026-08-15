@@ -296,7 +296,7 @@ describe('DockedSessionHistory conversation tree menu', () => {
         preview?.querySelector('[data-session-prompt-preview-header]')?.classList.contains('h-9')
       ).toBe(true);
       expect(
-        preview?.querySelector('[data-session-prompt-preview-body]')?.classList.contains('h-52')
+        preview?.querySelector('[data-session-prompt-preview-row]')?.classList.contains('h-52')
       ).toBe(true);
 
       const historyBars = document.querySelectorAll<HTMLButtonElement>(
@@ -339,13 +339,16 @@ describe('DockedSessionHistory conversation tree menu', () => {
         preview?.querySelector('[data-session-prompt-preview-header]')?.classList.contains('h-9')
       ).toBe(true);
       expect(
-        preview?.querySelector('[data-session-prompt-preview-body]')?.classList.contains('h-52')
+        preview?.querySelector('[data-session-prompt-preview-row]')?.classList.contains('h-52')
       ).toBe(true);
       expect(historyBars[0]?.getAttribute('data-session-prompt-history-bar-active')).toBe('false');
       expect(historyBars[1]?.getAttribute('data-session-prompt-history-bar-active')).toBe('true');
     });
 
-    await act(async () => userEvent.click(historyBars[1]!));
+    // Synthetic click: the popup keeps a fixed height in the app, but this test
+    // runs without compiled Tailwind, so the shorter prompt reflows the popup and
+    // a pointer-driven click races the repositioning.
+    await act(async () => historyBars[1]?.click());
 
     await vi.waitFor(() => {
       const preview = document.querySelector<HTMLElement>('[data-session-prompt-preview]');
@@ -389,7 +392,10 @@ describe('DockedSessionHistory conversation tree menu', () => {
       const preview = document.querySelector<HTMLElement>('[data-session-prompt-preview]');
       expect(preview).not.toBeNull();
       // Tailwind is not compiled in browser tests, so assert the variant class.
-      expect(preview?.classList.contains('[[data-side=right]_&]:flex-row-reverse')).toBe(true);
+      const row = preview?.querySelector('[data-session-prompt-preview-row]');
+      expect(row?.classList.contains('[[data-side=right]_&]:flex-row-reverse')).toBe(true);
+      // The header spans both columns, so it must not live inside the mirrored row.
+      expect(row?.querySelector('[data-session-prompt-preview-header]')).toBeNull();
 
       // The mirror only holds if data-side carries the rendered side rather than
       // the requested one, so tie the attribute to the popup's real geometry.

@@ -653,130 +653,132 @@ function SessionPromptRow({
           showArrow={false}
           className="block w-[min(28rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border-primary/70 bg-background-quaternary p-0 text-foreground shadow-lg"
         >
-          {/*
-            The rail sits on the far side from the cursor: the popup opens to the
-            right of the pointer (data-side=right) until it collides and flips
-            left, so mirroring the row keeps the pointer's travel path over the
-            prompt body instead of dragging across the bars and reselecting.
-          */}
-          <div
-            data-session-prompt-preview
-            className="flex min-w-0 [[data-side=right]_&]:flex-row-reverse"
-          >
-            <aside
-              data-session-prompt-history-bars
-              className="flex w-16 shrink-0 items-center justify-center px-2 py-3"
+          <div data-session-prompt-preview className="min-w-0">
+            <div
+              data-session-prompt-preview-header
+              className="flex h-9 min-w-0 items-center gap-2 border-b border-border-primary/60 px-3"
             >
-              <div
-                ref={barRailRef}
-                className="flex max-h-60 w-12 flex-col items-center gap-1.5 overflow-y-auto rounded-full px-1 py-2"
-                onPointerEnter={handleBarPointerMove}
-                onPointerLeave={handleBarPointerLeave}
-                onPointerMove={handleBarPointerMove}
+              <span className="text-[10px] font-medium text-foreground-passive">
+                {t('tasks.sessionInfo.createdAt')}
+              </span>
+              {selectedPromptDate ? (
+                <RelativeTime
+                  value={selectedPromptDate}
+                  className="font-mono text-[11px] tabular-nums text-foreground-muted"
+                />
+              ) : (
+                <span className="font-mono text-[11px] text-foreground-passive">—</span>
+              )}
+              <div className="ml-auto flex shrink-0 items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  data-session-prompt-copy
+                  className="text-foreground-passive hover:text-foreground"
+                  aria-label={t(copied ? 'common.copied' : 'common.copy')}
+                  title={t(copied ? 'common.copied' : 'common.copy')}
+                  disabled={!selectedText}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleCopyPrompt();
+                  }}
+                >
+                  {copied ? (
+                    <Check className="text-status-done" aria-hidden="true" />
+                  ) : (
+                    <Copy aria-hidden="true" />
+                  )}
+                </Button>
+                {restoreButton}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  data-session-prompt-expand
+                  className="text-foreground-passive hover:text-foreground"
+                  aria-label={t('tasks.sessionInfo.viewFullPrompt')}
+                  title={t('tasks.sessionInfo.viewFullPrompt')}
+                  disabled={!selectedText}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openPromptInModal();
+                  }}
+                >
+                  <Maximize2 aria-hidden="true" />
+                </Button>
+              </div>
+            </div>
+            {/*
+              The rail sits on the far side from the cursor: the popup opens to
+              the right of the pointer (data-side=right) until it collides and
+              flips left, so mirroring this row keeps the pointer's travel path
+              over the prompt body instead of dragging across the bars and
+              reselecting. The header stays above both columns, spanning the
+              popup's full width.
+            */}
+            <div
+              data-session-prompt-preview-row
+              className="flex h-52 min-w-0 [[data-side=right]_&]:flex-row-reverse"
+            >
+              <aside
+                data-session-prompt-history-bars
+                className="flex w-16 shrink-0 items-center justify-center px-2 py-3"
               >
-                {prompts.map((historyPrompt, historyIndex) => {
-                  const isSelected = historyPrompt.id === selectedPrompt.id;
-                  const historyPromptLength = promptLengths[historyIndex] ?? 0;
-                  const baseBarWidth = promptBarWidth(historyPromptLength, maxPromptLength);
-                  const barWidth = promptBarDockWidth(
-                    baseBarWidth,
-                    barPointer?.y ?? null,
-                    barPointer?.centers[historyIndex]
-                  );
-                  const promptLabel = t('tasks.sessionInfo.userMessageIndex', {
-                    index: historyIndex + 1,
-                  });
+                <div
+                  ref={barRailRef}
+                  className="flex max-h-full w-12 flex-col items-center gap-1.5 overflow-y-auto rounded-full px-1 py-2"
+                  onPointerEnter={handleBarPointerMove}
+                  onPointerLeave={handleBarPointerLeave}
+                  onPointerMove={handleBarPointerMove}
+                >
+                  {prompts.map((historyPrompt, historyIndex) => {
+                    const isSelected = historyPrompt.id === selectedPrompt.id;
+                    const historyPromptLength = promptLengths[historyIndex] ?? 0;
+                    const baseBarWidth = promptBarWidth(historyPromptLength, maxPromptLength);
+                    const barWidth = promptBarDockWidth(
+                      baseBarWidth,
+                      barPointer?.y ?? null,
+                      barPointer?.centers[historyIndex]
+                    );
+                    const promptLabel = t('tasks.sessionInfo.userMessageIndex', {
+                      index: historyIndex + 1,
+                    });
 
-                  return (
-                    <button
-                      key={historyPrompt.id || `history-prompt-${historyIndex}`}
-                      type="button"
-                      className="group flex h-3 w-full shrink-0 items-center justify-center rounded-full transition-colors hover:bg-background-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
-                      aria-label={promptLabel}
-                      aria-pressed={isSelected}
-                      data-session-prompt-history-bar={historyIndex + 1}
-                      data-session-prompt-history-bar-active={isSelected ? 'true' : 'false'}
-                      title={promptLabel}
-                      onFocus={() => selectHistoryPrompt(historyPrompt)}
-                      onPointerEnter={() => selectHistoryPrompt(historyPrompt)}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        selectHistoryPrompt(historyPrompt);
-                      }}
-                    >
-                      <span
-                        className={cn(
-                          'block h-0.5 max-w-full rounded-full transition-[width] duration-200 ease-out',
-                          isSelected
-                            ? 'bg-foreground'
-                            : 'bg-foreground-passive/45 group-hover:bg-foreground-muted'
-                        )}
-                        style={{ width: `${barWidth}%` }}
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            </aside>
-            <div className="min-w-0 flex-1">
-              <div
-                data-session-prompt-preview-header
-                className="flex h-9 min-w-0 items-center gap-2 border-b border-border-primary/60 px-3"
-              >
-                <span className="text-[10px] font-medium text-foreground-passive">
-                  {t('tasks.sessionInfo.createdAt')}
-                </span>
-                {selectedPromptDate ? (
-                  <RelativeTime
-                    value={selectedPromptDate}
-                    className="font-mono text-[11px] tabular-nums text-foreground-muted"
-                  />
-                ) : (
-                  <span className="font-mono text-[11px] text-foreground-passive">—</span>
-                )}
-                <div className="ml-auto flex shrink-0 items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    data-session-prompt-copy
-                    className="text-foreground-passive hover:text-foreground"
-                    aria-label={t(copied ? 'common.copied' : 'common.copy')}
-                    title={t(copied ? 'common.copied' : 'common.copy')}
-                    disabled={!selectedText}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void handleCopyPrompt();
-                    }}
-                  >
-                    {copied ? (
-                      <Check className="text-status-done" aria-hidden="true" />
-                    ) : (
-                      <Copy aria-hidden="true" />
-                    )}
-                  </Button>
-                  {restoreButton}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    data-session-prompt-expand
-                    className="text-foreground-passive hover:text-foreground"
-                    aria-label={t('tasks.sessionInfo.viewFullPrompt')}
-                    title={t('tasks.sessionInfo.viewFullPrompt')}
-                    disabled={!selectedText}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      openPromptInModal();
-                    }}
-                  >
-                    <Maximize2 aria-hidden="true" />
-                  </Button>
+                    return (
+                      <button
+                        key={historyPrompt.id || `history-prompt-${historyIndex}`}
+                        type="button"
+                        className="group flex h-3 w-full shrink-0 items-center justify-center rounded-full transition-colors hover:bg-background-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+                        aria-label={promptLabel}
+                        aria-pressed={isSelected}
+                        data-session-prompt-history-bar={historyIndex + 1}
+                        data-session-prompt-history-bar-active={isSelected ? 'true' : 'false'}
+                        title={promptLabel}
+                        onFocus={() => selectHistoryPrompt(historyPrompt)}
+                        onPointerEnter={() => selectHistoryPrompt(historyPrompt)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          selectHistoryPrompt(historyPrompt);
+                        }}
+                      >
+                        <span
+                          className={cn(
+                            'block h-0.5 max-w-full rounded-full transition-[width] duration-200 ease-out',
+                            isSelected
+                              ? 'bg-foreground'
+                              : 'bg-foreground-passive/45 group-hover:bg-foreground-muted'
+                          )}
+                          style={{ width: `${barWidth}%` }}
+                        />
+                      </button>
+                    );
+                  })}
                 </div>
-              </div>
+              </aside>
               <div
                 data-session-prompt-preview-body
-                className="h-52 min-h-0 overflow-y-auto px-3 py-2.5"
+                className="min-w-0 flex-1 overflow-y-auto px-3 py-2.5"
               >
                 <p className="min-w-0 whitespace-pre-wrap break-words text-left text-xs leading-5 text-foreground">
                   {selectedText || '—'}
