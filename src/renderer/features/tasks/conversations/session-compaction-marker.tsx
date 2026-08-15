@@ -42,14 +42,14 @@ export function SessionCompactionMarker({
       data-session-compaction-marker={compactions.length}
       data-session-compaction-placement={placement}
       className={cn(
-        'pointer-events-none flex items-center',
+        'pointer-events-none flex items-center justify-center',
         placement === 'flow' && 'py-1',
         placement !== 'flow' && 'absolute inset-x-0 z-10 h-0',
         placement === 'top' && 'top-0',
         placement === 'bottom' && 'bottom-0'
       )}
     >
-      <span className="h-px flex-1 bg-border-primary/70" />
+      <span className="h-px w-8 shrink-0 bg-gradient-to-r from-transparent to-border-primary/70" />
       <Tooltip>
         <TooltipTrigger
           render={
@@ -68,7 +68,7 @@ export function SessionCompactionMarker({
           ) : null}
         </TooltipContent>
       </Tooltip>
-      <span className="h-px flex-1 bg-border-primary/70" />
+      <span className="h-px w-8 shrink-0 bg-gradient-to-l from-transparent to-border-primary/70" />
     </div>
   );
 }
