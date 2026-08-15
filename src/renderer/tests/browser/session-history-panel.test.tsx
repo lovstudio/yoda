@@ -144,9 +144,9 @@ describe('DockedSessionHistory conversation tree menu', () => {
     expect(mocks.useSessionPrompts).toHaveBeenLastCalledWith(true);
     expect(mocks.useSessionPromptTree).toHaveBeenLastCalledWith(false);
 
-    const currentPrompt = host
-      .querySelector<HTMLButtonElement>('button [data-slot="tooltip-trigger"]')
-      ?.closest('button');
+    const currentPrompt = host.querySelector<HTMLButtonElement>(
+      'button[data-slot="tooltip-trigger"]'
+    );
     await act(async () => currentPrompt?.click());
     expect(mocks.restoreCurrentPrompt).toHaveBeenCalledWith(prompt, 1);
 
@@ -279,10 +279,15 @@ describe('DockedSessionHistory conversation tree menu', () => {
     );
     await act(async () => root.render(createElement(DockedSessionHistory)));
 
-    const promptText = host.querySelector<HTMLElement>('[data-slot="tooltip-trigger"]');
-    expect(promptText?.textContent).toBe(fullPrompt);
+    const promptRow = host.querySelector<HTMLElement>('[data-slot="tooltip-trigger"]');
+    // The hover target is the whole row, so it carries the index cell too; a
+    // short prompt must still preview when the pointer is on the blank space.
+    expect(promptRow?.querySelector('[data-session-prompt-text]')?.textContent).toBe(fullPrompt);
+    expect(
+      promptRow?.querySelector('[data-session-prompt-text]')?.previousElementSibling?.textContent
+    ).toBe('1');
 
-    await act(async () => userEvent.hover(promptText!));
+    await act(async () => userEvent.hover(promptRow!));
 
     await vi.waitFor(async () => {
       const preview = document.querySelector<HTMLElement>('[data-session-prompt-preview]');
@@ -385,8 +390,8 @@ describe('DockedSessionHistory conversation tree menu', () => {
     );
     await act(async () => root.render(createElement(DockedSessionHistory)));
 
-    const promptText = host.querySelector<HTMLElement>('[data-slot="tooltip-trigger"]');
-    await act(async () => userEvent.hover(promptText!));
+    const promptRow = host.querySelector<HTMLElement>('[data-slot="tooltip-trigger"]');
+    await act(async () => userEvent.hover(promptRow!));
 
     await vi.waitFor(() => {
       const preview = document.querySelector<HTMLElement>('[data-session-prompt-preview]');
@@ -400,7 +405,7 @@ describe('DockedSessionHistory conversation tree menu', () => {
       // The mirror only holds if data-side carries the rendered side rather than
       // the requested one, so tie the attribute to the popup's real geometry.
       const popup = document.querySelector<HTMLElement>('[data-slot="tooltip-content"]');
-      const triggerRect = promptText!.getBoundingClientRect();
+      const triggerRect = promptRow!.getBoundingClientRect();
       const anchorX = triggerRect.left + triggerRect.width / 2;
       const opensRight = popup!.getBoundingClientRect().left >= anchorX;
       expect(preview?.closest('[data-side]')?.getAttribute('data-side')).toBe(
@@ -452,8 +457,8 @@ describe('DockedSessionHistory conversation tree menu', () => {
     );
     await act(async () => root.render(createElement(DockedSessionHistory)));
 
-    const promptText = host.querySelector<HTMLElement>('[data-slot="tooltip-trigger"]');
-    await act(async () => userEvent.hover(promptText!));
+    const promptRow = host.querySelector<HTMLElement>('[data-slot="tooltip-trigger"]');
+    await act(async () => userEvent.hover(promptRow!));
 
     await vi.waitFor(() => {
       const preview = document.querySelector<HTMLElement>('[data-session-prompt-preview]');

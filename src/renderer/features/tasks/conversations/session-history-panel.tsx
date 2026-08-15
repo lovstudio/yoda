@@ -634,16 +634,50 @@ function SessionPromptRow({
       <span className="w-6 shrink-0 text-right font-mono text-[10px] text-foreground-passive">
         {index}
       </span>
+      <span
+        data-session-prompt-text
+        className="min-w-0 max-w-full truncate text-xs leading-5 text-foreground-muted"
+      >
+        {text}
+      </span>
+      {timestamp && !canRestore ? (
+        <span className="shrink-0 font-mono text-[10px] text-foreground-passive opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          {timestamp}
+        </span>
+      ) : null}
+    </>
+  );
+
+  return (
+    <div className="group relative flex h-6 w-full min-w-0 items-center gap-1 px-3 transition-colors hover:bg-background-1 focus-within:bg-background-1">
+      <SessionCompactionMarker compactions={precedingCompactions ?? []} />
+      <SessionCompactionMarker compactions={trailing ?? []} placement="bottom" />
       <Tooltip>
+        {/*
+          The whole row is the hover target, not just the text: a short prompt
+          leaves most of the row blank, and hovering that blank space has to
+          preview the prompt too.
+        */}
         <TooltipTrigger
           render={
-            <span className="min-w-0 max-w-full truncate text-xs leading-5 text-foreground-muted" />
+            handleClick ? (
+              <button
+                type="button"
+                className={cn(
+                  className,
+                  'hover:text-foreground-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border'
+                )}
+              />
+            ) : (
+              <div className={className} />
+            )
           }
+          onClick={handleClick}
           onPointerEnter={(event: PointerEvent) => {
             setPointerPosition({ x: event.clientX, y: event.clientY });
           }}
         >
-          {text}
+          {content}
         </TooltipTrigger>
         <TooltipContent
           anchor={tooltipAnchor}
@@ -788,32 +822,6 @@ function SessionPromptRow({
           </div>
         </TooltipContent>
       </Tooltip>
-      {timestamp && !canRestore ? (
-        <span className="shrink-0 font-mono text-[10px] text-foreground-passive opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-          {timestamp}
-        </span>
-      ) : null}
-    </>
-  );
-
-  return (
-    <div className="group relative flex h-6 w-full min-w-0 items-center gap-1 px-3 transition-colors hover:bg-background-1 focus-within:bg-background-1">
-      <SessionCompactionMarker compactions={precedingCompactions ?? []} />
-      <SessionCompactionMarker compactions={trailing ?? []} placement="bottom" />
-      {handleClick ? (
-        <button
-          type="button"
-          className={cn(
-            className,
-            'hover:text-foreground-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border'
-          )}
-          onClick={handleClick}
-        >
-          {content}
-        </button>
-      ) : (
-        <div className={className}>{content}</div>
-      )}
     </div>
   );
 }
