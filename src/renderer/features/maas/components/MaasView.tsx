@@ -389,7 +389,7 @@ const ExternalAgentSyncSettingsCard: React.FC = observer(() => {
 export const MaasView: React.FC<{
   embedded?: boolean;
   showSectionChrome?: boolean;
-  requestedPlatformId?: MaasPlatformTemplateId;
+  requestedPlatformId?: MaasPlatformTemplateId | MaasPlatformId;
   onOpenMarketplace?: () => void;
 }> = ({ embedded = false, showSectionChrome = true, requestedPlatformId }) => {
   const { t } = useTranslation();

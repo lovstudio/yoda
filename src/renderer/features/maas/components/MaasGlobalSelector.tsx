@@ -1,4 +1,4 @@
-import { Loader2, Settings2 } from 'lucide-react';
+import { ChevronDown, Loader2, Settings2 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -9,16 +9,14 @@ import {
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { Button } from '@renderer/lib/ui/button';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@renderer/lib/ui/select';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
+import { Switch } from '@renderer/lib/ui/switch';
 import { cn } from '@renderer/utils/utils';
 import { useMaasConnections, useMaasGlobalBinding, useSetMaasGlobalBinding } from '../useMaas';
-
-const DISABLED_PLATFORM_VALUE = '__maas-disabled__';
 
 export const MaasGlobalSelector: React.FC<{
   platformId?: MaasPlatformId;
@@ -44,6 +42,9 @@ export const MaasGlobalSelector: React.FC<{
     const available = platformConfigured && connection?.lastTest?.ok === true;
     const selected = Boolean(binding.data?.enabled && binding.data.platformId === nextPlatformId);
     const effective = selected && binding.data?.effective;
+    const unavailableReason = connection?.lastTest?.ok
+      ? t('maas.global.needsConfiguration')
+      : t('maas.global.needsSuccessfulTest');
     const status = effective
       ? t('maas.global.effective', {
           count: binding.data?.runtimeIds.length ?? 0,
@@ -52,9 +53,7 @@ export const MaasGlobalSelector: React.FC<{
         ? t('maas.global.needsAttention')
         : available
           ? t('maas.global.notEnabled')
-          : connection?.lastTest?.ok
-            ? t('maas.global.needsConfiguration')
-            : t('maas.global.needsSuccessfulTest');
+          : unavailableReason;
 
     return {
       platformId: nextPlatformId,
@@ -63,10 +62,10 @@ export const MaasGlobalSelector: React.FC<{
       selected,
       effective,
       status,
+      unavailableReason,
     };
   });
   const selectedProfile = profiles.find((profile) => profile.selected) ?? null;
-  const selectedValue = selectedProfile?.platformId ?? DISABLED_PLATFORM_VALUE;
   const manageProfile = selectedProfile ?? (platformId ? profiles[0] : null);
 
   const updateBinding = (nextPlatformId: MaasPlatformId, enabled: boolean) => {
@@ -96,24 +95,6 @@ export const MaasGlobalSelector: React.FC<{
     );
   };
 
-  const selectProfile = (nextValue: string | null) => {
-    if (!nextValue) return;
-    if (nextValue === DISABLED_PLATFORM_VALUE) {
-      if (binding.data?.enabled && binding.data.platformId) {
-        updateBinding(binding.data.platformId, false);
-      }
-      return;
-    }
-
-    const nextProfile = profiles.find((profile) => profile.platformId === nextValue);
-    if (!nextProfile) return;
-    if (!nextProfile.available && !nextProfile.selected) {
-      onManagePlatform?.(nextProfile.platformId);
-      return;
-    }
-    updateBinding(nextProfile.platformId, true);
-  };
-
   return (
     <section className={cn('grid gap-2', platformId && 'border-t border-border/50 pt-4')}>
       {platformId ? (
@@ -132,81 +113,93 @@ export const MaasGlobalSelector: React.FC<{
         </div>
       ) : (
         <div className="flex min-w-0 items-center gap-2">
-          <Select
-            value={selectedValue}
-            disabled={setBinding.isPending || profiles.length === 0}
-            onValueChange={selectProfile}
-          >
-            <SelectTrigger
-              size="sm"
-              className="h-8 min-w-0 flex-1 px-2.5 text-xs"
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              disabled={profiles.length === 0}
               aria-label={t('maas.global.title')}
+              className="flex h-8 min-w-0 flex-1 items-center justify-between gap-1.5 rounded-md border border-border bg-transparent px-2.5 text-xs outline-none transition-colors hover:bg-foreground/[0.03] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <SelectValue>
-                {selectedProfile ? (
-                  <span className="flex min-w-0 flex-1 items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate font-medium text-foreground">
-                      {selectedProfile.platformName}
-                    </span>
-                    {showSelectedStatus ? (
-                      <span
-                        className={cn(
-                          'shrink-0 truncate text-[10px]',
-                          selectedProfile.effective
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-amber-700 dark:text-amber-300'
-                        )}
-                      >
-                        {selectedProfile.status}
-                      </span>
-                    ) : null}
+              {selectedProfile ? (
+                <span className="flex min-w-0 flex-1 items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-left font-medium text-foreground">
+                    {selectedProfile.platformName}
                   </span>
-                ) : (
-                  <span className="text-foreground-muted">{t('maas.global.disabled')}</span>
-                )}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent
-              align="start"
-              alignItemWithTrigger={false}
-              className="min-w-(--anchor-width)"
-            >
-              <SelectItem value={DISABLED_PLATFORM_VALUE}>
-                <span className="text-xs text-foreground-muted">{t('maas.global.disabled')}</span>
-              </SelectItem>
-              {profiles.map((profile) => (
-                <SelectItem
-                  key={profile.platformId}
-                  value={profile.platformId}
-                  disabled={!profile.available && !profile.selected && !onManagePlatform}
-                  className="py-2"
-                >
-                  <span className="grid min-w-0 flex-1 gap-0.5">
-                    <span className="truncate text-xs font-medium text-foreground">
-                      {profile.platformName}
-                    </span>
+                  {showSelectedStatus ? (
                     <span
                       className={cn(
-                        'truncate text-[10px]',
-                        profile.effective
+                        'shrink-0 truncate text-[10px]',
+                        selectedProfile.effective
                           ? 'text-emerald-600 dark:text-emerald-400'
-                          : profile.selected
-                            ? 'text-amber-700 dark:text-amber-300'
-                            : 'text-foreground-muted'
+                          : 'text-amber-700 dark:text-amber-300'
                       )}
                     >
-                      {profile.status}
+                      {selectedProfile.status}
                     </span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {setBinding.isPending ? (
-            <span className="flex size-7 shrink-0 items-center justify-center">
-              <Loader2 className="size-3.5 animate-spin text-foreground-muted" />
-            </span>
-          ) : onManagePlatform && manageProfile ? (
+                  ) : null}
+                </span>
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-left text-foreground-muted">
+                  {t('maas.global.disabled')}
+                </span>
+              )}
+              <ChevronDown aria-hidden className="size-3.5 shrink-0 text-foreground-muted" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-(--anchor-width)">
+              {profiles.map((profile) => {
+                const togglePending =
+                  setBinding.isPending && setBinding.variables?.platformId === profile.platformId;
+                const toggleLabel = profile.selected
+                  ? t('maas.global.disableAria', { platform: profile.platformName })
+                  : t('maas.global.enableAria', { platform: profile.platformName });
+                return (
+                  <DropdownMenuItem
+                    key={profile.platformId}
+                    data-maas-platform-id={profile.platformId}
+                    title={t('maas.global.manage', { platform: profile.platformName })}
+                    onClick={() => onManagePlatform?.(profile.platformId)}
+                    className="gap-2.5 py-1.5"
+                  >
+                    <span className="grid min-w-0 flex-1 gap-0.5">
+                      <span className="truncate text-xs font-medium text-foreground">
+                        {profile.platformName}
+                      </span>
+                      <span
+                        className={cn(
+                          'truncate text-[10px]',
+                          profile.effective
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : profile.selected
+                              ? 'text-amber-700 dark:text-amber-300'
+                              : 'text-foreground-muted'
+                        )}
+                      >
+                        {profile.status}
+                      </span>
+                    </span>
+                    {togglePending ? (
+                      <Loader2 className="size-3.5 shrink-0 animate-spin text-foreground-muted" />
+                    ) : (
+                      <Switch
+                        size="sm"
+                        checked={profile.selected}
+                        disabled={setBinding.isPending || (!profile.available && !profile.selected)}
+                        aria-label={toggleLabel}
+                        title={
+                          !profile.available && !profile.selected
+                            ? profile.unavailableReason
+                            : toggleLabel
+                        }
+                        onCheckedChange={(checked) => updateBinding(profile.platformId, checked)}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={(event) => event.stopPropagation()}
+                      />
+                    )}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {onManagePlatform && manageProfile ? (
             <Button
               type="button"
               variant="ghost"

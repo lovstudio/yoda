@@ -699,15 +699,16 @@ describe('MaaS platform menu', () => {
     );
     await act(async () => root.render(createElement(MaasGlobalSelector)));
     const selector = host.querySelector<HTMLButtonElement>(
-      '[data-slot="select-trigger"][aria-label="maas.global.title"]'
+      '[data-slot="dropdown-menu-trigger"][aria-label="maas.global.title"]'
     );
     expect(selector).not.toBeNull();
     expect(host.querySelector('[data-slot="checkbox"]')).toBeNull();
     await userEvent.click(selector!);
     const profileOption = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-slot="select-item"]')
+      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
     ).find((item) => item.textContent?.includes('First Custom'));
-    expect(profileOption?.hasAttribute('data-disabled')).toBe(true);
+    const profileSwitch = profileOption?.querySelector<HTMLElement>('[data-slot="switch"]');
+    expect(profileSwitch?.hasAttribute('data-disabled')).toBe(true);
     expect(profileOption?.textContent).toContain('maas.global.needsSuccessfulTest');
   });
 
@@ -962,7 +963,7 @@ describe('MaaS platform menu', () => {
     );
 
     const selector = host.querySelector<HTMLButtonElement>(
-      '[data-slot="select-trigger"][aria-label="maas.global.title"]'
+      '[data-slot="dropdown-menu-trigger"][aria-label="maas.global.title"]'
     );
     expect(selector?.textContent).toContain('First Custom');
     expect(selector?.textContent).toContain('maas.global.effective');
@@ -971,9 +972,10 @@ describe('MaaS platform menu', () => {
 
     await userEvent.click(selector!);
     const secondProfile = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-slot="select-item"]')
+      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
     ).find((item) => item.textContent?.includes('Second Custom'));
-    await userEvent.click(secondProfile!);
+    const enableSwitch = secondProfile?.querySelector<HTMLElement>('[data-slot="switch"]');
+    await act(async () => enableSwitch?.click());
     expect(mocks.setGlobalBinding).toHaveBeenCalledWith(
       { platformId: 'custom:second', enabled: true },
       expect.any(Object)

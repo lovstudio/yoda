@@ -1,4 +1,5 @@
 import { createElement, lazy, Suspense, type ComponentType, type ReactNode } from 'react';
+import type { MaasPlatformId } from '@shared/maas';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { homeView } from '@renderer/app/home-view';
 import type { MarketplaceSection } from '@renderer/features/extensions/marketplace-view';
@@ -87,7 +88,12 @@ const marketplaceView = {
 };
 
 const maasModule = () => import('@renderer/features/maas/maas-view');
+type MaasViewParams = {
+  children: ReactNode;
+  platformId?: MaasPlatformId;
+};
 const maasView = {
+  WrapView: deferredExport<MaasViewParams>(maasModule, 'MaasViewWrapper'),
   TitlebarSlot: deferredExport(maasModule, 'MaasTitlebar'),
   MainPanel: deferredExport(maasModule, 'MaasMainPanel'),
 };

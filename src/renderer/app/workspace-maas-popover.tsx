@@ -1,6 +1,6 @@
 import { Cloud, Ellipsis, ScrollText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { MaasGlobalBindingStatus } from '@shared/maas';
+import type { MaasGlobalBindingStatus, MaasPlatformId } from '@shared/maas';
 import { MaasGlobalSelector } from '@renderer/features/maas/components/MaasGlobalSelector';
 import { Button } from '@renderer/lib/ui/button';
 import {
@@ -14,10 +14,12 @@ import { cn } from '@renderer/utils/utils';
 export function WorkspaceMaasPopover({
   binding,
   onManage,
+  onManagePlatform,
   onOpenLogs,
 }: {
   binding: MaasGlobalBindingStatus | undefined;
   onManage: () => void;
+  onManagePlatform: (platformId: MaasPlatformId) => void;
   onOpenLogs: () => void;
 }) {
   const { t } = useTranslation();
@@ -59,7 +61,7 @@ export function WorkspaceMaasPopover({
         <div className="mb-1.5 text-[11px] font-medium text-foreground-muted">
           {t('workspaceRuntime.maas.profile')}
         </div>
-        <MaasGlobalSelector showSelectedStatus={false} />
+        <MaasGlobalSelector showSelectedStatus={false} onManagePlatform={onManagePlatform} />
       </div>
 
       <div className="mt-4 flex items-center gap-2">

@@ -62,11 +62,13 @@ describe('MaasGlobalSelector', () => {
 
   afterEach(async () => {
     await act(async () => root.unmount());
-    document.querySelectorAll('[data-slot="select-content"]').forEach((node) => node.remove());
+    document
+      .querySelectorAll('[data-slot="dropdown-menu-content"]')
+      .forEach((node) => node.remove());
     host.remove();
   });
 
-  it('uses one compact Select to switch Profiles and keeps current configuration adjacent', async () => {
+  it('opens Profile settings on row click and keeps enabling behind an explicit switch', async () => {
     const { MaasGlobalSelector } = await import(
       '@renderer/features/maas/components/MaasGlobalSelector'
     );
@@ -79,18 +81,24 @@ describe('MaasGlobalSelector', () => {
     );
 
     const trigger = host.querySelector<HTMLButtonElement>(
-      '[data-slot="select-trigger"][aria-label="maas.global.title"]'
+      '[data-slot="dropdown-menu-trigger"][aria-label="maas.global.title"]'
     );
     expect(trigger?.textContent).toContain('First Custom');
     expect(trigger?.textContent).toContain('maas.global.effective');
     expect(host.querySelector('[data-slot="checkbox"]')).toBeNull();
 
     await userEvent.click(trigger!);
-    const secondProfile = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-slot="select-item"]')
-    ).find((item) => item.textContent?.includes('Second Custom'));
-    await userEvent.click(secondProfile!);
+    const secondProfile = () =>
+      Array.from(document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')).find(
+        (item) => item.textContent?.includes('Second Custom')
+      );
+    await userEvent.click(secondProfile()!.querySelector<HTMLElement>('span')!);
+    expect(mocks.managePlatform).toHaveBeenCalledWith('custom:second');
+    expect(mocks.setBinding).not.toHaveBeenCalled();
 
+    await userEvent.click(trigger!);
+    const enableSwitch = secondProfile()!.querySelector<HTMLElement>('[data-slot="switch"]');
+    await act(async () => enableSwitch?.click());
     expect(mocks.setBinding).toHaveBeenCalledWith(
       { platformId: 'custom:second', enabled: true },
       expect.any(Object)
@@ -110,7 +118,7 @@ describe('MaasGlobalSelector', () => {
     );
 
     const trigger = host.querySelector<HTMLButtonElement>(
-      '[data-slot="select-trigger"][aria-label="maas.global.title"]'
+      '[data-slot="dropdown-menu-trigger"][aria-label="maas.global.title"]'
     );
     expect(trigger?.textContent).toContain('First Custom');
     expect(trigger?.textContent).not.toContain('maas.global.effective');
@@ -118,12 +126,15 @@ describe('MaasGlobalSelector', () => {
 
     await userEvent.click(trigger!);
     const selectedOption = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-slot="select-item"]')
+      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
     ).find((item) => item.textContent?.includes('First Custom'));
     expect(selectedOption?.textContent).toContain('maas.global.effective');
+    expect(selectedOption?.querySelector('[data-slot="switch"]')?.getAttribute('aria-label')).toBe(
+      'maas.global.disableAria'
+    );
   });
 
-  it('shows an unverified Profile as a disabled option when no configuration action is provided', async () => {
+  it('blocks the enable switch for an unverified Profile but still allows opening its settings', async () => {
     mocks.binding = { platformId: null, enabled: false, effective: false, runtimeIds: [] };
     mocks.connections = [
       connection({
@@ -141,16 +152,24 @@ describe('MaasGlobalSelector', () => {
     const { MaasGlobalSelector } = await import(
       '@renderer/features/maas/components/MaasGlobalSelector'
     );
-    await act(async () => root.render(createElement(MaasGlobalSelector)));
+    await act(async () =>
+      root.render(createElement(MaasGlobalSelector, { onManagePlatform: mocks.managePlatform }))
+    );
 
-    const trigger = host.querySelector<HTMLButtonElement>('[data-slot="select-trigger"]');
+    const trigger = host.querySelector<HTMLButtonElement>('[data-slot="dropdown-menu-trigger"]');
     await userEvent.click(trigger!);
     const profile = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-slot="select-item"]')
+      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
     ).find((item) => item.textContent?.includes('First Custom'));
 
-    expect(profile?.hasAttribute('data-disabled')).toBe(true);
+    expect(profile?.hasAttribute('data-disabled')).toBe(false);
     expect(profile?.textContent).toContain('maas.global.needsSuccessfulTest');
+    const enableSwitch = profile?.querySelector<HTMLElement>('[data-slot="switch"]');
+    expect(enableSwitch?.hasAttribute('data-disabled')).toBe(true);
+    expect(enableSwitch?.getAttribute('title')).toBe('maas.global.needsSuccessfulTest');
+
+    await userEvent.click(profile!.querySelector<HTMLElement>('span')!);
+    expect(mocks.managePlatform).toHaveBeenCalledWith('custom:first');
   });
 });
 

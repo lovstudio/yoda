@@ -30,7 +30,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { AppAgentSessionResource, TmuxReclamationSnapshot } from '@shared/app-resource';
 import type { Conversation } from '@shared/conversations';
-import type { MaasUsageSummary } from '@shared/maas';
+import type { MaasPlatformId, MaasUsageSummary } from '@shared/maas';
 import type { ComposerDefaults } from '@shared/project-settings';
 import {
   getRuntime,
@@ -191,6 +191,14 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       appState.navigation.navigate('maas');
     });
   }, [dismissMaasPopover]);
+  const openMaasPlatform = useCallback(
+    (platformId: MaasPlatformId) => {
+      dismissBeforeSynchronousAction(dismissMaasPopover, () => {
+        appState.navigation.navigate('maas', { platformId });
+      });
+    },
+    [dismissMaasPopover]
+  );
   const openMaasLogs = useCallback(() => {
     dismissBeforeSynchronousAction(dismissMaasPopover, () => {
       appState.sidePane.pinView('settings', { tab: 'ai-logs' });
@@ -1704,6 +1712,59 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           </div>
         </PopoverContent>
       </Popover>
+      <Popover open={isMaasPopoverOpen} onOpenChange={setIsMaasPopoverOpen}>
+        <PopoverTrigger
+          aria-label={maasTriggerLabel}
+          className={cn(
+            RUNTIME_BAR_ACTION_CLASS,
+            isMaasPopoverOpen
+              ? 'bg-background-2 text-foreground'
+              : maasPresentation.active
+                ? 'text-foreground'
+                : 'text-foreground-passive'
+          )}
+          title={maasTriggerLabel}
+        >
+          <Cloud aria-hidden className="size-3.5" />
+          {maasPresentation.providerName ? (
+            <span className="inline-block max-w-40 truncate @max-[1440px]:hidden">
+              {t('workspaceRuntime.maas.providerSuffix', {
+                provider: maasPresentation.providerName,
+              })}
+            </span>
+          ) : (
+            <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>
+              {t('workspaceRuntime.maas.title')}
+            </span>
+          )}
+          <span
+            aria-hidden
+            className={cn(
+              'absolute top-1 right-0.5 size-1.5 rounded-full @min-[1441px]:static',
+              globalMaasBinding.data?.effective
+                ? 'bg-emerald-500'
+                : globalMaasBinding.data?.enabled
+                  ? 'bg-amber-500'
+                  : 'bg-foreground-disabled'
+            )}
+          />
+        </PopoverTrigger>
+        {isMaasPopoverOpen ? (
+          <PopoverContent
+            align="end"
+            side="top"
+            sideOffset={8}
+            className="w-[21rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+          >
+            <WorkspaceMaasPopover
+              binding={globalMaasBinding.data}
+              onManage={openMaasManagement}
+              onManagePlatform={openMaasPlatform}
+              onOpenLogs={openMaasLogs}
+            />
+          </PopoverContent>
+        ) : null}
+      </Popover>
       <Popover open={isResourcePopoverOpen} onOpenChange={setIsResourcePopoverOpen}>
         <PopoverTrigger
           aria-label={t('workspaceRuntime.resources.triggerLabel')}
@@ -1783,58 +1844,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             })}
           />
         </PopoverContent>
-      </Popover>
-      <Popover open={isMaasPopoverOpen} onOpenChange={setIsMaasPopoverOpen}>
-        <PopoverTrigger
-          aria-label={maasTriggerLabel}
-          className={cn(
-            RUNTIME_BAR_ACTION_CLASS,
-            isMaasPopoverOpen
-              ? 'bg-background-2 text-foreground'
-              : maasPresentation.active
-                ? 'text-foreground'
-                : 'text-foreground-passive'
-          )}
-          title={maasTriggerLabel}
-        >
-          <Cloud aria-hidden className="size-3.5" />
-          {maasPresentation.providerName ? (
-            <span className="inline-block max-w-40 truncate @max-[1440px]:hidden">
-              {t('workspaceRuntime.maas.providerSuffix', {
-                provider: maasPresentation.providerName,
-              })}
-            </span>
-          ) : (
-            <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>
-              {t('workspaceRuntime.maas.title')}
-            </span>
-          )}
-          <span
-            aria-hidden
-            className={cn(
-              'absolute top-1 right-0.5 size-1.5 rounded-full @min-[1441px]:static',
-              globalMaasBinding.data?.effective
-                ? 'bg-emerald-500'
-                : globalMaasBinding.data?.enabled
-                  ? 'bg-amber-500'
-                  : 'bg-foreground-disabled'
-            )}
-          />
-        </PopoverTrigger>
-        {isMaasPopoverOpen ? (
-          <PopoverContent
-            align="end"
-            side="top"
-            sideOffset={8}
-            className="w-[21rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
-          >
-            <WorkspaceMaasPopover
-              binding={globalMaasBinding.data}
-              onManage={openMaasManagement}
-              onOpenLogs={openMaasLogs}
-            />
-          </PopoverContent>
-        ) : null}
       </Popover>
       {lastTaskOpenTrajectory ? (
         <Popover open={isTrajectoryPopoverOpen} onOpenChange={setIsTrajectoryPopoverOpen}>

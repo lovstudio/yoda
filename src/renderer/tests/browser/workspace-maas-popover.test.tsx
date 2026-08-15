@@ -58,6 +58,7 @@ describe('WorkspaceMaasPopover', () => {
 
   it('shows one global status and moves logs into the overflow menu', async () => {
     const onManage = vi.fn();
+    const onManagePlatform = vi.fn();
     const onOpenLogs = vi.fn();
     const { WorkspaceMaasPopover } = await import('@renderer/app/workspace-maas-popover');
     await act(async () =>
@@ -70,13 +71,14 @@ describe('WorkspaceMaasPopover', () => {
             runtimeIds: ['codex'],
           },
           onManage,
+          onManagePlatform,
           onOpenLogs,
         })
       )
     );
 
     expect(selectorProps).toHaveBeenCalledWith(
-      expect.objectContaining({ showSelectedStatus: false })
+      expect.objectContaining({ showSelectedStatus: false, onManagePlatform })
     );
     expect(host.textContent?.match(/Active/g)).toHaveLength(1);
     expect(host.textContent).toContain('Global routing for compatible Agent CLIs');
