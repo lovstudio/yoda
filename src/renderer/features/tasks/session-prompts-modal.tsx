@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentReplyDisplayLevel } from '@shared/agent-reply-display';
-import type { ClaudeSessionPrompt, SessionTranscriptMessage } from '@shared/conversations';
+import type {
+  ClaudeSessionPrompt,
+  SessionCompaction,
+  SessionTranscriptMessage,
+} from '@shared/conversations';
 import { SessionConversationList } from '@renderer/features/tasks/session-conversation-list';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { DialogContentArea, DialogHeader, DialogTitle } from '@renderer/lib/ui/dialog';
@@ -13,6 +17,8 @@ export type SessionPromptsModalArgs = {
   displayLevel?: Exclude<AgentReplyDisplayLevel, 'verbose'>;
   /** Optional one-based transcript positions when displaying a prompt subset. */
   promptNumbers?: number[];
+  /** Compaction boundaries, only when `prompts` is a whole session. */
+  compactions?: SessionCompaction[];
   sessionTitle?: string;
   onRestorePrompt?: (prompt: ClaudeSessionPrompt, index: number) => void;
 };
@@ -24,6 +30,7 @@ export function SessionPromptsModal({
   messages = [],
   displayLevel = 'hidden',
   promptNumbers,
+  compactions,
   sessionTitle,
   onRestorePrompt,
 }: Props) {
@@ -63,6 +70,7 @@ export function SessionPromptsModal({
           displayLevel={visibleDisplayLevel}
           variant="full"
           promptNumbers={promptNumbers}
+          compactions={compactions}
           onRestorePrompt={onRestorePrompt}
         />
       </DialogContentArea>

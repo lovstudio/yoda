@@ -494,6 +494,7 @@ export function useSessionPrompts(active: boolean): {
       showSessionPrompts({
         prompts: data?.prompts ?? [],
         messages: data?.messages ?? [],
+        compactions: data?.compactions ?? [],
         displayLevel,
         sessionTitle: conversation.title,
         onRestorePrompt: requestRestorePrompt,
@@ -587,6 +588,7 @@ export const SessionPromptsContent = observer(function SessionPromptsContent({
         messages={prompts.messages}
         displayLevel={displayLevel}
         variant="preview"
+        compactions={prompts.compactions}
         isLoading={prompts.isLoading}
         onOpenAll={() => prompts.openPromptsModal(displayLevel)}
         onRestorePrompt={prompts.requestRestorePrompt}

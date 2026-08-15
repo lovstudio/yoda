@@ -1,10 +1,19 @@
 import { Loader2, MoreHorizontal } from 'lucide-react';
-import { useMemo } from 'react';
+import { Fragment, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentReplyDisplayLevel } from '@shared/agent-reply-display';
-import type { ClaudeSessionPrompt, SessionTranscriptMessage } from '@shared/conversations';
+import type {
+  ClaudeSessionPrompt,
+  SessionCompaction,
+  SessionTranscriptMessage,
+} from '@shared/conversations';
 import { displaySessionPromptText } from '@renderer/features/tasks/context-panel-prompt-display';
+import { SessionCompactionMarker } from '@renderer/features/tasks/conversations/session-compaction-marker';
 import { SessionPromptRestoreButton } from '@renderer/features/tasks/conversations/session-prompt-restore-button';
+import {
+  compactionsBeforePrompt,
+  trailingCompactions,
+} from '@renderer/features/tasks/session-compactions';
 import {
   buildSessionConversationItems,
   buildSessionConversationPreviewItems,
@@ -19,6 +28,7 @@ export function SessionConversationList({
   displayLevel,
   variant,
   promptNumbers,
+  compactions,
   isLoading = false,
   onOpenAll,
   onRestorePrompt,
@@ -30,6 +40,11 @@ export function SessionConversationList({
   variant: 'preview' | 'full';
   /** Optional one-based transcript positions when displaying a prompt subset. */
   promptNumbers?: number[];
+  /**
+   * Only meaningful when `prompts` is a whole session — the boundaries are
+   * positioned against that array, so a `promptNumbers` subset must omit them.
+   */
+  compactions?: SessionCompaction[];
   isLoading?: boolean;
   onOpenAll?: () => void;
   onRestorePrompt?: (prompt: ClaudeSessionPrompt, index: number) => void;
@@ -79,15 +94,28 @@ export function SessionConversationList({
             {t('tasks.sessionInfo.truncatedMessages', { count: entry.hiddenCount })}
           </button>
         ) : (
-          <SessionConversationRow
-            key={entry.item.key}
-            item={entry.item}
-            variant={variant}
-            onRestorePrompt={onRestorePrompt}
-            isRestoring={restoringPromptId === entry.item.prompt?.id}
-          />
+          <Fragment key={entry.item.key}>
+            <SessionCompactionMarker
+              compactions={
+                entry.item.promptIndex
+                  ? compactionsBeforePrompt(compactions, entry.item.promptIndex)
+                  : []
+              }
+              placement="flow"
+            />
+            <SessionConversationRow
+              item={entry.item}
+              variant={variant}
+              onRestorePrompt={onRestorePrompt}
+              isRestoring={restoringPromptId === entry.item.prompt?.id}
+            />
+          </Fragment>
         )
       )}
+      <SessionCompactionMarker
+        compactions={trailingCompactions(compactions, prompts.length)}
+        placement="flow"
+      />
     </div>
   );
 }

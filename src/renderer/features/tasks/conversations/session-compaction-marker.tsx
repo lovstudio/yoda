@@ -10,17 +10,22 @@ import { cn } from '@renderer/utils/utils';
  * compaction. Shared by every prompt-history surface so the marker reads the
  * same in the docked strip and the full panel.
  *
- * Rendered as an absolute overlay on the row's top edge: the docked strip
- * reserves its height before prompts load, and any extra layout height there
- * would resize the terminal pane and make the agent reprint its screen.
+ * `top`/`bottom` render as a zero-height absolute overlay on the row's edge:
+ * the docked strip reserves its height before prompts load, and any extra
+ * layout height there would resize the terminal pane and make the agent
+ * reprint its screen. `flow` takes normal layout space, for surfaces that lay
+ * the conversation out as a scrollable card list.
  */
 export function SessionCompactionMarker({
   compactions,
   placement = 'top',
 }: {
   compactions: SessionCompaction[];
-  /** `bottom` marks a compaction no later prompt has followed yet. */
-  placement?: 'top' | 'bottom';
+  /**
+   * `bottom` marks a compaction no later prompt has followed yet. `flow` opts
+   * out of overlay positioning and sits between rows instead.
+   */
+  placement?: 'top' | 'bottom' | 'flow';
 }) {
   const { t } = useTranslation();
   if (compactions.length === 0) return null;
@@ -37,8 +42,11 @@ export function SessionCompactionMarker({
       data-session-compaction-marker={compactions.length}
       data-session-compaction-placement={placement}
       className={cn(
-        'pointer-events-none absolute inset-x-0 z-10 flex h-0 items-center',
-        placement === 'bottom' ? 'bottom-0' : 'top-0'
+        'pointer-events-none flex items-center',
+        placement === 'flow' && 'py-1',
+        placement !== 'flow' && 'absolute inset-x-0 z-10 h-0',
+        placement === 'top' && 'top-0',
+        placement === 'bottom' && 'bottom-0'
       )}
     >
       <span className="h-px flex-1 bg-border-primary/70" />
