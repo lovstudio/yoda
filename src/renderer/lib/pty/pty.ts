@@ -86,6 +86,14 @@ const CANONICAL_QUIET_HOLD_BUDGET_MS = 1_000;
  */
 const VISIBLE_FRAME_ACK_ATTEMPT_TIMEOUT_MS = 15_000;
 /**
+ * Shortest a fence may park once its hold budget is already due.
+ *
+ * Only reached when the budget says "reveal" but some other condition still
+ * holds the frame back. Re-check on a human-scale interval rather than spinning
+ * the loop against a provider that has stopped writing.
+ */
+const CANONICAL_FENCE_PARK_FLOOR_MS = 250;
+/**
  * Bound the subscribe round-trip generously. This is not a latency target: it
  * is the point at which we give up entirely, and giving up strands the caller
  * on its opening surface, because connect() rejections are intentionally
@@ -2106,13 +2114,19 @@ export class FrontendPty {
             revision,
             ...this.canonicalFenceDetails(revision),
           });
+          // Park only as long as the hold budget allows. Parking to the whole
+          // attempt deadline assumed more output was coming; when the provider
+          // has finished, it is the rest of the attempt spent waiting for a byte
+          // that will never arrive, and it outlives the budget it should defer
+          // to. An elapsed park is not a failure — loop and let the budget
+          // decide.
           const fencedActivity = await this.waitForOutputActivityOrDelay(
             revision,
-            Math.max(0, deadline - performance.now()),
+            this.canonicalFenceParkMs(deadline, generation),
             shouldContinue,
             deadline
           );
-          if (fencedActivity !== 'activity') return false;
+          if (fencedActivity === 'cancelled') return false;
           continue;
         }
 
@@ -2535,6 +2549,29 @@ export class FrontendPty {
       cursorComplete: this.synchronizedOutputCompletedWithCursorRevision === revision,
       parserDrained: this.canonicalParserDrainedRevision >= revision,
     };
+  }
+
+  /**
+   * How long a fence may park waiting for the next byte.
+   *
+   * Parking to the attempt deadline is only correct if more output is coming.
+   * When the provider has finished, that park spends the entire remaining
+   * attempt waiting for a byte that will never arrive — and it outlives the hold
+   * budget, which is the thing that should decide when to stop waiting. A
+   * measured open parked 11.2s past its provider's last byte that way.
+   *
+   * So park until the budget is due, then let the loop re-evaluate. The floor
+   * keeps a due budget from turning the wait into a spin: the top-of-loop check
+   * normally reveals the frame before the park is reached again, and if some
+   * other condition holds it back, we re-check on a sane interval instead of
+   * burning the CPU.
+   */
+  private canonicalFenceParkMs(deadline: number, generation: number): number {
+    const untilDeadlineMs = Math.max(0, deadline - performance.now());
+    if (this.canonicalQuietHoldGeneration !== generation) return untilDeadlineMs;
+    const untilBudgetDueMs =
+      this.canonicalQuietHoldSinceMs + CANONICAL_QUIET_HOLD_BUDGET_MS - performance.now();
+    return Math.min(untilDeadlineMs, Math.max(CANONICAL_FENCE_PARK_FLOOR_MS, untilBudgetDueMs));
   }
 
   /**
