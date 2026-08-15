@@ -184,18 +184,6 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
           }
     );
   }
-  if (actions.redaction) {
-    const { exempt, onToggle } = actions.redaction;
-    items.push({
-      key: 'redaction-exempt',
-      group: 3,
-      icon: exempt ? EyeOff : Eye,
-      label: exempt
-        ? t('sidebar.privacyExempt.removeMenuLabel')
-        : t('sidebar.privacyExempt.addMenuLabel'),
-      onSelect: onToggle,
-    });
-  }
   if (actions.onRename) {
     items.push({
       key: 'rename',
@@ -273,11 +261,26 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
     variant: 'destructive',
   });
 
-  // group 6 — repeatable project operations
+  // group 6 — privacy allowlist, on its own: it is a display setting, neither
+  // part of the project's lifecycle above nor of the operations below.
+  if (actions.redaction) {
+    const { exempt, onToggle } = actions.redaction;
+    items.push({
+      key: 'redaction-exempt',
+      group: 6,
+      icon: exempt ? EyeOff : Eye,
+      label: exempt
+        ? t('sidebar.privacyExempt.removeMenuLabel')
+        : t('sidebar.privacyExempt.addMenuLabel'),
+      onSelect: onToggle,
+    });
+  }
+
+  // group 7 — repeatable project operations
   if (actions.onCaptureAutomation) {
     items.push({
       key: 'quick-actions',
-      group: 6,
+      group: 7,
       kind: 'quick-actions',
       label: t('sidebar.captureAutomation.menuLabel'),
     });
