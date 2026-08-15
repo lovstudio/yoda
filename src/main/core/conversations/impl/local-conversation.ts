@@ -102,6 +102,7 @@ import { storeConversationSessionSource } from '../stored-conversation-session-s
 import { buildAgentCommand } from './agent-command';
 import { injectClipboardImagesAndPrompt, substituteImageMentions } from './image-attachments';
 import { getEnabledPromptPrinciplesText } from './prompt-principles';
+import { classifyLostPtyTransport, type PtyExitClassification } from './pty-exit-classification';
 import {
   resolveAgentApiEnvVars,
   resolveRuntimeEnv,
@@ -868,7 +869,14 @@ export class LocalConversationProvider implements ConversationProvider {
         );
       }
 
-      let shouldEmitAgentSessionExited = false;
+      // A dead PTY only proves the transport died. For a tmux-backed session the
+      // Agent runs inside the tmux pane and outlives every client, so an
+      // unexpected wrapper death (flow-control kill, client crash, SIGHUP) must
+      // not be reported as an Agent exit: that clears `working` and surfaces
+      // "session stopped" while the provider CLI is still mid-turn. tmux is the
+      // only authority, and probing it is asynchronous — hence a promise the
+      // final-exit emitter awaits instead of a synchronous flag.
+      let exitClassification: Promise<PtyExitClassification> | null = null;
       pty.onExit(({ exitCode, signal }) => {
         if (this.intentionallyDetachedPtys.delete(pty)) {
           this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
@@ -884,7 +892,8 @@ export class LocalConversationProvider implements ConversationProvider {
         this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
         const exitedBySignal = signal !== undefined && signal !== 0;
         const failed = exitedBySignal || (typeof exitCode === 'number' && exitCode !== 0);
-        if (!invocationLogFinished) {
+        const finishAsAgentExit = () => {
+          if (invocationLogFinished) return;
           invocationLogFinished = true;
           void aiLogService.finish(invocationLogId, {
             status: failed ? 'failed' : 'succeeded',
@@ -894,26 +903,57 @@ export class LocalConversationProvider implements ConversationProvider {
                 ? `Exit code ${exitCode}`
                 : undefined,
           });
+        };
+        if (this.sessions.get(sessionId) !== pty) {
+          finishAsAgentExit();
+          return;
         }
-        if (this.sessions.get(sessionId) !== pty) return;
-        shouldEmitAgentSessionExited = true;
-        void interactiveTurnLogger.onSessionExit(conversation.id);
+        // The transport is gone either way, so stop routing input into a dead
+        // file descriptor before the probe resolves; `sendInput` falls back to
+        // headless `tmux send-keys` exactly as it does for an idle detach.
         this.sessions.delete(sessionId);
-        this.sessionInfos.delete(sessionId);
-        sessionTitleManager.stop(conversation.id);
-        this.stopRunStateWatcher(conversation.id);
-        markRuntimeSessionExited({
-          projectId: conversation.projectId,
-          taskId: conversation.taskId,
-          conversationId: conversation.id,
-        });
-        telemetryService.capture('agent_run_finished', {
-          provider: conversation.runtimeId,
-          exit_code: typeof exitCode === 'number' ? exitCode : -1,
-          exit_signal: signal === undefined ? '' : String(signal),
-          project_id: conversation.projectId,
-          task_id: conversation.taskId,
-          conversation_id: conversation.id,
+        exitClassification = this.classifyLostPtyTransport(sessionId).then((verdict) => {
+          if (verdict === 'transport-lost') {
+            this.transportDetachedAt.set(sessionId, Date.now());
+            if (!invocationLogFinished) {
+              invocationLogFinished = true;
+              void aiLogService.finish(invocationLogId, {
+                status: 'succeeded',
+                output: `Lost Yoda renderer transport (${exitedBySignal ? `signal ${String(signal)}` : `exit code ${exitCode}`}); tmux agent remains running.`,
+              });
+            }
+            log.warn('LocalConversation: PTY transport died while the tmux agent stayed alive', {
+              sessionId,
+              conversationId: conversation.id,
+              exitCode,
+              signal: signal === undefined ? undefined : String(signal),
+            });
+            this.cleanupSessionArtifacts(sessionId, pty);
+            return verdict;
+          }
+          finishAsAgentExit();
+          // A replacement transport that registered while the probe was in
+          // flight owns the run state now; tearing it down here would kill a
+          // freshly resumed session.
+          if (this.sessions.has(sessionId)) return 'transport-lost';
+          void interactiveTurnLogger.onSessionExit(conversation.id);
+          this.sessionInfos.delete(sessionId);
+          sessionTitleManager.stop(conversation.id);
+          this.stopRunStateWatcher(conversation.id);
+          markRuntimeSessionExited({
+            projectId: conversation.projectId,
+            taskId: conversation.taskId,
+            conversationId: conversation.id,
+          });
+          telemetryService.capture('agent_run_finished', {
+            provider: conversation.runtimeId,
+            exit_code: typeof exitCode === 'number' ? exitCode : -1,
+            exit_signal: signal === undefined ? '' : String(signal),
+            project_id: conversation.projectId,
+            task_id: conversation.taskId,
+            conversation_id: conversation.id,
+          });
+          return verdict;
         });
       });
 
@@ -922,17 +962,21 @@ export class LocalConversationProvider implements ConversationProvider {
       const registerPty = () =>
         ptySessionRegistry.register(sessionId, pty, {
           onFinalExit: (info, generation) => {
-            if (!shouldEmitAgentSessionExited) return;
-            events.emit(agentSessionExitedChannel, {
-              sessionId,
-              projectId: conversation.projectId,
-              conversationId: conversation.id,
-              taskId: conversation.taskId,
-              generation,
-              exitCode: info.exitCode,
+            const classification = exitClassification;
+            if (!classification) return;
+            void classification.then((verdict) => {
+              if (verdict !== 'agent-exited') return;
+              events.emit(agentSessionExitedChannel, {
+                sessionId,
+                projectId: conversation.projectId,
+                conversationId: conversation.id,
+                taskId: conversation.taskId,
+                generation,
+                exitCode: info.exitCode,
+              });
+              snapshotConversationUsageOnSessionExit(conversation.id);
+              snapshotTaskDiffOnSessionExit(conversation.taskId);
             });
-            snapshotConversationUsageOnSessionExit(conversation.id);
-            snapshotTaskDiffOnSessionExit(conversation.taskId);
           },
           registrationEpoch,
           tmuxBacked: Boolean(tmuxSessionName),
@@ -1236,6 +1280,16 @@ export class LocalConversationProvider implements ConversationProvider {
             }),
       };
     });
+  }
+
+  /**
+   * Decide whether a PTY that died on its own took the Agent with it.
+   *
+   * Yoda's PTY is an `attach-session` wrapper, so for a tmux-backed session the
+   * surviving pane — not the dead wrapper — is the source of truth.
+   */
+  private classifyLostPtyTransport(sessionId: string): Promise<PtyExitClassification> {
+    return classifyLostPtyTransport(this.ctx, this.tmuxSessionNames.get(sessionId));
   }
 
   /** Release only the current tmux attach wrapper after registry revalidation. */

@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => ({
   injectTuiStartupInput: vi.fn(),
   ensureCodexResumeProviderCompatible: vi.fn(),
   ensureCodexMaasCompatibleModelCatalog: vi.fn(),
+  isTmuxSessionAgentAlive: vi.fn(),
   killTmuxSession: vi.fn(),
   listTmuxSessionMarkersStrict: vi.fn(),
   repairCodexThreadHistoryProjection: vi.fn(),
@@ -235,6 +236,7 @@ vi.mock('@main/core/pty/tmux-reattach', () => ({
 }));
 
 vi.mock('@main/core/pty/tmux-session-name', () => ({
+  isTmuxSessionAgentAlive: mocks.isTmuxSessionAgentAlive,
   killTmuxSession: mocks.killTmuxSession,
   listTmuxSessionMarkersStrict: mocks.listTmuxSessionMarkersStrict,
   makeTmuxSessionName: (sessionId: string) => `tmux-${sessionId}`,
@@ -373,6 +375,14 @@ const conversation: Conversation = {
 
 const sessionId = makePtySessionId(conversation.projectId, conversation.taskId, conversation.id);
 
+/**
+ * A PTY exit is only reported as an Agent exit after tmux confirms the pane is
+ * gone, so exit teardown lands one microtask chain later than the raw event.
+ */
+async function settleExitClassification(): Promise<void> {
+  await vi.advanceTimersByTimeAsync(0);
+}
+
 function createProvider(): LocalConversationProvider {
   return new LocalConversationProvider({
     projectId: conversation.projectId,
@@ -394,6 +404,7 @@ describe('LocalConversationProvider', () => {
     mocks.injectClipboardImagesAndPrompt.mockResolvedValue(undefined);
     mocks.injectTuiStartupInput.mockResolvedValue(true);
     mocks.killTmuxSession.mockResolvedValue(undefined);
+    mocks.isTmuxSessionAgentAlive.mockResolvedValue(false);
     mocks.listTmuxSessionMarkersStrict.mockResolvedValue([]);
     mocks.aiLogFinish.mockResolvedValue(undefined);
     mocks.aiLogStart.mockResolvedValue('ai-log-id');
@@ -822,6 +833,7 @@ describe('LocalConversationProvider', () => {
 
     spawned[0].pty.emitData('final output');
     spawned[0].pty.emitExit({ exitCode: 7 });
+    await settleExitClassification();
 
     expect(mocks.emitEvent).toHaveBeenCalledWith(
       ptyDataChannel,
@@ -861,6 +873,7 @@ describe('LocalConversationProvider', () => {
     ptySessionRegistry.subscribe(sessionId, consumerId);
 
     await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+    await settleExitClassification();
 
     expect(mocks.emitEvent).toHaveBeenCalledWith(
       ptyDataChannel,
@@ -1429,9 +1442,81 @@ describe('LocalConversationProvider', () => {
     ]);
 
     spawned[0].pty.emitExit({ exitCode: 0 });
+    await settleExitClassification();
 
     expect(provider.getActiveSessionCount()).toBe(0);
     expect(provider.getDetachableSessionCount()).toBe(0);
+    expect(provider.getActiveSessions()).toEqual([]);
+  });
+
+  it('keeps a tmux-backed session alive when only its transport dies', async () => {
+    mocks.getProviderConfig.mockResolvedValue({ cli: 'claude', statusMonitor: 'transcript' });
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    mocks.isTmuxSessionAgentAlive.mockResolvedValue(true);
+    const provider = createProvider();
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+    const runStateWatcher = mocks.watchClaudeRunState.mock.results[0]?.value as {
+      stop: () => void;
+    };
+    const pty = spawned[0].pty;
+    mocks.dispatchRuntimeStatus.mockClear();
+    mocks.emitEvent.mockClear();
+
+    // Not an intentional detach: the attach wrapper died on its own (a
+    // flow-control kill, a crashed client, SIGHUP), while the Agent keeps
+    // running in the tmux pane.
+    pty.emitExit({ exitCode: 1, signal: 'SIGHUP' });
+    await settleExitClassification();
+
+    expect(mocks.isTmuxSessionAgentAlive).toHaveBeenCalledWith(expect.anything(), 'tmux-session');
+    expect(mocks.emitEvent).not.toHaveBeenCalledWith(agentSessionExitedChannel, expect.anything());
+    expect(mocks.dispatchRuntimeStatus).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ kind: 'process-exited' }),
+      'process-exited'
+    );
+    expect(runStateWatcher.stop).not.toHaveBeenCalled();
+    expect(mocks.stopTitle).not.toHaveBeenCalled();
+    expect(provider.getActiveSessions()).toEqual([
+      expect.objectContaining({
+        sessionId,
+        conversationId: conversation.id,
+        detachable: true,
+        transportAttached: false,
+      }),
+    ]);
+
+    expect(await provider.sendInput(conversation.id, 'keep going\r')).toBe(true);
+    expect(mocks.sendLiteralToTmuxSession).toHaveBeenCalledWith(
+      expect.anything(),
+      'tmux-session',
+      'keep going\r'
+    );
+  });
+
+  it('reports an Agent exit once tmux confirms the pane is gone', async () => {
+    mocks.getProviderConfig.mockResolvedValue({ cli: 'claude', statusMonitor: 'transcript' });
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    mocks.isTmuxSessionAgentAlive.mockResolvedValue(false);
+    const provider = createProvider();
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+    const runStateWatcher = mocks.watchClaudeRunState.mock.results[0]?.value as {
+      stop: () => void;
+    };
+
+    spawned[0].pty.emitExit({ exitCode: 1, signal: 'SIGHUP' });
+    await settleExitClassification();
+
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      agentSessionExitedChannel,
+      expect.objectContaining({ sessionId })
+    );
+    expect(mocks.dispatchRuntimeStatus).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ kind: 'process-exited' }),
+      'process-exited'
+    );
+    expect(runStateWatcher.stop).toHaveBeenCalled();
     expect(provider.getActiveSessions()).toEqual([]);
   });
 
@@ -1674,6 +1759,7 @@ describe('LocalConversationProvider', () => {
     );
 
     spawned[0].pty.emitExit({ exitCode: 0 });
+    await settleExitClassification();
 
     expect(mocks.dispatchRuntimeStatus).toHaveBeenCalledWith(
       {

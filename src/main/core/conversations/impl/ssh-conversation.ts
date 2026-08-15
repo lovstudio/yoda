@@ -51,6 +51,7 @@ import {
 import { buildAgentCommand } from './agent-command';
 import { substituteImageMentions } from './image-attachments';
 import { getEnabledPromptPrinciplesText } from './prompt-principles';
+import { classifyLostPtyTransport, type PtyExitClassification } from './pty-exit-classification';
 import { resolveRuntimeEnv, resolveRuntimeTmuxEnv } from './runtime-env';
 import { injectTuiStartupInput } from './tui-startup-input';
 
@@ -379,7 +380,11 @@ export class SshConversationProvider implements ConversationProvider {
         );
       }
 
-      let shouldEmitAgentSessionExited = false;
+      // A dead PTY only proves the transport died: for a tmux-backed session the
+      // Agent runs inside the remote tmux pane and outlives every client. Ask
+      // tmux before reporting an Agent exit, otherwise a wrapper death clears
+      // `working` while the provider CLI is still mid-turn.
+      let exitClassification: Promise<PtyExitClassification> | null = null;
       let exitedBeforeCommit = false;
       pty.onExit(({ exitCode }) => {
         if (this.intentionallyDetachedPtys.delete(pty)) {
@@ -389,20 +394,40 @@ export class SshConversationProvider implements ConversationProvider {
         if (!startCommitted) exitedBeforeCommit = true;
         this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
         if (this.sessions.get(sessionId) !== pty) return;
-        shouldEmitAgentSessionExited = true;
+        // The transport is gone either way, so stop routing input into a dead
+        // channel before the probe resolves; `sendInput` falls back to headless
+        // `tmux send-keys` exactly as it does for an idle detach.
         this.sessions.delete(sessionId);
-        this.sessionInfos.delete(sessionId);
-        markRuntimeSessionExited({
-          projectId: conversation.projectId,
-          taskId: conversation.taskId,
-          conversationId: conversation.id,
-        });
-        telemetryService.capture('agent_run_finished', {
-          provider: conversation.runtimeId,
-          exit_code: typeof exitCode === 'number' ? exitCode : -1,
-          project_id: conversation.projectId,
-          task_id: conversation.taskId,
-          conversation_id: conversation.id,
+        exitClassification = classifyLostPtyTransport(
+          this.ctx,
+          this.tmuxSessionNames.get(sessionId)
+        ).then((verdict) => {
+          if (verdict === 'transport-lost') {
+            this.transportDetachedAt.set(sessionId, Date.now());
+            log.warn('SshConversation: PTY transport died while the tmux agent stayed alive', {
+              sessionId,
+              conversationId: conversation.id,
+              exitCode,
+            });
+            return verdict;
+          }
+          // A replacement transport that registered while the probe was in
+          // flight owns the run state now.
+          if (this.sessions.has(sessionId)) return 'transport-lost';
+          this.sessionInfos.delete(sessionId);
+          markRuntimeSessionExited({
+            projectId: conversation.projectId,
+            taskId: conversation.taskId,
+            conversationId: conversation.id,
+          });
+          telemetryService.capture('agent_run_finished', {
+            provider: conversation.runtimeId,
+            exit_code: typeof exitCode === 'number' ? exitCode : -1,
+            project_id: conversation.projectId,
+            task_id: conversation.taskId,
+            conversation_id: conversation.id,
+          });
+          return verdict;
         });
       });
 
@@ -411,17 +436,21 @@ export class SshConversationProvider implements ConversationProvider {
       const registerPty = () =>
         ptySessionRegistry.register(sessionId, pty, {
           onFinalExit: (info, generation) => {
-            if (!shouldEmitAgentSessionExited) return;
-            events.emit(agentSessionExitedChannel, {
-              sessionId,
-              projectId: conversation.projectId,
-              conversationId: conversation.id,
-              taskId: conversation.taskId,
-              generation,
-              exitCode: info.exitCode,
+            const classification = exitClassification;
+            if (!classification) return;
+            void classification.then((verdict) => {
+              if (verdict !== 'agent-exited') return;
+              events.emit(agentSessionExitedChannel, {
+                sessionId,
+                projectId: conversation.projectId,
+                conversationId: conversation.id,
+                taskId: conversation.taskId,
+                generation,
+                exitCode: info.exitCode,
+              });
+              snapshotConversationUsageOnSessionExit(conversation.id);
+              snapshotTaskDiffOnSessionExit(conversation.taskId);
             });
-            snapshotConversationUsageOnSessionExit(conversation.id);
-            snapshotTaskDiffOnSessionExit(conversation.taskId);
           },
           registrationEpoch,
           tmuxBacked: Boolean(tmuxSessionName),

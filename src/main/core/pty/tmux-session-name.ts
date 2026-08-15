@@ -273,6 +273,35 @@ export async function listTmuxSessionMarkersStrict(
   return [...markers.values()];
 }
 
+/**
+ * Report whether a Yoda-owned tmux session still hosts a running pane.
+ *
+ * The PTY Yoda spawns is only an `attach-session` wrapper: the Agent process
+ * lives in the tmux pane and outlives every client. So a dead PTY proves the
+ * transport died, never that the Agent died — only tmux can answer that.
+ * Probe failures resolve to `false` so callers keep their previous, safer
+ * "the backend is gone" behaviour instead of pinning a session as live forever.
+ */
+export async function isTmuxSessionAgentAlive(
+  ctx: IExecutionContext,
+  sessionName: string
+): Promise<boolean> {
+  try {
+    const { stdout } = await ctx.exec(
+      'tmux',
+      [...YODA_TMUX_SERVER_ARGS, 'list-panes', '-t', sessionName, '-F', '#{pane_dead}'],
+      { timeout: TMUX_LIST_TIMEOUT_MS, maxBuffer: TMUX_LIST_MAX_BUFFER }
+    );
+    return stdout.split('\n').some((line) => line.trim() === '0');
+  } catch (error) {
+    log.debug('isTmuxSessionAgentAlive: tmux session unavailable', {
+      sessionName,
+      error: String(error),
+    });
+    return false;
+  }
+}
+
 export async function killTmuxSession(
   ctx: IExecutionContext,
   sessionName: string,
