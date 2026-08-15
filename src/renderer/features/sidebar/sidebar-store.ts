@@ -1014,6 +1014,18 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     this.collapsedTaskGroupIds.delete(sidebarGroupId(group));
   }
 
+  /**
+   * Archived tasks live in the database, not in memory — the group is hydrated
+   * one page at a time. An expanded group must hold at least its first page, or
+   * it opens onto nothing but its own disclosure row.
+   */
+  ensureSidebarArchivedTasksHydrated(): void {
+    if (!this.taskPriorityMode) return;
+    if (this.sidebarArchivedTaskIdsByProject.size > 0) return;
+    if (this.sidebarArchivedTaskLoadState === 'error') return;
+    void this.loadMoreSidebarArchivedTasks(this.taskGroupVisibleLimit).catch(() => {});
+  }
+
   /** Called on first load when no snapshot exists — expand all known projects. */
   expandAllProjects(): void {
     for (const project of this.orderedProjects) {

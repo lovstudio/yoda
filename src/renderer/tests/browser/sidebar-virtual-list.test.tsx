@@ -30,10 +30,12 @@ const mocks = vi.hoisted(() => ({
     setTaskOrder: ReturnType<typeof vi.fn>;
     setProjectOrder: ReturnType<typeof vi.fn>;
     loadMoreSidebarArchivedTasks: ReturnType<typeof vi.fn>;
+    ensureSidebarArchivedTasksHydrated: ReturnType<typeof vi.fn>;
   },
   staleVirtualItemKey: null as string | null,
   virtualizerOptions: [] as object[],
   loadMoreSidebarArchivedTasks: vi.fn<(limit: number) => Promise<number>>(async () => 0),
+  ensureSidebarArchivedTasksHydrated: vi.fn(),
   toast: vi.fn(),
 }));
 
@@ -98,6 +100,7 @@ vi.mock('@renderer/lib/stores/app-state', async () => {
     setTaskOrder: vi.fn(),
     setProjectOrder: vi.fn(),
     loadMoreSidebarArchivedTasks: mocks.loadMoreSidebarArchivedTasks,
+    ensureSidebarArchivedTasksHydrated: mocks.ensureSidebarArchivedTasksHydrated,
   });
   mocks.sidebarStore = sidebarStore;
   return {

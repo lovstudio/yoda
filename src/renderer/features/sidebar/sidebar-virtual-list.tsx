@@ -91,17 +91,36 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     : draggingTask
       ? filterTaskDescendantRows(rows, draggingTask.projectId, draggingTask.taskId)
       : rows;
-  const renderRows = useMemo(() => {
-    const collapsedTaskGroupIds = new Set(
-      collapsedTaskGroupSignature ? collapsedTaskGroupSignature.split('\0') : []
-    );
-    return limitTaskGroupRows(
-      collapseTaskGroupRows(displayRows, collapsedTaskGroupIds),
-      visibleTaskCountByGroupId,
-      taskGroupVisibleLimit,
-      collapsedTaskGroupIds
-    );
-  }, [collapsedTaskGroupSignature, displayRows, taskGroupVisibleLimit, visibleTaskCountByGroupId]);
+  const collapsedTaskGroupIds = useMemo(
+    () => new Set(collapsedTaskGroupSignature ? collapsedTaskGroupSignature.split('\0') : []),
+    [collapsedTaskGroupSignature]
+  );
+  const renderRows = useMemo(
+    () =>
+      limitTaskGroupRows(
+        collapseTaskGroupRows(displayRows, collapsedTaskGroupIds),
+        visibleTaskCountByGroupId,
+        taskGroupVisibleLimit,
+        collapsedTaskGroupIds
+      ),
+    [collapsedTaskGroupIds, displayRows, taskGroupVisibleLimit, visibleTaskCountByGroupId]
+  );
+  // The archived group's rows come from the database a page at a time, so an
+  // expanded group holding nothing would render as an empty header. Hydrate the
+  // first page while it is open; the group row only exists once some project
+  // reports archived tasks, so this never queries an empty history.
+  const archivedGroupPresent = useMemo(
+    () =>
+      displayRows.some(
+        (row) => row.kind === 'group' && sidebarGroupId(row.group) === ARCHIVED_PRIORITY_COLLAPSE_ID
+      ),
+    [displayRows]
+  );
+  const archivedGroupCollapsed = collapsedTaskGroupIds.has(ARCHIVED_PRIORITY_COLLAPSE_ID);
+  useEffect(() => {
+    if (!archivedGroupPresent || archivedGroupCollapsed) return;
+    sidebarStore.ensureSidebarArchivedTasksHydrated();
+  }, [archivedGroupCollapsed, archivedGroupPresent]);
   const pinnedRows = useMemo(
     () =>
       limitPinnedTaskListRows(
@@ -278,16 +297,10 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
   const revealMoreTaskGroupItems = useCallback(
     (groupId: string) => {
       if (groupId === ARCHIVED_PRIORITY_TASK_GROUP_ID) {
+        // No local visible-count bookkeeping here: every hydrated archived row
+        // is shown, so fetching the next page is the whole reveal.
         void sidebarStore
           .loadMoreSidebarArchivedTasks(SIDEBAR_TASK_GROUP_REVEAL_INCREMENT)
-          .then((loadedCount) => {
-            if (loadedCount <= 0) return;
-            setVisibleTaskCountByGroupId((previous) => {
-              const next = new Map(previous);
-              next.set(groupId, (previous.get(groupId) ?? 0) + loadedCount);
-              return next;
-            });
-          })
           .catch((error: unknown) => {
             toast({
               title: t('sidebar.loadMoreArchivedTasksFailed'),
@@ -414,11 +427,13 @@ const toGroupDndId = (group: SidebarGroupKey) => {
 };
 const toProjectTaskGroupId = (projectId: string) => `project-tasks::${projectId}`;
 const toDirectTaskGroupId = (group: SidebarGroupKey) => `direct-tasks::${toGroupDndId(group)}`;
-const ARCHIVED_PRIORITY_TASK_GROUP_ID = toDirectTaskGroupId({
+const ARCHIVED_PRIORITY_GROUP: SidebarGroupKey = {
   kind: 'priority',
   priority: 'archived',
   count: 0,
-});
+};
+const ARCHIVED_PRIORITY_TASK_GROUP_ID = toDirectTaskGroupId(ARCHIVED_PRIORITY_GROUP);
+const ARCHIVED_PRIORITY_COLLAPSE_ID = sidebarGroupId(ARCHIVED_PRIORITY_GROUP);
 
 function isSidebarRow(row: SidebarRenderableRow): row is SidebarRow {
   return row.kind !== 'task-group-toggle';
@@ -738,8 +753,13 @@ function appendLimitedTaskRows(
 ) {
   if (totalCount === 0) return;
 
-  const initialVisibleCount = groupId === ARCHIVED_PRIORITY_TASK_GROUP_ID ? 0 : visibleLimit;
-  const visibleCount = visibleTaskCountByGroupId.get(groupId) ?? initialVisibleCount;
+  // Archived tasks are paged out of the database, so hydration — not a visible
+  // limit — bounds this group: show every row that has been loaded, and let the
+  // disclosure row fetch the next page.
+  const visibleCount =
+    groupId === ARCHIVED_PRIORITY_TASK_GROUP_ID
+      ? taskRows.length
+      : (visibleTaskCountByGroupId.get(groupId) ?? visibleLimit);
   const { visibleItems, hiddenCount } = getSidebarTaskGroupDisclosure(
     taskRows,
     visibleCount,
@@ -817,9 +837,10 @@ function findHiddenTaskGroup(
 
     const groupId = toDirectTaskGroupId(row.group);
     const taskRows = takeDirectTaskRows(rows, index);
+    // Mirror appendLimitedTaskRows: every hydrated archived row is visible.
     const visibleCount =
       visibleTaskCountByGroupId.get(groupId) ??
-      (groupId === ARCHIVED_PRIORITY_TASK_GROUP_ID ? 0 : visibleLimit);
+      (groupId === ARCHIVED_PRIORITY_TASK_GROUP_ID ? taskRows.rows.length : visibleLimit);
     const requiredVisibleCount = visibleTaskRowsCountForTarget(
       taskRows.rows,
       targetDndId,
