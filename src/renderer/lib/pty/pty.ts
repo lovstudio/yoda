@@ -73,6 +73,19 @@ const FALLBACK_FIRST_FRAME_QUIET_MS = 700;
  */
 const CANONICAL_QUIET_HOLD_BUDGET_MS = 1_000;
 /**
+ * How long one ACK attempt may work before abandoning what it has.
+ *
+ * This used to share FIRST_FRAME_TIMEOUT_MS, which put the bound at 5 s — the
+ * exact cost of a measured healthy open. That attempt validated its frame, sat
+ * out the settlement window, and expired 9 ms before it could commit; the retry
+ * then redid the whole thing, and the wasted attempt cost the open 670 ms.
+ *
+ * Abandoning an attempt is pure waste, not a safety valve: the caller's own
+ * `waitForVisibleFrame` bound is what surfaces a slow open to React, and it
+ * stays registered either way. So keep this well above any healthy cost.
+ */
+const VISIBLE_FRAME_ACK_ATTEMPT_TIMEOUT_MS = 15_000;
+/**
  * Bound the subscribe round-trip generously. This is not a latency target: it
  * is the point at which we give up entirely, and giving up strands the caller
  * on its opening surface, because connect() rejections are intentionally
@@ -1963,6 +1976,57 @@ export class FrontendPty {
         deadline
       );
       if (!parserDrained) return false;
+
+      // The hold budget has to be consulted here, before every `continue` below.
+      // Charging it inside the quiet-fallback branch was useless against the
+      // provider it was written for: while a CLI streams, each iteration sees
+      // the revision move during the drain and loops from the top, so the
+      // branch that held the budget was first reached only once the provider had
+      // already gone quiet. A measured resume spent 2s in that hole and reported
+      // `heldMs: 0` on arrival.
+      const canonicalViewportReady = this.hasCanonicalViewport();
+      const quietHoldSpent = this.trackCanonicalQuietHold(
+        this.outputGeneration,
+        canonicalViewportReady
+      );
+      if (
+        quietHoldSpent &&
+        canonicalViewportReady &&
+        // Structural completeness, and only that. No open DEC transaction plus a
+        // drained parser means the scene in the buffer is a whole frame — that is
+        // what prevents a torn reveal, and it is not negotiable.
+        //
+        // The cursor-shown bit is a different claim: it says the TUI finished its
+        // redraw and handed the cursor back. That is a *readiness* signal, i.e.
+        // exactly the thing the hold budget exists to stop waiting for. Requiring
+        // it here made the budget almost inert — a measured resume held a
+        // complete frame from 1.9s, spent its budget at 2.9s, and still waited
+        // until 5.4s for the provider to emit a cursor-showing transaction.
+        // Worst case now is a complete screen whose cursor is briefly hidden;
+        // that is a different order of defect from a half-drawn one.
+        !this.synchronizedOutputOpen &&
+        this.canonicalParserDrainedRevision >= this.outputRevision &&
+        // New and live-turn fences stay fail-closed no matter the budget: they
+        // are waiting on the provider to declare a turn, and revealing early
+        // shows a surface the provider has not written yet.
+        !this.hasBlockingCanonicalSurfaceFence(this.outputGeneration)
+      ) {
+        const heldGeneration = this.outputGeneration;
+        const heldRevision = this.outputRevision;
+        this.markCurrentVisibleFrameStage('frame-quiet-wait', {
+          reason: 'hold-budget-spent',
+          waitMs: 0,
+          heldMs: Math.round(performance.now() - this.canonicalQuietHoldSinceMs),
+          revision: heldRevision,
+          ...this.canonicalFenceDetails(heldRevision),
+        });
+        this.preparedCanonicalGeneration = heldGeneration;
+        this.preparedCanonicalRevision = heldRevision;
+        this.preparedCanonicalAtomicLive = false;
+        this.canonicalSurfaceFenceVerifiedRevision = heldRevision;
+        return true;
+      }
+
       // Output accepted while the sentinel was in xterm's queue sits after it.
       if (revisionBeforeDrain !== this.outputRevision) continue;
 
@@ -2059,43 +2123,14 @@ export class FrontendPty {
         // frame guard conservative until a provider-owned readiness fence is
         // available.
         //
-        // Conservative cannot mean unbounded, though. Every fence here is
-        // "N ms after the last byte", and a provider that redraws a spinner or
-        // a startup log while it boots restarts that window on every burst — so
-        // the reveal waits out the provider's entire startup no matter how
-        // early a complete frame was in hand. A measured Codex resume held one
-        // for 3.2s that way. Once the hold budget is spent on a frame that is
-        // cursor-complete for this exact generation, the loading screen is
-        // demonstrably behind us and further waiting only trades one frame of
-        // churn for seconds of blank surface.
-        if (this.canonicalQuietHoldGeneration !== generation) {
-          this.canonicalQuietHoldGeneration = generation;
-          this.canonicalQuietHoldSinceMs = performance.now();
-        }
-        const heldMs = performance.now() - this.canonicalQuietHoldSinceMs;
-        if (
-          heldMs >= CANONICAL_QUIET_HOLD_BUDGET_MS &&
-          this.synchronizedOutputCompletedWithCursorRevision === revision &&
-          this.canonicalParserDrainedRevision >= revision
-        ) {
-          this.markCurrentVisibleFrameStage('frame-quiet-wait', {
-            reason: 'hold-budget-spent',
-            waitMs: 0,
-            heldMs: Math.round(heldMs),
-            revision,
-            ...this.canonicalFenceDetails(revision),
-          });
-          this.preparedCanonicalGeneration = generation;
-          this.preparedCanonicalRevision = revision;
-          this.preparedCanonicalAtomicLive = false;
-          this.canonicalSurfaceFenceVerifiedRevision = revision;
-          return true;
-        }
+        // Conservative cannot mean unbounded, though: see the hold budget at the
+        // top of this loop, which bounds how long a complete frame may be kept
+        // off screen while the provider keeps writing.
         const quietMs = FALLBACK_FIRST_FRAME_QUIET_MS;
         this.markCurrentVisibleFrameStage('frame-quiet-wait', {
           reason: 'canonical-fallback',
           waitMs: quietMs,
-          heldMs: Math.round(heldMs),
+          heldMs: Math.round(performance.now() - this.canonicalQuietHoldSinceMs),
           revision,
           ...this.canonicalFenceDetails(revision),
         });
@@ -2503,6 +2538,26 @@ export class FrontendPty {
   }
 
   /**
+   * Charge the silence-fence hold budget and report whether it is spent.
+   *
+   * The clock starts when this generation first owns a complete viewport, not
+   * when the wait begins: before that there is nothing to reveal, and a budget
+   * running during the provider's loading screen would authorize revealing the
+   * loading screen — the regression staging exists to prevent. From that point
+   * on we are only waiting for the provider to stop writing, which is the wait
+   * that needs a bound.
+   */
+  private trackCanonicalQuietHold(generation: number, hasCanonicalViewport: boolean): boolean {
+    if (!hasCanonicalViewport) return false;
+    if (this.canonicalQuietHoldGeneration !== generation) {
+      this.canonicalQuietHoldGeneration = generation;
+      this.canonicalQuietHoldSinceMs = performance.now();
+      return false;
+    }
+    return performance.now() - this.canonicalQuietHoldSinceMs >= CANONICAL_QUIET_HOLD_BUDGET_MS;
+  }
+
+  /**
    * Whether this generation already spent its silence budget in the verifier.
    *
    * The settlement fence would otherwise re-impose the same 700 ms wait on the
@@ -2562,7 +2617,8 @@ export class FrontendPty {
       (options.shouldContinue?.() ?? true) &&
       (typeof document === 'undefined' || document.visibilityState !== 'hidden');
     const deadline =
-      performance.now() + Math.min(FIRST_FRAME_TIMEOUT_MS, options.timeoutMs ?? Infinity);
+      performance.now() +
+      Math.min(VISIBLE_FRAME_ACK_ATTEMPT_TIMEOUT_MS, options.timeoutMs ?? Infinity);
     while (isCurrentMount() && performance.now() < deadline) {
       // A cold visible mount starts before listener-first subscription resolves.
       // Keep it hidden until the snapshot and any events crossing that boundary
@@ -2950,6 +3006,11 @@ export class FrontendPty {
       hasResolvedInitialSnapshot: this.hasResolvedInitialSnapshot,
       queuedWriteCount: this.terminalWriteQueue.length,
     });
+    // Deliberately keep `debugVisibleMount`: unlike the success paths below,
+    // this attempt ending does not end the open. A retry is expected, and
+    // dropping the profiler's mount here made the frame lane go mute for the
+    // rest of the open — which is how the paint that eventually happened went
+    // unrecorded, leaving the interval that contained it looking like dead air.
     console.log('[DEBUG][agent-session-load] visible frame unavailable:', {
       sessionId: this.sessionId,
       elapsedMs: visibleMount
@@ -2960,7 +3021,6 @@ export class FrontendPty {
       queuedWriteCount: this.terminalWriteQueue.length,
       pendingWriteCount: this.pendingWrites.length,
     });
-    if (visibleMount) this.debugVisibleMount = null;
     this.atomicLiveFramePaintGeneration = null;
     this.atomicLiveFramePaintRevision = null;
     return false;
