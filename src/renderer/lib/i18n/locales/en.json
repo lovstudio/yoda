@@ -186,10 +186,11 @@
       "awaiting-input": "Awaiting input",
       "error": "Error",
       "completed": "Completed",
+      "interrupted": "Interrupted",
       "working": "In progress",
       "pending-review": "Completed · Review",
       "long-term": "Long-term",
-      "idle": "Idle",
+      "idle": "Dormant",
       "archived": "Archived"
     },
     "pinned": "Pinned",
@@ -1913,7 +1914,8 @@
         "background": "Background",
         "awaiting-input": "Awaiting input",
         "error": "Error",
-        "completed": "Completed"
+        "completed": "Completed",
+        "interrupted": "Interrupted"
       },
       "ptyStatus": {
         "disconnected": "Disconnected",
@@ -5828,7 +5830,8 @@
     "background": "Background",
     "awaiting-input": "Awaiting input",
     "error": "Error",
-    "completed": "Completed"
+    "completed": "Completed",
+    "interrupted": "Interrupted"
   },
   "featureDelivery": {
     "title": "Features",

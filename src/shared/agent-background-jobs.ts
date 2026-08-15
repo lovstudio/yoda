@@ -74,12 +74,15 @@ export function countRunningBackgroundJobs(jobs: readonly BackgroundJob[]): numb
  * The agent's own activity outranks a side job: `working`, `awaiting-input` and
  * `error` each say something the user must wait for or act on, and must not be
  * downgraded. Only a settled turn adopts the weaker "a job is still running"
- * signal.
+ * signal — including an `interrupted` one, whose turn is over even though it
+ * did not finish.
  */
 export function deriveAgentDisplayStatus(
   status: AgentSessionRuntimeStatus,
   runningBackgroundJobCount: number
 ): AgentDisplayStatus {
   if (runningBackgroundJobCount <= 0) return status;
-  return status === 'idle' || status === 'completed' ? 'background' : status;
+  return status === 'idle' || status === 'completed' || status === 'interrupted'
+    ? 'background'
+    : status;
 }

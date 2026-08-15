@@ -108,6 +108,19 @@ export function AgentStatusIndicator({
             title={statusLabel}
           />
         );
+      // Same dot vocabulary as the other settled states, in neutral: the turn is
+      // over, but it neither succeeded nor failed.
+      case 'interrupted':
+        return (
+          <span
+            className={cn(
+              'rounded-full bg-background-secondary border size-2 border-foreground-passive',
+              className
+            )}
+            aria-label={statusLabel}
+            title={statusLabel}
+          />
+        );
       default:
         return null;
     }

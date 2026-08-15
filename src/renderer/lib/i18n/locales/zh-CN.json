@@ -186,10 +186,11 @@
       "awaiting-input": "等待用户输入",
       "error": "已报错",
       "completed": "已完成",
+      "interrupted": "已中断",
       "working": "正在进行",
       "pending-review": "已完成 · 待审阅",
       "long-term": "长期",
-      "idle": "空闲",
+      "idle": "休眠",
       "archived": "已归档"
     },
     "pinned": "已置顶",
@@ -1913,7 +1914,8 @@
         "background": "后台运行中",
         "awaiting-input": "等待输入",
         "error": "错误",
-        "completed": "已完成"
+        "completed": "已完成",
+        "interrupted": "已中断"
       },
       "ptyStatus": {
         "disconnected": "未连接",
@@ -5828,7 +5830,8 @@
     "background": "后台运行中",
     "awaiting-input": "等待输入",
     "error": "错误",
-    "completed": "已完成"
+    "completed": "已完成",
+    "interrupted": "已中断"
   },
   "featureDelivery": {
     "title": "Feature",

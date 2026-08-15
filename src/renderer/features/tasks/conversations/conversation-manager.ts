@@ -541,15 +541,20 @@ export class ConversationManagerStore {
     let hasWorking = false;
     let hasUnseenError = false;
     let hasUnseenCompleted = false;
+    let hasInterrupted = false;
     for (const conversation of this.conversations.values()) {
       if (conversation.status === 'awaiting-input') return 'awaiting-input';
       if (conversation.status === 'working') hasWorking = true;
+      if (conversation.status === 'interrupted') hasInterrupted = true;
       if (!conversation.seen && conversation.status === 'error') hasUnseenError = true;
       if (!conversation.seen && conversation.status === 'completed') hasUnseenCompleted = true;
     }
     if (hasWorking) return 'working';
     if (hasUnseenError) return 'error';
     if (hasUnseenCompleted) return 'completed';
+    // Last: any sibling session with a real outcome describes the task better
+    // than "one of its turns was cut short".
+    if (hasInterrupted) return 'interrupted';
     return null;
   }
 
@@ -1535,6 +1540,9 @@ export class ConversationStore {
   get indicatorStatus(): AgentStatus | null {
     if (this.status === 'working') return 'working';
     if (this.status === 'awaiting-input') return 'awaiting-input';
+    // A cut-short turn is a standing fact about the session, not a notification,
+    // so it survives being seen — unlike error/completed below.
+    if (this.status === 'interrupted') return 'interrupted';
     if (this.seen) return null;
     if (this.status === 'error') return 'error';
     if (this.status === 'completed') return 'completed';

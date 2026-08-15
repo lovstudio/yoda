@@ -156,7 +156,10 @@ async function deriveStatus(args: {
           truth === 'working' &&
           isInterruptedSinceLastPrompt(conversationId, verdict.lastUserAt)
         ) {
-          truth = 'idle';
+          // The transcript's last turn never closed, and an interrupt landed
+          // after the prompt that opened it: the turn was cut short, which is a
+          // stronger statement than "nothing is running".
+          truth = 'interrupted';
         }
       }
     }
@@ -185,7 +188,7 @@ async function deriveStatus(args: {
     if (verdict?.state === 'working' || verdict?.state === 'awaiting-input') {
       truth = verdict.state;
       if (isInterruptedSinceLastPrompt(conversationId, verdict.lastStartedAt)) {
-        truth = 'idle';
+        truth = 'interrupted';
       }
     } else if (verdict?.state === 'error') truth = 'error';
     else if (verdict?.state === 'idle') truth = 'idle';
@@ -214,7 +217,8 @@ async function deriveStatus(args: {
     truth === 'working' &&
     memory === 'awaiting-input'
       ? memory
-      : truth === 'idle' && (memory === 'completed' || memory === 'error')
+      : (truth === 'idle' || truth === 'interrupted') &&
+          (memory === 'completed' || memory === 'error')
         ? memory
         : (truth ?? memory);
   if (isAgentSessionRunningStatus(derived)) {

@@ -247,29 +247,49 @@ describe('SidebarStore task recency ordering', () => {
     expect(priorityGroups(store.sidebarRows)).toEqual(['idle']);
   });
 
-  it('migrates the legacy default priority order while preserving custom orders', () => {
-    expect(
-      normalizeSidebarTaskPriorityOrder([
-        'awaiting-input',
-        'error',
-        'completed',
-        'working',
-        'pending-review',
-        'long-term',
-        'idle',
-        'archived',
-      ])
-    ).toEqual([
+  it('migrates any superseded default priority order while preserving custom orders', () => {
+    const currentDefault = [
       'awaiting-input',
       'error',
       'completed',
+      'interrupted',
       'working',
       'idle',
       'pending-review',
       'long-term',
       'archived',
-    ]);
+    ];
 
+    // Oldest shipped default.
+    expect(
+      normalizeSidebarTaskPriorityOrder([
+        'awaiting-input',
+        'error',
+        'completed',
+        'working',
+        'pending-review',
+        'long-term',
+        'idle',
+        'archived',
+      ])
+    ).toEqual(currentDefault);
+
+    // The default that shipped before `interrupted` existed.
+    expect(
+      normalizeSidebarTaskPriorityOrder([
+        'awaiting-input',
+        'error',
+        'completed',
+        'working',
+        'idle',
+        'pending-review',
+        'long-term',
+        'archived',
+      ])
+    ).toEqual(currentDefault);
+
+    // A genuinely customized order keeps its sequence; groups added since it was
+    // stored are appended, and `archived` stays pinned last.
     expect(
       normalizeSidebarTaskPriorityOrder([
         'working',
@@ -289,6 +309,7 @@ describe('SidebarStore task recency ordering', () => {
       'pending-review',
       'long-term',
       'idle',
+      'interrupted',
       'archived',
     ]);
   });
@@ -443,8 +464,9 @@ describe('SidebarStore task recency ordering', () => {
     expect(store.taskPriorityOrder).toEqual([
       'awaiting-input',
       'error',
-      'working',
       'completed',
+      'working',
+      'interrupted',
       'idle',
       'pending-review',
       'long-term',

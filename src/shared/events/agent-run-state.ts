@@ -34,8 +34,10 @@ export interface RunState {
   status: RunStatus;
   /**
    * Whether the user has observed the current terminal/attention status.
-   * `idle` and `working` are always considered seen; terminal/attention
-   * states stay unseen until explicitly marked.
+   * `idle`, `working` and `interrupted` are always considered seen — the first
+   * two say nothing to acknowledge, and an interrupt is something the user (or
+   * a dying process) just did, not news being delivered to them.
+   * Terminal/attention states stay unseen until explicitly marked.
    */
   seen: boolean;
   pendingAction: PendingAction | null;
@@ -78,7 +80,7 @@ export const POST_SUBMIT_NOTIFICATION_GRACE_MS = 3000;
 export function initialRunState(status: RunStatus = 'idle', at = 0): RunState {
   return {
     status,
-    seen: status === 'idle' || status === 'working',
+    seen: status === 'idle' || status === 'working' || status === 'interrupted',
     pendingAction: null,
     lastForceWorkingAt: status === 'working' ? at : 0,
     updatedAt: at,
@@ -157,10 +159,11 @@ export function reduceRunState(state: RunState, event: RunStateEvent): RunState 
 
     case 'turn-interrupted':
       // Non-terminal: a turn was cut short but the session can keep going.
-      // Drop to idle so the spinner stops, but don't mark error/completed.
+      // Records *that* it was cut short rather than collapsing into `idle`,
+      // which would claim the session simply has nothing to report.
       return {
         ...state,
-        status: 'idle',
+        status: 'interrupted',
         seen: true,
         pendingAction: null,
         updatedAt: event.at,
@@ -172,15 +175,20 @@ export function reduceRunState(state: RunState, event: RunStateEvent): RunState 
       if (!isRunningStatus(state.status)) {
         return { ...state, updatedAt: event.at };
       }
+      // The process died with a turn in flight — the same fact as an explicit
+      // interrupt, arrived at from the other side.
       return {
         ...state,
-        status: 'idle',
+        status: 'interrupted',
         seen: true,
         pendingAction: null,
         updatedAt: event.at,
       };
 
     case 'watchdog-idle':
+      // Deliberately NOT `interrupted`: the watchdog fires on *absence* of
+      // signal, which is a gap in our knowledge, not evidence that the turn was
+      // cut short. Claiming an interrupt here would fabricate an outcome.
       if (!isRunningStatus(state.status)) {
         return state;
       }

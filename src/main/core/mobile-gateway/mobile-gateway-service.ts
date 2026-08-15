@@ -43,6 +43,7 @@ import {
   type MobileSessionInputResponse,
   type MobileSessionRuntimeConfigurationResponse,
   type MobileSessionRuntimeConfigurationUpdate,
+  type MobileSessionRuntimeStatus,
   type MobileSessionSummary,
   type MobileSessionTranscriptBlock,
   type MobileSkillsResponse,
@@ -405,6 +406,20 @@ function tailSessionTranscript(blocks: MobileSessionTranscriptBlock[]): {
   }
 
   return { transcript, truncated: false };
+}
+
+/**
+ * Narrow a desktop run status onto the mobile wire contract.
+ *
+ * `interrupted` is desktop-only: the phone client has no rendering for it, and
+ * widening the wire union would break already-installed builds. A cut-short turn
+ * behaves like a session at rest for every mobile affordance — it still accepts
+ * a follow-up turn — so it reports as `idle` there.
+ */
+function toMobileSessionRuntimeStatus(
+  status: AgentSessionRuntimeStatus
+): MobileSessionRuntimeStatus {
+  return status === 'interrupted' ? 'idle' : status;
 }
 
 function compareConversations(a: Conversation, b: Conversation): number {
@@ -1718,7 +1733,9 @@ export class MobileGatewayService {
           conversationId,
           reason,
           emittedAt: new Date().toISOString(),
-          ...(runtimeStatus === undefined ? {} : { runtimeStatus }),
+          ...(runtimeStatus === undefined
+            ? {}
+            : { runtimeStatus: toMobileSessionRuntimeStatus(runtimeStatus) }),
         },
         retry
       );
@@ -2004,7 +2021,7 @@ export class MobileGatewayService {
       updatedAt: conversation.updatedAt,
       lastInteractedAt: conversation.lastInteractedAt,
       isInitialConversation: conversation.isInitialConversation,
-      runtimeStatus,
+      runtimeStatus: toMobileSessionRuntimeStatus(runtimeStatus),
       ...availability,
       tmuxEnabled: sessionInfo?.tmuxEnabled ?? false,
       sessionId: sessionInfo?.sessionId ?? conversation.id,

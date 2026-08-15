@@ -253,6 +253,7 @@ export class AgentRuntimeStore {
     let hasAwaiting = false;
     let hasError = false;
     let hasCompleted = false;
+    let hasInterrupted = false;
     let hasBackground = false;
     for (const key of this.statusKeysByTask.get(task) ?? []) {
       const status = this.displayStatus(key);
@@ -260,6 +261,7 @@ export class AgentRuntimeStore {
       else if (status === 'awaiting-input') hasAwaiting = true;
       else if (status === 'error') hasError = true;
       else if (status === 'completed') hasCompleted = true;
+      else if (status === 'interrupted') hasInterrupted = true;
       else if (status === 'background') hasBackground = true;
     }
     if (hasAwaiting) return 'awaiting-input';
@@ -269,6 +271,9 @@ export class AgentRuntimeStore {
     if (hasBackground) return 'background';
     if (hasError) return 'error';
     if (hasCompleted) return 'completed';
+    // Last: a cut-short turn is the weakest thing worth reporting, and any
+    // sibling session with a real outcome describes the task better.
+    if (hasInterrupted) return 'interrupted';
     return null;
   }
 

@@ -12,8 +12,9 @@ const STATUS_PRIORITY: Record<AgentSessionRuntimeStatus, number> = {
   'awaiting-input': 0,
   working: 1,
   idle: 2,
-  error: 3,
-  completed: 4,
+  interrupted: 3,
+  error: 4,
+  completed: 5,
 };
 
 /**

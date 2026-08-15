@@ -34,6 +34,7 @@ const TASK_SESSION_DOT_CLASSES: Record<TaskSessionVisibleStatus, string> = {
   'awaiting-input': 'bg-status-in-review',
   error: 'bg-foreground-destructive',
   completed: 'bg-status-done',
+  interrupted: 'bg-status-cancelled',
   working: 'bg-status-in-progress',
   // Muted on purpose: real in-flight work, but nothing the user must act on.
   background: 'bg-foreground-passive',

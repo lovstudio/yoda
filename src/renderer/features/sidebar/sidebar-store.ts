@@ -54,16 +54,36 @@ function parseSidebarBranchDisplay(value: unknown): SidebarBranchDisplay | undef
   return value === 'hidden' || value === 'compact' || value === 'full' ? value : undefined;
 }
 
-const LEGACY_DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER: readonly SidebarTaskPriorityGroup[] = [
-  'awaiting-input',
-  'error',
-  'completed',
-  'working',
-  'pending-review',
-  'long-term',
-  'idle',
-  'archived',
-];
+/**
+ * Every default order we have ever shipped. A stored order that still matches
+ * one of these is an untouched default, not a user preference, so it is
+ * upgraded to the current default wholesale — otherwise a newly added group
+ * would land at the bottom of the list for everyone who never reordered.
+ * Genuinely customized orders keep their sequence and get new groups appended.
+ */
+const SUPERSEDED_DEFAULT_SIDEBAR_TASK_PRIORITY_ORDERS: readonly (readonly SidebarTaskPriorityGroup[])[] =
+  [
+    [
+      'awaiting-input',
+      'error',
+      'completed',
+      'working',
+      'pending-review',
+      'long-term',
+      'idle',
+      'archived',
+    ],
+    [
+      'awaiting-input',
+      'error',
+      'completed',
+      'working',
+      'idle',
+      'pending-review',
+      'long-term',
+      'archived',
+    ],
+  ];
 
 function matchesSidebarTaskPriorityOrder(
   value: unknown,
@@ -77,7 +97,11 @@ function matchesSidebarTaskPriorityOrder(
 }
 
 export function normalizeSidebarTaskPriorityOrder(value: unknown): SidebarTaskPriorityGroup[] {
-  if (matchesSidebarTaskPriorityOrder(value, LEGACY_DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER)) {
+  if (
+    SUPERSEDED_DEFAULT_SIDEBAR_TASK_PRIORITY_ORDERS.some((order) =>
+      matchesSidebarTaskPriorityOrder(value, order)
+    )
+  ) {
     return [...DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER];
   }
   const valid = new Set<SidebarTaskPriorityGroup>(SIDEBAR_TASK_PRIORITY_GROUPS);
@@ -384,9 +408,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       'awaiting-input': 0,
       error: 1,
       completed: 2,
-      working: 3,
+      interrupted: 3,
+      working: 4,
       // Directly after `working`, matching every other surface's ordering.
-      background: 4,
+      background: 5,
     };
     return statuses.sort((left, right) => priority[left] - priority[right])[0] ?? null;
   }
@@ -414,11 +439,15 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     // working: the task genuinely has work in flight, and letting it fall
     // through would drop it past `completed` into `idle`.
     if (runtimeStatus === 'working' || runtimeStatus === 'background') return 'working';
-    if (!data) return 'idle';
+    if (!data) return runtimeStatus === 'interrupted' ? 'interrupted' : 'idle';
     if (data.needsReview || data.status === 'review') return 'pending-review';
     if (runtimeStatus === 'completed' || data.status === 'done' || data.status === 'cancelled') {
       return 'completed';
     }
+    // A turn that was cut short — by Esc or by the process dying. Grouped apart
+    // from `completed` because the work did not finish, and apart from `idle`
+    // because something actually happened.
+    if (runtimeStatus === 'interrupted') return 'interrupted';
     if (data.isLongTerm) return 'long-term';
     return 'idle';
   }

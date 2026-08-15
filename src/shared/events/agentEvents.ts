@@ -21,7 +21,15 @@ export type AgentSessionRuntimeStatus =
   | 'working'
   | 'awaiting-input'
   | 'error'
-  | 'completed';
+  | 'completed'
+  /**
+   * A turn was cut short — the user pressed Esc, or the agent process died
+   * mid-turn. Distinct from `idle`: the session is at rest, but its last turn
+   * did not finish, so calling it "completed" would be a lie and calling it
+   * "idle" would hide that work was left unfinished. Non-terminal in the Codex
+   * sense: the session can still receive more input.
+   */
+  | 'interrupted';
 
 export function isAgentSessionRunningStatus(status: AgentSessionRuntimeStatus): boolean {
   return status === 'working' || status === 'awaiting-input';

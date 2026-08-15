@@ -178,6 +178,7 @@ export const SIDEBAR_TASK_PRIORITY_GROUPS = [
   'awaiting-input',
   'error',
   'completed',
+  'interrupted',
   'working',
   'idle',
   'pending-review',

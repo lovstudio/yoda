@@ -149,10 +149,11 @@ const TASK_SESSION_STATUS_PRIORITY: Record<TaskSessionVisibleStatus, number> = {
   'awaiting-input': 0,
   error: 1,
   completed: 2,
-  working: 3,
+  interrupted: 3,
+  working: 4,
   // Ranked immediately below `working` everywhere: in-flight work the user is
   // not being asked to do anything about.
-  background: 4,
+  background: 5,
 };
 
 /** Shared, lossless task-session aggregation used by every task surface. */

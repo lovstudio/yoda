@@ -41,9 +41,9 @@ describe('reduceRunState', () => {
     expect(s.seen).toBe(false);
   });
 
-  it('turn-interrupted → idle (non-terminal), seen, no error', () => {
+  it('turn-interrupted → interrupted (non-terminal), seen, no error', () => {
     const s = reduceRunState(working(), { kind: 'turn-interrupted', at: 2000 });
-    expect(s.status).toBe('idle');
+    expect(s.status).toBe('interrupted');
     expect(s.seen).toBe(true);
   });
 
@@ -124,9 +124,10 @@ describe('reduceRunState', () => {
     }
   });
 
-  it('process-exited clears running state to idle', () => {
+  it('process-exited turns a running state into interrupted', () => {
     const s = reduceRunState(working(), { kind: 'process-exited', at: 3000 });
-    expect(s.status).toBe('idle');
+    expect(s.status).toBe('interrupted');
+    expect(s.seen).toBe(true);
   });
 
   it('process-exited preserves a terminal status (completed stays completed)', () => {

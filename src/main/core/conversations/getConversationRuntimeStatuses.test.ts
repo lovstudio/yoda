@@ -211,7 +211,7 @@ describe('getConversationRunStatus', () => {
     });
     mocks.isInterruptedSinceLastPrompt.mockReturnValue(true);
 
-    await expect(readCodexStatus()).resolves.toBe('idle');
+    await expect(readCodexStatus()).resolves.toBe('interrupted');
     expect(mocks.isInterruptedSinceLastPrompt).toHaveBeenCalledWith(
       'conv-1',
       Date.parse('2026-06-10T00:00:05.000Z')

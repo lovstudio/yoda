@@ -77,6 +77,7 @@ function mapStatus(s: AgentSessionRuntimeStatus): MemberStatus {
       return 'error';
     case 'idle':
     case 'completed':
+    case 'interrupted':
       return 'finished';
   }
 }

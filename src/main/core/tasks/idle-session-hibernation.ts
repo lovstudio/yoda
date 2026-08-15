@@ -9,8 +9,13 @@ export function shouldHibernateIdleSession(input: {
   timeoutMs: number;
   rendererConsumers: number;
 }): boolean {
+  // `interrupted` needs no authority guard: unlike `idle`, it is only ever
+  // reached from positive evidence that the turn ended, so the session is as
+  // safe to detach as a completed one.
   const hasHibernatableStatus =
-    input.status === 'completed' || (input.status === 'idle' && input.idleStatusIsAuthoritative);
+    input.status === 'completed' ||
+    input.status === 'interrupted' ||
+    (input.status === 'idle' && input.idleStatusIsAuthoritative);
   return (
     input.timeoutMs > 0 &&
     input.detachable &&
