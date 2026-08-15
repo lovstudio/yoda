@@ -5204,7 +5204,8 @@
       },
       "gap": {
         "handoff": "{{from}} finished {{stage}}, then {{to}} took {{duration}} to react.",
-        "stall": "{{lane}} paused {{duration}} after {{stage}}."
+        "stall": "{{lane}} paused {{duration}} after {{stage}}.",
+        "retry": "{{lane}} retried {{stage}} {{attempts}} more times over {{duration}}; something kept invalidating it."
       },
       "slowestHint": "Longest step of this open",
       "legend": "Amber marks the slowest step; shaded bands are intervals with no activity.",

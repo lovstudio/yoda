@@ -2,6 +2,7 @@ import type { SessionOpenPerformanceContext } from '@shared/session-open-perform
 import { setTaskOpenFrameMarkSink } from '@renderer/lib/perf/task-open-frame-marks';
 import {
   beginTaskOpenTrajectory,
+  bumpTaskOpenTrajectoryStepRepeat,
   finishTaskOpenTrajectory,
   recordTaskOpenTrajectoryStep,
 } from './task-open-trajectory';
@@ -174,6 +175,16 @@ export function getTaskOpenPerformanceContext(
   };
 }
 
+/**
+ * A stage is recorded once, so `frame-canonical-wait` entered for two unrelated
+ * causes would otherwise collapse into whichever came first. Keying on the
+ * reason keeps them apart while still folding a retried wait into one step.
+ */
+function stageKey(stage: string, details?: TaskOpenStageDetails): string {
+  const reason = details?.reason;
+  return typeof reason === 'string' ? `${stage}:${reason}` : stage;
+}
+
 export function markTaskOpenTrace(
   projectId: string,
   taskId: string,
@@ -181,12 +192,28 @@ export function markTaskOpenTrace(
   details?: TaskOpenStageDetails
 ): void {
   const trace = matchingTrace(projectId, taskId);
-  if (!trace || trace.stages.has(stage)) return;
+  if (!trace) return;
 
   const now = performance.now();
+  const key = stageKey(stage, details);
+  if (trace.stages.has(key)) {
+    // A retried wait is not news, but how often and how late it retried is: the
+    // interval between the first mark and the last retry is exactly the dead air
+    // the profiler has to attribute. Console output stays quiet — a loop
+    // spinning every 100ms would drown the log it shares with everything else.
+    const reason = details?.reason;
+    bumpTaskOpenTrajectoryStepRepeat(
+      trace.contextId,
+      stage,
+      typeof reason === 'string' ? reason : undefined,
+      elapsed(trace, now)
+    );
+    return;
+  }
+
   const hiddenDurationMs = currentHiddenDuration(trace, now);
   const elapsedMs = elapsed(trace, now);
-  trace.stages.add(stage);
+  trace.stages.add(key);
   recordTaskOpenTrajectoryStep(trace.contextId, {
     stage,
     source: 'renderer',

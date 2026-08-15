@@ -58,6 +58,9 @@ const LANE_BY_STAGE: Record<string, TaskOpenLaneId> = {
   'frame-snapshot-wait': 'frame',
   'frame-canonical-wait': 'frame',
   'frame-quiet-wait': 'frame',
+  // A resize is the UI's doing, not the frame loop's — filing it here would hide
+  // "our own layout invalidated the frame we were waiting for" inside one lane.
+  'frame-resize': 'ui',
   'frame-painted': 'frame',
   'frame-unavailable': 'frame',
   // Main — session resolution and bookkeeping.
@@ -112,6 +115,14 @@ export type TaskOpenGap = {
   toStage: string;
   startMs: number;
   durationMs: number;
+  /**
+   * How many times the preceding wait was re-entered during this interval.
+   *
+   * Nonzero changes the diagnosis completely: the interval was not dead air, it
+   * was a loop whose condition kept being invalidated. Reporting them the same
+   * way sends the reader looking for a missing wakeup that does not exist.
+   */
+  retries: number;
 };
 
 export type TaskOpenAnalysis = {
@@ -181,6 +192,7 @@ export function analyzeTaskOpenTrajectory(trajectory: TaskOpenTrajectory): TaskO
       toStage: next.stage,
       startMs: previous.atMs,
       durationMs,
+      retries: previous.lastAtMs > previous.atMs ? previous.repeats : 0,
     });
   }
   gaps.sort((a, b) => b.durationMs - a.durationMs);

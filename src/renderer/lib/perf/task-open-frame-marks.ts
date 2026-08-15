@@ -23,6 +23,12 @@ export type TaskOpenFrameStage =
   | 'frame-canonical-wait'
   /** Parked in a settlement or live-frame grace window. */
   | 'frame-quiet-wait'
+  /**
+   * New dimensions were sent to the backend. A TUI answers a resize with a full
+   * redraw, which invalidates whatever frame the loop was about to accept — so a
+   * resize landing mid-open is a self-inflicted restart of the wait, not noise.
+   */
+  | 'frame-resize'
   | 'frame-painted'
   /** The bounded attempt gave up; the React owner keeps its loading surface. */
   | 'frame-unavailable';

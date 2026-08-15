@@ -78,7 +78,11 @@ function segmentLabel(segment: TaskOpenLaneSegment): string {
   const waited = segment.isLaneStart
     ? ''
     : ` · waited ${formatTrajectoryDuration(segment.durationMs)}`;
-  return `${segment.step.stage}${reason ? ` (${reason})` : ''} @ ${at}${waited}`;
+  const retried =
+    segment.step.repeats > 0
+      ? ` · retried ${segment.step.repeats}× until ${formatTrajectoryDuration(segment.step.lastAtMs)}`
+      : '';
+  return `${segment.step.stage}${reason ? ` (${reason})` : ''} @ ${at}${waited}${retried}`;
 }
 
 /**
@@ -105,6 +109,7 @@ function LaneRow({
         <span aria-hidden className="absolute inset-x-0 top-1/2 h-px bg-border/50" />
         {track.segments.map((segment) => {
           const isSlowest = segment === slowest;
+          const retrySpanMs = Math.max(0, segment.step.lastAtMs - segment.step.atMs);
           return (
             <span key={`${segment.step.stage}:${segment.step.atMs}`}>
               {segment.isLaneStart ? null : (
@@ -120,6 +125,20 @@ function LaneRow({
                   }}
                 />
               )}
+              {retrySpanMs > 0 ? (
+                // A retried wait occupied the lane for as long as it kept
+                // re-entering. Without this the chip sits alone at its first
+                // entry and the interval reads as nobody working, when in fact
+                // this lane was spinning through it.
+                <span
+                  aria-hidden
+                  className="absolute top-1/2 h-[5px] -translate-y-1/2 rounded-sm border-y border-dotted border-foreground-passive/60"
+                  style={{
+                    left: `${percent(segment.step.atMs, spanMs)}%`,
+                    width: `${percent(retrySpanMs, spanMs)}%`,
+                  }}
+                />
+              ) : null}
               <span
                 title={segmentLabel(segment)}
                 className={cn(
@@ -185,24 +204,31 @@ function GapFinding({
 }) {
   const { t } = useTranslation();
   const duration = formatTrajectoryDuration(gap.durationMs);
+  const message =
+    gap.retries > 0
+      ? t('workspaceRuntime.trajectory.gap.retry', {
+          lane: laneLabel(gap.fromLane),
+          stage: gap.fromStage,
+          attempts: gap.retries,
+          duration,
+        })
+      : gap.kind === 'handoff'
+        ? t('workspaceRuntime.trajectory.gap.handoff', {
+            from: laneLabel(gap.fromLane),
+            to: laneLabel(gap.toLane),
+            stage: gap.fromStage,
+            duration,
+          })
+        : t('workspaceRuntime.trajectory.gap.stall', {
+            lane: laneLabel(gap.fromLane),
+            stage: gap.fromStage,
+            duration,
+          });
 
   return (
     <div className="flex items-start gap-1.5 text-[10px] leading-4 text-foreground-passive">
       <span aria-hidden className="mt-1.5 size-1 shrink-0 rounded-full bg-amber-500" />
-      <span className="min-w-0">
-        {gap.kind === 'handoff'
-          ? t('workspaceRuntime.trajectory.gap.handoff', {
-              from: laneLabel(gap.fromLane),
-              to: laneLabel(gap.toLane),
-              stage: gap.fromStage,
-              duration,
-            })
-          : t('workspaceRuntime.trajectory.gap.stall', {
-              lane: laneLabel(gap.fromLane),
-              stage: gap.fromStage,
-              duration,
-            })}
-      </span>
+      <span className="min-w-0">{message}</span>
     </div>
   );
 }
@@ -232,6 +258,9 @@ function StepRow({
       <span className="min-w-0 flex-1 truncate" title={segmentLabel(segment)}>
         {segment.step.stage}
         {reason ? <span className="text-foreground-disabled"> · {reason}</span> : null}
+        {segment.step.repeats > 0 ? (
+          <span className="text-amber-600 dark:text-amber-500"> ×{segment.step.repeats + 1}</span>
+        ) : null}
       </span>
       <span className="w-12 shrink-0 text-right">
         {segment.isLaneStart ? '—' : formatTrajectoryDuration(segment.durationMs)}

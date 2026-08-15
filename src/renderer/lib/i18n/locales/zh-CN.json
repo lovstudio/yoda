@@ -5204,7 +5204,8 @@
       },
       "gap": {
         "handoff": "{{from}} 完成 {{stage}} 后，{{to}} 隔了 {{duration}} 才接手。",
-        "stall": "{{lane}} 在 {{stage}} 之后停顿 {{duration}}。"
+        "stall": "{{lane}} 在 {{stage}} 之后停顿 {{duration}}。",
+        "retry": "{{lane}} 在 {{stage}} 上重试了 {{attempts}} 次、共 {{duration}}，说明条件被反复打断。"
       },
       "slowestHint": "本次耗时最长的一步",
       "legend": "琥珀色为最慢的一步，浅色带为无人活动的空档。",

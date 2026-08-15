@@ -283,6 +283,7 @@ export class FrontendPty {
       if (pty.sessionId === sessionId) {
         const changed = pty.lastSentDims?.cols !== cols || pty.lastSentDims?.rows !== rows;
         pty.lastSentDims = { cols, rows };
+        if (changed) pty.markCurrentVisibleFrameStage('frame-resize', { cols, rows });
         return changed;
       }
     }
@@ -322,6 +323,16 @@ export class FrontendPty {
   private terminalWriteWaiters = new Set<() => void>();
   /** Monotonic accepted-output revision used to prove a parser drain stayed quiet. */
   private outputRevision = 0;
+  /**
+   * When output was last accepted, so a frame wait can report how stale the
+   * screen it is guarding actually is.
+   *
+   * Every quiet fence is "wait N ms after the last byte". Without this the
+   * profiler can see that a wait happened but not whether it was still hearing
+   * from the provider — which is the difference between a fence that is too
+   * conservative and a provider that is genuinely still drawing.
+   */
+  private lastOutputAtMs: number | null = null;
   /** Live output accepted while hidden since the adaptive-cache sampler last read it. */
   private hiddenOutputCodeUnits = 0;
   private outputActivityWaiters = new Set<() => void>();
@@ -1635,6 +1646,7 @@ export class FrontendPty {
     }
     this.outputRevision += 1;
     this.visualFrameRevision += 1;
+    this.lastOutputAtMs = performance.now();
     // Once a live generation has crossed its first canonical paint, normal
     // streaming output is terminal content rather than another loading phase.
     // Keep React's semantic-ready signal stable; explicit generation changes
@@ -1984,6 +1996,10 @@ export class FrontendPty {
           // New/live sessions still require their provider-owned fence. A
           // settled transcript anchor is handled below as a positive fast path
           // with a structural fallback, so scrollback cannot strand the task.
+          this.markCurrentVisibleFrameStage('frame-canonical-wait', {
+            reason: 'blocking-fence',
+            revision,
+          });
           const fencedActivity = await this.waitForOutputActivityOrDelay(
             revision,
             Math.max(0, deadline - performance.now()),
@@ -1998,6 +2014,10 @@ export class FrontendPty {
           this.expectedCanonicalSurfaceAnchor !== null &&
           !this.hasStructuralCanonicalSurfaceFallback(generation, revision)
         ) {
+          this.markCurrentVisibleFrameStage('frame-canonical-wait', {
+            reason: 'anchor-fallback-missing',
+            revision,
+          });
           const fencedActivity = await this.waitForOutputActivityOrDelay(
             revision,
             Math.max(0, deadline - performance.now()),
@@ -2015,6 +2035,11 @@ export class FrontendPty {
         // frame guard conservative until a provider-owned readiness fence is
         // available.
         const quietMs = FALLBACK_FIRST_FRAME_QUIET_MS;
+        this.markCurrentVisibleFrameStage('frame-quiet-wait', {
+          reason: 'canonical-fallback',
+          waitMs: quietMs,
+          revision,
+        });
         const quietOutcome = await this.waitForOutputActivityOrDelay(
           revision,
           quietMs,
@@ -2046,6 +2071,13 @@ export class FrontendPty {
         return true;
       }
 
+      // Either the viewport is not canonical yet or a synchronized redraw is
+      // still open. Both mean the frame in hand is incomplete, so wait out the
+      // whole attempt for the next one rather than painting a torn screen.
+      this.markCurrentVisibleFrameStage('frame-canonical-wait', {
+        reason: this.hasCanonicalViewport() ? 'synchronized-open' : 'viewport-incomplete',
+        revision,
+      });
       const activityOutcome = await this.waitForOutputActivityOrDelay(
         revision,
         Math.max(0, deadline - performance.now()),
@@ -2359,7 +2391,30 @@ export class FrontendPty {
     details?: TaskOpenFrameDetails
   ): void {
     if (this.debugVisibleMount?.lease !== mountLease) return;
-    markTaskOpenFrameStage(stage, { sessionId: this.sessionId, ...details });
+    markTaskOpenFrameStage(stage, {
+      sessionId: this.sessionId,
+      sinceOutputMs:
+        this.lastOutputAtMs === null ? null : Math.round(performance.now() - this.lastOutputAtMs),
+      ...details,
+    });
+  }
+
+  /**
+   * Mark against whichever visible mount currently owns this pty.
+   *
+   * The canonical wait is reachable from a parser callback as well as from the
+   * ACK loop, so it has no lease of its own to check. Attributing its waits to
+   * the current visible mount is still correct — an off-screen preparation has
+   * no `debugVisibleMount` and is therefore silently skipped, which is what we
+   * want: the profiler measures what the user is waiting to see.
+   */
+  private markCurrentVisibleFrameStage(
+    stage: TaskOpenFrameStage,
+    details?: TaskOpenFrameDetails
+  ): void {
+    const lease = this.debugVisibleMount?.lease;
+    if (lease === undefined) return;
+    this.markVisibleFrameStage(lease, stage, details);
   }
 
   private scheduleVisibleFrameAck(mountLease: number): void {

@@ -25,6 +25,18 @@ export type TaskOpenTrajectoryStep = {
   source: TaskOpenTrajectorySource;
   /** Milliseconds between the click and this mark. */
   atMs: number;
+  /**
+   * How many times the same wait was re-entered after the first mark.
+   *
+   * Only the first occurrence gets a step, otherwise a loop that retries every
+   * few hundred milliseconds would bury the rest of the timeline. But a wait
+   * entered once and a wait entered nine times are completely different
+   * diagnoses — the second means something kept invalidating the condition —
+   * and without a count the whole cycle reads as one silent interval.
+   */
+  repeats: number;
+  /** When the wait was last re-entered; equal to `atMs` when never repeated. */
+  lastAtMs: number;
   details: TaskOpenTrajectoryDetails;
 };
 
@@ -78,7 +90,7 @@ export function beginTaskOpenTrajectory(
     startedAtEpochMs,
     outcome: 'open',
     totalMs: null,
-    steps: [{ stage: 'click', source: 'renderer', atMs: 0, details: {} }],
+    steps: [{ stage: 'click', source: 'renderer', atMs: 0, repeats: 0, lastAtMs: 0, details: {} }],
   };
   trajectories = [started, ...trajectories].slice(0, MAX_TRAJECTORIES);
   publish();
@@ -98,15 +110,51 @@ export function recordTaskOpenTrajectoryStep(
 
   // Main and renderer marks interleave, and a main event can be delivered after
   // a later renderer mark. Order by elapsed time, not arrival.
+  const atMs = Math.max(0, step.atMs);
   const steps = [
     ...trajectory.steps,
     {
       stage: step.stage,
       source: step.source,
-      atMs: Math.max(0, step.atMs),
+      atMs,
+      repeats: 0,
+      lastAtMs: atMs,
       details: step.details ?? {},
     },
   ].sort((a, b) => a.atMs - b.atMs);
+
+  commit({ ...trajectory, steps });
+}
+
+/**
+ * Record that an already-marked wait was entered again.
+ *
+ * Matched on stage *and* reason so two different causes of the same wait keep
+ * separate counts — a fence that reset nine times and a revision that changed
+ * once are not the same finding even though both are `frame-canonical-wait`.
+ */
+export function bumpTaskOpenTrajectoryStepRepeat(
+  contextId: string,
+  stage: string,
+  reason: string | undefined,
+  atMs: number
+): void {
+  const trajectory = find(contextId);
+  if (!trajectory) return;
+
+  let matched = false;
+  const steps = trajectory.steps.map((step) => {
+    if (matched || step.stage !== stage) return step;
+    const stepReason = typeof step.details.reason === 'string' ? step.details.reason : undefined;
+    if (stepReason !== reason) return step;
+    matched = true;
+    return {
+      ...step,
+      repeats: step.repeats + 1,
+      lastAtMs: Math.max(step.lastAtMs, Math.max(0, atMs)),
+    };
+  });
+  if (!matched) return;
 
   commit({ ...trajectory, steps });
 }
