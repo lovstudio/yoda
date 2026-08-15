@@ -104,6 +104,10 @@ describe('MaasGlobalSelector', () => {
       expect.any(Object)
     );
 
+    // Toggling the switch deliberately keeps the menu open, and an open menu
+    // covers the page with its own backdrop, so anything behind it is only
+    // reachable after a dismissal — same as clicking outside in the app.
+    await userEvent.keyboard('{Escape}');
     const manage = host.querySelector<HTMLButtonElement>('[aria-label="maas.global.manage"]');
     await userEvent.click(manage!);
     expect(mocks.managePlatform).toHaveBeenCalledWith('custom:first');

@@ -971,11 +971,18 @@ describe('MaaS platform menu', () => {
     expect(host.querySelector('[data-maas-gateway-requirement]')).toBeNull();
 
     await userEvent.click(selector!);
-    const secondProfile = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
-    ).find((item) => item.textContent?.includes('Second Custom'));
-    const enableSwitch = secondProfile?.querySelector<HTMLElement>('[data-slot="switch"]');
-    await act(async () => enableSwitch?.click());
+    // Waiting for the switch instead of reading it straight away: a menu that
+    // has not finished opening yields `undefined`, and an optional click on
+    // `undefined` passes silently until the assertion below.
+    const enableSwitch = await vi.waitFor(() => {
+      const secondProfile = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+      ).find((item) => item.textContent?.includes('Second Custom'));
+      const found = secondProfile?.querySelector<HTMLElement>('[data-slot="switch"]');
+      if (!found) throw new Error('enable switch for the second Profile did not render');
+      return found;
+    });
+    await act(async () => enableSwitch.click());
     expect(mocks.setGlobalBinding).toHaveBeenCalledWith(
       { platformId: 'custom:second', enabled: true },
       expect.any(Object)
