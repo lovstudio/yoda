@@ -1,7 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { app } from 'electron';
-import type { ClaudeSessionPrompt, SessionTranscriptMessage } from '@shared/conversations';
+import type {
+  ClaudeSessionPrompt,
+  SessionCompaction,
+  SessionTranscriptMessage,
+} from '@shared/conversations';
 
 type StoredCohubTurn = {
   assistantText?: unknown;
@@ -18,6 +22,8 @@ type StoredCohubState = {
 export type CohubSessionContext = {
   messages: SessionTranscriptMessage[];
   prompts: ClaudeSessionPrompt[];
+  /** Cohub keeps whole turns, so its history has no compaction boundaries. */
+  compactions: SessionCompaction[];
 };
 
 export async function getCohubSessionContext(
@@ -33,7 +39,7 @@ export async function getCohubSessionContext(
     return null;
   }
 
-  if (!Array.isArray(state.turns)) return { prompts: [], messages: [] };
+  if (!Array.isArray(state.turns)) return { prompts: [], messages: [], compactions: [] };
   const prompts: ClaudeSessionPrompt[] = [];
   const messages: SessionTranscriptMessage[] = [];
   for (const candidate of state.turns) {
@@ -54,5 +60,5 @@ export async function getCohubSessionContext(
       });
     }
   }
-  return { prompts, messages };
+  return { prompts, messages, compactions: [] };
 }

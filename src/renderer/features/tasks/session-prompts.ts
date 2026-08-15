@@ -2,6 +2,7 @@ import { queryOptions } from '@tanstack/react-query';
 import type {
   ClaudeSessionPrompt,
   Conversation,
+  SessionCompaction,
   SessionTranscriptMessage,
 } from '@shared/conversations';
 import { rpc } from '@renderer/lib/ipc';
@@ -20,11 +21,14 @@ type VisibleRefreshOptions = {
 export type SessionConversationData = {
   prompts: ClaudeSessionPrompt[];
   messages: SessionTranscriptMessage[];
+  /** Where the runtime compacted context, so history can mark the boundaries. */
+  compactions: SessionCompaction[];
 };
 
 const EMPTY_SESSION_CONVERSATION: SessionConversationData = {
   prompts: [],
   messages: [],
+  compactions: [],
 };
 
 export function sessionConversationQueryKey(
@@ -136,6 +140,7 @@ export async function resolveSessionConversation(
       return {
         prompts: context?.prompts ?? [],
         messages: context?.messages ?? [],
+        compactions: context?.compactions ?? [],
       };
     }
 
@@ -149,6 +154,7 @@ export async function resolveSessionConversation(
       return {
         prompts: context?.prompts ?? [],
         messages: context?.messages ?? [],
+        compactions: context?.compactions ?? [],
       };
     }
 
@@ -157,6 +163,7 @@ export async function resolveSessionConversation(
       return {
         prompts: context?.prompts ?? [],
         messages: context?.messages ?? [],
+        compactions: context?.compactions ?? [],
       };
     }
   } catch {

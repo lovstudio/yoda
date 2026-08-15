@@ -53,6 +53,7 @@ describe('getCohubSessionContext', () => {
           phase: 'final',
         },
       ],
+      compactions: [],
     });
   });
 });

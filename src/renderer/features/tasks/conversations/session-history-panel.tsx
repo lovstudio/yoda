@@ -13,9 +13,13 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ClaudeSessionPrompt, Conversation } from '@shared/conversations';
+import type { ClaudeSessionPrompt, Conversation, SessionCompaction } from '@shared/conversations';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { displaySessionPromptText } from '@renderer/features/tasks/context-panel-prompt-display';
+import {
+  compactionsBeforePrompt,
+  trailingCompactions,
+} from '@renderer/features/tasks/session-compactions';
 import { useSessionPrompts } from '@renderer/features/tasks/session-info-panel';
 import { buildPromptPreviewItems } from '@renderer/features/tasks/session-prompts-preview';
 import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
@@ -36,6 +40,7 @@ import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
+import { SessionCompactionMarker } from './session-compaction-marker';
 import { SessionPromptRestoreButton } from './session-prompt-restore-button';
 import { countSessionPromptTreeNodes, SessionPromptTreeView } from './session-prompt-tree';
 import { reopenArchivedConversation } from './use-archived-conversations';
@@ -50,12 +55,14 @@ import { useSessionPromptTree } from './use-session-prompt-tree';
  */
 export const SessionPromptList = observer(function SessionPromptList({
   prompts,
+  compactions,
   onRestorePrompt,
   restoringPromptId,
   className,
   style,
 }: {
   prompts: ClaudeSessionPrompt[];
+  compactions?: SessionCompaction[];
   onRestorePrompt?: (prompt: ClaudeSessionPrompt, index: number) => void;
   restoringPromptId?: string | null;
   className?: string;
@@ -86,6 +93,12 @@ export const SessionPromptList = observer(function SessionPromptList({
           prompts={prompts}
           prompt={prompt}
           index={index + 1}
+          precedingCompactions={compactionsBeforePrompt(compactions, index + 1)}
+          trailingCompactions={
+            index === prompts.length - 1
+              ? trailingCompactions(compactions, prompts.length)
+              : undefined
+          }
           onRestore={onRestorePrompt}
           restoringPromptId={restoringPromptId}
         />
@@ -129,6 +142,7 @@ export const SessionHistoryPanel = observer(function SessionHistoryPanel({
   return (
     <SessionPromptList
       prompts={prompts.prompts}
+      compactions={prompts.compactions}
       onRestorePrompt={prompts.requestRestorePrompt}
       restoringPromptId={prompts.restoringPromptId}
       className="h-full"
@@ -313,6 +327,7 @@ export const DockedSessionHistory = observer(function DockedSessionHistory({
           prompts.hasPrompts ? (
             <DockedSessionPromptPreview
               prompts={prompts.prompts}
+              compactions={prompts.compactions}
               tailCount={rows}
               onOpenAll={prompts.openPromptsModal}
               onRestorePrompt={prompts.requestRestorePrompt}
@@ -390,12 +405,14 @@ export const DockedSessionHistory = observer(function DockedSessionHistory({
 
 function DockedSessionPromptPreview({
   prompts,
+  compactions,
   tailCount,
   onOpenAll,
   onRestorePrompt,
   restoringPromptId,
 }: {
   prompts: ClaudeSessionPrompt[];
+  compactions: SessionCompaction[];
   tailCount: number;
   onOpenAll: () => void;
   onRestorePrompt: (prompt: ClaudeSessionPrompt, index: number) => void;
@@ -428,6 +445,12 @@ function DockedSessionPromptPreview({
             prompts={prompts}
             prompt={item.prompt}
             index={item.promptIndex}
+            precedingCompactions={compactionsBeforePrompt(compactions, item.promptIndex)}
+            trailingCompactions={
+              item.promptIndex === prompts.length
+                ? trailingCompactions(compactions, prompts.length)
+                : undefined
+            }
             onRestore={onRestorePrompt}
             restoringPromptId={restoringPromptId}
           />
@@ -441,6 +464,8 @@ function SessionPromptRow({
   prompts,
   prompt,
   index,
+  precedingCompactions,
+  trailingCompactions: trailing,
   onClick,
   onRestore,
   restoringPromptId,
@@ -448,6 +473,10 @@ function SessionPromptRow({
   prompts: ClaudeSessionPrompt[];
   prompt: ClaudeSessionPrompt;
   index: number;
+  /** Compactions the runtime performed just before this prompt. */
+  precedingCompactions?: SessionCompaction[];
+  /** Compactions after the newest prompt; only the last row renders these. */
+  trailingCompactions?: SessionCompaction[];
   onClick?: () => void;
   onRestore?: (prompt: ClaudeSessionPrompt, index: number) => void;
   restoringPromptId?: string | null;
@@ -757,7 +786,9 @@ function SessionPromptRow({
   );
 
   return (
-    <div className="group flex h-6 w-full min-w-0 items-center gap-1 px-3 transition-colors hover:bg-background-1 focus-within:bg-background-1">
+    <div className="group relative flex h-6 w-full min-w-0 items-center gap-1 px-3 transition-colors hover:bg-background-1 focus-within:bg-background-1">
+      <SessionCompactionMarker compactions={precedingCompactions ?? []} />
+      <SessionCompactionMarker compactions={trailing ?? []} placement="bottom" />
       {handleClick ? (
         <button
           type="button"

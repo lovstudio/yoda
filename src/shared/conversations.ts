@@ -324,6 +324,8 @@ export type ClaudeSessionContext = {
   skillsListing: string | null;
   prompts: ClaudeSessionPrompt[];
   messages: SessionTranscriptMessage[];
+  /** Compaction boundaries the runtime recorded, oldest first. */
+  compactions: SessionCompaction[];
   /** Latest compaction summary the runtime wrote into the transcript, if any. */
   summary: SessionSummary | null;
 };
@@ -336,6 +338,25 @@ export type ClaudeSessionContext = {
 export type SessionSummary = {
   text: string;
   timestamp: string | null;
+};
+
+/**
+ * One context compaction the runtime performed mid-session.
+ *
+ * `afterPromptIndex` counts the user prompts that precede the boundary, so `0`
+ * is a compaction before the first prompt and `prompts.length` is a trailing
+ * one the next prompt has not followed yet. Keeping the position outside
+ * `ClaudeSessionPrompt[]` leaves prompt indices untouched, which the branch
+ * tree keys on.
+ */
+export type SessionCompaction = {
+  afterPromptIndex: number;
+  timestamp: string | null;
+  /** Runtime-reported cause, for example Claude Code's `auto` or `manual`. */
+  trigger: string | null;
+  /** Context size before/after the compaction when the runtime reports it. */
+  preTokens: number | null;
+  postTokens: number | null;
 };
 
 export type SessionTranscriptMessage = {
@@ -482,6 +503,8 @@ export type CodexSessionContext = {
   skillsListing: string | null;
   prompts: ClaudeSessionPrompt[];
   messages: SessionTranscriptMessage[];
+  /** Compaction boundaries the runtime recorded, oldest first. */
+  compactions: SessionCompaction[];
   turnContexts: CodexTurnContext[];
   completedTurnCount: number;
   /** Latest compaction summary the runtime wrote into the rollout, if any. */

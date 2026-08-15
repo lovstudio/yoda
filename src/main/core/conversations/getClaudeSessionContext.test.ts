@@ -148,6 +148,66 @@ describe('getClaudeSessionContext restore checkpoints', () => {
     ]);
   });
 
+  it('keeps prompts from before a compaction and reports the boundary', async () => {
+    writeFileSync(
+      mocks.transcriptPath,
+      [
+        row('user', 'prompt-1', null, { role: 'user', content: 'Prompt before compaction' }),
+        row('assistant', 'answer-1', 'prompt-1', {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Answer before compaction' }],
+        }),
+        doneRow('done-1', 'answer-1'),
+        // Claude links a compaction boundary through logicalParentUuid only, so a
+        // parentUuid-only walk stops here and hides everything above.
+        {
+          type: 'system',
+          subtype: 'compact_boundary',
+          uuid: 'boundary-1',
+          parentUuid: null,
+          logicalParentUuid: 'done-1',
+          isSidechain: false,
+          compactMetadata: { trigger: 'auto', preTokens: 166911, postTokens: 13638 },
+        },
+        {
+          ...row('user', 'summary-1', 'boundary-1', {
+            role: 'user',
+            content: 'This session is being continued from a previous conversation…',
+          }),
+          isCompactSummary: true,
+        },
+        row('user', 'prompt-2', 'summary-1', { role: 'user', content: 'Prompt after compaction' }),
+        row('assistant', 'answer-2', 'prompt-2', {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Answer after compaction' }],
+        }),
+        doneRow('done-2', 'answer-2'),
+      ]
+        .map((value) => JSON.stringify(value))
+        .join('\n'),
+      'utf8'
+    );
+
+    const context = await getClaudeSessionContext('/repo', 'session-1', {
+      claudeConfigDir: directory,
+    });
+
+    expect(context?.prompts.map((prompt) => [prompt.id, prompt.restoreTarget])).toEqual([
+      ['prompt-1', { kind: 'claude-message', messageId: 'done-1' }],
+      ['prompt-2', { kind: 'claude-message', messageId: 'done-2' }],
+    ]);
+    expect(context?.compactions).toEqual([
+      {
+        afterPromptIndex: 1,
+        timestamp: null,
+        trigger: 'auto',
+        preTokens: 166911,
+        postTokens: 13638,
+      },
+    ]);
+    expect(context?.summary?.text).toContain('continued from a previous conversation');
+  });
+
   it('classifies Claude text before tools as commentary and end-turn text as final', async () => {
     writeFileSync(
       mocks.transcriptPath,

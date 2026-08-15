@@ -4,6 +4,7 @@ import type {
   AgentMemory,
   ClaudeSessionContext,
   ClaudeSessionPrompt,
+  SessionCompaction,
   SessionSummary,
   SessionTranscriptMessage,
 } from '@shared/conversations';
@@ -25,6 +26,7 @@ import { scanClaudeSkills } from './scanClaudeSkills';
 export type ClaudeSessionConversation = {
   prompts: ClaudeSessionPrompt[];
   messages: SessionTranscriptMessage[];
+  compactions: SessionCompaction[];
 };
 
 type ParsedClaudeTranscript = ClaudeSessionConversation & {
@@ -58,7 +60,7 @@ export async function getClaudeSessionContext(
   }
 
   const parsedTranscript = parseClaudeTranscript(raw, true);
-  const { tools, mcpServers, prompts, messages, summary } = parsedTranscript;
+  const { tools, mcpServers, prompts, messages, compactions, summary } = parsedTranscript;
   const [memoryFiles, memories, skills, scannedAgents] = await Promise.all([
     getInstructionFiles(cwd),
     loadMemories(cwd, claudeConfigDir),
@@ -77,6 +79,7 @@ export async function getClaudeSessionContext(
     skillsListing: formatSkillListing(skills),
     prompts,
     messages,
+    compactions,
     summary,
   };
 }
@@ -101,8 +104,8 @@ export async function getClaudeSessionConversation(
     return null;
   }
 
-  const { prompts, messages } = parseClaudeTranscript(raw, false);
-  return { prompts, messages };
+  const { prompts, messages, compactions } = parseClaudeTranscript(raw, false);
+  return { prompts, messages, compactions };
 }
 
 function parseClaudeTranscript(raw: string, collectHarness: boolean): ParsedClaudeTranscript {
@@ -111,6 +114,7 @@ function parseClaudeTranscript(raw: string, collectHarness: boolean): ParsedClau
   const mcpServers = new Map<string, string>();
   const prompts: ClaudeSessionPrompt[] = [];
   const messages: SessionTranscriptMessage[] = [];
+  const compactions: SessionCompaction[] = [];
   const completedTurnTargets = getClaudeCompletedTurnTargets(raw);
   const currentBranchMessageIds = getClaudeCurrentBranchMessageIds(raw);
   // Keep only the latest compaction summary — later compactions supersede earlier ones.
@@ -126,6 +130,14 @@ function parseClaudeTranscript(raw: string, collectHarness: boolean): ParsedClau
 
     if (parsed.type === 'attachment') {
       if (collectHarness) collectAttachment(parsed.attachment, { tools, agents, mcpServers });
+      continue;
+    }
+
+    if (parsed.type === 'system') {
+      // The boundary row carries the compaction's position: every prompt seen
+      // so far precedes it.
+      const compaction = extractCompaction(parsed, prompts.length);
+      if (compaction) compactions.push(compaction);
       continue;
     }
 
@@ -155,7 +167,7 @@ function parseClaudeTranscript(raw: string, collectHarness: boolean): ParsedClau
       if (message) messages.push(message);
     }
   }
-  return { tools, mcpServers, prompts, messages, summary };
+  return { tools, mcpServers, prompts, messages, compactions, summary };
 }
 
 /** Prompt-only transcript reader for progressive project-history surfaces. */
@@ -187,6 +199,29 @@ export async function getClaudeSessionPrompts(
     if (prompt) prompts.push(prompt);
   }
   return prompts;
+}
+
+/**
+ * Claude Code marks each compaction with a `system/compact_boundary` row whose
+ * `compactMetadata` reports the trigger and the context size on both sides.
+ * The row itself is not conversation content — we keep only its position so
+ * history surfaces can show where the runtime dropped context.
+ */
+function extractCompaction(
+  row: Record<string, unknown>,
+  afterPromptIndex: number
+): SessionCompaction | null {
+  if (row.subtype !== 'compact_boundary') return null;
+  const metadata = row.compactMetadata;
+  const fields =
+    metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>) : {};
+  return {
+    afterPromptIndex,
+    timestamp: typeof row.timestamp === 'string' ? row.timestamp : null,
+    trigger: typeof fields.trigger === 'string' ? fields.trigger : null,
+    preTokens: typeof fields.preTokens === 'number' ? fields.preTokens : null,
+    postTokens: typeof fields.postTokens === 'number' ? fields.postTokens : null,
+  };
 }
 
 /**

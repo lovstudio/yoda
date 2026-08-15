@@ -46,6 +46,19 @@ export type DeleteClaudeTranscriptParams = {
   targetPath?: string;
 };
 
+/**
+ * How far back a lineage walk reaches.
+ *
+ * - `native`: follow `parentUuid` only. This is the context Claude Code itself
+ *   replays, so forked transcripts must use it — a compaction exists precisely
+ *   to drop the rows before it.
+ * - `logical`: fall back to `logicalParentUuid` when `parentUuid` is empty.
+ *   Claude writes a `system/compact_boundary` row with a null `parentUuid` and
+ *   a `logicalParentUuid` pointing at the pre-compaction tail, so only this
+ *   mode sees the turns a compaction dropped. History surfaces use it.
+ */
+type LineageMode = 'native' | 'logical';
+
 const TRANSCRIPT_TYPES = new Set(['user', 'assistant', 'attachment', 'system', 'progress']);
 const WRITABLE_TRANSCRIPT_TYPES = new Set(['user', 'assistant', 'attachment', 'system']);
 const SOURCE_STATE_FIELDS = ['teamName', 'agentName', 'slug', 'sourceToolAssistantUUID'] as const;
@@ -58,7 +71,8 @@ const SOURCE_STATE_FIELDS = ['teamName', 'agentName', 'slug', 'sourceToolAssista
  */
 export function getClaudeCompletedTurnTargets(raw: string): Map<string, string> {
   const rows = selectClaudeCurrentBranchRows(
-    parseForkTranscript(raw, null).transcript.filter((row) => !row.isSidechain)
+    parseForkTranscript(raw, null).transcript.filter((row) => !row.isSidechain),
+    'logical'
   );
   const promptIndexes = rows.flatMap((row, index) =>
     isClaudeRealUserPromptRow(row) ? [index] : []
@@ -95,7 +109,8 @@ export function getClaudeCompletedTurnTargets(raw: string): Map<string, string> 
 export function getClaudeCurrentBranchMessageIds(raw: string): ReadonlySet<string> {
   return new Set(
     selectClaudeCurrentBranchRows(
-      parseForkTranscript(raw, null).transcript.filter((row) => !row.isSidechain)
+      parseForkTranscript(raw, null).transcript.filter((row) => !row.isSidechain),
+      'logical'
     ).flatMap((row) => {
       const id = stringValue(row.uuid);
       return id ? [id] : [];
@@ -364,7 +379,10 @@ function indexRowsByUuid(rows: ClaudeTranscriptRow[]): Map<string, ClaudeTranscr
   return byUuid;
 }
 
-function selectClaudeCurrentBranchRows(rows: ClaudeTranscriptRow[]): ClaudeTranscriptRow[] {
+function selectClaudeCurrentBranchRows(
+  rows: ClaudeTranscriptRow[],
+  mode: LineageMode = 'native'
+): ClaudeTranscriptRow[] {
   const latestPrompt = findLastRow(rows, isClaudeRealUserPromptRow);
   const latestPromptId = stringValue(latestPrompt?.uuid);
   if (!latestPromptId) return rows;
@@ -375,12 +393,13 @@ function selectClaudeCurrentBranchRows(rows: ClaudeTranscriptRow[]): ClaudeTrans
     return rowId === latestPromptId || isDescendantOf(row, latestPromptId, rowsByUuid);
   });
   const leafId = stringValue(leaf?.uuid) ?? latestPromptId;
-  return selectClaudeBranchThroughTarget(rows, leafId);
+  return selectClaudeBranchThroughTarget(rows, leafId, mode);
 }
 
 function selectClaudeBranchThroughTarget(
   rows: ClaudeTranscriptRow[],
-  targetMessageId: string
+  targetMessageId: string,
+  mode: LineageMode = 'native'
 ): ClaudeTranscriptRow[] {
   const rowsByUuid = indexRowsByUuid(rows);
   const branchIds = new Set<string>();
@@ -390,13 +409,19 @@ function selectClaudeBranchThroughTarget(
     const row = rowsByUuid.get(cursor);
     if (!row) break;
     branchIds.add(cursor);
-    cursor = stringValue(row.parentUuid);
+    cursor = lineageParent(row, mode);
   }
 
   return rows.filter((row) => {
     const id = stringValue(row.uuid);
     return id !== null && branchIds.has(id);
   });
+}
+
+function lineageParent(row: ClaudeTranscriptRow, mode: LineageMode): string | null {
+  const parentUuid = stringValue(row.parentUuid);
+  if (parentUuid || mode === 'native') return parentUuid;
+  return stringValue(row.logicalParentUuid);
 }
 
 function findLastRow(

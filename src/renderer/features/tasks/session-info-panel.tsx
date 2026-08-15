@@ -16,6 +16,7 @@ import type {
   ClaudeSessionPrompt,
   Conversation,
   ConversationNamingSnapshot,
+  SessionCompaction,
   SessionSummary,
   SessionSummaryResult,
   SessionSummaryScope,
@@ -442,6 +443,7 @@ export const SessionInfoPanel = observer(function SessionInfoPanel({
 export function useSessionPrompts(active: boolean): {
   prompts: ClaudeSessionPrompt[];
   messages: SessionTranscriptMessage[];
+  compactions: SessionCompaction[];
   isLoading: boolean;
   hasPrompts: boolean;
   hasConversation: boolean;
@@ -506,6 +508,7 @@ export function useSessionPrompts(active: boolean): {
   return {
     prompts: conversationData?.prompts ?? [],
     messages: conversationData?.messages ?? [],
+    compactions: conversationData?.compactions ?? [],
     isLoading: conversationQuery.isFetching && conversationData === undefined,
     hasPrompts: (conversationData?.prompts.length ?? 0) > 0,
     hasConversation: Boolean(conversation),

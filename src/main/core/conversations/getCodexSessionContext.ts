@@ -7,6 +7,7 @@ import type {
   CodexDynamicTool,
   CodexSessionContext,
   CodexTurnContext,
+  SessionCompaction,
   SessionSummary,
   SessionTranscriptMessage,
 } from '@shared/conversations';
@@ -43,6 +44,7 @@ type ParsedCodexRollout = {
   baseInstructions: string | null;
   developerMessages: ClaudeSessionPrompt[];
   prompts: ClaudeSessionPrompt[];
+  compactions: SessionCompaction[];
   messages: SessionTranscriptMessage[];
   turnContexts: CodexTurnContext[];
   dynamicTools: CodexDynamicTool[];
@@ -55,6 +57,7 @@ type ParsedCodexRollout = {
 export type CodexSessionConversation = {
   prompts: ClaudeSessionPrompt[];
   messages: SessionTranscriptMessage[];
+  compactions: SessionCompaction[];
 };
 
 export type CodexSessionRuntimeMetadata = {
@@ -84,6 +87,17 @@ type CodexPromptCandidate = {
   turnId: string | null;
   order: number;
   source: 'event' | 'response';
+};
+
+/**
+ * A compaction boundary pinned to the `promptOrder` counter rather than to an
+ * array index. Prompts arrive through two rollout channels that are only merged
+ * at the end, and a rollback can splice earlier prompts away, so the absolute
+ * order is the only stable anchor.
+ */
+type CodexCompactionAnchor = {
+  timestamp: string | null;
+  promptOrder: number;
 };
 
 /**
@@ -162,6 +176,7 @@ export async function getCodexSessionContext(
     skillsListing: formatSkillListing(skills),
     prompts: rollout.prompts,
     messages: rollout.messages,
+    compactions: rollout.compactions,
     turnContexts: rollout.turnContexts,
     completedTurnCount: rollout.completedTurnCount,
     summary: rollout.summary,
@@ -240,8 +255,12 @@ export async function getCodexSessionConversation(
     resolved.thread.firstUserMessage,
     'conversation'
   );
-  if (!rollout) return { prompts: [], messages: [] };
-  return { prompts: rollout.prompts, messages: rollout.messages };
+  if (!rollout) return { prompts: [], messages: [], compactions: [] };
+  return {
+    prompts: rollout.prompts,
+    messages: rollout.messages,
+    compactions: rollout.compactions,
+  };
 }
 
 /** Small runtime-bar payload resolved without loading the full Codex harness. */
@@ -863,6 +882,7 @@ function parseCodexRolloutLines(
   let sawRolloutUserPrompt = false;
   // Keep only the latest compaction summary — later compactions supersede earlier ones.
   let summary: SessionSummary | null = null;
+  const compactionAnchors: CodexCompactionAnchor[] = [];
 
   const markTurnRestorable = (turnId: string): void => {
     markLastPromptForTurn(eventPrompts, eventPromptTurnIds, turnId);
@@ -912,6 +932,11 @@ function parseCodexRolloutLines(
     const parsed = safeParse(line);
     if (!parsed) continue;
     const timestamp = nullableString(parsed.timestamp);
+
+    if (parsed.type === 'compacted') {
+      compactionAnchors.push({ timestamp, promptOrder });
+      continue;
+    }
 
     if (parsed.type === 'session_meta') {
       const payload = objectValue(parsed.payload);
@@ -1057,7 +1082,7 @@ function parseCodexRolloutLines(
     }
   }
 
-  const prompts = mergeCodexPromptSources(
+  const mergedCandidates = mergeCodexPromptSources(
     eventPrompts,
     eventPromptTurnIds,
     eventPromptOrders,
@@ -1069,11 +1094,13 @@ function parseCodexRolloutLines(
       ? [{ id: 'first-user-message', text: firstUserMessage, timestamp: null }]
       : []
   );
+  const prompts = mergedCandidates.map(({ prompt }) => prompt);
 
   return {
     baseInstructions,
     developerMessages: developerMessages.map((entry) => entry.value),
     prompts,
+    compactions: resolveCodexCompactions(compactionAnchors, mergedCandidates),
     messages:
       messages.length > 0
         ? messages.map((entry) => entry.value)
@@ -1103,7 +1130,7 @@ function mergeCodexPromptSources(
   responsePromptOrders: number[],
   staleResponsePrompts: ReadonlySet<ClaudeSessionPrompt>,
   fallbackPrompts: ClaudeSessionPrompt[]
-): ClaudeSessionPrompt[] {
+): CodexPromptCandidate[] {
   const candidates: CodexPromptCandidate[] = [
     ...eventPrompts.map((prompt, sourceIndex) => ({
       prompt,
@@ -1125,7 +1152,14 @@ function mergeCodexPromptSources(
     ),
   ];
 
-  if (candidates.length === 0) return fallbackPrompts;
+  if (candidates.length === 0) {
+    return fallbackPrompts.map((prompt, index) => ({
+      prompt,
+      turnId: null,
+      order: index,
+      source: 'event' as const,
+    }));
+  }
 
   candidates.sort((left, right) => left.order - right.order);
   const merged: CodexPromptCandidate[] = [];
@@ -1153,7 +1187,25 @@ function mergeCodexPromptSources(
     merged[duplicateIndex] = preferred;
   }
 
-  return merged.map(({ prompt }) => prompt);
+  return merged;
+}
+
+/**
+ * Resolves each boundary's position in the merged prompt list. An anchor sits
+ * after every prompt the rollout emitted before it, which survives both the
+ * two-channel merge and turn rollbacks.
+ */
+function resolveCodexCompactions(
+  anchors: readonly CodexCompactionAnchor[],
+  merged: readonly CodexPromptCandidate[]
+): SessionCompaction[] {
+  return anchors.map((anchor) => ({
+    afterPromptIndex: merged.filter((candidate) => candidate.order < anchor.promptOrder).length,
+    timestamp: anchor.timestamp,
+    trigger: null,
+    preTokens: null,
+    postTokens: null,
+  }));
 }
 
 function markLastPromptForTurn(
@@ -1341,6 +1393,7 @@ function emptyRollout(): ParsedCodexRollout {
     baseInstructions: null,
     developerMessages: [],
     prompts: [],
+    compactions: [],
     messages: [],
     turnContexts: [],
     dynamicTools: [],
