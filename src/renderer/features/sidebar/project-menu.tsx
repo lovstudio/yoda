@@ -431,13 +431,13 @@ function ProjectContextMenuItems({
 
 /**
  * The project menu nested one level down, for surfaces that belong to a project
- * without being one (a task row). Quick actions stay at the host menu's top
- * level — they are the project operations a user repeats — so they are dropped
- * here instead of appearing twice.
+ * without being one (a task row). Shares the item list verbatim: a surface that
+ * reaches the project offers exactly the project's own operations, quick
+ * actions included.
  */
 export function ProjectContextSubmenu({ actions }: { actions: ProjectMenuActions }) {
   const { t } = useTranslation();
-  const items = useMenuItems(actions).filter((item) => item.kind !== 'quick-actions');
+  const items = useMenuItems(actions);
   const scheduleMenuPrefetch = useProjectMenuPrefetchAfterPaint(() => {
     actions.onQuickActionsMenuOpen?.();
     actions.onMenuOpen?.();
@@ -556,7 +556,7 @@ function ProjectDropdownMenuItems({
 /** Dropdown twin of {@link ProjectContextSubmenu}. */
 export function ProjectDropdownSubmenu({ actions }: { actions: ProjectMenuActions }) {
   const { t } = useTranslation();
-  const items = useMenuItems(actions).filter((item) => item.kind !== 'quick-actions');
+  const items = useMenuItems(actions);
   const scheduleMenuPrefetch = useProjectMenuPrefetchAfterPaint(() => {
     actions.onQuickActionsMenuOpen?.();
     actions.onMenuOpen?.();

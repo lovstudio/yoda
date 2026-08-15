@@ -7,7 +7,6 @@ import {
 } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { QuickAction } from '@shared/project-settings';
 import type { TaskMenuActions } from '@renderer/features/tasks/components/task-context-menu';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -321,26 +320,12 @@ describe('TaskContextMenuItems grouping', () => {
   );
 
   it.each(['context', 'dropdown'] as const)(
-    'shows project-scoped quick actions in the shared task %s menu',
+    'leaves project-scoped quick actions to the nested project menu in the %s surface',
     async (surface) => {
       const { TaskActionsMenu, TaskContextMenu } = await import(
         '@renderer/features/tasks/components/task-context-menu'
       );
-      const quickAction: QuickAction = {
-        id: 'review-project',
-        label: 'Review project',
-        command: 'Review the current project changes.',
-        kind: 'skill',
-      };
-      const onRunQuickAction = vi.fn();
-      const onCaptureAutomation = vi.fn();
-      const onManageQuickActions = vi.fn();
-      const actions = taskMenuActions({
-        quickActions: [quickAction],
-        onRunQuickAction,
-        onCaptureAutomation,
-        onManageQuickActions,
-      });
+      const actions = taskMenuActions({ projectId: 'project-1' });
 
       await act(async () => {
         root.render(
@@ -356,13 +341,8 @@ describe('TaskContextMenuItems grouping', () => {
         );
       });
 
-      expect(host.textContent).toContain('sidebar.captureAutomation.menuLabel');
-      await act(async () => findButton(host, quickAction.label)?.click());
-      expect(onRunQuickAction).toHaveBeenCalledWith(quickAction);
-      await act(async () => findButton(host, 'sidebar.captureAutomation.createLabel')?.click());
-      expect(onCaptureAutomation).toHaveBeenCalledOnce();
-      await act(async () => findButton(host, 'projects.quickActions.manage')?.click());
-      expect(onManageQuickActions).toHaveBeenCalledOnce();
+      expect(host.textContent).not.toContain('sidebar.captureAutomation.menuLabel');
+      expect(host.textContent).toContain('tasks.context.projectMenu');
     }
   );
 });

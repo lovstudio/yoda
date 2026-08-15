@@ -358,4 +358,59 @@ describe('ProjectMenu quick actions submenu', () => {
       expect(onRunQuickAction).not.toHaveBeenCalled();
     }
   );
+
+  it.each([
+    ['context', 'context-menu-item'],
+    ['dropdown', 'dropdown-menu-item'],
+  ] as const)(
+    'offers the same operations nested one level down in the %s menu',
+    async (surface, itemSlot) => {
+      const {
+        ProjectActionsMenu,
+        ProjectContextMenu,
+        ProjectContextSubmenu,
+        ProjectDropdownSubmenu,
+      } = await import('@renderer/features/sidebar/project-menu');
+      const actions = {
+        ...requiredActions(),
+        quickActions: [savedAction],
+        onCreateTask: vi.fn(),
+        onCreateTaskAndRun: vi.fn(),
+        onOpenDetails: vi.fn(),
+        onRunQuickAction: vi.fn(),
+        onCaptureAutomation: vi.fn(),
+        onManageQuickActions: vi.fn(),
+      };
+      const itemLabels = () =>
+        Array.from(host.querySelectorAll<HTMLButtonElement>(`button[data-slot="${itemSlot}"]`)).map(
+          (item) => item.textContent
+        );
+
+      await act(async () => {
+        root.render(
+          surface === 'context'
+            ? createElement(ProjectContextMenu, {
+                ...actions,
+                children: createElement('div', null, 'Example project'),
+              })
+            : createElement(ProjectActionsMenu, {
+                ...actions,
+                trigger: createElement('button', null, 'More'),
+              })
+        );
+      });
+      const ownMenuLabels = itemLabels();
+      expect(ownMenuLabels.some((label) => label?.includes(savedAction.label))).toBe(true);
+
+      await act(async () => {
+        root.render(
+          createElement(surface === 'context' ? ProjectContextSubmenu : ProjectDropdownSubmenu, {
+            actions,
+          })
+        );
+      });
+
+      expect(itemLabels()).toEqual(ownMenuLabels);
+    }
+  );
 });

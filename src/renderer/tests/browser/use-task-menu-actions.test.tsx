@@ -38,9 +38,6 @@ vi.mock('@renderer/features/projects/stores/project-selectors', () => ({
   getProjectStore: () => undefined,
   getRepositoryStore: () => undefined,
 }));
-vi.mock('@renderer/features/projects/use-project-quick-actions', () => ({
-  useProjectQuickActions: () => ({}),
-}));
 vi.mock('@renderer/features/tasks/archive-task', () => ({
   useArchiveTask: () => ({ archiveTask: mocks.archiveTask }),
 }));
