@@ -2441,7 +2441,8 @@
       "removeFromHistory": "从历史中移除",
       "openExternal": "在系统浏览器中打开",
       "mute": "将此页面静音",
-      "unmute": "取消此页面静音"
+      "unmute": "取消此页面静音",
+      "loadFailed": "加载失败：{{description}}"
     },
     "sidePane": {
       "moveBack": "移回主区域",

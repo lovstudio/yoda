@@ -18,6 +18,7 @@ vi.mock('@renderer/lib/stores/app-state', () => ({
 
 vi.mock('@renderer/lib/clipboard', () => ({
   copyYodaLink: vi.fn(),
+  copyText: vi.fn(),
 }));
 
 vi.mock('@renderer/features/tasks/components/task-context-menu', () => ({

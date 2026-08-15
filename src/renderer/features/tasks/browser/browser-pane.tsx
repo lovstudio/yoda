@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   ArrowRight,
+  Copy,
   ExternalLink,
   Globe,
   Plus,
@@ -13,8 +14,12 @@ import { observer } from 'mobx-react-lite';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TaskBrowserStore } from '@renderer/features/tasks/browser/browser-store';
+import { copyText } from '@renderer/lib/clipboard';
 import { rpc } from '@renderer/lib/ipc';
 import { cn } from '@renderer/utils/utils';
+
+/** A main-frame load that failed, kept until the next navigation succeeds. */
+type LoadFailure = { url: string; code: number; description: string };
 
 /** Normalize address-bar input to a loadable URL (bare hosts get https://). */
 function normalizeAddress(input: string): string | null {
@@ -22,6 +27,32 @@ function normalizeAddress(input: string): string | null {
   if (!trimmed) return null;
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   return `https://${trimmed}`;
+}
+
+/**
+ * Load a URL into a mounted webview. Electron throws synchronously when the
+ * guest is not attached yet (the element mounted this very tick), so retry once
+ * the guest reports `dom-ready` instead of dropping the navigation.
+ */
+function loadInWebview(webview: ElectronWebviewElement, url: string): void {
+  const attempt = () => webview.loadURL(url);
+  try {
+    void attempt().catch(scheduleRetry);
+  } catch {
+    scheduleRetry();
+  }
+
+  function scheduleRetry() {
+    const retry = () => {
+      webview.removeEventListener('dom-ready', retry);
+      try {
+        void attempt().catch(() => undefined);
+      } catch {
+        // Guest went away between dom-ready and this call; nothing to load into.
+      }
+    };
+    webview.addEventListener('dom-ready', retry);
+  }
 }
 
 function hostOf(url: string): string {
@@ -80,32 +111,38 @@ export const BrowserPane = observer(function BrowserPane({
   const [draftAddress, setDraftAddress] = useState<string | null>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
+  const [failure, setFailure] = useState<LoadFailure | null>(null);
   /**
    * The `src` the webview mounts with — constant for the lifetime of the
    * mounted webview (a changing `src` prop would reload the page). Later
    * navigation goes through loadURL below.
    */
   const mountSrcRef = useRef<string | null>(null);
-  /** The URL the webview was last told to load (or reported via did-navigate). */
-  const loadedUrlRef = useRef<string | null>(null);
+  /**
+   * The last navigate request already handed to the webview. Keyed on the
+   * request id — never on the URL — so a repeat submit of the same address
+   * still reloads, and a load that failed can be retried by submitting again.
+   */
+  const handledNavigationRef = useRef(store.navigationId);
   const isEmpty = store.url === null;
   if (isEmpty) {
     mountSrcRef.current = null;
-    loadedUrlRef.current = null;
+    handledNavigationRef.current = store.navigationId;
   } else if (mountSrcRef.current === null) {
+    // Mounting with this URL as `src` is how the request gets served.
     mountSrcRef.current = store.url;
-    loadedUrlRef.current = store.url;
+    handledNavigationRef.current = store.navigationId;
   }
 
-  // External navigate requests (smart URL clicks, history items) while the
-  // webview is already mounted: load imperatively.
+  // External navigate requests (address bar, smart URL clicks, history items)
+  // while the webview is already mounted: load imperatively.
   useEffect(() => {
     const webview = webviewRef.current;
     if (!webview || store.url === null) return;
-    if (loadedUrlRef.current !== store.url) {
-      loadedUrlRef.current = store.url;
-      void webview.loadURL(store.url);
-    }
+    if (handledNavigationRef.current === store.navigationId) return;
+    handledNavigationRef.current = store.navigationId;
+    setFailure(null);
+    loadInWebview(webview, store.url);
     // navigationId is the signal; store.url is read at fire time.
   }, [store, store.navigationId, store.url]);
 
@@ -113,7 +150,7 @@ export const BrowserPane = observer(function BrowserPane({
     const webview = webviewRef.current;
     if (!webview) return;
     const handleNavigate = () => {
-      loadedUrlRef.current = webview.getURL();
+      setFailure(null);
       store.setLocation(webview.getURL());
       setCanGoBack(webview.canGoBack());
       setCanGoForward(webview.canGoForward());
@@ -122,13 +159,32 @@ export const BrowserPane = observer(function BrowserPane({
       const { title } = event as Event & { title?: string };
       if (title) store.setTitle(title);
     };
+    // A load that dies without this surface is invisible: the pane just keeps
+    // showing the old page. ERR_ABORTED (-3) is routine (a load superseded by
+    // the next one), so only real main-frame failures are reported.
+    const handleFail = (event: Event) => {
+      const { errorCode, errorDescription, validatedURL, isMainFrame } = event as Event & {
+        errorCode?: number;
+        errorDescription?: string;
+        validatedURL?: string;
+        isMainFrame?: boolean;
+      };
+      if (isMainFrame === false || errorCode === -3) return;
+      setFailure({
+        url: validatedURL ?? store.url ?? '',
+        code: errorCode ?? 0,
+        description: errorDescription ?? '',
+      });
+    };
     webview.addEventListener('did-navigate', handleNavigate);
     webview.addEventListener('did-navigate-in-page', handleNavigate);
     webview.addEventListener('page-title-updated', handleTitle);
+    webview.addEventListener('did-fail-load', handleFail);
     return () => {
       webview.removeEventListener('did-navigate', handleNavigate);
       webview.removeEventListener('did-navigate-in-page', handleNavigate);
       webview.removeEventListener('page-title-updated', handleTitle);
+      webview.removeEventListener('did-fail-load', handleFail);
     };
     // Re-attach when the webview (re)mounts after the empty state.
   }, [store, isEmpty]);
@@ -168,8 +224,12 @@ export const BrowserPane = observer(function BrowserPane({
     return () => webview.removeEventListener('dom-ready', apply);
   }, [effectiveMuted, isEmpty]);
 
+  /**
+   * Enter in the address bar is an explicit navigate request, even when the
+   * address is unchanged — that is how a browser reloads from the address bar.
+   */
   const submitAddress = () => {
-    const url = draftAddress === null ? null : normalizeAddress(draftAddress);
+    const url = normalizeAddress(draftAddress ?? store.url ?? '');
     setDraftAddress(null);
     if (url) store.navigate(url);
   };
@@ -245,6 +305,34 @@ export const BrowserPane = observer(function BrowserPane({
           <ExternalLink className="size-3.5" />
         </ToolbarButton>
       </div>
+      {failure && !isEmpty && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-border bg-background-2 px-2.5 py-1.5">
+          <span className="min-w-0 flex-1 truncate text-[11px] leading-4 text-foreground-muted">
+            {t('tasks.browser.loadFailed', {
+              description: failure.description || failure.code,
+            })}
+          </span>
+          <ToolbarButton
+            label={t('tasks.browser.reload')}
+            onClick={() => {
+              if (store.url) store.navigate(store.url);
+            }}
+          >
+            <RotateCw className="size-3.5" />
+          </ToolbarButton>
+          <ToolbarButton
+            label={t('common.copy')}
+            onClick={() => {
+              void copyText(`${failure.url}\n${failure.description} (${failure.code})`, t, {
+                success: t('common.copied'),
+                failure: t('tasks.browser.loadFailed', { description: failure.description }),
+              });
+            }}
+          >
+            <Copy className="size-3.5" />
+          </ToolbarButton>
+        </div>
+      )}
       {isEmpty ? (
         <BrowserHistoryList store={store} />
       ) : (

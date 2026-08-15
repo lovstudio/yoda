@@ -2441,7 +2441,8 @@
       "removeFromHistory": "Remove from history",
       "openExternal": "Open in system browser",
       "mute": "Mute this page",
-      "unmute": "Unmute this page"
+      "unmute": "Unmute this page",
+      "loadFailed": "Failed to load: {{description}}"
     },
     "sidePane": {
       "moveBack": "Move back to tab strip",
