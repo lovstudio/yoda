@@ -33,6 +33,18 @@ export const PTY_OUTPUT_BATCH_MAX_BYTES = 64 * 1024;
 export const PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES = 384 * 1024;
 export const PTY_FLOW_CONTROL_LOW_WATERMARK_BYTES = 96 * 1024;
 export const PTY_CONSUMER_LEASE_TIMEOUT_MS = 90_000;
+/**
+ * How long a consumer may hold the transport paused without acknowledging a
+ * single further batch before it loses its flow-control vote.
+ *
+ * A lease renewal proves the renderer's timer still runs; it proves nothing
+ * about its ability to drain output. A renderer that heartbeats but never
+ * advances its watermark used to keep `rendererBackpressured` true forever,
+ * which paused the backend permanently and froze the session with no recovery
+ * path. Well above one flush interval and one heartbeat's ACK jitter, far below
+ * the lease timeout.
+ */
+export const PTY_CONSUMER_ACK_STALL_TIMEOUT_MS = 10_000;
 /** Bound a generation reveal across route commit and the browser's painted-frame ACK. */
 export const PTY_GENERATION_REVEAL_CLAIM_TIMEOUT_MS = 6_000;
 /**
@@ -58,6 +70,10 @@ type ConsumerState = {
   generation: number;
   acknowledgedSequence: number;
   expiresAt: number;
+  /** Last time this consumer's watermark actually moved forward. */
+  ackProgressAt: number;
+  /** This consumer stalled while backpressuring and no longer throttles output. */
+  flowControlForgiven: boolean;
   ownerWebContentsId: number | null;
 };
 
@@ -86,6 +102,7 @@ type SessionState = {
   checkpointBackpressured: boolean;
   paused: boolean;
   resumeRetryTimer: ReturnType<typeof setTimeout> | null;
+  ackStallTimer: ReturnType<typeof setTimeout> | null;
   resumeRetryAttempt: number;
   pendingExit: { info: PtyExitInfo; preserveBuffer: boolean } | null;
   readonly onFinalExit: ((info: PtyExitInfo, generation: number) => void) | undefined;
@@ -121,6 +138,8 @@ export type PtySessionDiagnostics = {
   ringBufferCapBytes: number;
   consumerCount: number;
   pendingOutputBytes: number;
+  /** The backend is held paused by renderer or checkpoint backpressure. */
+  transportPaused?: boolean;
 };
 
 type PendingInput = {
@@ -472,6 +491,7 @@ export class PtySessionRegistry {
       checkpointBackpressured: false,
       paused: false,
       resumeRetryTimer: null,
+      ackStallTimer: null,
       resumeRetryAttempt: 0,
       pendingExit: null,
       onFinalExit: options?.onFinalExit,
@@ -486,6 +506,8 @@ export class PtySessionRegistry {
     for (const consumer of this.consumers.get(sessionId)?.values() ?? []) {
       consumer.generation = generation;
       consumer.acknowledgedSequence = 0;
+      consumer.ackProgressAt = Date.now();
+      consumer.flowControlForgiven = false;
     }
     // Invalidate an attached renderer's previous generation before the new
     // backend has produced its first visible byte. This sentinel carries no
@@ -542,6 +564,7 @@ export class PtySessionRegistry {
       // anything. Drain a consumed session's finite tail in fairness-bounded IPC
       // batches; a cold tail is already complete in the replay ring.
       this.clearResumeRetry(state);
+      this.clearAckStallWatchdog(state);
       state.rendererBackpressured = false;
       state.checkpointBackpressured = false;
       state.paused = false;
@@ -796,6 +819,7 @@ export class PtySessionRegistry {
       ringBufferCapBytes: this.ringBufferCapBytes,
       consumerCount,
       pendingOutputBytes: state ? state.pendingByteLength + state.inflightByteLength : 0,
+      transportPaused: state?.paused ?? false,
     };
   }
 
@@ -831,6 +855,8 @@ export class PtySessionRegistry {
       generation: currentGeneration,
       acknowledgedSequence: 0,
       expiresAt: Date.now() + PTY_CONSUMER_LEASE_TIMEOUT_MS,
+      ackProgressAt: Date.now(),
+      flowControlForgiven: false,
       ownerWebContentsId: options?.ownerWebContentsId ?? null,
     });
     this.consumers.set(sessionId, consumers);
@@ -973,12 +999,18 @@ export class PtySessionRegistry {
     if (!state || state.generation !== generation) return;
     const consumer = this.consumers.get(sessionId)?.get(consumerId);
     if (!consumer || consumer.generation !== generation) return;
+    const previousAcknowledgedSequence = consumer.acknowledgedSequence;
 
     consumer.acknowledgedSequence = Math.max(
       consumer.acknowledgedSequence,
       Math.min(sequence, state.sequence)
     );
-    consumer.expiresAt = Date.now() + PTY_CONSUMER_LEASE_TIMEOUT_MS;
+    const now = Date.now();
+    if (consumer.acknowledgedSequence > previousAcknowledgedSequence) {
+      consumer.ackProgressAt = now;
+      consumer.flowControlForgiven = false;
+    }
+    consumer.expiresAt = now + PTY_CONSUMER_LEASE_TIMEOUT_MS;
     this.pruneAcknowledgedBatches(sessionId, state);
     this.scheduleConsumerLeaseSweep();
   }
@@ -1016,10 +1048,18 @@ export class PtySessionRegistry {
             Math.min(acknowledgedSequence, state?.sequence ?? acknowledgedSequence)
           )
         : 0;
+    const advanced =
+      currentGeneration !== current.generation ||
+      nextAcknowledgedSequence > current.acknowledgedSequence;
+    const now = Date.now();
     consumers.set(consumerId, {
       generation: currentGeneration,
       acknowledgedSequence: nextAcknowledgedSequence,
-      expiresAt: Date.now() + PTY_CONSUMER_LEASE_TIMEOUT_MS,
+      expiresAt: now + PTY_CONSUMER_LEASE_TIMEOUT_MS,
+      // A renewal alone never counts as progress: that is exactly the state the
+      // ACK-stall watchdog exists to break.
+      ackProgressAt: advanced ? now : current.ackProgressAt,
+      flowControlForgiven: advanced ? false : current.flowControlForgiven,
       ownerWebContentsId: current.ownerWebContentsId,
     });
     if (state) this.pruneAcknowledgedBatches(sessionId, state);
@@ -1167,7 +1207,8 @@ export class PtySessionRegistry {
       if (!this.transferPendingOutputToCheckpoint(state)) this.discardPendingOutput(state);
       return false;
     }
-    const tracksConsumerBacklog = !state.pendingExit && hasCurrentConsumers;
+    const tracksConsumerBacklog =
+      !state.pendingExit && this.hasFlowControlConsumers(sessionId, state.generation);
     const remainingFlowControlBudget = tracksConsumerBacklog
       ? PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES - state.inflightByteLength
       : PTY_OUTPUT_BATCH_MAX_BYTES;
@@ -1300,6 +1341,7 @@ export class PtySessionRegistry {
     state.rendererBackpressured = false;
     state.checkpointBackpressured = false;
     state.paused = false;
+    this.clearAckStallWatchdog(state);
     while (state.pendingByteLength > 0 && this.flushOne(sessionId, state)) {
       // Drain the already-finite tail in fairness-bounded event payloads.
     }
@@ -1309,17 +1351,20 @@ export class PtySessionRegistry {
   private pruneAcknowledgedBatches(sessionId: string, state: SessionState): void {
     const consumers = this.consumers.get(sessionId);
     let slowestAcknowledgedSequence = Number.POSITIVE_INFINITY;
-    let currentConsumerCount = 0;
+    let votingConsumerCount = 0;
     for (const consumer of consumers?.values() ?? []) {
       if (consumer.generation !== state.generation) continue;
-      currentConsumerCount += 1;
+      // A forgiven consumer still receives every batch; it just no longer holds
+      // the backlog open, so its watermark cannot pin the transport paused.
+      if (consumer.flowControlForgiven) continue;
+      votingConsumerCount += 1;
       slowestAcknowledgedSequence = Math.min(
         slowestAcknowledgedSequence,
         consumer.acknowledgedSequence
       );
     }
 
-    if (currentConsumerCount === 0) {
+    if (votingConsumerCount === 0) {
       state.inflightBatches = [];
       state.inflightByteLength = 0;
     } else {
@@ -1348,6 +1393,14 @@ export class PtySessionRegistry {
     return false;
   }
 
+  /** Current consumers that still hold a flow-control vote. */
+  private hasFlowControlConsumers(sessionId: string, generation: number): boolean {
+    for (const consumer of this.consumers.get(sessionId)?.values() ?? []) {
+      if (consumer.generation === generation && !consumer.flowControlForgiven) return true;
+    }
+    return false;
+  }
+
   private setRendererBackpressured(
     sessionId: string,
     state: SessionState,
@@ -1356,6 +1409,92 @@ export class PtySessionRegistry {
     if (state.rendererBackpressured === backpressured) return;
     state.rendererBackpressured = backpressured;
     this.updateTransportPause(sessionId, state);
+    this.updateAckStallWatchdog(sessionId, state);
+  }
+
+  /**
+   * Watch for a consumer that holds the transport paused without draining it.
+   *
+   * Armed only while output is actually blocked (or while a previously forgiven
+   * consumer is still on probation), so a healthy or idle session pays nothing.
+   */
+  private updateAckStallWatchdog(sessionId: string, state: SessionState): void {
+    const needed =
+      state.live &&
+      (state.rendererBackpressured || this.hasForgivenConsumers(sessionId, state.generation));
+    if (!needed) {
+      this.clearAckStallWatchdog(state);
+      return;
+    }
+    if (state.ackStallTimer !== null) return;
+    state.ackStallTimer = setTimeout(() => {
+      state.ackStallTimer = null;
+      this.enforceAckProgress(sessionId, state);
+    }, PTY_CONSUMER_ACK_STALL_TIMEOUT_MS);
+    (
+      state.ackStallTimer as ReturnType<typeof setTimeout> & {
+        unref?: () => void;
+      }
+    ).unref?.();
+  }
+
+  private clearAckStallWatchdog(state: SessionState): void {
+    if (state.ackStallTimer === null) return;
+    clearTimeout(state.ackStallTimer);
+    state.ackStallTimer = null;
+  }
+
+  private hasForgivenConsumers(sessionId: string, generation: number): boolean {
+    for (const consumer of this.consumers.get(sessionId)?.values() ?? []) {
+      if (consumer.generation === generation && consumer.flowControlForgiven) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Two strikes against a consumer whose watermark has not moved.
+   *
+   * Strike one drops its flow-control vote, which resumes the backend without
+   * losing a byte: the consumer keeps receiving every batch. Strike two — still
+   * no progress a full window later — releases its registration, so the next
+   * heartbeat reports `known: false` and the renderer re-subscribes from a fresh
+   * snapshot instead of staring at a frozen frame forever.
+   */
+  private enforceAckProgress(sessionId: string, state: SessionState): void {
+    if (this.sessions.get(sessionId) !== state || !state.live) return;
+    const consumers = this.consumers.get(sessionId);
+    const now = Date.now();
+    const evicted: string[] = [];
+    let forgave = false;
+    for (const [consumerId, consumer] of consumers ?? []) {
+      if (consumer.generation !== state.generation) continue;
+      if (consumer.acknowledgedSequence >= state.sequence) continue;
+      if (now - consumer.ackProgressAt < PTY_CONSUMER_ACK_STALL_TIMEOUT_MS) continue;
+      if (!consumer.flowControlForgiven) {
+        consumer.flowControlForgiven = true;
+        forgave = true;
+        log.warn('PtySessionRegistry: consumer stalled while backpressuring; dropping its vote', {
+          sessionId,
+          consumerId,
+          acknowledgedSequence: consumer.acknowledgedSequence,
+          sequence: state.sequence,
+          inflightByteLength: state.inflightByteLength,
+        });
+        continue;
+      }
+      evicted.push(consumerId);
+    }
+    if (forgave) this.pruneAcknowledgedBatches(sessionId, state);
+    for (const consumerId of evicted) {
+      log.warn('PtySessionRegistry: releasing stalled consumer so the renderer can resynchronize', {
+        sessionId,
+        consumerId,
+        sequence: state.sequence,
+      });
+      this.unsubscribe(sessionId, consumerId);
+    }
+    if (this.sessions.get(sessionId) !== state) return;
+    this.updateAckStallWatchdog(sessionId, state);
   }
 
   private setCheckpointBackpressured(
@@ -1621,6 +1760,7 @@ export class PtySessionRegistry {
     state.pendingExit = null;
     state.rendererBackpressured = false;
     state.checkpointBackpressured = false;
+    this.clearAckStallWatchdog(state);
     this.updateTransportPause(sessionId, state);
     this.clearResumeRetry(state);
 

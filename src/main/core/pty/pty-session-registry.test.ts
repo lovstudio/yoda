@@ -5,8 +5,10 @@ import { getTerminalRingBufferCapBytes } from '@shared/terminal-settings';
 import type { Pty, PtyExitInfo } from './pty';
 import { PTY_CHECKPOINT_PARSER_HIGH_WATERMARK_BYTES } from './pty-render-checkpoint';
 import {
+  PTY_CONSUMER_ACK_STALL_TIMEOUT_MS,
   PTY_CONSUMER_LEASE_TIMEOUT_MS,
   PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES,
+  PTY_FLOW_CONTROL_LOW_WATERMARK_BYTES,
   PTY_GENERATION_REVEAL_CLAIM_TIMEOUT_MS,
   PTY_OUTPUT_BATCH_MAX_BYTES,
   PTY_PENDING_INPUT_MAX_CHUNKS,
@@ -1238,6 +1240,76 @@ describe('PtySessionRegistry', () => {
     expect(pty.resume).toHaveBeenCalledTimes(1);
   });
 
+  it('resumes the transport when a consumer heartbeats without acknowledging', () => {
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    registry.register('session', pty);
+    registry.subscribe('session', 'stalled-consumer');
+    pty.emitData('x'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES));
+    expect(pty.pause).toHaveBeenCalledTimes(1);
+
+    // A renewed lease proves the renderer's timer runs, not that it can drain
+    // output. Without an ACK-progress requirement this session stayed paused
+    // forever and the terminal froze.
+    vi.advanceTimersByTime(PTY_CONSUMER_ACK_STALL_TIMEOUT_MS - 1);
+    expect(registry.heartbeat('session', 'stalled-consumer', 1, 0)).toEqual({ known: true });
+    expect(pty.resume).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(pty.resume).toHaveBeenCalledTimes(1);
+
+    // The forgiven consumer keeps receiving output; it just no longer throttles.
+    pty.emitData('y');
+    vi.advanceTimersByTime(16);
+    const lastBatch = eventMocks.emit.mock.calls
+      .filter(([event]) => event === ptyDataChannel)
+      .map(([, payload]) => payload as { data: string })
+      .at(-1);
+    expect(lastBatch?.data).toBe('y');
+    expect(pty.pause).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases a consumer that stays stalled for a second window', () => {
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    registry.register('session', pty);
+    registry.subscribe('session', 'stalled-consumer');
+    pty.emitData('x'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES));
+
+    vi.advanceTimersByTime(PTY_CONSUMER_ACK_STALL_TIMEOUT_MS);
+    expect(registry.heartbeat('session', 'stalled-consumer', 1, 0)).toEqual({ known: true });
+    vi.advanceTimersByTime(PTY_CONSUMER_ACK_STALL_TIMEOUT_MS);
+
+    // `known: false` is the renderer's cue to resubscribe from a fresh snapshot
+    // instead of waiting on bytes it can no longer acknowledge.
+    expect(registry.heartbeat('session', 'stalled-consumer', 1, 0)).toEqual({ known: false });
+  });
+
+  it('keeps flow control for a consumer that acknowledges slowly', () => {
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    registry.register('session', pty);
+    registry.subscribe('session', 'slow-consumer');
+    pty.emitData('x'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES));
+    const lastSequence = PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES / PTY_OUTPUT_BATCH_MAX_BYTES;
+    const lowWatermarkBatches = Math.floor(
+      PTY_FLOW_CONTROL_LOW_WATERMARK_BYTES / PTY_OUTPUT_BATCH_MAX_BYTES
+    );
+    // Stay above the low watermark so the transport is still paused on merit.
+    const stillBackpressuredSequence = lastSequence - lowWatermarkBatches - 1;
+
+    for (let sequence = 1; sequence <= stillBackpressuredSequence; sequence += 1) {
+      vi.advanceTimersByTime(PTY_CONSUMER_ACK_STALL_TIMEOUT_MS - 1);
+      registry.acknowledge('session', 'slow-consumer', 1, sequence);
+    }
+    // Progress, however slow, keeps the backlog authoritative.
+    expect(pty.resume).not.toHaveBeenCalled();
+    expect(registry.getDiagnostics('session')?.transportPaused).toBe(true);
+
+    registry.acknowledge('session', 'slow-consumer', 1, lastSequence);
+    expect(pty.resume).toHaveBeenCalledTimes(1);
+    expect(registry.getDiagnostics('session')?.transportPaused).toBe(false);
+  });
+
   it('keeps retrying resume with capped backoff until it succeeds', () => {
     const registry = new PtySessionRegistry();
     const pty = new FakePty();
@@ -1304,7 +1376,6 @@ describe('PtySessionRegistry', () => {
     const pty = new FakePty();
     registry.register('session', pty);
     registry.subscribe('session', 'consumer');
-    pty.emitData('x'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES));
 
     vi.advanceTimersByTime(PTY_CONSUMER_LEASE_TIMEOUT_MS - 1);
     // The renewal is refused, but the registration exists — reporting it missing
@@ -1314,7 +1385,8 @@ describe('PtySessionRegistry', () => {
     });
     vi.advanceTimersByTime(1);
 
-    expect(pty.resume).toHaveBeenCalledTimes(1);
+    // The refused renewal left the original expiry in force.
+    expect(registry.heartbeat('session', 'consumer', 1, 0)).toEqual({ known: false });
   });
 
   it('honors a renewed lease after the originally scheduled sweep wakes early', () => {
@@ -1322,16 +1394,16 @@ describe('PtySessionRegistry', () => {
     const pty = new FakePty();
     registry.register('session', pty);
     registry.subscribe('session', 'live-consumer');
-    pty.emitData('x'.repeat(PTY_FLOW_CONTROL_HIGH_WATERMARK_BYTES));
-    expect(pty.pause).toHaveBeenCalledTimes(1);
 
     vi.advanceTimersByTime(PTY_CONSUMER_LEASE_TIMEOUT_MS - 10_000);
-    registry.heartbeat('session', 'live-consumer', 1, 0);
+    expect(registry.heartbeat('session', 'live-consumer', 1, 0)).toEqual({ known: true });
+    // The sweep scheduled for the original expiry must recompute the renewed
+    // lease instead of evicting a consumer that is still reporting in.
     vi.advanceTimersByTime(10_000);
-    expect(pty.resume).not.toHaveBeenCalled();
+    expect(registry.heartbeat('session', 'live-consumer', 1, 0)).toEqual({ known: true });
 
-    vi.advanceTimersByTime(PTY_CONSUMER_LEASE_TIMEOUT_MS - 10_000);
-    expect(pty.resume).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(PTY_CONSUMER_LEASE_TIMEOUT_MS);
+    expect(registry.heartbeat('session', 'live-consumer', 1, 0)).toEqual({ known: false });
   });
 
   it('clears a large cold IPC queue without broadcasting while preserving replay', () => {
