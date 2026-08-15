@@ -1,5 +1,6 @@
 import { makeAutoObservable, toJS } from 'mobx';
 import type { NavigationSnapshot } from '@shared/view-state';
+import { isPageIdentityChange } from '@renderer/app/route-identity';
 import { migratePersistedViewRoute } from '@renderer/app/route-migrations';
 import { type ViewId, type WrapParams } from '@renderer/app/view-registry';
 import { modalStore } from '@renderer/lib/modal/modal-store';
@@ -124,6 +125,17 @@ export class NavigationStore implements Snapshottable<NavigationSnapshot> {
     this.revision += 1;
     const current = (this.viewParamsStore[viewId] ?? {}) as WrapParams<TId>;
     const next = typeof update === 'function' ? update(current) : { ...current, ...update };
+    // An in-view param move that lands on another page is a navigation and gets
+    // its own back/forward step — otherwise Back skips every settings tab,
+    // library section, and app the user walked through and jumps straight out of
+    // the view. Presentation-only params update in place. Params of a view that
+    // is not the active route are not navigation at all.
+    if (viewId === this.currentViewId && isPageIdentityChange(viewId, current, next)) {
+      appState.history.pushNavigation(
+        this._historyEntry(viewId, current),
+        this._historyEntry(viewId, next)
+      );
+    }
     this.viewParamsStore = { ...this.viewParamsStore, [viewId]: next };
   }
 

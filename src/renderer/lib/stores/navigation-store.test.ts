@@ -88,6 +88,80 @@ describe('NavigationStore navigation side effects', () => {
   });
 });
 
+describe('NavigationStore in-view page history', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('records a settings tab move as its own back step', () => {
+    const store = new NavigationStore();
+    store.navigate('settings');
+    mocks.pushNavigation.mockClear();
+
+    store.updateViewParams('settings', { tab: 'account' });
+
+    expect(mocks.pushNavigation).toHaveBeenCalledWith(
+      { kind: 'view', viewId: 'settings', params: {} },
+      { kind: 'view', viewId: 'settings', params: { tab: 'account' } }
+    );
+  });
+
+  it('keeps a focus-only settings param out of history', () => {
+    const store = new NavigationStore();
+    store.navigate('settings', { tab: 'clis-models' });
+    mocks.pushNavigation.mockClear();
+
+    store.updateViewParams('settings', { runtimeId: 'claude' });
+
+    expect(mocks.pushNavigation).not.toHaveBeenCalled();
+    expect(store.viewParamsStore.settings).toEqual({ tab: 'clis-models', runtimeId: 'claude' });
+  });
+
+  it('records leaving a library app back to its section', () => {
+    const store = new NavigationStore();
+    store.navigate('library', { section: 'apps', appId: 'app-1' });
+    mocks.pushNavigation.mockClear();
+
+    store.updateViewParams('library', { appId: undefined });
+
+    expect(mocks.pushNavigation).toHaveBeenCalledWith(
+      { kind: 'view', viewId: 'library', params: { section: 'apps', appId: 'app-1' } },
+      { kind: 'view', viewId: 'library', params: { section: 'apps', appId: undefined } }
+    );
+  });
+
+  it('keeps a one-shot library open intent out of history', () => {
+    const store = new NavigationStore();
+    store.navigate('library', { section: 'prompts', createPrompt: true });
+    mocks.pushNavigation.mockClear();
+
+    store.updateViewParams('library', { createPrompt: undefined });
+
+    expect(mocks.pushNavigation).not.toHaveBeenCalled();
+  });
+
+  it('keeps a composer preselect out of history', () => {
+    const store = new NavigationStore();
+    store.navigate('home');
+    mocks.pushNavigation.mockClear();
+
+    store.updateViewParams('home', { projectId: 'project-1' });
+
+    expect(mocks.pushNavigation).not.toHaveBeenCalled();
+  });
+
+  it('ignores params written for a view that is not the active route', () => {
+    const store = new NavigationStore();
+    store.navigate('home');
+    mocks.pushNavigation.mockClear();
+
+    store.updateViewParams('settings', { tab: 'account' });
+
+    expect(mocks.pushNavigation).not.toHaveBeenCalled();
+    expect(store.viewParamsStore.settings).toEqual({ tab: 'account' });
+  });
+});
+
 describe('NavigationStore persisted route migration', () => {
   it('restores a Marketplace app route under Library', () => {
     const store = new NavigationStore();

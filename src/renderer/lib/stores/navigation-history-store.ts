@@ -20,7 +20,8 @@ function normalizeValue(value: unknown): unknown {
     }, {});
 }
 
-function paramsEqual(a: unknown, b: unknown): boolean {
+/** Order-insensitive deep equality for route params. */
+export function paramsEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(normalizeValue(a ?? {})) === JSON.stringify(normalizeValue(b ?? {}));
 }
 
