@@ -62,6 +62,8 @@ const LANE_BY_STAGE: Record<string, TaskOpenLaneId> = {
   'frame-snapshot-wait': 'frame',
   'frame-canonical-wait': 'frame',
   'frame-quiet-wait': 'frame',
+  'frame-resync': 'frame',
+  'frame-canonical-degraded': 'frame',
   // A resize is the UI's doing, not the frame loop's — filing it here would hide
   // "our own layout invalidated the frame we were waiting for" inside one lane.
   'frame-resize': 'ui',

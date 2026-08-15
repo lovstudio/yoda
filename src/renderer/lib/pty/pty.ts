@@ -94,6 +94,32 @@ const VISIBLE_FRAME_ACK_ATTEMPT_TIMEOUT_MS = 15_000;
  */
 const CANONICAL_FENCE_PARK_FLOOR_MS = 250;
 /**
+ * How long a canonical wait may go without output before suspecting divergence.
+ *
+ * The canonical fence assumes its own state is a faithful mirror of the
+ * backend's: once a generation-start sentinel arrives, the payload that
+ * completes that generation is expected to follow over the live stream. When it
+ * does not — main dropped the batch because its consumer set momentarily lost
+ * this generation, or the events never reached this window — the fence has
+ * nothing to wake it. It then parks on the whole remaining attempt deadline and
+ * the task simply never opens, which is exactly the failure this bound exists to
+ * end. Long enough that a slow-booting provider is never resynchronized for
+ * merely being slow; short enough that a diverged renderer repairs itself well
+ * inside one ACK attempt.
+ */
+const CANONICAL_STALL_RESYNC_MS = 2_500;
+/**
+ * How many times one mount may re-read the backend before giving up on
+ * canonical evidence.
+ *
+ * Each resync is an authoritative answer from main, so a third identical answer
+ * carries no new information: either the generation is genuinely empty, or the
+ * transport is broken in a way another subscribe cannot fix. Past this the loop
+ * drops the canonical requirement and reveals what it has, because a degraded
+ * frame the user can read and retype into beats a spinner forever.
+ */
+const MAX_CANONICAL_STALL_RESYNCS = 2;
+/**
  * Bound the subscribe round-trip generously. This is not a latency target: it
  * is the point at which we give up entirely, and giving up strands the caller
  * on its opening surface, because connect() rejections are intentionally
@@ -399,6 +425,16 @@ export class FrontendPty {
    */
   private canonicalQuietHoldGeneration: number | null = null;
   private canonicalQuietHoldSinceMs = 0;
+  /**
+   * How many times this session re-read main's buffer to escape a stalled
+   * canonical wait, and the in-flight repair if one is running.
+   *
+   * Counted per session rather than per mount: a diverged watermark survives
+   * remounts, so resetting the budget on every mount would let the same session
+   * resubscribe indefinitely.
+   */
+  private canonicalStallResyncCount = 0;
+  private canonicalStallResyncPromise: Promise<boolean> | null = null;
   private preparedCanonicalGeneration: number | null = null;
   private preparedCanonicalRevision: number | null = null;
   /** Whether the prepared revision bypassed silence under a live-runtime fence. */
@@ -2237,6 +2273,143 @@ export class FrontendPty {
     });
   }
 
+  /**
+   * Re-read main's authoritative buffer to escape a canonical wait that no
+   * incoming event can end.
+   *
+   * The frame fence is built on the assumption that this renderer's watermark
+   * mirrors the backend's: the generation-start sentinel promises a payload, and
+   * the payload arrives over the live stream. Both sides of that promise can be
+   * broken without either noticing. Main drops a pending batch whenever its
+   * consumer set momentarily holds no consumer at the current generation, and it
+   * has no way to learn that the renderer is still waiting for those bytes; the
+   * renderer, for its part, sets its watermark once at subscribe and has no way
+   * to learn that main moved past it. The result is a session that is alive,
+   * writing, and permanently invisible.
+   *
+   * Main always appends to its ring buffer, including bytes it declined to
+   * deliver, so a fresh subscribe is a complete answer rather than a guess. The
+   * new consumer is registered *before* the old one is released so the consumer
+   * set never dips empty mid-repair — otherwise the repair could trigger the
+   * very discard it exists to undo. The per-session event listener is not
+   * consumer-bound and is deliberately left in place; any batch replayed in the
+   * snapshot and also delivered live is dropped by the sequence watermark.
+   *
+   * Returns whether the read produced payload this generation had been missing.
+   */
+  private async resynchronizeStalledGeneration(mountLease: number): Promise<boolean> {
+    if (this.canonicalStallResyncPromise) return this.canonicalStallResyncPromise;
+    if (this.isDisposed || this.connectedConsumerId === null) return false;
+
+    const previousConsumerId = this.connectedConsumerId;
+    const consumerId = globalThis.crypto.randomUUID();
+    this.canonicalStallResyncCount += 1;
+    const attempt = (async () => {
+      let result: Awaited<ReturnType<typeof rpc.pty.subscribe>> | null = null;
+      try {
+        result = await rpc.pty.subscribe(this.sessionId, consumerId);
+      } catch (error) {
+        log.debug('[pty-renderer] canonical resync failed', {
+          sessionId: this.sessionId,
+          error: String(error),
+        });
+      }
+      if (this.isDisposed || this.connectedConsumerId !== previousConsumerId) {
+        if (result?.success) void rpc.pty.unsubscribe(this.sessionId, consumerId).catch(() => {});
+        return false;
+      }
+      if (!result?.success) {
+        this.markVisibleFrameStage(mountLease, 'frame-resync', {
+          reason: 'unavailable',
+          resyncCount: this.canonicalStallResyncCount,
+        });
+        return false;
+      }
+
+      // Own the session before releasing the previous lease, so a discard can
+      // never happen in the window between the two.
+      this.connectedConsumerId = consumerId;
+      void rpc.pty.unsubscribe(this.sessionId, previousConsumerId).catch(() => {});
+
+      const snapshot = result.data;
+      const knownSequence = this.lastOutputSequence;
+      const generationChanged = snapshot.generation !== this.outputGeneration;
+      if (generationChanged) {
+        this.invalidateVisibleFrame({ hide: true });
+        this.beginCanonicalGeneration(snapshot.generation);
+        this.expectedCanonicalGeneration = snapshot.generation;
+        this.resetBeforeNextLiveGeneration = snapshot.replayedFromHistory === true;
+        // The old generation's watermark cannot gate a different process's
+        // sequence numbers, which restart from zero.
+        this.lastOutputSequence = 0;
+        this.acknowledgedGeneration = snapshot.generation;
+        this.acknowledgedSequence = 0;
+      }
+
+      // Rewrite the scene only when this generation has nothing on screen. With
+      // payload already parsed the stall has some other cause, and replaying the
+      // buffer would append a second copy of what the user can already see.
+      const rewrite = Boolean(snapshot.buffer) && !this.canonicalGenerationHasPayload;
+      // Whether main's answer can explain the stall is the whole diagnostic
+      // value of this mark: a buffer carrying a sequence beyond the one this
+      // renderer knew means the batches were numbered and lost on the way here,
+      // while a buffer at a sequence already known means main discarded them
+      // before numbering.
+      this.markVisibleFrameStage(mountLease, 'frame-resync', {
+        reason: 'buffer-reread',
+        generation: snapshot.generation,
+        sequence: snapshot.sequence,
+        knownSequence,
+        bufferLength: snapshot.buffer.length,
+        rewrote: rewrite,
+        resyncCount: this.canonicalStallResyncCount,
+      });
+      log.debug('[pty-renderer] canonical resync snapshot', {
+        sessionId: this.sessionId,
+        generation: snapshot.generation,
+        sequence: snapshot.sequence,
+        knownGeneration: this.outputGeneration,
+        knownSequence,
+        snapshotCharacters: snapshot.buffer.length,
+        rewrote: rewrite,
+      });
+      // Leave the watermark alone when not rewriting. Main flushes its pending
+      // output during this very call, so that batch is both inside the buffer we
+      // are declining and in flight over the live stream; raising the watermark
+      // without writing the buffer would drop it and lose those bytes for good.
+      if (!rewrite) return false;
+
+      // The buffer contains every byte up to this watermark, including the batch
+      // main just flushed. Adopting it drops that batch's live event as the
+      // duplicate it now is.
+      this.lastOutputSequence = snapshot.sequence;
+      this.acknowledgedGeneration = snapshot.generation;
+      this.acknowledgedSequence = 0;
+      this.resetBeforeNextLiveGeneration = snapshot.replayedFromHistory === true;
+      this.noteOutputActivity();
+      const revision = this.outputRevision;
+      this.observeCanonicalPayload(snapshot.buffer, revision);
+      this.writeOrBuffer(
+        `${RESET_TERMINAL_SEQUENCE}${snapshot.buffer}`,
+        { generation: snapshot.generation, sequence: snapshot.sequence },
+        () => {
+          this.noteCanonicalParserDrained(snapshot.generation, revision);
+          if (this.isVisibleMountLease(this.mountGeneration)) {
+            this.scheduleVisibleFrameAck(this.mountGeneration);
+          }
+        }
+      );
+      return true;
+    })();
+
+    this.canonicalStallResyncPromise = attempt;
+    try {
+      return await attempt;
+    } finally {
+      if (this.canonicalStallResyncPromise === attempt) this.canonicalStallResyncPromise = null;
+    }
+  }
+
   private waitForTerminalRenderAfter(
     observedRevision: number,
     shouldContinue: () => boolean,
@@ -2902,14 +3075,51 @@ export class FrontendPty {
           synchronizedOutputOpen: this.synchronizedOutputOpen,
           outputGeneration: this.outputGeneration,
         });
+        // Park in bounded slices rather than on the whole attempt deadline. The
+        // wait is woken by live output, so parking until the deadline assumes
+        // the missing payload is merely late. When it was instead never
+        // delivered — main dropped the batch, or the events did not reach this
+        // window — nothing will ever wake this wait, and the task stays
+        // unopenable for the full attempt and every retry after it. Silence
+        // this long is the signal to stop trusting local state and go ask main.
+        const stallBudgetMs = Math.min(
+          CANONICAL_STALL_RESYNC_MS,
+          Math.max(0, deadline - performance.now())
+        );
         const activity = await this.waitForOutputActivityOrDelay(
           stableRevision,
-          Math.max(0, deadline - performance.now()),
+          stallBudgetMs,
           isCurrentMount,
           deadline
         );
         if (activity === 'activity') continue;
-        break;
+        if (activity === 'cancelled') break;
+        // Only a wait that spent the whole budget is evidence of a stall. An
+        // attempt expiring near its deadline must not spend the repair budget on
+        // a few milliseconds of silence.
+        if (stallBudgetMs < CANONICAL_STALL_RESYNC_MS) break;
+        if (this.canonicalStallResyncCount < MAX_CANONICAL_STALL_RESYNCS) {
+          await this.resynchronizeStalledGeneration(mountLease);
+          if (!isCurrentMount()) break;
+          continue;
+        }
+        // Main has been asked directly and still cannot complete this
+        // generation. Reveal what the terminal holds instead of holding the
+        // owner on its opening surface forever: an incomplete frame is legible
+        // and typeable, and live output keeps repainting it.
+        this.markVisibleFrameStage(mountLease, 'frame-canonical-degraded', {
+          outputGeneration: this.outputGeneration,
+          outputRevision: this.outputRevision,
+          resyncCount: this.canonicalStallResyncCount,
+          hadPayload: this.canonicalGenerationHasPayload,
+        });
+        this.expectedCanonicalGeneration = null;
+        this.canonicalOutputRequiredAfterRevision = null;
+        this.preparedCanonicalGeneration = null;
+        this.preparedCanonicalRevision = null;
+        this.preparedCanonicalAtomicLive = false;
+        this.synchronizedOutputOpen = false;
+        continue;
       }
 
       const renderRevision = this.terminalRenderRevision;

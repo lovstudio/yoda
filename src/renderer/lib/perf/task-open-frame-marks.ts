@@ -29,6 +29,22 @@ export type TaskOpenFrameStage =
    * resize landing mid-open is a self-inflicted restart of the wait, not noise.
    */
   | 'frame-resize'
+  /**
+   * The canonical wait went silent long enough to suspect that this renderer's
+   * watermark no longer matches the backend's, so main's buffer was re-read.
+   *
+   * The detail is the only thing that can tell the two divergence causes apart
+   * after the fact: a large buffer at a sequence the renderer already knew means
+   * main discarded the batches before numbering them, while a large buffer at a
+   * higher sequence means they were numbered and lost on the way here.
+   */
+  | 'frame-resync'
+  /**
+   * Canonical evidence was abandoned and an incomplete frame revealed, because
+   * re-reading the backend did not produce one either. Always a bug upstream —
+   * but a legible terminal beats an opening surface that never resolves.
+   */
+  | 'frame-canonical-degraded'
   | 'frame-painted'
   /** The bounded attempt gave up; the React owner keeps its loading surface. */
   | 'frame-unavailable';
