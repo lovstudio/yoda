@@ -388,6 +388,68 @@ describe('TaskManagerStore archive events', () => {
     expect(store.provisionedTask).toBeNull();
     manager.dispose();
   });
+
+  // Archiving is organizational, not a runtime state: an already-archived task
+  // provisions on demand. Vetoing this left the RPC succeeding while the store
+  // stayed unprovisioned, so opening reported "could not be provisioned".
+  it('publishes a provision for a task that was already archived', async () => {
+    const manager = createManager();
+    manager.taskLoadState = 'loaded';
+    const archived = makeTask('Task');
+    archived.archivedAt = '2026-08-14T10:00:00.000Z';
+    const transitionToProvisioned = vi.fn();
+    const activate = vi.fn();
+    manager.tasks.set('task-1', {
+      state: 'unprovisioned',
+      phase: 'idle',
+      data: archived,
+      transitionToProvisioned,
+      activate,
+      dispose: vi.fn(),
+    } as unknown as TaskStore);
+    mocks.mountProject.mockResolvedValue(undefined);
+    mocks.getActiveTasks.mockResolvedValue([]);
+    mocks.getConversationsForTask.mockResolvedValue([]);
+    mocks.viewStateGet.mockResolvedValue(undefined);
+    mocks.provisionTask.mockResolvedValue({ path: '/repo/task-1', workspaceId: 'workspace-1' });
+
+    await manager.provisionTask('task-1');
+
+    expect(mocks.provisionTask).toHaveBeenCalledWith('task-1');
+    expect(transitionToProvisioned).toHaveBeenCalledOnce();
+    expect(transitionToProvisioned).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'task-1', archivedAt: '2026-08-14T10:00:00.000Z' }),
+      '/repo/task-1',
+      'workspace-1',
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      undefined,
+      undefined
+    );
+    expect(activate).toHaveBeenCalledOnce();
+    manager.dispose();
+  });
+
+  it('keeps an open archived task when the archive listing is released', () => {
+    const manager = createManager();
+    const dispose = vi.fn();
+    const archived = makeTask('Task');
+    archived.archivedAt = '2026-08-14T10:00:00.000Z';
+    manager.tasks.set('task-1', {
+      state: 'provisioned',
+      data: archived,
+      provisionedTask: {},
+      dispose,
+    } as unknown as TaskStore);
+
+    manager.releaseSidebarArchivedTasks(['task-1']);
+    manager.unloadArchivedTasks();
+
+    expect(manager.tasks.has('task-1')).toBe(true);
+    expect(dispose).not.toHaveBeenCalled();
+    manager.dispose();
+  });
 });
 
 describe('TaskManagerStore restore and delete events', () => {

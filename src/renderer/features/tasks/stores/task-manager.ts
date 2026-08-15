@@ -691,6 +691,10 @@ export class TaskManagerStore {
     runInAction(() => {
       for (const [taskId, store] of this.tasks) {
         if (!isRegistered(store) || !store.data.archivedAt) continue;
+        // An archived task can be open: archiving is organizational, so it
+        // provisions like any other. Releasing the archive listing must not
+        // dispose the runtime under a task the user is working in.
+        if (isProvisioned(store)) continue;
         this.tasks.delete(taskId);
         removed.push(store);
       }
@@ -718,6 +722,8 @@ export class TaskManagerStore {
       for (const taskId of taskIds) {
         const store = this.tasks.get(taskId);
         if (!store || !isRegistered(store) || !store.data.archivedAt) continue;
+        // Keep an open archived task: see unloadArchivedTasks.
+        if (isProvisioned(store)) continue;
         this.tasks.delete(taskId);
         removed.push(store);
       }
@@ -1032,6 +1038,15 @@ export class TaskManagerStore {
       });
     }
 
+    // Archiving is organizational: an already-archived task provisions on
+    // demand. What must never be published is a provision that an archive
+    // overtook mid-flight — _markLoadedTaskArchived already tore that view
+    // down, so transitioning now would revive a disposed runtime. Compare
+    // against the state at entry instead of "is archived", which would also
+    // veto the ordinary open of a task that was archived all along.
+    const wasArchivedAtEntry = Boolean(task.data.archivedAt);
+    const archivedDuringProvision = () => !wasArchivedAtEntry && Boolean(task.data.archivedAt);
+
     const taskViewPreload = this._getTaskViewPreload(taskId);
     try {
       const [result, preload] = await Promise.all([
@@ -1040,7 +1055,7 @@ export class TaskManagerStore {
       ]);
       runInAction(() => {
         const current = this.tasks.get(taskId);
-        if (current === task && isUnprovisioned(current) && !current.data.archivedAt) {
+        if (current === task && isUnprovisioned(current) && !archivedDuringProvision()) {
           current.transitionToProvisioned(
             { ...current.data },
             result.path,
@@ -1057,7 +1072,7 @@ export class TaskManagerStore {
     } catch (err: unknown) {
       runInAction(() => {
         const current = this.tasks.get(taskId);
-        if (current === task && isUnprovisioned(current) && !current.data.archivedAt) {
+        if (current === task && isUnprovisioned(current) && !archivedDuringProvision()) {
           current.phase = 'provision-error';
           current.errorMessage = err instanceof Error ? err.message : String(err);
         }
