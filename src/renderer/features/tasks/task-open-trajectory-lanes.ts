@@ -51,6 +51,10 @@ const LANE_BY_STAGE: Record<string, TaskOpenLaneId> = {
   'verify-blocked': 'ui',
   'verify-armed': 'ui',
   'verify-retry': 'ui',
+  // Keyboard focus is the UI's own handoff after the frame is up, not part of
+  // producing it — filing it in the frame lane would read as the terminal still
+  // drawing.
+  'input-focus-wait': 'ui',
   // Renderer — the terminal's own frame-acknowledgement loop. Its waits are the
   // difference between "the backend delivered" and "the user can see it".
   'frame-mount': 'frame',

@@ -73,6 +73,19 @@ const VISIBLE_FRAME_SLOW_NOTICE_MS = 30_000;
  */
 const VISIBLE_FRAME_ACK_POLL_MS = 1_000;
 
+/**
+ * How long keyboard focus may keep chasing the freshly revealed terminal.
+ *
+ * React ref attachment, browser focus ownership and xterm's hidden textarea can
+ * settle on adjacent frames, so one attempt is not enough. A fixed attempt count
+ * was, though: a commit-heavy reveal stretches those frames far enough that the
+ * handoff was abandoned while still recoverable, leaving the user typing into
+ * nothing until an unrelated re-render happened to retry. Bound the chase in
+ * time instead — it costs empty animation frames and stops the moment focus
+ * lands.
+ */
+const CANONICAL_FOCUS_HANDOFF_BUDGET_MS = 1_500;
+
 type BoundedPromiseOutcome<T> =
   | { kind: 'resolved'; value: T }
   | { kind: 'rejected'; error: unknown }
@@ -320,7 +333,7 @@ export const ConversationSession = observer(function ConversationSession({
     let frameReportedReady = false;
     let dialogObserver: MutationObserver | null = null;
     let focusFrame: number | null = null;
-    let focusAttempts = 0;
+    let focusDeadlineMs = 0;
     let frameRetryRunning = false;
     let ensureFrameRetry = () => {};
     // Only time this window actually spent on screen counts toward the slow
@@ -348,11 +361,9 @@ export const ConversationSession = observer(function ConversationSession({
       });
     };
     const focusCanonicalTerminal = () => {
-      if (!active || !autoFocus || !focusPendingRef.current) {
-        if (active && !autoFocus) completeReadyTrace();
-        return;
-      }
+      if (!active || !autoFocus || !focusPendingRef.current) return;
       if (document.querySelector('[role="dialog"]')) {
+        markTaskOpenTrace(projectId, taskId, 'input-focus-wait', { reason: 'dialog-open' });
         dialogObserver ??= new MutationObserver(() => {
           if (document.querySelector('[role="dialog"]')) return;
           dialogObserver?.disconnect();
@@ -364,18 +375,20 @@ export const ConversationSession = observer(function ConversationSession({
       }
       terminalRef.current?.focus();
       focusPendingRef.current = sessionPty.terminal.textarea !== document.activeElement;
-      if (!focusPendingRef.current) {
-        completeReadyTrace();
+      if (!focusPendingRef.current) return;
+      markTaskOpenTrace(projectId, taskId, 'input-focus-wait', { reason: 'not-focused' });
+      if (performance.now() < focusDeadlineMs) {
+        focusFrame = requestAnimationFrame(focusCanonicalTerminal);
         return;
       }
-      // React ref attachment, browser focus ownership and xterm's hidden
-      // textarea can settle on adjacent frames even without a dialog. Retry a
-      // small bounded number of paints instead of permanently abandoning input
-      // focus after one unlucky frame.
-      if (focusAttempts < 8) {
-        focusAttempts += 1;
-        focusFrame = requestAnimationFrame(focusCanonicalTerminal);
-      }
+      // Giving up used to be silent, which is why an unfocused terminal read as a
+      // slow open rather than a lost handoff.
+      log.warn('[conversation-session] keyboard focus never reached the canonical terminal', {
+        projectId,
+        taskId,
+        conversationId: conversation.data.id,
+        sessionId,
+      });
     };
 
     setVisibleFrame({ pty: sessionPty, ready: false });
@@ -387,7 +400,13 @@ export const ConversationSession = observer(function ConversationSession({
         setVisibleFrame({ pty: sessionPty, ready: frameReady });
         if (frameReady) {
           setSlowFrameVerification(null);
+          focusDeadlineMs = performance.now() + CANONICAL_FOCUS_HANDOFF_BUDGET_MS;
           focusCanonicalTerminal();
+          // The open ends when the terminal is on screen. Completion used to hang
+          // off the focus handoff instead, so a focus attempt that lost its frame
+          // race charged its entire recovery to the open — and a handoff that
+          // never recovered left the trace open forever.
+          completeReadyTrace();
         } else {
           // A later backend generation starts a fresh verification attempt.
           // Do not retain either the previous generation's slow detail or its
@@ -398,7 +417,7 @@ export const ConversationSession = observer(function ConversationSession({
           setSlowFrameVerification(null);
           if (autoFocus) {
             focusPendingRef.current = true;
-            focusAttempts = 0;
+            focusDeadlineMs = 0;
           }
         }
       }
