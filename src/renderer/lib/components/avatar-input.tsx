@@ -123,14 +123,20 @@ export function AvatarInput({
           aria-label={uploadTitle}
           disabled={disabled || reading}
           onClick={() => setPickerOpen(true)}
-          className="group relative block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-60"
+          // Sized and rounded by the same class as the preview it wraps: a caller
+          // that scales this down to sit inline still gets a hover scrim the shape
+          // of the avatar rather than of the default tile.
+          className={cn(
+            'group relative block size-16 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-60',
+            previewClassName
+          )}
         >
           <AvatarValue
             name={name}
             value={value}
             className={cn('size-16 rounded-2xl text-xl', previewClassName)}
           />
-          <span className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/0 text-white transition-colors group-hover:bg-black/35 group-focus-visible:bg-black/35">
+          <span className="absolute inset-0 flex items-center justify-center rounded-[inherit] bg-black/0 text-white transition-colors group-hover:bg-black/35 group-focus-visible:bg-black/35">
             {reading ? (
               <Loader2 className="size-5 animate-spin" />
             ) : (

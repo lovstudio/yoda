@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, Pencil } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentTeam } from '@shared/agent-team';
@@ -18,7 +18,6 @@ import {
   DialogTrigger,
 } from '@renderer/lib/ui/dialog';
 import { Input } from '@renderer/lib/ui/input';
-import { Label } from '@renderer/lib/ui/label';
 import { cn } from '@renderer/utils/utils';
 import { ParadigmConfigurationPanel } from './configuration-panel';
 import {
@@ -28,8 +27,8 @@ import {
   paradigmEntryOwnName,
   type ParadigmEntry,
 } from './entries';
-import { ParadigmEntryRow } from './entry-row';
-import { ParadigmIcon } from './icons';
+import { ParadigmEntryCard } from './entry-card';
+import { ParadigmIcon, ParadigmMark } from './icons';
 import { paradigmSeatAgentId } from './seats';
 import { useParadigms } from './use-paradigms';
 
@@ -258,17 +257,21 @@ export function ParadigmSelector({
             role="tablist"
             aria-label={t('home.modeAria')}
             aria-orientation="vertical"
-            className="flex w-60 shrink-0 flex-col gap-px overflow-y-auto bg-background-1/50 p-1.5"
+            className="flex w-[16.5rem] shrink-0 flex-col gap-1.5 overflow-y-auto bg-background-2 p-2"
           >
             {entries.map((entry) => {
               const label = labelOf(entry);
               return (
-                <ParadigmEntryRow
+                <ParadigmEntryCard
                   key={entry.id}
                   entry={entry}
                   category={label.category}
                   name={label.name}
-                  active={entry.id === pendingId}
+                  // Highlights the entry the right pane is actually showing, not
+                  // the raw pending id: that id can be unset or point at an
+                  // instance that is gone, and then no card looked chosen while
+                  // the pane beside it was configuring one.
+                  active={entry.id === pending?.id}
                   onSelect={() => setPendingId(entry.id)}
                   onDuplicate={() => void handleDuplicate(entry.id)}
                   onEdit={() => startEditing(entry)}
@@ -277,35 +280,46 @@ export function ParadigmSelector({
               );
             })}
           </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
-            {pending && editingId === pending.id ? (
-              <div className="flex items-end gap-3 rounded-xl border border-border bg-muted/15 p-3">
-                <AvatarInput
-                  id="paradigm-avatar"
-                  name={editDraft.label || (pendingLabel?.category ?? '')}
-                  value={editDraft.icon}
-                  onChange={(icon) => {
-                    const next = { ...editDraft, icon };
-                    setEditDraft(next);
-                    // The picker closes on select, so there is no blur to ride and
-                    // no reason to make the user confirm a choice they just made.
-                    persistEditing(pending.id, next);
-                  }}
-                  inputLabel={t('home.paradigmAvatar')}
-                  placeholder={t('common.avatarPlaceholder')}
-                  uploadTitle={t('common.uploadPhoto')}
-                  clearTitle={t('common.clearAvatar')}
-                  onFileError={showAvatarFileError}
-                  appearance="profile"
-                />
-                <div className="min-w-0 flex-1 space-y-2">
-                  <Label htmlFor="paradigm-name" className="text-xs">
-                    {t('home.paradigmName')}
-                  </Label>
+          <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
+            {pending && pendingLabel && (
+              // One header, two states. Editing swaps the name for a field and the
+              // avatar for a picker in place, at the same footprint: an edit box of
+              // its own shifted everything under it and made renaming look like a
+              // different screen.
+              <div className="flex items-center gap-2.5">
+                {editingId === pending.id ? (
+                  <AvatarInput
+                    id="paradigm-avatar"
+                    name={editDraft.label || pendingLabel.category}
+                    value={editDraft.icon}
+                    onChange={(icon) => {
+                      const next = { ...editDraft, icon };
+                      setEditDraft(next);
+                      // The picker closes on select, so there is no blur to ride and
+                      // no reason to make the user confirm a choice they just made.
+                      persistEditing(pending.id, next);
+                    }}
+                    inputLabel={t('home.paradigmAvatar')}
+                    placeholder={t('common.avatarPlaceholder')}
+                    uploadTitle={t('home.paradigmAvatar')}
+                    clearTitle={t('common.clearAvatar')}
+                    onFileError={showAvatarFileError}
+                    appearance="profile"
+                    previewClassName="size-9 rounded-lg text-sm"
+                  />
+                ) : (
+                  <ParadigmMark
+                    iconId={pending.iconId}
+                    avatar={pending.avatar}
+                    name={pendingLabel.name ?? pendingLabel.category}
+                    active
+                  />
+                )}
+                {editingId === pending.id ? (
                   <Input
-                    id="paradigm-name"
                     autoFocus
                     value={editDraft.label}
+                    aria-label={t('home.paradigmName')}
                     onChange={(event) =>
                       setEditDraft((prev) => ({ ...prev, label: event.target.value }))
                     }
@@ -318,45 +332,65 @@ export function ParadigmSelector({
                       if (event.key === 'Escape') setEditingId(null);
                     }}
                     placeholder={t('home.paradigmNamePlaceholder')}
-                    className="h-8 min-w-0 text-sm"
+                    className="h-8 min-w-0 flex-1 text-sm"
                   />
-                </div>
-              </div>
-            ) : (
-              pending &&
-              pendingLabel && (
-                <div className="flex items-center gap-2">
-                  {pending.avatar !== undefined ? (
-                    <AvatarValue
-                      name={pendingLabel.name ?? pendingLabel.category}
-                      value={pending.avatar}
-                      className="size-4 rounded-sm text-[10px]"
-                    />
+                ) : (
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+                        {pendingLabel.name ?? pendingLabel.category}
+                      </span>
+                      {pending.alpha && (
+                        <Badge
+                          variant="secondary"
+                          className="shrink-0 px-1 py-0 text-[9px] font-normal uppercase tracking-wide"
+                        >
+                          {t('home.modeAlphaBadge')}
+                        </Badge>
+                      )}
+                    </div>
+                    {pendingLabel.name && (
+                      <span className="min-w-0 truncate text-[11px] leading-tight text-foreground-muted">
+                        {pendingLabel.category}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {/* Renaming is also in the card's menu, but this is the pane the
+                    edit happens on, so it gets the affordance too. Nothing is
+                    riding on leaving edit mode — every edit is already written —
+                    so the same button just puts the header back. */}
+                <button
+                  type="button"
+                  aria-label={
+                    editingId === pending.id ? t('common.confirm') : t('home.paradigmEdit')
+                  }
+                  title={editingId === pending.id ? t('common.confirm') : t('home.paradigmEdit')}
+                  onClick={() => {
+                    if (editingId !== pending.id) {
+                      startEditing(pending);
+                      return;
+                    }
+                    persistEditing(pending.id);
+                    setEditingId(null);
+                  }}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground"
+                >
+                  {editingId === pending.id ? (
+                    <Check className="size-3.5" />
                   ) : (
-                    <ParadigmIcon
-                      iconId={pending.iconId}
-                      className="size-4 shrink-0 text-primary"
-                    />
+                    <Pencil className="size-3.5" />
                   )}
-                  <span className="text-sm font-semibold text-foreground">
-                    {pendingLabel.category}
-                  </span>
-                  {pendingLabel.name && (
-                    <span className="min-w-0 truncate text-sm text-foreground-muted">
-                      {pendingLabel.name}
-                    </span>
-                  )}
-                  {pending.alpha && (
-                    <Badge variant="secondary" className="px-1 py-0 text-[9px]">
-                      {t('home.modeAlphaBadge')}
-                    </Badge>
-                  )}
-                </div>
-              )
+                </button>
+              </div>
             )}
             {pending && (
               <>
-                <p className="text-xs text-foreground-muted">{t(pending.descKey)}</p>
+                {/* The kind's own description, not the instance's: it says what
+                    will happen, which is the same whatever this one is called. */}
+                <p className="text-xs leading-relaxed text-foreground-muted">
+                  {t(pending.descKey)}
+                </p>
                 <ParadigmConfigurationPanel
                   entry={pending}
                   teams={teams}
