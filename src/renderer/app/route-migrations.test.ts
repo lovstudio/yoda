@@ -46,6 +46,16 @@ describe('persisted view route migrations', () => {
       viewId: 'library',
       params: { section: 'extensions' },
     });
+
+    expect(
+      migratePersistedViewRoute({
+        viewId: 'library',
+        params: { section: 'agentTeams' },
+      })
+    ).toEqual({
+      viewId: 'library',
+      params: { section: 'agents' },
+    });
   });
 
   it('leaves current routes unchanged', () => {

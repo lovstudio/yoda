@@ -23,9 +23,6 @@ vi.mock('@renderer/lib/components/titlebar/Titlebar', () => ({
   Titlebar: () => createElement('div', null, 'titlebar'),
 }));
 
-vi.mock('@renderer/features/agent-teams/agent-teams-panel', () => ({
-  AgentTeamsMainPanel: () => null,
-}));
 vi.mock('@renderer/features/agents-config/agent-manager-view', () => ({
   AgentManagerMainPanel: () => null,
 }));

@@ -1,7 +1,6 @@
-import { Check, ChevronDown, Pencil } from 'lucide-react';
+import { Check, ChevronDown, Copy, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AgentTeam } from '@shared/agent-team';
 import type { Agent } from '@shared/agents';
 import type { ParadigmKindId } from '@shared/paradigms/contract';
 import { paradigmKind } from '@shared/paradigms/kinds';
@@ -17,6 +16,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@renderer/lib/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { Input } from '@renderer/lib/ui/input';
 import { cn } from '@renderer/utils/utils';
 import { ParadigmConfigurationPanel } from './configuration-panel';
@@ -36,7 +42,6 @@ export interface ParadigmSelectorProps {
   kindId: ParadigmKindId;
   /** Remembered paradigm instance for `kindId`; empty selects its built-in. */
   paradigmId: string;
-  teams: AgentTeam[];
   agents: Agent[];
   /**
    * Seat assignments from the composer draft, where they lived before they
@@ -61,7 +66,6 @@ export interface ParadigmSelectorProps {
 export function ParadigmSelector({
   kindId,
   paradigmId,
-  teams,
   agents,
   draftAgents,
   onChange,
@@ -273,9 +277,6 @@ export function ParadigmSelector({
                   // the pane beside it was configuring one.
                   active={entry.id === pending?.id}
                   onSelect={() => setPendingId(entry.id)}
-                  onDuplicate={() => void handleDuplicate(entry.id)}
-                  onEdit={() => startEditing(entry)}
-                  onRemove={() => void handleRemove(entry.id)}
                 />
               );
             })}
@@ -356,10 +357,10 @@ export function ParadigmSelector({
                     )}
                   </div>
                 )}
-                {/* Renaming is also in the card's menu, but this is the pane the
-                    edit happens on, so it gets the affordance too. Nothing is
-                    riding on leaving edit mode — every edit is already written —
-                    so the same button just puts the header back. */}
+                {/* Renaming is one job, so it gets its own button rather than
+                    hiding in the menu beside it. Nothing is riding on leaving edit
+                    mode — every edit is already written — so the same button just
+                    puts the header back. */}
                 <button
                   type="button"
                   aria-label={
@@ -382,6 +383,39 @@ export function ParadigmSelector({
                     <Pencil className="size-3.5" />
                   )}
                 </button>
+                {/* Everything else this paradigm can have done to it. Kept off the
+                    list rows: a row is a name to pick, and nine rows each carrying
+                    their own menu made the list read as a toolbar. */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    aria-label={t('common.more')}
+                    title={t('common.more')}
+                    className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground"
+                  >
+                    <MoreHorizontal className="size-3.5" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem onClick={() => void handleDuplicate(pending.id)}>
+                      <Copy className="size-3.5" />
+                      {t('home.paradigmDuplicate')}
+                    </DropdownMenuItem>
+                    {/* A shipped paradigm stays: the app references it by id, and
+                        clearing its name and icon already restores what it shipped
+                        with. */}
+                    {!pending.builtin && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => void handleRemove(pending.id)}
+                        >
+                          <Trash2 className="size-3.5" />
+                          {t('home.paradigmRemove')}
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             )}
             {pending && (
@@ -393,7 +427,6 @@ export function ParadigmSelector({
                 </p>
                 <ParadigmConfigurationPanel
                   entry={pending}
-                  teams={teams}
                   agents={agents}
                   slotAgentId={seatAgentId(pending)}
                   onSlotAgentChange={(slotKey, agentId) =>

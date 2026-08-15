@@ -3,16 +3,13 @@ import { PARADIGM_KINDS } from './kinds';
 import { builtinParadigmId, type Paradigm } from './paradigm';
 
 /**
- * The instance a self-contained kind ships with: one per kind whose instances are
- * not sourced from somewhere else.
+ * The instance every kind ships with — exactly one each.
  *
- * A kind whose `instanceSource` names an external collection is excluded — its
- * instances *are* that collection, so synthesizing an extra one would put a
- * phantom entry in the picker.
+ * A kind is always reachable: it is a way of working, so it must be pickable
+ * before the user has configured anything. Extra instances of the same kind are
+ * user rows, created by duplicating this one.
  */
-const KIND_OWNED_BUILTINS: readonly Paradigm[] = PARADIGM_KIND_IDS.filter(
-  (kindId) => PARADIGM_KINDS[kindId].instanceSource === null
-).map((kindId) => {
+const KIND_OWNED_BUILTINS: readonly Paradigm[] = PARADIGM_KIND_IDS.map((kindId) => {
   const kind = PARADIGM_KINDS[kindId];
   return {
     id: builtinParadigmId(kindId),
@@ -37,9 +34,6 @@ const KIND_OWNED_BUILTINS: readonly Paradigm[] = PARADIGM_KIND_IDS.filter(
  * These are defaults, not fixtures: `paradigmsService` overlays any stored row
  * with the same id on top, so a built-in can be renamed and reconfigured while
  * still being the instance the app ships and references by id.
- *
- * The multi-agent kind contributes nothing here — its instances *are* the user's
- * Agent Teams, and the app ships none of those.
  */
 export const BUILTIN_PARADIGMS: readonly Paradigm[] = KIND_OWNED_BUILTINS;
 

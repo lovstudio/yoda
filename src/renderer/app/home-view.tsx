@@ -53,6 +53,7 @@ import {
   runModeForParadigmKind,
   type LegacyRunMode,
 } from '@shared/paradigms/kinds';
+import { paradigmToTeam } from '@shared/paradigms/team-adapter';
 import type { ComposerDefaults, TaskOutputLanguage } from '@shared/project-settings';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
@@ -67,10 +68,7 @@ import type {
   ParadigmLaunchParams,
   TaskStrategyKind,
 } from '@renderer/features/paradigms/launch-context';
-import {
-  agentTeamsQueryKey,
-  paradigmsQueryKey,
-} from '@renderer/features/paradigms/paradigm-queries';
+import { paradigmsQueryKey } from '@renderer/features/paradigms/paradigm-queries';
 import { paradigmLauncher, paradigmLaunchStamp } from '@renderer/features/paradigms/registry';
 import { paradigmSeatAgentId } from '@renderer/features/paradigms/seats';
 import { ParadigmSelector } from '@renderer/features/paradigms/selector';
@@ -655,12 +653,6 @@ export const HomeComposer = observer(function HomeComposer({
       return next;
     });
   }, []);
-  // Agent Teams are reusable, project/task-decoupled templates surfaced as the
-  // `team` paradigm (「多智能体（name）」). Built-ins + user teams come from the list.
-  const { data: teams = [] } = useQuery({
-    queryKey: agentTeamsQueryKey,
-    queryFn: () => rpc.agentTeams.list(),
-  });
   // Paradigm instances, for the seats the selected one carries. The picker reads
   // the same query, so both resolve seats from one source.
   const { data: paradigms = [] } = useQuery({
@@ -671,15 +663,6 @@ export const HomeComposer = observer(function HomeComposer({
   // Which paradigm *instance* is selected. Empty means the current kind's own
   // built-in instance, which is what every kind but `team` has exactly one of.
   const selectedParadigmId = draft?.selectedParadigmId ?? '';
-  // A team's paradigm instance keeps the team's id, so the selected instance
-  // resolves the roster directly. The fallback is the first team rather than a
-  // named one so it matches the row the picker highlights for an unremembered
-  // selection — the team paradigm cannot run without a roster, and the two
-  // surfaces must not disagree about which one it is.
-  const activeTeam = useMemo<AgentTeam | undefined>(
-    () => teams.find((tm) => tm.id === selectedParadigmId) ?? teams[0],
-    [teams, selectedParadigmId]
-  );
   const { agents: userAgents } = useAgents();
   const selectedAgentIdsByMode = useMemo<Record<string, string[]>>(
     () => draft?.selectedAgentIds ?? {},
@@ -691,6 +674,14 @@ export const HomeComposer = observer(function HomeComposer({
   const activeParadigm = useMemo(
     () => selectByKind(paradigms, paradigmKindForRunMode(runMode), selectedParadigmId),
     [paradigms, runMode, selectedParadigmId]
+  );
+  // The roster the multi-agent paradigm runs, read off the selected instance
+  // itself: a team *is* a `team` instance, and its roster is that instance's
+  // params. Derived rather than fetched separately so the row the picker
+  // highlights and the roster that launches cannot disagree.
+  const activeTeam = useMemo<AgentTeam | undefined>(
+    () => (activeParadigm?.kindId === 'team' ? paradigmToTeam(activeParadigm) : undefined),
+    [activeParadigm]
   );
   // Per-slot Agent selection, resolved against the selected instance first and
   // the composer draft second — see `paradigmSeatAgentId`.
@@ -1595,7 +1586,6 @@ export const HomeComposer = observer(function HomeComposer({
             <ParadigmSelector
               kindId={paradigmKindForRunMode(runMode)}
               paradigmId={selectedParadigmId}
-              teams={teams}
               agents={userAgents}
               draftAgents={selectedAgentIdsByMode}
               onChange={setParadigm}

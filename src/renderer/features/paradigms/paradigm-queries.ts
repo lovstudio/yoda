@@ -1,16 +1,14 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 /**
- * Query keys for the paradigm instance list, and for the Agent Team view of it.
+ * The paradigm instance list — the one source every surface reads.
  *
- * Teams are `team`-kind paradigm rows read through an adapter, so the two lists
- * are the same data under two vocabularies: renaming a paradigm renames a team.
- * Both keys therefore invalidate together — from either side.
+ * A multi-agent team is a `team`-kind row here rather than a collection of its
+ * own, so the composer, the picker, and a kind's configuration panel all
+ * invalidate through this single key.
  */
 export const paradigmsQueryKey = ['paradigms'] as const;
-export const agentTeamsQueryKey = ['agentTeams'] as const;
 
 export function invalidateParadigmQueries(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: paradigmsQueryKey });
-  void queryClient.invalidateQueries({ queryKey: agentTeamsQueryKey });
 }

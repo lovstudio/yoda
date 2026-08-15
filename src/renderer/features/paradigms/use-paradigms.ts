@@ -73,6 +73,21 @@ export function useParadigms() {
         },
       });
     },
+    /**
+     * Replace an instance's params wholesale, leaving its name and icon alone.
+     *
+     * This is the write a kind's configuration panel uses: what a paradigm runs
+     * with lives entirely in its own params, so a panel edits those and nothing
+     * else. Shipped instances included — they are defaults, not fixtures.
+     */
+    setParams: async (id: string, params: unknown) => {
+      const existing = paradigms.find((paradigm) => paradigm.id === id);
+      if (!existing) return;
+      await updateMutation.mutateAsync({
+        id,
+        draft: { kindId: existing.kindId, label: existing.label, icon: existing.icon, params },
+      });
+    },
     remove: removeMutation.mutateAsync,
     duplicate: duplicateMutation.mutateAsync,
   };

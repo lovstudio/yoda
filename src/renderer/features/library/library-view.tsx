@@ -8,13 +8,11 @@ import {
   Plug,
   Puzzle,
   Store,
-  Users,
   Workflow,
   type LucideIcon,
 } from 'lucide-react';
 import { createContext, useCallback, useContext, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AgentTeamsMainPanel } from '@renderer/features/agent-teams/agent-teams-panel';
 import { AgentManagerMainPanel } from '@renderer/features/agents-config/agent-manager-view';
 import { AiLabView } from '@renderer/features/ai-lab/components/AiLabView';
 import { AutomationMainPanel } from '@renderer/features/automation/automation-view';
@@ -39,7 +37,6 @@ export type LibrarySection =
   | 'apps'
   | 'prompts'
   | 'agents'
-  | 'agentTeams'
   | 'skills'
   | 'plugins'
   | 'mcp'
@@ -54,7 +51,6 @@ const SECTIONS: {
   { id: 'apps', icon: AppWindow, labelKey: 'library.sections.apps' },
   { id: 'prompts', icon: FileText, labelKey: 'library.sections.prompts' },
   { id: 'agents', icon: Bot, labelKey: 'library.sections.agents' },
-  { id: 'agentTeams', icon: Users, labelKey: 'library.sections.agentTeams' },
   { id: 'skills', icon: Boxes, labelKey: 'library.sections.skills' },
   { id: 'plugins', icon: Puzzle, labelKey: 'library.sections.plugins' },
   { id: 'mcp', icon: Plug, labelKey: 'library.sections.mcp' },
@@ -158,8 +154,6 @@ function LibrarySectionContent({
       );
     case 'agents':
       return <AgentManagerMainPanel />;
-    case 'agentTeams':
-      return <AgentTeamsMainPanel />;
     case 'skills':
       return <SkillsMainPanel />;
     case 'plugins':

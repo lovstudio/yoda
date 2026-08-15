@@ -34,7 +34,6 @@ export const singleParadigmKind: ParadigmKindDescriptor = {
   iconId: 'bot',
   inPicker: true,
   pickerOrder: 0,
-  instanceSource: null,
   slots: [
     {
       key: 'agent',
@@ -67,8 +66,7 @@ export const teamParadigmKind: ParadigmKindDescriptor = {
   iconId: 'git-fork',
   inPicker: true,
   pickerOrder: 50,
-  instanceSource: 'agent-teams',
-  // The roster lives in params (one instance per Agent Team), not in fixed slots.
+  // The roster lives in params (edited in the paradigm's own panel), not in fixed slots.
   slots: [],
   taskMarker: 'multi-agent',
   capabilities: {
@@ -99,7 +97,6 @@ export const compareParadigmKind: ParadigmKindDescriptor = {
   iconId: 'columns',
   inPicker: false,
   pickerOrder: 0,
-  instanceSource: null,
   slots: [],
   // Each variant task is stamped with the inner paradigm, so the marker a
   // comparison produces is the inner kind's, never this one's.

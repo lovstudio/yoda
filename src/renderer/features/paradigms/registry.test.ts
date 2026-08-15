@@ -72,7 +72,7 @@ describe('paradigm registry', () => {
     }
   });
 
-  it('ships every code-defined instance exactly once, whatever its source', () => {
+  it('ships exactly one code-defined instance per kind', () => {
     for (const paradigm of BUILTIN_PARADIGMS) {
       expect(isBuiltinParadigmId(paradigm.id)).toBe(true);
       expect(paradigm.builtin).toBe(true);
@@ -85,30 +85,26 @@ describe('paradigm registry', () => {
     const ids = BUILTIN_PARADIGMS.map((paradigm) => paradigm.id);
     expect(new Set(ids).size, `duplicate built-in ids: ${ids.join(', ')}`).toBe(ids.length);
 
-    // A kind that sources its instances elsewhere gets no synthesized instance of
-    // its own, or the picker grows a phantom entry beside the real ones.
+    // Every kind is pickable before the user has configured anything, so every
+    // kind owns a shipped instance — none may be missing, none may be extra.
     const kindOwned = BUILTIN_PARADIGMS.filter(
       (paradigm) => paradigm.id === builtinParadigmId(paradigm.kindId)
     );
-    expect(kindOwned.map((paradigm) => paradigm.kindId)).toEqual(
-      PARADIGM_KIND_IDS.filter((kindId) => PARADIGM_KINDS[kindId].instanceSource === null)
-    );
+    expect(kindOwned.map((paradigm) => paradigm.kindId)).toEqual([...PARADIGM_KIND_IDS]);
     for (const paradigm of kindOwned) {
       // Empty label/icon are what make a builtin fall back to its kind's copy.
       expect(paradigm.label).toBe('');
       expect(paradigm.icon).toBe('');
     }
 
-    // Nothing else ships: the multi-agent kind's instances *are* the user's Agent
-    // Teams, and the app comes with none of those.
     expect(BUILTIN_PARADIGMS.filter((paradigm) => !kindOwned.includes(paradigm))).toEqual([]);
   });
 });
 
 describe('paradigm entries', () => {
   const mine = userParadigm('mine', 'single', 'My vibe');
-  // The multi-agent kind ships no instance, so a `team` row only exists once the
-  // user has made a team — which is what a picker row for it represents.
+  // A second team beside the one the multi-agent kind ships: the shipped instance
+  // is the way of working, and duplicating it is how a user keeps several rosters.
   const squad = userParadigm('squad', 'team', 'My squad');
   const paradigms = [...BUILTIN_PARADIGMS, squad, mine];
 
@@ -122,8 +118,9 @@ describe('paradigm entries', () => {
       ).toBe(PARADIGM_KINDS[kindId].inPicker);
     }
     // Every instance is its own row, so each team contributes one rather than
-    // collapsing into a single "multi-agent" entry.
+    // collapsing into a single "multi-agent" entry — the shipped one included.
     expect(entries.filter((entry) => entry.kindId === 'team').map((entry) => entry.id)).toEqual([
+      builtinParadigmId('team'),
       squad.id,
     ]);
     // Ranked ascending, which is the only ordering the flat list has.
@@ -208,8 +205,8 @@ describe('paradigm entries', () => {
     expect(paradigmEntryId(entries, 'team', squad.id)).toBe(squad.id);
     expect(paradigmEntryId(entries, 'single', mine.id)).toBe(mine.id);
     // A remembered instance of another kind loses to the kind, which is what the
-    // rest of the composer is configured for.
-    expect(paradigmEntryId(entries, 'team', mine.id)).toBe(squad.id);
+    // rest of the composer is configured for — landing on the kind's shipped row.
+    expect(paradigmEntryId(entries, 'team', mine.id)).toBe(builtinParadigmId('team'));
     // A deleted instance degrades to its kind rather than blanking the picker.
     expect(paradigmEntryId(entries, 'single', 'gone')).toBe(builtinParadigmId('single'));
     expect(paradigmEntryId([], 'single', '')).toBeUndefined();

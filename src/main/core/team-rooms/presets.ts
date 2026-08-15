@@ -246,6 +246,12 @@ export async function seedRoomFromTeam(args: {
   projectId: string;
   taskId: string;
   requirement: string;
+  /**
+   * Room name to use when the team itself is unnamed. A team is a paradigm
+   * instance, and the instance the app ships carries no label of its own — it
+   * displays as its kind's localized name, which only the renderer can resolve.
+   */
+  fallbackName?: string;
 }): Promise<string> {
   const { team } = args;
   const leader = teamLeader(team);
@@ -256,7 +262,7 @@ export async function seedRoomFromTeam(args: {
   const room = await createRoom({
     projectId: args.projectId,
     taskId: args.taskId,
-    name: team.name,
+    name: team.name.trim() || args.fallbackName?.trim() || 'Team',
     preset: 'freeform',
     routingHopLimit: team.routingHopLimit,
     communication: team.communication,
@@ -327,6 +333,8 @@ export type CreateRoomFromTeamParams = {
   taskId: string;
   teamId: string;
   requirement: string;
+  /** Localized paradigm name, used when the team carries no name of its own. */
+  fallbackName?: string;
 };
 
 /** Resolve a team template by id, then instantiate a room from it. */
@@ -338,6 +346,7 @@ export async function createRoomFromTeam(params: CreateRoomFromTeamParams): Prom
     projectId: params.projectId,
     taskId: params.taskId,
     requirement: params.requirement,
+    ...(params.fallbackName ? { fallbackName: params.fallbackName } : {}),
   });
 }
 

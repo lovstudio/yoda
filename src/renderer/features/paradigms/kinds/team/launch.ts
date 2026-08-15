@@ -39,6 +39,9 @@ export const teamLauncher: ParadigmLauncher = {
         taskId: task.taskId,
         teamId: team.id,
         requirement,
+        // The shipped instance has no name of its own — it displays as the kind's
+        // localized name, which main cannot resolve, so the room borrows it here.
+        fallbackName: ctx.t(teamParadigmKind.labelKey),
       });
       // The room now drives this task, whether it was created here or joined.
       ctx.claimJoinedTask();

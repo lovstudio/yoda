@@ -15,8 +15,8 @@ import type { z } from 'zod';
  *   mounted in a registry. Adding a paradigm = one directory + one registry
  *   line, no edits to the composer's branch points.
  * - **Instance** (`paradigm.ts`) — data. A row the user can rename, re-icon,
- *   duplicate, and parameterize. Many instances may share one kind; that is
- *   already how every Agent Team gets its own picker entry.
+ *   duplicate, and parameterize. Every kind ships exactly one instance; more are
+ *   made by duplicating it, so several instances may share one kind.
  *
  * This module is imported by main, renderer, and mobile, so it stays pure data:
  * no React, no lucide. Icons are string ids resolved to components on the
@@ -75,13 +75,6 @@ export type ParadigmUnbornPolicy = 'degrade' | 'seed-commit';
 /** Visual weight of the composer input while the paradigm is selected. */
 export type ParadigmAccent = 'default' | 'advanced' | 'experimental';
 
-/**
- * Where a kind's instances come from. `null` means the kind has exactly one
- * implicit instance; `'agent-teams'` means each Agent Team is an instance, so the
- * kind contributes one picker entry per team and none when there are no teams.
- */
-export type ParadigmInstanceSource = 'agent-teams' | null;
-
 export interface ParadigmCapabilities {
   worktree: ParadigmWorktreeNeed;
   strategyField: ParadigmStrategyField;
@@ -125,8 +118,6 @@ export interface ParadigmKindDescriptor<Params = unknown> {
   inPicker: boolean;
   /** Rank in the flat picker. Instances may override it. */
   pickerOrder: number;
-  /** Where the kind's instances come from; null = one implicit instance. */
-  instanceSource: ParadigmInstanceSource;
   slots: readonly ParadigmSlot[];
   /** How tasks driven by this kind are marked in task lists. */
   taskMarker: ParadigmTaskMarker;

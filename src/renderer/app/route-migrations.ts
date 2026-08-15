@@ -32,5 +32,15 @@ export function migratePersistedViewRoute(route: PersistedViewRoute): PersistedV
     };
   }
 
+  // A multi-agent roster is edited inside its own paradigm now, so the Library
+  // no longer keeps a section for teams. Anyone parked there lands on the agents
+  // that a roster is built from.
+  if (route.params.section === 'agentTeams') {
+    return {
+      viewId: 'library',
+      params: { section: 'agents' },
+    };
+  }
+
   return route;
 }

@@ -1,4 +1,3 @@
-import type { AgentTeam } from '@shared/agent-team';
 import type { Agent } from '@shared/agents';
 import type { ParadigmEntry } from './entries';
 
@@ -9,7 +8,6 @@ import type { ParadigmEntry } from './entries';
  */
 export interface ParadigmPanelProps {
   entry: ParadigmEntry;
-  teams: AgentTeam[];
   agents: Agent[];
   slotAgentId: (slotKey: string) => string | null;
   onSlotAgentChange: (slotKey: string, agentId: string) => void;
