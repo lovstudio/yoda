@@ -132,7 +132,13 @@ describe('WorkspaceNotificationCenter', () => {
     expect(workspaceNotificationStore.getSnapshot().map((entry) => entry.title)).toEqual([
       'Agent needs input',
     ]);
+    await vi.waitFor(() => {
+      expect(document.querySelector('[data-slot="popover-content"]')).toBeNull();
+    });
 
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('[aria-label="Notifications 1"]')?.click()
+    );
     const markAllReadButton = Array.from(
       document.querySelectorAll<HTMLButtonElement>('button')
     ).find((button) => button.textContent?.includes('workspaceRuntime.notifications.markAllRead'));
@@ -152,6 +158,40 @@ describe('WorkspaceNotificationCenter', () => {
       projectId: 'project-1',
       taskId: 'task-1',
       conversationId: 'session-1',
+    });
+    await vi.waitFor(() => {
+      expect(document.querySelector('[data-slot="popover-content"]')).toBeNull();
+    });
+  });
+
+  it('closes the panel when the window loses focus', async () => {
+    workspaceNotificationStore.enqueue({
+      title: 'Agent needs input',
+      kind: 'info',
+      source: 'agent',
+      reason: 'action-required',
+    });
+
+    await act(async () => {
+      root.render(
+        createElement(WorkspaceNotificationCenter, {
+          triggerClassName: 'trigger',
+          triggerLabelClassName: 'label',
+          onOpenTarget: vi.fn(),
+        })
+      );
+    });
+
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('[aria-label="Notifications 1"]')?.click()
+    );
+    expect(document.querySelector('[data-slot="popover-content"]')).not.toBeNull();
+
+    await act(async () => {
+      window.dispatchEvent(new Event('blur'));
+    });
+    await vi.waitFor(() => {
+      expect(document.querySelector('[data-slot="popover-content"]')).toBeNull();
     });
   });
 

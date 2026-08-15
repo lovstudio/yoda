@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
+import { dismissBeforeSynchronousAction } from '@renderer/lib/dismiss-before-synchronous-action';
 import { useDismissOnWindowBlur } from '@renderer/lib/hooks/use-dismiss-on-window-blur';
 import { copyTextToClipboard, useToast } from '@renderer/lib/hooks/use-toast';
 import {
@@ -55,17 +56,16 @@ export function WorkspaceNotificationCenter({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = notifications.find((notification) => notification.id === selectedId) ?? null;
   const unreadCount = notifications.filter((notification) => notification.readAt === null).length;
-  const dismissPanel = useCallback(() => {
-    setOpen(false);
-    setSelectedId(null);
-  }, []);
+  const dismissPanel = useCallback(() => setOpen(false), []);
   useDismissOnWindowBlur(open, dismissPanel);
 
   return (
     <Popover
       open={open}
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
+      onOpenChange={setOpen}
+      // Reset the selection only once the popup is gone, so closing from the
+      // details view fades out the details instead of flashing the list.
+      onOpenChangeComplete={(nextOpen) => {
         if (!nextOpen) setSelectedId(null);
       }}
     >
@@ -103,10 +103,8 @@ export function WorkspaceNotificationCenter({
               workspaceNotificationStore.remove(selected.id);
               setSelectedId(null);
             }}
-            onOpenTarget={(target) => {
-              dismissPanel();
-              onOpenTarget(target);
-            }}
+            onDismiss={dismissPanel}
+            onOpenTarget={onOpenTarget}
           />
         ) : (
           <NotificationList
@@ -262,11 +260,13 @@ function NotificationDetails({
   notification,
   onBack,
   onDelete,
+  onDismiss,
   onOpenTarget,
 }: {
   notification: WorkspaceNotification;
   onBack: () => void;
   onDelete: () => void;
+  onDismiss: () => void;
   onOpenTarget: (target: WorkspaceNotificationTarget) => void;
 }) {
   const { t } = useTranslation();
@@ -314,11 +314,16 @@ function NotificationDetails({
             size="sm"
             className="mt-3 w-full"
             onClick={(event) => {
-              if (action) {
-                workspaceNotificationStore.invokeAction(notification.id, event);
-              } else if (notification.target) {
-                onOpenTarget(notification.target);
-              }
+              // The panel must be gone before the handler runs: both branches
+              // navigate or focus something synchronously, and a queued close
+              // would otherwise leave the popup floating over the destination.
+              dismissBeforeSynchronousAction(onDismiss, () => {
+                if (action) {
+                  workspaceNotificationStore.invokeAction(notification.id, event);
+                } else if (notification.target) {
+                  onOpenTarget(notification.target);
+                }
+              });
             }}
           >
             {action?.label ?? t('workspaceRuntime.notifications.openTarget')}
