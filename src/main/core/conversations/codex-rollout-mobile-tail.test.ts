@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -92,5 +92,54 @@ describe('bounded Codex rollout mobile readers', () => {
     expect(history).toContain('Recent assistant update');
     expect(history).toContain('All tests passed');
     expect(history).not.toContain('xxxxxxxx');
+  });
+
+  it('reuses the parsed tail until the rollout changes', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'yoda-mobile-rollout-cache-'));
+    temporaryDirectories.push(directory);
+    context.rolloutPath = path.join(directory, 'rollout.jsonl');
+    await writeFile(
+      context.rolloutPath,
+      `${JSON.stringify({
+        timestamp: '2026-08-15T01:00:00.000Z',
+        type: 'event_msg',
+        payload: { type: 'agent_message', message: 'First answer' },
+      })}\n`
+    );
+    const conversation = {
+      id: 'conversation-cache',
+      runtimeId: 'codex',
+      title: 'Conversation',
+      createdAt: '2026-08-15T00:00:00.000Z',
+    } as Conversation;
+
+    const first = await loadCodexRolloutTranscriptTailForConversation({
+      conversation,
+      cwd: directory,
+    });
+    const second = await loadCodexRolloutTranscriptTailForConversation({
+      conversation,
+      cwd: directory,
+    });
+
+    // Identity, not equality: an unchanged rollout must not be re-read or
+    // re-parsed, so the second call has to hand back the retained result.
+    expect(second).toBe(first);
+
+    await appendFile(
+      context.rolloutPath,
+      `${JSON.stringify({
+        timestamp: '2026-08-15T01:00:05.000Z',
+        type: 'event_msg',
+        payload: { type: 'agent_message', message: 'Second answer' },
+      })}\n`
+    );
+    const grown = await loadCodexRolloutTranscriptTailForConversation({
+      conversation,
+      cwd: directory,
+    });
+
+    expect(grown).not.toBe(first);
+    expect(grown?.map((entry) => entry.content)).toEqual(['First answer\n\nSecond answer']);
   });
 });

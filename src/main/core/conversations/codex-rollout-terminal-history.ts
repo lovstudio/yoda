@@ -32,6 +32,7 @@ type CachedValue<T> = { signature: string; value: Promise<T> };
 const rolloutReads = new Map<string, CachedValue<RolloutFileSnapshot>>();
 const rolloutTailReads = new Map<string, CachedValue<RolloutFileSnapshot>>();
 const historyCache = new Map<string, CachedValue<string | null>>();
+const transcriptTailCache = new Map<string, CachedValue<CodexRolloutTranscriptEntry[] | null>>();
 
 type HistoryEntry = {
   order: number;
@@ -91,35 +92,7 @@ export async function loadCodexRolloutTerminalHistoryForConversation({
 
   const context = await resolveCodexRolloutContext(conversation, cwd);
   if (!context?.rolloutPath) return null;
-
-  let snapshot: RolloutFileSnapshot;
-  try {
-    // Renderer startup subscribes every preloaded conversation. Historical
-    // rollouts can be hundreds of megabytes while the terminal surface retains
-    // at most MAX_HISTORY_CHARS, so loading the full file here multiplies into
-    // a multi-gigabyte main-process spike. The bounded tail contains more than
-    // enough source material for the capped terminal replay.
-    snapshot = await readRolloutTailSnapshot(context.rolloutPath);
-  } catch {
-    return null;
-  }
-
-  const options = {
-    threadId: context.threadId,
-    title: context.title,
-    rolloutPath: context.rolloutPath,
-  };
-  const signature = `${snapshot.signature}\0${context.threadId}\0${context.title}`;
-  const cached = historyCache.get(context.rolloutPath);
-  if (cached?.signature === signature) return cached.value;
-
-  const value = Promise.resolve().then(() => {
-    const history = formatCodexRolloutTerminalHistory(snapshot.raw, options);
-    return history.trim() ? history : null;
-  });
-  historyCache.set(context.rolloutPath, { signature, value });
-  trimCache(historyCache);
-  return value;
+  return loadTerminalHistory(context);
 }
 
 export async function loadCodexRolloutTranscriptForConversation({
@@ -155,19 +128,28 @@ export async function loadCodexRolloutTerminalHistoryTailForConversation({
 }): Promise<string | null> {
   const context = await resolveCodexRolloutContext(conversation, cwd);
   if (!context) return null;
+  return loadTerminalHistory(context);
+}
 
-  let snapshot: RolloutFileSnapshot;
-  try {
-    snapshot = await readRolloutTailSnapshot(context.rolloutPath);
-  } catch {
-    return null;
-  }
-  const history = formatCodexRolloutTerminalHistory(snapshot.raw, {
-    threadId: context.threadId,
-    title: context.title,
-    rolloutPath: context.rolloutPath,
-  });
-  return history.trim() ? history : null;
+/**
+ * The one bounded history path.
+ *
+ * Renderer startup subscribes every preloaded conversation and mobile polls the
+ * same rollout repeatedly, while rollouts reach hundreds of megabytes and the
+ * terminal surface retains at most MAX_HISTORY_CHARS. So the read is bounded to
+ * the tail, and both the read and the formatting are settled by file identity:
+ * an unchanged rollout costs one stat.
+ */
+function loadTerminalHistory(context: HistoryOptions): Promise<string | null> {
+  return cachedRolloutDerivation(
+    historyCache,
+    context.rolloutPath,
+    `\0${context.threadId}\0${context.title}`,
+    (raw) => {
+      const history = formatCodexRolloutTerminalHistory(raw, context);
+      return history.trim() ? history : null;
+    }
+  );
 }
 
 /** Bounded mobile transcript reader; the response itself is subsequently capped to 240k. */
@@ -181,14 +163,66 @@ export async function loadCodexRolloutTranscriptTailForConversation({
   const context = await resolveCodexRolloutContext(conversation, cwd);
   if (!context) return null;
 
+  return cachedRolloutDerivation(transcriptTailCache, context.rolloutPath, '', (raw) => {
+    const transcript = parseCodexRolloutTranscript(raw);
+    return transcript.length > 0 ? transcript : null;
+  });
+}
+
+/**
+ * Derives a value from the bounded rollout tail, keyed by file identity.
+ *
+ * Unlike the Claude reader this keeps re-reading a fixed-size tail rather than
+ * advancing a byte cursor from offset 0: rollouts reach hundreds of megabytes
+ * with single rows in the tens of kilobytes, so a cursor's first pass would scan
+ * the whole file — the main-process spike the tail bound exists to prevent. The
+ * cost worth removing here is the other one: an unchanged rollout re-read,
+ * re-decoded and re-parsed on every poll, which is what both mobile readers did
+ * on every request. An unchanged file now costs one stat.
+ *
+ * The stored signature is the one observed by the read that produced the value,
+ * so a rollout that grew between that read and this lookup re-derives instead of
+ * serving a tail that is no longer the tail.
+ */
+async function cachedRolloutDerivation<T>(
+  cache: Map<string, CachedValue<T>>,
+  rolloutPath: string,
+  signatureSuffix: string,
+  derive: (raw: string) => T
+): Promise<T | null> {
+  const cached = cache.get(rolloutPath);
+  if (cached) {
+    const signature = await rolloutSignature(rolloutPath);
+    if (signature !== null && cached.signature === `${signature}${signatureSuffix}`) {
+      return cached.value;
+    }
+  }
+
   let snapshot: RolloutFileSnapshot;
   try {
-    snapshot = await readRolloutTailSnapshot(context.rolloutPath);
+    snapshot = await readRolloutTailSnapshot(rolloutPath);
   } catch {
     return null;
   }
-  const transcript = parseCodexRolloutTranscript(snapshot.raw);
-  return transcript.length > 0 ? transcript : null;
+
+  const value = Promise.resolve().then(() => derive(snapshot.raw));
+  // A retained rejection would be served to every later caller until the file
+  // changed, turning one bad parse into a stuck surface.
+  value.catch(() => {
+    if (cache.get(rolloutPath)?.value === value) cache.delete(rolloutPath);
+  });
+  cache.set(rolloutPath, { signature: `${snapshot.signature}${signatureSuffix}`, value });
+  trimCache(cache);
+  return value;
+}
+
+async function rolloutSignature(rolloutPath: string): Promise<string | null> {
+  try {
+    const metadata = await stat(rolloutPath);
+    return `${metadata.size}:${metadata.mtimeMs}`;
+  } catch {
+    return null;
+  }
 }
 
 /**

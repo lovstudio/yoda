@@ -1,55 +1,153 @@
-import { readFile } from 'node:fs/promises';
 import type {
   MobileSessionTranscriptAgentPhase,
   MobileSessionTranscriptBlock,
 } from '@shared/mobile-api';
 import { resolveClaudeTranscriptPath } from '@main/core/session-title/claude-title-source';
+import { IncrementalJsonlCursor } from './incremental-jsonl-cursor';
 
 const MAX_TOOL_CONTENT_CHARS = 16 * 1024;
 const INTERACTIVE_TOOL_NAMES = new Set(['AskUserQuestion', 'ExitPlanMode']);
+const MAX_CACHED_TRANSCRIPTS = 8;
+/**
+ * Retained block content per session. Keeping a cursor means keeping its
+ * accumulator, so this is resident rather than transient: the bound is what
+ * stops eight long sessions from pinning the whole history in the main process.
+ *
+ * Four times the 240k-char cap every reader applies to its own response — wide
+ * enough that trimming can never drop a block a caller would have rendered, and
+ * narrow enough that the worst case stays a few megabytes per session.
+ */
+const MAX_RETAINED_CONTENT_CHARS = 1024 * 1024;
 
-export async function loadClaudeTranscript({
+type TranscriptAccumulator = {
+  blocks: MobileSessionTranscriptBlock[];
+  /**
+   * Monotonic block counter. Block ids embed it, so it must keep rising after a
+   * trim instead of falling back to `blocks.length` and reissuing a used id.
+   */
+  nextIndex: number;
+  retainedContentChars: number;
+};
+
+type ReaderOptions = {
+  chunkBytes?: number;
+  maxCacheEntries?: number;
+  maxRetainedContentChars?: number;
+  /** Read-work probe used by focused tests and runtime diagnostics. */
+  onRead?: (filePath: string, position: number, length: number) => void;
+};
+
+/**
+ * Parses Claude session transcripts through a byte cursor: a live turn appends
+ * to a file that is routinely tens of megabytes, and the change feed invalidates
+ * several times a second, so re-deriving the unchanged prefix on every read
+ * costs a real fraction of a core. Only rows appended since the previous read
+ * are parsed; the derived tool-status and compaction passes still run over the
+ * retained blocks, which is array work rather than JSON work.
+ */
+export class ClaudeTranscriptReader {
+  private readonly cursor: IncrementalJsonlCursor<TranscriptAccumulator>;
+
+  constructor(options: ReaderOptions = {}) {
+    const maxRetainedContentChars = Math.max(
+      0,
+      Math.floor(options.maxRetainedContentChars ?? MAX_RETAINED_CONTENT_CHARS)
+    );
+    this.cursor = new IncrementalJsonlCursor<TranscriptAccumulator>({
+      createPayload: () => ({ blocks: [], nextIndex: 0, retainedContentChars: 0 }),
+      commitLine: (accumulator, line) => {
+        appendClaudeTranscriptLine(accumulator, line);
+        trimRetainedBlocks(accumulator, maxRetainedContentChars);
+      },
+      maxCacheEntries: options.maxCacheEntries ?? MAX_CACHED_TRANSCRIPTS,
+      ...(options.chunkBytes === undefined ? {} : { chunkBytes: options.chunkBytes }),
+      ...(options.onRead ? { onRead: options.onRead } : {}),
+    });
+  }
+
+  /** Resolves to null when the transcript is unreadable or holds nothing renderable. */
+  async readFile(filePath: string): Promise<MobileSessionTranscriptBlock[] | null> {
+    let accumulator: TranscriptAccumulator;
+    try {
+      accumulator = (await this.cursor.read(filePath)).payload;
+    } catch {
+      return null;
+    }
+
+    const transcript = deriveClaudeTranscript(accumulator.blocks);
+    return transcript.length > 0 ? transcript : null;
+  }
+
+  clear(filePath?: string): void {
+    this.cursor.clear(filePath);
+  }
+}
+
+const claudeTranscriptReader = new ClaudeTranscriptReader();
+
+export function loadClaudeTranscript({
   cwd,
   sessionId,
 }: {
   cwd: string;
   sessionId: string;
 }): Promise<MobileSessionTranscriptBlock[] | null> {
-  let raw: string;
-  try {
-    raw = await readFile(resolveClaudeTranscriptPath(cwd, sessionId), 'utf8');
-  } catch {
-    return null;
-  }
-
-  const transcript = parseClaudeTranscript(raw);
-  return transcript.length > 0 ? transcript : null;
+  return claudeTranscriptReader.readFile(resolveClaudeTranscriptPath(cwd, sessionId));
 }
 
 export function parseClaudeTranscript(raw: string): MobileSessionTranscriptBlock[] {
-  const blocks: MobileSessionTranscriptBlock[] = [];
-
+  const accumulator: TranscriptAccumulator = { blocks: [], nextIndex: 0, retainedContentChars: 0 };
   for (const line of raw.split('\n')) {
     if (!line.trim()) continue;
-    const row = safeParse(line);
-    if (!row) continue;
-    if (row.isSidechain === true || row.isMeta === true) continue;
-    if (row.subtype === 'stop_hook_summary') continue;
-
-    const message = objectValue(row.message);
-    const role = nullableString(message?.role);
-    if (row.type === 'user' && role === 'user') {
-      blocks.push(...extractUserBlocks(message?.content, row, blocks.length));
-      continue;
-    }
-
-    if (row.type === 'assistant' && role === 'assistant') {
-      for (const block of extractAssistantBlocks(message?.content, row, blocks.length)) {
-        blocks.push(block);
-      }
-    }
+    appendClaudeTranscriptLine(accumulator, line);
   }
+  return deriveClaudeTranscript(accumulator.blocks);
+}
 
+function appendClaudeTranscriptLine(accumulator: TranscriptAccumulator, line: string): void {
+  const row = safeParse(line);
+  if (!row) return;
+  if (row.isSidechain === true || row.isMeta === true) return;
+  if (row.subtype === 'stop_hook_summary') return;
+
+  const message = objectValue(row.message);
+  const role = nullableString(message?.role);
+  const produced =
+    row.type === 'user' && role === 'user'
+      ? extractUserBlocks(message?.content, row, accumulator.nextIndex)
+      : row.type === 'assistant' && role === 'assistant'
+        ? extractAssistantBlocks(message?.content, row, accumulator.nextIndex)
+        : [];
+
+  for (const block of produced) {
+    accumulator.blocks.push(block);
+    accumulator.retainedContentChars += block.content.length;
+  }
+  accumulator.nextIndex += produced.length;
+}
+
+function trimRetainedBlocks(accumulator: TranscriptAccumulator, maxContentChars: number): void {
+  if (accumulator.retainedContentChars <= maxContentChars) return;
+
+  let dropCount = 0;
+  let retained = accumulator.retainedContentChars;
+  while (dropCount < accumulator.blocks.length && retained > maxContentChars) {
+    retained -= accumulator.blocks[dropCount]?.content.length ?? 0;
+    dropCount += 1;
+  }
+  if (dropCount === 0) return;
+  accumulator.blocks.splice(0, dropCount);
+  accumulator.retainedContentChars = retained;
+}
+
+/**
+ * Derives the renderable transcript from retained rows. Both passes need the
+ * whole retained window — an interactive tool call is resolved by a result that
+ * can arrive many rows later — so they run per read rather than per appended row.
+ */
+function deriveClaudeTranscript(
+  blocks: MobileSessionTranscriptBlock[]
+): MobileSessionTranscriptBlock[] {
   return compactIncrementalAssistantBlocks(resolveClaudeToolStatuses(blocks));
 }
 

@@ -2,7 +2,8 @@
 
 ## Status
 
-Proposed on 2026-08-15. Evaluation only — no code has been written against it.
+Proposed on 2026-08-15; stage 1 accepted and landed the same day. Stages 2–4
+remain proposals. Stage 3 is explicitly held — see the resolved questions.
 
 ## Context
 
@@ -34,8 +35,9 @@ The transcript path is not greenfield:
 
 | Piece | Location | State |
 | --- | --- | --- |
-| Structured block parser (Claude) | `src/main/core/conversations/claude-transcript.ts` | full parse of the whole file, no cache, no cursor |
-| Structured block parser (Codex) | `src/main/core/conversations/codex-rollout-terminal-history.ts` | tail-bounded at 8 MiB, LRU of 3 rollouts |
+| Structured block parser (Claude) | `src/main/core/conversations/claude-transcript.ts` | byte cursor, blocks retained per path, bounded by content (stage 1) |
+| Structured block parser (Codex) | `src/main/core/conversations/codex-rollout-terminal-history.ts` | tail-bounded at 8 MiB, derivations cached by file identity, LRU of 3 rollouts (stage 1) |
+| Byte-cursor engine | `src/main/core/conversations/incremental-jsonl-cursor.ts` | shared by the Claude parser and the raw tail reader (stage 1) |
 | Block model | `MobileSessionTranscriptBlock` in `src/shared/mobile-api.ts` | roles user/assistant/tool/status, `agentPhase`, `toolStatus`, `toolCallId`, format markdown/code/plain |
 | Grouping / render items | `src/shared/mobile-tool-transcript.ts` | adjacent tool calls collapse into one stable group |
 | Interaction extraction | `src/shared/mobile-session-interaction.ts` | structured only for `AskUserQuestion` / `ExitPlanMode`, otherwise scrapes terminal text |
@@ -69,11 +71,12 @@ Read + parse every line, then the same file via a tail read (`node`, this machin
 
 Two conclusions. First, reading history is ~three orders of magnitude cheaper than
 the fence it would replace — the data layer is not the problem and pagination is
-not needed for *latency*. Second, pagination is still needed for *bounding*:
-`loadClaudeTranscript` reads and re-parses the entire file on every invalidation,
-and `transcript-feed` invalidates up to 4×/s during a live turn. On a 14 MB
-transcript that is ~40 % of a core, spent re-deriving unchanged prefix. Codex
-escapes this only because it caps its tail at 8 MiB.
+not needed for *latency*. Second, bounding was still missing: `loadClaudeTranscript`
+read and re-parsed the entire file on every invalidation, and `transcript-feed`
+invalidates up to 4×/s during a live turn, so a 14 MB transcript burned ~40 % of a
+core re-deriving an unchanged prefix. Codex escaped that only by capping its tail
+at 8 MiB, and paid a smaller version of the same bill on every poll. Stage 1 has
+since closed both.
 
 ## Options
 
@@ -110,12 +113,36 @@ scope as a single step; B is a prerequisite for it either way.
 Adopt B, staged. Each stage is independently shippable and independently
 revertable.
 
-**Stage 1 — bound and cache the readers.** Give both parsers an offset cursor:
-parse only bytes appended since the last read, keep the block list per
-`(path, size, mtime)`, and cap the retained head. Pure main-process work, no UI.
-This removes the 4×/s full re-parse that mobile pays today.
-*Accept:* a live Claude turn on a 14 MB transcript re-parses only the appended
-tail; `claude-transcript.test.ts` covers an append, a truncation and a rewrite.
+**Stage 1 — bound and cache the readers. Landed 2026-08-15.** Pure main-process
+work, no UI. Measuring the two parsers first split this stage in two, because
+their costs turned out to be different problems:
+
+| | Claude, 14 MB | Codex, 547 MB |
+| --- | --- | --- |
+| Per read | 102 ms, whole file, no cache | 11–17 ms, 8 MiB tail, 123 rows |
+| What was wrong | unbounded re-parse of an unchanged prefix | unchanged file re-read and re-parsed every poll |
+| What it got | byte cursor from offset 0 | result cache keyed by `(size, mtime)` |
+
+Claude got the offset cursor the ADR asked for: `IncrementalJsonlCursor` scans
+only bytes appended since the previous read, and `ClaudeTranscriptReader` keeps
+the derived blocks per path, bounded by retained content. The existing
+`IncrementalTranscriptTailReader` became a second consumer of the same cursor
+rather than a second copy of the scan.
+
+Codex deliberately did **not** get a cursor. Its rows are tens of kilobytes
+each, so a cursor's first pass would scan the whole 547 MB — precisely the
+main-process spike the 8 MiB tail bound exists to prevent. The cost actually
+worth removing there was the other one: both mobile readers re-read, re-decoded
+and re-parsed an unchanged rollout on every request, because `rolloutTailReads`
+is a single-flight, not a cache. An unchanged rollout now costs one `stat`. The
+two history readers, which had converged on identical bodies with a cache on
+only one of them, now share one path.
+
+*Accepted:* an append to a Claude transcript reads only the appended byte range;
+`claude-transcript.test.ts` covers append, truncation, same-length inode
+replacement, cross-read interactive-tool pairing and the retained-content bound;
+`codex-rollout-mobile-tail.test.ts` asserts result identity across an unchanged
+rollout and re-derivation after growth.
 
 **Stage 2 — desktop transcript view.** Render `MobileSessionTranscriptBlock`s in
 the task view, reusing `groupAdjacentMobileToolBlocks` and the existing block
@@ -154,18 +181,29 @@ the user knowing which surface produced it.
 - Cross-provider divergence moves from the fence into the parsers, where it is at
   least testable against a fixture file instead of against a live CLI's timing.
 
-## Open questions
+## Resolved questions
+
+Answered 2026-08-15.
 
 1. **Does the transcript view replace the terminal in the task view, or sit beside
-   it?** Replacing it is the only version that actually removes the open cost;
-   sitting beside it doubles the surfaces and keeps the fence alive.
-2. **What happens for the 28 runtimes without parsers?** Ship the split experience
-   (fast, structured for two; terminal-only for the rest), or hold stage 3 until a
-   generic parser exists? A generic one may be impossible — most of those CLIs
-   write no transcript at all.
-3. **Is stage 1 worth doing alone?** It is the only stage that pays off with no UI
-   work, and it fixes a live mobile cost. It is also the stage most likely to be
-   the whole win if stage 2 slips.
+   it?** **It replaces the terminal, and the user can pick either surface.** Not a
+   split pane: one surface is shown at a time, with the transcript as the default
+   for a parser-backed runtime and the terminal reachable on demand. This keeps
+   the open-cost win — a task that opens into the transcript view waits on no
+   terminal fence — while leaving the raw provider TUI available when the
+   transcript's derived view is not what the reader wants.
+   Consequence for stage 2: the switch must not remount the PTY. The session
+   stays attached while hidden, so choosing "terminal" is a reveal, not a resume;
+   otherwise the fence returns as a per-switch cost instead of a per-open one.
+2. **What happens for the 28 runtimes without parsers?** **Stage 3 is held.** The
+   split experience is not shipped for now: the fence stays in place for every
+   runtime, including `claude` and `codex`, until the transcript view has proven
+   itself as a reading surface in stage 2. Holding it also keeps the fence's
+   bounds honest — they remain the live path for 30 runtimes rather than becoming
+   dead code nobody maintains.
+3. **Is stage 1 worth doing alone?** **Yes — done, standalone.** It shipped
+   without any of stage 2, and it changed the plan: see the stage 1 entry above
+   for why the Codex half became a cache rather than a cursor.
 
 ## References
 
