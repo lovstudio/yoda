@@ -12,6 +12,10 @@ export default tseslint.config(
     'out/**',
     'build/**',
     'node_modules/**',
+    // Vite's pre-bundled dependency cache. It lives inside the checkout so that
+    // parallel worktrees cannot overwrite each other's chunks, which also puts
+    // thousands of generated files in lint's path.
+    '.vite/**',
     '**/_*/**',
     // Worktrees are full checkouts that lint themselves — don't double-lint
     // them (or their build artifacts) from the parent checkout.

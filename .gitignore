@@ -84,6 +84,10 @@ src/main/appConfig.json
 /.output/
 /cover-image/
 
+# Vite dependency pre-bundle cache (kept in-checkout so parallel worktrees
+# cannot overwrite each other's chunks)
+/.vite/
+
 # vitest browser failure artifacts
 .vitest-attachments/
 **/__screenshots__/

@@ -9,6 +9,9 @@
 **/.turbo
 **/out
 
+# ignore vite's dependency pre-bundle cache
+.vite
+
 # ignore git worktrees (gitignored; descending into them flakes format)
 .worktrees
 

@@ -61,6 +61,18 @@ const FIRST_FRAME_TIMEOUT_MS = 5_000;
 const PREPARED_FRAME_SETTLEMENT_QUIET_MS = 120;
 const FALLBACK_FIRST_FRAME_QUIET_MS = 700;
 /**
+ * How long the silence fence may keep a complete frame off screen.
+ *
+ * The fence asks the provider to stop writing, which a booting agent CLI does
+ * not do: it draws a spinner or a startup log until it is done, restarting the
+ * window on every burst. Waiting for silence therefore costs the provider's
+ * whole startup, not the fence's nominal 700 ms — measured at ~5 s on a Codex
+ * resume that had a cursor-complete frame in hand after 2.2 s. Spend this much
+ * on silence, then accept the complete frame we are holding: an extra redraw
+ * lands as one frame of churn, while the alternative is seconds of nothing.
+ */
+const CANONICAL_QUIET_HOLD_BUDGET_MS = 1_000;
+/**
  * Bound the subscribe round-trip generously. This is not a latency target: it
  * is the point at which we give up entirely, and giving up strands the caller
  * on its opening surface, because connect() rejections are intentionally
@@ -357,6 +369,15 @@ export class FrontendPty {
   private canonicalSurfaceFenceVerifiedRevision: number | null = null;
   /** A source-grid checkpoint needs backend output after being fit to another grid. */
   private canonicalOutputRequiredAfterRevision: number | null = null;
+  /**
+   * Generation whose silence-fence hold budget is being spent, and since when.
+   *
+   * Keyed by generation so a replacement generation starts its own budget: the
+   * budget exists to bound "we are holding a complete frame the fence refuses",
+   * and a new generation has not proven anything yet.
+   */
+  private canonicalQuietHoldGeneration: number | null = null;
+  private canonicalQuietHoldSinceMs = 0;
   private preparedCanonicalGeneration: number | null = null;
   private preparedCanonicalRevision: number | null = null;
   /** Whether the prepared revision bypassed silence under a live-runtime fence. */
@@ -1586,6 +1607,7 @@ export class FrontendPty {
     this.synchronizedOutputCompletedWithCursorRevision = null;
     this.synchronizedOutputScanTail = '';
     this.canonicalOutputRequiredAfterRevision = null;
+    this.canonicalQuietHoldGeneration = null;
     this.atomicLiveFramePaintGeneration = null;
     this.atomicLiveFramePaintRevision = null;
   }
@@ -1999,6 +2021,7 @@ export class FrontendPty {
           this.markCurrentVisibleFrameStage('frame-canonical-wait', {
             reason: 'blocking-fence',
             revision,
+            ...this.canonicalFenceDetails(revision),
           });
           const fencedActivity = await this.waitForOutputActivityOrDelay(
             revision,
@@ -2017,6 +2040,7 @@ export class FrontendPty {
           this.markCurrentVisibleFrameStage('frame-canonical-wait', {
             reason: 'anchor-fallback-missing',
             revision,
+            ...this.canonicalFenceDetails(revision),
           });
           const fencedActivity = await this.waitForOutputActivityOrDelay(
             revision,
@@ -2034,11 +2058,46 @@ export class FrontendPty {
         // loading frames before replaying history. Keep the semantic first-
         // frame guard conservative until a provider-owned readiness fence is
         // available.
+        //
+        // Conservative cannot mean unbounded, though. Every fence here is
+        // "N ms after the last byte", and a provider that redraws a spinner or
+        // a startup log while it boots restarts that window on every burst — so
+        // the reveal waits out the provider's entire startup no matter how
+        // early a complete frame was in hand. A measured Codex resume held one
+        // for 3.2s that way. Once the hold budget is spent on a frame that is
+        // cursor-complete for this exact generation, the loading screen is
+        // demonstrably behind us and further waiting only trades one frame of
+        // churn for seconds of blank surface.
+        if (this.canonicalQuietHoldGeneration !== generation) {
+          this.canonicalQuietHoldGeneration = generation;
+          this.canonicalQuietHoldSinceMs = performance.now();
+        }
+        const heldMs = performance.now() - this.canonicalQuietHoldSinceMs;
+        if (
+          heldMs >= CANONICAL_QUIET_HOLD_BUDGET_MS &&
+          this.synchronizedOutputCompletedWithCursorRevision === revision &&
+          this.canonicalParserDrainedRevision >= revision
+        ) {
+          this.markCurrentVisibleFrameStage('frame-quiet-wait', {
+            reason: 'hold-budget-spent',
+            waitMs: 0,
+            heldMs: Math.round(heldMs),
+            revision,
+            ...this.canonicalFenceDetails(revision),
+          });
+          this.preparedCanonicalGeneration = generation;
+          this.preparedCanonicalRevision = revision;
+          this.preparedCanonicalAtomicLive = false;
+          this.canonicalSurfaceFenceVerifiedRevision = revision;
+          return true;
+        }
         const quietMs = FALLBACK_FIRST_FRAME_QUIET_MS;
         this.markCurrentVisibleFrameStage('frame-quiet-wait', {
           reason: 'canonical-fallback',
           waitMs: quietMs,
+          heldMs: Math.round(heldMs),
           revision,
+          ...this.canonicalFenceDetails(revision),
         });
         const quietOutcome = await this.waitForOutputActivityOrDelay(
           revision,
@@ -2360,7 +2419,7 @@ export class FrontendPty {
     this.publishVisibleFrameState(false);
   }
 
-  private commitVisibleFrame(mountLease: number): boolean {
+  private commitVisibleFrame(mountLease: number, path: 'hot' | 'canonical'): boolean {
     const claim = this.canonicalRevealClaim;
     if (claim && Date.now() >= claim.expiresAt) {
       this.expireCanonicalRevealClaim(claim);
@@ -2375,6 +2434,11 @@ export class FrontendPty {
       return false;
     }
     this.visibleFrameMountGeneration = mountLease;
+    // Mark before publishing. The publish runs its React listeners
+    // synchronously and the task-open trace is completed inside one of them, so
+    // a paint marked afterwards is dropped into a closed trace — which is how
+    // the paint itself went missing from the trajectory it was meant to explain.
+    this.markVisibleFrameStage(mountLease, 'frame-painted', { path });
     this.publishVisibleFrameState(true);
     return true;
   }
@@ -2415,6 +2479,42 @@ export class FrontendPty {
     const lease = this.debugVisibleMount?.lease;
     if (lease === undefined) return;
     this.markVisibleFrameStage(lease, stage, details);
+  }
+
+  /**
+   * What the fence is currently holding out for.
+   *
+   * A fence wait reported as a bare reason tells the reader that we refused a
+   * frame, not which of several independent conditions refused it. Naming the
+   * anchor kind and whether its text was found is the difference between "main
+   * had no transcript evidence" and "the evidence never appeared on screen" —
+   * two findings with opposite fixes that produce the same mark otherwise.
+   */
+  private canonicalFenceDetails(revision: number): TaskOpenFrameDetails {
+    const anchor = this.expectedCanonicalSurfaceAnchor;
+    return {
+      anchorKind: anchor?.kind ?? null,
+      anchorSegments: anchor?.segments.length ?? 0,
+      anchorMatched: this.canonicalSurfaceAnchorMatchedRevision === revision,
+      allowAtomicLive: this.shouldAllowAtomicLiveFrame(),
+      cursorComplete: this.synchronizedOutputCompletedWithCursorRevision === revision,
+      parserDrained: this.canonicalParserDrainedRevision >= revision,
+    };
+  }
+
+  /**
+   * Whether this generation already spent its silence budget in the verifier.
+   *
+   * The settlement fence would otherwise re-impose the same 700 ms wait on the
+   * revision the verifier just accepted, moving the stall one layer up instead
+   * of removing it — and against a streaming provider that wait cannot converge
+   * either. A DOM settlement window is still warranted; the silence one is not.
+   */
+  private hasSpentCanonicalQuietHold(generation: number): boolean {
+    return (
+      this.canonicalQuietHoldGeneration === generation &&
+      performance.now() - this.canonicalQuietHoldSinceMs >= CANONICAL_QUIET_HOLD_BUDGET_MS
+    );
   }
 
   private scheduleVisibleFrameAck(mountLease: number): void {
@@ -2523,12 +2623,11 @@ export class FrontendPty {
           this.ownedContainer.style.visibility = 'hidden';
           break;
         }
-        if (!this.commitVisibleFrame(mountLease)) break;
+        if (!this.commitVisibleFrame(mountLease, 'hot')) break;
         for (const resolve of this.visibleFrameWaiters) resolve(true);
         this.visibleFrameWaiters.clear();
         const visibleMount =
           this.debugVisibleMount?.lease === mountLease ? this.debugVisibleMount : null;
-        this.markVisibleFrameStage(mountLease, 'frame-painted', { path: 'hot' });
         console.log('[DEBUG][agent-session-load] hot visible frame painted:', {
           sessionId: this.sessionId,
           elapsedMs: visibleMount
@@ -2667,8 +2766,9 @@ export class FrontendPty {
             preparedRevision === this.outputRevision &&
             !preparedAtomicLive;
           const quietMs = outputChangedDuringSettlement
-            ? frameWasPreparedAtCurrentRevision &&
-              this.synchronizedOutputCompletedWithCursorRevision === this.outputRevision
+            ? (frameWasPreparedAtCurrentRevision &&
+                this.synchronizedOutputCompletedWithCursorRevision === this.outputRevision) ||
+              this.hasSpentCanonicalQuietHold(this.outputGeneration)
               ? PREPARED_FRAME_SETTLEMENT_QUIET_MS
               : FALLBACK_FIRST_FRAME_QUIET_MS
             : PREPARED_FRAME_SETTLEMENT_QUIET_MS;
@@ -2805,7 +2905,7 @@ export class FrontendPty {
 
       this.atomicLiveFramePaintGeneration = null;
       this.atomicLiveFramePaintRevision = null;
-      if (!this.commitVisibleFrame(mountLease)) break;
+      if (!this.commitVisibleFrame(mountLease, 'canonical')) break;
       this.visibleFrameSettlementPending = false;
       this.hasShownCanonicalFrame =
         !this.resetBeforeNextLiveGeneration && this.hasCanonicalViewport();
@@ -2817,7 +2917,6 @@ export class FrontendPty {
       this.visibleFrameWaiters.clear();
       const visibleMount =
         this.debugVisibleMount?.lease === mountLease ? this.debugVisibleMount : null;
-      this.markVisibleFrameStage(mountLease, 'frame-painted', { path: 'canonical' });
       console.log('[DEBUG][agent-session-load] visible frame painted:', {
         sessionId: this.sessionId,
         elapsedMs: visibleMount
