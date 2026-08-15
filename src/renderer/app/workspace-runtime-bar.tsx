@@ -2119,27 +2119,26 @@ function WorkspaceMaasUsageContent({
               : '—'}
           </span>
         </div>
-        <div className="mt-2 flex gap-2">
-          <Button
-            type="button"
-            className="flex-1"
-            size="sm"
-            variant="outline"
-            disabled={loading || refreshing}
-            onClick={onRefresh}
-          >
-            <RefreshCw
-              aria-hidden
-              className={cn('size-3.5', (loading || refreshing) && 'animate-spin')}
-            />
-            {refreshing
-              ? t('workspaceRuntime.refreshingAccountUsage')
-              : t('workspaceRuntime.refreshAccountUsage')}
-          </Button>
-          <Button type="button" className="flex-1" size="sm" variant="outline" onClick={onManage}>
-            {t('workspaceRuntime.maasUsageManage')}
-          </Button>
-        </div>
+        {/* This card describes the account behind the current session, so the
+            only steady-state action is re-reading it. Routing and Profile
+            management belong to the global model-access popover, which owns
+            that surface already. */}
+        <Button
+          type="button"
+          className="mt-2 w-full"
+          size="sm"
+          variant="outline"
+          disabled={loading || refreshing}
+          onClick={onRefresh}
+        >
+          <RefreshCw
+            aria-hidden
+            className={cn('size-3.5', (loading || refreshing) && 'animate-spin')}
+          />
+          {refreshing
+            ? t('workspaceRuntime.refreshingAccountUsage')
+            : t('workspaceRuntime.refreshAccountUsage')}
+        </Button>
       </WorkspaceBarCardFooter>
     </>
   );
