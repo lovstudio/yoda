@@ -1,15 +1,19 @@
+import type { AgentTeamMember } from '@shared/agent-team';
 import type { Agent } from '@shared/agents';
 import type { ParadigmEntry } from './entries';
 
 /**
- * What a paradigm's configuration panel gets. A kind reads only what it needs —
- * the slot seats are rendered generically from its descriptor, so a panel
- * contribution exists purely for what a kind adds beyond its seats.
+ * What a paradigm's configuration panel gets.
+ *
+ * The roster is rendered generically above it — every paradigm is a set of Agents,
+ * whatever kind stores it — so a panel contribution exists purely for what a kind
+ * adds beyond who is on the list.
  */
 export interface ParadigmPanelProps {
   entry: ParadigmEntry;
   agents: Agent[];
-  slotAgentId: (slotKey: string) => string | null;
-  onSlotAgentChange: (slotKey: string, agentId: string) => void;
+  /** The Agents this instance runs with, already read out of its params. */
+  roster: AgentTeamMember[];
+  onRosterChange: (members: AgentTeamMember[]) => void;
   onConfigurationChange: () => void;
 }

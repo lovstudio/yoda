@@ -38,7 +38,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import yodaLogoWhite from '@/assets/images/yoda/yoda_logo_white.svg';
 import yodaLogo from '@/assets/images/yoda/yoda_logo.svg';
-import { type AgentTeam } from '@shared/agent-team';
+import { enabledTeamMembers, type AgentTeam } from '@shared/agent-team';
 import type { Agent } from '@shared/agents';
 import type { Branch } from '@shared/git';
 import type {
@@ -142,7 +142,8 @@ import { promptRewriteFailureDescription } from './submit-prompt-rewrite';
 /**
  * The composer's persisted run-mode values. Kept as the storage vocabulary; the
  * behavior behind each one lives in its paradigm kind descriptor
- * (`src/shared/paradigms/kinds.ts`), reached via {@link runModeParadigm}.
+ * (`src/shared/paradigms/kinds.ts`), reached through the selected paradigm
+ * instance — `paradigmKindForRunMode` only seeds the selection.
  */
 type HomeRunMode = LegacyRunMode;
 type RunHostKind = 'local' | 'ssh';
@@ -226,18 +227,13 @@ interface RunModeInputChrome {
 const MAX_COMPARE_VARIANTS = 5;
 type ExplicitTaskOutputLanguage = Extract<TaskOutputLanguage, 'en' | 'zh-CN'>;
 
-/** The paradigm kind behind a persisted run mode. */
-function runModeParadigm(mode: HomeRunMode): ParadigmKindDescriptor {
-  return paradigmKind(paradigmKindForRunMode(mode));
-}
-
 /**
  * Storage key of the slot whose Agent stands in for the whole paradigm in the
  * composer (its implementer seat). null for kinds with no fixed slots — `team`
  * carries its roster in params instead.
  */
-function primarySlotKey(mode: HomeRunMode): string | null {
-  return runModeParadigm(mode).slots[0]?.storageKey ?? null;
+function primarySlotKey(kind: ParadigmKindDescriptor): string | null {
+  return kind.slots[0]?.storageKey ?? null;
 }
 
 /**
@@ -266,9 +262,9 @@ const PARADIGM_ACCENT_CONTAINER_CLASS: Record<ParadigmAccent, string> = {
     'border-amber-500/30 bg-amber-500/[0.035] ring-1 ring-amber-500/15 focus-within:border-amber-500/45 focus-within:ring-amber-500/25',
 };
 
-function getRunModeInputChrome(mode: HomeRunMode): RunModeInputChrome {
+function getParadigmInputChrome(kind: ParadigmKindDescriptor): RunModeInputChrome {
   return {
-    containerClassName: PARADIGM_ACCENT_CONTAINER_CLASS[runModeParadigm(mode).capabilities.accent],
+    containerClassName: PARADIGM_ACCENT_CONTAINER_CLASS[kind.capabilities.accent],
   };
 }
 
@@ -606,12 +602,24 @@ export const HomeComposer = observer(function HomeComposer({
     if (draft === undefined || hasManualRunModeRef.current) return;
     setRunModeState(persistedRunMode);
   }, [draft, persistedRunMode]);
+  /**
+   * Switch mode, and with it the remembered instance.
+   *
+   * A mode reached without naming an instance forgets the one remembered before
+   * it — the id belonged to whatever was chosen alongside it, and carrying a
+   * team's id into single-Agent mode is what made the two disagree. Written in one
+   * patch so the mode and the id it applies to can never land separately.
+   */
   const setRunMode = useCallback(
-    (next: HomeRunMode) => {
+    (next: HomeRunMode, paradigmId = '') => {
       hasManualRunModeRef.current = true;
       setRunModeState(next);
-      if (runModeOverridden) setComposerDefault('runMode', next);
-      else updateDraft({ runMode: next });
+      if (runModeOverridden) {
+        setComposerDefault('runMode', next);
+        updateDraft({ selectedParadigmId: paradigmId });
+      } else {
+        updateDraft({ runMode: next, selectedParadigmId: paradigmId });
+      }
     },
     [runModeOverridden, setComposerDefault, updateDraft]
   );
@@ -621,8 +629,8 @@ export const HomeComposer = observer(function HomeComposer({
   const setParadigm = useCallback(
     (kindId: ParadigmKindId, paradigmId: string) => {
       const runMode = runModeForParadigmKind(kindId);
-      if (runMode) setRunMode(runMode);
-      updateDraft({ selectedParadigmId: paradigmId });
+      if (runMode) setRunMode(runMode, paradigmId);
+      else updateDraft({ selectedParadigmId: paradigmId });
     },
     [setRunMode, updateDraft]
   );
@@ -671,9 +679,28 @@ export const HomeComposer = observer(function HomeComposer({
   // The paradigm instance this submit will run. Seats live on it, so resolving it
   // here is what makes a duplicated paradigm launch with its own Agents rather
   // than the ones its original was configured with.
-  const activeParadigm = useMemo(
-    () => selectByKind(paradigms, paradigmKindForRunMode(runMode), selectedParadigmId),
-    [paradigms, runMode, selectedParadigmId]
+  const activeParadigm = useMemo(() => {
+    // The remembered instance is authoritative, not filtered by the run mode:
+    // editing a paradigm's roster can change its kind (one Agent becomes three),
+    // and resolving by mode would then drop the instance the user is holding and
+    // silently substitute another of the old kind. The mode is only the fallback
+    // for a selection that was never made or no longer exists — `setRunMode`
+    // clears the id whenever the two would otherwise diverge.
+    const remembered = selectedParadigmId
+      ? paradigms.find((paradigm) => paradigm.id === selectedParadigmId)
+      : undefined;
+    return remembered ?? selectByKind(paradigms, paradigmKindForRunMode(runMode), undefined);
+  }, [paradigms, runMode, selectedParadigmId]);
+  /**
+   * The kind actually driving this composer.
+   *
+   * Every capability gate reads this rather than the run mode: the mode is a
+   * persisted string that names a kind, while the selected instance *is* one, and
+   * after a roster edit the instance is the one that changed.
+   */
+  const activeKind = useMemo(
+    () => paradigmKind(activeParadigm?.kindId ?? paradigmKindForRunMode(runMode)),
+    [activeParadigm, runMode]
   );
   // The roster the multi-agent paradigm runs, read off the selected instance
   // itself: a team *is* a `team` instance, and its roster is that instance's
@@ -696,7 +723,7 @@ export const HomeComposer = observer(function HomeComposer({
     [activeParadigm, selectedAgentIdsByMode, userAgents]
   );
   const composerAgent = useMemo<Agent | null>(() => {
-    if (runMode === 'team') {
+    if (activeKind.kindId === 'team') {
       const leader =
         activeTeam?.members.find((member) => member.role === 'leader') ?? activeTeam?.members[0];
       if (!leader?.agentRef) return null;
@@ -706,10 +733,10 @@ export const HomeComposer = observer(function HomeComposer({
         ) ?? null
       );
     }
-    const slotKey = primarySlotKey(runMode);
+    const slotKey = primarySlotKey(activeKind);
     const agentId = slotKey ? slotAgentId(slotKey) : null;
     return agentId ? (userAgents.find((agent) => agent.id === agentId) ?? null) : null;
-  }, [activeTeam, runMode, slotAgentId, userAgents]);
+  }, [activeKind, activeTeam, slotAgentId, userAgents]);
   const composerSkillSelection = useMemo(() => agentSkillSelection(composerAgent), [composerAgent]);
   const permissionModes = useRuntimePermissionModes();
   const normalAgentRuntime = useMemo(
@@ -805,7 +832,7 @@ export const HomeComposer = observer(function HomeComposer({
   // existing local/remote source in a worktree.
   const standardSubmitKind: HomeProjectSubmitStrategy =
     effectiveStandardStrategyKind === 'new-branch' ? 'new-branch' : selectedBranchSubmitKind;
-  const paradigmCapabilities = runModeParadigm(runMode).capabilities;
+  const paradigmCapabilities = activeKind.capabilities;
   // Which branch strategy reaches createTask: fixed for paradigms that declare
   // their worktree need, otherwise whichever strategy field the paradigm reads.
   const projectSubmitStrategyKind: HomeProjectSubmitStrategy =
@@ -915,19 +942,21 @@ export const HomeComposer = observer(function HomeComposer({
   // runtime + prompt). Every slot the paradigm declares must be filled.
   const hasSlotAgent = (slotKey: string) => !!slotAgentId(slotKey);
   const modeHasAgents =
-    runMode === 'team'
-      ? // The team roster is params, not fixed slots — it moves under the
-        // paradigm's params once instances land.
-        Boolean(activeTeam && activeTeam.members.length > 0)
-      : runModeParadigm(runMode).slots.every((slot) => hasSlotAgent(slot.storageKey));
+    activeKind.kindId === 'team'
+      ? // A team's roster lives in its params, not in fixed slots — and a member
+        // switched off is still on the roster, so only the enabled ones count
+        // towards having anyone to run.
+        Boolean(activeTeam && enabledTeamMembers(activeTeam).length > 0)
+      : activeKind.slots.every((slot) => hasSlotAgent(slot.storageKey));
   // Multi-config compare only fires in plain (normal, non-task-scoped) submits;
   // every variant must target a real project before it can spawn a task.
-  const compareActive = runMode === 'normal' && !taskScopedTarget && compareVariants.length > 0;
+  const compareActive =
+    activeKind.kindId === 'single' && !taskScopedTarget && compareVariants.length > 0;
   const compareVariantsReady =
     !compareActive ||
     (Boolean(selectedProjectId) && compareVariants.every((variant) => Boolean(variant.projectId)));
   const quickActionModeAvailable =
-    runMode === 'normal' &&
+    activeKind.kindId === 'single' &&
     !taskScopedTarget &&
     compareVariants.length === 0 &&
     projectData?.type === 'local' &&
@@ -1001,8 +1030,7 @@ export const HomeComposer = observer(function HomeComposer({
 
       // Which paradigm runs. Comparison wraps the single-agent paradigm rather
       // than being a mode of it, so it is selected here and nowhere else.
-      const kindId: ParadigmKindId =
-        compareActive && mounted ? 'compare' : paradigmKindForRunMode(runMode);
+      const kindId: ParadigmKindId = compareActive && mounted ? 'compare' : activeKind.kindId;
       const params: ParadigmLaunchParams = {
         team: activeTeam,
         variants: compareVariants,
@@ -1164,7 +1192,7 @@ export const HomeComposer = observer(function HomeComposer({
     projectSubmitStrategyKind,
     paradigmCapabilities,
     submitting,
-    runMode,
+    activeKind,
     compareActive,
     compareVariants,
     quickActionMode,
@@ -1197,7 +1225,7 @@ export const HomeComposer = observer(function HomeComposer({
     void handleSubmit();
   }, [canSubmit, needsInitialCommit, selectedProjectId, showInitialCommitModal, handleSubmit, t]);
 
-  const promptInputChrome = getRunModeInputChrome(runMode);
+  const promptInputChrome = getParadigmInputChrome(activeKind);
   // The composer-settings gear belongs to a config row (the base row in normal
   // mode, every config row in compare mode), so it is a render helper reused
   // across rows rather than a single global control.
@@ -1438,7 +1466,7 @@ export const HomeComposer = observer(function HomeComposer({
         {/* Compare mode: the base config is migrated into this uniform, reorderable
             list, so every row is an equal config. The plain base chip row below is
             hidden while comparing. */}
-        {!taskScopedTarget && runMode === 'normal' && compareVariants.length > 0 && (
+        {!taskScopedTarget && activeKind.kindId === 'single' && compareVariants.length > 0 && (
           <div className="flex flex-col gap-2">
             {compareVariants.map((variant, index) => {
               const variantProject = asMounted(
@@ -1580,18 +1608,18 @@ export const HomeComposer = observer(function HomeComposer({
                 {t('home.buildGenerating')}
               </span>
             )}
-            {!taskScopedTarget && mounted && runMode === 'team' && (
+            {!taskScopedTarget && mounted && activeKind.kindId === 'team' && (
               <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
             )}
             <ParadigmSelector
-              kindId={paradigmKindForRunMode(runMode)}
+              kindId={activeKind.kindId}
               paradigmId={selectedParadigmId}
               agents={userAgents}
               draftAgents={selectedAgentIdsByMode}
               onChange={setParadigm}
             />
             {renderComposerSettingsButton()}
-            {!taskScopedTarget && runMode === 'normal' && renderAddCompareButton()}
+            {!taskScopedTarget && activeKind.kindId === 'single' && renderAddCompareButton()}
           </div>
         )}
       </div>

@@ -86,7 +86,33 @@ export const teamParadigmKind: ParadigmKindDescriptor = {
     routing: 'sequential',
     communication: { ...DEFAULT_TEAM_COMMUNICATION_CONFIG },
     routingHopLimit: DEFAULT_ROUTING_HOP_LIMIT,
-    members: [],
+    // Shipped with a roster rather than empty: a way of working the user has to
+    // populate before it does anything is not a paradigm, it is a form. These
+    // three are the stages every non-trivial change goes through, and any of them
+    // can be switched off in the panel — which is cheaper than assembling them.
+    members: [
+      {
+        handle: 'spec',
+        displayName: 'Spec Agent',
+        role: 'leader' as const,
+        runtime: 'claude' as const,
+        agentRef: BUILTIN_AGENT_KEYS.spec,
+      },
+      {
+        handle: 'implementer',
+        displayName: 'Implementer',
+        role: 'worker' as const,
+        runtime: 'claude' as const,
+        agentRef: BUILTIN_AGENT_KEYS.reviewImplementer,
+      },
+      {
+        handle: 'reviewer',
+        displayName: 'Reviewer',
+        role: 'worker' as const,
+        runtime: 'codex' as const,
+        agentRef: BUILTIN_AGENT_KEYS.reviewReviewer,
+      },
+    ],
   },
 };
 

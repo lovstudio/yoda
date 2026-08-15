@@ -1,9 +1,9 @@
-import { Check, ChevronDown, Copy, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, Copy, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { AgentTeamMember } from '@shared/agent-team';
 import type { Agent } from '@shared/agents';
 import type { ParadigmKindId } from '@shared/paradigms/contract';
-import { paradigmKind } from '@shared/paradigms/kinds';
 import { AvatarInput, type AvatarFileError } from '@renderer/lib/components/avatar-input';
 import { AvatarValue } from '@renderer/lib/components/avatar-value';
 import { toast } from '@renderer/lib/hooks/use-toast';
@@ -35,7 +35,7 @@ import {
 } from './entries';
 import { ParadigmEntryCard } from './entry-card';
 import { ParadigmIcon, ParadigmMark } from './icons';
-import { paradigmSeatAgentId } from './seats';
+import { paradigmRoster, rosterAgent, rosterDraft } from './roster';
 import { useParadigms } from './use-paradigms';
 
 export interface ParadigmSelectorProps {
@@ -71,7 +71,7 @@ export function ParadigmSelector({
   onChange,
 }: ParadigmSelectorProps) {
   const { t } = useTranslation();
-  const { paradigms, setPresentation, setSeatAgent, remove, duplicate } = useParadigms();
+  const { paradigms, create, update, setPresentation, remove, duplicate } = useParadigms();
   const [open, setOpen] = useState(false);
   const entries = useMemo(() => paradigmEntries(paradigms), [paradigms]);
   const currentId = paradigmEntryId(entries, kindId, paradigmId);
@@ -91,30 +91,31 @@ export function ParadigmSelector({
   const dirty = configurationDirty || (pending !== undefined && pending.id !== current?.id);
   const isNonStandardMode = current !== undefined && current.kindId !== 'single';
 
-  // Seats resolve per instance: a duplicated paradigm's Agents are its own, which
-  // is what makes the copy worth having. Bound per entry so a row's name and its
-  // configuration panel cannot disagree about who is assigned.
-  const seatAgentId = (entry: ParadigmEntry) => (slotStorageKey: string) =>
-    paradigmSeatAgentId({
+  // A paradigm *is* its roster, so the list reads it per instance: a duplicated
+  // paradigm's Agents are its own, which is what makes the copy worth having.
+  // Bound per entry so a row and its configuration panel cannot disagree about
+  // who is on the list.
+  const rosterOf = (entry: ParadigmEntry) =>
+    paradigmRoster({
       paradigm: paradigms.find((paradigm) => paradigm.id === entry.id),
-      slotStorageKey,
-      draftAgents,
       agents,
+      draftAgents,
     });
   /**
-   * What an unnamed instance goes by: the Agent in its implementer seat.
+   * The one line under a row's name: who it runs with.
    *
-   * A kind's own built-in was never named, but the Agent sitting in it was — and
-   * that name is the one the user recognizes, so it stands in rather than leaving
-   * the row as a bare category.
+   * One Agent is named outright — for a kind's own built-in that name is the whole
+   * point of the row. Several are counted, because three names do not fit and the
+   * count is what the user is choosing between anyway.
    */
-  const seatAgentName = (entry: ParadigmEntry): string | null => {
-    const slot = paradigmKind(entry.kindId).slots[0];
-    if (!slot) return null;
-    const agentId = seatAgentId(entry)(slot.storageKey);
-    return agents.find((agent) => agent.id === agentId)?.name ?? null;
+  const rosterSummary = (entry: ParadigmEntry): string => {
+    const members = rosterOf(entry);
+    if (members.length === 0) return t(entry.descKey);
+    const sole = members[0];
+    if (members.length === 1 && sole) return rosterAgent(sole, agents)?.name ?? sole.displayName;
+    return t('home.paradigmRosterCount', { count: members.length });
   };
-  const labelOf = (entry: ParadigmEntry) => paradigmEntryLabel(entry, t, seatAgentName(entry));
+  const labelOf = (entry: ParadigmEntry) => paradigmEntryLabel(entry, t);
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
@@ -173,6 +174,61 @@ export function ParadigmSelector({
     setPendingId(copy.id);
     setEditingId(copy.id);
     setEditDraft({ label: copy.label, icon: copy.icon });
+  };
+
+  /**
+   * A paradigm from scratch: one Agent, no parameters, named for renaming.
+   *
+   * It starts as a `single` because that is what one Agent is, not because the user
+   * chose a category — adding a second Agent in the panel migrates it. There is no
+   * empty state to fill first: the seat falls back to the general Agent, so the new
+   * row is launchable the moment it exists.
+   */
+  const handleCreate = async () => {
+    const created = await create({
+      kindId: 'single',
+      label: t('home.paradigmNewName'),
+      icon: '',
+      params: { agents: {} },
+    });
+    setPendingId(created.id);
+    setEditingId(created.id);
+    setEditDraft({ label: created.label, icon: created.icon });
+  };
+
+  /**
+   * The only write behind the roster editor, and the only place a paradigm changes
+   * kind.
+   *
+   * Going from one Agent to several is a different storage shape, which `rosterDraft`
+   * works out. A built-in cannot make that crossing — its id is a shipped constant
+   * other params point at — so it is duplicated first and the copy migrates, which
+   * is also the honest outcome: the user was editing a default and now owns one.
+   */
+  const handleRosterChange = async (entry: ParadigmEntry, members: AgentTeamMember[]) => {
+    const paradigm = paradigms.find((candidate) => candidate.id === entry.id);
+    if (!paradigm) return;
+    const draft = rosterDraft({ paradigm, members, agents });
+    if (draft.kindId !== paradigm.kindId && paradigm.builtin) {
+      const label = labelOf(entry);
+      const copy = await duplicate(paradigm.id);
+      setPendingId(copy.id);
+      // The main process names a copy `"<label> copy"` — it cannot resolve i18n
+      // keys — so this write, which has to happen anyway, corrects it.
+      await update(
+        copy.id,
+        rosterDraft({
+          paradigm: copy,
+          members,
+          agents,
+          label: t('home.paradigmCopyName', { name: label.name ?? label.category }),
+        })
+      );
+      toast({ title: t('home.paradigmForkedForRoster') });
+    } else {
+      await update(paradigm.id, draft);
+    }
+    setConfigurationDirty(true);
   };
 
   const handleRemove = async (id: string) => {
@@ -257,29 +313,44 @@ export function ParadigmSelector({
           </DialogTitle>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 divide-x divide-border/60 border-t border-border/60">
-          <div
-            role="tablist"
-            aria-label={t('home.modeAria')}
-            aria-orientation="vertical"
-            className="flex w-[16.5rem] shrink-0 flex-col gap-1.5 overflow-y-auto bg-background-2 p-2"
-          >
-            {entries.map((entry) => {
-              const label = labelOf(entry);
-              return (
-                <ParadigmEntryCard
-                  key={entry.id}
-                  entry={entry}
-                  category={label.category}
-                  name={label.name}
-                  // Highlights the entry the right pane is actually showing, not
-                  // the raw pending id: that id can be unset or point at an
-                  // instance that is gone, and then no card looked chosen while
-                  // the pane beside it was configuring one.
-                  active={entry.id === pending?.id}
-                  onSelect={() => setPendingId(entry.id)}
-                />
-              );
-            })}
+          <div className="flex w-[16.5rem] shrink-0 flex-col bg-background-2">
+            <div
+              role="tablist"
+              aria-label={t('home.modeAria')}
+              aria-orientation="vertical"
+              className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-2"
+            >
+              {entries.map((entry) => {
+                const label = labelOf(entry);
+                return (
+                  <ParadigmEntryCard
+                    key={entry.id}
+                    entry={entry}
+                    title={label.name ?? label.category}
+                    subtitle={rosterSummary(entry)}
+                    // Highlights the entry the right pane is actually showing, not
+                    // the raw pending id: that id can be unset or point at an
+                    // instance that is gone, and then no card looked chosen while
+                    // the pane beside it was configuring one.
+                    active={entry.id === pending?.id}
+                    onSelect={() => setPendingId(entry.id)}
+                  />
+                );
+              })}
+            </div>
+            {/* Pinned to the bottom rather than sitting after the last card: with
+                nine rows it scrolls out of sight, and creating is the one action in
+                this column that is not about the rows already in it. */}
+            <div className="shrink-0 border-t border-border/60 p-2">
+              <button
+                type="button"
+                onClick={() => void handleCreate()}
+                className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border text-xs font-medium text-foreground-muted transition-colors hover:border-border-1 hover:bg-background-1 hover:text-foreground"
+              >
+                <Plus className="size-3.5" />
+                {t('home.paradigmNew')}
+              </button>
+            </div>
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
             {pending && pendingLabel && (
@@ -428,10 +499,8 @@ export function ParadigmSelector({
                 <ParadigmConfigurationPanel
                   entry={pending}
                   agents={agents}
-                  slotAgentId={seatAgentId(pending)}
-                  onSlotAgentChange={(slotKey, agentId) =>
-                    void setSeatAgent(pending.id, slotKey, agentId)
-                  }
+                  roster={rosterOf(pending)}
+                  onRosterChange={(members) => void handleRosterChange(pending, members)}
                   onConfigurationChange={() => setConfigurationDirty(true)}
                 />
               </>

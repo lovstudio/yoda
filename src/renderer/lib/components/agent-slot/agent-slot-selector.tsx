@@ -26,6 +26,11 @@ interface AgentSlotSelectorProps {
   /** Optional quiet line above the agent name inside the trigger (e.g. the
    *  slot's role), letting the caller fold a label into the picker row. */
   eyebrow?: ReactNode;
+  /**
+   * What the empty trigger reads as. Defaults to picking an Agent for a seat;
+   * callers that use the empty state to *append* an Agent say so instead.
+   */
+  placeholder?: string;
   className?: string;
 }
 
@@ -42,6 +47,7 @@ export function AgentSlotSelector({
   onCreateAgent,
   onManageAgents,
   eyebrow,
+  placeholder,
   className,
 }: AgentSlotSelectorProps) {
   const { t } = useTranslation();
@@ -101,7 +107,9 @@ export function AgentSlotSelector({
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col text-left leading-tight">
                   {eyebrow}
-                  <span className="truncate text-foreground-muted">{t('home.slotPickAgent')}</span>
+                  <span className="truncate text-foreground-muted">
+                    {placeholder ?? t('home.slotPickAgent')}
+                  </span>
                 </span>
               </>
             )}

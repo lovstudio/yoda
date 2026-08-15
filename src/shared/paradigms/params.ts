@@ -75,6 +75,8 @@ const teamMemberSchema = z.object({
   runtime: runtimeIdSchema,
   agentRef: z.string().optional(),
   systemPrompt: z.string().optional(),
+  /** Absent means the member runs; only a switched-off member is recorded. */
+  enabled: z.boolean().optional(),
 });
 
 const teamCommunicationSchema = z.object({

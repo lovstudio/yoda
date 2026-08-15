@@ -1,16 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Paradigm, ParadigmDraft } from '@shared/paradigms/paradigm';
-import { withParadigmSlotAgent } from '@shared/paradigms/params';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { invalidateParadigmQueries, paradigmsQueryKey } from './paradigm-queries';
 
 /**
- * The paradigm instances the picker lists, plus the per-instance edits it offers.
+ * The paradigm instances the picker lists, plus the writes it offers.
  *
- * Presentation edits go through `update` with the instance's existing params: the
- * picker renames and re-icons, it does not reshape behavior — that is what each
- * kind's configuration panel is for.
+ * Everything lands as one `update` of the whole draft, because a paradigm's kind,
+ * name, and params are one coherent record: editing a roster can change the kind,
+ * and writing the params without it would leave a row nobody can parse. The narrow
+ * helpers below are that same write with the fields the caller is not touching
+ * carried over.
  */
 export function useParadigms() {
   const { toast } = useToast();
@@ -24,6 +25,11 @@ export function useParadigms() {
   const onError = (titleKey: string) => (error: Error) =>
     toast({ title: titleKey, description: error.message, variant: 'destructive' });
 
+  const createMutation = useMutation({
+    mutationFn: (draft: ParadigmDraft) => rpc.paradigms.create(draft),
+    onSuccess: () => invalidateParadigmQueries(queryClient),
+    onError: onError('Create failed'),
+  });
   const updateMutation = useMutation({
     mutationFn: ({ id, draft }: { id: string; draft: ParadigmDraft }) =>
       rpc.paradigms.update(id, draft),
@@ -44,6 +50,16 @@ export function useParadigms() {
   return {
     paradigms,
     isPending,
+    /** A new paradigm instance from scratch. */
+    create: createMutation.mutateAsync,
+    /**
+     * Replace an instance wholesale — kind included.
+     *
+     * The kind is part of the draft rather than pinned to the row because a
+     * paradigm is a set of Agents and the kinds are two ways of storing that set:
+     * growing from one Agent to several has to be able to cross between them.
+     */
+    update: (id: string, draft: ParadigmDraft) => updateMutation.mutateAsync({ id, draft }),
     /** Rename and/or re-icon an instance, leaving its params untouched. */
     setPresentation: async (id: string, label: string, icon: string) => {
       const existing = paradigms.find((paradigm) => paradigm.id === id);
@@ -51,26 +67,6 @@ export function useParadigms() {
       await updateMutation.mutateAsync({
         id,
         draft: { kindId: existing.kindId, label, icon, params: existing.params },
-      });
-    },
-    /**
-     * Assign an Agent to one of an instance's seats.
-     *
-     * This is what makes a duplicate more than a rename: seats live in the
-     * instance's own params, so changing them cannot reach back into the original.
-     * Shipped instances included — they are defaults, not fixtures.
-     */
-    setSeatAgent: async (id: string, slotStorageKey: string, agentId: string) => {
-      const existing = paradigms.find((paradigm) => paradigm.id === id);
-      if (!existing) return;
-      await updateMutation.mutateAsync({
-        id,
-        draft: {
-          kindId: existing.kindId,
-          label: existing.label,
-          icon: existing.icon,
-          params: withParadigmSlotAgent(existing.params, slotStorageKey, agentId),
-        },
       });
     },
     /**

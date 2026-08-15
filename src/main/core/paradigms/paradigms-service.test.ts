@@ -211,13 +211,29 @@ describe('paradigms service: folding agent_teams in', () => {
     await expect(service.remove(SINGLE_ID)).rejects.toThrow(/cannot be removed/);
   });
 
-  it('refuses to change an instance to another kind, which its params are shaped by', async () => {
+  it('lets a user instance change kind, since a paradigm is only a set of Agents', async () => {
     const team = insertTeam(sqlite);
     const service = await loadService();
     await service.list();
 
+    // Dropping back to a single Agent is the `single` shape. The row has to move
+    // kind with its params, or it reads back through a schema that cannot parse it.
+    const migrated = await service.update(team.id, {
+      kindId: 'single',
+      label: 'Just me',
+      icon: '',
+      params: {},
+    });
+    expect(migrated.kindId).toBe('single');
+    expect((await service.get(team.id))?.kindId).toBe('single');
+  });
+
+  it('refuses to change a built-in instance to another kind, whose id is a shipped constant', async () => {
+    const service = await loadService();
+    await service.list();
+
     await expect(
-      service.update(team.id, { kindId: 'single', label: 'Nope', icon: '', params: {} })
+      service.update(SINGLE_ID, { kindId: 'team', label: 'Nope', icon: '', params: {} })
     ).rejects.toThrow(/kind cannot be changed/);
   });
 });

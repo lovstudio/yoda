@@ -12,33 +12,28 @@ import { ParadigmMark } from './icons';
  * flat for that reason. The card only selects: renaming, duplicating, and
  * removing belong to the pane that shows what is selected, so the list stays a
  * list of names.
+ *
+ * Name over roster, on two lines. The roster is what tells two rows apart — the
+ * category they share was eating the width and truncating away the part that
+ * distinguished them — so the quiet second line says who runs, and the name is
+ * read first without either cutting the other short.
  */
 export function ParadigmEntryCard({
   entry,
-  category,
-  name,
+  title,
+  subtitle,
   active,
   onSelect,
 }: {
   entry: ParadigmEntry;
-  /** The kind's name — which way of working this is. */
-  category: string;
-  /** What this one is called, when it is called anything. */
-  name: string | null;
+  /** What this one is called: its own name, or the category when it has none. */
+  title: string;
+  /** Who it runs with — the one line that tells two same-category rows apart. */
+  subtitle: string;
   active: boolean;
   onSelect: () => void;
 }) {
   const { t } = useTranslation();
-
-  // Name over category, on two lines rather than one. Half the list is teams, so
-  // on a single line the shared category ate the width and truncated away the one
-  // part that told the cards apart. Stacked, the repeated word is the quiet one
-  // and the name is read first — and neither has to cut the other short.
-  const title = name ?? category;
-  // Under it: which way of working this is, or — for an instance that was never
-  // named, and is therefore titled by its category already — what it does. Always
-  // one line, so every card is the same height and the list scans as a column.
-  const subtitle = name ? category : t(entry.descKey);
 
   return (
     // The card is the button. Anything outside it — padding included — is dead

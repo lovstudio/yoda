@@ -7,7 +7,12 @@ import { builtinParadigmId, isBuiltinParadigmId, type Paradigm } from '@shared/p
 import { withParadigmSlotAgent } from '@shared/paradigms/params';
 import en from '@renderer/lib/i18n/locales/en.json';
 import zh from '@renderer/lib/i18n/locales/zh-CN.json';
-import { paradigmEntries, paradigmEntryId, paradigmEntryLabel } from './entries';
+import {
+  paradigmEntries,
+  paradigmEntryId,
+  paradigmEntryLabel,
+  type ParadigmEntry,
+} from './entries';
 import { PARADIGM_ICONS } from './icons';
 import { PARADIGM_LAUNCHERS } from './registry';
 import { paradigmSeatAgentId } from './seats';
@@ -158,12 +163,10 @@ describe('paradigm entries', () => {
     });
     expect(user?.builtin).toBe(false);
 
-    // An unnamed instance goes by the Agent in its seat...
-    expect(builtinSingle && paradigmEntryLabel(builtinSingle, t, 'cc').name).toBe('cc');
-    // ...unless that name only restates the category, which is the common case
-    // for a seat's default Agent and reads as a stutter.
+    // A name that only restates the category is dropped: it reads as a stutter
+    // and costs the width the real qualifier needs.
     expect(
-      builtinSingle && paradigmEntryLabel(builtinSingle, t, PARADIGM_KINDS.single.labelKey).name
+      paradigmEntryLabel({ ...(team as ParadigmEntry), name: PARADIGM_KINDS.team.labelKey }, t).name
     ).toBeNull();
   });
 

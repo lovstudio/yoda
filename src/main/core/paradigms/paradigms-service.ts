@@ -193,20 +193,28 @@ class ParadigmsService {
   }
 
   /**
-   * A paradigm's kind is immutable: params are shaped by it, so switching kinds
-   * would silently invalidate them. Duplicate into the other kind instead.
-   *
    * A built-in is editable here. Its edits are written as a row under its own id —
    * an overlay on the shipped default rather than a copy of it — so renaming the
    * paradigm the user actually works in does not first require duplicating it into
    * a near-identical row.
+   *
+   * A user paradigm may change kind. A paradigm is a set of Agents, and the kinds
+   * are only two ways of storing that set (one seat vs. a members array), so growing
+   * from one Agent to two has to be allowed to cross between them — `sanitizeDraft`
+   * validates the params against the *incoming* kind, so what lands is coherent.
+   *
+   * A built-in may not, and that is the one asymmetry: its id is a shipped constant
+   * that other params point at (`compare` defaults to `builtin:paradigm:single`), and
+   * `overlayBuiltin` reads a row's params through the kind the code ships — so a
+   * migrated built-in would both break those references and read back as its old
+   * kind anyway. Callers duplicate first and migrate the copy.
    */
   async update(id: string, draft: ParadigmDraft): Promise<Paradigm> {
     const existing = await this.get(id);
     if (!existing) throw new Error(`Paradigm ${id} not found`);
-    if (draft.kindId !== existing.kindId)
+    if (draft.kindId !== existing.kindId && existing.builtin)
       throw new Error(
-        `Paradigm ${id} is a "${existing.kindId}" paradigm; its kind cannot be changed.`
+        `Paradigm ${id} is a built-in "${existing.kindId}" paradigm; its kind cannot be changed. Duplicate it first.`
       );
     const clean = sanitizeDraft(draft);
     await db
@@ -226,6 +234,10 @@ class ParadigmsService {
       .onConflictDoUpdate({
         target: paradigms.id,
         set: {
+          // Written on conflict too: a user paradigm that grew past one Agent lands
+          // here with a new kind, and leaving the old one would pair it with params
+          // the reader no longer knows how to parse.
+          kindId: clean.kindId,
           label: clean.label,
           icon: clean.icon,
           params: clean.params,

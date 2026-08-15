@@ -41,9 +41,9 @@ const USER_ORDER_BASE = 100;
 /**
  * The instance's own name, resolved — what editing it starts from.
  *
- * Deliberately not the displayed name: that falls back to the category or to the
- * Agent in the seat, and seeding an edit with either would turn a borrowed label
- * into a stored one on the first keystroke.
+ * Deliberately not the displayed name: that falls back to the category, and
+ * seeding an edit with it would turn a localized label into a stored one on the
+ * first keystroke.
  */
 export function paradigmEntryOwnName(entry: ParadigmEntry): string {
   return entry.name ?? '';
@@ -56,24 +56,21 @@ export function paradigmEntryOwnName(entry: ParadigmEntry): string {
  * say what it will do — a team called `Review` and a vibe-coding instance called
  * `Review` run nothing alike, so the category is the part that disambiguates.
  *
- * `fallbackName` covers the instance that was never named: a kind's own built-in
- * has no label, but the Agent sitting in it does, and that Agent is what tells
- * two rows of the same category apart.
+ * An instance that was never named reads as the bare category. It deliberately
+ * does not borrow the name of the Agent inside it: who a paradigm runs with is
+ * shown as its roster, and having that same name stand in as the title too made
+ * title and subtitle repeat each other.
  *
- * A name that only restates the category is dropped. It is the common case for
- * the fallback — the Agent seeded into a kind's seat is usually named after that
- * kind — and a doubled name says less while costing the width the real qualifiers
- * need.
+ * A name that only restates the category is dropped — a doubled name says less
+ * while costing the width the real qualifiers need.
  */
 export function paradigmEntryLabel(
   entry: ParadigmEntry,
-  t: (key: string) => string,
-  fallbackName?: string | null
+  t: (key: string) => string
 ): { category: string; name: string | null } {
   const category = t(entry.categoryKey);
   const own = paradigmEntryOwnName(entry);
-  const name = own || fallbackName || null;
-  return { category, name: name && name !== category ? name : null };
+  return { category, name: own && own !== category ? own : null };
 }
 
 /**
