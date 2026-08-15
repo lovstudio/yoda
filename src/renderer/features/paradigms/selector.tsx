@@ -156,6 +156,10 @@ export function ParadigmSelector({
     )
       return;
     void setPresentation(id, draft.label, draft.icon);
+    // Same footing as a seat change: the write already happened, and what the
+    // button confirms is that the chooser is settled. Leaving it disabled after an
+    // edit reads as the edit not having registered.
+    setConfigurationDirty(true);
   };
 
   const handleDuplicate = async (id: string) => {
