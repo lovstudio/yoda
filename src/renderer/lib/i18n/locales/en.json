@@ -2614,6 +2614,10 @@
     }
   },
   "library": {
+    "groups": {
+      "basic": "Basics",
+      "advanced": "Advanced"
+    },
     "sections": {
       "extensions": "Extensions",
       "apps": "Apps",
@@ -2621,6 +2625,7 @@
       "agents": "Agents",
       "skills": "Skills",
       "plugins": "Plugins",
+      "hooks": "Hooks",
       "mcp": "MCP",
       "automation": "Automation"
     }
@@ -6513,5 +6518,17 @@
     "current": "Workspace ({{name}})",
     "defaultTab": "Default",
     "countsAria": "{{attention}} running, awaiting review or unread"
+  },
+  "hooksLibrary": {
+    "title": "Hooks",
+    "subtitle": "Lifecycle hooks configured on this machine, per client, in firing order.",
+    "refresh": "Refresh",
+    "none": "No hooks configured",
+    "noneDescription": "The settings file defines no hooks.",
+    "noConfigDescription": "This machine has no settings file for this client yet.",
+    "readOnly": "Read-only",
+    "readOnlyDescription": "Global hooks are owned by the client's own settings file. To disable one for a single task, use that task's Hooks panel.",
+    "loadFailed": "Failed to read hooks",
+    "copyError": "Copy error"
   }
 }

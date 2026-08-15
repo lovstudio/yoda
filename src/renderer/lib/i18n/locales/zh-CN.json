@@ -2614,6 +2614,10 @@
     }
   },
   "library": {
+    "groups": {
+      "basic": "基础",
+      "advanced": "高级"
+    },
     "sections": {
       "extensions": "扩展",
       "apps": "应用",
@@ -2621,6 +2625,7 @@
       "agents": "智能体",
       "skills": "技能",
       "plugins": "插件",
+      "hooks": "Hooks",
       "mcp": "MCP",
       "automation": "自动化"
     }
@@ -6513,5 +6518,17 @@
     "current": "工作区（{{name}}）",
     "defaultTab": "默认",
     "countsAria": "{{attention}} 条进行中、待交付或未读"
+  },
+  "hooksLibrary": {
+    "title": "Hooks",
+    "subtitle": "本机各客户端的生命周期 hooks 清单，按触发时机排列。",
+    "refresh": "刷新",
+    "none": "未配置 hooks",
+    "noneDescription": "配置文件里没有 hooks 定义。",
+    "noConfigDescription": "这台电脑上还没有该客户端的配置文件。",
+    "readOnly": "只读",
+    "readOnlyDescription": "全局 hooks 由客户端自己的配置文件管理。要为单个任务临时关闭某个 hook，请到任务的 Hooks 面板。",
+    "loadFailed": "读取 hooks 失败",
+    "copyError": "复制错误"
   }
 }

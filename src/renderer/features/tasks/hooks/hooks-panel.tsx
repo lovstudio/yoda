@@ -1,9 +1,14 @@
-import { Bug, Check, Info, Loader2, RotateCcw, X } from 'lucide-react';
+import { Bug, Check, Loader2, RotateCcw, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HookInspectionResult, InspectedHook } from '@shared/agent-hooks';
 import { hookExecChannel, type HookExecEvent } from '@shared/events/agentEvents';
+import {
+  groupHooks,
+  HookGroupSection,
+  type HookListSurface,
+} from '@renderer/features/agent-hooks/hook-list';
 import {
   FileActionsDropdown,
   toWorkspaceRelativePath,
@@ -16,7 +21,6 @@ import {
 import { events, rpc } from '@renderer/lib/ipc';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { MicroLabel } from '@renderer/lib/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { Switch } from '@renderer/lib/ui/switch';
 import { cn } from '@renderer/utils/utils';
 
@@ -116,6 +120,13 @@ export const HooksPanel = observer(function HooksPanel({
     const hooks = inspection?.hooks ?? [];
     return { all: hooks.length, on: hooks.filter((h) => h.enabled).length };
   }, [inspection]);
+  const workspaceRoot = provisionedTask.path;
+  const surface: HookListSurface = {
+    onToggle: onToggleHook,
+    displaySourcePath: (sourcePath) =>
+      toWorkspaceRelativePath(sourcePath, workspaceRoot) ?? sourcePath,
+    renderFileActions: (sourcePath) => <FileActionsDropdown sourcePath={sourcePath} />,
+  };
 
   return (
     <div
@@ -163,7 +174,7 @@ export const HooksPanel = observer(function HooksPanel({
               ) : (
                 <div className="flex min-w-0 flex-col gap-3">
                   {grouped.map((group) => (
-                    <HookGroupSection key={group.key} group={group} onToggle={onToggleHook} />
+                    <HookGroupSection key={group.key} group={group} surface={surface} />
                   ))}
                 </div>
               )}
@@ -241,152 +252,6 @@ function RestartBanner({
   );
 }
 
-function HookGroupSection({
-  group,
-  onToggle,
-}: {
-  group: HookGroup;
-  onToggle: (hook: InspectedHook, enabled: boolean) => void | Promise<void>;
-}) {
-  const on = group.hooks.filter((h) => h.enabled).length;
-  return (
-    <section className="flex min-w-0 flex-col">
-      <header className="mb-1 flex min-w-0 items-baseline gap-1.5 border-b border-border/60 px-0.5 pb-1">
-        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-foreground">
-          {group.label}
-        </span>
-        <span className="shrink-0 font-mono text-[10px] tabular-nums text-foreground-passive">
-          {on}/{group.hooks.length}
-        </span>
-      </header>
-      <div className="flex min-w-0 flex-col">
-        {group.hooks.map((hook) => (
-          <HookRow key={hook.id} hook={hook} onToggle={onToggle} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-const HookRow = observer(function HookRow({
-  hook,
-  onToggle,
-}: {
-  hook: InspectedHook;
-  onToggle: (hook: InspectedHook, enabled: boolean) => void | Promise<void>;
-}) {
-  return (
-    <div
-      className={cn(
-        'group/hook flex min-w-0 items-center gap-1.5 rounded-sm px-1.5 py-1 hover:bg-background-1',
-        !hook.enabled && 'opacity-45'
-      )}
-    >
-      {hook.matcher ? (
-        <span
-          className="shrink-0 rounded-sm bg-background-2 px-1 py-px font-mono text-[10px] text-foreground-muted"
-          title={hook.matcher}
-        >
-          {hook.matcher}
-        </span>
-      ) : null}
-      <code
-        className={cn(
-          'min-w-0 flex-1 truncate font-mono text-[11px] leading-snug',
-          hook.enabled
-            ? 'text-foreground'
-            : 'text-foreground-passive line-through decoration-border'
-        )}
-        title={hook.command}
-      >
-        {hook.command}
-      </code>
-      {hook.managedByYoda ? (
-        <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-primary/80">
-          yoda
-        </span>
-      ) : null}
-      <HookDetailsPopover hook={hook} onToggle={onToggle} />
-    </div>
-  );
-});
-
-const HookDetailsPopover = observer(function HookDetailsPopover({
-  hook,
-  onToggle,
-}: {
-  hook: InspectedHook;
-  onToggle: (hook: InspectedHook, enabled: boolean) => void | Promise<void>;
-}) {
-  const { t } = useTranslation();
-  const { path: workspaceRoot } = useRequireProvisionedTask();
-  const sourcePath =
-    typeof hook.sourcePath === 'string' && hook.sourcePath.trim().length > 0
-      ? hook.sourcePath
-      : null;
-  const relative = sourcePath ? toWorkspaceRelativePath(sourcePath, workspaceRoot) : null;
-  const displayPath = sourcePath ? (relative ?? sourcePath) : t('tasks.hooks.sourceUnknown');
-
-  return (
-    <Popover>
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            className="-mr-1 flex size-5 shrink-0 items-center justify-center rounded-sm text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
-            aria-label={t('tasks.hooks.details')}
-            title={t('tasks.hooks.details')}
-          >
-            <Info className="size-3.5" />
-          </button>
-        }
-      />
-      <PopoverContent align="end" side="left" className="w-80 gap-2 p-2.5 text-left">
-        {/* Enable toggle lives here so the row stays a clean single line. */}
-        <label className="flex min-w-0 cursor-pointer items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-[11px] text-foreground-muted">
-            {t('tasks.hooks.enabled')}
-          </span>
-          <Switch
-            checked={hook.enabled}
-            onCheckedChange={(v) => void onToggle(hook, v)}
-            size="sm"
-            className="shrink-0"
-          />
-        </label>
-
-        <div className="flex min-w-0 flex-wrap items-center gap-1">
-          <span className="font-mono text-[10px] text-foreground-passive">{hook.event}</span>
-          {hook.matcher ? (
-            <span className="rounded-sm bg-background-2 px-1 py-px font-mono text-[10px] text-foreground-muted">
-              {hook.matcher}
-            </span>
-          ) : null}
-          {hook.managedByYoda ? (
-            <span className="font-mono text-[9px] uppercase tracking-wider text-primary/80">
-              yoda
-            </span>
-          ) : null}
-        </div>
-
-        <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-sm border border-dashed border-border/80 bg-background-1/40 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground-muted">
-          {hook.command}
-        </pre>
-
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span
-            className="min-w-0 flex-1 truncate font-mono text-[10px] text-foreground-passive"
-            title={sourcePath ?? undefined}
-          >
-            {displayPath}
-          </span>
-          {sourcePath ? <FileActionsDropdown sourcePath={sourcePath} /> : null}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-});
-
 const ExecLog = observer(function ExecLog({
   ref,
   log,
@@ -461,53 +326,5 @@ function ExecLogRow({ entry }: { entry: HookExecEvent }) {
         ) : null}
       </div>
     </div>
-  );
-}
-
-/**
- * Canonical Claude Code hook lifecycle order. Groups are sorted by this so the
- * panel reads top-to-bottom in the order hooks actually fire during a session.
- * Unknown events sort after all known ones, alphabetically.
- */
-const LIFECYCLE_ORDER = [
-  'SessionStart',
-  'UserPromptSubmit',
-  'PreToolUse',
-  'PostToolUse',
-  'Notification',
-  'PreCompact',
-  'Stop',
-  'SubagentStop',
-  'SessionEnd',
-  // Codex
-  'notify',
-] as const;
-
-function lifecycleIndex(event: string): number {
-  const i = (LIFECYCLE_ORDER as readonly string[]).indexOf(event);
-  return i === -1 ? LIFECYCLE_ORDER.length : i;
-}
-
-interface HookGroup {
-  key: string;
-  /** Group heading. */
-  label: string;
-  hooks: InspectedHook[];
-}
-
-/** Group hooks by lifecycle event, sorted in firing order. */
-function groupHooks(hooks: InspectedHook[]): HookGroup[] {
-  const map = new Map<string, InspectedHook[]>();
-  for (const hook of hooks) {
-    const list = map.get(hook.event) ?? [];
-    list.push(hook);
-    map.set(hook.event, list);
-  }
-
-  return Array.from(map.entries(), ([key, list]) => ({ key, label: key, hooks: list })).sort(
-    (a, b) => {
-      const d = lifecycleIndex(a.key) - lifecycleIndex(b.key);
-      return d !== 0 ? d : a.key.localeCompare(b.key);
-    }
   );
 }

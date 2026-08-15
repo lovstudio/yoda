@@ -8,11 +8,13 @@ import {
   Plug,
   Puzzle,
   Store,
+  Webhook,
   Workflow,
   type LucideIcon,
 } from 'lucide-react';
-import { createContext, useCallback, useContext, type ReactNode } from 'react';
+import { createContext, Fragment, useCallback, useContext, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { GlobalHooksMainPanel } from '@renderer/features/agent-hooks/global-hooks-view';
 import { AgentManagerMainPanel } from '@renderer/features/agents-config/agent-manager-view';
 import { AiLabView } from '@renderer/features/ai-lab/components/AiLabView';
 import { AutomationMainPanel } from '@renderer/features/automation/automation-view';
@@ -27,6 +29,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { cn } from '@renderer/utils/utils';
@@ -39,23 +42,50 @@ export type LibrarySection =
   | 'agents'
   | 'skills'
   | 'plugins'
+  | 'hooks'
   | 'mcp'
   | 'automation';
 
-const SECTIONS: {
+type LibrarySectionEntry = {
   id: LibrarySection;
   icon: LucideIcon;
   labelKey: string;
+};
+
+/**
+ * Basics are the building blocks a session consumes directly; advanced entries
+ * orchestrate or extend Yoda itself. The nav and the compact dropdown render
+ * the same two groups so the taxonomy reads identically at every width.
+ */
+const SECTION_GROUPS: {
+  id: 'basic' | 'advanced';
+  labelKey: string;
+  sections: LibrarySectionEntry[];
 }[] = [
-  { id: 'extensions', icon: Store, labelKey: 'library.sections.extensions' },
-  { id: 'apps', icon: AppWindow, labelKey: 'library.sections.apps' },
-  { id: 'prompts', icon: FileText, labelKey: 'library.sections.prompts' },
-  { id: 'agents', icon: Bot, labelKey: 'library.sections.agents' },
-  { id: 'skills', icon: Boxes, labelKey: 'library.sections.skills' },
-  { id: 'plugins', icon: Puzzle, labelKey: 'library.sections.plugins' },
-  { id: 'mcp', icon: Plug, labelKey: 'library.sections.mcp' },
-  { id: 'automation', icon: Workflow, labelKey: 'library.sections.automation' },
+  {
+    id: 'basic',
+    labelKey: 'library.groups.basic',
+    sections: [
+      { id: 'prompts', icon: FileText, labelKey: 'library.sections.prompts' },
+      { id: 'skills', icon: Boxes, labelKey: 'library.sections.skills' },
+      { id: 'plugins', icon: Puzzle, labelKey: 'library.sections.plugins' },
+      { id: 'hooks', icon: Webhook, labelKey: 'library.sections.hooks' },
+      { id: 'mcp', icon: Plug, labelKey: 'library.sections.mcp' },
+      { id: 'agents', icon: Bot, labelKey: 'library.sections.agents' },
+    ],
+  },
+  {
+    id: 'advanced',
+    labelKey: 'library.groups.advanced',
+    sections: [
+      { id: 'automation', icon: Workflow, labelKey: 'library.sections.automation' },
+      { id: 'extensions', icon: Store, labelKey: 'library.sections.extensions' },
+      { id: 'apps', icon: AppWindow, labelKey: 'library.sections.apps' },
+    ],
+  },
 ];
+
+const SECTIONS: LibrarySectionEntry[] = SECTION_GROUPS.flatMap((group) => group.sections);
 
 const LibrarySectionContext = createContext<{
   section: LibrarySection;
@@ -158,6 +188,8 @@ function LibrarySectionContent({
       return <SkillsMainPanel />;
     case 'plugins':
       return <PluginsView />;
+    case 'hooks':
+      return <GlobalHooksMainPanel />;
     case 'mcp':
       return <McpMainPanel />;
     case 'automation':
@@ -190,12 +222,17 @@ export function LibrarySectionDropdown({
         <Menu className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
-        {SECTIONS.map(({ id, icon: Icon, labelKey }) => (
-          <DropdownMenuItem key={id} onClick={() => onSectionChange(id)}>
-            <Icon className="size-4 shrink-0" />
-            <span className="truncate">{t(labelKey)}</span>
-            {id === activeSection && <Check className="ml-auto size-3.5" />}
-          </DropdownMenuItem>
+        {SECTION_GROUPS.map(({ id: groupId, labelKey: groupLabelKey, sections }) => (
+          <Fragment key={groupId}>
+            <DropdownMenuLabel>{t(groupLabelKey)}</DropdownMenuLabel>
+            {sections.map(({ id, icon: Icon, labelKey }) => (
+              <DropdownMenuItem key={id} onClick={() => onSectionChange(id)}>
+                <Icon className="size-4 shrink-0" />
+                <span className="truncate">{t(labelKey)}</span>
+                {id === activeSection && <Check className="ml-auto size-3.5" />}
+              </DropdownMenuItem>
+            ))}
+          </Fragment>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -222,26 +259,38 @@ export function LibraryMainPanel() {
           the picker moves into the content header (or the chip-strip when
           pin-hosted). */}
       <nav className="flex w-52 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border bg-background-secondary p-2 @max-lg:hidden">
-        {SECTIONS.map(({ id, icon: Icon, labelKey }) => {
-          const active = id === section;
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onSectionChange(id)}
-              aria-current={active}
+        {SECTION_GROUPS.map(({ id: groupId, labelKey: groupLabelKey, sections }, groupIndex) => (
+          <Fragment key={groupId}>
+            <div
               className={cn(
-                'flex h-8 items-center gap-2 rounded-md px-2.5 text-sm transition-colors',
-                active
-                  ? 'bg-background-1 text-foreground'
-                  : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
+                'px-2.5 pb-1 text-[10px] font-medium uppercase tracking-wider text-foreground-passive',
+                groupIndex === 0 ? 'pt-1' : 'pt-3'
               )}
             >
-              <Icon className="size-4 shrink-0" />
-              <span className="truncate">{t(labelKey)}</span>
-            </button>
-          );
-        })}
+              {t(groupLabelKey)}
+            </div>
+            {sections.map(({ id, icon: Icon, labelKey }) => {
+              const active = id === section;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onSectionChange(id)}
+                  aria-current={active}
+                  className={cn(
+                    'flex h-8 items-center gap-2 rounded-md px-2.5 text-sm transition-colors',
+                    active
+                      ? 'bg-background-1 text-foreground'
+                      : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" />
+                  <span className="truncate">{t(labelKey)}</span>
+                </button>
+              );
+            })}
+          </Fragment>
+        ))}
       </nav>
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {!isPinHosted && (

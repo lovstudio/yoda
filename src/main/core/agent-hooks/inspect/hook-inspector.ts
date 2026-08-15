@@ -8,15 +8,20 @@ import type {
   InspectedHook,
   TaskHookOverrides,
 } from '@shared/agent-hooks';
-import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
+import { getRuntime, RUNTIMES, type RuntimeId } from '@shared/runtime-registry';
 
 const YODA_MARKER = 'YODA_HOOK_PORT';
 
 type ClaudeLayer = { source: HookSource; path: string };
 
+const CLAUDE_USER_LAYER: ClaudeLayer = {
+  source: 'user',
+  path: join(homedir(), '.claude', 'settings.json'),
+};
+
 function claudeLayers(cwd: string): ClaudeLayer[] {
   return [
-    { source: 'user', path: join(homedir(), '.claude', 'settings.json') },
+    CLAUDE_USER_LAYER,
     { source: 'project', path: join(cwd, '.claude', 'settings.json') },
     { source: 'local', path: join(cwd, '.claude', 'settings.local.json') },
   ];
@@ -81,10 +86,12 @@ function parseClaudeHooks(
   return out;
 }
 
-async function inspectClaude(cwd: string): Promise<{ hooks: InspectedHook[]; sources: string[] }> {
+async function inspectClaudeLayers(
+  layers: ClaudeLayer[]
+): Promise<{ hooks: InspectedHook[]; sources: string[] }> {
   const hooks: InspectedHook[] = [];
   const sources: string[] = [];
-  for (const layer of claudeLayers(cwd)) {
+  for (const layer of layers) {
     const config = await readJson(layer.path);
     if (!config) continue;
     sources.push(layer.path);
@@ -131,7 +138,7 @@ export async function inspectHooks(
   }
 
   const { hooks, sources } =
-    runtimeId === 'codex' ? await inspectCodex() : await inspectClaude(cwd);
+    runtimeId === 'codex' ? await inspectCodex() : await inspectClaudeLayers(claudeLayers(cwd));
 
   const disabled = new Set(overrides.disabled);
   for (const hook of hooks) {
@@ -139,4 +146,20 @@ export async function inspectHooks(
   }
 
   return { runtimeId, supported: true, sources, hooks };
+}
+
+/**
+ * Machine-wide hooks: the user-level layer only, with no project or task
+ * overrides applied. Backs the Library surface, which is not scoped to a
+ * project — one result per runtime that supports hooks.
+ */
+export async function inspectGlobalHooks(): Promise<HookInspectionResult[]> {
+  const runtimes = RUNTIMES.filter((runtime) => runtime.supportsHooks === true);
+  return Promise.all(
+    runtimes.map(async ({ id }) => {
+      const { hooks, sources } =
+        id === 'codex' ? await inspectCodex() : await inspectClaudeLayers([CLAUDE_USER_LAYER]);
+      return { runtimeId: id, supported: true, sources, hooks };
+    })
+  );
 }
