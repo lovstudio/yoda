@@ -1,4 +1,9 @@
 import type { SessionOpenPerformanceContext } from '@shared/session-open-performance';
+import {
+  beginTaskOpenTrajectory,
+  finishTaskOpenTrajectory,
+  recordTaskOpenTrajectoryStep,
+} from './task-open-trajectory';
 
 type TaskOpenStageDetails = Record<string, boolean | number | string | null | undefined>;
 
@@ -92,12 +97,20 @@ function cancelTrace(trace: TaskOpenTrace, now: number, details?: TaskOpenStageD
   if (trace.stages.has('cancelled') || trace.stages.has('painted')) return;
   stopVisibilityTracking(trace, now);
   trace.stages.add('cancelled');
+  const elapsedMs = elapsed(trace, now);
+  recordTaskOpenTrajectoryStep(trace.contextId, {
+    stage: 'cancelled',
+    source: 'renderer',
+    atMs: elapsedMs,
+    details,
+  });
+  finishTaskOpenTrajectory(trace.contextId, 'cancelled', elapsedMs);
   console.log('[DEBUG][task-open] cancelled:', {
     context_id: trace.contextId,
     projectId: trace.projectId,
     taskId: trace.taskId,
     segmentMs: segment(trace, now),
-    elapsedMs: elapsed(trace, now),
+    elapsedMs,
     ...details,
     ...visibilityDetails(trace, now),
   });
@@ -136,6 +149,7 @@ export function beginTaskOpenTrace(projectId: string, taskId: string): string {
     visibilityDocument.addEventListener('visibilitychange', trace.visibilityListener);
   }
   activeTrace = trace;
+  beginTaskOpenTrajectory(contextId, projectId, taskId, startedAtEpochMs);
   console.log('[DEBUG][task-open] click:', {
     context_id: contextId,
     projectId,
@@ -170,13 +184,20 @@ export function markTaskOpenTrace(
 
   const now = performance.now();
   const hiddenDurationMs = currentHiddenDuration(trace, now);
+  const elapsedMs = elapsed(trace, now);
   trace.stages.add(stage);
+  recordTaskOpenTrajectoryStep(trace.contextId, {
+    stage,
+    source: 'renderer',
+    atMs: elapsedMs,
+    details,
+  });
   console.log(`[DEBUG][task-open] ${stage}:`, {
     context_id: trace.contextId,
     projectId,
     taskId,
     segmentMs: segment(trace, now),
-    elapsedMs: elapsed(trace, now),
+    elapsedMs,
     ...details,
     ...visibilityDetails(trace, now),
     visibleSegmentMs: roundDuration(
@@ -210,6 +231,8 @@ export function completeTaskOpenTrace(
   if (!trace || trace.stages.has('painted')) return;
 
   markTaskOpenTrace(projectId, taskId, 'painted', details);
-  stopVisibilityTracking(trace, performance.now());
+  const now = performance.now();
+  finishTaskOpenTrajectory(trace.contextId, 'painted', elapsed(trace, now));
+  stopVisibilityTracking(trace, now);
   if (activeTrace === trace) activeTrace = null;
 }

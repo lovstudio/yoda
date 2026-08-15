@@ -15,6 +15,7 @@ import {
   Settings2,
   Stethoscope,
   Terminal,
+  Timer,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import {
@@ -118,6 +119,11 @@ import {
   shouldReadOfficialAccountUsage,
 } from './workspace-runtime-usage-source';
 import { WorkspaceSkillPopover } from './workspace-skill-popover';
+import {
+  formatTrajectoryDuration,
+  useTaskOpenTrajectories,
+  WorkspaceTrajectoryPopover,
+} from './workspace-trajectory-popover';
 
 type WorkspaceAgentSession = Omit<AppAgentSessionResource, 'runtimeId' | 'title' | 'taskTitle'> & {
   runtimeId?: AppAgentSessionResource['runtimeId'];
@@ -158,6 +164,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const showConfirmActionModal = useShowModal('confirmActionModal');
   const showArchiveWithNote = useShowModal('archiveTaskWithNoteModal');
   const showResourceDetailsModal = useShowModal('workspaceResourceDetailsModal');
+  const taskOpenTrajectories = useTaskOpenTrajectories();
+  const lastTaskOpenTrajectory = taskOpenTrajectories[0];
+  const [isTrajectoryPopoverOpen, setIsTrajectoryPopoverOpen] = useState(false);
   const { value: interfaceSettings, update: updateInterfaceSettings } =
     useAppSettingsKey('interface');
   const { value: homeDraft, update: updateHomeDraft } = useAppSettingsKey('homeDraft');
@@ -1839,6 +1848,40 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           </PopoverContent>
         ) : null}
       </Popover>
+      {lastTaskOpenTrajectory ? (
+        <Popover open={isTrajectoryPopoverOpen} onOpenChange={setIsTrajectoryPopoverOpen}>
+          <PopoverTrigger
+            aria-label={t('workspaceRuntime.trajectory.triggerLabel')}
+            title={t('workspaceRuntime.trajectory.triggerLabel')}
+            className={cn(
+              RUNTIME_BAR_ACTION_CLASS,
+              isTrajectoryPopoverOpen
+                ? 'bg-background-2 text-foreground'
+                : 'text-foreground-passive'
+            )}
+          >
+            <Timer aria-hidden className="size-3.5" />
+            <span className={cn(RUNTIME_BAR_ACTION_LABEL_CLASS, 'font-mono tabular-nums')}>
+              {lastTaskOpenTrajectory.totalMs === null
+                ? '—'
+                : formatTrajectoryDuration(lastTaskOpenTrajectory.totalMs)}
+            </span>
+          </PopoverTrigger>
+          {isTrajectoryPopoverOpen ? (
+            <PopoverContent
+              align="end"
+              side="top"
+              sideOffset={8}
+              className="w-[26rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+            >
+              <WorkspaceTrajectoryPopover
+                trajectories={taskOpenTrajectories}
+                resolveTaskName={(projectId, taskId) => getTaskStore(projectId, taskId)?.data.name}
+              />
+            </PopoverContent>
+          ) : null}
+        </Popover>
+      ) : null}
       <button
         type="button"
         title={t('workspaceRuntime.doctor')}

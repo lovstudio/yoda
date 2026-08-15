@@ -5170,6 +5170,24 @@
     "skill": "Skill",
     "doctor": "Doctor",
     "terminal": "终端",
+    "trajectory": {
+      "triggerLabel": "打开耗时",
+      "title": "打开耗时",
+      "empty": "暂无记录。",
+      "copy": "复制为 JSON",
+      "copied": "已复制",
+      "copyFailed": "复制失败",
+      "clear": "清空记录",
+      "mcpHint": "新建会话会启动 {{serverCount}} 个已配置的 MCP 服务，这部分计入本次耗时。",
+      "mcpManage": "管理",
+      "slowestHint": "本次耗时最长的一步",
+      "legend": "实心为界面步骤，浅色为后台步骤。",
+      "outcome": {
+        "open": "进行中",
+        "painted": "已渲染",
+        "cancelled": "已中断"
+      }
+    },
     "config": {
       "title": "配置",
       "description": "调整常用输入与 Agent 选项。Prompt、指令文件等详细内容在资源库统一管理。"

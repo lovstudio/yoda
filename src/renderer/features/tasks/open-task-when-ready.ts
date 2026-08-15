@@ -35,8 +35,18 @@ let latestOpenRequest = 0;
 const TASK_OPEN_LOADING_THRESHOLD_MS = 900;
 /** Safety ceiling for genuine provisioning/startup failures, not the product latency target. */
 const TASK_OPEN_HARD_TIMEOUT_MS = 30_000;
-/** Absolute budget for destination layout, generation binding, parse, and staging paint. */
-const TASK_OPEN_SESSION_STAGING_BUDGET_MS = 1_500;
+/**
+ * Deadline — measured from the click, not from the moment preparation starts —
+ * for destination layout, generation binding, parse, and staging paint. The
+ * user's clock starts at the click, so a slow provisioning phase must eat into
+ * this window rather than stack another full budget on top of it.
+ */
+const TASK_OPEN_SESSION_STAGING_DEADLINE_MS = 1_500;
+/**
+ * Floor so a slow provisioning phase still leaves preparation a usable window
+ * instead of a zero-length one that always defers.
+ */
+const TASK_OPEN_SESSION_STAGING_FLOOR_MS = 400;
 const TASK_OPEN_CANCELLATION_POLL_MS = 25;
 
 class TaskOpenCancelledError extends Error {}
@@ -319,7 +329,13 @@ async function openTaskWhenReadyAfterTrace(
     );
   const remainingHardBudget = () => Math.max(0, hardDeadline - performance.now());
   const remainingSessionStagingBudget = () =>
-    Math.min(TASK_OPEN_SESSION_STAGING_BUDGET_MS, remainingHardBudget());
+    Math.min(
+      Math.max(
+        TASK_OPEN_SESSION_STAGING_FLOOR_MS,
+        startedAt + TASK_OPEN_SESSION_STAGING_DEADLINE_MS - performance.now()
+      ),
+      remainingHardBudget()
+    );
   let target: TaskWindowTabTarget | undefined = explicitTarget;
   const initialTaskStore = getTaskStore(projectId, taskId);
   if (isArchivedTaskStore(initialTaskStore)) {

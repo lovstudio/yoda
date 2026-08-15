@@ -5170,6 +5170,24 @@
     "skill": "Skill",
     "doctor": "Doctor",
     "terminal": "Terminal",
+    "trajectory": {
+      "triggerLabel": "Open timing",
+      "title": "Open timing",
+      "empty": "No opens recorded yet.",
+      "copy": "Copy as JSON",
+      "copied": "Copied",
+      "copyFailed": "Copy failed",
+      "clear": "Clear records",
+      "mcpHint": "Cold sessions start {{serverCount}} configured MCP servers, which is part of this time.",
+      "mcpManage": "Manage",
+      "slowestHint": "Longest step of this open",
+      "legend": "Filled bars are UI steps, muted bars are background steps.",
+      "outcome": {
+        "open": "In progress",
+        "painted": "Rendered",
+        "cancelled": "Interrupted"
+      }
+    },
     "config": {
       "title": "Config",
       "description": "Adjust common input and Agent options. Manage detailed prompts and instruction files in Library."
