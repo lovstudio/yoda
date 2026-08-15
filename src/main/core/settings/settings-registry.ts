@@ -173,7 +173,7 @@ export const SETTINGS_DEFAULTS = {
       uiux: 'claude' as const,
       operations: 'codex' as const,
     },
-    selectedTeamId: 'builtin:startup',
+    selectedParadigmId: '',
     agentSystemPrompts: {},
     selectedAgentIds: {},
     expressMode: false,

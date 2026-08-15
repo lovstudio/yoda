@@ -1,19 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  BUILTIN_FEATURE_TEAM_ID,
-  BUILTIN_REVIEW_TEAM_ID,
-  BUILTIN_TEAMS,
-  type AgentTeam,
-} from '@shared/agent-team';
+import { BUILTIN_FEATURE_TEAM_ID, BUILTIN_REVIEW_TEAM_ID, BUILTIN_TEAMS } from '@shared/agent-team';
 import { BUILTIN_PARADIGMS } from '@shared/paradigms/builtins';
 import { PARADIGM_KIND_IDS, type ParadigmKindId } from '@shared/paradigms/contract';
 import { PARADIGM_KINDS } from '@shared/paradigms/kinds';
-import { builtinParadigmId, isBuiltinParadigmId } from '@shared/paradigms/paradigm';
-import { DEFAULT_TEAM_COMMUNICATION_CONFIG } from '@shared/team-communication';
-import { DEFAULT_ROUTING_HOP_LIMIT } from '@shared/team-routing-limit';
+import { builtinParadigmId, isBuiltinParadigmId, type Paradigm } from '@shared/paradigms/paradigm';
 import en from '@renderer/lib/i18n/locales/en.json';
 import zh from '@renderer/lib/i18n/locales/zh-CN.json';
-import { paradigmEntries, paradigmEntryGroups, paradigmEntryId } from './entries';
+import { paradigmEntries, paradigmEntryId } from './entries';
 import { PARADIGM_ICONS } from './icons';
 import { PARADIGM_LAUNCHERS } from './registry';
 
@@ -30,16 +23,15 @@ function translation(locale: unknown, key: string): unknown {
   }, locale);
 }
 
-function team(id: string, name: string): AgentTeam {
+function userParadigm(id: string, kindId: ParadigmKindId, label: string): Paradigm {
   return {
     id,
-    name,
+    kindId,
+    label,
     icon: '',
-    routing: 'sequential',
-    communication: DEFAULT_TEAM_COMMUNICATION_CONFIG,
-    builtin: true,
-    routingHopLimit: DEFAULT_ROUTING_HOP_LIMIT,
-    members: [],
+    params: PARADIGM_KINDS[kindId].defaultParams,
+    builtin: false,
+    sortOrder: 0,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   };
@@ -115,59 +107,70 @@ describe('paradigm registry', () => {
 });
 
 describe('paradigm entries', () => {
-  const teams = [
-    team(BUILTIN_FEATURE_TEAM_ID, 'Feature'),
-    team(BUILTIN_REVIEW_TEAM_ID, 'Review loop'),
-    team('user-team', 'My team'),
-  ];
+  const mine = userParadigm('mine', 'single', 'My vibe');
+  const paradigms = [...BUILTIN_PARADIGMS, mine];
 
-  it('gives every Agent Team its own entry and every other picker kind one', () => {
-    const entries = paradigmEntries(teams);
-    const teamEntries = entries.filter((entry) => entry.kindId === 'team');
-    expect(teamEntries.map((entry) => entry.teamId)).toEqual(
-      teams.map((candidate) => candidate.id)
-    );
-
-    const pickerKinds = PARADIGM_KIND_IDS.filter(
-      (kindId) => PARADIGM_KINDS[kindId].pickerGroup !== null && kindId !== 'team'
-    );
-    for (const kindId of pickerKinds) {
-      expect(entries.filter((entry) => entry.kindId === kindId)).toHaveLength(1);
+  it('lists every picker kind flat, with no sections', () => {
+    const entries = paradigmEntries(paradigms);
+    const kinds = new Set(entries.map((entry) => entry.kindId));
+    for (const kindId of PARADIGM_KIND_IDS) {
+      expect(
+        kinds.has(kindId),
+        `${kindId} is ${PARADIGM_KINDS[kindId].inPicker ? 'missing' : 'present'}`
+      ).toBe(PARADIGM_KINDS[kindId].inPicker);
     }
-    // `compare` is reached through the composer's compare affordance, not the picker.
-    expect(entries.some((entry) => entry.kindId === 'compare')).toBe(false);
+    // Every instance is its own row, so the teams contribute one each rather than
+    // collapsing into a single "multi-agent" entry.
+    expect(entries.filter((entry) => entry.kindId === 'team')).toHaveLength(BUILTIN_TEAMS.length);
+    // Ranked ascending, which is the only ordering the flat list has.
+    expect(entries.map((entry) => entry.pickerOrder)).toEqual(
+      [...entries.map((entry) => entry.pickerOrder)].sort((a, b) => a - b)
+    );
+    expect(entries[0]?.kindId).toBe('single');
+    // A user instance sorts after every built-in, whatever its kind.
+    expect(entries.at(-1)?.id).toBe(mine.id);
   });
 
-  it('places the feature team with the converged workflows and the rest under multi-agent', () => {
-    const groups = paradigmEntryGroups(paradigmEntries(teams));
-    const workflow = groups.find((group) => group.labelKey === 'home.modeGroupWorkflow');
-    const multiAgent = groups.find((group) => group.labelKey === 'home.modeGroupMultiAgent');
+  it('marks which rows can be edited, and names them from the instance or its kind', () => {
+    const entries = paradigmEntries(paradigms);
+    const builtinSingle = entries.find((entry) => entry.id === builtinParadigmId('single'));
+    // A built-in carries no label of its own; it reads as its kind.
+    expect(builtinSingle?.labelKey).toBe(PARADIGM_KINDS.single.labelKey);
+    expect(builtinSingle?.builtin).toBe(true);
 
-    expect(workflow?.entries[0]?.kindId).toBe('single');
-    expect(workflow?.entries.map((entry) => entry.teamId)).toContain(BUILTIN_FEATURE_TEAM_ID);
-    expect(multiAgent?.entries.map((entry) => entry.teamId)).toEqual([
-      BUILTIN_REVIEW_TEAM_ID,
-      'user-team',
-    ]);
+    const feature = entries.find((entry) => entry.id === BUILTIN_FEATURE_TEAM_ID);
+    // Built-in teams get localized copy rather than echoing the template name.
+    expect(feature?.labelKey).toBe('home.modeTeamFeature');
+
+    const user = entries.find((entry) => entry.id === mine.id);
+    expect(user?.label).toBe('My vibe');
+    expect(user?.builtin).toBe(false);
   });
 
-  it('resolves the active entry by kind, disambiguated by team', () => {
-    const entries = paradigmEntries(teams);
-    expect(paradigmEntryId(entries, 'team', 'user-team')).toBe('team:user-team');
-    expect(paradigmEntryId(entries, 'review', 'user-team')).toBe('review');
-    // An unknown team falls back to the kind's first entry rather than nothing.
-    expect(paradigmEntryId(entries, 'team', 'gone')).toBe(`team:${BUILTIN_FEATURE_TEAM_ID}`);
+  it('resolves the active row by kind, disambiguated by instance', () => {
+    const entries = paradigmEntries(paradigms);
+    expect(paradigmEntryId(entries, 'team', BUILTIN_REVIEW_TEAM_ID)).toBe(BUILTIN_REVIEW_TEAM_ID);
+    expect(paradigmEntryId(entries, 'single', mine.id)).toBe(mine.id);
+    // A remembered instance of another kind loses to the kind, which is what the
+    // rest of the composer is configured for.
+    expect(paradigmEntryId(entries, 'review', mine.id)).toBe(builtinParadigmId('review'));
+    // A deleted instance degrades to its kind rather than blanking the picker.
+    expect(paradigmEntryId(entries, 'single', 'gone')).toBe(builtinParadigmId('single'));
+    expect(paradigmEntryId([], 'single', '')).toBeUndefined();
   });
 
-  it('keeps the picker usable before the teams have loaded', () => {
-    const entries = paradigmEntries([]);
-    const kinds = new Set<ParadigmKindId>(entries.map((entry) => entry.kindId));
-    expect(kinds.has('single')).toBe(true);
-    // Team entries are the teams themselves, so an empty list contributes none
-    // and its group drops out rather than rendering an empty section.
-    expect(kinds.has('team')).toBe(false);
-    expect(paradigmEntryGroups(entries).map((group) => group.labelKey)).toEqual([
-      'home.modeGroupWorkflow',
-    ]);
+  it('localizes the per-row actions', () => {
+    for (const locale of [en, zh]) {
+      for (const key of [
+        'home.paradigmDuplicate',
+        'home.paradigmEdit',
+        'home.paradigmRemove',
+        'home.paradigmName',
+        'home.paradigmNamePlaceholder',
+        'home.paradigmAvatar',
+      ]) {
+        expect(typeof translation(locale, key), `${key} is missing`).toBe('string');
+      }
+    }
   });
 });

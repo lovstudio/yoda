@@ -7,14 +7,17 @@ import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import type { ParadigmPanelProps } from '../../panel-context';
 
 /**
- * The selected team's roster. The team itself is chosen in the picker sidebar
- * (each team is its own entry), so the panel only reports who will run and where
- * the roster is edited.
+ * The selected team's roster. The team itself is chosen in the picker list (each
+ * team is its own row), so the panel only reports who will run and where the
+ * roster is edited.
+ *
+ * A team's paradigm instance keeps the team's id — rooms reference it — so the
+ * entry id resolves the roster directly.
  */
 export function TeamParadigmPanel({ entry, teams }: ParadigmPanelProps) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
-  const team = teams.find((candidate) => candidate.id === entry.teamId);
+  const team = teams.find((candidate) => candidate.id === entry.id);
   const isFeatureWorkflow = Boolean(team && hasFeatureWorkflowContract(team));
 
   return (

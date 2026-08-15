@@ -634,6 +634,17 @@ export const homeDraftSchema = z.preprocess(
       migrated ??= { ...record };
       delete migrated.compareRuntimes;
     }
+    // `selectedTeamId` was "which Agent Team", back when teams were the only
+    // paradigm with more than one instance. Teams are now `team`-kind paradigm
+    // instances keyed by the same id, so the remembered team carries over as the
+    // remembered instance — but only for a draft that was actually on that
+    // paradigm, or every draft would come back claiming to be a team.
+    if (!('selectedParadigmId' in record)) {
+      migrated ??= { ...record };
+      if (record.runMode === 'team' && typeof record.selectedTeamId === 'string')
+        migrated.selectedParadigmId = record.selectedTeamId;
+      delete migrated.selectedTeamId;
+    }
     return migrated ?? value;
   },
   z.object({
@@ -654,8 +665,9 @@ export const homeDraftSchema = z.preprocess(
     runMode: homeRunModeSchema,
     reviewReviewerRuntime: runtimeIdSchema,
     teamRuntimes: teamRuntimeSelectionSchema,
-    /** Selected Agent Team template id for the `team` paradigm (built-in or user). */
-    selectedTeamId: z.string().default('builtin:startup'),
+    /** Remembered paradigm instance id. Empty means "the kind's own built-in
+     *  instance", which is what a draft that never picked one wants. */
+    selectedParadigmId: z.string().default(''),
     agentSystemPrompts: z.record(z.string(), z.string().nullable()),
     /** Selected user-defined Agent ids per run mode. Keyed by HomeRunMode; the
      *  value is an array (single-element for solo modes, multiple for team). An

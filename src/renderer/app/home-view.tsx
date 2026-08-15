@@ -39,7 +39,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import yodaLogoWhite from '@/assets/images/yoda/yoda_logo_white.svg';
 import yodaLogo from '@/assets/images/yoda/yoda_logo.svg';
-import { BUILTIN_STARTUP_TEAM_ID, type AgentTeam } from '@shared/agent-team';
+import { type AgentTeam } from '@shared/agent-team';
 import type { Agent } from '@shared/agents';
 import { hasFeatureWorkflowContract } from '@shared/feature-workflow';
 import type { Branch } from '@shared/git';
@@ -70,6 +70,7 @@ import type {
   ParadigmLaunchParams,
   TaskStrategyKind,
 } from '@renderer/features/paradigms/launch-context';
+import { agentTeamsQueryKey } from '@renderer/features/paradigms/paradigm-queries';
 import { paradigmLauncher, paradigmLaunchStamp } from '@renderer/features/paradigms/registry';
 import { ParadigmSelector } from '@renderer/features/paradigms/selector';
 import {
@@ -650,14 +651,16 @@ export const HomeComposer = observer(function HomeComposer({
     },
     [runModeOverridden, setComposerDefault, updateDraft]
   );
-  // The picker speaks paradigm kinds; the composer still persists the legacy run
-  // mode string, so the kind is translated back on the way in.
-  const setParadigmKind = useCallback(
-    (next: ParadigmKindId) => {
-      const runMode = runModeForParadigmKind(next);
+  // The picker speaks paradigm instances; the composer still persists the legacy
+  // run mode string, so the kind is translated back on the way in and the instance
+  // is remembered beside it.
+  const setParadigm = useCallback(
+    (kindId: ParadigmKindId, paradigmId: string) => {
+      const runMode = runModeForParadigmKind(kindId);
       if (runMode) setRunMode(runMode);
+      updateDraft({ selectedParadigmId: paradigmId });
     },
-    [setRunMode]
+    [setRunMode, updateDraft]
   );
   useEffect(() => {
     if (!homeParams.runMode) return;
@@ -692,21 +695,21 @@ export const HomeComposer = observer(function HomeComposer({
   // Agent Teams are reusable, project/task-decoupled templates surfaced as the
   // `team` paradigm (「多智能体（name）」). Built-ins + user teams come from the list.
   const { data: teams = [] } = useQuery({
-    queryKey: ['agentTeams'],
+    queryKey: agentTeamsQueryKey,
     queryFn: () => rpc.agentTeams.list(),
   });
   const queryClient = useQueryClient();
-  const selectedTeamId = draft?.selectedTeamId ?? BUILTIN_STARTUP_TEAM_ID;
-  const setSelectedTeamId = useCallback(
-    (next: string) => updateDraft({ selectedTeamId: next }),
-    [updateDraft]
-  );
+  // Which paradigm *instance* is selected. Empty means the current kind's own
+  // built-in instance, which is what every kind but `team` has exactly one of.
+  const selectedParadigmId = draft?.selectedParadigmId ?? '';
+  // A team's paradigm instance keeps the team's id, so the selected instance
+  // resolves the roster directly. The fallback is the first team rather than a
+  // named one so it matches the row the picker highlights for an unremembered
+  // selection — the team paradigm cannot run without a roster, and the two
+  // surfaces must not disagree about which one it is.
   const activeTeam = useMemo<AgentTeam | undefined>(
-    () =>
-      teams.find((tm) => tm.id === selectedTeamId) ??
-      teams.find((tm) => tm.id === BUILTIN_STARTUP_TEAM_ID) ??
-      teams[0],
-    [teams, selectedTeamId]
+    () => teams.find((tm) => tm.id === selectedParadigmId) ?? teams[0],
+    [teams, selectedParadigmId]
   );
   const { agents: userAgents } = useAgents();
   const selectedAgentIdsByMode = useMemo<Record<string, string[]>>(
@@ -1701,14 +1704,13 @@ export const HomeComposer = observer(function HomeComposer({
             )}
             <ParadigmSelector
               kindId={paradigmKindForRunMode(runMode)}
+              paradigmId={selectedParadigmId}
               summary={runModeSummary}
               teams={teams}
-              selectedTeamId={selectedTeamId}
               agents={userAgents}
               slotAgentId={slotAgentId}
               onSlotAgentChange={setSlotAgent}
-              onChange={setParadigmKind}
-              onSelectTeam={setSelectedTeamId}
+              onChange={setParadigm}
             />
             {renderComposerSettingsButton()}
             {!taskScopedTarget && runMode === 'normal' && renderAddCompareButton()}
