@@ -86,14 +86,21 @@ const USER_ORDER_BASE = 100;
  * `fallbackName` covers the instance that was never named: a kind's own built-in
  * has no label, but the Agent sitting in it does, and that Agent is what tells
  * two rows of the same category apart.
+ *
+ * A name that only restates the category is dropped. It is the common case for
+ * the fallback — the Agent seeded into a kind's seat is usually named after that
+ * kind — and `Spec Spec` says less than `Spec` while costing the width the real
+ * qualifiers need.
  */
 export function paradigmEntryLabel(
   entry: ParadigmEntry,
   t: (key: string) => string,
   fallbackName?: string | null
 ): { category: string; name: string | null } {
+  const category = t(entry.categoryKey);
   const own = entry.name ?? (entry.nameKey ? t(entry.nameKey) : null);
-  return { category: t(entry.categoryKey), name: own || fallbackName || null };
+  const name = own || fallbackName || null;
+  return { category, name: name && name !== category ? name : null };
 }
 
 /**

@@ -242,7 +242,7 @@ export function ParadigmSelector({
             role="tablist"
             aria-label={t('home.modeAria')}
             aria-orientation="vertical"
-            className="flex w-56 shrink-0 flex-col gap-0.5 overflow-y-auto bg-background-1/50 p-2"
+            className="flex w-60 shrink-0 flex-col gap-px overflow-y-auto bg-background-1/50 p-1.5"
           >
             {entries.map((entry) => {
               const label = labelOf(entry);

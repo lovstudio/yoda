@@ -1,4 +1,4 @@
-import { Check, Copy, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Copy, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { AvatarValue } from '@renderer/lib/components/avatar-value';
 import { Badge } from '@renderer/lib/ui/badge';
@@ -46,60 +46,70 @@ export function ParadigmEntryRow({
   const { t } = useTranslation();
 
   return (
-    <div
-      className={cn(
-        'group/paradigm flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors',
-        active
-          ? 'bg-primary/10 font-medium text-primary'
-          : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
-      )}
-    >
+    // The row is the button. Anything outside it — padding included — is dead
+    // space that looks clickable and is not, which is what made hits near the
+    // edges miss.
+    <div className="group/paradigm relative">
       <button
         type="button"
         role="tab"
         aria-selected={active}
         title={t(entry.descKey)}
         onClick={onSelect}
-        className="flex min-w-0 flex-1 items-center gap-2 text-left"
-      >
-        {entry.avatar !== undefined ? (
-          <AvatarValue
-            name={name ?? category}
-            value={entry.avatar}
-            className="size-4 rounded-sm text-[10px]"
-          />
-        ) : (
-          <ParadigmIcon
-            iconId={entry.iconId}
-            className={cn('size-4 shrink-0', active ? 'text-primary' : 'text-foreground-muted')}
-          />
+        className={cn(
+          'flex w-full min-w-0 items-center gap-2 rounded-md py-1.5 pl-2 pr-8 text-left text-sm transition-colors',
+          active
+            ? 'bg-primary/10 font-medium text-primary'
+            : 'text-foreground hover:bg-background-2'
         )}
-        {/* Category first, then what this one is called: a row is read as "which
-            way of working", and only then as "which one of those". */}
-        <span className="flex min-w-0 flex-1 items-center gap-1.5">
-          <span className="shrink-0">{category}</span>
-          {name && <span className="min-w-0 truncate font-normal opacity-60">{name}</span>}
-          {entry.alpha && (
-            <Badge variant="secondary" className="shrink-0 px-1 py-0 text-[9px]">
-              {t('home.modeAlphaBadge')}
-            </Badge>
+      >
+        {/* A fixed slot for either mark. A kind's glyph and an instance's avatar
+            have different intrinsic widths, and letting each set its own left the
+            labels starting at ragged offsets down the list. */}
+        <span className="flex size-4 shrink-0 items-center justify-center">
+          {entry.avatar !== undefined ? (
+            <AvatarValue
+              name={name ?? category}
+              value={entry.avatar}
+              className="size-4 rounded-sm text-[10px]"
+            />
+          ) : (
+            <ParadigmIcon
+              iconId={entry.iconId}
+              className={cn('size-4', active ? 'text-primary' : 'text-foreground-muted')}
+            />
           )}
         </span>
-        {active && <Check className="size-3.5 shrink-0 text-primary" />}
+        {/* Category first, then what this one is called: a row is read as "which
+            way of working", and only then as "which one of those". One truncating
+            line, so the category — what the list is scanned by — is the part that
+            survives a narrow row. */}
+        <span className="min-w-0 flex-1 truncate">
+          <span>{category}</span>
+          {name && <span className="font-normal text-foreground-muted"> {name}</span>}
+        </span>
+        {entry.alpha && (
+          <Badge
+            variant="secondary"
+            className="shrink-0 px-1 py-0 text-[9px] font-normal uppercase tracking-wide"
+          >
+            {t('home.modeAlphaBadge')}
+          </Badge>
+        )}
       </button>
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label={t('common.more')}
           title={t('common.more')}
           className={cn(
-            'flex size-5 shrink-0 items-center justify-center rounded-sm text-foreground-passive transition-opacity hover:bg-background-1 hover:text-foreground focus-visible:opacity-100 group-hover/paradigm:opacity-100',
+            'absolute right-1 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-foreground-passive transition-opacity hover:bg-background-2 hover:text-foreground focus-visible:opacity-100 group-hover/paradigm:opacity-100',
             // Kept visible on the selected row: duplicating is how a built-in
             // becomes editable, so the way in cannot be hover-only on the one row
             // the user is already looking at.
-            active ? 'opacity-70' : 'opacity-0'
+            active ? 'opacity-60' : 'opacity-0'
           )}
         >
-          <MoreHorizontal className="size-3" />
+          <MoreHorizontal className="size-3.5" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
           {/* Duplicate comes first because it is the way into every other action

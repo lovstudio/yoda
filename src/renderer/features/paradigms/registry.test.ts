@@ -160,6 +160,14 @@ describe('paradigm entries', () => {
       name: 'My vibe',
     });
     expect(user?.builtin).toBe(false);
+
+    // An unnamed instance goes by the Agent in its seat...
+    expect(builtinSingle && paradigmEntryLabel(builtinSingle, t, 'cc').name).toBe('cc');
+    // ...unless that name only restates the category, which is the common case
+    // for a seat's default Agent and reads as a stutter.
+    expect(
+      builtinSingle && paradigmEntryLabel(builtinSingle, t, PARADIGM_KINDS.single.labelKey).name
+    ).toBeNull();
   });
 
   it('scopes seats to the instance, so a duplicate diverges from its original', () => {
