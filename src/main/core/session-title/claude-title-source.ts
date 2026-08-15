@@ -13,7 +13,7 @@ import type {
 /**
  * Claude Code stores session transcripts at
  *   ~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl
- * where <encoded-cwd> replaces both '/' and '.' with '-'.
+ * where <encoded-cwd> is the slug built by encodeClaudeProjectDir below.
  *
  * Claude appends sentinel rows whenever the session title changes:
  *   {"type":"ai-title","aiTitle":"...","sessionId":"..."}
@@ -37,8 +37,33 @@ export class ClaudeSessionTitleSource implements SessionTitleSource {
   }
 }
 
+/**
+ * Claude Code's project-directory slug: EVERY character outside [a-zA-Z0-9]
+ * becomes '-', not just '/' and '.'. A CJK project path such as
+ * `/Users/x/repos/手工川ai剪辑` lands in `-Users-x-repos----ai--`, so an encoder
+ * that only rewrites separators points at a directory that never exists and
+ * every transcript-backed surface (prompt history, session title, run state,
+ * usage stats) silently reads nothing.
+ *
+ * Slugs longer than the limit are truncated and disambiguated with a hash of
+ * the raw path — same as Claude Code, which would otherwise collide long
+ * worktree paths that share a prefix.
+ */
+const CLAUDE_PROJECT_DIR_MAX_LENGTH = 200;
+
 export function encodeClaudeProjectDir(cwd: string): string {
-  return cwd.replace(/[/.]/g, '-');
+  const slug = cwd.replace(/[^a-zA-Z0-9]/g, '-');
+  if (slug.length <= CLAUDE_PROJECT_DIR_MAX_LENGTH) return slug;
+  return `${slug.slice(0, CLAUDE_PROJECT_DIR_MAX_LENGTH)}-${claudeProjectDirHash(cwd)}`;
+}
+
+/** Claude Code's 32-bit djb2-style hash of the raw cwd, base36. */
+function claudeProjectDirHash(cwd: string): string {
+  let hash = 0;
+  for (let index = 0; index < cwd.length; index++) {
+    hash = ((hash << 5) - hash + cwd.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash).toString(36);
 }
 
 export function resolveClaudeTranscriptPath(cwd: string, sessionId: string): string {
