@@ -36,6 +36,11 @@
   wrapper; it must not publish PTY/Agent exit or mark the conversation stopped.
   `transportAttached: false` remains a live, reattachable tmux session; only
   explicit stop/destroy or idle-session hibernation terminates the tmux session
+- a dead PTY proves only that the transport died. For a tmux-backed session the
+  provider CLI lives in the pane and outlives every attach wrapper, so classify
+  every unexpected wrapper death (flow-control kill, client crash, SIGHUP)
+  against tmux before reporting an Agent exit; a surviving pane keeps the
+  run-state watcher, runtime status and headless `tmux send-keys` input path
 - idle-session hibernation may terminate only detachable `idle`/`completed`
   sessions with zero renderer consumers; first reopen/input must transparently
   resume through the existing conversation registration epoch
