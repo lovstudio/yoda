@@ -18,12 +18,13 @@ import { useTranslation } from 'react-i18next';
 import type { AiLabUserApp } from '@shared/ai-lab';
 import { buildAiLabAppDeepLink } from '@shared/deep-links';
 import { getRuntime } from '@shared/runtime-registry';
-import { ensureUniqueTaskDisplayName } from '@shared/task-name';
+import { ensureUniqueTaskDisplayName, taskNameFromPrompt } from '@shared/task-name';
 import type { MountedProject } from '@renderer/features/projects/stores/project';
 import {
   asMounted,
   getProjectManagerStore,
 } from '@renderer/features/projects/stores/project-selectors';
+import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { HeaderActionButton, HeaderActionToolbar } from '@renderer/lib/components/header-actions';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
@@ -49,7 +50,7 @@ type AiLabViewProps = {
   onActiveAppChange?: (appId: string | null) => void;
 };
 
-/** Apps shelf: generated apps are created by Home's Yoda Build mode and launched here. */
+/** Apps shelf: every generated app is created here and launched from here. */
 export const AiLabView: React.FC<AiLabViewProps> = ({
   embedded = false,
   activeAppId: controlledAppId,
@@ -91,9 +92,64 @@ function Launcher({
 }) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
+  const { toast } = useToast();
+  const { runtimeId } = useEffectiveRuntime();
+  const [isComposing, setIsComposing] = useState(false);
+  const [requirement, setRequirement] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
 
-  const openYodaBuild = () => {
-    navigate('home', { runMode: 'build' });
+  // An app owns its project, so the requirement has to be in hand before
+  // anything is created: it names the project and seeds the first task.
+  const handleCreate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const prompt = requirement.trim();
+    if (!prompt || isCreating) return;
+    if (!runtimeId) {
+      toast({
+        title: t('aiLab.createFailed'),
+        description: t('aiLab.createAgentUnavailable'),
+        variant: 'destructive',
+      });
+      return;
+    }
+    setIsCreating(true);
+    try {
+      const project = await createAiLabProject(
+        taskNameFromPrompt(prompt) || t('aiLab.defaultAppProjectName')
+      );
+      await project.taskManager.loadTasks();
+      const launch = await startAiLabBuildTask({
+        project,
+        prompt,
+        runtimeId,
+        taskName: ensureUniqueTaskDisplayName(
+          t('aiLab.buildTaskName'),
+          Array.from(project.taskManager.tasks.values(), (task) => task.data.name)
+        ),
+      });
+      setRequirement('');
+      setIsComposing(false);
+      navigate('task', {
+        projectId: project.data.id,
+        taskId: launch.taskId,
+        tab: { kind: 'conversation', conversationId: launch.conversationId },
+      });
+      void launch.promise.catch((error: unknown) => {
+        toast({
+          title: t('aiLab.createFailed'),
+          description: error instanceof Error ? error.message : String(error),
+          variant: 'destructive',
+        });
+      });
+    } catch (error) {
+      toast({
+        title: t('aiLab.createFailed'),
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   return (
@@ -114,12 +170,44 @@ function Launcher({
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs tabular-nums text-foreground-passive">{apps.length}</span>
-              <Button size="sm" onClick={openYodaBuild}>
+              <Button
+                size="sm"
+                variant={isComposing ? 'secondary' : 'default'}
+                aria-expanded={isComposing}
+                disabled={isCreating}
+                onClick={() => setIsComposing((current) => !current)}
+              >
                 <Plus />
                 {t('aiLab.newApp')}
               </Button>
             </div>
           </div>
+          {isComposing && (
+            <form
+              className="mb-3 flex items-end gap-2 rounded-xl border border-border bg-background-secondary p-3 @max-md:flex-col @max-md:items-stretch"
+              onSubmit={(event) => void handleCreate(event)}
+            >
+              <div className="min-w-0 flex-1">
+                <label htmlFor="ai-lab-new-app" className="mb-1 block text-xs font-medium">
+                  {t('aiLab.createTitle')}
+                </label>
+                <Textarea
+                  id="ai-lab-new-app"
+                  rows={2}
+                  maxLength={4_000}
+                  autoFocus
+                  value={requirement}
+                  placeholder={t('aiLab.createPlaceholder')}
+                  disabled={isCreating}
+                  onChange={(event) => setRequirement(event.target.value)}
+                />
+              </div>
+              <Button type="submit" disabled={!requirement.trim() || isCreating}>
+                {isCreating ? <Loader2 className="animate-spin" /> : <Sparkles />}
+                {isCreating ? t('aiLab.creating') : t('aiLab.createSubmit')}
+              </Button>
+            </form>
+          )}
           <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
             {apps.map((app) => (
               <AppTile key={app.id} app={app} onOpen={() => onOpen(app.id)} />
@@ -127,7 +215,7 @@ function Launcher({
             {apps.length === 0 && (
               <button
                 type="button"
-                onClick={openYodaBuild}
+                onClick={() => setIsComposing(true)}
                 className="col-span-full flex min-h-28 items-center gap-4 rounded-xl border border-dashed border-border px-5 py-4 text-left text-foreground-muted transition-colors hover:border-border-primary hover:bg-background-secondary"
               >
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-background-2">

@@ -6,8 +6,6 @@ interface ProjectViewWrapperProps {
   projectId: string;
   /** Which project page this top-level tab shows (defaults to overview). */
   view?: ProjectView;
-  /** In-page selection for the Feature workspace; does not create another app tab. */
-  featureId?: string;
 }
 
 export function ProjectViewWrapper({ children }: ProjectViewWrapperProps) {

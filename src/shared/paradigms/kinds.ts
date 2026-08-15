@@ -10,11 +10,8 @@ import {
 } from './contract';
 import { builtinParadigmId } from './paradigm';
 import {
-  appBuildParadigmParamsSchema,
   compareParadigmParamsSchema,
-  reviewParadigmParamsSchema,
   singleParadigmParamsSchema,
-  specParadigmParamsSchema,
   teamParadigmParamsSchema,
 } from './params';
 
@@ -45,7 +42,6 @@ export const singleParadigmKind: ParadigmKindDescriptor = {
       labelKey: 'home.agentLabel',
       iconId: 'bot',
       defaultBuiltinAgentKey: BUILTIN_AGENT_KEYS.general,
-      runtimeFallback: 'composer',
     },
   ],
   taskMarker: 'default',
@@ -62,123 +58,6 @@ export const singleParadigmKind: ParadigmKindDescriptor = {
   },
   paramsSchema: singleParadigmParamsSchema,
   defaultParams: singleParadigmParamsSchema.parse({}),
-};
-
-export const specParadigmKind: ParadigmKindDescriptor = {
-  kindId: 'spec',
-  labelKey: 'home.modeBrainstorm',
-  descriptionKey: 'home.modeBrainstormDesc',
-  iconId: 'lightbulb',
-  inPicker: true,
-  pickerOrder: 40,
-  instanceSource: null,
-  slots: [
-    {
-      key: 'agent',
-      storageKey: 'brainstorm:agent',
-      labelKey: 'home.brainstormAgent',
-      iconId: 'lightbulb',
-      defaultBuiltinAgentKey: BUILTIN_AGENT_KEYS.spec,
-      runtimeFallback: 'composer',
-    },
-  ],
-  taskMarker: 'default',
-  capabilities: {
-    // Spec work reads and writes the repo in place — no branch is cut for it.
-    worktree: 'never',
-    strategyField: null,
-    unbornPolicy: 'degrade',
-    projectless: true,
-    taskScoped: true,
-    target: 'task',
-    accent: 'advanced',
-    mobile: true,
-    composable: true,
-  },
-  paramsSchema: specParadigmParamsSchema,
-  defaultParams: specParadigmParamsSchema.parse({}),
-  alpha: true,
-};
-
-export const reviewParadigmKind: ParadigmKindDescriptor = {
-  kindId: 'review',
-  labelKey: 'home.modeReview',
-  descriptionKey: 'home.modeReviewDesc',
-  iconId: 'repeat',
-  inPicker: true,
-  pickerOrder: 30,
-  instanceSource: null,
-  slots: [
-    {
-      key: 'implementer',
-      storageKey: 'review:implementer',
-      labelKey: 'home.reviewImplementer',
-      iconId: 'bot',
-      defaultBuiltinAgentKey: BUILTIN_AGENT_KEYS.reviewImplementer,
-      runtimeFallback: 'composer',
-    },
-    {
-      key: 'reviewer',
-      storageKey: 'review:reviewer',
-      labelKey: 'home.reviewReviewer',
-      iconId: 'shield-check',
-      defaultBuiltinAgentKey: BUILTIN_AGENT_KEYS.reviewReviewer,
-      runtimeFallback: 'reviewer',
-    },
-  ],
-  // Two Agents, but only one seat is user-facing and the loop reads as a single
-  // thread of work — the multi-agent marker is reserved for a visible roster.
-  taskMarker: 'default',
-  capabilities: {
-    worktree: 'optional',
-    strategyField: 'review',
-    // The loop needs a branch to review, so an unborn repo is a hard stop.
-    unbornPolicy: 'seed-commit',
-    projectless: false,
-    taskScoped: true,
-    target: 'task',
-    accent: 'advanced',
-    mobile: false,
-    composable: true,
-  },
-  paramsSchema: reviewParadigmParamsSchema,
-  defaultParams: reviewParadigmParamsSchema.parse({}),
-};
-
-export const appBuildParadigmKind: ParadigmKindDescriptor = {
-  kindId: 'app-build',
-  labelKey: 'home.modeBuild',
-  descriptionKey: 'home.modeBuildDesc',
-  iconId: 'app-window',
-  inPicker: true,
-  pickerOrder: 20,
-  instanceSource: null,
-  slots: [
-    {
-      key: 'agent',
-      storageKey: 'build:agent',
-      labelKey: 'home.buildAgent',
-      iconId: 'app-window',
-      defaultBuiltinAgentKey: BUILTIN_AGENT_KEYS.general,
-      runtimeFallback: 'composer',
-    },
-  ],
-  taskMarker: 'default',
-  capabilities: {
-    worktree: 'never',
-    strategyField: null,
-    unbornPolicy: 'degrade',
-    projectless: true,
-    // Scaffolds its own project, so there is no existing task to join.
-    taskScoped: false,
-    target: 'new-project',
-    accent: 'experimental',
-    mobile: false,
-    composable: false,
-  },
-  paramsSchema: appBuildParadigmParamsSchema,
-  defaultParams: appBuildParadigmParamsSchema.parse({}),
-  alpha: true,
 };
 
 export const teamParadigmKind: ParadigmKindDescriptor = {
@@ -246,9 +125,6 @@ export const compareParadigmKind: ParadigmKindDescriptor = {
 
 export const PARADIGM_KINDS: Record<ParadigmKindId, ParadigmKindDescriptor> = {
   single: singleParadigmKind,
-  spec: specParadigmKind,
-  review: reviewParadigmKind,
-  'app-build': appBuildParadigmKind,
   team: teamParadigmKind,
   compare: compareParadigmKind,
 };
@@ -257,7 +133,7 @@ export function paradigmKind(kindId: ParadigmKindId): ParadigmKindDescriptor {
   return PARADIGM_KINDS[kindId];
 }
 
-/** A kind's slot by role, e.g. `paradigmSlot('review', 'reviewer')`. */
+/** A kind's slot by role, e.g. `paradigmSlot('single', 'agent')`. */
 export function paradigmSlot(kindId: ParadigmKindId, slotKey: string): ParadigmSlot {
   const slot = PARADIGM_KINDS[kindId].slots.find((candidate) => candidate.key === slotKey);
   if (!slot) throw new Error(`Paradigm kind "${kindId}" has no "${slotKey}" slot`);
@@ -283,23 +159,30 @@ export const PARADIGM_KIND_ORDER: readonly ParadigmKindId[] = PARADIGM_KIND_IDS;
  * kind ids are the new vocabulary; this maps between them so settings written by
  * older versions keep loading.
  */
-export const LEGACY_RUN_MODES = ['normal', 'build', 'brainstorm', 'review', 'team'] as const;
+export const LEGACY_RUN_MODES = ['normal', 'team'] as const;
 
 export type LegacyRunMode = (typeof LEGACY_RUN_MODES)[number];
 
+/**
+ * Run modes whose paradigms were retired. A draft or `.yoda.json` written when
+ * they existed still has to parse, so they coerce to vibe coding rather than
+ * failing the whole settings object — the same treatment `compare` got when it
+ * stopped being a mode of its own.
+ */
+const RETIRED_RUN_MODES: readonly string[] = ['compare', 'build', 'brainstorm', 'review'];
+
+/** Coerces a persisted run mode, retired values included, into a live one. */
+export function normalizeLegacyRunMode(value: unknown): unknown {
+  return typeof value === 'string' && RETIRED_RUN_MODES.includes(value) ? 'normal' : value;
+}
+
 const LEGACY_RUN_MODE_TO_KIND: Record<LegacyRunMode, ParadigmKindId> = {
   normal: 'single',
-  build: 'app-build',
-  brainstorm: 'spec',
-  review: 'review',
   team: 'team',
 };
 
 const KIND_TO_LEGACY_RUN_MODE: Partial<Record<ParadigmKindId, LegacyRunMode>> = {
   single: 'normal',
-  'app-build': 'build',
-  spec: 'brainstorm',
-  review: 'review',
   team: 'team',
 };
 

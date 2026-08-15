@@ -22,7 +22,7 @@ import {
   MAX_CUSTOM_MODELS_PER_PROVIDER,
 } from '@shared/model-provider-catalog';
 import { openInAppIdSchema } from '@shared/openInApps';
-import { LEGACY_RUN_MODES } from '@shared/paradigms/kinds';
+import { LEGACY_RUN_MODES, normalizeLegacyRunMode } from '@shared/paradigms/kinds';
 import { promptPrincipleSchema, taskOutputLanguageValues } from '@shared/project-settings';
 import { runtimeIdSchema } from '@shared/runtime-id-schema';
 import { RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES } from '@shared/runtime-model-candidates';
@@ -597,19 +597,10 @@ export const interfaceSettingsSchema = z.object({
 export const browserPreviewSettingsSchema = z.object({ enabled: z.boolean() });
 
 const homeRunModeSchema = z.enum(LEGACY_RUN_MODES);
-const teamRuntimeSelectionSchema = z.object({
-  ceo: runtimeIdSchema,
-  product: runtimeIdSchema,
-  engineering: runtimeIdSchema,
-  uiux: runtimeIdSchema,
-  operations: runtimeIdSchema,
-});
 
 /** provider→runtime terminology migration for persisted home drafts. */
 const HOME_DRAFT_LEGACY_FIELDS: Record<string, string> = {
   providerOverride: 'runtimeOverride',
-  reviewReviewerProvider: 'reviewReviewerRuntime',
-  teamProviders: 'teamRuntimes',
 };
 
 export const homeDraftSchema = z.preprocess(
@@ -624,15 +615,12 @@ export const homeDraftSchema = z.preprocess(
         delete migrated[oldKey];
       }
     }
-    // The retired `compare` run mode coerces to `normal`; drop the dead
-    // compareRuntimes field so an old draft still satisfies the schema.
-    if (record.runMode === 'compare') {
+    // A retired run mode coerces to vibe coding so an old draft still
+    // satisfies the schema instead of failing the whole settings object.
+    const normalizedRunMode = normalizeLegacyRunMode(record.runMode);
+    if (normalizedRunMode !== record.runMode) {
       migrated ??= { ...record };
-      migrated.runMode = 'normal';
-    }
-    if ('compareRuntimes' in record) {
-      migrated ??= { ...record };
-      delete migrated.compareRuntimes;
+      migrated.runMode = normalizedRunMode;
     }
     // `selectedTeamId` was "which Agent Team", back when teams were the only
     // paradigm with more than one instance. Teams are now `team`-kind paradigm
@@ -651,7 +639,6 @@ export const homeDraftSchema = z.preprocess(
     prompt: z.string(),
     selectedProjectId: z.string().nullable(),
     strategyKind: z.enum(['new-branch', 'no-worktree']),
-    reviewStrategyKind: z.enum(['new-branch', 'no-worktree']),
     /** User-picked base branch for forked tasks. null = project default branch.
      *  Cleared whenever the composer switches projects. */
     baseBranch: z
@@ -663,8 +650,6 @@ export const homeDraftSchema = z.preprocess(
       .nullable(),
     runtimeOverride: runtimeIdSchema.nullable(),
     runMode: homeRunModeSchema,
-    reviewReviewerRuntime: runtimeIdSchema,
-    teamRuntimes: teamRuntimeSelectionSchema,
     /** Remembered paradigm instance id. Empty means "the kind's own built-in
      *  instance", which is what a draft that never picked one wants. */
     selectedParadigmId: z.string().default(''),

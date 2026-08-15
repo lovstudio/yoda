@@ -33,12 +33,14 @@ export function SidebarTaskGroupToggle({
       onMouseDown={(event) => event.preventDefault()}
       onClick={onToggle}
       className={cn(
-        'flex h-7 w-full min-w-0 items-center gap-1.5 overflow-hidden rounded-lg text-left text-xs font-medium text-foreground-tertiary-muted transition-colors hover:bg-background-tertiary-1 hover:text-foreground-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        rowVariant === 'underProject' ? 'pl-8 pr-2' : 'px-2'
+        'flex h-7 w-full min-w-0 items-center gap-1 overflow-hidden rounded-lg pr-2 text-left text-xs font-medium text-foreground-tertiary-muted transition-colors hover:bg-background-tertiary-1 hover:text-foreground-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        // Match the indent of the task rows this row discloses, so the label
+        // lines up with their titles rather than with the group's chevron.
+        rowVariant === 'underProject' ? 'pl-8' : rowVariant === 'flat' ? 'pl-6' : 'pl-2'
       )}
     >
-      <ChevronDown className={cn('size-3.5 shrink-0', loading && 'animate-pulse')} />
       <span className="truncate">{label}</span>
+      <ChevronDown className={cn('size-3.5 shrink-0', loading && 'animate-pulse')} />
     </button>
   );
 }

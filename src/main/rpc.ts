@@ -15,7 +15,6 @@ import { doctorController } from './core/doctor/controller';
 import { editorBufferController } from './core/editor/controller';
 import { extensionsController } from './core/extensions/controller';
 import { featurebaseController } from './core/featurebase/controller';
-import { featureController } from './core/features/controller';
 import { feishuController } from './core/feishu/controller';
 import { forgejoController } from './core/forgejo/controller';
 import { filesController } from './core/fs/controller';
@@ -42,7 +41,6 @@ import { ptyController } from './core/pty/controller';
 import { pullRequestController } from './core/pull-requests/controller';
 import { quickActionsController } from './core/quick-actions/controller';
 import { repositoryController } from './core/repository/controller';
-import { reviewOrchestrationController } from './core/review-orchestration/controller';
 import { searchController } from './core/search/controller';
 import { sessionSharesController } from './core/session-shares/controller';
 import { settingsSyncController } from './core/settings-sync/controller';
@@ -82,7 +80,6 @@ export const rpcRouter = createRPCRouter({
   pty: ptyController,
   featurebase: featurebaseController,
   feishu: feishuController,
-  features: featureController,
   forgejo: forgejoController,
   github: githubController,
   gitlab: gitlabController,
@@ -121,7 +118,6 @@ export const rpcRouter = createRPCRouter({
   viewState: viewStateController,
   search: searchController,
   sessionShares: sessionSharesController,
-  reviewOrchestration: reviewOrchestrationController,
   teamRooms: teamRoomController,
 });
 

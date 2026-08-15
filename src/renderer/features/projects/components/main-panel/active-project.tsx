@@ -1,6 +1,5 @@
 import { observer } from 'mobx-react-lite';
 import { DocsPanel } from '@renderer/features/projects/components/docs-view/docs-panel';
-import { FeaturesPanel } from '@renderer/features/projects/components/features-view/features-panel';
 import { HarnessPanel } from '@renderer/features/projects/components/harness-view/harness-panel';
 import { IssuesPanel } from '@renderer/features/projects/components/issues-view/issues-panel';
 import { OverviewPanel } from '@renderer/features/projects/components/overview-view/overview-panel';
@@ -31,7 +30,6 @@ export const ActiveProject = observer(function ActiveProject() {
     <div className="flex flex-col min-h-0 flex-1">
       <div className="flex-1 min-h-0">
         {activeView === 'overview' && <OverviewPanel />}
-        {activeView === 'features' && <FeaturesPanel />}
         {activeView === 'tasks' && <TaskList />}
         {activeView === 'issues' && <IssuesPanel />}
         {activeView === 'pullRequests' && <PullRequestView />}

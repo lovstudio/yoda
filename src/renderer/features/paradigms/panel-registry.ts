@@ -1,7 +1,5 @@
 import type { ComponentType } from 'react';
 import type { ParadigmKindId } from '@shared/paradigms/contract';
-import { AppBuildParadigmPanel } from './kinds/app-build/panel';
-import { ReviewParadigmPanel } from './kinds/review/panel';
 import { TeamParadigmPanel } from './kinds/team/panel';
 import type { ParadigmPanelProps } from './panel-context';
 
@@ -14,7 +12,5 @@ import type { ParadigmPanelProps } from './panel-context';
  * lookup that reads as a function call would be constructing one per render.
  */
 export const PARADIGM_PANELS: Partial<Record<ParadigmKindId, ComponentType<ParadigmPanelProps>>> = {
-  'app-build': AppBuildParadigmPanel,
-  review: ReviewParadigmPanel,
   team: TeamParadigmPanel,
 };

@@ -27,7 +27,6 @@ import {
   projectRemotes,
   projects,
   projectSettings,
-  reviewOrchestrations,
   taskNamingSnapshots,
   tasks,
   teamRooms,
@@ -367,9 +366,6 @@ async function mergeProjectIntoExisting(source: ProjectRow, target: ProjectRow):
     tx.update(taskNamingSnapshots)
       .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(taskNamingSnapshots.projectId, source.id));
-    tx.update(reviewOrchestrations)
-      .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(reviewOrchestrations.projectId, source.id));
     tx.update(teamRooms)
       .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(teamRooms.projectId, source.id));

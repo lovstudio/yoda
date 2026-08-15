@@ -1,5 +1,5 @@
 import z from 'zod';
-import { LEGACY_RUN_MODES } from './paradigms/kinds';
+import { LEGACY_RUN_MODES, normalizeLegacyRunMode } from './paradigms/kinds';
 import {
   PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES,
   PROMPT_SOURCE_DEFAULT_TIMEOUT_SECONDS,
@@ -150,16 +150,11 @@ export type ComposerBaseBranch = z.infer<typeof composerBaseBranchSchema>;
 
 export const composerDefaultsSchema = z.object({
   runtimeId: runtimeIdSchema.optional(),
-  // The retired `compare` run mode coerces to `normal` so an old `.yoda.json`
-  // override still parses instead of failing the whole settings object.
-  runMode: z.preprocess(
-    (value) => (value === 'compare' ? 'normal' : value),
-    z.enum(composerRunModeValues).optional()
-  ),
+  // A retired run mode coerces to vibe coding so an old `.yoda.json` override
+  // still parses instead of failing the whole settings object.
+  runMode: z.preprocess(normalizeLegacyRunMode, z.enum(composerRunModeValues).optional()),
   baseBranch: composerBaseBranchSchema.optional(),
   standardStrategyKind: z.enum(composerStrategyKindValues).optional(),
-  reviewStrategyKind: z.enum(composerStrategyKindValues).optional(),
-  reviewerRuntime: runtimeIdSchema.optional(),
   attachImagesAsPaths: z.boolean().optional(),
   inputPromptLanguage: z.enum(taskOutputLanguageValues).optional(),
   namingLanguage: z.enum(taskOutputLanguageValues).optional(),

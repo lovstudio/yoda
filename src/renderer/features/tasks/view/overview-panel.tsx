@@ -1,12 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, GitBranch, MessageSquarePlus, Milestone } from 'lucide-react';
+import { ChevronRight, GitBranch, MessageSquarePlus } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import type { ConversationUsageSummary } from '@shared/stats';
 import { TaskRoomChat } from '@renderer/features/agent-room/task-room-chat';
 import { taskRoomQueryKey } from '@renderer/features/agent-room/team-room-queries';
-import { openFeature } from '@renderer/features/features/feature-navigation';
-import { useFeatures } from '@renderer/features/features/use-features';
 import {
   getProjectStore,
   projectDisplayName,
@@ -50,8 +48,6 @@ export const OverviewPanel = observer(function OverviewPanel() {
   const sessionCount = sessions.length + archivedSessions.length;
 
   const { data: taskStats } = useTaskStats(projectId, taskId);
-  const { data: features = [] } = useFeatures(projectId);
-  const owningFeatures = features.filter((feature) => feature.taskIds.includes(taskId));
   const usageByConversation = new Map<string, ConversationUsageSummary>(
     (taskStats?.conversations ?? []).map((usage) => [usage.conversationId, usage])
   );
@@ -132,27 +128,6 @@ export const OverviewPanel = observer(function OverviewPanel() {
           )}
           {taskStats && <TaskStatsStrip stats={taskStats} />}
         </header>
-
-        {owningFeatures.length > 0 ? (
-          <section className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-background-secondary px-3 py-2">
-            <Milestone className="size-3.5 shrink-0 text-foreground-muted" />
-            <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.12em] text-foreground-passive">
-              {t('featureDelivery.taskContext')}
-            </span>
-            <div className="flex min-w-0 flex-wrap gap-1.5">
-              {owningFeatures.map((feature) => (
-                <button
-                  key={feature.id}
-                  type="button"
-                  className="max-w-64 truncate rounded bg-background px-2 py-1 text-xs text-foreground ring-1 ring-inset ring-border transition-colors hover:bg-background-1"
-                  onClick={() => openFeature(projectId, feature.id)}
-                >
-                  {feature.title}
-                </button>
-              ))}
-            </div>
-          </section>
-        ) : null}
 
         <section className="flex flex-col gap-2">
           <div className="flex items-center justify-between">

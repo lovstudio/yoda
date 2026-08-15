@@ -1,8 +1,6 @@
-import { BUILTIN_TEAMS } from '../agent-team';
 import { PARADIGM_KIND_IDS } from './contract';
 import { PARADIGM_KINDS } from './kinds';
 import { builtinParadigmId, type Paradigm } from './paradigm';
-import { builtinTeamToParadigm } from './team-adapter';
 
 /**
  * The instance a self-contained kind ships with: one per kind whose instances are
@@ -36,20 +34,14 @@ const KIND_OWNED_BUILTINS: readonly Paradigm[] = PARADIGM_KIND_IDS.filter(
 /**
  * Every code-defined paradigm instance.
  *
- * The built-in Agent Teams are here rather than behind the team adapter because
- * they are not a different species: a built-in team is a code-defined instance of
- * the multi-agent kind, exactly as `builtin:paradigm:review` is one of the review
- * kind. Keeping them out would leave `paradigms.list()` missing instances that the
- * picker shows.
- *
  * These are defaults, not fixtures: `paradigmsService` overlays any stored row
  * with the same id on top, so a built-in can be renamed and reconfigured while
  * still being the instance the app ships and references by id.
+ *
+ * The multi-agent kind contributes nothing here — its instances *are* the user's
+ * Agent Teams, and the app ships none of those.
  */
-export const BUILTIN_PARADIGMS: readonly Paradigm[] = [
-  ...KIND_OWNED_BUILTINS,
-  ...BUILTIN_TEAMS.map(builtinTeamToParadigm),
-];
+export const BUILTIN_PARADIGMS: readonly Paradigm[] = KIND_OWNED_BUILTINS;
 
 export function builtinParadigm(id: string): Paradigm | undefined {
   return BUILTIN_PARADIGMS.find((paradigm) => paradigm.id === id);

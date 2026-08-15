@@ -6,12 +6,12 @@ import {
 } from './project-settings';
 
 describe('shareableProjectSettingsSchema', () => {
-  it('accepts Yoda Build as a project composer mode', () => {
+  it('coerces a retired composer mode to vibe coding', () => {
     const parsed = shareableProjectSettingsSchema.parse({
       composerDefaults: { runMode: 'build' },
     });
 
-    expect(parsed.composerDefaults?.runMode).toBe('build');
+    expect(parsed.composerDefaults?.runMode).toBe('normal');
   });
 
   it('accepts composer language overrides', () => {

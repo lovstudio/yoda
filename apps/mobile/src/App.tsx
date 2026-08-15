@@ -314,7 +314,6 @@ function createDefaultMobileDemandConfiguration(
   return {
     agentId: agent?.id ?? null,
     runtimeId,
-    runMode: 'normal',
     strategyKind: 'no-worktree',
     model: agent?.model ?? null,
     reasoningEffort: agent?.reasoningEffort ?? null,
@@ -1135,7 +1134,6 @@ export function App() {
         attachmentIds,
         agentId: demandConfiguration?.agentId,
         provider: demandConfiguration?.runtimeId,
-        runMode: demandConfiguration?.runMode,
         strategyKind: demandConfiguration?.strategyKind,
         model: demandConfiguration?.model,
         reasoningEffort: demandConfiguration?.reasoningEffort,
@@ -2135,7 +2133,7 @@ function DemandComposer({
           </Text>
           <Text style={styles.composerConfigurationMeta} numberOfLines={1}>
             {demandConfiguration
-              ? `${demandConfiguration.runMode === 'brainstorm' ? '方案讨论' : '普通开发'} · ${demandConfiguration.strategyKind === 'new-branch' ? '新建分支' : '当前项目'}`
+              ? `${demandConfiguration.strategyKind === 'new-branch' ? '新建分支' : '当前项目'}`
               : '点击查看'}
           </Text>
         </View>
@@ -2525,28 +2523,6 @@ function MobileDemandSettingsSheet({
                         ),
                       });
                     }}
-                  />
-                </View>
-
-                <View style={styles.mobileSettingsGroup}>
-                  <MobileDropdownMenu
-                    label="开发模式"
-                    options={[
-                      {
-                        value: 'normal',
-                        label: '普通开发',
-                        description: '直接进入实现与验证流程',
-                      },
-                      {
-                        value: 'brainstorm',
-                        label: '方案讨论',
-                        description: '先整理目标、步骤和验收方式',
-                      },
-                    ]}
-                    value={value.runMode}
-                    onChange={(runMode) =>
-                      update({ runMode: runMode as MobileDemandConfiguration['runMode'] })
-                    }
                   />
                 </View>
 

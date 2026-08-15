@@ -28,8 +28,6 @@ import { normalizeRoutingHopLimit, type RoutingHopLimit } from '@shared/team-rou
 import { claimTaskParadigm } from '@main/core/tasks/operations/setTaskParadigm';
 import { db } from '@main/db/client';
 import {
-  featureTaskLinks,
-  featureWorkflowOwners,
   roomMembers,
   roomMessages,
   teamRooms,
@@ -47,7 +45,6 @@ function mapRoom(row: TeamRoomRow): TeamRoom {
     id: row.id,
     projectId: row.projectId,
     taskId: row.taskId,
-    featureId: row.featureId,
     name: row.name,
     preset: row.preset as RoomPreset,
     status: row.status as TeamRoom['status'],
@@ -102,7 +99,6 @@ function mapMessage(row: RoomMessageRow): RoomMessage {
 export type CreateRoomParams = {
   projectId: string;
   taskId: string;
-  featureId?: string | null;
   name: string;
   preset?: RoomPreset;
   routingHopLimit?: RoutingHopLimit;
@@ -115,7 +111,6 @@ export async function createRoom(params: CreateRoomParams): Promise<TeamRoom> {
     id,
     projectId: params.projectId,
     taskId: params.taskId,
-    featureId: params.featureId ?? null,
     name: params.name,
     preset: params.preset ?? 'freeform',
     status: 'active',
@@ -124,46 +119,13 @@ export async function createRoom(params: CreateRoomParams): Promise<TeamRoom> {
     createdAt: sql`CURRENT_TIMESTAMP`,
     updatedAt: sql`CURRENT_TIMESTAMP`,
   } as const;
-  const row =
-    values.preset === 'feature-workflow'
-      ? db.transaction((tx) => {
-          if (!values.featureId) {
-            throw new Error('Feature workflow Room requires an authoritative Feature.');
-          }
-          const owner = tx
-            .select({ taskId: featureWorkflowOwners.taskId })
-            .from(featureWorkflowOwners)
-            .where(
-              and(
-                eq(featureWorkflowOwners.taskId, values.taskId),
-                eq(featureWorkflowOwners.featureId, values.featureId)
-              )
-            )
-            .limit(1)
-            .get();
-          const link = tx
-            .select({ taskId: featureTaskLinks.taskId })
-            .from(featureTaskLinks)
-            .where(
-              and(
-                eq(featureTaskLinks.featureId, values.featureId),
-                eq(featureTaskLinks.taskId, values.taskId)
-              )
-            )
-            .limit(1)
-            .get();
-          if (!owner || !link) {
-            throw new Error('Feature workflow Room requires its Task ownership to remain linked.');
-          }
-          return tx.insert(teamRooms).values(values).returning().get();
-        })
-      : (await db.insert(teamRooms).values(values).returning())[0];
+  const [row] = await db.insert(teamRooms).values(values).returning();
   if (!row) throw new Error('Could not create Team Room.');
   // A Room is the team paradigm made concrete, and it can be started without
-  // going through a paradigm launcher — from the rooms panel, or by the
-  // create-task modal's Feature workflow. Claim the task here so every entry
-  // point agrees, rather than asking each one to remember. Kind-level, so a
-  // launcher that already recorded which team runs the task keeps its stamp.
+  // going through a paradigm launcher — from the rooms panel, for instance.
+  // Claim the task here so every entry point agrees, rather than asking each one
+  // to remember. Kind-level, so a launcher that already recorded which team runs
+  // the task keeps its stamp.
   await claimTaskParadigm(params.taskId, defaultParadigmStamp('team'));
   return mapRoom(row);
 }
@@ -189,34 +151,6 @@ export async function getRoomForTask(
       and(
         eq(teamRooms.projectId, projectId),
         eq(teamRooms.taskId, taskId),
-        eq(teamRooms.status, 'active')
-      )
-    )
-    .orderBy(desc(teamRooms.createdAt))
-    .limit(1);
-  if (!room) return null;
-  const [members, messages, dispatches] = await Promise.all([
-    getMembers(room.id),
-    getMessages(room.id),
-    getControlMessages(room.id),
-  ]);
-  return { room: mapRoom(room), members, messages, dispatches };
-}
-
-export async function getFeatureRoomForTask(
-  projectId: string,
-  taskId: string,
-  featureId: string
-): Promise<RoomSnapshot | null> {
-  const [room] = await db
-    .select()
-    .from(teamRooms)
-    .where(
-      and(
-        eq(teamRooms.projectId, projectId),
-        eq(teamRooms.taskId, taskId),
-        eq(teamRooms.featureId, featureId),
-        eq(teamRooms.preset, 'feature-workflow'),
         eq(teamRooms.status, 'active')
       )
     )

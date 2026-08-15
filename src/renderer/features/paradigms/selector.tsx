@@ -133,7 +133,7 @@ export function ParadigmSelector({
     // Seeded with the instance's own name, not the name it displays: that can fall
     // back to the category or to the Agent in its seat, and storing either would
     // freeze a borrowed label as this instance's own.
-    setEditDraft({ label: paradigmEntryOwnName(entry, t), icon: entry.avatar ?? '' });
+    setEditDraft({ label: paradigmEntryOwnName(entry), icon: entry.avatar ?? '' });
   };
 
   /**
@@ -151,7 +151,7 @@ export function ParadigmSelector({
     // own — freezing a localized label, or an Agent's name, as the instance's.
     if (
       !entry ||
-      (draft.label === paradigmEntryOwnName(entry, t) && draft.icon === (entry.avatar ?? ''))
+      (draft.label === paradigmEntryOwnName(entry) && draft.icon === (entry.avatar ?? ''))
     )
       return;
     void setPresentation(id, draft.label, draft.icon);

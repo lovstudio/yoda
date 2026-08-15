@@ -67,18 +67,6 @@ const withSlots = <T extends z.ZodRawShape>(shape: T) =>
 export const singleParadigmParamsSchema = withSlots({});
 export type SingleParadigmParams = z.infer<typeof singleParadigmParamsSchema>;
 
-export const specParadigmParamsSchema = withSlots({});
-export type SpecParadigmParams = z.infer<typeof specParadigmParamsSchema>;
-
-export const appBuildParadigmParamsSchema = withSlots({});
-export type AppBuildParadigmParams = z.infer<typeof appBuildParadigmParamsSchema>;
-
-export const reviewParadigmParamsSchema = withSlots({
-  /** Runtime the reviewer seat spawns on; null inherits the global default. */
-  reviewerRuntime: runtimeIdSchema.nullable().default(null),
-});
-export type ReviewParadigmParams = z.infer<typeof reviewParadigmParamsSchema>;
-
 const teamMemberSchema = z.object({
   handle: z.string(),
   displayName: z.string(),

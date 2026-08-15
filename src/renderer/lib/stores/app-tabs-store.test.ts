@@ -398,21 +398,3 @@ describe('skill comparison tabs', () => {
     expect(isIndexTab(tab)).toBe(false);
   });
 });
-
-describe('Feature workspace tabs', () => {
-  it('keeps Feature selection inside one project page tab', () => {
-    const first = routeKey('project', {
-      projectId: 'project-1',
-      view: 'features',
-      featureId: 'feature-1',
-    });
-    const second = routeKey('project', {
-      projectId: 'project-1',
-      view: 'features',
-      featureId: 'feature-2',
-    });
-
-    expect(first).toBe(second);
-    expect(first).not.toBe(routeKey('project', { projectId: 'project-1', view: 'issues' }));
-  });
-});

@@ -1604,8 +1604,6 @@
     "composerDefaultRunModeLabel": "Default mode",
     "composerDefaultBaseBranchLabel": "Default base branch",
     "composerDefaultStrategyLabel": "New worktree by default",
-    "composerDefaultReviewStrategyLabel": "New worktree for review",
-    "composerDefaultReviewerLabel": "Default reviewer",
     "agentCliConfigLabel": "Agent CLI",
     "agentCliConfigHint": "Runtime permissions and instruction files read by the selected Agent CLI.",
     "promptConfigurationLabel": "Prompts & instructions",
@@ -1654,18 +1652,6 @@
     "modeAlphaBadge": "Alpha",
     "modeNormal": "Vibe",
     "modeNormalDesc": "One AI handles the task on its own.",
-    "modeBuild": "Yoda Build",
-    "modeBuildDesc": "Create a dedicated project for every app, then keep building and improving it with natural language.",
-    "modeBrainstorm": "Spec",
-    "modeBrainstormDesc": "Clarify the work first — produce a PRD, design, and acceptance criteria.",
-    "modeReview": "Review",
-    "modeReviewDesc": "One AI implements, another reviews — looping until it passes.",
-    "modeTeamReview": "Review",
-    "modeTeamReviewDesc": "A small AI crew collaborates in a chat, looping implementation and review.",
-    "modeTeamFeature": "Spec",
-    "modeTeamFeatureDesc": "A governed delivery chain whose specialist agents propose evidence from product/UX design through PR, release, and SEO.",
-    "modeTeamStartup": "Startup",
-    "modeTeamStartupDesc": "An AI team (CEO, product, engineering, design, ops) divides the work.",
     "modeTeamDesc": "A custom AI team collaborates on the task.",
     "modeTeamDefault": "Multi-agent team",
     "modeCompare": "Compare",
@@ -1700,7 +1686,6 @@
     "buildCreated": "“{{name}}” was generated in Apps",
     "buildUpdated": "“{{name}}” was updated automatically",
     "buildFailed": "Yoda Build failed",
-    "brainstormPolicy": "Spec first",
     "brainstormAgent": "Spec agent",
     "teamBranchPolicy": "Role branches",
     "addCompareVariant": "Compare",
@@ -1738,11 +1723,6 @@
     "strategyNewBranchDesc": "Spins up an isolated copy on a new branch. Keeps {{branch}} clean and lets multiple tasks run in parallel.",
     "strategyCheckoutExistingTitle": "Work on {{branch}}",
     "strategyCheckoutExistingDesc": "Checks out this existing branch in an isolated worktree — no new branch, and your project directory stays untouched.",
-    "reviewStrategyAria": "Choose review branch mode",
-    "reviewStrategySameBranchTitle": "Review on {{branch}}",
-    "reviewStrategySameBranchDesc": "A and B share the current branch. Best when the loop should directly refine the working tree.",
-    "reviewStrategyNewBranchTitle": "Review worktree off {{branch}}",
-    "reviewStrategyNewBranchDesc": "A and B share one isolated review branch while keeping {{branch}} clean.",
     "welcome": "Welcome.",
     "welcomeStart": "Start shipping",
     "createNewProject": "Create new project",
@@ -2200,15 +2180,6 @@
       "dangerouslySkipPermissions": "Dangerously skip permissions",
       "permissionMode": "Permission mode",
       "initialPromptPlaceholder": "Describe what you want the agent to do.",
-      "executionMode": "Execution mode",
-      "executionAgent": "Standard task",
-      "executionAgentDescription": "One selected agent starts from this prompt.",
-      "executionFeature": "Feature workflow",
-      "executionFeatureDescription": "One authoritative Feature with six specialist execution hand-offs.",
-      "featureBrief": "Problem brief",
-      "featureBriefPlaceholder": "Describe the user problem, desired outcome, constraints, and any known success signal.",
-      "featureWorkflowTaskNotReady": "The task was created, but its worktree is not ready. Repair task setup before starting the Feature loop.",
-      "featureWorkflowStartFailed": "The task was created, but its Feature workflow could not start. Select that task on Home and retry with Feature loop.",
       "pushBranchToRemote": "Push branch to remote",
       "selectAnotherIssue": "Select another issue",
       "selectAnotherPr": "Select another pull request"
@@ -2699,7 +2670,6 @@
     "newTeam": "New team",
     "newTeamDraft": "New team…",
     "editTeam": "Edit team",
-    "builtin": "Built-in",
     "duplicateTeam": "Duplicate",
     "deleteTeam": "Delete team",
     "selectTeam": "Select a team, or create one.",
@@ -2781,18 +2751,6 @@
         ],
         "note": "You don't @ anyone — the System does. You can still @mention someone to chime in."
       },
-      "feature": {
-        "lead": "One problem moves through six evidence-backed hand-offs, with the Feature Lead guarding every gate:",
-        "steps": [
-          "Frame the problem, outcome, constraints, and success signal.",
-          "Write and approve product, UI/UX, and acceptance decisions.",
-          "Implement the approved design with focused tests.",
-          "Validate independently; failed checks return to engineering.",
-          "Document verified user-facing behavior.",
-          "Prepare PR, changelog, release, and SEO copy."
-        ],
-        "note": "Each pass or blocker is stored in the room hand-off, so the rail rebuilds after a restart."
-      },
       "freeform": {
         "lead": "Open collaboration — you direct the team:",
         "steps": [
@@ -2866,7 +2824,6 @@
     },
     "preset": {
       "review": "Review loop",
-      "feature": "Feature workflow",
       "freeform": "Freeform"
     },
     "mode": {
@@ -2899,50 +2856,6 @@
       "localOnly": "New worktrees are only supported for local projects.",
       "taskCreate": "Failed to create the task.",
       "taskSetup": "The task's worktree setup didn't finish — fix it in the task view, then create the room."
-    }
-  },
-  "featureWorkflow": {
-    "title": "Feature execution hand-offs",
-    "subtitle": "Status comes from Feature delivery; agent evidence enters as reviewable drafts.",
-    "progress": "{{completed}} / {{total}} gates",
-    "openWorkspace": "Open Feature delivery",
-    "resume": "Continue current stage",
-    "resumePrompt": "The Feature workspace is now at {{stage}}. Review its gate, delegate only the current owner, and return draft evidence for approval.",
-    "loading": "Loading the authoritative Feature delivery state…",
-    "unavailable": "This Room has no authoritative Feature delivery record. Routing is paused.",
-    "latestEvidence": "Latest evidence",
-    "currentDeliverable": "Current deliverable",
-    "status": {
-      "pending": "Waiting",
-      "active": "In progress",
-      "completed": "Gate passed",
-      "blocked": "Blocked"
-    },
-    "stages": {
-      "problem": {
-        "title": "Problem",
-        "deliverable": "User, outcome, non-goals, constraints, and success signal"
-      },
-      "product-design": {
-        "title": "Product design",
-        "deliverable": "PRD, UX flow, UI states, and testable acceptance criteria"
-      },
-      "implementation": {
-        "title": "Implementation",
-        "deliverable": "Approved technical plan, production code, and focused tests"
-      },
-      "validation": {
-        "title": "Validation",
-        "deliverable": "Independent review and exact verification evidence"
-      },
-      "feature-docs": {
-        "title": "Feature docs",
-        "deliverable": "User guide, examples, limitations, and troubleshooting"
-      },
-      "launch-docs": {
-        "title": "PR & SEO",
-        "deliverable": "Delivery summary, PR packet, release notes, and SEO copy"
-      }
     }
   },
   "promptLibrary": {
@@ -5852,176 +5765,6 @@
     "error": "Error",
     "completed": "Completed",
     "interrupted": "Interrupted"
-  },
-  "featureDelivery": {
-    "title": "Features",
-    "newFeature": "New Feature",
-    "createTitle": "Define a Feature",
-    "create": "Create Feature",
-    "creating": "Creating…",
-    "createFailed": "Failed to create Feature",
-    "saveFailed": "Failed to save the Feature. Try again.",
-    "loadFailed": "Failed to load Features",
-    "notFound": "Feature not found",
-    "notFoundDescription": "It may have been removed or belong to another project.",
-    "sourceIssue": "Source Issue",
-    "listLabel": "Delivery queue",
-    "featureCount": "{{count}} Features",
-    "activeCount": "{{count}} active",
-    "readyCount": "{{count}} ready",
-    "blockedCount": "{{count}} blocked",
-    "emptyTitle": "No Features yet",
-    "emptyDescription": "Define the problem and outcome first, then keep design, implementation, testing, and release on one delivery spine.",
-    "emptyCompact": "Define the next requirement as a Feature",
-    "openFeature": "Open Feature",
-    "createFromIssue": "Create Feature",
-    "taskContext": "Feature",
-    "stagesLabel": "Feature delivery stages",
-    "briefLabel": "Delivery brief",
-    "artifactCreateFailed": "Failed to add artifact",
-    "fields": {
-      "title": "Title",
-      "titlePlaceholder": "What does this Feature solve?",
-      "problem": "Problem",
-      "problemPlaceholder": "Who encounters what problem, and in which context?",
-      "problemHint": "Describe the user problem instead of prescribing an implementation.",
-      "outcome": "Expected outcome",
-      "outcomePlaceholder": "What verifiable user or business change should result?",
-      "nonGoals": "Non-goals",
-      "nonGoalsPlaceholder": "What is explicitly out of scope?",
-      "save": "Save brief"
-    },
-    "statuses": {
-      "active": "Active",
-      "blocked": "Blocked",
-      "completed": "Delivered",
-      "cancelled": "Cancelled"
-    },
-    "stages": {
-      "problem": {
-        "label": "Problem and outcome",
-        "short": "Problem",
-        "description": "Align on the real problem, expected outcome, and non-goals before solution work begins."
-      },
-      "design": {
-        "label": "Product and UX design",
-        "short": "Design",
-        "description": "Capture the product approach, key interactions, and acceptance criteria that bound implementation."
-      },
-      "planning": {
-        "label": "Technical planning",
-        "short": "Plan",
-        "description": "Make architecture, dependencies, risks, and task decomposition explicit before coding."
-      },
-      "implementation": {
-        "label": "Implementation",
-        "short": "Build",
-        "description": "Use linked Tasks for concrete development while keeping every branch attached to the same Feature."
-      },
-      "verification": {
-        "label": "Verification and testing",
-        "short": "Verify",
-        "description": "Provide reproducible evidence that behavior, regressions, and acceptance criteria have been verified."
-      },
-      "documentation": {
-        "label": "Feature documentation",
-        "short": "Docs",
-        "description": "Leave usable, discoverable documentation that stays aligned with the shipped behavior."
-      },
-      "release": {
-        "label": "Release and communication",
-        "short": "Release",
-        "description": "Collect PRs, release notes, and communication assets into an auditable delivery conclusion."
-      },
-      "done": {
-        "label": "Delivery complete",
-        "short": "Done",
-        "description": "The Feature loop is complete, with decisions, implementation, and evidence still traceable."
-      }
-    },
-    "tasks": {
-      "title": "Implementation tasks",
-      "manage": "Link tasks",
-      "linkedCount": "{{count}} linked",
-      "noTasks": "This project has no tasks available to link.",
-      "none": "No implementation tasks are linked. At least one must reach review before implementation can advance.",
-      "archived": "Archived",
-      "unlink": "Unlink “{{title}}”",
-      "activeWorkflowLocked": "An active Feature workflow is using this Task. Archive its Room first."
-    },
-    "artifacts": {
-      "title": "Name",
-      "add": "Add artifact",
-      "type": "Type",
-      "uri": "File or link",
-      "uriPlaceholder": "docs/features/example.md or https://…",
-      "uriHint": "Use a project-relative path for files, or a full URL for external material.",
-      "status": "Review status",
-      "open": "Open artifact",
-      "openSourceTask": "Open source Task",
-      "empty": "No artifacts yet; add a document, test result, or release asset",
-      "approve": "Approve artifact",
-      "markDraft": "Mark draft",
-      "remove": "Remove",
-      "removeTitle": "Remove artifact?",
-      "removeDescription": "“{{title}}” will be unlinked from this Feature. The source file will not be deleted."
-    },
-    "artifactTypes": {
-      "product_spec": "Product spec",
-      "ux_design": "UI/UX design",
-      "acceptance_criteria": "Acceptance criteria",
-      "technical_plan": "Technical plan",
-      "test_evidence": "Test evidence",
-      "feature_docs": "Feature docs",
-      "delivery_summary": "Delivery summary",
-      "pull_request": "Pull Request",
-      "release_note": "Release notes",
-      "seo": "SEO / communication asset"
-    },
-    "artifactStatuses": {
-      "draft": "Draft",
-      "reviewed": "Reviewed",
-      "approved": "Approved",
-      "stale": "Stale"
-    },
-    "gate": {
-      "title": "Stage gate",
-      "target": "Target: {{stage}}",
-      "complete": "Loop complete",
-      "ready": "Ready to advance",
-      "readyDescription": "The required evidence for this stage is present.",
-      "blocked": "{{count}} requirements outstanding",
-      "completedDescription": "This Feature has completed the full problem-to-release delivery loop.",
-      "transitionFailed": "Stage transition failed. Check the latest gate state.",
-      "advance": "Enter {{stage}}",
-      "retreat": "Return to {{stage}}",
-      "firstStage": "Already at first stage",
-      "blockers": {
-        "featureNotActive": "Feature is {{status}}; restore it to Active first",
-        "problemRequired": "Complete the problem definition",
-        "artifactMissing": "Missing “{{artifact}}”",
-        "artifactUnapproved": "“{{artifact}}” is not approved",
-        "artifactStale": "“{{artifact}}” is stale and must be reconfirmed",
-        "taskRequired": "Link at least one implementation task",
-        "taskIncomplete": "{{count}} tasks have not reached review or done"
-      }
-    },
-    "events": {
-      "title": "Delivery trail",
-      "types": {
-        "created": "Created Feature",
-        "updated": "Updated delivery brief",
-        "stage_advanced": "Advanced delivery stage",
-        "stage_retreated": "Returned delivery stage",
-        "status_changed": "Changed Feature status",
-        "task_linked": "Linked implementation task",
-        "task_unlinked": "Unlinked implementation task",
-        "artifact_added": "Added artifact",
-        "artifact_updated": "Updated artifact",
-        "artifact_removed": "Removed artifact",
-        "handoff_recorded": "Recorded agent hand-off"
-      }
-    }
   },
   "issues": {
     "alreadyLinkedToTask": "Already linked to {{taskName}}",

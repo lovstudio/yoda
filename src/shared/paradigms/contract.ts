@@ -4,8 +4,8 @@ import type { z } from 'zod';
  * Development paradigms — the plugin contract.
  *
  * A paradigm answers one question: "given a user requirement, how is a task
- * driven to completion?" Vibe coding hands it to a single Agent; the review
- * loop alternates implementer and reviewer; a team fans it out over a roster.
+ * driven to completion?" Vibe coding hands it to a single Agent; a team fans it
+ * out over a roster.
  *
  * Two axes, deliberately separate:
  *
@@ -23,14 +23,7 @@ import type { z } from 'zod';
  * renderer side.
  */
 
-export const PARADIGM_KIND_IDS = [
-  'single',
-  'spec',
-  'review',
-  'app-build',
-  'team',
-  'compare',
-] as const;
+export const PARADIGM_KIND_IDS = ['single', 'team', 'compare'] as const;
 
 export type ParadigmKindId = (typeof PARADIGM_KIND_IDS)[number];
 
@@ -42,16 +35,7 @@ export function isParadigmKindId(value: unknown): value is ParadigmKindId {
  * Icon ids a paradigm (or one of its slots) may declare. Resolved to lucide
  * components by the renderer's icon map — shared code must not import React.
  */
-export const PARADIGM_ICON_IDS = [
-  'bot',
-  'lightbulb',
-  'repeat',
-  'app-window',
-  'git-fork',
-  'columns',
-  'shield-check',
-  'users',
-] as const;
+export const PARADIGM_ICON_IDS = ['bot', 'git-fork', 'columns'] as const;
 
 export type ParadigmIconId = (typeof PARADIGM_ICON_IDS)[number];
 
@@ -60,8 +44,8 @@ export type ParadigmIconId = (typeof PARADIGM_ICON_IDS)[number];
  *
  * `key` is the seat's role inside the kind and is stable forever. `storageKey`
  * is where the user's pick is persisted — currently the legacy per-mode prompt
- * key (`'review:implementer'`), kept verbatim so existing drafts keep resolving
- * until the paradigm-params migration moves them.
+ * key (`'normal:agent'`), kept verbatim so existing drafts keep resolving until
+ * the paradigm-params migration moves them.
  */
 export interface ParadigmSlot {
   key: string;
@@ -70,11 +54,6 @@ export interface ParadigmSlot {
   iconId: ParadigmIconId;
   /** Built-in Agent preset used when the user has not picked one. */
   defaultBuiltinAgentKey: string;
-  /**
-   * Which runtime the seat falls back to when its Agent declares no preference:
-   * the composer's own runtime, or the separately configured reviewer runtime.
-   */
-  runtimeFallback: 'composer' | 'reviewer';
 }
 
 /** How a paradigm's worktree/branch requirement is decided. */
@@ -84,7 +63,7 @@ export type ParadigmWorktreeNeed = 'required' | 'optional' | 'never';
  * Which persisted strategy setting an `optional`-worktree paradigm reads.
  * `null` for paradigms whose worktree need is fixed.
  */
-export type ParadigmStrategyField = 'standard' | 'review' | null;
+export type ParadigmStrategyField = 'standard' | null;
 
 /**
  * What happens when the project has no commits yet ("unborn" HEAD).

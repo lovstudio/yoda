@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { BUILTIN_FEATURE_TEAM_ID, BUILTIN_REVIEW_TEAM_ID, BUILTIN_TEAMS } from '@shared/agent-team';
 import type { Agent } from '@shared/agents';
 import { BUILTIN_PARADIGMS } from '@shared/paradigms/builtins';
 import { PARADIGM_KIND_IDS, type ParadigmKindId } from '@shared/paradigms/contract';
@@ -100,20 +99,18 @@ describe('paradigm registry', () => {
       expect(paradigm.icon).toBe('');
     }
 
-    // Built-in teams come across as instances keyed by the team id — rooms
-    // reference it, so re-keying them would orphan every existing room.
-    const teamOwned = BUILTIN_PARADIGMS.filter((paradigm) => !kindOwned.includes(paradigm));
-    expect(teamOwned.map((paradigm) => paradigm.id)).toEqual(BUILTIN_TEAMS.map((team) => team.id));
-    for (const paradigm of teamOwned) {
-      expect(paradigm.kindId).toBe('team');
-      expect(paradigm.label).not.toBe('');
-    }
+    // Nothing else ships: the multi-agent kind's instances *are* the user's Agent
+    // Teams, and the app comes with none of those.
+    expect(BUILTIN_PARADIGMS.filter((paradigm) => !kindOwned.includes(paradigm))).toEqual([]);
   });
 });
 
 describe('paradigm entries', () => {
   const mine = userParadigm('mine', 'single', 'My vibe');
-  const paradigms = [...BUILTIN_PARADIGMS, mine];
+  // The multi-agent kind ships no instance, so a `team` row only exists once the
+  // user has made a team — which is what a picker row for it represents.
+  const squad = userParadigm('squad', 'team', 'My squad');
+  const paradigms = [...BUILTIN_PARADIGMS, squad, mine];
 
   it('lists every picker kind flat, with no sections', () => {
     const entries = paradigmEntries(paradigms);
@@ -124,9 +121,11 @@ describe('paradigm entries', () => {
         `${kindId} is ${PARADIGM_KINDS[kindId].inPicker ? 'missing' : 'present'}`
       ).toBe(PARADIGM_KINDS[kindId].inPicker);
     }
-    // Every instance is its own row, so the teams contribute one each rather than
+    // Every instance is its own row, so each team contributes one rather than
     // collapsing into a single "multi-agent" entry.
-    expect(entries.filter((entry) => entry.kindId === 'team')).toHaveLength(BUILTIN_TEAMS.length);
+    expect(entries.filter((entry) => entry.kindId === 'team').map((entry) => entry.id)).toEqual([
+      squad.id,
+    ]);
     // Ranked ascending, which is the only ordering the flat list has.
     expect(entries.map((entry) => entry.pickerOrder)).toEqual(
       [...entries.map((entry) => entry.pickerOrder)].sort((a, b) => a - b)
@@ -148,24 +147,12 @@ describe('paradigm entries', () => {
     expect(builtinSingle && paradigmEntryLabel(builtinSingle, t).name).toBeNull();
     expect(builtinSingle?.builtin).toBe(true);
 
-    const feature = entries.find((entry) => entry.id === BUILTIN_FEATURE_TEAM_ID);
+    const team = entries.find((entry) => entry.id === squad.id);
     // A team is one of many `team` instances, so it carries both: the category
     // says it is multi-agent, the name says which team.
-    expect(feature?.categoryKey).toBe(PARADIGM_KINDS.team.labelKey);
-    expect(feature && paradigmEntryLabel(feature, t).name).toBe('home.modeTeamFeature');
-
-    // Naming a shipped team replaces its localized copy — that name is the one the
-    // user expects to see, and keeping both would show them someone else's.
-    const renamedFeature = paradigmEntries(
-      paradigms.map((paradigm) =>
-        paradigm.id === BUILTIN_FEATURE_TEAM_ID
-          ? { ...paradigm, label: 'My squad', customized: true }
-          : paradigm
-      )
-    ).find((entry) => entry.id === BUILTIN_FEATURE_TEAM_ID);
-    expect(renamedFeature && paradigmEntryLabel(renamedFeature, t).name).toBe('My squad');
-    // Still shipped, so it stays undeletable however it is named.
-    expect(renamedFeature?.builtin).toBe(true);
+    expect(team?.categoryKey).toBe(PARADIGM_KINDS.team.labelKey);
+    expect(team && paradigmEntryLabel(team, t).name).toBe('My squad');
+    expect(team?.builtin).toBe(false);
 
     const user = entries.find((entry) => entry.id === mine.id);
     expect(user && paradigmEntryLabel(user, t)).toEqual({
@@ -218,11 +205,11 @@ describe('paradigm entries', () => {
 
   it('resolves the active row by kind, disambiguated by instance', () => {
     const entries = paradigmEntries(paradigms);
-    expect(paradigmEntryId(entries, 'team', BUILTIN_REVIEW_TEAM_ID)).toBe(BUILTIN_REVIEW_TEAM_ID);
+    expect(paradigmEntryId(entries, 'team', squad.id)).toBe(squad.id);
     expect(paradigmEntryId(entries, 'single', mine.id)).toBe(mine.id);
     // A remembered instance of another kind loses to the kind, which is what the
     // rest of the composer is configured for.
-    expect(paradigmEntryId(entries, 'review', mine.id)).toBe(builtinParadigmId('review'));
+    expect(paradigmEntryId(entries, 'team', mine.id)).toBe(squad.id);
     // A deleted instance degrades to its kind rather than blanking the picker.
     expect(paradigmEntryId(entries, 'single', 'gone')).toBe(builtinParadigmId('single'));
     expect(paradigmEntryId([], 'single', '')).toBeUndefined();

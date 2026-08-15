@@ -3,17 +3,12 @@ import {
   CircleDot,
   ExternalLink,
   Loader2,
-  Milestone,
   MoreHorizontal,
   ScanSearch,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
-import type { FeatureSummary } from '@shared/features';
 import type { Issue } from '@shared/tasks';
-import { findFeatureForIssue } from '@renderer/features/features/feature-issue-link';
-import { openFeature } from '@renderer/features/features/feature-navigation';
-import { useFeatures } from '@renderer/features/features/use-features';
 import { useIssues } from '@renderer/features/integrations/use-issues';
 import { CreateIssueButton } from '@renderer/features/projects/components/issues-view/create-issue-button';
 import {
@@ -45,53 +40,18 @@ const RECENT_LIMIT = 3;
 function IssueOverviewActions({
   issue,
   projectId,
-  linkedFeature,
   onViewAll,
 }: {
   issue: Issue;
   projectId: string;
-  linkedFeature?: FeatureSummary;
   onViewAll: () => void;
 }) {
   const { t } = useTranslation();
   const showCreateTaskModal = useShowModal('taskModal');
-  const showCreateFeature = useShowModal('createFeatureModal');
   const alreadyInTask = getLinkedTaskStores(projectId, issue).length > 0;
-  const handleFeature = () => {
-    if (linkedFeature) {
-      openFeature(projectId, linkedFeature.id);
-      return;
-    }
-    showCreateFeature({
-      projectId,
-      sourceIssue: issue,
-      onSuccess: (feature) => openFeature(projectId, feature.id),
-    });
-  };
 
   return (
     <div className="flex shrink-0 items-center gap-0.5 opacity-70 transition-opacity group-hover/issue:opacity-100">
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label={
-                linkedFeature
-                  ? t('featureDelivery.openFeature')
-                  : t('featureDelivery.createFromIssue')
-              }
-              onClick={handleFeature}
-            >
-              <Milestone className="size-3.5" />
-            </Button>
-          }
-        />
-        <TooltipContent>
-          {linkedFeature ? t('featureDelivery.openFeature') : t('featureDelivery.createFromIssue')}
-        </TooltipContent>
-      </Tooltip>
       <Tooltip>
         <TooltipTrigger
           render={
@@ -152,7 +112,6 @@ export const IssuesOverviewCard = observer(function IssuesOverviewCard({
     initialLimit: ISSUE_FETCH_LIMIT,
     enabled: Boolean(repositoryUrl) && isInitialized && authenticated,
   });
-  const { data: features = [] } = useFeatures(projectId);
 
   const recentIssues = issues.slice(0, RECENT_LIMIT);
   const { createIssueTasks, isCreatingIssueTasks, taskableIssues } = useIssueTaskCreation(
@@ -268,7 +227,6 @@ export const IssuesOverviewCard = observer(function IssuesOverviewCard({
                   <IssueOverviewActions
                     issue={issue}
                     projectId={projectId}
-                    linkedFeature={findFeatureForIssue(features, issue)}
                     onViewAll={goToIssues}
                   />
                 </div>

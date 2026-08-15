@@ -1,12 +1,4 @@
-import {
-  AlertTriangle,
-  Copy,
-  Milestone,
-  Send,
-  Settings,
-  TerminalSquare,
-  Users,
-} from 'lucide-react';
+import { AlertTriangle, Copy, Send, Settings, TerminalSquare, Users } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -21,8 +13,6 @@ import {
   normalizeRoutingHopLimit,
   type RoutingHopLimit,
 } from '@shared/team-routing-limit';
-import { openFeature } from '@renderer/features/features/feature-navigation';
-import { useFeature } from '@renderer/features/features/use-features';
 import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { AvatarValue } from '@renderer/lib/components/avatar-value';
 import { Checkbox } from '@renderer/lib/ui/checkbox';
@@ -48,7 +38,6 @@ import {
   STATUS_TEXT,
 } from './accent';
 import { agentRoomStore } from './agent-room-store';
-import { FeatureWorkflowRail } from './feature-workflow-rail';
 
 /** Opens an agent's detail / a session as a normal task tab (defaulting to the sidebar). */
 type OpenTab = (id: string) => void;
@@ -68,8 +57,6 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
     () => new Map(snapshot.members.map((m) => [m.handle.toLowerCase(), m])),
     [snapshot.members]
   );
-  const featureQuery = useFeature(snapshot.room.projectId, snapshot.room.featureId ?? undefined);
-  const feature = featureQuery.data ?? null;
   const latestFailedDispatch = snapshot.dispatches
     ?.filter((dispatch) => dispatch.deliveryStatus === 'failed')
     .at(-1);
@@ -101,9 +88,7 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
   const presetLabel =
     snapshot.room.preset === 'review-loop'
       ? t('agentRoom.preset.review')
-      : snapshot.room.preset === 'feature-workflow'
-        ? t('agentRoom.preset.feature')
-        : t('agentRoom.preset.freeform');
+      : t('agentRoom.preset.freeform');
 
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -117,17 +102,6 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {feature && (
-            <button
-              type="button"
-              onClick={() => openFeature(snapshot.room.projectId, feature.id)}
-              title={t('featureWorkflow.openWorkspace')}
-              className="flex h-8 min-w-0 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
-            >
-              <Milestone className="size-3.5 shrink-0" />
-              <span className="hidden max-w-40 truncate xl:inline">{feature.title}</span>
-            </button>
-          )}
           <RoomSettingsPopover room={snapshot.room} />
           <TeamIntroPopover
             agents={agents}
@@ -135,12 +109,7 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
             updatedAt={snapshot.room.updatedAt}
             onOpenMember={openMember}
           />
-          <div
-            className={cn(
-              'items-center gap-1.5',
-              snapshot.room.preset === 'feature-workflow' ? 'hidden 2xl:flex' : 'flex'
-            )}
-          >
+          <div className="flex items-center gap-1.5">
             {agents.map((m) => (
               <button
                 key={m.id}
@@ -207,23 +176,6 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
             <Copy className="size-3.5" />
           </button>
         </div>
-      )}
-
-      {snapshot.room.preset === 'feature-workflow' && (
-        <FeatureWorkflowRail
-          snapshot={snapshot}
-          feature={feature}
-          loading={featureQuery.isLoading}
-          onOpenMember={openMember}
-          onResume={() => {
-            if (!feature) return;
-            void agentRoomStore.postLeadMessage(
-              `@orchestrator ${t('featureWorkflow.resumePrompt', {
-                stage: t(`featureDelivery.stages.${feature.stage}.label`),
-              })}`
-            );
-          }}
-        />
       )}
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
@@ -503,8 +455,7 @@ const TeamIntroPanel = observer(function TeamIntroPanel({
   onOpenMember: OpenTab;
 }) {
   const { t } = useTranslation();
-  const key =
-    preset === 'review-loop' ? 'review' : preset === 'feature-workflow' ? 'feature' : 'freeform';
+  const key = preset === 'review-loop' ? 'review' : 'freeform';
   const impl = agents.find((m) => m.role === 'leader')?.displayName ?? 'Implementer';
   const rev = agents.find((m) => m.role === 'worker')?.displayName ?? 'Reviewer';
   const steps = t(`agentRoom.intro.${key}.steps`, { returnObjects: true, impl, rev }) as string[];

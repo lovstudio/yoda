@@ -1,12 +1,7 @@
 import { Copy, Crown, Pencil, Plus, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  isBuiltinTeamId,
-  type AgentTeam,
-  type AgentTeamMember,
-  type TeamRouting,
-} from '@shared/agent-team';
+import type { AgentTeam, AgentTeamMember, TeamRouting } from '@shared/agent-team';
 import type { Agent } from '@shared/agents';
 import { BUILTIN_AGENT_PRESETS } from '@shared/builtin-agents';
 import {
@@ -198,7 +193,6 @@ export function AgentTeamsMainPanel() {
   // Effective selection falls back to the first team (no setState-in-effect).
   const effectiveId = isNew ? null : (selectedId ?? teams[0]?.id ?? null);
   const selected = teams.find((t) => t.id === effectiveId) ?? null;
-  const isBuiltin = selected ? isBuiltinTeamId(selected.id) : false;
 
   const startNew = () => {
     setSelectedId('__new__');
@@ -280,11 +274,6 @@ export function AgentTeamsMainPanel() {
                 className="size-5 rounded-md text-xs"
               />
               <span className="min-w-0 flex-1 truncate">{team.name}</span>
-              {isBuiltinTeamId(team.id) && (
-                <span className="shrink-0 text-[10px] text-foreground-muted">
-                  {t('agentTeams.builtin')}
-                </span>
-              )}
             </button>
           ))}
         </div>
@@ -310,9 +299,6 @@ export function AgentTeamsMainPanel() {
                 className="size-9 rounded-lg text-lg"
               />
               <h2 className="flex-1 text-lg font-semibold">{selected.name}</h2>
-              {/* A built-in team is editable here too, the same as in the
-                  paradigm picker: it is a default the user works in, not a
-                  fixture. Only deleting is withheld — rooms reference it by id. */}
               <button
                 type="button"
                 onClick={() => startEdit(selected)}
@@ -329,20 +315,18 @@ export function AgentTeamsMainPanel() {
               >
                 <Copy className="size-3.5" />
               </button>
-              {!isBuiltin && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void remove(selected.id);
-                    setSelectedId(null);
-                  }}
-                  title={t('agentTeams.deleteTeam')}
-                  aria-label={t('agentTeams.deleteTeam')}
-                  className="flex size-7 items-center justify-center rounded-md border border-border text-foreground-muted transition-colors hover:border-red-500 hover:text-red-500"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  void remove(selected.id);
+                  setSelectedId(null);
+                }}
+                title={t('agentTeams.deleteTeam')}
+                aria-label={t('agentTeams.deleteTeam')}
+                className="flex size-7 items-center justify-center rounded-md border border-border text-foreground-muted transition-colors hover:border-red-500 hover:text-red-500"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
             </div>
             <p className="mb-1 text-xs text-foreground-muted">
               {t(ROUTING_LABEL_KEYS[selected.routing])}

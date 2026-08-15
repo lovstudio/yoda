@@ -36,7 +36,7 @@ export type ParadigmLaunchTarget =
   | { kind: 'new-task'; projectId: string }
   /** No project selected — the task lands in the internal drafts project. */
   | { kind: 'draft' }
-  /** The paradigm scaffolds its own project (app-build). */
+  /** The paradigm scaffolds its own project. */
   | { kind: 'new-project' };
 
 /** A slot whose Agent resolved to a runtime, so it can actually be launched. */
@@ -85,8 +85,6 @@ export interface ParadigmVariantLaunchRequest {
  * row instead of composer state.
  */
 export interface ParadigmLaunchParams {
-  /** review: fallback runtime for the reviewer slot. */
-  reviewerRuntime: RuntimeId | null;
   /** team: the selected Agent Team template. */
   team: AgentTeam | undefined;
   /** compare: the configs to run side by side. */

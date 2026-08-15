@@ -1,8 +1,3 @@
-import {
-  BUILTIN_FEATURE_TEAM_ID,
-  BUILTIN_REVIEW_TEAM_ID,
-  BUILTIN_STARTUP_TEAM_ID,
-} from '@shared/agent-team';
 import type { ParadigmIconId, ParadigmKindId } from '@shared/paradigms/contract';
 import { paradigmKind } from '@shared/paradigms/kinds';
 import type { Paradigm } from '@shared/paradigms/paradigm';
@@ -31,9 +26,7 @@ export interface ParadigmEntry {
    * keeps a named team from reading as an unrelated one-off.
    */
   categoryKey: string;
-  /** The instance's own name, as an i18n key. Absent when it has none. */
-  nameKey?: string;
-  /** The instance's own name, literal. Absent when it has none. */
+  /** The instance's own name. Absent when it has none. */
   name?: string;
   descKey: string;
   alpha?: boolean;
@@ -41,37 +34,6 @@ export interface ParadigmEntry {
   builtin: boolean;
   pickerOrder: number;
 }
-
-/**
- * Presentation overrides for the built-in Agent Teams: localized copy so the
- * picker reads naturally instead of echoing a template name, plus the rank each
- * one has always had. Instance-level presentation is exactly what the entry
- * carries, so a built-in reads as a first-class paradigm rather than a template.
- */
-const BUILTIN_TEAM_PRESENTATION: Record<
-  string,
-  { nameKey: string; descKey: string; pickerOrder: number; alpha?: boolean }
-> = {
-  [BUILTIN_FEATURE_TEAM_ID]: {
-    nameKey: 'home.modeTeamFeature',
-    descKey: 'home.modeTeamFeatureDesc',
-    // Converged enough to sit among the single-thread paradigms rather than after
-    // them, which is where it has always been.
-    pickerOrder: 10,
-  },
-  [BUILTIN_REVIEW_TEAM_ID]: {
-    nameKey: 'home.modeTeamReview',
-    descKey: 'home.modeTeamReviewDesc',
-    pickerOrder: 50,
-  },
-  [BUILTIN_STARTUP_TEAM_ID]: {
-    nameKey: 'home.modeTeamStartup',
-    descKey: 'home.modeTeamStartupDesc',
-    pickerOrder: 51,
-    // Honors the original "startup is alpha" call; the review team is GA.
-    alpha: true,
-  },
-};
 
 /** User instances sort after every built-in, in list order. */
 const USER_ORDER_BASE = 100;
@@ -83,16 +45,16 @@ const USER_ORDER_BASE = 100;
  * Agent in the seat, and seeding an edit with either would turn a borrowed label
  * into a stored one on the first keystroke.
  */
-export function paradigmEntryOwnName(entry: ParadigmEntry, t: (key: string) => string): string {
-  return entry.name ?? (entry.nameKey ? t(entry.nameKey) : '');
+export function paradigmEntryOwnName(entry: ParadigmEntry): string {
+  return entry.name ?? '';
 }
 
 /**
  * How an entry reads: its category, qualified by its own name when it has one.
  *
  * "Category · name" rather than name alone, because a name on its own does not
- * say what it will do — `Spec` is a team and `Review` is both a team and a
- * single-thread loop, so the category is the part that disambiguates.
+ * say what it will do — a team called `Review` and a vibe-coding instance called
+ * `Review` run nothing alike, so the category is the part that disambiguates.
  *
  * `fallbackName` covers the instance that was never named: a kind's own built-in
  * has no label, but the Agent sitting in it does, and that Agent is what tells
@@ -100,8 +62,8 @@ export function paradigmEntryOwnName(entry: ParadigmEntry, t: (key: string) => s
  *
  * A name that only restates the category is dropped. It is the common case for
  * the fallback — the Agent seeded into a kind's seat is usually named after that
- * kind — and `Spec Spec` says less than `Spec` while costing the width the real
- * qualifiers need.
+ * kind — and a doubled name says less while costing the width the real qualifiers
+ * need.
  */
 export function paradigmEntryLabel(
   entry: ParadigmEntry,
@@ -109,7 +71,7 @@ export function paradigmEntryLabel(
   fallbackName?: string | null
 ): { category: string; name: string | null } {
   const category = t(entry.categoryKey);
-  const own = paradigmEntryOwnName(entry, t);
+  const own = paradigmEntryOwnName(entry);
   const name = own || fallbackName || null;
   return { category, name: name && name !== category ? name : null };
 }
@@ -126,10 +88,7 @@ export function paradigmEntries(paradigms: readonly Paradigm[]): ParadigmEntry[]
     .flatMap((paradigm) => {
       const kind = paradigmKind(paradigm.kindId);
       if (!kind.inPicker) return [];
-      const presentation = BUILTIN_TEAM_PRESENTATION[paradigm.id];
-      const rank = paradigm.builtin
-        ? (presentation?.pickerOrder ?? kind.pickerOrder)
-        : USER_ORDER_BASE + userIndex++;
+      const rank = paradigm.builtin ? kind.pickerOrder : USER_ORDER_BASE + userIndex++;
       return [
         {
           id: paradigm.id,
@@ -141,15 +100,9 @@ export function paradigmEntries(paradigms: readonly Paradigm[]): ParadigmEntry[]
           categoryKey: kind.labelKey,
           // Only an instance that was named carries a name. A kind's own built-in
           // has none, and reads as the bare category rather than repeating it.
-          // A shipped team's localized copy holds only while it is pristine: once
-          // the user names it themselves, that name is the one they expect to see.
-          ...(presentation && !paradigm.customized
-            ? { nameKey: presentation.nameKey }
-            : paradigm.label
-              ? { name: paradigm.label }
-              : {}),
-          descKey: presentation?.descKey ?? kind.descriptionKey,
-          ...((presentation?.alpha ?? kind.alpha) ? { alpha: true } : {}),
+          ...(paradigm.label ? { name: paradigm.label } : {}),
+          descKey: kind.descriptionKey,
+          ...(kind.alpha ? { alpha: true } : {}),
           builtin: paradigm.builtin,
           pickerOrder: rank,
         } satisfies ParadigmEntry,

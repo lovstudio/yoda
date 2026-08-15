@@ -1,10 +1,7 @@
 import type { ParadigmKindId } from '@shared/paradigms/contract';
 import { defaultParadigmStamp, type ParadigmStamp } from '@shared/paradigms/stamp';
-import { appBuildLauncher } from './kinds/app-build/launch';
 import { compareLauncher } from './kinds/compare/launch';
-import { reviewLauncher } from './kinds/review/launch';
 import { singleLauncher } from './kinds/single/launch';
-import { specLauncher } from './kinds/spec/launch';
 import { teamLauncher } from './kinds/team/launch';
 import type { ParadigmLauncher, ParadigmLaunchParams } from './launch-context';
 
@@ -14,9 +11,6 @@ import type { ParadigmLauncher, ParadigmLaunchParams } from './launch-context';
  */
 export const PARADIGM_LAUNCHERS: Record<ParadigmKindId, ParadigmLauncher> = {
   single: singleLauncher,
-  spec: specLauncher,
-  review: reviewLauncher,
-  'app-build': appBuildLauncher,
   team: teamLauncher,
   compare: compareLauncher,
 };

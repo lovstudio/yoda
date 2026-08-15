@@ -1,19 +1,6 @@
-import { BUILTIN_AGENT_KEYS } from './builtin-agents';
-import {
-  BUILTIN_FEATURE_TEAM_ID,
-  FEATURE_DOCS_PROMPT,
-  FEATURE_ENGINEERING_PROMPT,
-  FEATURE_LAUNCH_DOCS_PROMPT,
-  FEATURE_LEAD_PROMPT,
-  FEATURE_PRODUCT_DESIGN_PROMPT,
-  FEATURE_QUALITY_PROMPT,
-} from './feature-workflow';
 import { isValidRuntimeId, type RuntimeId } from './runtime-registry';
-import {
-  DEFAULT_TEAM_COMMUNICATION_CONFIG,
-  type TeamCommunicationConfig,
-} from './team-communication';
-import { DEFAULT_ROUTING_HOP_LIMIT, type RoutingHopLimit } from './team-routing-limit';
+import { type TeamCommunicationConfig } from './team-communication';
+import { type RoutingHopLimit } from './team-routing-limit';
 
 /**
  * An Agent Team is a reusable, project/task-decoupled template (like an Agent) —
@@ -60,8 +47,6 @@ export interface AgentTeam {
   icon: string;
   routing: TeamRouting;
   communication: TeamCommunicationConfig;
-  /** Shipped with the app: editable like any other team, but not deletable. */
-  builtin: boolean;
   /** Max conductor routing deliveries per human prompt. null = unlimited. */
   routingHopLimit: RoutingHopLimit;
   members: AgentTeamMember[];
@@ -76,166 +61,6 @@ export interface AgentTeamDraft {
   communication: TeamCommunicationConfig;
   routingHopLimit: RoutingHopLimit;
   members: AgentTeamMember[];
-}
-
-export const BUILTIN_STARTUP_TEAM_ID = 'builtin:startup';
-export const BUILTIN_REVIEW_TEAM_ID = 'builtin:review';
-export { BUILTIN_FEATURE_TEAM_ID } from './feature-workflow';
-
-/**
- * The built-in "startup company" team — the former hard-coded 5-role `team`
- * mode, now expressed as a template so it sits alongside user teams. Member
- * runtimes/agentRefs mirror the previous DEFAULT_TEAM_PROVIDERS + builtin team
- * agent keys so behavior is unchanged when this template is selected.
- */
-export const BUILTIN_TEAMS: AgentTeam[] = [
-  {
-    id: BUILTIN_FEATURE_TEAM_ID,
-    name: 'Feature',
-    icon: '🧭',
-    routing: 'sequential',
-    communication: { ...DEFAULT_TEAM_COMMUNICATION_CONFIG },
-    builtin: true,
-    routingHopLimit: DEFAULT_ROUTING_HOP_LIMIT,
-    members: [
-      {
-        handle: 'orchestrator',
-        displayName: 'Feature Lead',
-        icon: '🧭',
-        role: 'leader',
-        runtime: 'claude',
-        systemPrompt: FEATURE_LEAD_PROMPT,
-      },
-      {
-        handle: 'product-design',
-        displayName: 'Product Design',
-        icon: '✦',
-        role: 'worker',
-        runtime: 'claude',
-        systemPrompt: FEATURE_PRODUCT_DESIGN_PROMPT,
-      },
-      {
-        handle: 'engineering',
-        displayName: 'Engineering',
-        icon: '⌘',
-        role: 'worker',
-        runtime: 'codex',
-        systemPrompt: FEATURE_ENGINEERING_PROMPT,
-      },
-      {
-        handle: 'quality',
-        displayName: 'Quality',
-        icon: '✓',
-        role: 'worker',
-        runtime: 'codex',
-        systemPrompt: FEATURE_QUALITY_PROMPT,
-      },
-      {
-        handle: 'feature-docs',
-        displayName: 'Feature Docs',
-        icon: '▤',
-        role: 'worker',
-        runtime: 'claude',
-        systemPrompt: FEATURE_DOCS_PROMPT,
-      },
-      {
-        handle: 'launch-docs',
-        displayName: 'PR & SEO',
-        icon: '↗',
-        role: 'worker',
-        runtime: 'codex',
-        systemPrompt: FEATURE_LAUNCH_DOCS_PROMPT,
-      },
-    ],
-    createdAt: '',
-    updatedAt: '',
-  },
-  {
-    id: BUILTIN_STARTUP_TEAM_ID,
-    name: 'Startup',
-    icon: '🏢',
-    routing: 'fan-out',
-    communication: { ...DEFAULT_TEAM_COMMUNICATION_CONFIG },
-    builtin: true,
-    routingHopLimit: DEFAULT_ROUTING_HOP_LIMIT,
-    members: [
-      {
-        handle: 'ceo',
-        displayName: 'CEO',
-        role: 'leader',
-        runtime: 'claude',
-        agentRef: BUILTIN_AGENT_KEYS.teamCeo,
-      },
-      {
-        handle: 'product',
-        displayName: 'Product',
-        role: 'worker',
-        runtime: 'claude',
-        agentRef: BUILTIN_AGENT_KEYS.teamProduct,
-      },
-      {
-        handle: 'engineering',
-        displayName: 'Engineering',
-        role: 'worker',
-        runtime: 'codex',
-        agentRef: BUILTIN_AGENT_KEYS.teamEngineering,
-      },
-      {
-        handle: 'uiux',
-        displayName: 'Design',
-        role: 'worker',
-        runtime: 'claude',
-        agentRef: BUILTIN_AGENT_KEYS.teamUiux,
-      },
-      {
-        handle: 'operations',
-        displayName: 'Operations',
-        role: 'worker',
-        runtime: 'codex',
-        agentRef: BUILTIN_AGENT_KEYS.teamOperations,
-      },
-    ],
-    createdAt: '',
-    updatedAt: '',
-  },
-  {
-    id: BUILTIN_REVIEW_TEAM_ID,
-    name: 'Review',
-    icon: '🔍',
-    routing: 'review-loop',
-    communication: { ...DEFAULT_TEAM_COMMUNICATION_CONFIG },
-    builtin: true,
-    routingHopLimit: DEFAULT_ROUTING_HOP_LIMIT,
-    members: [
-      {
-        handle: 'referee',
-        displayName: 'Referee',
-        role: 'leader',
-        runtime: 'claude',
-        agentRef: BUILTIN_AGENT_KEYS.reviewReferee,
-      },
-      {
-        handle: 'implementer',
-        displayName: 'Implementer',
-        role: 'worker',
-        runtime: 'claude',
-        agentRef: BUILTIN_AGENT_KEYS.reviewImplementer,
-      },
-      {
-        handle: 'reviewer',
-        displayName: 'Reviewer',
-        role: 'worker',
-        runtime: 'codex',
-        agentRef: BUILTIN_AGENT_KEYS.reviewReviewer,
-      },
-    ],
-    createdAt: '',
-    updatedAt: '',
-  },
-];
-
-export function isBuiltinTeamId(id: string): boolean {
-  return id.startsWith('builtin:');
 }
 
 /**

@@ -479,8 +479,6 @@ function describeProjectTab(
 ): { label: string; icon: ReactNode } {
   const view = ((tab.params.view as string | undefined) ?? 'overview') as ProjectPageView;
   switch (view) {
-    case 'features':
-      return { label: t('featureDelivery.title'), icon: lucideIcon(Milestone) };
     case 'tasks':
       return { label: t('projects.sessions'), icon: lucideIcon(ListTodo) };
     case 'issues':

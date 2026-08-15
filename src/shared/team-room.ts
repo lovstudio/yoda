@@ -4,7 +4,7 @@ import type { TeamCommunicationConfig } from './team-communication';
 import type { RoutingHopLimit } from './team-routing-limit';
 
 /** Preset that seeded a room. `review-loop` wires implementer↔reviewer routing. */
-export type RoomPreset = 'freeform' | 'review-loop' | 'feature-workflow';
+export type RoomPreset = 'freeform' | 'review-loop';
 
 /**
  * Member lifecycle state shown as the roster dot, game-loop style:
@@ -29,8 +29,6 @@ export interface TeamRoom {
   id: string;
   projectId: string;
   taskId: string;
-  /** Authoritative Feature aggregate for governed workflow rooms. */
-  featureId: string | null;
   name: string;
   preset: RoomPreset;
   status: 'active' | 'archived';

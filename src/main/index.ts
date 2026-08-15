@@ -40,7 +40,6 @@ import { promptLibraryService } from './core/prompt-library/prompt-library-servi
 import { promptSourceService } from './core/prompt-library/prompt-source-service';
 import { ptySessionRegistry } from './core/pty/pty-session-registry';
 import { prSyncScheduler } from './core/pull-requests/pr-sync-scheduler';
-import { reviewOrchestrator } from './core/review-orchestration/orchestrator';
 import { searchService } from './core/search/search-service';
 import { modelProviderCatalogService } from './core/settings/model-provider-catalog-service';
 import { runtimeModelCandidatesService } from './core/settings/runtime-model-candidates-service';
@@ -265,11 +264,6 @@ void app.whenReady().then(async () => {
   // reload, app crash/quit before the archive completed).
   resumePendingTaskArchives().catch((e) => {
     log.warn('Failed to resume pending task archives:', e);
-  });
-
-  // Resume review-mode orchestrations interrupted mid-flight (reload, crash).
-  reviewOrchestrator.resumePending().catch((e) => {
-    log.warn('Failed to resume pending review orchestrations:', e);
   });
 
   // Team Room @-mention routing engine: subscribe to room message posts, then

@@ -1,10 +1,12 @@
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BUILTIN_REVIEW_TEAM_ID } from '@shared/agent-team';
 import { builtinParadigm } from '@shared/paradigms/builtins';
+import { builtinParadigmId } from '@shared/paradigms/paradigm';
 import type { TeamParadigmParams } from '@shared/paradigms/params';
 import * as schema from '@main/db/schema';
+
+const SINGLE_ID = builtinParadigmId('single');
 
 const state = vi.hoisted(() => ({ db: null as unknown }));
 
@@ -167,23 +169,23 @@ describe('paradigms service: folding agent_teams in', () => {
     expect(params.routingHopLimit).toBe(100);
   });
 
-  it('leaves built-in teams to the code-defined list rather than writing rows', async () => {
+  it('leaves built-in instances to the code-defined list rather than writing rows', async () => {
     const service = await loadService();
     const listed = await service.list();
 
-    expect(listed.some((paradigm) => paradigm.id === BUILTIN_REVIEW_TEAM_ID)).toBe(true);
+    expect(listed.some((paradigm) => paradigm.id === SINGLE_ID)).toBe(true);
     expect(sqlite.prepare('SELECT COUNT(*) AS n FROM paradigms').get()).toEqual({ n: 0 });
   });
 
   it('overlays an edit onto a code-defined instance instead of copying it', async () => {
     const service = await loadService();
     const edit = (label: string, icon: string) =>
-      service.update(BUILTIN_REVIEW_TEAM_ID, { kindId: 'team' as const, label, icon, params: {} });
+      service.update(SINGLE_ID, { kindId: 'single' as const, label, icon, params: {} });
 
     const updated = await edit('My reviewers', 'R');
     // The same instance, not a copy: rooms and composer drafts reference this id,
     // and a rename must not move the paradigm out from under them.
-    expect(updated.id).toBe(BUILTIN_REVIEW_TEAM_ID);
+    expect(updated.id).toBe(SINGLE_ID);
     expect(updated.label).toBe('My reviewers');
     expect(updated.icon).toBe('R');
     // Still shipped — that is what keeps it undeletable — but now carrying edits.
@@ -191,10 +193,8 @@ describe('paradigms service: folding agent_teams in', () => {
     expect(updated.customized).toBe(true);
 
     const listed = await service.list();
-    expect(listed.filter((paradigm) => paradigm.id === BUILTIN_REVIEW_TEAM_ID)).toHaveLength(1);
-    expect(listed.find((paradigm) => paradigm.id === BUILTIN_REVIEW_TEAM_ID)?.label).toBe(
-      'My reviewers'
-    );
+    expect(listed.filter((paradigm) => paradigm.id === SINGLE_ID)).toHaveLength(1);
+    expect(listed.find((paradigm) => paradigm.id === SINGLE_ID)?.label).toBe('My reviewers');
 
     // Editing again rewrites the one overlay row rather than conflicting on it.
     await edit('Again', '');
@@ -202,13 +202,13 @@ describe('paradigms service: folding agent_teams in', () => {
 
     // Clearing the name and icon is the way back to what shipped — the only one
     // there is, since a built-in cannot be deleted and re-created.
-    const shipped = builtinParadigm(BUILTIN_REVIEW_TEAM_ID);
+    const shipped = builtinParadigm(SINGLE_ID);
     const reset = await edit('', '');
     expect(reset.label).toBe(shipped?.label);
     expect(reset.icon).toBe(shipped?.icon);
     expect(reset.customized).toBeUndefined();
 
-    await expect(service.remove(BUILTIN_REVIEW_TEAM_ID)).rejects.toThrow(/cannot be removed/);
+    await expect(service.remove(SINGLE_ID)).rejects.toThrow(/cannot be removed/);
   });
 
   it('refuses to change an instance to another kind, which its params are shaped by', async () => {

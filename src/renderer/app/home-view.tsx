@@ -13,7 +13,6 @@ import {
   GitCompare,
   GitFork,
   GripVertical,
-  Lightbulb,
   Loader2,
   LocateFixed,
   Monitor,
@@ -41,7 +40,6 @@ import yodaLogoWhite from '@/assets/images/yoda/yoda_logo_white.svg';
 import yodaLogo from '@/assets/images/yoda/yoda_logo.svg';
 import { type AgentTeam } from '@shared/agent-team';
 import type { Agent } from '@shared/agents';
-import { hasFeatureWorkflowContract } from '@shared/feature-workflow';
 import type { Branch } from '@shared/git';
 import type {
   ParadigmAccent,
@@ -228,7 +226,6 @@ interface RunModeInputChrome {
 }
 
 const MAX_COMPARE_VARIANTS = 5;
-const DEFAULT_REVIEWER_RUNTIME: RuntimeId = 'claude';
 type ExplicitTaskOutputLanguage = Extract<TaskOutputLanguage, 'en' | 'zh-CN'>;
 
 /** The paradigm kind behind a persisted run mode. */
@@ -587,22 +584,6 @@ export const HomeComposer = observer(function HomeComposer({
     }),
     [selectedBranchLabel, selectedBranchSubmitKind, t]
   );
-  const reviewStrategyLabels = useMemo(
-    () => ({
-      newBranchTitle: t('home.reviewStrategyNewBranchTitle', { branch: selectedBranchLabel }),
-      newBranchDesc: t('home.reviewStrategyNewBranchDesc', { branch: selectedBranchLabel }),
-      noWorktreeTitle:
-        selectedBranchSubmitKind === 'checkout-existing'
-          ? t('home.strategyCheckoutExistingTitle', { branch: selectedBranchLabel })
-          : t('home.reviewStrategySameBranchTitle', { branch: selectedBranchLabel }),
-      noWorktreeDesc:
-        selectedBranchSubmitKind === 'checkout-existing'
-          ? t('home.strategyCheckoutExistingDesc', { branch: selectedBranchLabel })
-          : t('home.reviewStrategySameBranchDesc'),
-    }),
-    [selectedBranchLabel, selectedBranchSubmitKind, t]
-  );
-
   // Run config below resolves project override ?? global homeDraft. A present
   // `composerDefaults` field means the chip edits the project layer; otherwise
   // it edits the user's global default. The scope pills live in the gear popover.
@@ -674,9 +655,6 @@ export const HomeComposer = observer(function HomeComposer({
       return next;
     });
   }, []);
-  const reviewerOverridden = composerDefaults?.reviewerRuntime !== undefined;
-  const reviewerRuntime =
-    composerDefaults?.reviewerRuntime ?? draft?.reviewReviewerRuntime ?? DEFAULT_REVIEWER_RUNTIME;
   // Agent Teams are reusable, project/task-decoupled templates surfaced as the
   // `team` paradigm (「多智能体（name）」). Built-ins + user teams come from the list.
   const { data: teams = [] } = useQuery({
@@ -830,27 +808,12 @@ export const HomeComposer = observer(function HomeComposer({
     },
     [standardStrategyOverridden, setComposerDefault, updateDraft]
   );
-  const reviewStrategyOverridden = composerDefaults?.reviewStrategyKind !== undefined;
-  const reviewStrategyKind: TaskStrategyKind =
-    composerDefaults?.reviewStrategyKind ?? draft?.reviewStrategyKind ?? 'no-worktree';
-  const setReviewStrategyKind = useCallback(
-    (next: TaskStrategyKind) => {
-      if (reviewStrategyOverridden) setComposerDefault('reviewStrategyKind', next);
-      else updateDraft({ reviewStrategyKind: next });
-    },
-    [reviewStrategyOverridden, setComposerDefault, updateDraft]
-  );
   const effectiveStandardStrategyKind: TaskStrategyKind = isUnborn ? 'no-worktree' : strategyKind;
-  const effectiveReviewStrategyKind: TaskStrategyKind = isUnborn
-    ? 'no-worktree'
-    : reviewStrategyKind;
   // What actually gets submitted: the fork switch picks new-branch, otherwise
   // the selected branch decides between running in place and checking out an
   // existing local/remote source in a worktree.
   const standardSubmitKind: HomeProjectSubmitStrategy =
     effectiveStandardStrategyKind === 'new-branch' ? 'new-branch' : selectedBranchSubmitKind;
-  const reviewSubmitKind: HomeProjectSubmitStrategy =
-    effectiveReviewStrategyKind === 'new-branch' ? 'new-branch' : selectedBranchSubmitKind;
   const paradigmCapabilities = runModeParadigm(runMode).capabilities;
   // Which branch strategy reaches createTask: fixed for paradigms that declare
   // their worktree need, otherwise whichever strategy field the paradigm reads.
@@ -859,9 +822,7 @@ export const HomeComposer = observer(function HomeComposer({
       ? 'new-branch'
       : paradigmCapabilities.worktree === 'never'
         ? 'no-worktree'
-        : paradigmCapabilities.strategyField === 'review'
-          ? reviewSubmitKind
-          : standardSubmitKind;
+        : standardSubmitKind;
   const projectSubmitSourceBranch =
     mounted &&
     resolveProjectSubmitSourceBranch({
@@ -983,10 +944,6 @@ export const HomeComposer = observer(function HomeComposer({
   useEffect(() => {
     if (!quickActionModeAvailable) setQuickActionMode(false);
   }, [quickActionModeAvailable]);
-  const featureWorkflowNeedsBrief =
-    runMode === 'team' &&
-    Boolean(activeTeam && hasFeatureWorkflowContract(activeTeam)) &&
-    !promptHasText;
   // A worktree-requiring mode on a repo without a base commit can't fork until
   // one exists. This covers both an unborn repo (git init, no commit) and a
   // plain folder that was never `git init`-ed — both surface as `isUnborn` with
@@ -1000,7 +957,6 @@ export const HomeComposer = observer(function HomeComposer({
   const canSubmit =
     !submitting &&
     modeHasAgents &&
-    !featureWorkflowNeedsBrief &&
     compareVariantsReady &&
     (!scaffoldsOwnProject || promptHasText) &&
     (scaffoldsOwnProject
@@ -1057,7 +1013,6 @@ export const HomeComposer = observer(function HomeComposer({
       const kindId: ParadigmKindId =
         compareActive && mounted ? 'compare' : paradigmKindForRunMode(runMode);
       const params: ParadigmLaunchParams = {
-        reviewerRuntime,
         team: activeTeam,
         variants: compareVariants,
         quickAction: quickActionMode,
@@ -1222,7 +1177,6 @@ export const HomeComposer = observer(function HomeComposer({
     compareActive,
     compareVariants,
     quickActionMode,
-    reviewerRuntime,
     activeTeam,
     queryClient,
     userAgents,
@@ -1355,29 +1309,6 @@ export const HomeComposer = observer(function HomeComposer({
                     )
                   }
                 />
-                <ComposerScopeRow
-                  label={t('home.composerDefaultReviewStrategyLabel')}
-                  source={reviewStrategyOverridden ? 'project' : 'global'}
-                  canOverride={hasProjectOverrideTarget}
-                  onChange={(scope) =>
-                    setComposerDefault(
-                      'reviewStrategyKind',
-                      scope === 'project' ? reviewStrategyKind : undefined
-                    )
-                  }
-                />
-                <ComposerScopeRow
-                  label={t('home.composerDefaultReviewerLabel')}
-                  value={getRuntime(reviewerRuntime)?.name ?? reviewerRuntime}
-                  source={reviewerOverridden ? 'project' : 'global'}
-                  canOverride={hasProjectOverrideTarget}
-                  onChange={(scope) =>
-                    setComposerDefault(
-                      'reviewerRuntime',
-                      scope === 'project' ? reviewerRuntime : undefined
-                    )
-                  }
-                />
               </CollapsibleContent>
             </Collapsible>
           }
@@ -1404,8 +1335,8 @@ export const HomeComposer = observer(function HomeComposer({
   );
 
   // The fork/branch row is shown for paradigms that read a persisted strategy
-  // field, and edits whichever field the paradigm declares. Paradigms with a
-  // fixed worktree need (spec, team, app-build) have nothing to configure here.
+  // field. Paradigms with a fixed worktree need (team) have nothing to configure
+  // here.
   const strategyFieldConfig =
     paradigmCapabilities.strategyField === 'standard'
       ? {
@@ -1414,14 +1345,7 @@ export const HomeComposer = observer(function HomeComposer({
           forkLabels: strategyLabels,
           forkAriaLabel: t('home.strategyAria'),
         }
-      : paradigmCapabilities.strategyField === 'review'
-        ? {
-            strategyKind: effectiveReviewStrategyKind,
-            setStrategyKind: setReviewStrategyKind,
-            forkLabels: reviewStrategyLabels,
-            forkAriaLabel: t('home.reviewStrategyAria'),
-          }
-        : null;
+      : null;
 
   const environmentBranchConfiguration: EnvironmentBranchConfiguration | undefined =
     !taskScopedTarget && mounted && strategyFieldConfig
@@ -1658,7 +1582,6 @@ export const HomeComposer = observer(function HomeComposer({
                 branchConfiguration={environmentBranchConfiguration}
               />
             )}
-            {runMode === 'brainstorm' && <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>}
             {scaffoldsOwnProject && <Chip icon={AppWindow}>{t('home.buildDestination')}</Chip>}
             {scaffoldsOwnProject && submitting && (
               <span className="flex h-7 items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2.5 text-xs font-medium text-amber-700 ydark:text-amber-300">

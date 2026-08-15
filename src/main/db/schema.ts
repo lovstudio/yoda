@@ -278,53 +278,6 @@ export const runtimeInstructionFileVersions = sqliteTable(
   })
 );
 
-/**
- * One review-mode orchestration run (implement → review → loop). Persisted so
- * the loop survives renderer reloads and app restarts: the main-process
- * orchestrator resumes any row whose `completedAt` is null at startup. Replaces
- * the old renderer-side in-memory loop, which silently died on reload and could
- * never recover when the reviewer's turn-end signal was missed.
- */
-export const reviewOrchestrations = sqliteTable(
-  'review_orchestrations',
-  {
-    id: text('id').primaryKey(),
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
-    taskId: text('task_id')
-      .notNull()
-      .references(() => tasks.id, { onDelete: 'cascade' }),
-    implementerConversationId: text('implementer_conversation_id').notNull(),
-    requirement: text('requirement').notNull().default(''),
-    reviewerRuntime: text('reviewer_runtime').notNull(),
-    reviewerSystemPrompt: text('reviewer_system_prompt').notNull().default(''),
-    reviewerSkillSelection: text('reviewer_skill_selection', {
-      mode: 'json',
-    }).$type<SkillSelectionInput | null>(),
-    reviewerAutoApprove: integer('reviewer_auto_approve', { mode: 'boolean' })
-      .notNull()
-      .default(false),
-    maxRounds: integer('max_rounds').notNull(),
-    round: integer('round').notNull().default(1),
-    // 'awaiting_impl' | 'reviewing' | 'passed' | 'failed' | 'aborted' | 'error'
-    status: text('status').notNull().default('awaiting_impl'),
-    currentReviewerConversationId: text('current_reviewer_conversation_id'),
-    error: text('error'),
-    createdAt: text('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-    updatedAt: text('updated_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`)
-      .$onUpdate(() => new Date().toISOString()),
-    completedAt: text('completed_at'),
-  },
-  (table) => ({
-    taskIdx: index('idx_review_orchestrations_task_id').on(table.taskId),
-  })
-);
-
 export const tasks = sqliteTable(
   'tasks',
   {
@@ -465,161 +418,6 @@ export const taskIssueLinks = sqliteTable(
   (table) => ({
     pk: primaryKey({ columns: [table.taskId, table.issueUrl] }),
     issueUrlIdx: index('idx_task_issues_issue_url').on(table.issueUrl),
-  })
-);
-
-/**
- * A Feature is the durable delivery aggregate above tasks and conversations.
- * Stage transitions are guarded by the feature service; this table stores only
- * the current projection while `feature_events` preserves the audit trail.
- */
-export const features = sqliteTable(
-  'features',
-  {
-    id: text('id').primaryKey(),
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
-    title: text('title').notNull(),
-    problem: text('problem').notNull().default(''),
-    outcome: text('outcome').notNull().default(''),
-    nonGoals: text('non_goals').notNull().default(''),
-    stage: text('stage').notNull().default('problem'),
-    status: text('status').notNull().default('active'),
-    templateId: text('template_id').notNull().default('feature-development-v1'),
-    createdAt: text('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-    updatedAt: text('updated_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`)
-      .$onUpdate(() => new Date().toISOString()),
-    completedAt: text('completed_at'),
-  },
-  (table) => ({
-    projectIdIdx: index('idx_features_project_id').on(table.projectId),
-    projectStageIdx: index('idx_features_project_stage').on(table.projectId, table.stage),
-    projectStatusIdx: index('idx_features_project_status').on(table.projectId, table.status),
-  })
-);
-
-export const featureTaskLinks = sqliteTable(
-  'feature_tasks',
-  {
-    featureId: text('feature_id')
-      .notNull()
-      .references(() => features.id, { onDelete: 'cascade' }),
-    taskId: text('task_id')
-      .notNull()
-      .references(() => tasks.id, { onDelete: 'cascade' }),
-    createdAt: text('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-  },
-  (table) => ({
-    pk: primaryKey({ columns: [table.featureId, table.taskId] }),
-    taskIdIdx: index('idx_feature_tasks_task_id').on(table.taskId),
-  })
-);
-
-/**
- * A Task may participate in several Features, but a Feature Team workflow needs
- * one durable owner so concurrent starts cannot create parallel aggregates.
- */
-export const featureWorkflowOwners = sqliteTable(
-  'feature_workflow_owners',
-  {
-    taskId: text('task_id')
-      .primaryKey()
-      .references(() => tasks.id, { onDelete: 'cascade' }),
-    featureId: text('feature_id')
-      .notNull()
-      .references(() => features.id, { onDelete: 'cascade' }),
-    createdAt: text('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-    updatedAt: text('updated_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`)
-      .$onUpdate(() => new Date().toISOString()),
-  },
-  (table) => ({
-    featureIdIdx: index('idx_feature_workflow_owners_feature_id').on(table.featureId),
-  })
-);
-
-export const featureIssueLinks = sqliteTable(
-  'feature_issues',
-  {
-    featureId: text('feature_id')
-      .notNull()
-      .references(() => features.id, { onDelete: 'cascade' }),
-    issueUrl: text('issue_url')
-      .notNull()
-      .references(() => issueRecords.url, { onDelete: 'cascade' }),
-    createdAt: text('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-  },
-  (table) => ({
-    pk: primaryKey({ columns: [table.featureId, table.issueUrl] }),
-    issueUrlIdx: index('idx_feature_issues_issue_url').on(table.issueUrl),
-  })
-);
-
-export const featureArtifacts = sqliteTable(
-  'feature_artifacts',
-  {
-    id: text('id').primaryKey(),
-    featureId: text('feature_id')
-      .notNull()
-      .references(() => features.id, { onDelete: 'cascade' }),
-    type: text('type').notNull(),
-    title: text('title').notNull(),
-    uri: text('uri').notNull(),
-    contentHash: text('content_hash'),
-    sourceTaskId: text('source_task_id'),
-    sourceRoomId: text('source_room_id'),
-    sourceMessageId: text('source_message_id'),
-    sourceMemberId: text('source_member_id'),
-    status: text('status').notNull().default('draft'),
-    createdAt: text('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-    updatedAt: text('updated_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`)
-      .$onUpdate(() => new Date().toISOString()),
-    approvedAt: text('approved_at'),
-  },
-  (table) => ({
-    featureIdIdx: index('idx_feature_artifacts_feature_id').on(table.featureId),
-    featureTypeIdx: index('idx_feature_artifacts_feature_type').on(table.featureId, table.type),
-    sourceTaskIdIdx: index('idx_feature_artifacts_source_task_id').on(table.sourceTaskId),
-    sourceMessageIdIdx: index('idx_feature_artifacts_source_message_id').on(table.sourceMessageId),
-  })
-);
-
-export const featureEvents = sqliteTable(
-  'feature_events',
-  {
-    id: text('id').primaryKey(),
-    featureId: text('feature_id')
-      .notNull()
-      .references(() => features.id, { onDelete: 'cascade' }),
-    type: text('type').notNull(),
-    actorType: text('actor_type').notNull().default('user'),
-    payload: text('payload', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
-    createdAt: text('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-  },
-  (table) => ({
-    featureIdIdx: index('idx_feature_events_feature_id').on(table.featureId),
-    featureCreatedAtIdx: index('idx_feature_events_feature_created_at').on(
-      table.featureId,
-      table.createdAt
-    ),
   })
 );
 
@@ -886,9 +684,8 @@ export const teamRooms = sqliteTable(
     taskId: text('task_id')
       .notNull()
       .references(() => tasks.id, { onDelete: 'cascade' }),
-    featureId: text('feature_id'),
     name: text('name').notNull(),
-    /** Preset that seeded the room: 'review-loop' | 'freeform' | … */
+    /** Preset that seeded the room: 'freeform' | 'review-loop'. */
     preset: text('preset').notNull().default('freeform'),
     /** 'active' | 'archived' */
     status: text('status').notNull().default('active'),
@@ -912,10 +709,6 @@ export const teamRooms = sqliteTable(
   (table) => ({
     projectIdIdx: index('idx_team_rooms_project_id').on(table.projectId),
     taskIdIdx: index('idx_team_rooms_task_id').on(table.taskId),
-    featureIdIdx: index('idx_team_rooms_feature_id').on(table.featureId),
-    activeFeatureWorkflowTaskIdx: uniqueIndex('idx_team_rooms_active_feature_workflow_task')
-      .on(table.projectId, table.taskId)
-      .where(sql`${table.preset} = 'feature-workflow' AND ${table.status} = 'active'`),
   })
 );
 
@@ -1046,8 +839,8 @@ export const agents = sqliteTable(
   })
 );
 
-// User-defined Agent Team templates (decoupled from project/task, like agents).
-// Built-in teams live in code (BUILTIN_TEAMS), not here.
+// Legacy Agent Team templates. Teams now live in `paradigms` as `team`-kind
+// instances; this table is a read-only fallback until the next release drops it.
 export const agentTeams = sqliteTable('agent_teams', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
@@ -1189,7 +982,6 @@ export const workspacesRelations = relations(workspaces, ({ many }) => ({
 
 export const projectsRelations = relations(projects, ({ one, many }) => ({
   tasks: many(tasks),
-  features: many(features),
   settings: one(projectSettings, {
     fields: [projects.id],
     references: [projectSettings.projectId],
@@ -1218,12 +1010,10 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
   }),
   conversations: many(conversations),
   issueLinks: many(taskIssueLinks),
-  featureLinks: many(featureTaskLinks),
 }));
 
 export const issueRecordsRelations = relations(issueRecords, ({ many }) => ({
   taskLinks: many(taskIssueLinks),
-  featureLinks: many(featureIssueLinks),
 }));
 
 export const taskIssueLinksRelations = relations(taskIssueLinks, ({ one }) => ({
@@ -1234,69 +1024,6 @@ export const taskIssueLinksRelations = relations(taskIssueLinks, ({ one }) => ({
   issue: one(issueRecords, {
     fields: [taskIssueLinks.issueUrl],
     references: [issueRecords.url],
-  }),
-}));
-
-export const featuresRelations = relations(features, ({ one, many }) => ({
-  project: one(projects, {
-    fields: [features.projectId],
-    references: [projects.id],
-  }),
-  taskLinks: many(featureTaskLinks),
-  workflowOwners: many(featureWorkflowOwners),
-  issueLinks: many(featureIssueLinks),
-  artifacts: many(featureArtifacts),
-  events: many(featureEvents),
-}));
-
-export const featureTaskLinksRelations = relations(featureTaskLinks, ({ one }) => ({
-  feature: one(features, {
-    fields: [featureTaskLinks.featureId],
-    references: [features.id],
-  }),
-  task: one(tasks, {
-    fields: [featureTaskLinks.taskId],
-    references: [tasks.id],
-  }),
-}));
-
-export const featureWorkflowOwnersRelations = relations(featureWorkflowOwners, ({ one }) => ({
-  feature: one(features, {
-    fields: [featureWorkflowOwners.featureId],
-    references: [features.id],
-  }),
-  task: one(tasks, {
-    fields: [featureWorkflowOwners.taskId],
-    references: [tasks.id],
-  }),
-}));
-
-export const featureIssueLinksRelations = relations(featureIssueLinks, ({ one }) => ({
-  feature: one(features, {
-    fields: [featureIssueLinks.featureId],
-    references: [features.id],
-  }),
-  issue: one(issueRecords, {
-    fields: [featureIssueLinks.issueUrl],
-    references: [issueRecords.url],
-  }),
-}));
-
-export const featureArtifactsRelations = relations(featureArtifacts, ({ one }) => ({
-  feature: one(features, {
-    fields: [featureArtifacts.featureId],
-    references: [features.id],
-  }),
-  sourceTask: one(tasks, {
-    fields: [featureArtifacts.sourceTaskId],
-    references: [tasks.id],
-  }),
-}));
-
-export const featureEventsRelations = relations(featureEvents, ({ one }) => ({
-  feature: one(features, {
-    fields: [featureEvents.featureId],
-    references: [features.id],
   }),
 }));
 
@@ -1318,7 +1045,6 @@ export const messagesRelations = relations(messages, ({ one }) => ({
 export const teamRoomsRelations = relations(teamRooms, ({ one, many }) => ({
   project: one(projects, { fields: [teamRooms.projectId], references: [projects.id] }),
   task: one(tasks, { fields: [teamRooms.taskId], references: [tasks.id] }),
-  feature: one(features, { fields: [teamRooms.featureId], references: [features.id] }),
   members: many(roomMembers),
   messages: many(roomMessages),
 }));
@@ -1353,9 +1079,6 @@ export type IssueRecordRow = typeof issueRecords.$inferSelect;
 export type IssueRecordInsert = typeof issueRecords.$inferInsert;
 export type TaskIssueLinkRow = typeof taskIssueLinks.$inferSelect;
 export type TaskIssueLinkInsert = typeof taskIssueLinks.$inferInsert;
-export type FeatureRow = typeof features.$inferSelect;
-export type FeatureArtifactRow = typeof featureArtifacts.$inferSelect;
-export type FeatureEventRow = typeof featureEvents.$inferSelect;
 export type ConversationRow = typeof conversations.$inferSelect;
 export type TerminalRow = typeof terminals.$inferSelect;
 export type MessageRow = typeof messages.$inferSelect;

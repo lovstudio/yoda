@@ -35,7 +35,6 @@ import {
   type MobileInputAttachmentDiscardResponse,
   type MobileProfileSnapshot,
   type MobileProjectSummary,
-  type MobileRunMode,
   type MobileSessionAgent,
   type MobileSessionContentSource,
   type MobileSessionDetail,
@@ -614,12 +613,6 @@ function normalizeNullableConfigText(
   return normalized || null;
 }
 
-function normalizeMobileRunMode(value: unknown): MobileRunMode {
-  if (value === undefined || value === 'normal') return 'normal';
-  if (value === 'brainstorm') return 'brainstorm';
-  throw new MobileGatewayError(400, 'invalid_configuration', 'Unsupported mobile run mode.');
-}
-
 function normalizeMobileStrategyKind(value: unknown): MobileTaskStrategyKind {
   if (value === undefined || value === 'no-worktree') return 'no-worktree';
   if (value === 'new-branch') return 'new-branch';
@@ -663,7 +656,6 @@ function normalizeCreateDemandRequest(body: unknown): MobileCreateDemandRequest 
             : (() => {
                 throw new MobileGatewayError(400, 'invalid_configuration', 'Agent id is invalid.');
               })(),
-    runMode: normalizeMobileRunMode(value.runMode),
     strategyKind: normalizeMobileStrategyKind(value.strategyKind),
     model: normalizeNullableConfigText(value.model, 'model'),
     reasoningEffort: normalizeNullableConfigText(value.reasoningEffort, 'reasoningEffort'),
@@ -2182,17 +2174,7 @@ export class MobileGatewayService {
     const reasoningEffort =
       params.reasoningEffort !== undefined ? params.reasoningEffort : agent?.reasoningEffort;
     const promptBody = promptWithImageMarkers(params.prompt, attachments.length);
-    const initialPrompt = withSystemPrompt(
-      agent?.systemPrompt ?? '',
-      params.runMode === 'brainstorm'
-        ? [
-            '请先进行方案讨论，不要直接修改文件。',
-            '先梳理目标、关键决策、实现步骤和验收方式，再等待用户确认。',
-            '',
-            promptBody,
-          ].join('\n')
-        : promptBody
-    );
+    const initialPrompt = withSystemPrompt(agent?.systemPrompt ?? '', promptBody);
     const taskId = randomUUID();
     const conversationId = randomUUID();
     const existingTaskNames = (await getTasks(projectId)).map((task) => task.name);

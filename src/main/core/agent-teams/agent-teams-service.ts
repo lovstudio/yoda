@@ -1,4 +1,4 @@
-import { isBuiltinTeamId, type AgentTeam, type AgentTeamDraft } from '@shared/agent-team';
+import type { AgentTeam, AgentTeamDraft } from '@shared/agent-team';
 import { paradigmToTeam, teamToParadigmDraft } from '@shared/paradigms/team-adapter';
 import { paradigmsService } from '@main/core/paradigms/paradigms-service';
 
@@ -13,7 +13,7 @@ import { paradigmsService } from '@main/core/paradigms/paradigms-service';
  * Ids carry across unchanged, so rooms keep resolving their team.
  */
 class AgentTeamsService {
-  /** Built-in templates first, then user teams (most-recently-updated first). */
+  /** User teams, most-recently-updated first. */
   async list(): Promise<AgentTeam[]> {
     const instances = await paradigmsService.list();
     return instances
@@ -33,17 +33,15 @@ class AgentTeamsService {
     return paradigmToTeam(await paradigmsService.create(teamToParadigmDraft(draft)));
   }
 
-  /** Built-in teams are editable too; their edits overlay the shipped default. */
   async update(id: string, draft: AgentTeamDraft): Promise<AgentTeam> {
     return paradigmToTeam(await paradigmsService.update(id, teamToParadigmDraft(draft)));
   }
 
   async remove(id: string): Promise<void> {
-    if (isBuiltinTeamId(id)) throw new Error('Built-in teams cannot be removed.');
     await paradigmsService.remove(id);
   }
 
-  /** Duplicate any team (built-in or user) into an editable user team. */
+  /** Duplicate a team into a new, independently editable one. */
   async duplicate(id: string): Promise<AgentTeam> {
     const source = await this.get(id);
     if (!source) throw new Error(`Team ${id} not found`);

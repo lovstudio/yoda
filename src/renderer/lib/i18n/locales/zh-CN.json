@@ -1604,8 +1604,6 @@
     "composerDefaultRunModeLabel": "默认模式",
     "composerDefaultBaseBranchLabel": "默认基线分支",
     "composerDefaultStrategyLabel": "默认新建 worktree",
-    "composerDefaultReviewStrategyLabel": "评审默认新建 worktree",
-    "composerDefaultReviewerLabel": "默认评审 agent",
     "agentCliConfigLabel": "Agent CLI",
     "agentCliConfigHint": "当前所选 Agent CLI 的运行权限与启动前会读取的指令文件。",
     "promptConfigurationLabel": "提示词与指令",
@@ -1654,18 +1652,6 @@
     "modeAlphaBadge": "Alpha",
     "modeNormal": "Vibe",
     "modeNormalDesc": "一个 AI 独立完成任务。",
-    "modeBuild": "Yoda Build",
-    "modeBuildDesc": "为每个 App 创建独立项目，用自然语言持续创建与优化。",
-    "modeBrainstorm": "Spec",
-    "modeBrainstormDesc": "动手前先理清需求，产出 PRD、设计与验收标准。",
-    "modeReview": "Review",
-    "modeReviewDesc": "一个 AI 实现、一个 AI 评审，反复打磨直到通过。",
-    "modeTeamReview": "Review",
-    "modeTeamReviewDesc": "一个 AI 小组以群聊协作，实现与评审来回打磨。",
-    "modeTeamFeature": "Spec",
-    "modeTeamFeatureDesc": "以唯一 Feature 交付为主线，让专业 Agent 从产品与 UI/UX 一直接力到 PR、发布与 SEO 证据。",
-    "modeTeamStartup": "创业团队",
-    "modeTeamStartupDesc": "一支 AI 团队（CEO、产品、工程、设计、运营）分工协作。",
     "modeTeamDesc": "一支自定义 AI 团队协作完成任务。",
     "modeTeamDefault": "多智能体团队",
     "modeCompare": "对比",
@@ -1700,7 +1686,6 @@
     "buildCreated": "「{{name}}」已生成到 Apps",
     "buildUpdated": "「{{name}}」已自动更新",
     "buildFailed": "Yoda Build 生成失败",
-    "brainstormPolicy": "先做 Spec",
     "brainstormAgent": "Spec agent",
     "teamBranchPolicy": "角色独立分支",
     "addCompareVariant": "对比",
@@ -1738,11 +1723,6 @@
     "strategyNewBranchDesc": "在新分支上拉出独立工作目录，保持 {{branch}} 干净，可同时跑多个任务互不打架。",
     "strategyCheckoutExistingTitle": "检出已有分支 {{branch}}",
     "strategyCheckoutExistingDesc": "在独立 worktree 中直接检出该分支继续工作，不新建分支，也不影响当前项目目录。",
-    "reviewStrategyAria": "选择 Review 分支模式",
-    "reviewStrategySameBranchTitle": "在 {{branch}} 上 Review",
-    "reviewStrategySameBranchDesc": "A 和 B 共用当前分支，适合让 review loop 直接修正当前工作区。",
-    "reviewStrategyNewBranchTitle": "分叉到 Review worktree",
-    "reviewStrategyNewBranchDesc": "A 和 B 共用一个隔离的 review 分支，同时保持 {{branch}} 干净。",
     "welcome": "欢迎",
     "welcomeStart": "开始使用",
     "createNewProject": "新建项目",
@@ -2200,15 +2180,6 @@
       "dangerouslySkipPermissions": "跳过权限检查（危险）",
       "permissionMode": "权限模式",
       "initialPromptPlaceholder": "描述你希望代理完成的工作。",
-      "executionMode": "执行方式",
-      "executionAgent": "标准任务",
-      "executionAgentDescription": "由一个选定 Agent 从当前 Prompt 开始。",
-      "executionFeature": "Feature 工作流",
-      "executionFeatureDescription": "一个权威 Feature 加六段专业协作执行。",
-      "featureBrief": "问题简报",
-      "featureBriefPlaceholder": "描述用户问题、期望结果、约束和已知的成功信号。",
-      "featureWorkflowTaskNotReady": "任务已创建，但 worktree 尚未就绪。请先修复任务设置，再启动 Feature 闭环。",
-      "featureWorkflowStartFailed": "任务已创建，但 Feature 闭环未能启动。请在 Home 选中该任务后，用 Feature 闭环重试。",
       "pushBranchToRemote": "将分支 push 到远端",
       "selectAnotherIssue": "选择其他 Issue",
       "selectAnotherPr": "选择其他 Pull Request"
@@ -2699,7 +2670,6 @@
     "newTeam": "新建团队",
     "newTeamDraft": "新团队…",
     "editTeam": "编辑团队",
-    "builtin": "内置",
     "duplicateTeam": "创建副本",
     "deleteTeam": "删除团队",
     "selectTeam": "选择一个团队，或新建团队。",
@@ -2781,18 +2751,6 @@
         ],
         "note": "你不需要 @ 任何人——由系统来 @。你仍可随时 @ 某人插话。"
       },
-      "feature": {
-        "lead": "一个问题沿 6 次可验证交接推进，由 Feature Lead 守住每一道门禁：",
-        "steps": [
-          "锁定问题、目标、约束与成功信号。",
-          "产出并确认产品、UI/UX 与验收决策。",
-          "按已批准设计实现代码与聚焦测试。",
-          "独立验证；失败则退回工程阶段修复。",
-          "记录已经验证的用户可见功能。",
-          "准备 PR、Changelog、发布与 SEO 文案。"
-        ],
-        "note": "每次通过或阻塞都会写入房间交接，应用重启后仍能恢复阶段轨。"
-      },
       "freeform": {
         "lead": "自由协作——由你来调度：",
         "steps": [
@@ -2866,7 +2824,6 @@
     },
     "preset": {
       "review": "评审循环",
-      "feature": "Feature 闭环",
       "freeform": "自由"
     },
     "mode": {
@@ -2899,50 +2856,6 @@
       "localOnly": "新建 worktree 仅支持本地项目。",
       "taskCreate": "创建任务失败。",
       "taskSetup": "任务的 worktree 没设置完成——请到任务视图修复后再建房间。"
-    }
-  },
-  "featureWorkflow": {
-    "title": "Feature 协作执行",
-    "subtitle": "状态以 Feature 交付为准；Agent 证据先作为待审核草稿进入。",
-    "progress": "{{completed}} / {{total}} 道门禁",
-    "openWorkspace": "查看 Feature 交付",
-    "resume": "继续当前阶段",
-    "resumePrompt": "Feature 交付已进入「{{stage}}」。请检查当前门禁，只委派当前负责人，并提交待审核证据。",
-    "loading": "正在读取唯一的 Feature 交付状态…",
-    "unavailable": "这个房间没有关联唯一的 Feature 交付记录，路由已暂停。",
-    "latestEvidence": "最近证据",
-    "currentDeliverable": "当前交付物",
-    "status": {
-      "pending": "等待中",
-      "active": "进行中",
-      "completed": "已通过",
-      "blocked": "已阻塞"
-    },
-    "stages": {
-      "problem": {
-        "title": "问题定义",
-        "deliverable": "用户、目标、非目标、约束与成功信号"
-      },
-      "product-design": {
-        "title": "产品设计",
-        "deliverable": "PRD、UX 流程、UI 状态与可测试验收标准"
-      },
-      "implementation": {
-        "title": "代码实现",
-        "deliverable": "已批准技术方案、生产代码与聚焦测试"
-      },
-      "validation": {
-        "title": "测试验证",
-        "deliverable": "独立评审与精确的验证证据"
-      },
-      "feature-docs": {
-        "title": "功能文档",
-        "deliverable": "用户指南、示例、限制与故障排查"
-      },
-      "launch-docs": {
-        "title": "PR 与 SEO",
-        "deliverable": "交付摘要、PR 文档、发布说明与 SEO 文案"
-      }
     }
   },
   "promptLibrary": {
@@ -5852,176 +5765,6 @@
     "error": "错误",
     "completed": "已完成",
     "interrupted": "已中断"
-  },
-  "featureDelivery": {
-    "title": "Feature",
-    "newFeature": "新建 Feature",
-    "createTitle": "定义 Feature",
-    "create": "创建 Feature",
-    "creating": "创建中…",
-    "createFailed": "创建 Feature 失败",
-    "saveFailed": "保存 Feature 失败，请重试。",
-    "loadFailed": "Feature 加载失败",
-    "notFound": "找不到这个 Feature",
-    "notFoundDescription": "它可能已被移除，或不属于当前项目。",
-    "sourceIssue": "来源 Issue",
-    "listLabel": "交付队列",
-    "featureCount": "{{count}} 个 Feature",
-    "activeCount": "进行中 {{count}}",
-    "readyCount": "可推进 {{count}}",
-    "blockedCount": "受阻 {{count}}",
-    "emptyTitle": "还没有 Feature",
-    "emptyDescription": "先定义问题与目标，再让设计、实现、测试和发布围绕同一条交付主线协作。",
-    "emptyCompact": "把下一个需求定义为 Feature",
-    "openFeature": "查看 Feature",
-    "createFromIssue": "转为 Feature",
-    "taskContext": "所属 Feature",
-    "stagesLabel": "Feature 交付阶段",
-    "briefLabel": "交付简报",
-    "artifactCreateFailed": "添加交付物失败",
-    "fields": {
-      "title": "标题",
-      "titlePlaceholder": "这个 Feature 要解决什么？",
-      "problem": "问题定义",
-      "problemPlaceholder": "谁在什么场景遇到了什么问题？",
-      "problemHint": "请描述用户问题，而不是预设实现方案。",
-      "outcome": "预期结果",
-      "outcomePlaceholder": "完成后，用户或业务会发生什么可验证的变化？",
-      "nonGoals": "非目标",
-      "nonGoalsPlaceholder": "这次明确不解决什么？",
-      "save": "保存简报"
-    },
-    "statuses": {
-      "active": "进行中",
-      "blocked": "已阻塞",
-      "completed": "已交付",
-      "cancelled": "已取消"
-    },
-    "stages": {
-      "problem": {
-        "label": "问题与目标",
-        "short": "问题",
-        "description": "确认真实问题、预期结果与非目标，建立整个 Feature 的共同语境。"
-      },
-      "design": {
-        "label": "产品与体验设计",
-        "short": "设计",
-        "description": "沉淀产品方案、关键交互和可验收标准，让实现有明确边界。"
-      },
-      "planning": {
-        "label": "技术规划",
-        "short": "规划",
-        "description": "明确架构、依赖、风险和任务拆分，再开始写代码。"
-      },
-      "implementation": {
-        "label": "代码实现",
-        "short": "实现",
-        "description": "用关联 Task 承载具体开发，并让每个工作分支回到同一 Feature。"
-      },
-      "verification": {
-        "label": "验证与测试",
-        "short": "验证",
-        "description": "用可复现的测试证据证明功能、回归和验收标准已经满足。"
-      },
-      "documentation": {
-        "label": "功能文档",
-        "short": "文档",
-        "description": "为用户和后续维护者留下可查、可用、与实现一致的功能说明。"
-      },
-      "release": {
-        "label": "发布与传播",
-        "short": "发布",
-        "description": "汇总 PR、发布说明和传播素材，形成可审计的交付结论。"
-      },
-      "done": {
-        "label": "交付完成",
-        "short": "完成",
-        "description": "Feature 已完成闭环；所有关键决策、实现与证据仍可追溯。"
-      }
-    },
-    "tasks": {
-      "title": "实现任务",
-      "manage": "关联任务",
-      "linkedCount": "已关联 {{count}}",
-      "noTasks": "当前项目还没有可关联的任务。",
-      "none": "尚未关联实现任务；进入实现阶段后，至少需要一个任务完成审查。",
-      "archived": "已归档",
-      "unlink": "取消关联“{{title}}”",
-      "activeWorkflowLocked": "活跃的 Feature 工作流正在使用此任务，请先归档工作流房间"
-    },
-    "artifacts": {
-      "title": "名称",
-      "add": "添加交付物",
-      "type": "类型",
-      "uri": "文件或链接",
-      "uriPlaceholder": "docs/features/example.md 或 https://…",
-      "uriHint": "项目内文件使用相对路径；外部材料可使用完整链接。",
-      "status": "审查状态",
-      "open": "打开交付物",
-      "openSourceTask": "打开来源任务",
-      "empty": "还没有交付物；添加文档、测试结果或发布材料",
-      "approve": "批准交付物",
-      "markDraft": "改为草稿",
-      "remove": "移除",
-      "removeTitle": "移除交付物？",
-      "removeDescription": "“{{title}}”将从 Feature 中移除，原文件不会被删除。"
-    },
-    "artifactTypes": {
-      "product_spec": "产品方案",
-      "ux_design": "UI/UX 设计",
-      "acceptance_criteria": "验收标准",
-      "technical_plan": "技术方案",
-      "test_evidence": "测试证据",
-      "feature_docs": "功能文档",
-      "delivery_summary": "交付总结",
-      "pull_request": "Pull Request",
-      "release_note": "发布说明",
-      "seo": "SEO / 传播素材"
-    },
-    "artifactStatuses": {
-      "draft": "草稿",
-      "reviewed": "已审查",
-      "approved": "已批准",
-      "stale": "已过期"
-    },
-    "gate": {
-      "title": "阶段门禁",
-      "target": "目标：{{stage}}",
-      "complete": "闭环完成",
-      "ready": "可以推进",
-      "readyDescription": "当前阶段的必需证据已经齐备。",
-      "blocked": "还有 {{count}} 项未满足",
-      "completedDescription": "这条 Feature 已完成从问题到发布的完整交付闭环。",
-      "transitionFailed": "阶段切换失败，请检查最新门禁状态。",
-      "advance": "进入{{stage}}",
-      "retreat": "退回{{stage}}",
-      "firstStage": "已经是首阶段",
-      "blockers": {
-        "featureNotActive": "Feature 当前为“{{status}}”，需先恢复为进行中",
-        "problemRequired": "补全问题定义",
-        "artifactMissing": "缺少“{{artifact}}”",
-        "artifactUnapproved": "“{{artifact}}”尚未批准",
-        "artifactStale": "“{{artifact}}”已经过期，需要重新确认",
-        "taskRequired": "至少关联一个实现任务",
-        "taskIncomplete": "还有 {{count}} 个任务未进入审查或完成状态"
-      }
-    },
-    "events": {
-      "title": "交付轨迹",
-      "types": {
-        "created": "创建 Feature",
-        "updated": "更新交付简报",
-        "stage_advanced": "推进交付阶段",
-        "stage_retreated": "退回交付阶段",
-        "status_changed": "更新 Feature 状态",
-        "task_linked": "关联实现任务",
-        "task_unlinked": "取消任务关联",
-        "artifact_added": "添加交付物",
-        "artifact_updated": "更新交付物",
-        "artifact_removed": "移除交付物",
-        "handoff_recorded": "记录 Agent 交接"
-      }
-    }
   },
   "issues": {
     "alreadyLinkedToTask": "已关联到 {{taskName}}",

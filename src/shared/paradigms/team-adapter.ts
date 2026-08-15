@@ -1,5 +1,4 @@
 import {
-  isBuiltinTeamId,
   normalizeTeamMembers,
   normalizeTeamRouting,
   type AgentTeam,
@@ -66,26 +65,8 @@ export function paradigmToTeam(paradigm: Paradigm): AgentTeam {
     routing: normalizeTeamRouting(params.routing),
     routingHopLimit: normalizeRoutingHopLimit(params.routingHopLimit),
     communication: normalizeTeamCommunicationConfig(params.communication),
-    // Shipped with the app, which is what `builtin` has always meant for a team:
-    // editable, but not deletable.
-    builtin: isBuiltinTeamId(paradigm.id),
     members: normalizeTeamMembers(Array.isArray(params.members) ? params.members : []),
     createdAt: paradigm.createdAt,
     updatedAt: paradigm.updatedAt,
-  };
-}
-
-/** A built-in team as its code-defined paradigm instance. */
-export function builtinTeamToParadigm(team: AgentTeam): Paradigm {
-  return {
-    id: team.id,
-    kindId: 'team',
-    label: team.name,
-    icon: team.icon,
-    params: teamToParadigmParams(team),
-    builtin: true,
-    sortOrder: 0,
-    createdAt: team.createdAt,
-    updatedAt: team.updatedAt,
   };
 }

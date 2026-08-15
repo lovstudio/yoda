@@ -14,14 +14,7 @@ import { taskEvents } from '@main/core/tasks/task-events';
 import { taskManager } from '@main/core/tasks/task-manager';
 import { mapTaskRowToTask } from '@main/core/tasks/utils/utils';
 import { db } from '@main/db/client';
-import {
-  conversations,
-  reviewOrchestrations,
-  taskNamingSnapshots,
-  tasks,
-  teamRooms,
-  terminals,
-} from '@main/db/schema';
+import { conversations, taskNamingSnapshots, tasks, teamRooms, terminals } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
@@ -145,10 +138,6 @@ export async function moveTaskToProject(
     .update(taskNamingSnapshots)
     .set({ projectId: targetProjectId })
     .where(eq(taskNamingSnapshots.taskId, taskId));
-  await db
-    .update(reviewOrchestrations)
-    .set({ projectId: targetProjectId })
-    .where(eq(reviewOrchestrations.taskId, taskId));
   await db
     .update(teamRooms)
     .set({ projectId: targetProjectId })

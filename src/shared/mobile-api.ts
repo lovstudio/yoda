@@ -590,7 +590,6 @@ export type MobileProfileSnapshot = {
   };
 };
 
-export type MobileRunMode = 'normal' | 'brainstorm';
 export type MobileTaskStrategyKind = 'new-branch' | 'no-worktree';
 
 export type MobilePermissionModeOption = {
@@ -651,7 +650,6 @@ export function resolveMobilePermissionMode(
 export type MobileDemandConfiguration = {
   agentId: string | null;
   runtimeId: RuntimeId;
-  runMode: MobileRunMode;
   strategyKind: MobileTaskStrategyKind;
   model: string | null;
   reasoningEffort: string | null;
@@ -667,7 +665,6 @@ export type MobileCreateDemandRequest = {
   provider?: string;
   attachmentIds?: string[];
   agentId?: string | null;
-  runMode?: MobileRunMode;
   strategyKind?: MobileTaskStrategyKind;
   model?: string | null;
   reasoningEffort?: string | null;

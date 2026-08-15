@@ -216,6 +216,36 @@ function ensureTaskParadigmCompatibility(connection: BetterSqlite3.Database): vo
   }
 }
 
+/**
+ * Idempotent form of `0060_dark_hemingway`. The generated SQL drops the retired
+ * feature-workflow and review-orchestration tables unconditionally, which throws
+ * on any database that never had them (a squashed-tail upgrade, or a schema that
+ * predates them).
+ */
+function dropRetiredParadigmSchema(connection: BetterSqlite3.Database): void {
+  for (const tableName of [
+    'feature_artifacts',
+    'feature_events',
+    'feature_issues',
+    'feature_tasks',
+    'feature_workflow_owners',
+    'features',
+    'review_orchestrations',
+  ]) {
+    connection.exec(`DROP TABLE IF EXISTS ${quoteIdentifier(tableName)}`);
+  }
+
+  connection.exec('DROP INDEX IF EXISTS idx_team_rooms_feature_id');
+  connection.exec('DROP INDEX IF EXISTS idx_team_rooms_active_feature_workflow_task');
+
+  if (
+    tableExists(connection, 'team_rooms') &&
+    columnExists(connection, 'team_rooms', 'feature_id')
+  ) {
+    connection.exec('ALTER TABLE team_rooms DROP COLUMN feature_id');
+  }
+}
+
 function ensureConversationRunOutcomeCompatibility(connection: BetterSqlite3.Database): void {
   if (
     !tableExists(connection, 'conversations') ||
@@ -263,6 +293,8 @@ export function runBundledMigrations(connection: BetterSqlite3.Database): void {
         ensureTaskParadigmCompatibility(connection);
       } else if (record.tag === '0059_glamorous_the_renegades') {
         ensureConversationRunOutcomeCompatibility(connection);
+      } else if (record.tag === '0060_dark_hemingway') {
+        dropRetiredParadigmSchema(connection);
       } else {
         const sqlKey = Object.keys(sqlFiles).find((k) => k.includes(record.tag));
         if (!sqlKey) throw new Error(`Missing bundled SQL for migration: ${record.tag}`);

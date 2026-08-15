@@ -5,7 +5,6 @@ import {
   getRepositoryStore,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useParams } from '@renderer/lib/layout/navigation-provider';
-import { FeaturesOverviewCard } from './features-overview-card';
 import { IssuesOverviewCard } from './issues-overview-card';
 import { ProjectPromptsCard } from './project-prompts-card';
 import { PullRequestsOverviewCard } from './pull-requests-overview-card';
@@ -30,7 +29,6 @@ export const OverviewPanel = observer(function OverviewPanel() {
     <div className="overflow-y-auto h-full">
       <div className="max-w-3xl mx-auto w-full px-6 py-6 flex flex-col gap-4">
         <QuickActionsCard projectId={projectId} />
-        <FeaturesOverviewCard projectId={projectId} />
         <RepoStatusCard projectId={projectId} />
         <PullRequestsOverviewCard projectId={projectId} />
         <IssuesOverviewCard projectId={projectId} />

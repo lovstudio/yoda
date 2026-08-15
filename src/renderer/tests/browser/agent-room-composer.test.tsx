@@ -21,18 +21,6 @@ vi.mock('@renderer/features/agent-room/agent-room-store', () => ({
   },
 }));
 
-vi.mock('@renderer/features/agent-room/feature-workflow-rail', () => ({
-  FeatureWorkflowRail: () => null,
-}));
-
-vi.mock('@renderer/features/features/feature-navigation', () => ({
-  openFeature: vi.fn(),
-}));
-
-vi.mock('@renderer/features/features/use-features', () => ({
-  useFeature: () => ({ data: null, isLoading: false }),
-}));
-
 vi.mock('@renderer/features/tasks/task-view-context', () => ({
   useRequireProvisionedTask: () => {
     throw new Error('Task view context is not used by AgentRoomComposer');

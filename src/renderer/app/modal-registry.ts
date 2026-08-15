@@ -5,8 +5,6 @@ import { WorkspaceResourceDetailsModal } from '@renderer/app/workspace-resource-
 import { AgentEditModal } from '@renderer/features/agents-config/agent-edit-modal';
 import { CommandPaletteModal } from '@renderer/features/command-palette/command-palette-modal';
 import { DoctorModal } from '@renderer/features/doctor/doctor-modal';
-import { CreateFeatureModal } from '@renderer/features/features/create-feature-modal';
-import { FeatureArtifactModal } from '@renderer/features/features/feature-artifact-modal';
 import { IntegrationSetupModal } from '@renderer/features/integrations/integration-setup-modal';
 import { AddMaasProfileModal } from '@renderer/features/maas/components/AddMaasProfileModal';
 import { ZenmuxUsageModal } from '@renderer/features/maas/components/ZenmuxUsageModal';
@@ -72,8 +70,6 @@ export const modalRegistry = {
   doctorModal: createModal(DoctorModal, { size: 'xl' }),
   commandPaletteModal: createModal(CommandPaletteModal, { size: 'md' }),
   workspaceResourceDetailsModal: createModal(WorkspaceResourceDetailsModal, { size: 'lg' }),
-  createFeatureModal: createModal(CreateFeatureModal, { size: 'md' }),
-  featureArtifactModal: createModal(FeatureArtifactModal, { size: 'sm' }),
   taskModal: createModal(CreateTaskModal),
   newTaskModal: createModal(NewTaskModal, { size: 'lg', className: 'sm:max-w-3xl' }),
   newConversationModal: createModal(NewConversationModal, { size: 'lg' }),

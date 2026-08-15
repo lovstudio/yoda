@@ -1,13 +1,4 @@
-import {
-  AppWindow,
-  Bot,
-  Columns2,
-  GitFork,
-  Lightbulb,
-  Repeat2,
-  ShieldCheck,
-  Users,
-} from 'lucide-react';
+import { Bot, Columns2, GitFork } from 'lucide-react';
 import type { ComponentType } from 'react';
 import type { ParadigmIconId } from '@shared/paradigms/contract';
 import { AvatarValue } from '@renderer/lib/components/avatar-value';
@@ -20,13 +11,8 @@ import { cn } from '@renderer/utils/utils';
  */
 export const PARADIGM_ICONS: Record<ParadigmIconId, ComponentType<{ className?: string }>> = {
   bot: Bot,
-  lightbulb: Lightbulb,
-  repeat: Repeat2,
-  'app-window': AppWindow,
   'git-fork': GitFork,
   columns: Columns2,
-  'shield-check': ShieldCheck,
-  users: Users,
 };
 
 /** Renders a paradigm's (or slot's) declared icon. */

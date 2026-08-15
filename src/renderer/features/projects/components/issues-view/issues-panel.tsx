@@ -1,11 +1,7 @@
-import { ExternalLink, Github, Loader2, Milestone, RefreshCw, ScanSearch } from 'lucide-react';
+import { ExternalLink, Github, Loader2, RefreshCw, ScanSearch } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
-import type { FeatureSummary } from '@shared/features';
 import type { Issue } from '@shared/tasks';
-import { findFeatureForIssue } from '@renderer/features/features/feature-issue-link';
-import { openFeature } from '@renderer/features/features/feature-navigation';
-import { useFeatures } from '@renderer/features/features/use-features';
 import { useIssues } from '@renderer/features/integrations/use-issues';
 import { CreateIssueButton } from '@renderer/features/projects/components/issues-view/create-issue-button';
 import {
@@ -38,28 +34,14 @@ const ISSUE_FETCH_LIMIT = 50;
 const ProjectIssueRow = observer(function ProjectIssueRow({
   issue,
   projectId,
-  linkedFeature,
 }: {
   issue: Issue;
   projectId: string;
-  linkedFeature?: FeatureSummary;
 }) {
   const { t } = useTranslation();
   const showCreateTaskModal = useShowModal('taskModal');
-  const showCreateFeature = useShowModal('createFeatureModal');
   const assignees = issue.assignees ?? [];
   const alreadyInTask = getLinkedTaskStores(projectId, issue).length > 0;
-  const handleFeature = () => {
-    if (linkedFeature) {
-      openFeature(projectId, linkedFeature.id);
-      return;
-    }
-    showCreateFeature({
-      projectId,
-      sourceIssue: issue,
-      onSuccess: (feature) => openFeature(projectId, feature.id),
-    });
-  };
 
   return (
     <div className="group relative flex items-start gap-3 rounded-lg p-3 py-4 hover:bg-background-1 transition-colors">
@@ -115,26 +97,11 @@ const ProjectIssueRow = observer(function ProjectIssueRow({
           ) : null}
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {linkedFeature ? (
-            <Button
-              variant="ghost"
-              size="xs"
-              className="max-w-56"
-              onClick={() => openFeature(projectId, linkedFeature.id)}
-            >
-              <Milestone className="size-3" />
-              <span className="truncate">{linkedFeature.title}</span>
-            </Button>
-          ) : null}
           <IssueLinkedTasks issue={issue} projectId={projectId} />
           <IssueTaskLinkPopover issue={issue} projectId={projectId} />
         </div>
       </div>
       <div className="pointer-events-none absolute right-3 top-0 flex h-full items-center gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
-        <Button variant="outline" size="sm" onClick={handleFeature}>
-          <Milestone className="size-3.5" />
-          {linkedFeature ? t('featureDelivery.openFeature') : t('featureDelivery.createFromIssue')}
-        </Button>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -167,7 +134,6 @@ export const IssuesPanel = observer(function IssuesPanel() {
     params: { projectId },
   } = useParams('project');
   const repositoryUrl = getRepositoryStore(projectId)?.repositoryUrl ?? null;
-  const { data: features = [] } = useFeatures(projectId);
   const { authenticated, isInitialized, needsGhAuth } = useGithubContext();
   const { navigate } = useNavigate();
   const { value: defaultRuntime } = useAppSettingsKey('defaultRuntime');
@@ -324,7 +290,6 @@ export const IssuesPanel = observer(function IssuesPanel() {
               key={issue.url || issue.identifier}
               issue={issue}
               projectId={projectId}
-              linkedFeature={findFeatureForIssue(features, issue)}
             />
           ))}
         </div>

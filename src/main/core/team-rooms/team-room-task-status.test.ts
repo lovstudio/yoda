@@ -13,10 +13,9 @@ vi.mock('@main/core/tasks/operations/updateTaskStatus', () => ({
 vi.mock('@main/lib/events', () => ({ events: { emit: mocks.emit } }));
 
 const room = {
-  preset: 'freeform',
   projectId: 'project-1',
   taskId: 'task-1',
-} satisfies Pick<TeamRoom, 'preset' | 'projectId' | 'taskId'>;
+} satisfies Pick<TeamRoom, 'projectId' | 'taskId'>;
 
 describe('completeTeamRoomTask', () => {
   beforeEach(() => {
@@ -35,16 +34,5 @@ describe('completeTeamRoomTask', () => {
       projectId: 'project-1',
       status: 'done',
     });
-  });
-
-  it('leaves Feature Room tasks at their review gate', async () => {
-    const { completeTeamRoomTask } = await import('./team-room-task-status');
-
-    await expect(completeTeamRoomTask({ ...room, preset: 'feature-workflow' })).resolves.toBe(
-      false
-    );
-
-    expect(mocks.updateTaskStatus).not.toHaveBeenCalled();
-    expect(mocks.emit).not.toHaveBeenCalled();
   });
 });

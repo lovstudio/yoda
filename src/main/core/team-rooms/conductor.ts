@@ -7,10 +7,6 @@ import {
 } from '@shared/agent-communication-protocol';
 import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import { teamRoomUpdatedChannel } from '@shared/events/teamRoomEvents';
-import {
-  FEATURE_WORKFLOW_ROOM_PRESET,
-  featureWorkflowAllowedTargetHandles,
-} from '@shared/feature-workflow';
 import { makePtySessionId } from '@shared/ptySessionId';
 import type { RuntimeId } from '@shared/runtime-registry';
 import type { TeamCommunicationConfig } from '@shared/team-communication';
@@ -27,8 +23,6 @@ import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session
 import { createConversation } from '@main/core/conversations/createConversation';
 import { getConversationSessionInfo } from '@main/core/conversations/getConversationSessionInfo';
 import { injectPrompt } from '@main/core/conversations/inject-prompt';
-import { ingestFeatureWorkflowHandoff } from '@main/core/features/feature-loop-service';
-import { featureService } from '@main/core/features/feature-service';
 import { resolveTask } from '@main/core/projects/utils';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { events } from '@main/lib/events';
@@ -202,64 +196,15 @@ class RoomConductor {
     // An agent that addressed someone this turn has explicitly handed off, so its
     // turn-end must NOT also trigger the automatic hand-back to the lead.
     const wantsAll = originalHandles.includes(ALL_HANDLE);
-    const isFeatureWorkflow = room.preset === FEATURE_WORKFLOW_ROOM_PRESET;
-    let requestedHandles = wantsAll ? [ALL_HANDLE] : originalHandles;
-    let handsToHuman = false;
-    if (isFeatureWorkflow && requestedHandles.length > 0) {
-      const feature = room.featureId
-        ? await featureService.get(room.projectId, room.featureId)
-        : null;
-      if (!feature) {
-        if (author?.runtime) this.handedOff.delete(author.id);
-        await postMessage({
-          roomId,
-          kind: 'system',
-          body: 'Feature routing paused — this Room is not linked to an authoritative Feature workspace.',
-          mentions: [],
-        });
-        return rejectedRoute(requestedHandles, 'The Feature Room has no authoritative Feature.');
-      }
-      const allowed = new Set(featureWorkflowAllowedTargetHandles(feature, members, message));
-      const rejected = requestedHandles.filter((handle) => !allowed.has(handle));
-      requestedHandles = requestedHandles.filter((handle) => allowed.has(handle));
-      handsToHuman = requestedHandles.includes('you');
-      if (rejected.length > 0) {
-        if (author?.runtime && requestedHandles.length === 0) this.handedOff.delete(author.id);
-        await postMessage({
-          roomId,
-          kind: 'system',
-          body: `Feature gate kept ${rejected.map((handle) => `@${handle}`).join(', ')} waiting. Pass the current gate or return to an unlocked stage first.`,
-          mentions: [],
-        });
-      }
-      if (requestedHandles.length > 0) {
-        try {
-          await ingestFeatureWorkflowHandoff({ room, feature, members, message });
-        } catch (error) {
-          if (author?.runtime) this.handedOff.delete(author.id);
-          await postMessage({
-            roomId,
-            kind: 'system',
-            body: `Feature evidence was rejected: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-            mentions: [],
-          });
-          return rejectedRoute(requestedHandles, 'Feature evidence was rejected.');
-        }
-      }
-    }
+    const requestedHandles = wantsAll ? [ALL_HANDLE] : originalHandles;
     const targets = members.filter(
       (member) =>
         member.runtime &&
         member.id !== message.authorMemberId &&
-        ((!isFeatureWorkflow && wantsAll) || requestedHandles.includes(member.handle.toLowerCase()))
+        (wantsAll || requestedHandles.includes(member.handle.toLowerCase()))
     );
     const humanTargeted = requestedHandles.includes('you') && message.visibility === 'room';
     if (targets.length === 0 && !humanTargeted) {
-      if (isFeatureWorkflow && author?.runtime && !handsToHuman && message.mentions.length > 0) {
-        this.handedOff.delete(author.id);
-      }
       const available = members
         .filter((member) => member.runtime)
         .map((member) => `@${member.handle}`)
@@ -306,7 +251,7 @@ class RoomConductor {
         deliveryError = outcome.error;
       }
     }
-    if (humanTargeted && targets.length === 0 && author?.runtime && !isFeatureWorkflow) {
+    if (humanTargeted && targets.length === 0 && author?.runtime) {
       await completeTeamRoomTask(room).catch((error: unknown) => {
         log.warn('RoomConductor: failed to complete team task', {
           roomId,

@@ -5,7 +5,6 @@ import { AccountSessionEvents } from './app/account-session-events';
 import { AiLabBuildEvents } from './app/ai-lab-build-events';
 import { AppMenuEvents } from './app/app-menu-events';
 import { BootScreen } from './app/boot-screen';
-import { ReviewOrchestrationEvents } from './app/review-orchestration-events';
 import { SettingsSyncAgent } from './app/settings-sync-agent';
 import { WelcomeScreen } from './app/welcome';
 import { Workspace } from './app/workspace';
@@ -114,7 +113,6 @@ const AppContent = observer(function AppContent() {
             <IntegrationsProvider>
               <WorkspaceViewProvider>
                 <AppMenuEvents onOpenSettings={handleOpenSettingsFromMenu} />
-                <ReviewOrchestrationEvents />
                 {!isTaskWindowLaunch && !isComparisonWindowLaunch && !isAiLabWindowLaunch && (
                   <AiLabBuildEvents />
                 )}
