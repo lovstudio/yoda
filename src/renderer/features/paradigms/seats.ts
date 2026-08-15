@@ -8,16 +8,13 @@ import { paradigmParamsAgents } from '@shared/paradigms/params';
  *
  * Three layers, most specific first:
  *
- * 1. the instance's own params — what makes duplicating a paradigm worth doing,
- *    since the copy's seats can diverge from the original's;
- * 2. the composer draft, keyed by the bare slot key — where a kind's single
- *    built-in instance keeps its seats, and the inherited default for an instance
- *    the user has not configured;
- * 3. the built-in Agent seeded for that slot, so every paradigm runs untouched.
- *
- * A built-in instance deliberately has no layer 1: there is exactly one per kind,
- * so the draft is already instance-scoped for it, and built-in rows are immutable
- * anyway — which is why the picker offers duplicate before edit.
+ * 1. the instance's own params — where every seat assignment is written, and what
+ *    makes duplicating a paradigm worth doing, since the copy's seats can diverge
+ *    from the original's;
+ * 2. the composer draft, keyed by the bare slot key — where seats lived before
+ *    they belonged to an instance, kept as the inherited default so an existing
+ *    setup carries over untouched;
+ * 3. the built-in Agent seeded for that slot, so every paradigm runs unconfigured.
  */
 export function paradigmSeatAgentId({
   paradigm,
@@ -30,10 +27,9 @@ export function paradigmSeatAgentId({
   draftAgents: Record<string, string[]>;
   agents: Agent[];
 }): string | null {
-  const fromInstance =
-    paradigm && !paradigm.builtin
-      ? paradigmParamsAgents(paradigm.params)[slotStorageKey]?.[0]
-      : undefined;
+  const fromInstance = paradigm
+    ? paradigmParamsAgents(paradigm.params)[slotStorageKey]?.[0]
+    : undefined;
   const explicit = fromInstance ?? draftAgents[slotStorageKey]?.[0];
   if (explicit) return explicit;
   const builtinKey = paradigmSlotByStorageKey(slotStorageKey)?.defaultBuiltinAgentKey;

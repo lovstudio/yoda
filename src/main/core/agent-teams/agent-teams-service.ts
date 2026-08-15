@@ -33,9 +33,8 @@ class AgentTeamsService {
     return paradigmToTeam(await paradigmsService.create(teamToParadigmDraft(draft)));
   }
 
+  /** Built-in teams are editable too; their edits overlay the shipped default. */
   async update(id: string, draft: AgentTeamDraft): Promise<AgentTeam> {
-    if (isBuiltinTeamId(id))
-      throw new Error('Built-in teams cannot be edited; duplicate it first.');
     return paradigmToTeam(await paradigmsService.update(id, teamToParadigmDraft(draft)));
   }
 

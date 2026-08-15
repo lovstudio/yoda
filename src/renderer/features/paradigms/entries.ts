@@ -37,7 +37,7 @@ export interface ParadigmEntry {
   name?: string;
   descKey: string;
   alpha?: boolean;
-  /** Code-defined instances can be duplicated but not renamed or removed. */
+  /** Shipped instances can be renamed and re-iconed, but not removed. */
   builtin: boolean;
   pickerOrder: number;
 }
@@ -77,6 +77,17 @@ const BUILTIN_TEAM_PRESENTATION: Record<
 const USER_ORDER_BASE = 100;
 
 /**
+ * The instance's own name, resolved — what editing it starts from.
+ *
+ * Deliberately not the displayed name: that falls back to the category or to the
+ * Agent in the seat, and seeding an edit with either would turn a borrowed label
+ * into a stored one on the first keystroke.
+ */
+export function paradigmEntryOwnName(entry: ParadigmEntry, t: (key: string) => string): string {
+  return entry.name ?? (entry.nameKey ? t(entry.nameKey) : '');
+}
+
+/**
  * How an entry reads: its category, qualified by its own name when it has one.
  *
  * "Category · name" rather than name alone, because a name on its own does not
@@ -98,7 +109,7 @@ export function paradigmEntryLabel(
   fallbackName?: string | null
 ): { category: string; name: string | null } {
   const category = t(entry.categoryKey);
-  const own = entry.name ?? (entry.nameKey ? t(entry.nameKey) : null);
+  const own = paradigmEntryOwnName(entry, t);
   const name = own || fallbackName || null;
   return { category, name: name && name !== category ? name : null };
 }
@@ -130,7 +141,9 @@ export function paradigmEntries(paradigms: readonly Paradigm[]): ParadigmEntry[]
           categoryKey: kind.labelKey,
           // Only an instance that was named carries a name. A kind's own built-in
           // has none, and reads as the bare category rather than repeating it.
-          ...(presentation
+          // A shipped team's localized copy holds only while it is pristine: once
+          // the user names it themselves, that name is the one they expect to see.
+          ...(presentation && !paradigm.customized
             ? { nameKey: presentation.nameKey }
             : paradigm.label
               ? { name: paradigm.label }

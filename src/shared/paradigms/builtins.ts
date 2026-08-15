@@ -42,9 +42,9 @@ const KIND_OWNED_BUILTINS: readonly Paradigm[] = PARADIGM_KIND_IDS.filter(
  * kind. Keeping them out would leave `paradigms.list()` missing instances that the
  * picker shows.
  *
- * None of these are stored. They carry no user edits, so rows would only be
- * something to keep in sync; `paradigmsService.list()` prepends them to the user's
- * rows the same way `agentTeamsService` used to prepend `BUILTIN_TEAMS`.
+ * These are defaults, not fixtures: `paradigmsService` overlays any stored row
+ * with the same id on top, so a built-in can be renamed and reconfigured while
+ * still being the instance the app ships and references by id.
  */
 export const BUILTIN_PARADIGMS: readonly Paradigm[] = [
   ...KIND_OWNED_BUILTINS,

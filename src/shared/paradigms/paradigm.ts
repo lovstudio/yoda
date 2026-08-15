@@ -17,8 +17,21 @@ export interface Paradigm {
   icon: string;
   /** Validated against the kind's `paramsSchema`. */
   params: unknown;
-  /** Code-defined instances are not editable or deletable. */
+  /**
+   * Shipped with the app. It can be renamed, re-iconed, and reconfigured like any
+   * other instance — the edits land in a row keyed by its own id — but it cannot
+   * be deleted: the app ships expecting it to exist.
+   */
   builtin: boolean;
+  /**
+   * A built-in carrying stored edits.
+   *
+   * Only meaningful for built-ins, and only because some of them ship with copy
+   * the renderer localizes (the Agent Teams). That copy has to win while the
+   * instance is pristine and lose the moment the user names it themselves, and
+   * the label alone cannot say which of those is the case.
+   */
+  customized?: boolean;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;

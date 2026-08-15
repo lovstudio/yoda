@@ -56,14 +56,13 @@ export function useParadigms() {
     /**
      * Assign an Agent to one of an instance's seats.
      *
-     * This is what makes a duplicate more than a rename: the copy's seats live in
-     * its own params, so changing them cannot reach back into the original.
-     * Built-ins have no params to write — there is one per kind, so their seats
-     * stay in the composer draft and the caller keeps that path.
+     * This is what makes a duplicate more than a rename: seats live in the
+     * instance's own params, so changing them cannot reach back into the original.
+     * Shipped instances included — they are defaults, not fixtures.
      */
     setSeatAgent: async (id: string, slotStorageKey: string, agentId: string) => {
       const existing = paradigms.find((paradigm) => paradigm.id === id);
-      if (!existing || existing.builtin) return false;
+      if (!existing) return;
       await updateMutation.mutateAsync({
         id,
         draft: {
@@ -73,7 +72,6 @@ export function useParadigms() {
           params: withParadigmSlotAgent(existing.params, slotStorageKey, agentId),
         },
       });
-      return true;
     },
     remove: removeMutation.mutateAsync,
     duplicate: duplicateMutation.mutateAsync,

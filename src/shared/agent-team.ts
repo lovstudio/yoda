@@ -60,7 +60,7 @@ export interface AgentTeam {
   icon: string;
   routing: TeamRouting;
   communication: TeamCommunicationConfig;
-  /** Code-defined built-ins are not editable/deletable. */
+  /** Shipped with the app: editable like any other team, but not deletable. */
   builtin: boolean;
   /** Max conductor routing deliveries per human prompt. null = unlimited. */
   routingHopLimit: RoutingHopLimit;

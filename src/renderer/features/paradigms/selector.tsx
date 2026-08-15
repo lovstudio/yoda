@@ -24,6 +24,7 @@ import {
   paradigmEntries,
   paradigmEntryId,
   paradigmEntryLabel,
+  paradigmEntryOwnName,
   type ParadigmEntry,
 } from './entries';
 import { ParadigmEntryRow } from './entry-row';
@@ -37,10 +38,11 @@ export interface ParadigmSelectorProps {
   paradigmId: string;
   teams: AgentTeam[];
   agents: Agent[];
-  /** Composer-draft seat assignments, keyed by slot storage key. */
+  /**
+   * Seat assignments from the composer draft, where they lived before they
+   * belonged to an instance. Read-only: every write lands in the instance's params.
+   */
   draftAgents: Record<string, string[]>;
-  /** Seat write for a built-in instance, whose seats live in the draft. */
-  onDraftSlotAgentChange: (slotKey: string, agentId: string) => void;
   onChange: (kindId: ParadigmKindId, paradigmId: string) => void;
 }
 
@@ -62,7 +64,6 @@ export function ParadigmSelector({
   teams,
   agents,
   draftAgents,
-  onDraftSlotAgentChange,
   onChange,
 }: ParadigmSelectorProps) {
   const { t } = useTranslation();
@@ -129,10 +130,10 @@ export function ParadigmSelector({
   const startEditing = (entry: ParadigmEntry) => {
     setPendingId(entry.id);
     setEditingId(entry.id);
-    // Seeded with the instance's own name, not its category: editing sets what
-    // distinguishes this one, and pre-filling the category would invite a name
-    // that repeats it.
-    setEditDraft({ label: entry.name ?? '', icon: entry.avatar ?? '' });
+    // Seeded with the instance's own name, not the name it displays: that can fall
+    // back to the category or to the Agent in its seat, and storing either would
+    // freeze a borrowed label as this instance's own.
+    setEditDraft({ label: paradigmEntryOwnName(entry, t), icon: entry.avatar ?? '' });
   };
 
   const commitEditing = async (id: string) => {
@@ -156,12 +157,6 @@ export function ParadigmSelector({
     if (pendingId === id) setPendingId(currentId);
     if (editingId === id) setEditingId(null);
     await remove(id);
-  };
-
-  /** A user instance stores seats in its params; a built-in has only the draft. */
-  const assignSeat = async (entry: ParadigmEntry, slotKey: string, agentId: string) => {
-    const stored = await setSeatAgent(entry.id, slotKey, agentId);
-    if (!stored) onDraftSlotAgentChange(slotKey, agentId);
   };
 
   const showAvatarFileError = (error: AvatarFileError) => {
@@ -333,7 +328,7 @@ export function ParadigmSelector({
                   agents={agents}
                   slotAgentId={seatAgentId(pending)}
                   onSlotAgentChange={(slotKey, agentId) =>
-                    void assignSeat(pending, slotKey, agentId)
+                    void setSeatAgent(pending.id, slotKey, agentId)
                   }
                   onConfigurationChange={() => setConfigurationDirty(true)}
                 />

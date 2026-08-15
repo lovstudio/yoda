@@ -43,9 +43,33 @@ function rowToParadigm(row: ParadigmRow): Paradigm {
     label: row.label,
     icon: row.icon,
     params: readParams(kindId, row.params),
-    builtin: false,
+    // A row under a built-in id is an override for a built-in that this build no
+    // longer ships. Still built-in, so `remove` keeps refusing it — deleting it
+    // here would be deleting an edit to something the user cannot get back.
+    builtin: isBuiltinParadigmId(row.id),
     sortOrder: row.sortOrder,
     createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+/**
+ * A shipped instance with the user's edits applied.
+ *
+ * A built-in is a default, not a fixed thing: it can be renamed, re-iconed and
+ * reconfigured like any other instance, and those edits live in a row keyed by the
+ * built-in's own id. Identity and rank stay with the code — the id is what rooms
+ * and drafts reference, and the picker's shipped ordering should not shift because
+ * something was renamed.
+ */
+function overlayBuiltin(builtin: Paradigm, row: ParadigmRow | undefined): Paradigm {
+  if (!row) return builtin;
+  return {
+    ...builtin,
+    label: row.label,
+    icon: row.icon,
+    params: readParams(builtin.kindId, row.params),
+    customized: true,
     updatedAt: row.updatedAt,
   };
 }
@@ -120,7 +144,7 @@ class ParadigmsService {
     return this.teamMigration;
   }
 
-  /** Code-defined instances first, then the user's (by rank, newest tie-break). */
+  /** Shipped instances first, then the user's (by rank, newest tie-break). */
   async list(): Promise<Paradigm[]> {
     await this.ensureTeamsMigrated();
     const rows = await db
@@ -128,14 +152,20 @@ class ParadigmsService {
       .from(paradigms)
       .orderBy(asc(paradigms.sortOrder), desc(paradigms.updatedAt))
       .execute();
-    return [...BUILTIN_PARADIGMS, ...rows.map(rowToParadigm)];
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return [
+      ...BUILTIN_PARADIGMS.map((builtin) => overlayBuiltin(builtin, byId.get(builtin.id))),
+      // Rows consumed as overrides above are not instances of their own; listing
+      // them again would double every edited built-in.
+      ...rows.filter((row) => !builtinParadigm(row.id)).map(rowToParadigm),
+    ];
   }
 
   async get(id: string): Promise<Paradigm | null> {
-    const builtin = builtinParadigm(id);
-    if (builtin) return builtin;
     await this.ensureTeamsMigrated();
     const [row] = await db.select().from(paradigms).where(eq(paradigms.id, id)).execute();
+    const builtin = builtinParadigm(id);
+    if (builtin) return overlayBuiltin(builtin, row);
     return row ? rowToParadigm(row) : null;
   }
 
@@ -160,10 +190,13 @@ class ParadigmsService {
   /**
    * A paradigm's kind is immutable: params are shaped by it, so switching kinds
    * would silently invalidate them. Duplicate into the other kind instead.
+   *
+   * A built-in is editable here. Its edits are written as a row under its own id —
+   * an overlay on the shipped default rather than a copy of it — so renaming the
+   * paradigm the user actually works in does not first require duplicating it into
+   * a near-identical row.
    */
   async update(id: string, draft: ParadigmDraft): Promise<Paradigm> {
-    if (isBuiltinParadigmId(id))
-      throw new Error('Built-in paradigms cannot be edited; duplicate it first.');
     const existing = await this.get(id);
     if (!existing) throw new Error(`Paradigm ${id} not found`);
     if (draft.kindId !== existing.kindId)
@@ -172,15 +205,39 @@ class ParadigmsService {
       );
     const clean = sanitizeDraft(draft);
     await db
-      .update(paradigms)
-      .set({ label: clean.label, icon: clean.icon, params: clean.params })
-      .where(eq(paradigms.id, id))
+      .insert(paradigms)
+      .values({
+        id,
+        kindId: clean.kindId,
+        label: clean.label,
+        icon: clean.icon,
+        params: clean.params,
+        // Shipped rank, so an edited built-in keeps its place in the picker.
+        sortOrder: existing.sortOrder,
+      })
+      // Covers a built-in's first edit and every edit after it, without the caller
+      // having to know whether a row exists yet. `$onUpdate` does not fire on
+      // conflict, so the timestamp is set here.
+      .onConflictDoUpdate({
+        target: paradigms.id,
+        set: {
+          label: clean.label,
+          icon: clean.icon,
+          params: clean.params,
+          updatedAt: new Date().toISOString(),
+        },
+      })
       .execute();
     const updated = await this.get(id);
     if (!updated) throw new Error(`Paradigm ${id} not found`);
     return updated;
   }
 
+  /**
+   * A shipped paradigm cannot be deleted — the app expects it to exist, and rooms
+   * and drafts reference its id. Clearing its name and icon restores the shipped
+   * copy, which is the reset this would otherwise be for.
+   */
   async remove(id: string): Promise<void> {
     if (isBuiltinParadigmId(id)) throw new Error('Built-in paradigms cannot be removed.');
     await db.delete(paradigms).where(eq(paradigms.id, id)).execute();

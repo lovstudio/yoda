@@ -310,36 +310,38 @@ export function AgentTeamsMainPanel() {
                 className="size-9 rounded-lg text-lg"
               />
               <h2 className="flex-1 text-lg font-semibold">{selected.name}</h2>
-              {isBuiltin ? (
+              {/* A built-in team is editable here too, the same as in the
+                  paradigm picker: it is a default the user works in, not a
+                  fixture. Only deleting is withheld — rooms reference it by id. */}
+              <button
+                type="button"
+                onClick={() => startEdit(selected)}
+                className="rounded-md border border-border bg-background-1 px-2.5 py-1.5 text-xs transition-colors hover:bg-background-2"
+              >
+                {t('common.edit')}
+              </button>
+              <button
+                type="button"
+                onClick={() => duplicate(selected.id)}
+                title={t('agentTeams.duplicateTeam')}
+                aria-label={t('agentTeams.duplicateTeam')}
+                className="flex size-7 items-center justify-center rounded-md border border-border text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+              >
+                <Copy className="size-3.5" />
+              </button>
+              {!isBuiltin && (
                 <button
                   type="button"
-                  onClick={() => duplicate(selected.id)}
-                  className="flex items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 py-1.5 text-xs transition-colors hover:bg-background-2"
+                  onClick={() => {
+                    void remove(selected.id);
+                    setSelectedId(null);
+                  }}
+                  title={t('agentTeams.deleteTeam')}
+                  aria-label={t('agentTeams.deleteTeam')}
+                  className="flex size-7 items-center justify-center rounded-md border border-border text-foreground-muted transition-colors hover:border-red-500 hover:text-red-500"
                 >
-                  <Copy className="size-3.5" /> {t('agentTeams.duplicateToEdit')}
+                  <Trash2 className="size-3.5" />
                 </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => startEdit(selected)}
-                    className="rounded-md border border-border bg-background-1 px-2.5 py-1.5 text-xs transition-colors hover:bg-background-2"
-                  >
-                    {t('common.edit')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void remove(selected.id);
-                      setSelectedId(null);
-                    }}
-                    title={t('agentTeams.deleteTeam')}
-                    aria-label={t('agentTeams.deleteTeam')}
-                    className="flex size-7 items-center justify-center rounded-md border border-border text-foreground-muted transition-colors hover:border-red-500 hover:text-red-500"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </>
               )}
             </div>
             <p className="mb-1 text-xs text-foreground-muted">
@@ -354,9 +356,6 @@ export function AgentTeamsMainPanel() {
                 : t('agentTeams.routingSteps', { count: selected.routingHopLimit })}
             </p>
             <MemberList members={selected.members} agents={agents} />
-            {isBuiltin && (
-              <p className="mt-3 text-xs text-foreground-muted">{t('agentTeams.readOnlyHint')}</p>
-            )}
           </div>
         ) : (
           <div className="flex flex-1 items-center justify-center text-sm text-foreground-muted">

@@ -154,6 +154,19 @@ describe('paradigm entries', () => {
     expect(feature?.categoryKey).toBe(PARADIGM_KINDS.team.labelKey);
     expect(feature && paradigmEntryLabel(feature, t).name).toBe('home.modeTeamFeature');
 
+    // Naming a shipped team replaces its localized copy — that name is the one the
+    // user expects to see, and keeping both would show them someone else's.
+    const renamedFeature = paradigmEntries(
+      paradigms.map((paradigm) =>
+        paradigm.id === BUILTIN_FEATURE_TEAM_ID
+          ? { ...paradigm, label: 'My squad', customized: true }
+          : paradigm
+      )
+    ).find((entry) => entry.id === BUILTIN_FEATURE_TEAM_ID);
+    expect(renamedFeature && paradigmEntryLabel(renamedFeature, t).name).toBe('My squad');
+    // Still shipped, so it stays undeletable however it is named.
+    expect(renamedFeature?.builtin).toBe(true);
+
     const user = entries.find((entry) => entry.id === mine.id);
     expect(user && paradigmEntryLabel(user, t)).toEqual({
       category: PARADIGM_KINDS.single.labelKey,
@@ -193,11 +206,14 @@ describe('paradigm entries', () => {
     // An unconfigured instance inherits the draft, so duplicating changes nothing
     // until the copy is actually edited.
     expect(seat(mine)).toBe('agent-a');
-    // A built-in has no params to write: there is one per kind, so the draft is
-    // already instance-scoped for it.
-    expect(seat(BUILTIN_PARADIGMS.find((p) => p.id === builtinParadigmId('single')))).toBe(
-      'agent-a'
-    );
+    // A built-in is a default, not a fixture: unconfigured it inherits the draft,
+    // and once a seat is assigned on it that assignment is its own.
+    const builtin = BUILTIN_PARADIGMS.find((p) => p.id === builtinParadigmId('single'));
+    expect(seat(builtin)).toBe('agent-a');
+    expect(
+      builtin &&
+        seat({ ...builtin, params: withParadigmSlotAgent(builtin.params, SINGLE_SEAT, 'agent-b') })
+    ).toBe('agent-b');
   });
 
   it('resolves the active row by kind, disambiguated by instance', () => {

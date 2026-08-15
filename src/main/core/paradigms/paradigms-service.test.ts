@@ -174,11 +174,31 @@ describe('paradigms service: folding agent_teams in', () => {
     expect(sqlite.prepare('SELECT COUNT(*) AS n FROM paradigms').get()).toEqual({ n: 0 });
   });
 
-  it('refuses to edit or delete a code-defined instance', async () => {
+  it('overlays an edit onto a code-defined instance instead of copying it', async () => {
     const service = await loadService();
-    const draft = { kindId: 'team' as const, label: 'Mine', icon: '', params: {} };
+    const edit = (label: string, icon: string) =>
+      service.update(BUILTIN_REVIEW_TEAM_ID, { kindId: 'team' as const, label, icon, params: {} });
 
-    await expect(service.update(BUILTIN_REVIEW_TEAM_ID, draft)).rejects.toThrow(/cannot be edited/);
+    const updated = await edit('My reviewers', 'R');
+    // The same instance, not a copy: rooms and composer drafts reference this id,
+    // and a rename must not move the paradigm out from under them.
+    expect(updated.id).toBe(BUILTIN_REVIEW_TEAM_ID);
+    expect(updated.label).toBe('My reviewers');
+    expect(updated.icon).toBe('R');
+    // Still shipped — that is what keeps it undeletable — but now carrying edits.
+    expect(updated.builtin).toBe(true);
+    expect(updated.customized).toBe(true);
+
+    const listed = await service.list();
+    expect(listed.filter((paradigm) => paradigm.id === BUILTIN_REVIEW_TEAM_ID)).toHaveLength(1);
+    expect(listed.find((paradigm) => paradigm.id === BUILTIN_REVIEW_TEAM_ID)?.label).toBe(
+      'My reviewers'
+    );
+
+    // Editing again rewrites the one overlay row rather than conflicting on it.
+    await edit('Again', '');
+    expect(sqlite.prepare('SELECT COUNT(*) AS n FROM paradigms').get()).toEqual({ n: 1 });
+
     await expect(service.remove(BUILTIN_REVIEW_TEAM_ID)).rejects.toThrow(/cannot be removed/);
   });
 

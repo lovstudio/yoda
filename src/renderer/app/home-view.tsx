@@ -726,12 +726,6 @@ export const HomeComposer = observer(function HomeComposer({
       }),
     [activeParadigm, selectedAgentIdsByMode, userAgents]
   );
-  const setSlotAgent = useCallback(
-    (slotKey: string, agentId: string) => {
-      updateDraft({ selectedAgentIds: { ...selectedAgentIdsByMode, [slotKey]: [agentId] } });
-    },
-    [selectedAgentIdsByMode, updateDraft]
-  );
   const composerAgent = useMemo<Agent | null>(() => {
     if (runMode === 'team') {
       const leader =
@@ -1681,7 +1675,6 @@ export const HomeComposer = observer(function HomeComposer({
               teams={teams}
               agents={userAgents}
               draftAgents={selectedAgentIdsByMode}
-              onDraftSlotAgentChange={setSlotAgent}
               onChange={setParadigm}
             />
             {renderComposerSettingsButton()}

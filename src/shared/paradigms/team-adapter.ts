@@ -66,8 +66,8 @@ export function paradigmToTeam(paradigm: Paradigm): AgentTeam {
     routing: normalizeTeamRouting(params.routing),
     routingHopLimit: normalizeRoutingHopLimit(params.routingHopLimit),
     communication: normalizeTeamCommunicationConfig(params.communication),
-    // A code-defined instance is uneditable, which is exactly what `builtin` has
-    // always meant for a team.
+    // Shipped with the app, which is what `builtin` has always meant for a team:
+    // editable, but not deletable.
     builtin: isBuiltinTeamId(paradigm.id),
     members: normalizeTeamMembers(Array.isArray(params.members) ? params.members : []),
     createdAt: paradigm.createdAt,

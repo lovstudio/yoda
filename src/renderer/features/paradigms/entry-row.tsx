@@ -103,27 +103,30 @@ export function ParadigmEntryRow({
           title={t('common.more')}
           className={cn(
             'absolute right-1 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-foreground-passive transition-opacity hover:bg-background-2 hover:text-foreground focus-visible:opacity-100 group-hover/paradigm:opacity-100',
-            // Kept visible on the selected row: duplicating is how a built-in
-            // becomes editable, so the way in cannot be hover-only on the one row
-            // the user is already looking at.
+            // Kept visible on the selected row: it is the one the user is already
+            // looking at, so its actions should not be hover-only.
             active ? 'opacity-60' : 'opacity-0'
           )}
         >
           <MoreHorizontal className="size-3.5" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          {/* Duplicate comes first because it is the way into every other action
-              for a built-in: those cannot be edited, only copied and then edited. */}
+          {/* Every row can be named and re-iconed, shipped ones included: the
+              paradigm the user works in daily is the one they most want to call
+              their own, and making that cost a duplicate leaves the list with two
+              near-identical rows. */}
+          <DropdownMenuItem onClick={onEdit}>
+            <Pencil className="size-3.5" />
+            {t('home.paradigmEdit')}
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={onDuplicate}>
             <Copy className="size-3.5" />
             {t('home.paradigmDuplicate')}
           </DropdownMenuItem>
+          {/* A shipped paradigm stays: the app references it by id, and clearing
+              its name and icon already restores what it shipped with. */}
           {!entry.builtin && (
             <>
-              <DropdownMenuItem onClick={onEdit}>
-                <Pencil className="size-3.5" />
-                {t('home.paradigmEdit')}
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={onRemove}>
                 <Trash2 className="size-3.5" />
