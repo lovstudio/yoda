@@ -309,7 +309,9 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
         checked={sidebarStore.redactTaskContent}
         onCheckedChange={(checked) => sidebarStore.setRedactTaskContent(checked)}
       />
-      {sidebarStore.redactTaskContent && <RedactionAllowlistRow />}
+      {(sidebarStore.redactTaskContent || sidebarStore.redactionExemptProjectIds.size > 0) && (
+        <RedactionAllowlistRow />
+      )}
       {!sidebarStore.taskPriorityMode && (
         <>
           <PanelSeparator />
@@ -333,7 +335,8 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
 /**
  * Privacy allowlist summary. Membership is edited from each project's own menu
  * (that is where a project's identity lives), so this row only reports the count
- * and offers a bulk clear.
+ * and offers a bulk clear. Stays visible while an allowlist exists even with
+ * privacy mode off, so a pre-built list is never invisible.
  */
 const RedactionAllowlistRow = observer(function RedactionAllowlistRow() {
   const { t } = useTranslation();

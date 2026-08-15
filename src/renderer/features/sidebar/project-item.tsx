@@ -27,7 +27,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/toolti
 import { cn } from '@renderer/utils/utils';
 import { ProjectActionsMenu, ProjectContextMenu } from './project-menu';
 import { SidebarItemMiniButton, SidebarMenuButton, SidebarMenuRow } from './sidebar-primitives';
-import { SIDEBAR_REDACTED_CLASS } from './sidebar-redaction';
+import { SIDEBAR_REDACTED_CLASS, SIDEBAR_REDACTED_HOVER_REVEAL_CLASS } from './sidebar-redaction';
 import { useProjectMenuActions } from './use-project-menu-actions';
 
 const UNREGISTERED_PHASE_KEY: Record<UnregisteredProject['phase'], string> = {
@@ -112,7 +112,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     ? appState.sshConnections.stateFor(sshConnectionId)
     : null;
   const isRedacted = sidebarStore.isProjectRedacted(projectId);
-  const redactedNameClassName = isRedacted && SIDEBAR_REDACTED_CLASS;
+  const redactedNameClassName =
+    isRedacted && cn(SIDEBAR_REDACTED_CLASS, SIDEBAR_REDACTED_HOVER_REVEAL_CLASS);
   const ProjectIcon = isSshProject ? FolderInput : FolderClosed;
   const isLoadingProjectSessions =
     projectViewKind(project) === 'bootstrapping' ||

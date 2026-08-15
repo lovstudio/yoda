@@ -67,8 +67,8 @@ export interface ProjectMenuActions extends ProjectQuickActionsMenuActions {
   onPin: () => void;
   onUnpin: () => void;
   /**
-   * Privacy allowlist toggle. Only supplied while privacy mode is on — the
-   * entry is meaningless otherwise, so the menu simply omits it.
+   * Privacy allowlist toggle. Present regardless of privacy mode — the
+   * allowlist is configured while names are still legible.
    */
   redaction?: { exempt: boolean; onToggle: () => void };
   onOpenDetails?: () => void;

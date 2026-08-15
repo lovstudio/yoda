@@ -4,43 +4,47 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const mocks = vi.hoisted(() => ({
-  mountProject: vi.fn(),
-  project: null as unknown as {
-    state: 'unmounted';
-    id: string;
-    name: string;
-    alias: null;
-    data: {
+const mocks = vi.hoisted(() => {
+  const flags = { redacted: false };
+  return {
+    flags,
+    mountProject: vi.fn(),
+    project: null as unknown as {
+      state: 'unmounted';
       id: string;
       name: string;
       alias: null;
-      path: string;
-      type: 'local';
-      baseRef: string;
-      workspaceId: null;
-      isInternal: false;
-    };
-    phase: 'idle';
-    mountedProject: null;
-    displayName: string;
-    error: undefined;
-    errorCode: undefined;
-  },
-  sidebarStore: {
-    expandedProjectIds: new Set<string>(),
-    collapsedTaskIds: new Set<string>(),
-    taskBranchDisplay: 'compact' as const,
-    redactTaskContent: false,
-    isProjectPinned: () => false,
-    setProjectPinned: vi.fn(),
-    isProjectRedacted: () => false,
-    isProjectRedactionExempt: () => false,
-    toggleProjectRedactionExempt: vi.fn(),
-    holdTaskReflow: vi.fn(),
-    releaseTaskReflow: vi.fn(),
-  },
-}));
+      data: {
+        id: string;
+        name: string;
+        alias: null;
+        path: string;
+        type: 'local';
+        baseRef: string;
+        workspaceId: null;
+        isInternal: false;
+      };
+      phase: 'idle';
+      mountedProject: null;
+      displayName: string;
+      error: undefined;
+      errorCode: undefined;
+    },
+    sidebarStore: {
+      expandedProjectIds: new Set<string>(),
+      collapsedTaskIds: new Set<string>(),
+      taskBranchDisplay: 'compact' as const,
+      redactTaskContent: false,
+      isProjectPinned: () => false,
+      setProjectPinned: vi.fn(),
+      isProjectRedacted: () => flags.redacted,
+      isProjectRedactionExempt: () => false,
+      toggleProjectRedactionExempt: vi.fn(),
+      holdTaskReflow: vi.fn(),
+      releaseTaskReflow: vi.fn(),
+    },
+  };
+});
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -177,6 +181,7 @@ describe('SidebarProjectItem restored expansion', () => {
   beforeEach(() => {
     mocks.mountProject.mockReset();
     mocks.mountProject.mockResolvedValue(undefined);
+    mocks.flags.redacted = false;
     mocks.project = {
       state: 'unmounted',
       id: 'project-1',
@@ -217,5 +222,20 @@ describe('SidebarProjectItem restored expansion', () => {
     });
 
     expect(mocks.mountProject).toHaveBeenCalledWith('project-1');
+  });
+
+  // A blurred project row still has to be identifiable, otherwise the privacy
+  // allowlist becomes unreachable the moment privacy mode is on.
+  it('clears a redacted project name on row hover', async () => {
+    mocks.flags.redacted = true;
+    const { SidebarProjectItem } = await import('@renderer/features/sidebar/project-item');
+
+    await act(async () => {
+      root.render(createElement(SidebarProjectItem, { projectId: 'project-1' }));
+    });
+
+    const name = host.querySelector('[data-sidebar-project-content="name"]');
+    expect(name?.classList.contains('blur-[2px]')).toBe(true);
+    expect(name?.classList.contains('group-hover/row:blur-none')).toBe(true);
   });
 });

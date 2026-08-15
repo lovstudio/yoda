@@ -212,12 +212,12 @@
     "branchDisplayFull": "Full",
     "privacySection": "Privacy",
     "privacyMode": "Privacy mode",
-    "privacyModeDescription": "Lightly blurs project names, task titles, and branch names in the sidebar. Task hover previews stay hidden while it is on. Allowlisted projects are left alone.",
+    "privacyModeDescription": "Lightly blurs project names, task titles, and branch names in the sidebar. Task hover previews stay hidden while it is on. Allowlisted projects are left alone, and hovering a row clears its project name so you can still find it.",
     "privacyExempt": {
       "addMenuLabel": "Add to privacy allowlist",
       "removeMenuLabel": "Remove from privacy allowlist",
       "panelLabel": "Allowlisted projects",
-      "panelHint": "Allowlisted projects and their tasks stay legible while privacy mode is on. Add or remove them from a project's context menu.",
+      "panelHint": "Allowlisted projects and their tasks stay legible while privacy mode is on. Add or remove them from a project's context menu, including before privacy mode is turned on.",
       "panelEmpty": "None",
       "panelCount": "{{count}}",
       "clear": "Clear"
@@ -4441,6 +4441,14 @@
     "subtitle": "Create, run, and continuously develop App projects with natural language.",
     "back": "Back to Apps",
     "newApp": "New app",
+    "createTitle": "Describe the app you want",
+    "createPlaceholder": "Describe the app, its core workflow, data, and interactions…",
+    "createSubmit": "Start building",
+    "creating": "Creating App project…",
+    "createFailed": "Could not create the app",
+    "createAgentUnavailable": "Install an Agent client before creating an app.",
+    "buildTaskName": "Create and improve App",
+    "defaultAppProjectName": "New App",
     "openApp": "Open app",
     "openInWindow": "Open in separate window",
     "openInWindowFailed": "Failed to open separate window",
@@ -4532,7 +4540,7 @@
       "deleteFailed": "Could not delete the generation record"
     },
     "emptyTitle": "No personal apps yet",
-    "emptyDescription": "Go Home and choose Yoda Build to create your first dedicated App project.",
+    "emptyDescription": "Describe an app in one sentence and Yoda gives it a dedicated project to keep growing in.",
     "comingSoonTitle": "More apps on the way",
     "comingSoonDescription": "This hub is built to grow — the next idea becomes the next app.",
     "apps": {

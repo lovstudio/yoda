@@ -268,14 +268,13 @@ export function useProjectMenuActions(projectId: string): ProjectMenuBundle | nu
       project.state === 'unregistered' ? undefined : () => void handleOpenArchivedTasks(),
     onPin: () => sidebarStore.setProjectPinned(projectId, true),
     onUnpin: () => sidebarStore.setProjectPinned(projectId, false),
-    // Offered only while privacy mode is on — outside it the allowlist has no
-    // observable effect, so the entry would be a dead control.
-    redaction: sidebarStore.redactTaskContent
-      ? {
-          exempt: sidebarStore.isProjectRedactionExempt(projectId),
-          onToggle: () => sidebarStore.toggleProjectRedactionExempt(projectId),
-        }
-      : undefined,
+    // Offered whether or not privacy mode is on: the allowlist has to be built
+    // while project names are still legible, and turning privacy mode on is
+    // exactly what takes that away. Membership is simply inert until then.
+    redaction: {
+      exempt: sidebarStore.isProjectRedactionExempt(projectId),
+      onToggle: () => sidebarStore.toggleProjectRedactionExempt(projectId),
+    },
     onReconnect: sshConnectionId
       ? () => {
           void appState.sshConnections.connect(sshConnectionId).catch(() => {});
