@@ -3,6 +3,7 @@ import type { AgentSessionSource } from '@shared/conversations';
 import {
   isAgentSessionRunningStatus,
   type AgentSessionRuntimeStatus,
+  type PersistedRunStatus,
 } from '@shared/events/agentEvents';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { isValidRuntimeId } from '@shared/runtime-registry';
@@ -21,6 +22,10 @@ import { findClaudeTranscriptPathBySessionId } from './claude-transcript-locator
 import { readCodexTurnVerdict } from './codex-run-state-source';
 import { resolveCodexThreadIdForConversation } from './codex-session-id';
 import { getReservedCodexThreadIds } from './codex-thread-reservations';
+import {
+  readConversationRunOutcome,
+  runtimeStatusFromRunOutcome,
+} from './conversation-run-outcome';
 import { parseConversationSessionSource } from './conversation-session-source';
 import { isInterruptedSinceLastPrompt } from './interrupt-marker';
 import { runtimeStatusMonitorRegistry } from './runtime-status-monitor-registry';
@@ -58,6 +63,7 @@ export async function getConversationRuntimeStatuses(
       createdAt: row?.createdAt,
       title: row?.title,
       sessionSource: row?.sessionSource,
+      lastRunStatus: row?.lastRunStatus ?? null,
       cwd,
     });
     // Keep the RPC return type status-only, while also delivering the current
@@ -84,6 +90,12 @@ export async function getConversationRunStatus(args: {
   createdAt?: string | null;
   title?: string | null;
   sessionSource?: AgentSessionSource;
+  /**
+   * The conversation's stored run outcome, when the caller already loaded the
+   * row. Omit it to have the outcome read on demand — only ever needed when
+   * nothing else can describe the session.
+   */
+  lastRunStatus?: PersistedRunStatus | null;
 }): Promise<AgentSessionRuntimeStatus> {
   return deriveStatus(args);
 }
@@ -96,10 +108,20 @@ async function deriveStatus(args: {
   createdAt?: string | null;
   title?: string | null;
   sessionSource?: AgentSessionSource;
+  lastRunStatus?: PersistedRunStatus | null;
   cwd: string | undefined;
 }): Promise<AgentSessionRuntimeStatus> {
-  const { projectId, taskId, conversationId, provider, createdAt, title, sessionSource, cwd } =
-    args;
+  const {
+    projectId,
+    taskId,
+    conversationId,
+    provider,
+    createdAt,
+    title,
+    sessionSource,
+    lastRunStatus,
+    cwd,
+  } = args;
   const mountedTask = resolveTask(projectId, taskId);
   const activeSession = mountedTask?.conversations
     .getActiveSessions()
@@ -240,11 +262,23 @@ async function deriveStatus(args: {
     }
   }
 
+  // Nothing is running and nothing above could say why. The reducer's memory and
+  // every provider truth source only describe this process's lifetime, so after a
+  // restart they can only report absence — which is how a finished or cut-short
+  // session used to decay into "nothing known". The stored outcome is the one
+  // record that survives, and it is strictly more informative than `idle`.
+  if (derived === 'idle') {
+    const stored =
+      lastRunStatus === undefined
+        ? await readConversationRunOutcome(conversationId).catch(() => undefined)
+        : runtimeStatusFromRunOutcome(lastRunStatus);
+    if (stored) derived = stored;
+  }
+
   const providerTurnConfirmed =
     isAgentSessionRunningStatus(derived) &&
     truth !== undefined &&
     isAgentSessionRunningStatus(truth);
-
   // Self-heal the in-memory cache so other readers and the next cold load agree.
   if (derived !== memory) {
     agentSessionRuntimeStore.setStatus(session, derived, { providerTurnConfirmed });
@@ -277,6 +311,7 @@ async function loadConversationRows(conversationIds: string[]): Promise<
       runtime: string | null;
       createdAt: string | null;
       title: string | null;
+      lastRunStatus: PersistedRunStatus | null;
       sessionSource?: AgentSessionSource;
     }
   >
@@ -287,6 +322,7 @@ async function loadConversationRows(conversationIds: string[]): Promise<
       runtime: conversations.runtime,
       createdAt: conversations.createdAt,
       title: conversations.title,
+      lastRunStatus: conversations.lastRunStatus,
       config: conversations.config,
     })
     .from(conversations)
@@ -302,6 +338,7 @@ async function loadConversationRows(conversationIds: string[]): Promise<
         runtime: r.runtime,
         createdAt: r.createdAt,
         title: r.title,
+        lastRunStatus: r.lastRunStatus ?? null,
         sessionSource: parseConversationSessionSource(r.config),
       },
     ])

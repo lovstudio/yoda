@@ -12,6 +12,7 @@ import {
   isAgentSessionRunningStatus,
   type AgentEvent,
   type AgentSessionRuntimeStatus,
+  type PersistedRunStatus,
 } from '@shared/events/agentEvents';
 import { isAppFocused, maybeShowNotification } from '@main/core/agent-hooks/notification';
 import { events } from '@main/lib/events';
@@ -25,6 +26,13 @@ export type AgentSessionKey = {
 };
 
 type RuntimeStateListener = (state: RunState) => void;
+
+/**
+ * Records a settled run status somewhere durable. Injected at boot instead of
+ * imported: this module sits on the hot path of many unit tests, and the
+ * persistence layer opens a real database file at import time.
+ */
+type RunOutcomeRecorder = (conversationId: string, status: PersistedRunStatus) => void;
 
 function keyFor({ projectId, taskId, conversationId }: AgentSessionKey): string {
   return `${projectId}\0${taskId}\0${conversationId}`;
@@ -185,9 +193,11 @@ class AgentSessionRuntimeStore {
   private listeners = new Map<string, Set<RuntimeStateListener>>();
   private offRendererStatusChanged: (() => void) | null = null;
   private watchdogTimer: NodeJS.Timeout | null = null;
+  private recordRunOutcome: RunOutcomeRecorder | null = null;
 
-  initialize(): void {
+  initialize(options: { recordRunOutcome?: RunOutcomeRecorder } = {}): void {
     if (this.offRendererStatusChanged) return;
+    this.recordRunOutcome = options.recordRunOutcome ?? null;
     this.offRendererStatusChanged = events.on(agentSessionStatusChangedChannel, (event) => {
       const reducerEvent = eventForRendererStatus(event.status, Date.now(), event.pendingAction);
       if (!reducerEvent) return;
@@ -200,6 +210,7 @@ class AgentSessionRuntimeStore {
   dispose(): void {
     this.offRendererStatusChanged?.();
     this.offRendererStatusChanged = null;
+    this.recordRunOutcome = null;
     if (this.watchdogTimer) {
       clearInterval(this.watchdogTimer);
       this.watchdogTimer = null;
@@ -290,6 +301,7 @@ class AgentSessionRuntimeStore {
           event: event.kind,
           source,
         });
+        this.rememberStatus(session, next.status);
       }
       // Publish every canonical transition, including renderer-originated
       // predictions. The mounted ConversationStore already changed locally, but
@@ -345,8 +357,23 @@ class AgentSessionRuntimeStore {
       previous.status !== state.status ||
       (previousEntry?.providerTurnConfirmed ?? false) !== providerTurnConfirmed
     ) {
+      if (previous?.status !== state.status) this.rememberStatus(session, state.status);
       this.publishState(session, state, providerTurnConfirmed);
     }
+  }
+
+  /**
+   * Write a status change down so it survives this process.
+   *
+   * `idle` is skipped on purpose: it says nothing about how a turn ended, so
+   * storing it would replace knowledge with the lack of it. Every other status —
+   * including a running one — is a fact worth keeping: a stored `working` that
+   * outlives the process is precisely how "the app died mid-turn" is detected on
+   * the next launch.
+   */
+  private rememberStatus(session: AgentSessionKey, status: AgentSessionRuntimeStatus): void {
+    if (status === 'idle') return;
+    this.recordRunOutcome?.(session.conversationId, status);
   }
 
   /**

@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
-import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
+import type { AgentSessionRuntimeStatus, PersistedRunStatus } from '@shared/events/agentEvents';
 import { parsePtySessionId } from '@shared/ptySessionId';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import type { IExecutionContext } from '@main/core/execution-context/types';
@@ -8,6 +8,7 @@ import { decodeTmuxSessionName, listTmuxSessionMarkers } from '@main/core/pty/tm
 import { db } from '@main/db/client';
 import { conversations, projects, tasks } from '@main/db/schema';
 import { agentSessionRuntimeStore, type AgentSessionKey } from './agent-session-runtime';
+import { loadPersistedRunOutcomes, runtimeStatusFromRunOutcome } from './conversation-run-outcome';
 import { parseConversationSessionSource } from './conversation-session-source';
 import { getConversationRunStatus } from './getConversationRuntimeStatuses';
 
@@ -32,6 +33,7 @@ type ActiveConversationRow = {
   runtime: string | null;
   title: string | null;
   createdAt: string | null;
+  lastRunStatus: PersistedRunStatus | null;
   config: string | null;
 };
 
@@ -96,7 +98,7 @@ export async function getActiveRuntimeStatuses(
       const key = sessionKey(row);
       const cached = memoryByKey.get(key)?.status;
       const candidate = candidates.get(key);
-      const status =
+      const derived =
         cached ??
         (await getConversationRunStatus({
           projectId: row.projectId,
@@ -106,9 +108,13 @@ export async function getActiveRuntimeStatuses(
           cwd: candidate?.cwd ?? '',
           title: row.title,
           createdAt: row.createdAt,
+          lastRunStatus: row.lastRunStatus,
           sessionSource: parseConversationSessionSource(row.config),
         }));
-      if (status !== 'idle') {
+      // A cached `idle` gets the same treatment as a derived one, so this path and
+      // the mounted-task path never disagree about the very same session.
+      const status = derived === 'idle' ? runtimeStatusFromRunOutcome(row.lastRunStatus) : derived;
+      if (status) {
         entries.push({
           projectId: row.projectId,
           taskId: row.taskId,
@@ -116,6 +122,15 @@ export async function getActiveRuntimeStatuses(
           status,
         });
       }
+    }
+
+    // Sessions whose outcome only the database knows: no live marker, no
+    // in-memory entry, nothing left to re-derive. Skipping them is what used to
+    // drop every finished or cut-short session into the residual bucket after a
+    // restart.
+    for (const outcome of await loadPersistedRunOutcomes(coveredProjectIds)) {
+      if (candidates.has(sessionKey(outcome))) continue;
+      entries.push(outcome);
     }
 
     return { coveredProjectIds, entries };
@@ -171,6 +186,7 @@ async function loadActiveConversationRows(
         runtime: conversations.runtime,
         title: conversations.title,
         createdAt: conversations.createdAt,
+        lastRunStatus: conversations.lastRunStatus,
         config: conversations.config,
       })
       .from(conversations)

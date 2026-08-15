@@ -9,6 +9,7 @@ import {
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 import type { AgentTeamMember } from '@shared/agent-team';
+import type { PersistedRunStatus } from '@shared/events/agentEvents';
 import type { ParadigmKindId } from '@shared/paradigms/contract';
 import type { AgentAccountProviderId } from '@shared/runtime-registry';
 import type { SkillSelectionInput } from '@shared/skills/types';
@@ -769,6 +770,15 @@ export const conversations = sqliteTable(
       .default(sql`CURRENT_TIMESTAMP`)
       .$onUpdate(() => new Date().toISOString()),
     lastInteractedAt: text('last_interacted_at'),
+    // How this session's last agent turn ended. The in-memory run-state reducer
+    // and every provider truth source only speak about the current process
+    // lifetime, so without this column a restart erases the outcome and a
+    // finished session degrades into "nothing known about it".
+    //
+    // A *running* value that survives a restart is not a contradiction: it means
+    // a turn started and no terminal event was ever recorded, i.e. the app or
+    // the CLI went away mid-turn. It reads back as `interrupted`.
+    lastRunStatus: text('last_run_status').$type<PersistedRunStatus>(),
     isInitialConversation: integer('is_initial_conversation', { mode: 'boolean' }),
     archivedAt: text('archived_at'),
     // Immutable, provider-neutral lineage for conversations created by

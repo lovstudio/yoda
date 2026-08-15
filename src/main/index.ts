@@ -22,6 +22,7 @@ import {
 import { appService } from './core/app/service';
 import { automationScheduler } from './core/automation/automation-scheduler';
 import { agentSessionRuntimeStore } from './core/conversations/agent-session-runtime';
+import { persistConversationRunOutcome } from './core/conversations/conversation-run-outcome';
 import { sessionSummaryAutoRefreshService } from './core/conversations/session-summary-autorefresh';
 import { localDependencyManager } from './core/dependencies/dependency-manager';
 import { knownBinDirs } from './core/dependencies/probe';
@@ -133,7 +134,10 @@ void app.whenReady().then(async () => {
     console.log(`[DEBUG][boot] ${label} +${Date.now() - __bootT0}ms`);
   __bootMark('whenReady fired');
   console.log('[BUILD-MARKER] agent-run-state-sync v4 (stateless-derive + claude-awaiting)');
-  agentSessionRuntimeStore.initialize();
+  agentSessionRuntimeStore.initialize({
+    recordRunOutcome: (conversationId, status) =>
+      void persistConversationRunOutcome(conversationId, status),
+  });
 
   // Synchronously seed the common user bin dirs (Homebrew, /usr/local/bin, nvm,
   // cargo, …) into PATH before anything can spawn. A GUI-launched (launchd /

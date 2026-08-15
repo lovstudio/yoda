@@ -293,6 +293,31 @@ describe('AgentSessionRuntimeStore local subscriptions', () => {
       false
     );
   });
+
+  it('records every outcome that outlives the process, and never records its absence', () => {
+    const outcomeSession: AgentSessionKey = { ...session, conversationId: 'conversation-outcome' };
+    const recordRunOutcome = vi.fn();
+    agentSessionRuntimeStore.initialize({ recordRunOutcome });
+
+    agentSessionRuntimeStore.dispatch(
+      outcomeSession,
+      { kind: 'turn-started', at: 1, force: true },
+      'renderer:test'
+    );
+    agentSessionRuntimeStore.dispatch(
+      outcomeSession,
+      { kind: 'turn-completed', at: 2 },
+      'renderer:test'
+    );
+    agentSessionRuntimeStore.setStatus(outcomeSession, 'idle');
+
+    // `working` is recorded too: a stored running status that survives a restart
+    // is exactly how a turn cut short by the app going away is detected.
+    expect(recordRunOutcome.mock.calls).toEqual([
+      ['conversation-outcome', 'working'],
+      ['conversation-outcome', 'completed'],
+    ]);
+  });
 });
 
 describe('AgentSessionRuntimeStore background jobs', () => {

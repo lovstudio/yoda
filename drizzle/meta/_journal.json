@@ -414,6 +414,13 @@
       "when": 1786744831535,
       "tag": "0058_flippant_texas_twister",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "6",
+      "when": 1786791206212,
+      "tag": "0059_glamorous_the_renegades",
+      "breakpoints": true
     }
   ]
 }

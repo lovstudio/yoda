@@ -36,6 +36,7 @@ describe('getProjectSessionSources', () => {
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         last_interacted_at TEXT,
+        last_run_status TEXT,
         is_initial_conversation INTEGER,
         archived_at TEXT,
         forked_from_conversation_id TEXT,

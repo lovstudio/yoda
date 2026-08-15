@@ -1,0 +1,1 @@
+ALTER TABLE `conversations` ADD `last_run_status` text;

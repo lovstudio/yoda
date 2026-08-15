@@ -203,6 +203,24 @@ describe('getConversationRunStatus', () => {
     );
   });
 
+  it('falls back to the stored outcome when nothing running can be observed', async () => {
+    mocks.resolveTask.mockReturnValue(mountedTask());
+    mocks.dbSelect.mockReturnValue({
+      from: () => ({ where: () => Promise.resolve([{ lastRunStatus: 'completed' }]) }),
+    });
+
+    await expect(readStatus()).resolves.toBe('completed');
+  });
+
+  it('reads a stored running outcome back as a turn cut short', async () => {
+    mocks.resolveTask.mockReturnValue(mountedTask());
+    mocks.dbSelect.mockReturnValue({
+      from: () => ({ where: () => Promise.resolve([{ lastRunStatus: 'working' }]) }),
+    });
+
+    await expect(readStatus()).resolves.toBe('interrupted');
+  });
+
   it('honors an interrupt marker for Codex rollout working verdicts', async () => {
     mocks.resolveTask.mockReturnValue(mountedTask(['conv-1']));
     mocks.readCodexTurnVerdict.mockResolvedValue({

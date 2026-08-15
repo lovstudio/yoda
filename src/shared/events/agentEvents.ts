@@ -31,6 +31,15 @@ export type AgentSessionRuntimeStatus =
    */
   | 'interrupted';
 
+/**
+ * A run status worth writing down: every status except the absence of one.
+ *
+ * `idle` is deliberately not representable. It carries no information about how
+ * a turn ended, so persisting it would only overwrite an outcome we knew with
+ * one we don't.
+ */
+export type PersistedRunStatus = Exclude<AgentSessionRuntimeStatus, 'idle'>;
+
 export function isAgentSessionRunningStatus(status: AgentSessionRuntimeStatus): boolean {
   return status === 'working' || status === 'awaiting-input';
 }
