@@ -50,31 +50,29 @@ describe('Workspace runtime bar responsive layout', () => {
     expect(source).toContain("compact ? 'h-1 w-9 @max-[720px]:hidden'");
   });
 
-  it('keeps session-history visibility prominent in the context popover, not the runtime bar', () => {
+  it('keeps session-history visibility in the context popover as a labelled row, not a bare toggle', () => {
     expect(source).not.toContain('<MessageSquare');
     expect(source).not.toContain('resolveSessionPrompts');
-    expect(source).toContain("t('workspaceRuntime.sessionHistoryVisibility')");
-    expect(source).toContain('onCheckedChange={toggleSessionHistoryDock}');
-    const contextHeader = source.slice(
-      source.indexOf("t('workspaceRuntime.contextPopoverTitle')"),
-      source.indexOf('<ContextProgressBar percent={contextPercent} tone={contextTone} />')
-    );
-    expect(contextHeader).toContain('onCheckedChange={toggleSessionHistoryDock}');
-    expect(contextHeader).toContain('<TooltipContent side="bottom" sideOffset={8}>');
+    const contextPopover = contextPopoverSource();
+
+    expect(contextPopover).toContain("t('workspaceRuntime.sessionHistoryVisibility')");
+    expect(contextPopover).toContain('onCheckedChange={toggleSessionHistoryDock}');
+    // A setting needs a visible name and rationale; a tooltip on a naked
+    // switch reads as decoration.
+    expect(contextPopover).toContain("t('workspaceRuntime.sessionHistoryVisibilityDescription')");
   });
 
   it('keeps secondary context actions behind a compact overflow menu', () => {
-    const contextPopover = source.slice(
-      source.indexOf("t('workspaceRuntime.contextPopoverTitle')"),
-      source.indexOf(
-        '</PopoverContent>',
-        source.indexOf("t('workspaceRuntime.contextPopoverTitle')")
-      )
-    );
+    const contextPopover = contextPopoverSource();
 
     expect(contextPopover).toContain('<DropdownMenu>');
     expect(contextPopover).toContain('presentation="menu-item"');
     expect(contextPopover).toContain('<Minimize2');
     expect(contextPopover).not.toContain("t('workspaceRuntime.replyScreenshotDescription')");
   });
+
+  function contextPopoverSource(): string {
+    const start = source.indexOf("t('workspaceRuntime.contextPopoverTitle')");
+    return source.slice(start, source.indexOf('</PopoverContent>', start));
+  }
 });

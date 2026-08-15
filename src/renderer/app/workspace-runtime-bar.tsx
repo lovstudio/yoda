@@ -64,6 +64,7 @@ import type { SessionModelSettings } from '@renderer/lib/components/agent-select
 import { dismissBeforeSynchronousAction } from '@renderer/lib/dismiss-before-synchronous-action';
 import { useDismissOnWindowBlur } from '@renderer/lib/hooks/use-dismiss-on-window-blur';
 import { copyTextToClipboard, useToast } from '@renderer/lib/hooks/use-toast';
+import i18n from '@renderer/lib/i18n';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -307,10 +308,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               ...(sessionContext.lastResetAt
                 ? [
                     t('workspaceRuntime.contextLastReset', {
-                      time: new Intl.DateTimeFormat(undefined, {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      }).format(new Date(sessionContext.lastResetAt)),
+                      time: formatPopoverTime(sessionContext.lastResetAt),
                     }),
                   ]
                 : []),
@@ -1045,81 +1043,21 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   align="start"
                   side="top"
                   sideOffset={8}
-                  className="max-h-[min(80vh,40rem)] w-[min(20rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] gap-0 overflow-y-auto overscroll-contain border border-border bg-background p-0 text-foreground shadow-lg"
+                  className="w-72 max-w-[calc(100vw-1rem)] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
                 >
-                  <div className="flex flex-col gap-3 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-medium">
-                          {t('workspaceRuntime.contextPopoverTitle')}
-                        </div>
-                        <div className="mt-0.5 text-xs text-foreground-passive">
-                          {t('workspaceRuntime.contextPopoverDescription')}
-                        </div>
+                  <div className="flex items-start justify-between gap-2 p-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium">
+                        {t('workspaceRuntime.contextPopoverTitle')}
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <span className="font-mono text-sm tabular-nums text-foreground-muted">
-                          {contextPercent}%
-                        </span>
-                        {activeConversationId ? (
-                          <Tooltip>
-                            <TooltipTrigger render={<span className="inline-flex" />}>
-                              <Switch
-                                size="sm"
-                                checked={sessionHistoryDocked}
-                                onCheckedChange={toggleSessionHistoryDock}
-                                aria-label={t('workspaceRuntime.sessionHistoryVisibility')}
-                              />
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" sideOffset={8}>
-                              {t('workspaceRuntime.sessionHistoryVisibility')}
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : null}
+                      <div className="mt-0.5 text-xs text-foreground-passive">
+                        {t('workspaceRuntime.contextPopoverDescription')}
                       </div>
                     </div>
-                    <ContextProgressBar percent={contextPercent} tone={contextTone} />
-                    <div className="flex items-end justify-between gap-3">
-                      <div>
-                        <div className="font-mono text-2xl leading-none tabular-nums">
-                          {formatCompactNumber(sessionContext.usedTokens)}
-                        </div>
-                        <div className="mt-1 text-xs text-foreground-passive">
-                          {t('workspaceRuntime.contextOfTotal', {
-                            total: formatCompactNumber(sessionContext.limitTokens),
-                          })}
-                        </div>
-                      </div>
-                      <div className="text-right text-xs text-foreground-passive">
-                        <div>{t('workspaceRuntime.contextRemaining')}</div>
-                        <div className="mt-0.5 font-mono tabular-nums text-foreground-muted">
-                          {formatCompactNumber(contextRemaining ?? 0)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="border-t border-border" />
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-3 text-xs">
-                    <ContextMetric
-                      label={t('workspaceRuntime.sessionTokenTotalLabel')}
-                      value={sessionTokens ? formatCompactNumber(sessionTokens.total) : '—'}
-                    />
-                    <ContextMetric
-                      label={t('workspaceRuntime.contextCompactionsLabel')}
-                      value={String(sessionContext.resetCount)}
-                    />
-                    {sessionContext.lastResetAt ? (
-                      <ContextMetric
-                        label={t('workspaceRuntime.contextLastCompactionLabel')}
-                        value={formatPopoverTime(sessionContext.lastResetAt)}
-                      />
-                    ) : null}
-                  </div>
-                  {canCaptureLatestReply || canCompactContext ? (
-                    <div className="flex items-center justify-end border-t border-border px-2 py-1.5">
+                    {canCaptureLatestReply || canCompactContext ? (
                       <DropdownMenu>
                         <Tooltip>
-                          <TooltipTrigger render={<span className="inline-flex" />}>
+                          <TooltipTrigger render={<span className="-mr-1 inline-flex" />}>
                             <DropdownMenuTrigger
                               render={
                                 <Button
@@ -1137,7 +1075,12 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                             {t('common.more')}
                           </TooltipContent>
                         </Tooltip>
-                        <DropdownMenuContent align="end" side="top" sideOffset={6} className="w-52">
+                        <DropdownMenuContent
+                          align="end"
+                          side="bottom"
+                          sideOffset={6}
+                          className="w-52"
+                        >
                           {activeConversationId && params?.projectId && params.taskId ? (
                             <LatestReplyScreenshotButton
                               projectId={params.projectId}
@@ -1162,6 +1105,57 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                           ) : null}
                         </DropdownMenuContent>
                       </DropdownMenu>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-col gap-1.5 border-t border-border p-3">
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <span className="font-mono tabular-nums text-foreground">
+                        {formatCompactNumber(sessionContext.usedTokens)} /{' '}
+                        {formatCompactNumber(sessionContext.limitTokens)}
+                      </span>
+                      <span className="font-mono tabular-nums text-foreground">
+                        {contextPercent}%
+                      </span>
+                    </div>
+                    <ContextProgressBar percent={contextPercent} tone={contextTone} />
+                    <span className="text-[11px] text-foreground-passive">
+                      {t('workspaceRuntime.contextRemainingTokens', {
+                        value: formatCompactNumber(contextRemaining ?? 0),
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1.5 border-t border-border p-3 text-xs">
+                    <RuntimeMetricRow
+                      label={t('workspaceRuntime.sessionTokenTotalLabel')}
+                      value={sessionTokens ? formatCompactNumber(sessionTokens.total) : '—'}
+                    />
+                    <RuntimeMetricRow
+                      label={t('workspaceRuntime.contextCompactionsLabel')}
+                      value={String(sessionContext.resetCount)}
+                    />
+                    {sessionContext.lastResetAt ? (
+                      <RuntimeMetricRow
+                        label={t('workspaceRuntime.contextLastCompactionLabel')}
+                        value={formatPopoverTime(sessionContext.lastResetAt)}
+                      />
+                    ) : null}
+                  </div>
+                  {activeConversationId ? (
+                    <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2.5 text-xs">
+                      <div className="min-w-0">
+                        <div className="text-foreground">
+                          {t('workspaceRuntime.sessionHistoryVisibility')}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-foreground-passive">
+                          {t('workspaceRuntime.sessionHistoryVisibilityDescription')}
+                        </div>
+                      </div>
+                      <Switch
+                        size="sm"
+                        checked={sessionHistoryDocked}
+                        onCheckedChange={toggleSessionHistoryDock}
+                        aria-label={t('workspaceRuntime.sessionHistoryVisibility')}
+                      />
                     </div>
                   ) : null}
                 </PopoverContent>
@@ -1338,40 +1332,25 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                         </div>
                       ) : null}
                       {runtimeId === 'codex' && !connectionId ? (
-                        <div className="border-t border-border px-3 py-2.5 text-xs">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-foreground-passive">
-                              {t('workspaceRuntime.accountResetCredits')}
-                            </span>
-                            <span className="font-mono tabular-nums text-foreground">
-                              {accountUsage?.resetCreditsAvailable != null
+                        <div className="flex flex-col gap-1.5 border-t border-border px-3 py-2.5 text-xs">
+                          <RuntimeMetricRow
+                            label={t('workspaceRuntime.accountResetCredits')}
+                            value={
+                              accountUsage?.resetCreditsAvailable != null
                                 ? t('workspaceRuntime.accountResetCreditsCount', {
                                     count: accountUsage.resetCreditsAvailable,
                                   })
                                 : accountUsage?.error
                                   ? t('workspaceRuntime.accountResetCreditsFailed')
-                                  : t('workspaceRuntime.accountResetCreditsLoading')}
-                            </span>
-                          </div>
+                                  : t('workspaceRuntime.accountResetCreditsLoading')
+                            }
+                          />
                           {accountUsage?.resetCreditsAvailable != null &&
                           accountUsage.resetCreditsAvailable > 0 ? (
-                            <div className="mt-1.5 flex items-center justify-between gap-3">
-                              <span className="text-foreground-passive">
-                                {t('workspaceRuntime.accountResetCreditExpiry')}
-                              </span>
-                              <span
-                                className="text-right font-mono tabular-nums text-foreground"
-                                title={
-                                  nextAccountResetCredit?.expiresAt
-                                    ? new Date(nextAccountResetCredit.expiresAt).toLocaleString()
-                                    : t(
-                                        accountUsageSupportsResetCreditDetails
-                                          ? 'workspaceRuntime.accountResetCreditExpiryUnknownDescription'
-                                          : 'workspaceRuntime.accountResetCreditRestartRequiredDescription'
-                                      )
-                                }
-                              >
-                                {nextAccountResetCredit?.expiresAt
+                            <RuntimeMetricRow
+                              label={t('workspaceRuntime.accountResetCreditExpiry')}
+                              value={
+                                nextAccountResetCredit?.expiresAt
                                   ? t('workspaceRuntime.accountResetCreditExpiresAt', {
                                       time: formatAccountResetCreditExpiry(
                                         nextAccountResetCredit.expiresAt
@@ -1383,9 +1362,18 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                                         accountUsageSupportsResetCreditDetails
                                           ? 'workspaceRuntime.accountResetCreditExpiryUnknown'
                                           : 'workspaceRuntime.accountResetCreditRestartRequired'
-                                      )}
-                              </span>
-                            </div>
+                                      )
+                              }
+                              title={
+                                nextAccountResetCredit?.expiresAt
+                                  ? formatAbsoluteDateTime(nextAccountResetCredit.expiresAt)
+                                  : t(
+                                      accountUsageSupportsResetCreditDetails
+                                        ? 'workspaceRuntime.accountResetCreditExpiryUnknownDescription'
+                                        : 'workspaceRuntime.accountResetCreditRestartRequiredDescription'
+                                    )
+                              }
+                            />
                           ) : null}
                         </div>
                       ) : null}
@@ -2263,19 +2251,45 @@ function ContextMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * Label/value row shared by the runtime bar's popovers: label flush left, value
+ * flush right in mono digits so a stack of rows reads as an aligned column.
+ * `ContextMetric` stays for the dense two-column grids where labels wrap.
+ */
+function RuntimeMetricRow({
+  label,
+  value,
+  title,
+}: {
+  label: string;
+  value: string;
+  title?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="min-w-0 truncate text-foreground-passive">{label}</span>
+      <span className="text-right font-mono tabular-nums text-foreground" title={title}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+// The UI language is the user's choice; the OS locale is not. Every formatter
+// below reads `i18n.language` so a Chinese UI never renders "05:05 PM".
 function formatPopoverTime(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(
+  return new Intl.DateTimeFormat(i18n.language, { hour: '2-digit', minute: '2-digit' }).format(
     new Date(value)
   );
 }
 
 function formatUsagePeriod(startingAt: string, endingAt: string): string {
-  const formatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+  const formatter = new Intl.DateTimeFormat(i18n.language, { month: 'short', day: 'numeric' });
   return `${formatter.format(new Date(startingAt))} – ${formatter.format(new Date(endingAt))}`;
 }
 
 function formatUsd(value: number): string {
-  return new Intl.NumberFormat(undefined, {
+  return new Intl.NumberFormat(i18n.language, {
     style: 'currency',
     currency: 'USD',
     minimumFractionDigits: value >= 100 ? 0 : 2,
@@ -2288,7 +2302,7 @@ function formatResetCountdown(value: string): string {
     0,
     Math.ceil((new Date(value).getTime() - Date.now()) / 60_000)
   );
-  const formatter = new Intl.RelativeTimeFormat(undefined, {
+  const formatter = new Intl.RelativeTimeFormat(i18n.language, {
     numeric: 'always',
     style: 'short',
   });
@@ -2302,11 +2316,19 @@ function formatResetCountdown(value: string): string {
 }
 
 function formatAccountResetCreditExpiry(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(i18n.language, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+  }).format(new Date(value));
+}
+
+/** Full date + time, for the tooltip behind an abbreviated reading. */
+function formatAbsoluteDateTime(value: string): string {
+  return new Intl.DateTimeFormat(i18n.language, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
   }).format(new Date(value));
 }
 
