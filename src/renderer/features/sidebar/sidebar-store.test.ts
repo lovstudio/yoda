@@ -288,8 +288,25 @@ describe('SidebarStore task recency ordering', () => {
       ])
     ).toEqual(currentDefault);
 
-    // A genuinely customized order keeps its sequence; groups added since it was
-    // stored are appended, and `archived` stays pinned last.
+    // An older default that a previous normalizer already rewrote by appending
+    // the group it did not know about. Still nobody's preference.
+    expect(
+      normalizeSidebarTaskPriorityOrder([
+        'awaiting-input',
+        'error',
+        'completed',
+        'working',
+        'idle',
+        'pending-review',
+        'long-term',
+        'interrupted',
+        'archived',
+      ])
+    ).toEqual(currentDefault);
+
+    // A genuinely customized order keeps its sequence; a group added since it
+    // was stored lands beside its default neighbour rather than at the bottom,
+    // and `archived` stays pinned last.
     expect(
       normalizeSidebarTaskPriorityOrder([
         'working',
@@ -302,6 +319,7 @@ describe('SidebarStore task recency ordering', () => {
         'archived',
       ])
     ).toEqual([
+      'interrupted',
       'working',
       'awaiting-input',
       'error',
@@ -309,7 +327,6 @@ describe('SidebarStore task recency ordering', () => {
       'pending-review',
       'long-term',
       'idle',
-      'interrupted',
       'archived',
     ]);
   });

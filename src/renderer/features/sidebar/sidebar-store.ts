@@ -56,10 +56,10 @@ function parseSidebarBranchDisplay(value: unknown): SidebarBranchDisplay | undef
 
 /**
  * Every default order we have ever shipped. A stored order that still matches
- * one of these is an untouched default, not a user preference, so it is
- * upgraded to the current default wholesale — otherwise a newly added group
- * would land at the bottom of the list for everyone who never reordered.
- * Genuinely customized orders keep their sequence and get new groups appended.
+ * one of these — or the shape an earlier normalizer rewrote one into — is an
+ * untouched default, not a user preference, so it is upgraded to the current
+ * default wholesale. Genuinely customized orders keep their sequence, and any
+ * group added since they were stored is spliced in beside its default neighbour.
  */
 const SUPERSEDED_DEFAULT_SIDEBAR_TASK_PRIORITY_ORDERS: readonly (readonly SidebarTaskPriorityGroup[])[] =
   [
@@ -96,12 +96,51 @@ function matchesSidebarTaskPriorityOrder(
   );
 }
 
-export function normalizeSidebarTaskPriorityOrder(value: unknown): SidebarTaskPriorityGroup[] {
-  if (
-    SUPERSEDED_DEFAULT_SIDEBAR_TASK_PRIORITY_ORDERS.some((order) =>
-      matchesSidebarTaskPriorityOrder(value, order)
+/**
+ * What the previous normalizer turned `order` into: unseen groups appended at
+ * the bottom, `archived` pinned last. Recognizing our own rewrite keeps a
+ * never-reordered list eligible for a wholesale upgrade — otherwise the first
+ * group we ever appended freezes into a preference the user never expressed.
+ */
+function appendedRewriteOf(order: readonly SidebarTaskPriorityGroup[]): SidebarTaskPriorityGroup[] {
+  const kept = order.filter((group) => group !== 'archived');
+  const appended = DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER.filter(
+    (group) => group !== 'archived' && !kept.includes(group)
+  );
+  return [...kept, ...appended, 'archived'];
+}
+
+function isUntouchedSidebarTaskPriorityOrder(value: unknown): boolean {
+  return SUPERSEDED_DEFAULT_SIDEBAR_TASK_PRIORITY_ORDERS.some(
+    (order) =>
+      matchesSidebarTaskPriorityOrder(value, order) ||
+      matchesSidebarTaskPriorityOrder(value, appendedRewriteOf(order))
+  );
+}
+
+/**
+ * Splice a group the stored order has never seen in beside its semantic
+ * neighbour: right before the first group that follows it in the shipped
+ * default and that the user kept. Appending instead would rank a new status
+ * below every existing one — `interrupted` under `idle` — for anyone who had
+ * ever reordered a single group.
+ */
+function insertAtDefaultNeighbour(
+  normalized: SidebarTaskPriorityGroup[],
+  group: SidebarTaskPriorityGroup
+): void {
+  const successors = new Set(
+    DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER.slice(
+      DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER.indexOf(group) + 1
     )
-  ) {
+  );
+  const at = normalized.findIndex((entry) => successors.has(entry));
+  if (at === -1) normalized.push(group);
+  else normalized.splice(at, 0, group);
+}
+
+export function normalizeSidebarTaskPriorityOrder(value: unknown): SidebarTaskPriorityGroup[] {
+  if (isUntouchedSidebarTaskPriorityOrder(value)) {
     return [...DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER];
   }
   const valid = new Set<SidebarTaskPriorityGroup>(SIDEBAR_TASK_PRIORITY_GROUPS);
@@ -118,7 +157,8 @@ export function normalizeSidebarTaskPriorityOrder(value: unknown): SidebarTaskPr
   }
   for (const group of DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER) {
     if (group === 'archived' || seen.has(group)) continue;
-    normalized.push(group);
+    seen.add(group);
+    insertAtDefaultNeighbour(normalized, group);
   }
   normalized.push('archived');
   return normalized;
