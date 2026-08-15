@@ -65,7 +65,7 @@ describe('Workspace runtime bar responsive layout', () => {
   it('keeps secondary context actions behind a compact overflow menu', () => {
     const contextPopover = contextPopoverSource();
 
-    expect(contextPopover).toContain('<DropdownMenu>');
+    expect(contextPopover).toContain('<WorkspaceBarCardMenu>');
     expect(contextPopover).toContain('presentation="menu-item"');
     expect(contextPopover).toContain('<Minimize2');
     expect(contextPopover).not.toContain("t('workspaceRuntime.replyScreenshotDescription')");

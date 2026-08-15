@@ -1,15 +1,16 @@
-import { Cloud, Ellipsis, ScrollText } from 'lucide-react';
+import { Cloud, ScrollText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { MaasGlobalBindingStatus, MaasPlatformId } from '@shared/maas';
 import { MaasGlobalSelector } from '@renderer/features/maas/components/MaasGlobalSelector';
 import { Button } from '@renderer/lib/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@renderer/lib/ui/dropdown-menu';
+import { DropdownMenuItem } from '@renderer/lib/ui/dropdown-menu';
 import { cn } from '@renderer/utils/utils';
+import {
+  WorkspaceBarCardFooter,
+  WorkspaceBarCardHeader,
+  WorkspaceBarCardMenu,
+  WorkspaceBarCardSection,
+} from './workspace-bar-card';
 
 export function WorkspaceMaasPopover({
   binding,
@@ -30,66 +31,44 @@ export function WorkspaceMaasPopover({
       : 'workspaceRuntime.maas.disabled';
 
   return (
-    <div className="p-4">
-      <div className="flex items-start gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/55 bg-background-2 text-foreground shadow-xs">
-          <Cloud aria-hidden className="size-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-3">
-            <div className="truncate text-sm font-medium">{t('workspaceRuntime.maas.title')}</div>
-            <span
-              className={cn(
-                'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium',
-                binding?.effective
-                  ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                  : binding?.enabled
-                    ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                    : 'bg-background-2 text-foreground-muted'
-              )}
-            >
-              {t(statusKey)}
-            </span>
-          </div>
-          <p className="mt-0.5 text-[11px] leading-4 text-foreground-passive">
-            {t('workspaceRuntime.maas.description')}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-4">
-        <div className="mb-1.5 text-[11px] font-medium text-foreground-muted">
-          {t('workspaceRuntime.maas.profile')}
-        </div>
-        <MaasGlobalSelector showSelectedStatus={false} onManagePlatform={onManagePlatform} />
-      </div>
-
-      <div className="mt-4 flex items-center gap-2">
-        <Button type="button" className="min-w-0 flex-1" onClick={onManage}>
-          {t('workspaceRuntime.maas.manageAccount')}
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                type="button"
-                variant="outline"
-                size="icon-sm"
-                title={t('common.more')}
-                aria-label={t('common.more')}
-              />
-            }
+    <>
+      <WorkspaceBarCardHeader
+        icon={Cloud}
+        title={t('workspaceRuntime.maas.title')}
+        titleBadge={
+          <span
+            className={cn(
+              'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium',
+              binding?.effective
+                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                : binding?.enabled
+                  ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                  : 'bg-background-2 text-foreground-muted'
+            )}
           >
-            <Ellipsis aria-hidden className="size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
+            {t(statusKey)}
+          </span>
+        }
+        description={t('workspaceRuntime.maas.description')}
+        actions={
+          <WorkspaceBarCardMenu>
             <DropdownMenuItem onClick={onOpenLogs}>
-              <ScrollText aria-hidden className="size-4" />
+              <ScrollText aria-hidden />
               {t('workspaceRuntime.maas.openLogs')}
             </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
+          </WorkspaceBarCardMenu>
+        }
+      />
+
+      <WorkspaceBarCardSection label={t('workspaceRuntime.maas.profile')}>
+        <MaasGlobalSelector showSelectedStatus={false} onManagePlatform={onManagePlatform} />
+      </WorkspaceBarCardSection>
+
+      <WorkspaceBarCardFooter>
+        <Button type="button" size="sm" variant="outline" className="w-full" onClick={onManage}>
+          {t('workspaceRuntime.maas.manageAccount')}
+        </Button>
+      </WorkspaceBarCardFooter>
+    </>
   );
 }

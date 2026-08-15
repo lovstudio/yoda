@@ -7,6 +7,7 @@ import { SkillQuickSearchPopover } from '@renderer/features/skills/components/Sk
 import { skillsQuickCatalogQueryOptions } from '@renderer/features/skills/skills-query';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { cn } from '@renderer/utils/utils';
+import { WORKSPACE_BAR_CARD_CLASS } from './workspace-bar-card';
 
 interface WorkspaceSkillPopoverProps {
   triggerClassName: string;
@@ -62,7 +63,7 @@ export const WorkspaceSkillPopover = memo(function WorkspaceSkillPopover({
         align="start"
         side="top"
         sideOffset={8}
-        className="w-[26rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+        className={cn(WORKSPACE_BAR_CARD_CLASS, 'w-[26rem]')}
       >
         <SkillQuickSearchPopover
           onInstalled={handleInstalled}

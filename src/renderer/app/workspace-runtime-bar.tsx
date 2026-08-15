@@ -7,7 +7,6 @@ import {
   ClipboardCheck,
   Cloud,
   Copy,
-  Ellipsis,
   ExternalLink,
   Gauge,
   Minimize2,
@@ -61,8 +60,7 @@ import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/tas
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { AgentInfoCard } from '@renderer/lib/components/agent-selector/agent-info-card';
 import type { SessionModelSettings } from '@renderer/lib/components/agent-selector/session-model-editor';
-import { dismissBeforeSynchronousAction } from '@renderer/lib/dismiss-before-synchronous-action';
-import { useDismissOnWindowBlur } from '@renderer/lib/hooks/use-dismiss-on-window-blur';
+import { usePopoverDismiss } from '@renderer/lib/hooks/use-popover-dismiss';
 import { copyTextToClipboard, useToast } from '@renderer/lib/hooks/use-toast';
 import i18n from '@renderer/lib/i18n';
 import { rpc } from '@renderer/lib/ipc';
@@ -71,17 +69,10 @@ import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 import { Button } from '@renderer/lib/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@renderer/lib/ui/dropdown-menu';
+import { DropdownMenuItem, DropdownMenuSeparator } from '@renderer/lib/ui/dropdown-menu';
 import { Input } from '@renderer/lib/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { Switch } from '@renderer/lib/ui/switch';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
@@ -94,6 +85,14 @@ import {
 } from './composer-settings-content';
 import { startRendererPerformanceReporter } from './renderer-performance-reporter';
 import { rankWorkspaceAgentSessions } from './workspace-agent-sessions';
+import {
+  WORKSPACE_BAR_CARD_CLASS,
+  WorkspaceBarCardFooter,
+  WorkspaceBarCardHeader,
+  WorkspaceBarCardMenu,
+  WorkspaceBarCardRow,
+  WorkspaceBarCardSection,
+} from './workspace-bar-card';
 import { WorkspaceMaasPopover } from './workspace-maas-popover';
 import { WorkspaceNotificationCenter } from './workspace-notification-center';
 import { WorkspacePromptPopover } from './workspace-prompt-popover';
@@ -185,26 +184,28 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const [isMaasPopoverOpen, setIsMaasPopoverOpen] = useState(false);
   const [accountUsageWarningThresholdDraft, setAccountUsageWarningThresholdDraft] = useState('95');
   const notifiedAccountUsageWindowsRef = useRef(new Set<string>());
-  const dismissMaasPopover = useCallback(() => setIsMaasPopoverOpen(false), []);
+  const { actionsRef: maasActionsRef, dismissThen: dismissMaasPopoverThen } = usePopoverDismiss(
+    isMaasPopoverOpen,
+    setIsMaasPopoverOpen
+  );
   const openMaasManagement = useCallback(() => {
-    dismissBeforeSynchronousAction(dismissMaasPopover, () => {
+    dismissMaasPopoverThen(() => {
       appState.navigation.navigate('maas');
     });
-  }, [dismissMaasPopover]);
+  }, [dismissMaasPopoverThen]);
   const openMaasPlatform = useCallback(
     (platformId: MaasPlatformId) => {
-      dismissBeforeSynchronousAction(dismissMaasPopover, () => {
+      dismissMaasPopoverThen(() => {
         appState.navigation.navigate('maas', { platformId });
       });
     },
-    [dismissMaasPopover]
+    [dismissMaasPopoverThen]
   );
   const openMaasLogs = useCallback(() => {
-    dismissBeforeSynchronousAction(dismissMaasPopover, () => {
+    dismissMaasPopoverThen(() => {
       appState.sidePane.pinView('settings', { tab: 'ai-logs' });
     });
-  }, [dismissMaasPopover]);
-  useDismissOnWindowBlur(isMaasPopoverOpen, dismissMaasPopover);
+  }, [dismissMaasPopoverThen]);
   const resourceHistory = useSyncExternalStore(
     workspaceResourceHistoryStore.subscribe,
     workspaceResourceHistoryStore.getSnapshot,
@@ -901,15 +902,17 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         align="start"
         side="top"
         sideOffset={8}
-        className="max-h-[min(32rem,calc(100vh-3rem))] w-96 gap-0 overflow-y-auto border border-border bg-background p-0 text-foreground shadow-lg"
+        className={cn(
+          WORKSPACE_BAR_CARD_CLASS,
+          'max-h-[min(32rem,calc(100vh-3rem))] w-96 overflow-y-auto'
+        )}
       >
-        <div className="border-b border-border p-3">
-          <div className="text-sm font-medium">{t('workspaceRuntime.config.title')}</div>
-          <div className="mt-0.5 text-xs text-foreground-passive">
-            {t('workspaceRuntime.config.description')}
-          </div>
-        </div>
-        <div className="p-3">
+        <WorkspaceBarCardHeader
+          icon={Settings2}
+          title={t('workspaceRuntime.config.title')}
+          description={t('workspaceRuntime.config.description')}
+        />
+        <WorkspaceBarCardSection>
           <ComposerSettingsContent
             attachImagesAsPaths={attachImagesField.value}
             inputPromptLanguage={inputPromptLanguageField.value}
@@ -920,7 +923,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             onNamingLanguageChange={namingLanguageField.setValue}
             onSummaryLanguageChange={summaryLanguageField.setValue}
           />
-        </div>
+        </WorkspaceBarCardSection>
       </PopoverContent>
     </Popover>
   );
@@ -980,7 +983,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               align="start"
               side="top"
               sideOffset={8}
-              className="w-auto border border-border bg-background p-0 text-foreground shadow-lg"
+              className="w-auto border-0 bg-transparent p-0 ring-0 shadow-none"
             >
               <AgentInfoCard
                 id={runtimeId}
@@ -1051,44 +1054,15 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   align="start"
                   side="top"
                   sideOffset={8}
-                  className="w-72 max-w-[calc(100vw-1rem)] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+                  className={cn(WORKSPACE_BAR_CARD_CLASS, 'w-72 max-w-[calc(100vw-1rem)]')}
                 >
-                  <div className="flex items-start justify-between gap-2 p-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium">
-                        {t('workspaceRuntime.contextPopoverTitle')}
-                      </div>
-                      <div className="mt-0.5 text-xs text-foreground-passive">
-                        {t('workspaceRuntime.contextPopoverDescription')}
-                      </div>
-                    </div>
-                    {canCaptureLatestReply || canCompactContext ? (
-                      <DropdownMenu>
-                        <Tooltip>
-                          <TooltipTrigger render={<span className="-mr-1 inline-flex" />}>
-                            <DropdownMenuTrigger
-                              render={
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  aria-label={t('common.more')}
-                                />
-                              }
-                            >
-                              <Ellipsis className="size-4" />
-                            </DropdownMenuTrigger>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" sideOffset={8}>
-                            {t('common.more')}
-                          </TooltipContent>
-                        </Tooltip>
-                        <DropdownMenuContent
-                          align="end"
-                          side="bottom"
-                          sideOffset={6}
-                          className="w-52"
-                        >
+                  <WorkspaceBarCardHeader
+                    icon={Brain}
+                    title={t('workspaceRuntime.contextPopoverTitle')}
+                    description={t('workspaceRuntime.contextPopoverDescription')}
+                    actions={
+                      canCaptureLatestReply || canCompactContext ? (
+                        <WorkspaceBarCardMenu>
                           {activeConversationId && params?.projectId && params.taskId ? (
                             <LatestReplyScreenshotButton
                               projectId={params.projectId}
@@ -1111,11 +1085,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                                 : t('workspaceRuntime.compactContext')}
                             </DropdownMenuItem>
                           ) : null}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-col gap-1.5 border-t border-border p-3">
+                        </WorkspaceBarCardMenu>
+                      ) : null
+                    }
+                  />
+                  <WorkspaceBarCardSection className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between gap-3 text-xs">
                       <span className="font-mono tabular-nums text-foreground">
                         {formatCompactNumber(sessionContext.usedTokens)} /{' '}
@@ -1131,8 +1105,8 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                         value: formatCompactNumber(contextRemaining ?? 0),
                       })}
                     </span>
-                  </div>
-                  <div className="flex flex-col gap-1.5 border-t border-border p-3 text-xs">
+                  </WorkspaceBarCardSection>
+                  <WorkspaceBarCardSection className="flex flex-col gap-1.5 text-xs">
                     <RuntimeMetricRow
                       label={t('workspaceRuntime.sessionTokenTotalLabel')}
                       value={sessionTokens ? formatCompactNumber(sessionTokens.total) : '—'}
@@ -1147,24 +1121,22 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                         value={formatPopoverTime(sessionContext.lastResetAt)}
                       />
                     ) : null}
-                  </div>
+                  </WorkspaceBarCardSection>
                   {activeConversationId ? (
-                    <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2.5 text-xs">
-                      <div className="min-w-0">
-                        <div className="text-foreground">
-                          {t('workspaceRuntime.sessionHistoryVisibility')}
-                        </div>
-                        <div className="mt-0.5 text-[11px] text-foreground-passive">
-                          {t('workspaceRuntime.sessionHistoryVisibilityDescription')}
-                        </div>
-                      </div>
-                      <Switch
-                        size="sm"
-                        checked={sessionHistoryDocked}
-                        onCheckedChange={toggleSessionHistoryDock}
-                        aria-label={t('workspaceRuntime.sessionHistoryVisibility')}
+                    <WorkspaceBarCardSection>
+                      <WorkspaceBarCardRow
+                        label={t('workspaceRuntime.sessionHistoryVisibility')}
+                        description={t('workspaceRuntime.sessionHistoryVisibilityDescription')}
+                        control={
+                          <Switch
+                            size="sm"
+                            checked={sessionHistoryDocked}
+                            onCheckedChange={toggleSessionHistoryDock}
+                            aria-label={t('workspaceRuntime.sessionHistoryVisibility')}
+                          />
+                        }
                       />
-                    </div>
+                    </WorkspaceBarCardSection>
                   ) : null}
                 </PopoverContent>
               </Popover>
@@ -1199,7 +1171,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   align="start"
                   side="top"
                   sideOffset={8}
-                  className="w-72 gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+                  className={cn(WORKSPACE_BAR_CARD_CLASS, 'w-72')}
                 >
                   {maasActiveForRuntime ? (
                     <WorkspaceMaasUsageContent
@@ -1217,40 +1189,32 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                     />
                   ) : (
                     <>
-                      <div className="p-3">
-                        <div className="text-sm font-medium">
-                          {t('workspaceRuntime.accountUsage')}
-                        </div>
-                        <div className="mt-0.5 text-xs text-foreground-passive">
-                          {t('workspaceRuntime.accountUsageDescription')}
-                        </div>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                          <a
-                            href={YODA_ACCOUNT_USAGE_DOC_URL}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex shrink-0 items-center gap-1 text-xs text-foreground-muted underline-offset-2 hover:text-foreground hover:underline"
-                          >
-                            {t('workspaceRuntime.accountDocs')}
-                            <ExternalLink aria-hidden className="size-3" />
-                          </a>
-                          {officialUsageUrl ? (
-                            <a
-                              href={officialUsageUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex shrink-0 items-center gap-1 text-xs text-foreground-muted underline-offset-2 hover:text-foreground hover:underline"
+                      <WorkspaceBarCardHeader
+                        icon={Gauge}
+                        title={t('workspaceRuntime.accountUsage')}
+                        description={t('workspaceRuntime.accountUsageDescription')}
+                        actions={
+                          <WorkspaceBarCardMenu>
+                            <DropdownMenuItem
+                              onClick={() => void rpc.app.openExternal(YODA_ACCOUNT_USAGE_DOC_URL)}
                             >
-                              {t('workspaceRuntime.officialAccountUsage', {
-                                name: runtime?.name ?? runtimeId,
-                              })}
-                              <ExternalLink aria-hidden className="size-3" />
-                            </a>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="border-t border-border" />
-                      <div className="flex flex-col gap-3 p-3">
+                              <ExternalLink aria-hidden />
+                              {t('workspaceRuntime.accountDocs')}
+                            </DropdownMenuItem>
+                            {officialUsageUrl ? (
+                              <DropdownMenuItem
+                                onClick={() => void rpc.app.openExternal(officialUsageUrl)}
+                              >
+                                <ExternalLink aria-hidden />
+                                {t('workspaceRuntime.officialAccountUsage', {
+                                  name: runtime?.name ?? runtimeId,
+                                })}
+                              </DropdownMenuItem>
+                            ) : null}
+                          </WorkspaceBarCardMenu>
+                        }
+                      />
+                      <WorkspaceBarCardSection className="flex flex-col gap-3">
                         {accountRateLimits.map((limit) => {
                           const percent = Math.round(limit.usedPercent);
                           const windowLabel = getQuotaWindowLabel(limit.windowMinutes);
@@ -1278,69 +1242,69 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                             </div>
                           );
                         })}
-                      </div>
+                      </WorkspaceBarCardSection>
                       {runtimeId === 'codex' && !connectionId ? (
-                        <div className="border-t border-border p-3 text-xs">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="text-foreground">
-                                {t('workspaceRuntime.accountUsageWarning')}
-                              </div>
-                              <div className="mt-0.5 text-[11px] text-foreground-passive">
-                                {t('workspaceRuntime.accountUsageWarningDescription')}
-                              </div>
-                            </div>
-                            <Switch
-                              size="sm"
-                              checked={accountUsageWarningEnabled}
-                              onCheckedChange={(enabled) =>
-                                updateNotificationSettings({ accountUsageWarningEnabled: enabled })
-                              }
-                              aria-label={t('workspaceRuntime.accountUsageWarning')}
-                            />
-                          </div>
+                        <WorkspaceBarCardSection>
+                          <WorkspaceBarCardRow
+                            label={t('workspaceRuntime.accountUsageWarning')}
+                            description={t('workspaceRuntime.accountUsageWarningDescription')}
+                            control={
+                              <Switch
+                                size="sm"
+                                checked={accountUsageWarningEnabled}
+                                onCheckedChange={(enabled) =>
+                                  updateNotificationSettings({
+                                    accountUsageWarningEnabled: enabled,
+                                  })
+                                }
+                                aria-label={t('workspaceRuntime.accountUsageWarning')}
+                              />
+                            }
+                          />
                           {accountUsageWarningEnabled ? (
-                            <div className="mt-2.5 flex items-center justify-between gap-3">
-                              <label
-                                htmlFor="account-usage-warning-threshold"
-                                className="text-foreground-muted"
-                              >
-                                {t('workspaceRuntime.accountUsageWarningThreshold')}
-                              </label>
-                              <div className="flex items-center gap-1.5">
-                                <Input
-                                  id="account-usage-warning-threshold"
-                                  type="number"
-                                  min={1}
-                                  max={100}
-                                  step={1}
-                                  value={accountUsageWarningThresholdDraft}
-                                  className="h-7 w-16 text-right font-mono tabular-nums"
-                                  onChange={(event) =>
-                                    setAccountUsageWarningThresholdDraft(event.target.value)
-                                  }
-                                  onBlur={commitAccountUsageWarningThreshold}
-                                  onKeyDown={(event) => {
-                                    if (event.key === 'Enter') {
-                                      event.currentTarget.blur();
-                                      return;
+                            <WorkspaceBarCardRow
+                              className="mt-2.5"
+                              label={
+                                <label htmlFor="account-usage-warning-threshold">
+                                  {t('workspaceRuntime.accountUsageWarningThreshold')}
+                                </label>
+                              }
+                              control={
+                                <>
+                                  <Input
+                                    id="account-usage-warning-threshold"
+                                    type="number"
+                                    min={1}
+                                    max={100}
+                                    step={1}
+                                    value={accountUsageWarningThresholdDraft}
+                                    className="h-7 w-16 text-right font-mono tabular-nums"
+                                    onChange={(event) =>
+                                      setAccountUsageWarningThresholdDraft(event.target.value)
                                     }
-                                    if (event.key === 'Escape') {
-                                      setAccountUsageWarningThresholdDraft(
-                                        String(accountUsageWarningThreshold)
-                                      );
-                                      event.currentTarget.blur();
-                                    }
-                                  }}
-                                />
-                                <span className="text-foreground-passive">%</span>
-                              </div>
-                            </div>
+                                    onBlur={commitAccountUsageWarningThreshold}
+                                    onKeyDown={(event) => {
+                                      if (event.key === 'Enter') {
+                                        event.currentTarget.blur();
+                                        return;
+                                      }
+                                      if (event.key === 'Escape') {
+                                        setAccountUsageWarningThresholdDraft(
+                                          String(accountUsageWarningThreshold)
+                                        );
+                                        event.currentTarget.blur();
+                                      }
+                                    }}
+                                  />
+                                  <span className="text-xs text-foreground-passive">%</span>
+                                </>
+                              }
+                            />
                           ) : null}
-                        </div>
+                        </WorkspaceBarCardSection>
                       ) : null}
                       {runtimeId === 'codex' && !connectionId ? (
-                        <div className="flex flex-col gap-1.5 border-t border-border px-3 py-2.5 text-xs">
+                        <WorkspaceBarCardSection className="flex flex-col gap-1.5 text-xs">
                           <RuntimeMetricRow
                             label={t('workspaceRuntime.accountResetCredits')}
                             value={
@@ -1383,9 +1347,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                               }
                             />
                           ) : null}
-                        </div>
+                        </WorkspaceBarCardSection>
                       ) : null}
-                      <div className="border-t border-border p-3">
+                      <WorkspaceBarCardFooter>
                         <p className="mb-2 text-[11px] leading-relaxed text-foreground-passive">
                           {t('workspaceRuntime.accountQuotaResetDescription')}
                         </p>
@@ -1419,7 +1383,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                             </Button>
                           ) : null}
                         </div>
-                      </div>
+                      </WorkspaceBarCardFooter>
                     </>
                   )}
                 </PopoverContent>
@@ -1479,14 +1443,13 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           align="end"
           side="top"
           sideOffset={8}
-          className="w-[440px] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+          className={cn(WORKSPACE_BAR_CARD_CLASS, 'w-[440px]')}
         >
-          <div className="border-b border-border p-3">
-            <div className="text-sm font-medium">{t('workspaceRuntime.agents.title')}</div>
-            <div className="mt-0.5 text-xs text-foreground-passive">
-              {t('workspaceRuntime.agents.description')}
-            </div>
-          </div>
+          <WorkspaceBarCardHeader
+            icon={Bot}
+            title={t('workspaceRuntime.agents.title')}
+            description={t('workspaceRuntime.agents.description')}
+          />
           <div className="grid grid-cols-4 gap-px bg-border">
             <WorkspaceResourceMetric
               label={t('workspaceRuntime.agents.sessions')}
@@ -1681,7 +1644,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               {t('workspaceRuntime.agents.pendingAcceptanceEmpty')}
             </div>
           )}
-          <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2.5">
+          <WorkspaceBarCardFooter className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="text-[11px] text-foreground-muted">
                 {isScanningTmux && !tmuxReclamation
@@ -1709,10 +1672,14 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   : t('workspaceRuntime.agents.reclaim')}
               </Button>
             ) : null}
-          </div>
+          </WorkspaceBarCardFooter>
         </PopoverContent>
       </Popover>
-      <Popover open={isMaasPopoverOpen} onOpenChange={setIsMaasPopoverOpen}>
+      <Popover
+        open={isMaasPopoverOpen}
+        onOpenChange={setIsMaasPopoverOpen}
+        actionsRef={maasActionsRef}
+      >
         <PopoverTrigger
           aria-label={maasTriggerLabel}
           className={cn(
@@ -1754,7 +1721,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             align="end"
             side="top"
             sideOffset={8}
-            className="w-[21rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+            className={cn(WORKSPACE_BAR_CARD_CLASS, 'w-[21rem]')}
           >
             <WorkspaceMaasPopover
               binding={globalMaasBinding.data}
@@ -1780,14 +1747,13 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           align="end"
           side="top"
           sideOffset={8}
-          className="w-[420px] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+          className={cn(WORKSPACE_BAR_CARD_CLASS, 'w-[420px]')}
         >
-          <div className="border-b border-border p-3">
-            <div className="text-sm font-medium">{t('workspaceRuntime.resources.title')}</div>
-            <div className="mt-0.5 text-xs text-foreground-passive">
-              {t('workspaceRuntime.resources.description')}
-            </div>
-          </div>
+          <WorkspaceBarCardHeader
+            icon={Activity}
+            title={t('workspaceRuntime.resources.title')}
+            description={t('workspaceRuntime.resources.description')}
+          />
           <div className="grid grid-cols-2 gap-px bg-border">
             <WorkspaceResourceMetric
               label={t('workspaceRuntime.resources.cpu')}
@@ -1869,7 +1835,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               align="end"
               side="top"
               sideOffset={8}
-              className="w-[30rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+              className={cn(WORKSPACE_BAR_CARD_CLASS, 'w-[30rem]')}
             >
               <WorkspaceTrajectoryPopover
                 trajectories={taskOpenTrajectories}
@@ -1980,38 +1946,31 @@ function WorkspaceMaasUsageContent({
 
   return (
     <>
-      <div className="p-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            {websiteUrl ? (
-              <button
-                type="button"
-                title={websiteUrl}
-                aria-label={t('workspaceRuntime.maasUsageOpenWebsite', { provider: providerName })}
-                className="inline-flex min-w-0 max-w-full items-center gap-1 truncate text-left text-sm font-medium underline-offset-2 hover:text-foreground-muted hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
-                onClick={() => void rpc.app.openExternal(websiteUrl)}
-              >
-                <span className="truncate">
-                  {t('workspaceRuntime.maasUsageTitle', { provider: providerName })}
-                </span>
-                <ExternalLink aria-hidden className="size-3 shrink-0" />
-              </button>
-            ) : (
-              <div className="truncate text-sm font-medium">
-                {t('workspaceRuntime.maasUsageTitle', { provider: providerName })}
-              </div>
-            )}
-            <div className="mt-0.5 text-xs leading-relaxed text-foreground-passive">
-              {t('workspaceRuntime.maasUsageDescription', { provider: providerName })}
-            </div>
-          </div>
+      <WorkspaceBarCardHeader
+        icon={Gauge}
+        title={t('workspaceRuntime.maasUsageTitle', { provider: providerName })}
+        titleBadge={
           <span className="shrink-0 rounded-full border border-border bg-background-secondary px-2 py-0.5 text-[10px] text-foreground-muted">
             {sourceLabel}
           </span>
-        </div>
-      </div>
+        }
+        description={t('workspaceRuntime.maasUsageDescription', { provider: providerName })}
+        actions={
+          websiteUrl ? (
+            <WorkspaceBarCardMenu>
+              <DropdownMenuItem
+                onClick={() => void rpc.app.openExternal(websiteUrl)}
+                title={websiteUrl}
+              >
+                <ExternalLink aria-hidden />
+                {t('workspaceRuntime.maasUsageOpenWebsite', { provider: providerName })}
+              </DropdownMenuItem>
+            </WorkspaceBarCardMenu>
+          ) : null
+        }
+      />
 
-      <div className="border-t border-border p-3">
+      <WorkspaceBarCardSection>
         {loading && !usage ? (
           <div className="flex items-center gap-2 text-xs text-foreground-passive">
             <RefreshCw aria-hidden className="size-3.5 animate-spin" />
@@ -2143,9 +2102,9 @@ function WorkspaceMaasUsageContent({
             ) : null}
           </div>
         )}
-      </div>
+      </WorkspaceBarCardSection>
 
-      <div className="border-t border-border px-3 py-2.5">
+      <WorkspaceBarCardFooter>
         <div className="flex items-center justify-between gap-3 text-[11px] text-foreground-passive">
           <span className="min-w-0 truncate">
             {usage?.period
@@ -2181,7 +2140,7 @@ function WorkspaceMaasUsageContent({
             {t('workspaceRuntime.maasUsageManage')}
           </Button>
         </div>
-      </div>
+      </WorkspaceBarCardFooter>
     </>
   );
 }

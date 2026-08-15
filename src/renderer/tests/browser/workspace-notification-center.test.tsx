@@ -139,9 +139,13 @@ describe('WorkspaceNotificationCenter', () => {
     await act(async () =>
       host.querySelector<HTMLButtonElement>('[aria-label="Notifications 1"]')?.click()
     );
+    const overflowTrigger = document.querySelector<HTMLButtonElement>('[aria-label="common.more"]');
+    expect(overflowTrigger).not.toBeNull();
+    await act(async () => overflowTrigger?.click());
     const markAllReadButton = Array.from(
-      document.querySelectorAll<HTMLButtonElement>('button')
-    ).find((button) => button.textContent?.includes('workspaceRuntime.notifications.markAllRead'));
+      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+    ).find((item) => item.textContent?.includes('workspaceRuntime.notifications.markAllRead'));
+    expect(markAllReadButton).toBeDefined();
     await act(async () => markAllReadButton?.click());
     expect(workspaceNotificationStore.getSnapshot()[0].readAt).not.toBeNull();
     expect(host.querySelector('[aria-label="Notifications 0"]')).not.toBeNull();

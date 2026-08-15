@@ -1,19 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Blocks,
   Check,
   Download,
   ExternalLink,
   Loader2,
   Search,
   SlidersHorizontal,
-  Sparkles,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CatalogSkill, ClawHubSkillSearchResult } from '@shared/skills/types';
+import {
+  WorkspaceBarCardHeader,
+  WorkspaceBarCardMenu,
+  WorkspaceBarCardSection,
+} from '@renderer/app/workspace-bar-card';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
+import { DropdownMenuItem } from '@renderer/lib/ui/dropdown-menu';
 import { Input } from '@renderer/lib/ui/input';
 import { cn } from '@renderer/utils/utils';
 import { filterInstalledSkills, hasInstalledRuntimeName } from '../skill-quick-search';
@@ -104,30 +110,21 @@ export function SkillQuickSearchPopover({
 
   return (
     <div className="flex min-h-0 flex-col">
-      <div className="border-b border-border p-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <Sparkles className="size-4 shrink-0 text-foreground-muted" />
-            <div className="min-w-0">
-              <div className="text-sm font-medium">{t('skills.quickSearch.title')}</div>
-              <div className="truncate text-[11px] text-foreground-passive">
-                {t('skills.quickSearch.description')}
-              </div>
-            </div>
-          </div>
-          <Button
-            aria-label={t('skills.quickSearch.manageAll')}
-            className="shrink-0"
-            size="icon-xs"
-            title={t('skills.quickSearch.manageAll')}
-            type="button"
-            variant="ghost"
-            onClick={onManageSkills}
-          >
-            <SlidersHorizontal className="size-3.5" />
-          </Button>
-        </div>
-        <div className="relative mt-3">
+      <WorkspaceBarCardHeader
+        icon={Blocks}
+        title={t('skills.quickSearch.title')}
+        description={t('skills.quickSearch.description')}
+        actions={
+          <WorkspaceBarCardMenu>
+            <DropdownMenuItem onClick={onManageSkills}>
+              <SlidersHorizontal aria-hidden />
+              {t('skills.quickSearch.manageAll')}
+            </DropdownMenuItem>
+          </WorkspaceBarCardMenu>
+        }
+      />
+      <WorkspaceBarCardSection>
+        <div className="relative">
           <Search
             aria-hidden
             className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-foreground-passive"
@@ -144,7 +141,7 @@ export function SkillQuickSearchPopover({
             }}
           />
         </div>
-      </div>
+      </WorkspaceBarCardSection>
 
       <div className="min-h-0 max-h-[28rem] overflow-y-auto">
         <section aria-labelledby="local-skills-heading" className="p-2">

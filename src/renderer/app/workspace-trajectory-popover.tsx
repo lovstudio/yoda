@@ -1,4 +1,4 @@
-import { Ellipsis, Trash2 } from 'lucide-react';
+import { Copy, Timer, Trash2 } from 'lucide-react';
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMcps } from '@renderer/features/mcp/components/useMcps';
@@ -19,15 +19,14 @@ import {
 } from '@renderer/features/tasks/task-open-trajectory-lanes';
 import { copyTextToClipboard, useToast } from '@renderer/lib/hooks/use-toast';
 import { appState } from '@renderer/lib/stores/app-state';
-import { Button } from '@renderer/lib/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@renderer/lib/ui/dropdown-menu';
+import { DropdownMenuItem, DropdownMenuSeparator } from '@renderer/lib/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
+import {
+  WorkspaceBarCardHeader,
+  WorkspaceBarCardMenu,
+  WorkspaceBarCardSection,
+} from './workspace-bar-card';
 
 export function useTaskOpenTrajectories(): TaskOpenTrajectory[] {
   return useSyncExternalStore(subscribeTaskOpenTrajectories, getTaskOpenTrajectories);
@@ -293,9 +292,18 @@ export function WorkspaceTrajectoryPopover({
 
   if (!selected || !analysis) {
     return (
-      <div className="p-4 text-xs text-foreground-passive">
-        {t('workspaceRuntime.trajectory.empty')}
-      </div>
+      <>
+        <WorkspaceBarCardHeader
+          icon={Timer}
+          title={t('workspaceRuntime.trajectory.title')}
+          description={t('workspaceRuntime.trajectory.description')}
+        />
+        <WorkspaceBarCardSection>
+          <p className="text-xs text-foreground-passive">
+            {t('workspaceRuntime.trajectory.empty')}
+          </p>
+        </WorkspaceBarCardSection>
+      </>
     );
   }
 
@@ -304,12 +312,48 @@ export function WorkspaceTrajectoryPopover({
 
   return (
     <>
-      <div className="flex items-start justify-between gap-2 border-b border-border p-3">
+      <WorkspaceBarCardHeader
+        icon={Timer}
+        title={t('workspaceRuntime.trajectory.title')}
+        description={t('workspaceRuntime.trajectory.description')}
+        actions={
+          <WorkspaceBarCardMenu>
+            <DropdownMenuItem
+              onClick={() => {
+                void copyTextToClipboard(JSON.stringify(selected, null, 2)).then(
+                  () => toast({ title: t('workspaceRuntime.trajectory.copied') }),
+                  () =>
+                    toast({
+                      title: t('workspaceRuntime.trajectory.copyFailed'),
+                      variant: 'destructive',
+                    })
+                );
+              }}
+            >
+              <Copy />
+              {t('workspaceRuntime.trajectory.copy')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => {
+                clearTaskOpenTrajectories();
+                setSelectedContextId(null);
+              }}
+            >
+              <Trash2 />
+              {t('workspaceRuntime.trajectory.clear')}
+            </DropdownMenuItem>
+          </WorkspaceBarCardMenu>
+        }
+      />
+
+      <WorkspaceBarCardSection>
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium">
-            {taskName ?? t('workspaceRuntime.trajectory.title')}
+          <div className="truncate text-xs font-medium text-foreground">
+            {taskName ?? t('workspaceRuntime.trajectory.unnamedTask')}
           </div>
-          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-foreground-passive">
+          <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-foreground-passive">
             <span className="font-mono tabular-nums">
               {selected.totalMs === null ? '—' : formatTrajectoryDuration(selected.totalMs)}
             </span>
@@ -332,48 +376,7 @@ export function WorkspaceTrajectoryPopover({
             ) : null}
           </div>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t('common.more')}
-                className="shrink-0"
-              />
-            }
-          >
-            <Ellipsis className="size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" side="bottom" sideOffset={6} className="w-52">
-            <DropdownMenuItem
-              onClick={() => {
-                void copyTextToClipboard(JSON.stringify(selected, null, 2)).then(
-                  () => toast({ title: t('workspaceRuntime.trajectory.copied') }),
-                  () =>
-                    toast({
-                      title: t('workspaceRuntime.trajectory.copyFailed'),
-                      variant: 'destructive',
-                    })
-                );
-              }}
-            >
-              {t('workspaceRuntime.trajectory.copy')}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                clearTaskOpenTrajectories();
-                setSelectedContextId(null);
-              }}
-            >
-              <Trash2 />
-              {t('workspaceRuntime.trajectory.clear')}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
+      </WorkspaceBarCardSection>
       <div className="relative px-3 py-2">
         <GapBands gaps={analysis.gaps} spanMs={analysis.spanMs} />
         <div className="relative space-y-1.5">

@@ -130,7 +130,7 @@ export const AgentInfoCard: React.FC<Props> = ({
   };
 
   return (
-    <div className="w-[min(24rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] rounded-lg border border-border bg-background p-3 text-foreground shadow-md">
+    <div className="w-[min(24rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] rounded-md border border-border bg-background p-3 text-foreground shadow-lg">
       <div className="mb-2 flex items-start gap-2">
         <AgentLogo
           logo={config.logo}

@@ -35,7 +35,7 @@ describe('Workspace runtime bar prompt group', () => {
     expect(promptPopoverSource).toContain('value="project"');
     expect(promptPopoverSource).toContain('value="enterprise"');
     expect(promptPopoverSource).not.toContain('<PromptScopeSummary');
-    expect(promptPopoverSource).not.toContain('workspaceRuntime.prompt.description');
+    expect(promptPopoverSource).toContain("t('workspaceRuntime.prompt.description'");
     expect(promptPopoverSource).toContain("t('workspaceRuntime.prompt.dynamicTitle')");
     expect(promptPopoverSource).toContain('h-[min(80vh,35rem)]');
     expect(promptPopoverSource).toContain('w-[min(26rem,calc(100vw-1rem))]');

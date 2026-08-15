@@ -12,10 +12,9 @@ import {
   MoreHorizontal,
   Trash2,
 } from 'lucide-react';
-import { useCallback, useState, useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { dismissBeforeSynchronousAction } from '@renderer/lib/dismiss-before-synchronous-action';
-import { useDismissOnWindowBlur } from '@renderer/lib/hooks/use-dismiss-on-window-blur';
+import { usePopoverDismiss } from '@renderer/lib/hooks/use-popover-dismiss';
 import { copyTextToClipboard, useToast } from '@renderer/lib/hooks/use-toast';
 import {
   workspaceNotificationStore,
@@ -34,6 +33,11 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { cn } from '@renderer/utils/utils';
+import {
+  WORKSPACE_BAR_CARD_CLASS,
+  WorkspaceBarCardHeader,
+  WorkspaceBarCardMenu,
+} from './workspace-bar-card';
 
 type WorkspaceNotificationCenterProps = {
   triggerClassName: string;
@@ -56,13 +60,13 @@ export function WorkspaceNotificationCenter({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = notifications.find((notification) => notification.id === selectedId) ?? null;
   const unreadCount = notifications.filter((notification) => notification.readAt === null).length;
-  const dismissPanel = useCallback(() => setOpen(false), []);
-  useDismissOnWindowBlur(open, dismissPanel);
+  const { actionsRef, dismissThen } = usePopoverDismiss(open, setOpen);
 
   return (
     <Popover
       open={open}
       onOpenChange={setOpen}
+      actionsRef={actionsRef}
       // Reset the selection only once the popup is gone, so closing from the
       // details view fades out the details instead of flashing the list.
       onOpenChangeComplete={(nextOpen) => {
@@ -93,7 +97,7 @@ export function WorkspaceNotificationCenter({
         align="end"
         side="top"
         sideOffset={8}
-        className="w-[min(26rem,calc(100vw-1rem))] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+        className={cn(WORKSPACE_BAR_CARD_CLASS, 'w-[min(26rem,calc(100vw-1rem))]')}
       >
         {selected ? (
           <NotificationDetails
@@ -103,7 +107,7 @@ export function WorkspaceNotificationCenter({
               workspaceNotificationStore.remove(selected.id);
               setSelectedId(null);
             }}
-            onDismiss={dismissPanel}
+            onDismissThen={dismissThen}
             onOpenTarget={onOpenTarget}
           />
         ) : (
@@ -144,29 +148,32 @@ function NotificationList({
 
   return (
     <>
-      <div className="flex items-start gap-3 border-b border-border p-3">
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium">{t('workspaceRuntime.notifications.title')}</div>
-          <div className="mt-0.5 text-xs text-foreground-passive">
-            {notifications.length > 0
-              ? unreadCount > 0
-                ? t('workspaceRuntime.notifications.summary', {
-                    unread: unreadCount,
-                    total: notifications.length,
-                  })
-                : t('workspaceRuntime.notifications.allReadSummary', {
-                    total: notifications.length,
-                  })
-              : t('workspaceRuntime.notifications.description')}
-          </div>
-        </div>
-        {unreadCount > 0 ? (
-          <Button type="button" variant="ghost" size="xs" onClick={onMarkAllRead}>
-            <CheckCheck aria-hidden />
-            {t('workspaceRuntime.notifications.markAllRead')}
-          </Button>
-        ) : null}
-      </div>
+      <WorkspaceBarCardHeader
+        icon={Bell}
+        title={t('workspaceRuntime.notifications.title')}
+        description={
+          notifications.length > 0
+            ? unreadCount > 0
+              ? t('workspaceRuntime.notifications.summary', {
+                  unread: unreadCount,
+                  total: notifications.length,
+                })
+              : t('workspaceRuntime.notifications.allReadSummary', {
+                  total: notifications.length,
+                })
+            : t('workspaceRuntime.notifications.description')
+        }
+        actions={
+          unreadCount > 0 ? (
+            <WorkspaceBarCardMenu>
+              <DropdownMenuItem onClick={onMarkAllRead}>
+                <CheckCheck aria-hidden />
+                {t('workspaceRuntime.notifications.markAllRead')}
+              </DropdownMenuItem>
+            </WorkspaceBarCardMenu>
+          ) : null
+        }
+      />
       {notifications.length > 0 ? (
         <div className="max-h-[min(26rem,calc(100vh-6rem))] overflow-y-auto p-1.5">
           {notifications.map((notification) => (
@@ -260,13 +267,13 @@ function NotificationDetails({
   notification,
   onBack,
   onDelete,
-  onDismiss,
+  onDismissThen,
   onOpenTarget,
 }: {
   notification: WorkspaceNotification;
   onBack: () => void;
   onDelete: () => void;
-  onDismiss: () => void;
+  onDismissThen: (action: () => void) => void;
   onOpenTarget: (target: WorkspaceNotificationTarget) => void;
 }) {
   const { t } = useTranslation();
@@ -314,10 +321,10 @@ function NotificationDetails({
             size="sm"
             className="mt-3 w-full"
             onClick={(event) => {
-              // The panel must be gone before the handler runs: both branches
-              // navigate or focus something synchronously, and a queued close
-              // would otherwise leave the popup floating over the destination.
-              dismissBeforeSynchronousAction(onDismiss, () => {
+              // Both branches navigate or focus something synchronously, so the
+              // popup has to be gone first — a queued close would leave it
+              // floating over the destination.
+              onDismissThen(() => {
                 if (action) {
                   workspaceNotificationStore.invokeAction(notification.id, event);
                 } else if (notification.target) {

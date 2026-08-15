@@ -131,6 +131,9 @@ describe('SkillQuickSearchPopover', () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     queryClient.clear();
+    document
+      .querySelectorAll('[data-slot="dropdown-menu-content"]')
+      .forEach((node) => node.remove());
     host.remove();
   });
 
@@ -156,11 +159,15 @@ describe('SkillQuickSearchPopover', () => {
     expect(mocks.getCatalog).toHaveBeenCalledWith({ lightweight: true });
     expect(mocks.searchClawHub).not.toHaveBeenCalled();
 
-    const manageButton = host.querySelector<HTMLButtonElement>(
-      'button[aria-label="skills.quickSearch.manageAll"]'
-    );
-    expect(manageButton).not.toBeNull();
-    await act(async () => manageButton?.click());
+    const moreButton = host.querySelector<HTMLButtonElement>('button[aria-label="common.more"]');
+    expect(moreButton).not.toBeNull();
+    await act(async () => moreButton?.click());
+    await settle();
+    const manageItem = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+    ).find((item) => item.textContent?.includes('skills.quickSearch.manageAll'));
+    expect(manageItem).not.toBeUndefined();
+    await act(async () => manageItem?.click());
     expect(mocks.onManageSkills).toHaveBeenCalledOnce();
 
     const input = host.querySelector<HTMLInputElement>('input');

@@ -25,12 +25,18 @@ import {
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
+import { DropdownMenuItem } from '@renderer/lib/ui/dropdown-menu';
 import { Input } from '@renderer/lib/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab } from '@renderer/lib/ui/tabs';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
+import {
+  WORKSPACE_BAR_CARD_CLASS,
+  WorkspaceBarCardHeader,
+  WorkspaceBarCardMenu,
+} from './workspace-bar-card';
 
 type PromptScope = 'user' | 'project' | 'enterprise';
 
@@ -90,29 +96,29 @@ export const WorkspacePromptPopover = observer(function WorkspacePromptPopover({
           align="start"
           side="top"
           sideOffset={8}
-          className="flex h-[min(80vh,35rem)] max-h-[calc(100vh-1rem)] min-h-0 w-[min(26rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] flex-col gap-0 overflow-hidden border border-border bg-background p-0 text-foreground shadow-lg"
+          className={cn(
+            WORKSPACE_BAR_CARD_CLASS,
+            'flex h-[min(80vh,35rem)] max-h-[calc(100vh-1rem)] min-h-0 w-[min(26rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] flex-col overflow-hidden'
+          )}
         >
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-2.5">
-            <div className="flex min-w-0 items-center gap-2">
-              <TextQuote className="size-4 shrink-0 text-foreground-muted" />
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <div className="text-sm font-medium">{t('workspaceRuntime.prompt.title')}</div>
-                <Badge variant="outline" className="shrink-0 text-[10px]">
-                  {runtimeName}
-                </Badge>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="xs"
-              className="shrink-0"
-              onClick={handleOpenLibrary}
-            >
-              <ArrowUpRight className="size-3.5" />
-              {t('workspaceRuntime.prompt.manageLibrary')}
-            </Button>
-          </div>
+          <WorkspaceBarCardHeader
+            icon={TextQuote}
+            title={t('workspaceRuntime.prompt.title')}
+            titleBadge={
+              <Badge variant="outline" className="shrink-0 text-[10px]">
+                {runtimeName}
+              </Badge>
+            }
+            description={t('workspaceRuntime.prompt.description', { name: runtimeName })}
+            actions={
+              <WorkspaceBarCardMenu>
+                <DropdownMenuItem onClick={handleOpenLibrary}>
+                  <ArrowUpRight aria-hidden />
+                  {t('workspaceRuntime.prompt.manageLibrary')}
+                </DropdownMenuItem>
+              </WorkspaceBarCardMenu>
+            }
+          />
 
           <Tabs
             value={scope}
