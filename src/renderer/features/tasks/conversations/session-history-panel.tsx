@@ -11,7 +11,15 @@ import {
   Plus,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+  type PointerEvent,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ClaudeSessionPrompt, Conversation, SessionCompaction } from '@shared/conversations';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
@@ -70,6 +78,8 @@ export const SessionPromptList = observer(function SessionPromptList({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedToBottomRef = useRef(true);
+  /** Row whose preview stays open after the pointer leaves; one at a time. */
+  const [pinnedPreviewIndex, setPinnedPreviewIndex] = useState<number | null>(null);
 
   // Keep the newest prompt in view unless the user scrolled up.
   useEffect(() => {
@@ -101,6 +111,8 @@ export const SessionPromptList = observer(function SessionPromptList({
           }
           onRestore={onRestorePrompt}
           restoringPromptId={restoringPromptId}
+          pinned={pinnedPreviewIndex === index + 1}
+          onPinnedChange={(pinned) => setPinnedPreviewIndex(pinned ? index + 1 : null)}
         />
       ))}
     </div>
@@ -419,6 +431,8 @@ function DockedSessionPromptPreview({
   restoringPromptId: string | null;
 }) {
   const { t } = useTranslation();
+  /** Row whose preview stays open after the pointer leaves; one at a time. */
+  const [pinnedPreviewIndex, setPinnedPreviewIndex] = useState<number | null>(null);
   const previewItems = useMemo(
     () => buildPromptPreviewItems(prompts, DOCK_PROMPT_HEAD_COUNT, tailCount),
     [prompts, tailCount]
@@ -453,6 +467,8 @@ function DockedSessionPromptPreview({
             }
             onRestore={onRestorePrompt}
             restoringPromptId={restoringPromptId}
+            pinned={pinnedPreviewIndex === item.promptIndex}
+            onPinnedChange={(pinned) => setPinnedPreviewIndex(pinned ? item.promptIndex : null)}
           />
         )
       )}
@@ -466,7 +482,8 @@ function SessionPromptRow({
   index,
   precedingCompactions,
   trailingCompactions: trailing,
-  onClick,
+  pinned,
+  onPinnedChange,
   onRestore,
   restoringPromptId,
 }: {
@@ -477,7 +494,9 @@ function SessionPromptRow({
   precedingCompactions?: SessionCompaction[];
   /** Compactions after the newest prompt; only the last row renders these. */
   trailingCompactions?: SessionCompaction[];
-  onClick?: () => void;
+  /** Whether this row's preview stays open without the pointer; one row at most. */
+  pinned: boolean;
+  onPinnedChange: (pinned: boolean) => void;
   onRestore?: (prompt: ClaudeSessionPrompt, index: number) => void;
   restoringPromptId?: string | null;
 }) {
@@ -500,6 +519,7 @@ function SessionPromptRow({
   const promptLengths = prompts.map((item) => displaySessionPromptText(item.text).trim().length);
   const maxPromptLength = Math.max(1, ...promptLengths);
   const [pointerPosition, setPointerPosition] = useState<{ x: number; y: number } | null>(null);
+  const [hoverOpen, setHoverOpen] = useState(false);
   const [barPointer, setBarPointer] = useState<{
     y: number;
     centers: number[];
@@ -518,8 +538,15 @@ function SessionPromptRow({
         : undefined,
     [pointerPosition]
   );
-  const handleClick =
-    onClick ?? (canRestore && onRestore ? () => onRestore(prompt, index) : undefined);
+  /**
+   * A click is a pin gesture, not an action: the preview it holds open is where
+   * copy / fork / expand live, so the row itself never mutates the session.
+   */
+  const handleClick = (event: MouseEvent<HTMLElement>) => {
+    // Keyboard activation carries no coordinates; keep the last pointer anchor.
+    if (event.detail > 0) setPointerPosition({ x: event.clientX, y: event.clientY });
+    onPinnedChange(!pinned);
+  };
   const className = 'flex h-6 min-w-0 flex-1 items-center gap-2 text-left';
 
   useEffect(
@@ -605,6 +632,7 @@ function SessionPromptRow({
 
   /** Escape hatch for long prompts: the same viewer the project prompt catalog opens. */
   const openPromptInModal = () => {
+    onPinnedChange(false);
     showPromptModal({
       prompts: [selectedPrompt],
       promptNumbers: [selectedIndex],
@@ -641,7 +669,7 @@ function SessionPromptRow({
         {text}
       </span>
       {timestamp && !canRestore ? (
-        <span className="shrink-0 font-mono text-[10px] text-foreground-passive opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <span className="shrink-0 font-mono text-[10px] text-foreground-passive opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 group-data-[session-prompt-pinned]:opacity-100">
           {timestamp}
         </span>
       ) : null}
@@ -649,10 +677,35 @@ function SessionPromptRow({
   );
 
   return (
-    <div className="group relative flex h-6 w-full min-w-0 items-center gap-1 px-3 transition-colors hover:bg-background-1 focus-within:bg-background-1">
+    <div
+      data-session-prompt-pinned={pinned ? 'true' : undefined}
+      className={cn(
+        'group relative flex h-6 w-full min-w-0 items-center gap-1 px-3 transition-colors hover:bg-background-1 focus-within:bg-background-1',
+        pinned && 'bg-background-1'
+      )}
+    >
       <SessionCompactionMarker compactions={precedingCompactions ?? []} />
       <SessionCompactionMarker compactions={trailing ?? []} placement="bottom" />
-      <Tooltip>
+      <Tooltip
+        open={pinned || hoverOpen}
+        onOpenChange={(nextOpen, eventDetails) => {
+          // Base UI dismisses a tooltip on press, which is the exact moment the
+          // reader wants to keep it: the press is handled as a pin instead.
+          if (eventDetails.reason === 'trigger-press') return;
+          setHoverOpen(nextOpen);
+          if (nextOpen) {
+            // Reaching any other row takes the pin from whichever row held it.
+            if (!pinned) onPinnedChange(false);
+          } else if (
+            eventDetails.reason !== 'trigger-hover' &&
+            eventDetails.reason !== 'trigger-focus'
+          ) {
+            // Only losing the pointer or focus leaves a pin standing; an
+            // outside press or Escape means the reader is done with it.
+            onPinnedChange(false);
+          }
+        }}
+      >
         {/*
           The whole row is the hover target, not just the text: a short prompt
           leaves most of the row blank, and hovering that blank space has to
@@ -660,17 +713,13 @@ function SessionPromptRow({
         */}
         <TooltipTrigger
           render={
-            handleClick ? (
-              <button
-                type="button"
-                className={cn(
-                  className,
-                  'hover:text-foreground-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border'
-                )}
-              />
-            ) : (
-              <div className={className} />
-            )
+            <button
+              type="button"
+              className={cn(
+                className,
+                'hover:text-foreground-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border'
+              )}
+            />
           }
           onClick={handleClick}
           onPointerEnter={(event: PointerEvent) => {

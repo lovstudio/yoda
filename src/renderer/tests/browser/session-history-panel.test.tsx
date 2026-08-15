@@ -147,8 +147,18 @@ describe('DockedSessionHistory conversation tree menu', () => {
     const currentPrompt = host.querySelector<HTMLButtonElement>(
       'button[data-slot="tooltip-trigger"]'
     );
+    // A click pins the preview open instead of forking the session behind the
+    // reader's back; restoring stays behind the button inside the preview.
     await act(async () => currentPrompt?.click());
-    expect(mocks.restoreCurrentPrompt).toHaveBeenCalledWith(prompt, 1);
+    expect(mocks.restoreCurrentPrompt).not.toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(document.querySelector('[data-session-prompt-preview]')).not.toBeNull();
+    });
+    expect(currentPrompt?.parentElement?.dataset.sessionPromptPinned).toBe('true');
+
+    await act(async () => currentPrompt?.click());
+    await waitForElementToDisappear('[data-session-prompt-preview]');
+    expect(currentPrompt?.parentElement?.dataset.sessionPromptPinned).toBeUndefined();
 
     expect(host.querySelector('button[aria-label="tasks.bottomPanel.sessionViewList"]')).toBeNull();
     const viewTree = host.querySelector<HTMLButtonElement>(
