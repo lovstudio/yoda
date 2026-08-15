@@ -91,15 +91,17 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     : draggingTask
       ? filterTaskDescendantRows(rows, draggingTask.projectId, draggingTask.taskId)
       : rows;
-  const renderRows = useMemo(
-    () =>
-      limitTaskGroupRows(
-        collapseTaskGroupRows(displayRows, collapsedTaskGroupSignature),
-        visibleTaskCountByGroupId,
-        taskGroupVisibleLimit
-      ),
-    [collapsedTaskGroupSignature, displayRows, taskGroupVisibleLimit, visibleTaskCountByGroupId]
-  );
+  const renderRows = useMemo(() => {
+    const collapsedTaskGroupIds = new Set(
+      collapsedTaskGroupSignature ? collapsedTaskGroupSignature.split('\0') : []
+    );
+    return limitTaskGroupRows(
+      collapseTaskGroupRows(displayRows, collapsedTaskGroupIds),
+      visibleTaskCountByGroupId,
+      taskGroupVisibleLimit,
+      collapsedTaskGroupIds
+    );
+  }, [collapsedTaskGroupSignature, displayRows, taskGroupVisibleLimit, visibleTaskCountByGroupId]);
   const pinnedRows = useMemo(
     () =>
       limitPinnedTaskListRows(
@@ -654,7 +656,8 @@ function getActiveSidebarDndId(
 function limitTaskGroupRows(
   rows: SidebarRow[],
   visibleTaskCountByGroupId: ReadonlyMap<string, number>,
-  visibleLimit: number
+  visibleLimit: number,
+  collapsedTaskGroupIds: ReadonlySet<string>
 ) {
   const limitedRows: SidebarRenderableRow[] = [];
   let index = 0;
@@ -680,6 +683,11 @@ function limitTaskGroupRows(
 
     if (row.kind !== 'group') continue;
 
+    // A collapsed group hides its tasks entirely, so it must not offer a
+    // "show more" row either — the archived group carries a server-side total
+    // that would otherwise keep the disclosure row alive with zero task rows.
+    if (collapsedTaskGroupIds.has(sidebarGroupId(row.group))) continue;
+
     const taskRows = takeDirectTaskRows(rows, index);
     appendLimitedTaskRows(
       limitedRows,
@@ -701,9 +709,8 @@ function limitTaskGroupRows(
   return limitedRows;
 }
 
-function collapseTaskGroupRows(rows: SidebarRow[], collapsedTaskGroupSignature: string) {
-  if (!collapsedTaskGroupSignature) return rows;
-  const collapsedTaskGroupIds = new Set(collapsedTaskGroupSignature.split('\0'));
+function collapseTaskGroupRows(rows: SidebarRow[], collapsedTaskGroupIds: ReadonlySet<string>) {
+  if (collapsedTaskGroupIds.size === 0) return rows;
   const visibleRows: SidebarRow[] = [];
   let groupCollapsed = false;
 

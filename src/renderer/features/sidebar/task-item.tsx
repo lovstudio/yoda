@@ -164,8 +164,18 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   // column instead of pushing the name right.
   const hasRootToggle = hasChildren && treeDepth === 0;
   const branchDisplay = sidebarStore.taskBranchDisplay;
+  // Titles align with the header that owns the row: project rows and grouped
+  // rows both put their label after a 16px disclosure gutter, so children line
+  // up under that label instead of hanging left of it. Pinned rows sit under a
+  // header whose label starts at the row edge, so they stay flush.
   const taskIndentClass =
-    rowVariant === 'underProject' ? (hasRootToggle ? undefined : 'pl-8') : 'pl-2';
+    rowVariant === 'underProject'
+      ? hasRootToggle
+        ? undefined
+        : 'pl-8'
+      : rowVariant === 'flat'
+        ? 'pl-6'
+        : 'pl-2';
   const markerLabel = t(
     isMultiAgent
       ? 'settings.taskAppearance.multiAgent'
