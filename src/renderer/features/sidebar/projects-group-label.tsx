@@ -231,16 +231,6 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
         </ToggleGroup>
       </PanelRow>
       <PanelSeparator />
-      <SectionLabel>{t('sidebar.prioritySection')}</SectionLabel>
-      <PanelSwitchRow
-        id="sidebar-priority-mode"
-        label={t('sidebar.priorityMode')}
-        description={t('sidebar.priorityModeDescription')}
-        checked={sidebarStore.taskPriorityMode}
-        onCheckedChange={(checked) => sidebarStore.setTaskPriorityMode(checked)}
-      />
-      {sidebarStore.taskPriorityMode && <PriorityOrderCard />}
-      <PanelSeparator />
       <PanelRow label={t('sidebar.branchDisplay')}>
         <ToggleGroup
           size="xs"
@@ -300,6 +290,16 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
         checked={expressMode}
         onCheckedChange={(checked) => updateHomeDraft({ expressMode: checked })}
       />
+      <PanelSeparator />
+      <SectionLabel>{t('sidebar.prioritySection')}</SectionLabel>
+      <PanelSwitchRow
+        id="sidebar-priority-mode"
+        label={t('sidebar.priorityMode')}
+        description={t('sidebar.priorityModeDescription')}
+        checked={sidebarStore.taskPriorityMode}
+        onCheckedChange={(checked) => sidebarStore.setTaskPriorityMode(checked)}
+      />
+      {sidebarStore.taskPriorityMode && <PriorityOrderCard />}
       <PanelSeparator />
       <SectionLabel>{t('sidebar.privacySection')}</SectionLabel>
       <SwitchRow

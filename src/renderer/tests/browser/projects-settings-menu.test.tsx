@@ -262,14 +262,14 @@ describe('ProjectsSettingsMenu', () => {
     expect(popover?.textContent).not.toContain('sidebar.priorityGroups.awaiting-input');
     expect(popover?.textContent).not.toContain('sidebar.priorityGroups.archived');
     expect(popover?.textContent).not.toContain('sidebar.groupBy');
-    expect(popoverText.indexOf('sidebar.sortBy')).toBeLessThan(
+    expect(popoverText.indexOf('sidebar.expressMode')).toBeLessThan(
       popoverText.indexOf('sidebar.prioritySection')
     );
     expect(popoverText.indexOf('sidebar.prioritySection')).toBeLessThan(
       popoverText.indexOf('sidebar.priorityMode')
     );
     expect(popoverText.indexOf('sidebar.priorityMode')).toBeLessThan(
-      popoverText.indexOf('sidebar.branchDisplay')
+      popoverText.indexOf('sidebar.privacySection')
     );
 
     const priorityOrderEntry = popover?.querySelector<HTMLButtonElement>(

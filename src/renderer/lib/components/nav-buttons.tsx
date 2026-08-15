@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, ListOrdered } from 'lucide-react';
+import { ArrowLeft, ArrowRight, SquareKanban } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { type ComponentProps, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -57,7 +57,7 @@ export const TaskPriorityModeButton = observer(function TaskPriorityModeButton()
           />
         }
       >
-        <ListOrdered className="h-4 w-4" />
+        <SquareKanban className="h-4 w-4" />
       </TooltipTrigger>
       <TooltipContent side="bottom" sideOffset={8}>
         {enabled ? t('sidebar.priorityModeDisable') : t('sidebar.priorityModeEnable')}
