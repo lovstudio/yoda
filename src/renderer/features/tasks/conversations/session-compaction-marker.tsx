@@ -1,4 +1,3 @@
-import { FoldVertical } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { SessionCompaction } from '@shared/conversations';
 import { droppedTokens } from '@renderer/features/tasks/session-compactions';
@@ -53,11 +52,10 @@ export function SessionCompactionMarker({
       <Tooltip>
         <TooltipTrigger
           render={
-            <span className="pointer-events-auto mx-2 flex shrink-0 items-center gap-1 rounded-full bg-background px-1.5 text-[9px] leading-none text-foreground-passive" />
+            <span className="pointer-events-auto mx-2 shrink-0 rounded-full bg-background px-1.5 text-[9px] leading-none text-foreground-passive" />
           }
         >
-          <FoldVertical className="size-2.5" />
-          <span>{label}</span>
+          {label}
         </TooltipTrigger>
         <TooltipContent side="top" align="center" className="max-w-64 text-[11px] leading-4">
           {t('tasks.sessionInfo.compactedHint')}
