@@ -1952,6 +1952,7 @@
       "showAgentReplies": "Show AI replies",
       "userMessage": "User",
       "userMessageIndex": "User #{{index}}",
+      "viewFullPrompt": "View full prompt",
       "agent": "Agent",
       "finalResult": "Final result",
       "restoreContextAtPrompt": "Restore to prompt {{index}}",

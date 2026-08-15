@@ -4,6 +4,7 @@ import {
   Copy,
   ListTree,
   Loader2,
+  Maximize2,
   MessageSquare,
   Minus,
   MoreHorizontal,
@@ -12,13 +13,22 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ClaudeSessionPrompt, Conversation } from '@shared/conversations';
+import type {
+  ClaudeSessionPrompt,
+  Conversation,
+  SessionCompaction,
+} from '@shared/conversations';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { displaySessionPromptText } from '@renderer/features/tasks/context-panel-prompt-display';
+import {
+  compactionsBeforePrompt,
+  trailingCompactions,
+} from '@renderer/features/tasks/session-compactions';
 import { useSessionPrompts } from '@renderer/features/tasks/session-info-panel';
 import { buildPromptPreviewItems } from '@renderer/features/tasks/session-prompts-preview';
 import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { copyTextToClipboard, toast } from '@renderer/lib/hooks/use-toast';
+import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import {
@@ -34,6 +44,7 @@ import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
+import { SessionCompactionMarker } from './session-compaction-marker';
 import { SessionPromptRestoreButton } from './session-prompt-restore-button';
 import { countSessionPromptTreeNodes, SessionPromptTreeView } from './session-prompt-tree';
 import { reopenArchivedConversation } from './use-archived-conversations';
@@ -48,12 +59,14 @@ import { useSessionPromptTree } from './use-session-prompt-tree';
  */
 export const SessionPromptList = observer(function SessionPromptList({
   prompts,
+  compactions,
   onRestorePrompt,
   restoringPromptId,
   className,
   style,
 }: {
   prompts: ClaudeSessionPrompt[];
+  compactions?: SessionCompaction[];
   onRestorePrompt?: (prompt: ClaudeSessionPrompt, index: number) => void;
   restoringPromptId?: string | null;
   className?: string;
@@ -84,6 +97,12 @@ export const SessionPromptList = observer(function SessionPromptList({
           prompts={prompts}
           prompt={prompt}
           index={index + 1}
+          precedingCompactions={compactionsBeforePrompt(compactions, index + 1)}
+          trailingCompactions={
+            index === prompts.length - 1
+              ? trailingCompactions(compactions, prompts.length)
+              : undefined
+          }
           onRestore={onRestorePrompt}
           restoringPromptId={restoringPromptId}
         />
@@ -127,6 +146,7 @@ export const SessionHistoryPanel = observer(function SessionHistoryPanel({
   return (
     <SessionPromptList
       prompts={prompts.prompts}
+      compactions={prompts.compactions}
       onRestorePrompt={prompts.requestRestorePrompt}
       restoringPromptId={prompts.restoringPromptId}
       className="h-full"
@@ -311,6 +331,7 @@ export const DockedSessionHistory = observer(function DockedSessionHistory({
           prompts.hasPrompts ? (
             <DockedSessionPromptPreview
               prompts={prompts.prompts}
+              compactions={prompts.compactions}
               tailCount={rows}
               onOpenAll={prompts.openPromptsModal}
               onRestorePrompt={prompts.requestRestorePrompt}
@@ -388,12 +409,14 @@ export const DockedSessionHistory = observer(function DockedSessionHistory({
 
 function DockedSessionPromptPreview({
   prompts,
+  compactions,
   tailCount,
   onOpenAll,
   onRestorePrompt,
   restoringPromptId,
 }: {
   prompts: ClaudeSessionPrompt[];
+  compactions: SessionCompaction[];
   tailCount: number;
   onOpenAll: () => void;
   onRestorePrompt: (prompt: ClaudeSessionPrompt, index: number) => void;
@@ -451,6 +474,7 @@ function SessionPromptRow({
   restoringPromptId?: string | null;
 }) {
   const { t } = useTranslation();
+  const showPromptModal = useShowModal('sessionPromptsModal');
   const text = displaySessionPromptText(prompt.text).trim();
   const promptDate = parsePromptTimestamp(prompt.timestamp);
   const timestamp = promptDate?.toLocaleTimeString() ?? null;
@@ -571,6 +595,33 @@ function SessionPromptRow({
     }
   };
 
+  /** Escape hatch for long prompts: the same viewer the project prompt catalog opens. */
+  const openPromptInModal = () => {
+    showPromptModal({
+      prompts: [selectedPrompt],
+      promptNumbers: [selectedIndex],
+      sessionTitle: t('tasks.sessionInfo.userMessageIndex', { index: selectedIndex }),
+      onRestorePrompt:
+        onRestore && selectedPrompt.restoreTarget
+          ? () => onRestore(selectedPrompt, selectedIndex)
+          : undefined,
+    });
+  };
+
+  const restoreButton = onRestore ? (
+    <SessionPromptRestoreButton
+      prompt={selectedPrompt}
+      index={selectedIndex}
+      isRestoring={selectedCanRestore ? selectedIsRestoring : undefined}
+      onRestore={onRestore}
+      visibleLabel={t('tasks.bottomPanel.sessionBranchFromHere')}
+      unavailableHint={
+        selectedCanRestore ? undefined : t('tasks.bottomPanel.sessionCheckpointUnavailableHint')
+      }
+      className={promptActionClassName}
+    />
+  ) : null;
+
   const content = (
     <>
       <span className="w-6 shrink-0 text-right font-mono text-[10px] text-foreground-passive">
@@ -667,42 +718,13 @@ function SessionPromptRow({
                 ) : (
                   <span className="font-mono text-[11px] text-foreground-passive">—</span>
                 )}
-                {selectedCanRestore && onRestore ? (
-                  <SessionPromptRestoreButton
-                    prompt={selectedPrompt}
-                    index={selectedIndex}
-                    isRestoring={selectedIsRestoring}
-                    onRestore={onRestore}
-                    visibleLabel={t('tasks.bottomPanel.sessionBranchFromHere')}
-                    containerClassName="ml-auto"
-                    className={promptActionClassName}
-                  />
-                ) : onRestore ? (
-                  <SessionPromptRestoreButton
-                    prompt={selectedPrompt}
-                    index={selectedIndex}
-                    onRestore={onRestore}
-                    visibleLabel={t('tasks.bottomPanel.sessionBranchFromHere')}
-                    unavailableHint={t('tasks.bottomPanel.sessionCheckpointUnavailableHint')}
-                    containerClassName="ml-auto"
-                    className={promptActionClassName}
-                  />
-                ) : null}
-              </div>
-              <div
-                data-session-prompt-preview-body
-                className="h-52 min-h-0 overflow-y-auto px-3 py-2.5"
-              >
-                <div className="flex min-w-0 items-start gap-2">
-                  <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-left text-xs leading-5 text-foreground">
-                    {selectedText || '—'}
-                  </p>
+                <div className="ml-auto flex shrink-0 items-center gap-1">
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon-xs"
                     data-session-prompt-copy
-                    className="shrink-0 text-foreground-passive hover:text-foreground"
+                    className="text-foreground-passive hover:text-foreground"
                     aria-label={t(copied ? 'common.copied' : 'common.copy')}
                     title={t(copied ? 'common.copied' : 'common.copy')}
                     disabled={!selectedText}
@@ -717,7 +739,32 @@ function SessionPromptRow({
                       <Copy className="size-3.5" aria-hidden="true" />
                     )}
                   </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    data-session-prompt-expand
+                    className="text-foreground-passive hover:text-foreground"
+                    aria-label={t('tasks.sessionInfo.viewFullPrompt')}
+                    title={t('tasks.sessionInfo.viewFullPrompt')}
+                    disabled={!selectedText}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openPromptInModal();
+                    }}
+                  >
+                    <Maximize2 className="size-3.5" aria-hidden="true" />
+                  </Button>
+                  {restoreButton}
                 </div>
+              </div>
+              <div
+                data-session-prompt-preview-body
+                className="h-52 min-h-0 overflow-y-auto px-3 py-2.5"
+              >
+                <p className="min-w-0 whitespace-pre-wrap break-words text-left text-xs leading-5 text-foreground">
+                  {selectedText || '—'}
+                </p>
               </div>
             </div>
           </div>

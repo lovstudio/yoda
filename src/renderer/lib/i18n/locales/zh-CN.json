@@ -1952,6 +1952,7 @@
       "showAgentReplies": "显示 AI 回复",
       "userMessage": "用户",
       "userMessageIndex": "用户 #{{index}}",
+      "viewFullPrompt": "查看完整内容",
       "agent": "Agent",
       "finalResult": "最终结果",
       "restoreContextAtPrompt": "恢复到第 {{index}} 条",
