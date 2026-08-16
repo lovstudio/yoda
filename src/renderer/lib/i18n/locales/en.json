@@ -5280,9 +5280,6 @@
         "agent": "Agent",
         "automation": "Automation",
         "system": "System"
-      },
-      "system": {
-        "agentAwaitingInput": "Agent is waiting for input"
       }
     },
     "model": {

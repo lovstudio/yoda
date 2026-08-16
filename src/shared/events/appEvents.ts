@@ -45,7 +45,6 @@ export type AppNotificationCreated = {
   status?: NotificationStatus;
   /** Stable identity used to coalesce repeats and match later recovery events. */
   notificationKey?: string;
-  messageKey?: 'agentAwaitingInput';
   target?: {
     projectId: string;
     taskId: string;

@@ -89,11 +89,11 @@ describe('WorkspaceNotificationCenter', () => {
       { label: 'Open build', onClick: runAction }
     );
     workspaceNotificationStore.enqueue({
-      title: 'Agent needs input',
-      details: 'Session: SESSION_ID',
+      title: 'Card moved to Review',
+      details: 'Task: task-1',
       kind: 'info',
-      source: 'agent',
-      reason: 'action-required',
+      source: 'automation',
+      reason: 'subscribed-result',
       target: { projectId: 'project-1', taskId: 'task-1', conversationId: 'session-1' },
     });
 
@@ -130,7 +130,7 @@ describe('WorkspaceNotificationCenter', () => {
     await act(async () => actionButton?.click());
     expect(runAction).toHaveBeenCalledOnce();
     expect(workspaceNotificationStore.getSnapshot().map((entry) => entry.title)).toEqual([
-      'Agent needs input',
+      'Card moved to Review',
     ]);
     await vi.waitFor(() => {
       expect(document.querySelector('[data-slot="popover-content"]')).toBeNull();
@@ -150,10 +150,10 @@ describe('WorkspaceNotificationCenter', () => {
     expect(workspaceNotificationStore.getSnapshot()[0].readAt).not.toBeNull();
     expect(host.querySelector('[aria-label="Notifications 0"]')).not.toBeNull();
 
-    const openAgent = document.querySelector<HTMLButtonElement>(
-      '[aria-label="Open Agent needs input"]'
+    const openCard = document.querySelector<HTMLButtonElement>(
+      '[aria-label="Open Card moved to Review"]'
     );
-    await act(async () => openAgent?.click());
+    await act(async () => openCard?.click());
     const openTargetButton = Array.from(
       document.querySelectorAll<HTMLButtonElement>('button')
     ).find((button) => button.textContent?.includes('workspaceRuntime.notifications.openTarget'));
@@ -170,10 +170,10 @@ describe('WorkspaceNotificationCenter', () => {
 
   it('closes the panel when the window loses focus', async () => {
     workspaceNotificationStore.enqueue({
-      title: 'Agent needs input',
+      title: 'Card moved to Review',
       kind: 'info',
-      source: 'agent',
-      reason: 'action-required',
+      source: 'automation',
+      reason: 'subscribed-result',
     });
 
     await act(async () => {

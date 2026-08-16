@@ -5280,9 +5280,6 @@
         "agent": "Agent",
         "automation": "自动化",
         "system": "系统"
-      },
-      "system": {
-        "agentAwaitingInput": "Agent 正在等待输入"
       }
     },
     "model": {
