@@ -586,6 +586,8 @@ export const interfaceSettingsSchema = z.object({
   newTaskOpenMode: z.enum(['home', 'modal']).catch('home'),
   /** How much of the agent's transcript appears in the Session → Conversation surface. */
   agentReplyDisplayLevel: z.enum(AGENT_REPLY_DISPLAY_LEVELS).catch('concise'),
+  /** Level baked into a public share link, so recipients start at the intended depth. */
+  sessionShareDisplayLevel: z.enum(AGENT_REPLY_DISPLAY_LEVELS).catch('concise'),
   /** Dock the active session's prompt history at the bottom of the conversation pane. */
   dockSessionHistory: z.boolean(),
   /** Number of latest prompts shown after the first prompt in the docked history preview. */

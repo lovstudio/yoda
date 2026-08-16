@@ -1052,7 +1052,9 @@
       "sidebarStatusBarPrimary": "Sidebar status bar",
       "sidebarStatusBarPrimaryDescription": "Choose which identity is shown as the primary entry. The other remains available as a compact icon.",
       "sidebarStatusBarProduct": "Product info",
-      "sidebarStatusBarAccount": "Account info"
+      "sidebarStatusBarAccount": "Account info",
+      "sessionShareDisplayLevel": "Share link detail",
+      "sessionShareDisplayLevelDescription": "The level baked into a new public link. Anyone opening it can still switch."
     },
     "taskAppearance": {
       "title": "Task appearance",
@@ -2415,19 +2417,19 @@
       "agentReplyDisplay": {
         "hidden": {
           "label": "Hidden",
-          "description": "Show user messages only"
+          "description": "Show user prompts only"
         },
         "concise": {
           "label": "Concise",
-          "description": "Show only the final result from each agent reply"
+          "description": "Show the closing reply of each turn"
         },
         "detailed": {
           "label": "Detailed",
-          "description": "Show agent replies without tool calls"
+          "description": "Add the agent's narration and system notices"
         },
         "verbose": {
-          "label": "Verbose",
-          "description": "Show everything, nearly equivalent to the transcript"
+          "label": "Complete",
+          "description": "Add tool calls — the full transcript"
         }
       },
       "transcript": "Transcript",

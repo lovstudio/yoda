@@ -76,7 +76,9 @@ describe('parseClaudeTranscript', () => {
       {
         id: 'assistant-1-assistant-1',
         role: 'assistant',
-        agentPhase: 'commentary',
+        // The turn ends on a tool call, so its last reply is promoted to `final`
+        // and the turn still shows up at the concise display level.
+        agentPhase: 'final',
         title: 'Claude',
         timestamp: '2026-06-08T01:00:01.000Z',
         format: 'markdown',

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { resolveClaudeTranscriptPathFromConfigDir } from '@main/core/session-title/claude-title-source';
+import { isClaudeInjectedUserRow } from './claude-system-rows';
 
 type ClaudeTranscriptRow = Record<string, unknown>;
 
@@ -128,6 +129,7 @@ export function isClaudeRealUserPromptRow(row: ClaudeTranscriptRow): boolean {
   if (Boolean(row.isSidechain) || row.isMeta === true || row.isCompactSummary === true) {
     return false;
   }
+  if (isClaudeInjectedUserRow(row)) return false;
   if (!stringValue(row.uuid)) return false;
   const message = objectValue(row.message);
   if (message?.role !== 'user') return false;

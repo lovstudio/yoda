@@ -1,6 +1,11 @@
-import { createYodaSessionShareUpload, type YodaSessionShareResponse } from '@shared/session-share';
+import {
+  createYodaSessionShareUpload,
+  withSessionShareDisplayLevel,
+  type YodaSessionShareResponse,
+} from '@shared/session-share';
 import { lovStudioApiClient } from '@main/core/account/services/lovstudio-api-client';
 import { mobileGatewayService } from '@main/core/mobile-gateway/mobile-gateway-service';
+import { appSettingsService } from '@main/core/settings/settings-service';
 import { attachLocalSessionAssets } from './session-share-assets';
 
 export async function createSessionShare(
@@ -22,7 +27,7 @@ export async function createSessionShare(
     throw new Error('This session has no shareable chat history yet.');
   }
 
-  return lovStudioApiClient.request<YodaSessionShareResponse>(
+  const created = await lovStudioApiClient.request<YodaSessionShareResponse>(
     '/api/yoda/session-shares',
     {
       method: 'POST',
@@ -30,4 +35,6 @@ export async function createSessionShare(
     },
     { timeoutMs: 60_000 }
   );
+  const { sessionShareDisplayLevel } = await appSettingsService.get('interface');
+  return { ...created, url: withSessionShareDisplayLevel(created.url, sessionShareDisplayLevel) };
 }

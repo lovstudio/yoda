@@ -44,6 +44,7 @@ import {
 import ModelsSettingsCard, { ModelCatalogAutomaticUpdateSetting } from './ModelsSettingsCard';
 import NotificationSettingsCard from './NotificationSettingsCard';
 import OpenInAppsSettingsCard from './OpenInAppsSettingsCard';
+import SessionShareDisplayLevelSettingsRow from './SessionShareDisplayLevelSettingsRow';
 import SidebarStatusBarSettingsRow from './SidebarStatusBarSettingsRow';
 import TaskAppearanceSettingsCard from './TaskAppearanceSettingsCard';
 import {
@@ -478,6 +479,7 @@ export function SettingsPage({
       sections: [
         { id: 'theme', component: <ThemeCard /> },
         { id: 'sidebar-status-bar', component: <SidebarStatusBarSettingsRow /> },
+        { id: 'session-share-display-level', component: <SessionShareDisplayLevelSettingsRow /> },
         { id: 'task-appearance', component: <TaskAppearanceSettingsCard /> },
       ],
     },

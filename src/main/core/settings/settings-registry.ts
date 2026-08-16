@@ -150,6 +150,7 @@ export const SETTINGS_DEFAULTS = {
     sidebarStatusBarPrimary: 'product' as const,
     newTaskOpenMode: 'home' as const,
     agentReplyDisplayLevel: 'concise' as const,
+    sessionShareDisplayLevel: 'concise' as const,
     dockSessionHistory: true,
     dockSessionHistoryRows: 3,
     taskAppearance: DEFAULT_TASK_APPEARANCE_SETTINGS,
