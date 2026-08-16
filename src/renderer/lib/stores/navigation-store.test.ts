@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NavigationStore } from './navigation-store';
 
 const mocks = vi.hoisted(() => ({
-  closeModal: vi.fn(),
+  closeAll: vi.fn(),
   markTaskSeen: vi.fn(),
   pushNavigation: vi.fn(),
   recordProjectActivity: vi.fn(),
@@ -26,7 +26,7 @@ vi.mock('./app-state', () => ({
 
 vi.mock('@renderer/lib/modal/modal-store', () => ({
   modalStore: {
-    closeModal: mocks.closeModal,
+    closeAll: mocks.closeAll,
   },
 }));
 

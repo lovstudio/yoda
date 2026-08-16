@@ -18,7 +18,7 @@ describe('new task modal responsive contract', () => {
     expect(registry).toContain(
       "newTaskModal: createModal(NewTaskModal, { size: 'lg', className: 'sm:max-w-3xl' })"
     );
-    expect(renderer).toContain('displayEntry?.className');
+    expect(renderer).toContain('entry?.className');
     expect(modal).toContain('data-yoda-surface="new-task-modal"');
     expect(modal).toContain('data-yoda-composer-modal');
     expect(conversationModal).toContain('data-yoda-surface="new-conversation-modal"');

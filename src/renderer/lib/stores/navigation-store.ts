@@ -123,7 +123,7 @@ export class NavigationStore implements Snapshottable<NavigationSnapshot> {
         appState.agentRuntime.markTaskSeen(taskParams.projectId, taskParams.taskId);
       }
     }
-    modalStore.closeModal();
+    modalStore.closeAll();
   }
 
   updateViewParams<TId extends ViewId>(

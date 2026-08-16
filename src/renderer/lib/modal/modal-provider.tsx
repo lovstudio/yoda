@@ -1,5 +1,4 @@
-import { runInAction } from 'mobx';
-import { useCallback, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, type ReactNode } from 'react';
 import { type modalRegistry } from '@renderer/app/modal-registry';
 import { useMobxValue } from '@renderer/lib/hooks/use-mobx-value';
 import { modalStore } from './modal-store';
@@ -24,6 +23,23 @@ type ModalId = keyof typeof modalRegistry;
 
 type ModalArgs<TId extends ModalId> = Parameters<(typeof modalRegistry)[TId]['component']>[0];
 
+/**
+ * Which panel of the stack the surrounding component is rendered in, so that a
+ * modal closing or guarding itself acts on its own panel rather than on whatever
+ * happens to be on top.
+ */
+const ModalLayerKeyContext = createContext<number | null>(null);
+
+export function ModalLayerKeyProvider({
+  layerKey,
+  children,
+}: {
+  layerKey: number;
+  children: ReactNode;
+}) {
+  return <ModalLayerKeyContext value={layerKey}>{children}</ModalLayerKeyContext>;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function wrapArgs<TId extends ModalId>(args: UserArgs<TId>): Record<string, any> {
   return {
@@ -41,22 +57,31 @@ function wrapArgs<TId extends ModalId>(args: UserArgs<TId>): Record<string, any>
 }
 
 export function useModalContext() {
+  const layerKey = useContext(ModalLayerKeyContext);
+
   const showModal = useCallback(<TId extends ModalId>(id: TId, args: UserArgs<TId>) => {
     modalStore.setModal(id, wrapArgs(args));
   }, []);
 
   const transitionModal = useCallback(<TId extends ModalId>(id: TId, args: UserArgs<TId>) => {
-    modalStore.setModal(id, wrapArgs(args));
-    // No overlay event — the dialog stays open; AnimatedHeight handles the content swap.
+    // Replaces this panel's content in place — the dialog stays open and
+    // AnimatedHeight handles the swap — rather than stacking a second panel.
+    modalStore.replaceModal(id, wrapArgs(args));
   }, []);
 
-  const closeModal = useCallback(() => modalStore.closeModal('dismissed'), []);
+  const closeModal = useCallback(() => {
+    if (layerKey === null) modalStore.closeModal('dismissed');
+    else modalStore.closeLayer(layerKey);
+  }, [layerKey]);
 
-  const setCloseGuard = useCallback((active: boolean) => {
-    runInAction(() => {
-      modalStore.closeGuardActive = active;
-    });
-  }, []);
+  const setCloseGuard = useCallback(
+    (active: boolean) => {
+      const key = layerKey ?? modalStore.top?.key;
+      if (key === undefined || key === null) return;
+      modalStore.setCloseGuard(key, active);
+    },
+    [layerKey]
+  );
 
   const hasActiveCloseGuard = useMobxValue(() => modalStore.closeGuardActive);
 
@@ -75,7 +100,7 @@ export function useShowModal<MId extends ModalId>(id: MId) {
 export function useTransitionModal<MId extends ModalId>(id: MId) {
   return useCallback(
     (args: UserArgs<MId>) => {
-      modalStore.setModal(id, wrapArgs(args));
+      modalStore.replaceModal(id, wrapArgs(args));
     },
     [id]
   );
