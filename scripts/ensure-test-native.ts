@@ -22,6 +22,7 @@ import fs from 'node:fs';
 import https from 'node:https';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -33,9 +34,29 @@ type Spec = {
   arch: string;
 };
 
+/**
+ * Walk up from this script to the nearest install that has better-sqlite3,
+ * instead of resolving against the cwd: a git worktree has no `node_modules` of
+ * its own and loads dependencies from the main checkout above it.
+ */
+function betterSqlite3NodeModulesDir(): string {
+  let dir = path.dirname(fileURLToPath(import.meta.url));
+  for (;;) {
+    const candidate = path.join(dir, 'node_modules');
+    if (fs.existsSync(path.join(candidate, 'better-sqlite3/package.json'))) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      throw new Error('Could not find an installed better-sqlite3 — run pnpm install.');
+    }
+    dir = parent;
+  }
+}
+
 function getSpec(): Spec {
-  const pkgPath = path.resolve('node_modules/better-sqlite3/package.json');
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { version: string };
+  const pkgPath = path.join(betterSqlite3NodeModulesDir(), 'better-sqlite3/package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as {
+    version: string;
+  };
   return {
     version: pkg.version,
     abi: process.versions.modules,
@@ -53,8 +74,11 @@ function tarballName({ version, abi, platform, arch }: Spec): string {
  */
 export function testNativeBindingPath(): string {
   const spec = getSpec();
-  return path.resolve(
-    'node_modules/.cache/yoda-test-native',
+  // Cache beside the package we resolved, so worktrees share the main
+  // checkout's build instead of re-downloading into a node_modules they lack.
+  return path.join(
+    betterSqlite3NodeModulesDir(),
+    '.cache/yoda-test-native',
     `better-sqlite3-v${spec.version}-node-v${spec.abi}-${spec.platform}-${spec.arch}`,
     'build/Release/better_sqlite3.node'
   );
