@@ -142,11 +142,17 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
       : null;
   const navigationRows = useMemo(() => {
     const next: SidebarNavigationRow[] = [];
-    if (!taskPriorityMode) {
-      next.push({ kind: 'pinned-header' });
-      if (!pinnedCollapsed) {
-        next.push(...pinnedRows.map((row) => ({ kind: 'pinned-row' as const, row })));
-      }
+    // Priority mode already carries its own grouping, so the pinned/projects
+    // section headers label nothing: the list is one flat sequence of priority
+    // groups. Without the headers there is no collapse toggle either, so the
+    // rows always render.
+    if (taskPriorityMode) {
+      next.push(...renderRows.map((row) => ({ kind: 'project-row' as const, row })));
+      return next;
+    }
+    next.push({ kind: 'pinned-header' });
+    if (!pinnedCollapsed) {
+      next.push(...pinnedRows.map((row) => ({ kind: 'pinned-row' as const, row })));
     }
     next.push({ kind: 'projects-header' });
     if (!projectsCollapsed) {
