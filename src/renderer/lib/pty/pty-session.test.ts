@@ -1,7 +1,10 @@
 import { autorun } from 'mobx';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { invalidateMachineCapacityCache } from './machine-capacity';
 import { PtySession } from './pty-session';
 import { invalidateTerminalSettingsCache } from './terminal-settings-cache';
+
+const GIB = 1024 ** 3;
 
 const mocks = vi.hoisted(() => ({
   instances: [] as Array<{
@@ -12,6 +15,7 @@ const mocks = vi.hoisted(() => ({
     failConnection: (error: unknown) => void;
   }>,
   getTerminalSettings: vi.fn(async () => ({})),
+  getMachineCapacity: vi.fn(async () => ({ totalMemoryBytes: 0, cpuCount: 0 })),
   throwOnConstruct: false,
   onExit: vi.fn(),
   exitListeners: new Map<string, () => void>(),
@@ -22,6 +26,9 @@ vi.mock('@renderer/lib/ipc', () => ({
     on: mocks.onExit,
   },
   rpc: {
+    app: {
+      getMachineCapacity: mocks.getMachineCapacity,
+    },
     appSettings: {
       get: mocks.getTerminalSettings,
     },
@@ -64,8 +71,10 @@ describe('PtySession connection lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     invalidateTerminalSettingsCache();
+    invalidateMachineCapacityCache();
     mocks.instances.length = 0;
     mocks.getTerminalSettings.mockResolvedValue({});
+    mocks.getMachineCapacity.mockResolvedValue({ totalMemoryBytes: 16 * GIB, cpuCount: 8 });
     mocks.throwOnConstruct = false;
     mocks.exitListeners.clear();
     mocks.onExit.mockImplementation((_event, callback, topic) => {
@@ -192,7 +201,7 @@ describe('PtySession connection lifecycle', () => {
     expect(mocks.exitListeners.has('one-shot')).toBe(false);
   });
 
-  it('bounds the default auto policy to four frontend terminal parsers', async () => {
+  it('bounds the auto policy to the limit this machine can afford', async () => {
     PtySession.setHotTerminalPolicy('auto', 2);
     const sessions = Array.from({ length: 20 }, (_, index) => new PtySession(`auto-${index}`));
     const firstNewInstance = mocks.instances.length;
@@ -213,6 +222,36 @@ describe('PtySession connection lifecycle', () => {
           )
         )
     ).toBe(true);
+    for (const session of sessions) session.dispose();
+  });
+
+  it('keeps more renderers warm on a machine with more memory and cores', async () => {
+    mocks.getMachineCapacity.mockResolvedValue({ totalMemoryBytes: 64 * GIB, cpuCount: 16 });
+    const sessions = Array.from({ length: 20 }, (_, index) => new PtySession(`roomy-${index}`));
+    const firstNewInstance = mocks.instances.length;
+
+    await Promise.all(sessions.map((session) => session.connect()));
+
+    const instances = mocks.instances.slice(firstNewInstance);
+    expect(
+      instances.filter((instance) => instance.disposeAndWait.mock.calls.length === 0)
+    ).toHaveLength(8);
+    for (const session of sessions) session.dispose();
+  });
+
+  it('falls back to the conservative default when the capacity probe fails', async () => {
+    mocks.getMachineCapacity.mockRejectedValue(new Error('machine capacity unavailable'));
+    PtySession.setHotTerminalPolicy('auto', 2, { totalMemoryBytes: 0, cpuCount: 0 });
+    const sessions = Array.from({ length: 8 }, (_, index) => new PtySession(`blind-${index}`));
+    const firstNewInstance = mocks.instances.length;
+
+    await Promise.all(sessions.map((session) => session.connect()));
+
+    const instances = mocks.instances.slice(firstNewInstance);
+    expect(instances).toHaveLength(8);
+    expect(
+      instances.filter((instance) => instance.disposeAndWait.mock.calls.length === 0)
+    ).toHaveLength(4);
     for (const session of sessions) session.dispose();
   });
 

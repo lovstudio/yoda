@@ -12,10 +12,13 @@ import {
   MIN_HOT_TERMINAL_LIMIT,
   MIN_TERMINAL_SCROLLBACK_LINES,
   normalizeTerminalScrollbackLines,
+  resolveAutoTerminalCachePolicy,
+  type TerminalCacheCapacity,
   type TerminalSmartPathOpenMode,
 } from '@shared/terminal-settings';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { rpc } from '@renderer/lib/ipc';
+import { getCachedMachineCapacity, loadMachineCapacity } from '@renderer/lib/pty/machine-capacity';
 import { PtySession } from '@renderer/lib/pty/pty-session';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
@@ -70,12 +73,19 @@ const TerminalSettingsCard: React.FC = () => {
   const [search, setSearch] = useState<string>('');
   const [installedFonts, setInstalledFonts] = useState<string[] | null>(null);
   const [loadingFonts, setLoadingFonts] = useState<boolean>(false);
+  const [machineCapacity, setMachineCapacity] = useState<TerminalCacheCapacity | null>(
+    getCachedMachineCapacity
+  );
 
   const fontFamily = terminal?.fontFamily ?? '';
   const autoCopyOnSelection = terminal?.autoCopyOnSelection ?? true;
   const smartPathOpenMode = terminal?.smartPathOpenMode ?? DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE;
   const hotTerminalMode = terminal?.hotTerminalMode ?? DEFAULT_TERMINAL_CACHE_MODE;
   const hotTerminalLimit = terminal?.hotTerminalLimit ?? DEFAULT_HOT_TERMINAL_LIMIT;
+  const autoHotTerminalLimit = useMemo(
+    () => resolveAutoTerminalCachePolicy(machineCapacity ?? {}).limit,
+    [machineCapacity]
+  );
   const idleSessionTimeoutMinutes =
     terminal?.idleSessionTimeoutMinutes ?? DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES;
   const scrollbackLines = normalizeTerminalScrollbackLines(terminal?.scrollbackLines);
@@ -151,6 +161,16 @@ const TerminalSettingsCard: React.FC = () => {
     setScrollbackDraft(String(scrollbackLines));
   }, [scrollbackLines]);
 
+  useEffect(() => {
+    let active = true;
+    void loadMachineCapacity().then((capacity) => {
+      if (active && capacity) setMachineCapacity(capacity);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const applyFont = useCallback(
     (next: string) => {
       const normalized = next.trim();
@@ -187,9 +207,9 @@ const TerminalSettingsCard: React.FC = () => {
   const updateHotTerminalMode = useCallback(
     (next: 'auto' | 'fixed') => {
       update({ hotTerminalMode: next });
-      PtySession.setHotTerminalPolicy(next, hotTerminalLimit);
+      PtySession.setHotTerminalPolicy(next, hotTerminalLimit, machineCapacity);
     },
-    [hotTerminalLimit, update]
+    [hotTerminalLimit, machineCapacity, update]
   );
 
   const updateHotTerminalLimit = useCallback(
@@ -424,7 +444,9 @@ const TerminalSettingsCard: React.FC = () => {
       />
       <SettingRow
         title={t('settings.terminal.hotTerminalLimit')}
-        description={t('settings.terminal.hotTerminalLimitDescription')}
+        description={t('settings.terminal.hotTerminalLimitDescription', {
+          limit: autoHotTerminalLimit,
+        })}
         control={
           <div className="flex items-center gap-2">
             <Select
@@ -439,7 +461,9 @@ const TerminalSettingsCard: React.FC = () => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="auto">{t('settings.terminal.hotTerminalAuto')}</SelectItem>
+                <SelectItem value="auto">
+                  {t('settings.terminal.hotTerminalAuto', { limit: autoHotTerminalLimit })}
+                </SelectItem>
                 <SelectItem value="fixed">{t('settings.terminal.hotTerminalFixed')}</SelectItem>
               </SelectContent>
             </Select>

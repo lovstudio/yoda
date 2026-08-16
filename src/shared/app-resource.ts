@@ -57,6 +57,12 @@ export type AppResourceSnapshotOptions = {
   freshAgentProcesses?: boolean;
 };
 
+/** Immutable machine limits used to size adaptive caches. */
+export type MachineCapacity = {
+  totalMemoryBytes: number;
+  cpuCount: number;
+};
+
 export type WorktreeStorageItem = {
   projectId: string;
   projectName: string;

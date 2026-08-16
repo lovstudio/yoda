@@ -7,11 +7,15 @@ import {
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
   MAX_HOT_TERMINAL_LIMIT,
   MIN_HOT_TERMINAL_LIMIT,
+  resolveAutoTerminalCachePolicy,
+  type AutoTerminalCachePolicy,
+  type TerminalCacheCapacity,
   type TerminalCacheMode,
 } from '@shared/terminal-settings';
 import { events, rpc } from '@renderer/lib/ipc';
 import { buildTerminalFontFamily, FrontendPty } from '@renderer/lib/pty/pty';
 import { log } from '@renderer/utils/logger';
+import { loadMachineCapacity } from './machine-capacity';
 import { selectTerminalLruEvictions, selectTerminalPressureEvictions } from './terminal-lru';
 import { loadTerminalSettings } from './terminal-settings-cache';
 
@@ -25,7 +29,6 @@ export type PtySessionOptions = {
 
 const TERMINAL_SETTINGS_TIMEOUT_MS = 3_000;
 const AUTO_PRESSURE_SAMPLE_INTERVAL_MS = 10_000;
-const AUTO_MEMORY_PRESSURE_BYTES = 1_500_000_000;
 const AUTO_HIDDEN_OUTPUT_CODE_UNITS_PER_SECOND = 2_000_000;
 const AUTO_MEMORY_PRESSURE_SAMPLES = 2;
 const AUTO_OUTPUT_PRESSURE_SAMPLES = 3;
@@ -40,6 +43,7 @@ function getConnectionErrorMessage(error: unknown): string {
 export class PtySession {
   private static hotMode: TerminalCacheMode = DEFAULT_TERMINAL_CACHE_MODE;
   private static hotLimit = DEFAULT_HOT_TERMINAL_LIMIT;
+  private static autoPolicy: AutoTerminalCachePolicy = resolveAutoTerminalCachePolicy();
   private static hotSessions: PtySession[] = [];
   private static autoPressureTimer: ReturnType<typeof setInterval> | null = null;
   private static autoPressureSampleInFlight = false;
@@ -165,9 +169,13 @@ export class PtySession {
         });
         return null;
       });
+      // Auto mode sizes itself from the machine, so the capacity probe belongs on
+      // the same path as the settings it feeds. Both are cached per renderer.
+      const machineCapacity = await loadMachineCapacity();
       PtySession.setHotTerminalPolicy(
         terminalSettings?.hotTerminalMode ?? DEFAULT_TERMINAL_CACHE_MODE,
-        terminalSettings?.hotTerminalLimit ?? DEFAULT_HOT_TERMINAL_LIMIT
+        terminalSettings?.hotTerminalLimit ?? DEFAULT_HOT_TERMINAL_LIMIT,
+        machineCapacity
       );
       pty.setScrollbackLines(
         terminalSettings?.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK_LINES
@@ -320,11 +328,16 @@ export class PtySession {
     });
   }
 
-  static setHotTerminalPolicy(mode: TerminalCacheMode, limit: number): void {
+  static setHotTerminalPolicy(
+    mode: TerminalCacheMode,
+    limit: number,
+    capacity?: TerminalCacheCapacity | null
+  ): void {
+    if (capacity) PtySession.autoPolicy = resolveAutoTerminalCachePolicy(capacity);
     PtySession.hotMode = mode;
     PtySession.hotLimit =
       mode === 'auto'
-        ? DEFAULT_HOT_TERMINAL_LIMIT
+        ? PtySession.autoPolicy.limit
         : Math.min(MAX_HOT_TERMINAL_LIMIT, Math.max(MIN_HOT_TERMINAL_LIMIT, Math.floor(limit)));
     const protectedSessionId = PtySession.hotSessions.at(-1)?.sessionId;
     if (mode === 'fixed') {
@@ -424,7 +437,7 @@ export class PtySession {
           0
         );
         PtySession.memoryPressureSamples =
-          electronMemoryBytes >= AUTO_MEMORY_PRESSURE_BYTES
+          electronMemoryBytes >= PtySession.autoPolicy.memoryPressureBytes
             ? PtySession.memoryPressureSamples + 1
             : 0;
       } catch (error) {
@@ -477,6 +490,8 @@ export class PtySession {
       reason,
       count: evictions.size,
       residentRenderers: PtySession.hotSessions.length,
+      hotLimit: PtySession.hotLimit,
+      memoryPressureBytes: PtySession.autoPolicy.memoryPressureBytes,
       hiddenOutputCodeUnitsPerSecond: Math.round(hiddenOutputRate),
     });
     for (const session of PtySession.hotSessions) {
