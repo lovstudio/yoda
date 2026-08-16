@@ -30,7 +30,15 @@ import { useTranslation } from 'react-i18next';
 import type { AppAgentSessionResource, TmuxReclamationSnapshot } from '@shared/app-resource';
 import type { Conversation } from '@shared/conversations';
 import type { MaasUsageSummary } from '@shared/maas';
-import type { ComposerDefaults } from '@shared/project-settings';
+import {
+  resolveOutputLanguage,
+  resolveOutputLanguageOverride,
+  resolvePromptRewriteEnabled,
+  resolvePromptRewriteLanguage,
+  resolvePromptRewriteLanguageOverride,
+  type ComposerDefaults,
+  type TaskOutputLanguage,
+} from '@shared/project-settings';
 import {
   getRuntime,
   getRuntimeAccountProfile,
@@ -77,12 +85,7 @@ import { agentConfig } from '@renderer/utils/agentConfig';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
 import { dualField, withComposerDefault } from './composer-project-overrides';
-import {
-  ComposerSettingsContent,
-  DEFAULT_INPUT_PROMPT_LANGUAGE,
-  DEFAULT_SUMMARY_OUTPUT_LANGUAGE,
-  DEFAULT_TASK_OUTPUT_LANGUAGE,
-} from './composer-settings-content';
+import { ComposerSettingsContent } from './composer-settings-content';
 import { startRendererPerformanceReporter } from './renderer-performance-reporter';
 import { rankWorkspaceAgentSessions } from './workspace-agent-sessions';
 import {
@@ -242,23 +245,55 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     setOverride: (value) => setComposerDefault('attachImagesAsPaths', value),
     hasProject: Boolean(activeProjectId),
   });
-  const inputPromptLanguageField = dualField({
-    override: composerDefaults?.inputPromptLanguage,
-    globalValue: taskSettings?.inputPromptLanguage ?? DEFAULT_INPUT_PROMPT_LANGUAGE,
-    setGlobal: (value) => updateTaskSettings({ inputPromptLanguage: value }),
+  // A capability's switch and its configuration are separate fields, so a
+  // project (or the user) can configure one that is currently switched off.
+  const globalPromptRewriteEnabled = resolvePromptRewriteEnabled(
+    taskSettings?.promptRewriteEnabled,
+    taskSettings?.inputPromptLanguage
+  );
+  const promptRewriteEnabledField = dualField<boolean>({
+    override: composerDefaults?.promptRewriteEnabled,
+    globalValue: globalPromptRewriteEnabled,
+    setGlobal: (value) => updateTaskSettings({ promptRewriteEnabled: value }),
+    setOverride: (value) => setComposerDefault('promptRewriteEnabled', value),
+    hasProject: Boolean(activeProjectId),
+  });
+  const inputPromptLanguageField = dualField<TaskOutputLanguage>({
+    override: resolvePromptRewriteLanguageOverride(composerDefaults?.inputPromptLanguage),
+    globalValue: resolvePromptRewriteLanguage(taskSettings?.inputPromptLanguage),
+    // Writing the language pins the switch too — see home-view.
+    setGlobal: (value) =>
+      updateTaskSettings({
+        inputPromptLanguage: value,
+        promptRewriteEnabled: globalPromptRewriteEnabled,
+      }),
     setOverride: (value) => setComposerDefault('inputPromptLanguage', value),
     hasProject: Boolean(activeProjectId),
   });
-  const namingLanguageField = dualField({
-    override: composerDefaults?.namingLanguage,
-    globalValue: taskSettings?.namingLanguage ?? DEFAULT_TASK_OUTPUT_LANGUAGE,
+  const autoGenerateNameField = dualField<boolean>({
+    override: composerDefaults?.autoGenerateName,
+    globalValue: taskSettings?.autoGenerateName ?? false,
+    setGlobal: (value) => updateTaskSettings({ autoGenerateName: value }),
+    setOverride: (value) => setComposerDefault('autoGenerateName', value),
+    hasProject: Boolean(activeProjectId),
+  });
+  const namingLanguageField = dualField<TaskOutputLanguage>({
+    override: resolveOutputLanguageOverride(composerDefaults?.namingLanguage),
+    globalValue: resolveOutputLanguage(taskSettings?.namingLanguage),
     setGlobal: (value) => updateTaskSettings({ namingLanguage: value }),
     setOverride: (value) => setComposerDefault('namingLanguage', value),
     hasProject: Boolean(activeProjectId),
   });
-  const summaryLanguageField = dualField({
-    override: composerDefaults?.summaryLanguage,
-    globalValue: taskSettings?.summaryLanguage ?? DEFAULT_SUMMARY_OUTPUT_LANGUAGE,
+  const autoGenerateSummaryField = dualField<boolean>({
+    override: composerDefaults?.autoGenerateSummary,
+    globalValue: taskSettings?.autoGenerateSummary ?? true,
+    setGlobal: (value) => updateTaskSettings({ autoGenerateSummary: value }),
+    setOverride: (value) => setComposerDefault('autoGenerateSummary', value),
+    hasProject: Boolean(activeProjectId),
+  });
+  const summaryLanguageField = dualField<TaskOutputLanguage>({
+    override: resolveOutputLanguageOverride(composerDefaults?.summaryLanguage),
+    globalValue: resolveOutputLanguage(taskSettings?.summaryLanguage),
     setGlobal: (value) => updateTaskSettings({ summaryLanguage: value }),
     setOverride: (value) => setComposerDefault('summaryLanguage', value),
     hasProject: Boolean(activeProjectId),
@@ -930,12 +965,18 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         <WorkspaceBarCardSection>
           <ComposerSettingsContent
             attachImagesAsPaths={attachImagesField.value}
+            promptRewriteEnabled={promptRewriteEnabledField.value}
             inputPromptLanguage={inputPromptLanguageField.value}
+            autoGenerateName={autoGenerateNameField.value}
             namingLanguage={namingLanguageField.value}
+            autoGenerateSummary={autoGenerateSummaryField.value}
             summaryLanguage={summaryLanguageField.value}
             onAttachImagesAsPathsChange={attachImagesField.setValue}
+            onPromptRewriteEnabledChange={promptRewriteEnabledField.setValue}
             onInputPromptLanguageChange={inputPromptLanguageField.setValue}
+            onAutoGenerateNameChange={autoGenerateNameField.setValue}
             onNamingLanguageChange={namingLanguageField.setValue}
+            onAutoGenerateSummaryChange={autoGenerateSummaryField.setValue}
             onSummaryLanguageChange={summaryLanguageField.setValue}
           />
         </WorkspaceBarCardSection>

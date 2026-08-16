@@ -11,18 +11,14 @@ import {
 import { cn } from '@renderer/utils/utils';
 
 /**
- * Every language option, including the two that mean "no call": `skip` (never
- * run) and `prompt` (follow the source text, so nothing to translate).
+ * Target languages. Whether a capability runs at all is a separate switch, so
+ * `skip` — which used to double as "off" — is not offered as a target.
  */
-export const TASK_LANGUAGE_OPTIONS: TaskOutputLanguage[] = ['skip', 'app', 'prompt', 'zh-CN', 'en'];
-
-/** Target languages only — for surfaces where a switch owns the on/off state. */
-export const TASK_LANGUAGE_OPTIONS_ON: TaskOutputLanguage[] = ['app', 'prompt', 'zh-CN', 'en'];
+export const TASK_LANGUAGE_OPTIONS: TaskOutputLanguage[] = ['app', 'prompt', 'zh-CN', 'en'];
 
 /**
  * Prompt rewriting has no use for `prompt`: rewriting into the language the
- * prompt is already in is the same as not rewriting, so that value belongs with
- * the off state, not with the targets.
+ * prompt is already in is the same as not rewriting.
  */
 export const PROMPT_REWRITE_LANGUAGE_OPTIONS: TaskOutputLanguage[] = ['app', 'zh-CN', 'en'];
 

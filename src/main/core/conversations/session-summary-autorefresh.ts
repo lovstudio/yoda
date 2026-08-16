@@ -49,7 +49,7 @@ class SessionSummaryAutoRefreshService {
       void (async () => {
         // Read the switch when the turn actually ends, not when the listener was
         // installed, so toggling it takes effect on the very next turn.
-        if (!(await isAutoSessionSummaryEnabled())) return;
+        if (!(await isAutoSessionSummaryEnabled(key.projectId))) return;
         await refreshConversationSummary(key, 'global');
       })().catch((error: unknown) => {
         log.warn('session-summary auto-refresh failed', {

@@ -1,5 +1,6 @@
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
 import type { SessionSummary, SessionSummaryScope } from '@shared/conversations';
+import { resolveOutputLanguage } from '@shared/project-settings';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import { extractAgentMessageText, runAgentCli } from '@main/core/agent-cli/run-agent-cli';
 import { resolveSelectedUtilityAgent } from '@main/core/agents-config/builtin-agent-resolver';
@@ -65,7 +66,9 @@ export async function resolveSummaryRuntime(
     agentId: summaryAgent.agentId,
     agentName: summaryAgent.agentName,
     systemPrompt: summaryAgent.systemPrompt,
-    language: composerDefaults?.summaryLanguage ?? taskSettings.summaryLanguage,
+    language: resolveOutputLanguage(
+      composerDefaults?.summaryLanguage ?? taskSettings.summaryLanguage
+    ),
     context:
       scope === 'recent' ? taskSettings.summaryContextRecent : taskSettings.summaryContextGlobal,
   };
@@ -88,9 +91,6 @@ export async function generateSessionSummary(
   scope: SessionSummaryScope,
   onDelta?: (delta: string) => void
 ): Promise<SessionSummaryGenerationResult> {
-  if (runtime.language === 'skip') {
-    return { summary: null, error: 'Session summary generation is disabled.' };
-  }
   const { runtimeId, runtimeName } = runtime;
   const { messages: transcriptMessages, prompt } = draft;
 

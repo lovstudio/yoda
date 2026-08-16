@@ -58,12 +58,16 @@ export const SETTINGS_DEFAULTS = {
     promptRewriteAgentId: '',
     autoGenerateSummary: true,
     summaryAgentId: '',
+    // `skip` here is not "off" — the prompt-rewrite switch is
+    // `promptRewriteEnabled`. It stays as the stored default only so that switch,
+    // which has no default of its own, still infers "off" for users who never set
+    // it. See resolvePromptRewriteEnabled.
     inputPromptLanguage: 'skip' as const,
     summaryLanguage: 'app' as const,
     summaryContextRecent: DEFAULT_SUMMARY_CONTEXT_RECENT,
     summaryContextGlobal: DEFAULT_SUMMARY_CONTEXT_GLOBAL,
     namingModel: DEFAULT_TASK_NAMING_MODEL,
-    namingLanguage: 'skip' as const,
+    namingLanguage: 'app' as const,
     namingContext: DEFAULT_TASK_NAMING_CONTEXT,
     namingRecentTaskLimit: DEFAULT_TASK_NAMING_RECENT_TASK_LIMIT,
     namingRequestTimeoutMs: DEFAULT_TASK_NAMING_TIMEOUT_MS,

@@ -2,7 +2,6 @@ import { Download, RefreshCw } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { isPromptRewriteEnabled } from '@shared/project-settings';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { AutoTrustWorktreesControl } from '@renderer/features/tasks/components/auto-trust-worktrees-control';
 import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings';
@@ -173,10 +172,9 @@ export const BranchNamingRow: React.FC = observer(() => {
 });
 
 /**
- * The prompt-rewrite toggle, so the capability reads as a switch like its two
- * siblings. There is no dedicated boolean behind it: the target language doubles
- * as the state, with `skip` as the off position and `app` as the default target
- * a fresh enable lands on.
+ * The prompt-rewrite switch, a plain boolean like its two siblings. It is
+ * deliberately separate from the target language: the language used to double as
+ * the switch, which made a switched-off capability impossible to configure.
  */
 export const PromptRewriteEnabledControl: React.FC = observer(() => {
   const { t } = useTranslation();
@@ -186,17 +184,15 @@ export const PromptRewriteEnabledControl: React.FC = observer(() => {
   return (
     <>
       <ResetToDefaultButton
-        visible={taskSettings.isFieldOverridden('inputPromptLanguage')}
+        visible={taskSettings.isFieldOverridden('promptRewriteEnabled')}
         defaultLabel={t('common.no')}
-        onReset={taskSettings.resetInputPromptLanguage}
+        onReset={taskSettings.resetPromptRewriteEnabled}
         disabled={disabled}
       />
       <Switch
-        checked={isPromptRewriteEnabled(taskSettings.inputPromptLanguage)}
+        checked={taskSettings.promptRewriteEnabled}
         disabled={disabled}
-        onCheckedChange={(checked) =>
-          taskSettings.updateInputPromptLanguage(checked ? 'app' : 'skip')
-        }
+        onCheckedChange={taskSettings.updatePromptRewriteEnabled}
       />
     </>
   );
