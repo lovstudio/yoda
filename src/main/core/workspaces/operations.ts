@@ -68,7 +68,8 @@ export async function reorderWorkspaces(orderedIds: string[]): Promise<void> {
     for (let i = 0; i < orderedIds.length; i++) {
       tx.update(workspaces)
         .set({ sortOrder: i, updatedAt: now })
-        .where(eq(workspaces.id, orderedIds[i]));
+        .where(eq(workspaces.id, orderedIds[i]))
+        .run();
     }
   });
 }

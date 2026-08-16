@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from '@renderer/lib/ui/dialog';
 import { Field, FieldGroup, FieldLabel } from '@renderer/lib/ui/field';
+import { InlineError } from '@renderer/lib/ui/inline-error';
 import { Input } from '@renderer/lib/ui/input';
 import { isImeComposing } from '@renderer/utils/ime';
 
@@ -186,7 +187,17 @@ export const MoveProjectPathModal = observer(function MoveProjectPathModal({
             {validationMessage && (
               <p className="mt-1 text-xs text-destructive">{validationMessage}</p>
             )}
-            {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+            {error && (
+              <InlineError
+                message={error}
+                debugInfo={{
+                  projectId,
+                  from: data?.path,
+                  to: trimmedPath,
+                  ...(conflictProject ? { mergeExistingProjectId: conflictProject.id } : {}),
+                }}
+              />
+            )}
           </Field>
           {conflictProject && (
             <Alert className="border-amber-500/30 bg-amber-500/10">
@@ -200,6 +211,9 @@ export const MoveProjectPathModal = observer(function MoveProjectPathModal({
                 </p>
                 <p className="mt-1 break-all font-mono text-[11px] text-foreground-muted">
                   {conflictProject.path}
+                </p>
+                <p className="mt-1 text-[11px] text-foreground-muted">
+                  {t('sidebar.moveProjectPath.targetExistsHint')}
                 </p>
               </AlertDescription>
             </Alert>
