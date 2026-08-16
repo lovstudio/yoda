@@ -1213,11 +1213,12 @@ export function App() {
 
     const address = await Network.getIpAddressAsync().catch(() => null);
     const result = await discoverLanGateways(address, token);
-    if (!result.subnet) {
-      throw new Error('无法读取本机 IP，请确认已连接 Wi-Fi 并允许「本地网络」权限。');
-    }
     const found = result.matches[0];
-    if (!found) throw new Error(`已扫描 ${result.subnet}.0/24，没有找到可连接的桌面端。`);
+    if (!found) {
+      throw new Error(
+        `已扫描 ${result.subnets.map((subnet) => `${subnet}.x`).join('、')}，没有找到可连接的桌面端。`
+      );
+    }
 
     const next: MobileConnection = { baseUrl: found, token };
     await applyConnectionSettings(putEndpoint(settings, 'lan', next), next);
