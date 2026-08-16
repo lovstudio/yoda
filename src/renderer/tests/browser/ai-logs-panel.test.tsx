@@ -61,6 +61,7 @@ vi.mock('react-i18next', () => ({
 vi.mock('@renderer/features/ai-logs/use-ai-logs', () => ({
   useAiLogs: () => ({ data: [fixture], isLoading: false }),
   useClearAiLogs: () => ({ mutate: vi.fn(), isPending: false }),
+  useAiLogTrace: () => ({ data: null, isLoading: false }),
 }));
 
 vi.mock('@renderer/lib/hooks/use-toast', () => ({

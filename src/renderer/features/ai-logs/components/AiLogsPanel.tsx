@@ -18,6 +18,7 @@ import { Spinner } from '@renderer/lib/ui/spinner';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
 import { buildAiLogDebugInformation } from '../log-debug-info';
+import { formatDuration, formatTimestamp } from '../log-format';
 import {
   AI_LOG_CATEGORIES,
   aiLogPreview,
@@ -30,30 +31,13 @@ import {
 } from '../log-presentation';
 import { useAiLogs, useClearAiLogs } from '../use-ai-logs';
 import { AiLogDetailBlock } from './AiLogDetailBlock';
+import { AiLogTraceSection } from './AiLogTraceSection';
 
 type StatusFilter = AiLogStatus | 'all';
 type CategoryFilter = AiLogCategory | 'all';
 
 const STATUS_FILTERS: StatusFilter[] = ['all', 'running', 'succeeded', 'failed'];
 const CATEGORY_FILTERS: CategoryFilter[] = ['all', ...AI_LOG_CATEGORIES];
-
-function formatDuration(durationMs: number): string {
-  if (durationMs < 1000) return `${durationMs}ms`;
-  if (durationMs < 60_000) return `${(durationMs / 1000).toFixed(1)}s`;
-  const minutes = Math.floor(durationMs / 60_000);
-  const seconds = Math.round((durationMs % 60_000) / 1000);
-  return `${minutes}m ${seconds}s`;
-}
-
-function formatTimestamp(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(new Date(value));
-}
 
 export const AiLogsPanel: React.FC = () => {
   const { t } = useTranslation();
@@ -330,6 +314,10 @@ const LogDetail: React.FC<{ record: AiInvocationLogRecord }> = ({ record }) => {
           {record.prompt && <AiLogDetailBlock label={t('aiLogs.prompt')} value={record.prompt} />}
           {record.output && <AiLogDetailBlock label={t('aiLogs.output')} value={record.output} />}
         </div>
+      )}
+
+      {record.metadata?.conversationId && (
+        <AiLogTraceSection logId={record.id} live={record.status === 'running'} />
       )}
 
       {record.command && (

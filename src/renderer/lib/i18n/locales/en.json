@@ -4673,6 +4673,29 @@
       "platform": "Platform",
       "profileId": "Profile"
     },
+    "trace": {
+      "title": "Process",
+      "loading": "Reading transcript…",
+      "summary": "{{requests}} requests · {{tokens}}",
+      "tokens": "in {{input}} · cached {{cached}} · out {{output}}",
+      "stepTokens": "in {{input}} out {{output}}",
+      "capped": "Showing the first {{shown}} of {{total}} steps",
+      "clipped": "{{count}} characters omitted — see the transcript for the full text",
+      "kind": {
+        "prompt": "Input",
+        "thinking": "Thinking",
+        "text": "Reply",
+        "tool-use": "Tool call",
+        "tool-result": "Tool result",
+        "compact": "Context compacted"
+      },
+      "unavailable": {
+        "unsupported-runtime": "This client's transcript format cannot be parsed yet, so there is no step detail.",
+        "no-conversation": "This invocation belongs to no session — the input and output above are the whole process.",
+        "no-transcript": "No matching transcript file; the worktree may have been removed.",
+        "empty-window": "The transcript has no rows in this time span."
+      }
+    },
     "purposeDescription": {
       "interactive-session": "One client process from launch to exit; every chat turn inside it is nested below.",
       "interactive-turn": "One turn of a session: from your message until the AI stops working.",

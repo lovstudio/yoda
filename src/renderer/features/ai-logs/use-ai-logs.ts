@@ -42,3 +42,18 @@ export function useClearAiLogs() {
     },
   });
 }
+
+/**
+ * What ran inside one invocation, parsed from the provider transcript. Read on
+ * demand — only when a row is expanded — because it means walking a JSONL file
+ * that can be tens of megabytes. A still-running invocation is re-read on an
+ * interval, since the transcript grows without emitting any app event.
+ */
+export function useAiLogTrace(logId: string, options: { live: boolean; enabled: boolean }) {
+  return useQuery({
+    queryKey: ['aiLogTrace', logId],
+    queryFn: () => rpc.aiLogs.getTrace(logId),
+    enabled: options.enabled,
+    refetchInterval: options.live ? 4_000 : false,
+  });
+}

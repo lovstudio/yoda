@@ -4673,6 +4673,29 @@
       "platform": "平台",
       "profileId": "配置档"
     },
+    "trace": {
+      "title": "过程",
+      "loading": "正在读取转录…",
+      "summary": "{{requests}} 次请求 · {{tokens}}",
+      "tokens": "入 {{input}} · 缓存 {{cached}} · 出 {{output}}",
+      "stepTokens": "入 {{input}} 出 {{output}}",
+      "capped": "仅显示前 {{shown}} 步，共 {{total}} 步",
+      "clipped": "此处省略 {{count}} 个字符，完整内容见转录文件",
+      "kind": {
+        "prompt": "输入",
+        "thinking": "思考",
+        "text": "回复",
+        "tool-use": "工具调用",
+        "tool-result": "工具结果",
+        "compact": "上下文压缩"
+      },
+      "unavailable": {
+        "unsupported-runtime": "该客户端的转录格式暂不支持解析，拿不到过程明细。",
+        "no-conversation": "这次调用不属于任何会话，上面的输入与输出就是全部过程。",
+        "no-transcript": "找不到对应的转录文件，工作树可能已被清理。",
+        "empty-window": "转录文件里这段时间没有留下任何记录。"
+      }
+    },
     "purposeDescription": {
       "interactive-session": "一次客户端进程的完整生命周期：从启动到退出，期间的每一轮对话列在它下面。",
       "interactive-turn": "会话中的一轮：从你发出消息，到 AI 停止工作。",
