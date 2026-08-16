@@ -1,3 +1,4 @@
+import type { AgentReplyDisplayLevel } from './agent-reply-display';
 import type { MobileSessionDetail, MobileSessionTranscriptBlock } from './mobile-api';
 
 export const YODA_SESSION_SHARE_KIND = 'yoda-session-share' as const;
@@ -47,6 +48,20 @@ export type YodaSessionShareResponse = {
   assetCount: number;
   omittedAssetCount: number;
 };
+
+/** Query parameter the share page reads to pick its transcript depth. */
+export const SESSION_SHARE_DISPLAY_LEVEL_PARAM = 'detail';
+
+/** Bakes the display level into a share URL so recipients open it at the intended depth. */
+export function withSessionShareDisplayLevel(url: string, level: AgentReplyDisplayLevel): string {
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set(SESSION_SHARE_DISPLAY_LEVEL_PARAM, level);
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
 
 function normalizedTimestamp(value: string | null | undefined): string | null {
   if (!value) return null;

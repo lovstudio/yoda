@@ -825,8 +825,6 @@
   pointer-events: none;
 }
 
-.dream-skin-tagline,
-.ydream [data-yoda-surface='home-masthead'],
 [data-yoda-surface='dream-actions'] {
   display: none;
 }
@@ -834,35 +832,6 @@
 .ydream [data-yoda-surface='home-shell'] {
   max-width: none;
   padding: 0 clamp(1.75rem, 3.6cqw, 4rem) 3rem;
-}
-
-.ydream [data-yoda-surface='home-masthead'] {
-  display: flex;
-  min-height: 5.5rem;
-  align-items: center;
-  padding-inline: 0.25rem;
-  color: var(--primary-button-background-hover);
-}
-
-.ydream .dream-skin-masthead-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.08rem;
-}
-
-.ydream .dream-skin-masthead-copy strong::after {
-  content: var(--dream-skin-brand, 'Yoda Dream');
-  font-family: ui-serif, 'Songti SC', 'STSong', serif;
-  font-size: 1.12rem;
-  font-weight: 650;
-  letter-spacing: 0.035em;
-}
-
-.ydream .dream-skin-masthead-copy small::after {
-  content: var(--dream-skin-subtitle, 'YODA DREAM SKIN');
-  color: var(--foreground-muted);
-  font-size: 0.68rem;
-  letter-spacing: 0.09em;
 }
 
 .ydream [data-yoda-surface='home-stage'] {
@@ -931,22 +900,9 @@
   z-index: 2;
 }
 
-.ydream [data-yoda-surface='home-hero'] > div:not(.dream-skin-status) {
+.ydream [data-yoda-surface='home-hero'] > div {
   justify-content: flex-start;
   margin-bottom: 1rem;
-}
-
-.ydream [data-yoda-surface='home-hero'] > div:not(.dream-skin-status) img {
-  display: none;
-}
-
-.ydream [data-yoda-surface='home-hero'] > div:not(.dream-skin-status)::after {
-  content: var(--dream-skin-brand, 'Yoda Dream');
-  color: color-mix(in srgb, var(--primary-button-background-hover) 78%, var(--foreground));
-  font-family: 'Snell Roundhand', 'Segoe Script', cursive;
-  font-size: clamp(1.7rem, 3.1cqw, 2.85rem);
-  font-weight: 500;
-  letter-spacing: 0.025em;
 }
 
 .ydream [data-yoda-surface='home-hero'] h1 {
@@ -960,47 +916,16 @@
 }
 
 .ydream[data-dream-text-side='right'] [data-yoda-surface='home-hero'] > div,
-.ydream[data-dream-text-side='right'] [data-yoda-surface='home-hero'] h1,
-.ydream[data-dream-text-side='right'] [data-yoda-surface='home-hero'] .dream-skin-tagline {
+.ydream[data-dream-text-side='right'] [data-yoda-surface='home-hero'] h1 {
   align-self: flex-end;
   margin-right: 0;
   margin-left: auto;
   text-align: right;
 }
 
-.ydream[data-dream-overlay-copy='off']
-  [data-yoda-surface='home-hero']
-  > div:not(.dream-skin-status),
-.ydream[data-dream-overlay-copy='off'] [data-yoda-surface='home-hero'] h1,
-.ydream[data-dream-overlay-copy='off'] [data-yoda-surface='home-hero'] .dream-skin-tagline {
-  visibility: hidden;
-}
-
 .ydream[data-dream-typography='sans'] [data-yoda-surface='home-hero'] h1,
-.ydream[data-dream-typography='sans'] .dream-skin-tagline,
 .ydream[data-dream-typography='sans'] [data-yoda-surface='dream-actions'] strong {
   font-family: var(--font-sans);
-}
-
-.ydream[data-dream-typography='serif']
-  [data-yoda-surface='home-hero']
-  > div:not(.dream-skin-status)::after {
-  font-family: ui-serif, 'Songti SC', 'STSong', serif;
-  font-style: italic;
-}
-
-.ydream .dream-skin-tagline {
-  display: block;
-  max-width: 48%;
-  margin-top: 1rem;
-  color: var(--foreground-muted);
-  font-family: ui-serif, 'Songti SC', 'STSong', serif;
-  font-size: clamp(0.85rem, 1.35cqw, 1.1rem);
-  letter-spacing: 0.08em;
-}
-
-.ydream .dream-skin-tagline::after {
-  content: var(--dream-skin-tagline, 'Make something wonderful.');
 }
 
 .ydream [data-yoda-surface='home-composer'] {
@@ -1102,47 +1027,6 @@
   border-radius: 22px;
 }
 
-.dream-skin-status {
-  display: none;
-}
-
-.ydream .dream-skin-status {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.42rem 0.65rem;
-  border: 1px solid color-mix(in srgb, var(--primary-button-background) 24%, transparent);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 0.72);
-  color: var(--primary-button-background-hover);
-  font: 700 0/1 var(--font-mono);
-  letter-spacing: 0.12em;
-}
-
-.ydream .dream-skin-status::after {
-  content: var(--dream-skin-status, 'DREAM SKIN ONLINE');
-  font-size: 0.625rem;
-}
-
-.ydream .dream-skin-status span {
-  width: 0.42rem;
-  height: 0.42rem;
-  border-radius: 50%;
-  background: var(--primary-button-background);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--primary-button-background) 72%, transparent);
-}
-
-.ydream[data-dream-motion='on'] .dream-skin-status span {
-  animation: dream-skin-pulse 2.4s ease-in-out infinite;
-}
-
-.ydream[data-dream-motion='off'] .dream-skin-status span {
-  animation: none;
-}
-
 .ydream[data-dream-shell='dark'] body {
   background:
     radial-gradient(
@@ -1235,13 +1119,6 @@
   text-shadow: 0 2px 16px rgb(0 0 0 / 0.74);
 }
 
-.ydream[data-dream-shell='dark']
-  [data-yoda-surface='home-hero']
-  > div:not(.dream-skin-status)::after {
-  color: var(--primary-button-background-hover);
-  text-shadow: 0 2px 18px rgb(0 0 0 / 0.72);
-}
-
 .ydream[data-dream-shell='dark'] [data-yoda-surface='dream-actions'] > button {
   border-color: color-mix(in srgb, var(--primary-button-background) 22%, transparent);
   background:
@@ -1258,11 +1135,6 @@
 
 .ydream[data-dream-shell='dark'] .dream-skin-action-icon {
   background: color-mix(in srgb, var(--primary-button-background) 14%, var(--background-1));
-}
-
-.ydream[data-dream-shell='dark'] .dream-skin-status {
-  background: rgb(9 15 21 / 0.72);
-  color: var(--primary-button-background);
 }
 
 @keyframes dream-skin-drift {
@@ -1344,21 +1216,8 @@
   animation: dream-skin-breathe 6s ease-in-out infinite;
 }
 
-@keyframes dream-skin-pulse {
-  0%,
-  100% {
-    opacity: 0.58;
-    transform: scale(0.86);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .ydream [data-yoda-surface='workspace']::after,
-  .ydream .dream-skin-status span,
   .dream-skin-editor-decoration {
     animation: none;
   }
@@ -1394,10 +1253,6 @@
     padding-inline: 0.75rem;
   }
 
-  .ydream [data-yoda-surface='home-masthead'] {
-    min-height: 4.5rem;
-  }
-
   .ydream [data-yoda-surface='home-hero'] {
     min-height: 33rem;
     padding: 4.25rem 1.5rem 19.5rem;
@@ -1408,11 +1263,6 @@
   .ydream [data-yoda-surface='home-hero'] h1 {
     max-width: 78%;
     font-size: clamp(1.65rem, 7cqw, 2.25rem);
-  }
-
-  .ydream .dream-skin-tagline {
-    max-width: 72%;
-    font-size: 0.78rem;
   }
 
   .ydream [data-yoda-surface='home-composer'] {
@@ -1446,10 +1296,6 @@
   .ydream [data-yoda-surface='home-composer-input'] [data-yoda-surface='composer'] {
     min-height: 9rem;
     border-radius: 18px;
-  }
-
-  .ydream .dream-skin-status {
-    display: none;
   }
 }
 

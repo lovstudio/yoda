@@ -1056,7 +1056,9 @@
       "sidebarStatusBarPrimary": "侧边栏状态栏",
       "sidebarStatusBarPrimaryDescription": "选择优先显示产品信息还是账号信息，另一项仍可通过紧凑图标访问。",
       "sidebarStatusBarProduct": "产品信息",
-      "sidebarStatusBarAccount": "账号信息"
+      "sidebarStatusBarAccount": "账号信息",
+      "sessionShareDisplayLevel": "分享链接详略",
+      "sessionShareDisplayLevelDescription": "生成公开链接时写入的初始详略级别，打开链接的人仍可自行切换。"
     },
     "taskAppearance": {
       "title": "任务外观",
@@ -1141,16 +1143,11 @@
       "skinUnsupportedType": "请选择 PNG、JPEG 或 WebP 图片。",
       "skinTooLarge": "图片大小不能超过 16 MB。",
       "untitledSkin": "未命名皮肤",
-      "skinDefaultTagline": "让图片、配色与工作区成为一个完整的创作空间。",
-      "skinDefaultStatus": "DREAM SKIN ONLINE",
       "skinEditorTitle": "梦境皮肤编辑器",
       "skinEditorIdentity": "名称与文案",
       "skinEditorIdentityHint": "文件名已自动净化，你仍可按主题内容重新命名。",
       "reanalyzePalette": "重新自动取色",
       "skinName": "皮肤名称",
-      "skinSubtitle": "品牌副标题",
-      "skinTagline": "主题标语",
-      "skinStatus": "状态标签",
       "skinEditorPalette": "主题色与排版",
       "skinMode": "外观模式",
       "skinModeLight": "浅色",
@@ -1168,7 +1165,6 @@
       "skinBlur": "背景柔化",
       "skinArtOpacity": "图片强度",
       "skinTextRight": "文字放在右侧",
-      "skinOverlayCopy": "显示 Yoda 叠加文案",
       "skinExtendWorkspace": "图片氛围延展到整个 IDE",
       "skinEditorDecorations": "动态挂件",
       "skinDecoration": "挂件样式",
@@ -2424,19 +2420,19 @@
       "agentReplyDisplay": {
         "hidden": {
           "label": "不显示",
-          "description": "只显示用户对话"
+          "description": "只显示用户的提问"
         },
         "concise": {
           "label": "精简",
-          "description": "只显示 Agent 回复里的最终结果"
+          "description": "每轮只显示 Agent 的收尾回复"
         },
         "detailed": {
           "label": "详细",
-          "description": "显示除工具调用之外的 Agent 回复"
+          "description": "加上 Agent 的过程说明与系统通知"
         },
         "verbose": {
-          "label": "verbose",
-          "description": "显示全部内容，几乎等同于实录"
+          "label": "完整",
+          "description": "加上工具调用，等同实录"
         }
       },
       "transcript": "实录",
@@ -3682,6 +3678,7 @@
     "noDescription": "暂无描述",
     "noDescriptionShort": "暂无描述",
     "duplicate": "创建副本",
+    "forkAgent": "以此为模板新建",
     "anyRuntime": "任意客户端",
     "skillsCount": "{{count}} 个 skill",
     "icon": "图标",
@@ -4784,6 +4781,27 @@
         "adminOpened": "管理密钥已复制，CLIProxyAPI 控制台已打开",
         "adminOpenedHint": "在控制台中粘贴密钥，即可登录并添加 CLI 或 OAuth 账号",
         "openAdminFailed": "CLIProxyAPI 控制台打开失败"
+      },
+      "ccSwitch": {
+        "managedDescription": "在多个 Claude Code / Codex 供应商配置之间一键切换",
+        "detecting": "正在检测 CC Switch…",
+        "detectionFailed": "应用检测遇到问题，重新检测后即可继续",
+        "installingDescription": "正在通过 Homebrew 安装 CC Switch",
+        "installedDescription": "已安装 v{{version}} · 未启用本地代理",
+        "proxyEnabledDescription": "已安装 v{{version}} · 本地代理已启用",
+        "installing": "正在安装 CC Switch…",
+        "installed": "CC Switch 已安装",
+        "installFailed": "CC Switch 安装失败",
+        "download": "下载",
+        "downloadOpened": "已打开 CC Switch 下载页",
+        "open": "打开",
+        "opened": "CC Switch 已打开",
+        "openFailed": "CC Switch 打开失败",
+        "checkUpdates": "检查更新",
+        "sourceRepository": "源码仓库",
+        "actions": "CC Switch 操作",
+        "manageActions": "管理 CC Switch",
+        "management": "CC Switch 管理"
       }
     },
     "categories": {

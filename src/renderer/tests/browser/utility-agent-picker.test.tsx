@@ -1,5 +1,6 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Agent } from '@shared/agents';
 import '../../index.css';
@@ -11,7 +12,8 @@ import '../../index.css';
 const PRESET_ICON = 'data:image/svg+xml,%3Csvg%20viewBox%3D%220%200%2027%206%22%3E%3C%2Fsvg%3E';
 const UPLOADED_ICON = 'data:image/png;base64,iVBORw0KGgo=';
 
-vi.mock('react-i18next', () => ({
+vi.mock('react-i18next', async (importOriginal) => ({
+  ...(await importOriginal<typeof ReactI18nextModule>()),
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
@@ -26,6 +28,8 @@ vi.mock('@renderer/lib/layout/navigation-provider', () => ({
 vi.mock('@renderer/lib/modal/modal-provider', () => ({
   useShowModal: () => vi.fn(),
 }));
+
+vi.mock('@renderer/lib/ipc', () => ({ rpc: {}, events: {} }));
 
 describe('UtilityAgentPicker', () => {
   let host: HTMLDivElement;

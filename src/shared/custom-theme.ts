@@ -92,10 +92,13 @@ export const dreamSkinSchema = z
         ),
     ]),
     imageName: z.string().trim().min(1).max(255),
-    brandSubtitle: z.string().trim().max(80).default('YODA DREAM SKIN'),
-    tagline: z.string().trim().max(160).default('Make something wonderful.'),
-    statusText: z.string().trim().max(80).default('DREAM SKIN ONLINE'),
-    quote: z.string().trim().max(80).default('MAKE SOMETHING WONDERFUL'),
+    // Retired overlay copy. Nothing renders these any more — skin metadata must
+    // not sit on the artwork — but the schema is strict, so previously saved or
+    // exported skins keep parsing.
+    brandSubtitle: z.string().trim().max(80).optional(),
+    tagline: z.string().trim().max(160).optional(),
+    statusText: z.string().trim().max(80).optional(),
+    quote: z.string().trim().max(80).optional(),
     imageTreatment: z
       .object({
         positionX: z.number().min(0).max(100).default(50),
@@ -105,7 +108,7 @@ export const dreamSkinSchema = z
         blur: z.number().min(0).max(20).default(0),
         artOpacity: z.number().min(0.25).max(1).default(1),
         textSide: z.enum(['left', 'right']).default('left'),
-        showOverlayCopy: z.boolean().default(true),
+        showOverlayCopy: z.boolean().optional(),
         extendToWorkspace: z.boolean().default(true),
       })
       .strict()
@@ -117,7 +120,6 @@ export const dreamSkinSchema = z
         blur: 0,
         artOpacity: 1,
         textSide: 'left',
-        showOverlayCopy: true,
         extendToWorkspace: true,
       }),
     decorations: z
@@ -337,10 +339,6 @@ const DEFAULT_DREAM_SKIN: DreamSkin = {
   kind: 'dream-skin',
   image: DREAM_SKIN_BUILTIN_IMAGE,
   imageName: 'dream-arina.jpg',
-  brandSubtitle: 'YODA DREAM SKIN',
-  tagline: 'Turn inspiration into an interactive agent workspace.',
-  statusText: 'DREAM SKIN ONLINE',
-  quote: 'MAKE SOMETHING WONDERFUL',
   imageTreatment: {
     positionX: 50,
     positionY: 50,
@@ -349,7 +347,6 @@ const DEFAULT_DREAM_SKIN: DreamSkin = {
     blur: 0,
     artOpacity: 1,
     textSide: 'left',
-    showOverlayCopy: true,
     extendToWorkspace: true,
   },
   decorations: { preset: 'petals', density: 0.55, motion: true },
@@ -431,10 +428,6 @@ function createBuiltInDreamVariant(input: {
   mode: CustomThemeMode;
   image: (typeof DREAM_SKIN_BUILTIN_IMAGES)[number];
   imageName: string;
-  brandSubtitle: string;
-  tagline: string;
-  statusText: string;
-  quote?: string;
   decoration?: DreamSkinDecorationPreset;
   imageTreatment?: Partial<DreamSkin['imageTreatment']>;
   colors: Partial<CustomThemeColors>;
@@ -449,10 +442,6 @@ function createBuiltInDreamVariant(input: {
       ...base.skin,
       image: input.image,
       imageName: input.imageName,
-      brandSubtitle: input.brandSubtitle,
-      tagline: input.tagline,
-      statusText: input.statusText,
-      quote: input.quote ?? base.skin?.quote,
       imageTreatment: { ...base.skin?.imageTreatment, ...input.imageTreatment },
       decorations: {
         ...base.skin?.decorations,
@@ -469,9 +458,6 @@ export const YODA_DREAM_ARINA_THEME = createBuiltInDreamVariant({
   mode: 'light',
   image: 'builtin:dream-arina',
   imageName: 'dream-arina.jpg',
-  brandSubtitle: '桥本有菜 专属定制皮肤',
-  tagline: '在玫瑰与灵感之间，创造只属于你的作品。',
-  statusText: 'ARINA CUSTOM ONLINE',
   decoration: 'petals',
   colors: {
     background: '#fff7f5',
@@ -498,10 +484,6 @@ export const YODA_DREAM_PANTHER_THEME = createBuiltInDreamVariant({
   mode: 'light',
   image: 'builtin:dream-panther',
   imageName: 'dream-panther.jpg',
-  brandSubtitle: '粉红豹 定制皮肤',
-  tagline: '慢一点也没关系，先把这杯喝完。',
-  statusText: 'PINK PANTHER ONLINE',
-  quote: 'STAY COOL',
   decoration: 'glow',
   imageTreatment: { positionY: 62 },
   colors: {

@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { userEvent } from 'vitest/browser';
+import type { CcSwitchIntegrationStatus } from '@shared/cc-switch-integration';
 import type { CliProxyApiManagedStatus } from '@shared/cliproxyapi-managed';
 import type { LiteLlmManagedStatus } from '@shared/litellm-managed';
 import type {
@@ -75,6 +76,16 @@ const mocks = vi.hoisted(() => ({
     installedVersion: null,
     modelCount: null,
   } as CliProxyApiManagedStatus,
+  ccSwitchStatus: {
+    state: 'not-installed',
+    operation: null,
+    installed: false,
+    appPath: null,
+    installedVersion: null,
+    configured: false,
+    localProxyEnabled: false,
+    installMethod: 'homebrew',
+  } as CcSwitchIntegrationStatus,
   globalBinding: {
     platformId: null,
     enabled: false,
@@ -236,6 +247,14 @@ vi.mock('@renderer/features/maas/useMaas', () => ({
     isPending: false,
     mutateAsync: vi.fn(async () => undefined),
   }),
+  useCcSwitchIntegrationStatus: () => ({
+    data: mocks.ccSwitchStatus,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(async () => undefined),
+  }),
+  useInstallCcSwitch: () => ({ isPending: false, mutateAsync: vi.fn(async () => undefined) }),
+  useOpenCcSwitch: () => ({ isPending: false, mutateAsync: vi.fn(async () => undefined) }),
 }));
 
 vi.mock('@renderer/features/maas/useMaasGatewayExtension', () => ({

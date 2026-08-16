@@ -180,7 +180,6 @@ describe('custom theme packages', () => {
         positionX: 50,
         positionY: 50,
         zoom: 1,
-        showOverlayCopy: true,
         extendToWorkspace: true,
       },
       decorations: { preset: 'petals', density: 0.55, motion: true },
@@ -223,7 +222,6 @@ describe('custom theme packages', () => {
           zoom: 1.35,
           overlayStrength: 0.52,
           textSide: 'right',
-          showOverlayCopy: false,
         },
         decorations: { preset: 'embers', density: 0.8, motion: false },
         provenance: {
@@ -246,7 +244,6 @@ describe('custom theme packages', () => {
           positionY: 38,
           zoom: 1.35,
           textSide: 'right',
-          showOverlayCopy: false,
         },
         decorations: { preset: 'embers', density: 0.8, motion: false },
         provenance: { source: 'local', rightsConfirmed: true },
@@ -275,8 +272,7 @@ describe('custom theme packages', () => {
       mode: 'light',
       skin: {
         image: 'builtin:dream-arina',
-        brandSubtitle: '桥本有菜 专属定制皮肤',
-        statusText: 'ARINA CUSTOM ONLINE',
+        decorations: { preset: 'petals' },
       },
     });
   });

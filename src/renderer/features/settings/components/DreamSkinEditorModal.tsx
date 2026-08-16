@@ -126,36 +126,21 @@ export function DreamSkinEditorModal({ initialTheme, onSuccess, onClose }: Props
             style={{ opacity: 0.2 + skin.decorations.density * 0.65 }}
             aria-hidden="true"
           />
-          {skin.imageTreatment.showOverlayCopy ? (
-            <div
-              className={`relative z-10 flex min-h-64 max-w-[62%] flex-col justify-center gap-3 p-8 ${
-                textOnRight ? 'ml-auto items-end text-right' : 'items-start text-left'
-              }`}
+          <div
+            className={`relative z-10 flex min-h-64 max-w-[62%] flex-col justify-center gap-3 p-8 ${
+              textOnRight ? 'ml-auto items-end text-right' : 'items-start text-left'
+            }`}
+          >
+            <strong
+              className={
+                skin.typography === 'sans'
+                  ? 'text-3xl font-semibold'
+                  : 'font-serif text-3xl font-semibold'
+              }
             >
-              <span
-                className="rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-[0.16em]"
-                style={{
-                  borderColor: draft.colors.border1,
-                  backgroundColor: `${draft.colors.background}cc`,
-                  color: draft.colors.primaryButtonBackground,
-                }}
-              >
-                {skin.statusText}
-              </span>
-              <strong
-                className={
-                  skin.typography === 'sans'
-                    ? 'text-3xl font-semibold'
-                    : 'font-serif text-3xl font-semibold'
-                }
-              >
-                {draft.name}
-              </strong>
-              <span className="text-sm" style={{ color: draft.colors.foregroundMuted }}>
-                {skin.tagline}
-              </span>
-            </div>
-          ) : null}
+              {t('home.headline')}
+            </strong>
+          </div>
         </div>
 
         <section className="grid gap-3 rounded-lg border border-border/70 bg-background-1 p-3">
@@ -186,33 +171,6 @@ export function DreamSkinEditorModal({ initialTheme, onSuccess, onClose }: Props
                 data-autofocus
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, name: event.target.value }))
-                }
-              />
-            </EditorField>
-            <EditorField label={t('settings.theme.skinSubtitle')}>
-              <Input
-                value={skin.brandSubtitle}
-                maxLength={80}
-                onChange={(event) =>
-                  updateSkin((current) => ({ ...current, brandSubtitle: event.target.value }))
-                }
-              />
-            </EditorField>
-            <EditorField label={t('settings.theme.skinTagline')}>
-              <Input
-                value={skin.tagline}
-                maxLength={160}
-                onChange={(event) =>
-                  updateSkin((current) => ({ ...current, tagline: event.target.value }))
-                }
-              />
-            </EditorField>
-            <EditorField label={t('settings.theme.skinStatus')}>
-              <Input
-                value={skin.statusText}
-                maxLength={80}
-                onChange={(event) =>
-                  updateSkin((current) => ({ ...current, statusText: event.target.value }))
                 }
               />
             </EditorField>
@@ -384,7 +342,7 @@ export function DreamSkinEditorModal({ initialTheme, onSuccess, onClose }: Props
               }
             />
           </div>
-          <div className="grid gap-2 @2xl:grid-cols-3">
+          <div className="grid gap-2 @2xl:grid-cols-2">
             <ToggleField
               label={t('settings.theme.skinTextRight')}
               checked={textOnRight}
@@ -395,16 +353,6 @@ export function DreamSkinEditorModal({ initialTheme, onSuccess, onClose }: Props
                     ...current.imageTreatment,
                     textSide: checked ? 'right' : 'left',
                   },
-                }))
-              }
-            />
-            <ToggleField
-              label={t('settings.theme.skinOverlayCopy')}
-              checked={skin.imageTreatment.showOverlayCopy}
-              onCheckedChange={(checked) =>
-                updateSkin((current) => ({
-                  ...current,
-                  imageTreatment: { ...current.imageTreatment, showOverlayCopy: checked },
                 }))
               }
             />

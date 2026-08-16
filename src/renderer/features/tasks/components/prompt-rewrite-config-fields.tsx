@@ -29,8 +29,7 @@ export const PromptRewriteConfigFields = observer(function PromptRewriteConfigFi
         hint={t('settings.tasks.promptRewriteAgentHint')}
         agentId={taskSettings.promptRewriteAgentId}
         onAgentIdChange={taskSettings.updatePromptRewriteAgentId}
-        disabled={taskSettings.loading || taskSettings.saving}
-        interactionDisabled={taskSettings.loading}
+        disabled={taskSettings.loading}
       />
       <TaskLanguageSelect
         label={t('settings.tasks.inputPromptLanguageLabel')}
