@@ -1,4 +1,4 @@
-import type { SearchItem } from '@shared/search';
+import { compareSearchItems, type SearchItem } from '@shared/search';
 
 type Rankable = { kind: string; id: string };
 
@@ -40,12 +40,6 @@ export function applyContextAffinity(
     const boost = (x: SearchItem) =>
       x.projectId === context.projectId && context.projectId != null ? 1 : 0;
     const diff = boost(b) - boost(a);
-    if (diff !== 0) return diff;
-    // ISO timestamps compare lexicographically; undated ('') sorts last.
-    const at = a.timestamp ?? '';
-    const bt = b.timestamp ?? '';
-    if (at !== bt) return at < bt ? 1 : -1;
-    // BM25: lower (more negative) is better
-    return a.score - b.score;
+    return diff !== 0 ? diff : compareSearchItems(a, b);
   });
 }

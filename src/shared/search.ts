@@ -50,3 +50,20 @@ export interface CommandPalettePage {
   /** Offset to pass for the next page, or null when there are no more items. */
   nextOffset: number | null;
 }
+
+/**
+ * Canonical palette ordering for result lists assembled in JS: active before
+ * archived, then newest first (matching the timestamp rendered on each row),
+ * with the source's own relevance score as the tiebreak. SQL-side result sets
+ * order by the same rule in their ORDER BY clauses.
+ */
+export function compareSearchItems(a: SearchItem, b: SearchItem): number {
+  const archived = Number(a.archived ?? false) - Number(b.archived ?? false);
+  if (archived !== 0) return archived;
+  // ISO timestamps compare lexicographically; undated ('') sorts last.
+  const at = a.timestamp ?? '';
+  const bt = b.timestamp ?? '';
+  if (at !== bt) return at < bt ? 1 : -1;
+  // Lower score is better (BM25 rank, or the source's hit order).
+  return a.score - b.score;
+}
