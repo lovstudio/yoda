@@ -1,11 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readRuntimeBarSource } from '@renderer/app/runtime-bar/test-helpers/read-bar-source';
 
 describe('Workspace runtime bar prompt group', () => {
-  const runtimeBarSource = readFileSync(
-    new URL('./workspace-runtime-bar.tsx', import.meta.url),
-    'utf8'
-  );
+  const runtimeBarSource = readRuntimeBarSource();
   const promptPopoverSource = readFileSync(
     new URL('./workspace-prompt-popover.tsx', import.meta.url),
     'utf8'
@@ -18,7 +16,7 @@ describe('Workspace runtime bar prompt group', () => {
   it('places the current Agent prompt and Skill entries before context usage', () => {
     const promptEntry = runtimeBarSource.indexOf('<WorkspacePromptPopover');
     const skillEntry = runtimeBarSource.indexOf('<WorkspaceSkillPopover');
-    const contextEntry = runtimeBarSource.indexOf('{sessionContext && contextPercent != null ? (');
+    const contextEntry = runtimeBarSource.indexOf('export const RuntimeBarContextItem');
 
     expect(promptEntry).toBeGreaterThan(-1);
     expect(promptEntry).toBeLessThan(skillEntry);

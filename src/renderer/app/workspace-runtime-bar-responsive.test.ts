@@ -1,8 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readRuntimeBarSource } from '@renderer/app/runtime-bar/test-helpers/read-bar-source';
 
 describe('Workspace runtime bar responsive layout', () => {
-  const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+  const source = readRuntimeBarSource();
+  const registrySource = readFileSync(
+    new URL('./runtime-bar/registry.ts', import.meta.url),
+    'utf8'
+  );
   const skillPopoverSource = readFileSync(
     new URL('./workspace-skill-popover.tsx', import.meta.url),
     'utf8'
@@ -27,19 +32,19 @@ describe('Workspace runtime bar responsive layout', () => {
 
   it('keeps global configuration as the first footer action and aligns its popover left', () => {
     const footerStart = source.indexOf('<footer');
-    const configRender = source.indexOf('{renderConfigPopover()}', footerStart);
+    const leadSlot = source.indexOf('<RuntimeBarSlotItems slot="lead" />', footerStart);
     const runtimeGroup = source.indexOf('{runtimeId ? (', footerStart);
+    const groupSpacer = source.indexOf('<span className="flex-1" />', footerStart);
     const configStart = source.indexOf(
       '<Popover open={isConfigPopoverOpen} onOpenChange={setIsConfigPopoverOpen}>'
     );
-    const groupSpacer = source.indexOf('<span className="flex-1" />');
     const configEnd = source.indexOf('</Popover>', configStart);
 
-    expect(configRender).toBeGreaterThan(footerStart);
-    expect(configRender).toBeLessThan(runtimeGroup);
-    expect(source.match(/\{renderConfigPopover\(\)\}/g)).toHaveLength(1);
+    expect(leadSlot).toBeGreaterThan(footerStart);
+    expect(leadSlot).toBeLessThan(runtimeGroup);
+    expect(runtimeGroup).toBeLessThan(groupSpacer);
+    expect(registrySource).toMatch(/\{ id: 'config', slot: 'lead'/);
     expect(configStart).toBeGreaterThan(-1);
-    expect(configStart).toBeLessThan(groupSpacer);
     expect(source.slice(configStart, configEnd)).toContain('align="start"');
   });
 
