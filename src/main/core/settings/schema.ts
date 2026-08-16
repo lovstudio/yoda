@@ -351,9 +351,6 @@ export const globalLlmSettingsSchema = z
       defaultProfileId: z.string(),
       namingProfileId: z.string(),
       imageGenerationProfileId: z.string(),
-      promptTranslationEnabled: z.boolean().catch(false),
-      promptTranslationProfileId: z.string(),
-      promptTranslationShowOriginal: z.boolean().catch(true),
     })
   )
   .transform((value) => normalizeLlmSettings(value));

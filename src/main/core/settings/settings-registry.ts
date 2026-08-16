@@ -97,9 +97,6 @@ export const SETTINGS_DEFAULTS = {
     defaultProfileId: DEFAULT_LLM_PROFILE_ID,
     namingProfileId: DEFAULT_LLM_PROFILE_ID,
     imageGenerationProfileId: DEFAULT_LLM_PROFILE_ID,
-    promptTranslationEnabled: false,
-    promptTranslationProfileId: DEFAULT_LLM_PROFILE_ID,
-    promptTranslationShowOriginal: true,
   },
   modelProviders: {
     automaticUpdatesEnabled: true,

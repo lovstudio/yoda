@@ -15,14 +15,12 @@ describe('normalizeLlmSettings', () => {
     expect(settings.defaultProfileId).toBe(DEFAULT_LLM_PROFILE_ID);
     expect(settings.namingProfileId).toBe(DEFAULT_LLM_PROFILE_ID);
     expect(settings.imageGenerationProfileId).toBe(DEFAULT_LLM_PROFILE_ID);
-    expect(settings.promptTranslationProfileId).toBe(DEFAULT_LLM_PROFILE_ID);
   });
 
   it('migrates the legacy direct MaaS switch into a profile access method', () => {
     const settings = normalizeLlmSettings({
       maasEnabled: true,
       maasModel: 'openai/gpt-5-mini',
-      promptTranslationEnabled: true,
     });
 
     expect(settings.profiles[0]).toMatchObject({
@@ -30,7 +28,6 @@ describe('normalizeLlmSettings', () => {
       authProvider: 'yoda-maas',
       model: 'openai/gpt-5-mini',
     });
-    expect(settings.promptTranslationEnabled).toBe(true);
   });
 
   it('migrates legacy routing fields even after defaults add a profile', () => {
@@ -38,7 +35,6 @@ describe('normalizeLlmSettings', () => {
       profiles: [createDefaultLlmProfile()],
       defaultProfileId: DEFAULT_LLM_PROFILE_ID,
       namingProfileId: DEFAULT_LLM_PROFILE_ID,
-      promptTranslationProfileId: DEFAULT_LLM_PROFILE_ID,
       maasEnabled: true,
       maasModel: 'anthropic/claude-sonnet-4-5',
     });
@@ -55,14 +51,12 @@ describe('normalizeLlmSettings', () => {
         defaultProfileId: 'fast',
         namingProfileId: 'missing',
         imageGenerationProfileId: 'missing-image',
-        promptTranslationProfileId: 'also-missing',
       })
     );
 
     expect(settings.defaultProfileId).toBe('fast');
     expect(settings.namingProfileId).toBe('fast');
     expect(settings.imageGenerationProfileId).toBe('fast');
-    expect(settings.promptTranslationProfileId).toBe('fast');
   });
 });
 
@@ -93,9 +87,6 @@ function profileSettings(overrides: Partial<GlobalLlmSettingsShape> = {}): Globa
     defaultProfileId: 'fast',
     namingProfileId: 'fast',
     imageGenerationProfileId: 'fast',
-    promptTranslationEnabled: false,
-    promptTranslationProfileId: 'fast',
-    promptTranslationShowOriginal: true,
     ...overrides,
   };
 }
