@@ -52,6 +52,19 @@ type ConversationSearchMeta = {
 const TASK_WORKSPACE_EXPR = 'COALESCE(wt.sidebar_workspace_id, wp.workspace_id)';
 
 /**
+ * Last-activity time of an indexed row, resolved from its source table. The FTS
+ * index carries no time column, so recency ordering joins back by id. Typed
+ * search orders by this first: BM25 over trigram-matched titles barely
+ * discriminates, while recency is what the user actually navigates by (and is
+ * the timestamp the palette renders on every row).
+ */
+const ACTIVITY_TS_EXPR = `CASE search_index.item_type
+    WHEN 'task' THEN (SELECT t.last_interacted_at FROM tasks t WHERE t.id = search_index.item_id)
+    WHEN 'project' THEN (SELECT p.updated_at FROM projects p WHERE p.id = search_index.item_id)
+    ELSE (SELECT c.last_interacted_at FROM conversations c WHERE c.id = search_index.item_id)
+  END`;
+
+/**
  * SQL condition (with bind params) filtering `search_index` task rows to a
  * sidebar workspace. DEFAULT_WORKSPACE_ID means "no workspace assigned".
  * Non-task rows pass through untouched.
@@ -276,7 +289,8 @@ export class SearchService {
             `SELECT item_type, item_id, project_id, task_id, archived, title, bm25(search_index) AS rank
              FROM search_index
              WHERE search_index MATCH ? AND item_type = ? ${extraSql}
-             ORDER BY archived, rank LIMIT ? OFFSET ?`
+             ORDER BY archived, ${ACTIVITY_TS_EXPR} DESC, rank
+             LIMIT ? OFFSET ?`
           )
           .all(ftsQuery, kind, ...extraParams, limit, offset) as FtsRow[];
         return rows.map(toSearchItem);
@@ -289,7 +303,8 @@ export class SearchService {
            FROM search_index
            WHERE (title LIKE ? ESCAPE '\\' OR keywords LIKE ? ESCAPE '\\')
              AND item_type = ? ${extraSql}
-           ORDER BY archived LIMIT ? OFFSET ?`
+           ORDER BY archived, ${ACTIVITY_TS_EXPR} DESC
+           LIMIT ? OFFSET ?`
         )
         .all(like, like, kind, ...extraParams, limit, offset) as FtsRow[];
       return rows.map(toSearchItem);
@@ -317,7 +332,7 @@ export class SearchService {
            WHERE search_index MATCH ?
              ${convSql}
              ${ws ? `AND ${ws.sql}` : ''}
-           ORDER BY archived, rank
+           ORDER BY archived, ${ACTIVITY_TS_EXPR} DESC, rank
            LIMIT 30`
         )
         .all(
@@ -347,7 +362,7 @@ export class SearchService {
            WHERE (title LIKE ? ESCAPE '\\' OR keywords LIKE ? ESCAPE '\\')
              ${convSql}
              ${ws ? `AND ${ws.sql}` : ''}
-           ORDER BY archived
+           ORDER BY archived, ${ACTIVITY_TS_EXPR} DESC
            LIMIT 30`
         )
         .all(

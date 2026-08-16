@@ -133,6 +133,68 @@ describe('SearchService conversations', () => {
   });
 });
 
+describe('SearchService ranking', () => {
+  let sqlite: Database.Database;
+
+  beforeEach(() => {
+    vi.resetModules();
+    sqlite = new Database(':memory:');
+    state.sqlite = sqlite;
+    createSchema(sqlite);
+    seedRankingTasks(sqlite);
+  });
+
+  afterEach(() => {
+    sqlite.close();
+    state.sqlite = null;
+  });
+
+  it('orders typed FTS results by last activity, newest first', async () => {
+    const { SearchService } = await import('./search-service');
+    const service = new SearchService();
+
+    // 'stale-task' has the shorter (better BM25) title but is older, and the
+    // archived row is the newest of all — archived still sorts last.
+    expect(service.search({ query: 'alpha' }).map((item) => item.id)).toEqual([
+      'fresh-task',
+      'stale-task',
+      'undated-task',
+      'archived-alpha-task',
+    ]);
+  });
+
+  it('orders short LIKE-fallback results by last activity too', async () => {
+    const { SearchService } = await import('./search-service');
+    const service = new SearchService();
+
+    expect(service.search({ query: 'al' }).map((item) => item.id)).toEqual([
+      'fresh-task',
+      'stale-task',
+      'undated-task',
+      'archived-alpha-task',
+    ]);
+  });
+
+  it('orders the paginated kind-scoped query by last activity', async () => {
+    const { SearchService } = await import('./search-service');
+    const service = new SearchService();
+
+    const page = service.searchPaged({
+      query: 'alpha',
+      kind: 'task',
+      offset: 0,
+      limit: 10,
+      context: {},
+    });
+    expect(page.items.map((item) => item.id)).toEqual([
+      'fresh-task',
+      'stale-task',
+      'undated-task',
+      'archived-alpha-task',
+    ]);
+  });
+});
+
 function createSchema(db: Database.Database): void {
   db.exec(`
     CREATE TABLE projects (
@@ -191,5 +253,23 @@ function seedConversations(db: Database.Database): void {
       ('active-conversation', 'Active session', 'project-1', 'active-task', NULL, '2026-07-05T00:30:00.000Z'),
       ('archived-conversation', 'Archived session', 'project-1', 'active-task', '2026-07-05T00:20:00.000Z', '2026-07-05T00:20:00.000Z'),
       ('task-archived-conversation', 'Task archived session', 'project-1', 'archived-task', NULL, '2026-07-05T00:25:00.000Z');
+  `);
+}
+
+function seedRankingTasks(db: Database.Database): void {
+  db.exec(`
+    INSERT INTO tasks (id, name, project_id, archived_at, last_interacted_at)
+    VALUES
+      ('stale-task', 'Alpha', 'project-1', NULL, '2026-07-05T00:00:00.000Z'),
+      ('fresh-task', 'Alpha pipeline refactor', 'project-1', NULL, '2026-07-05T09:00:00.000Z'),
+      ('undated-task', 'Alpha draft', 'project-1', NULL, NULL),
+      ('archived-alpha-task', 'Alpha archived', 'project-1', '2026-07-05T23:00:00.000Z', '2026-07-05T23:00:00.000Z');
+
+    INSERT INTO search_index (item_type, item_id, project_id, task_id, archived, title, keywords)
+    VALUES
+      ('task', 'stale-task', 'project-1', NULL, '', 'Alpha', ''),
+      ('task', 'fresh-task', 'project-1', NULL, '', 'Alpha pipeline refactor', ''),
+      ('task', 'undated-task', 'project-1', NULL, '', 'Alpha draft', ''),
+      ('task', 'archived-alpha-task', 'project-1', NULL, '1', 'Alpha archived', '');
   `);
 }

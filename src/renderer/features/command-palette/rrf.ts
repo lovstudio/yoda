@@ -26,9 +26,11 @@ export function rrf<T extends Rankable>(lists: T[][], k = 60): T[] {
 }
 
 /**
- * Re-ranks FTS5 results by boosting items belonging to the active project
+ * Re-ranks search results by boosting items belonging to the active project
  * before they enter RRF. Applied to List A (DB results) only — actions
- * (List B) are already ordered by context relevance.
+ * (List B) are already ordered by context relevance. Within the same project
+ * bucket the newest item wins, matching the timestamp shown on each row;
+ * undated items sort last.
  */
 export function applyContextAffinity(
   items: SearchItem[],
@@ -38,7 +40,12 @@ export function applyContextAffinity(
     const boost = (x: SearchItem) =>
       x.projectId === context.projectId && context.projectId != null ? 1 : 0;
     const diff = boost(b) - boost(a);
+    if (diff !== 0) return diff;
+    // ISO timestamps compare lexicographically; undated ('') sorts last.
+    const at = a.timestamp ?? '';
+    const bt = b.timestamp ?? '';
+    if (at !== bt) return at < bt ? 1 : -1;
     // BM25: lower (more negative) is better
-    return diff !== 0 ? diff : a.score - b.score;
+    return a.score - b.score;
   });
 }
