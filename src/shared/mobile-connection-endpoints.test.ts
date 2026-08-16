@@ -1,3 +1,4 @@
+import { MOBILE_RELAY_BASE_URL } from '@lovstudio/yoda-protocol/mobile-relay';
 import { describe, expect, it } from 'vitest';
 import {
   classifyEndpointKind,
@@ -9,7 +10,6 @@ import {
   withActiveEndpointFirst,
   type MobileConnectionSettings,
 } from '../../apps/mobile/src/connection-endpoints';
-import { MOBILE_RELAY_BASE_URL } from './mobile-relay';
 
 const RELAY_DEVICE_URL = `${MOBILE_RELAY_BASE_URL}/v1/devices/device-1`;
 

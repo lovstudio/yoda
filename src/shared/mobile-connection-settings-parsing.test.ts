@@ -1,6 +1,6 @@
+import { MOBILE_RELAY_BASE_URL } from '@lovstudio/yoda-protocol/mobile-relay';
 import { describe, expect, it } from 'vitest';
 import { parseConnectionSettings } from '../../apps/mobile/src/connection-endpoints';
-import { MOBILE_RELAY_BASE_URL } from './mobile-relay';
 
 describe('parseConnectionSettings', () => {
   it('migrates a v1 single-endpoint record into its matching slot', () => {

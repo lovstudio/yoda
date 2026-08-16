@@ -5,11 +5,6 @@ import http from 'node:http';
 import { networkInterfaces } from 'node:os';
 import path from 'node:path';
 import { URL } from 'node:url';
-import { app } from 'electron';
-import { resolveAgentPermissionMode, type Agent } from '@shared/agents';
-import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
-import type { Conversation } from '@shared/conversations';
-import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import {
   canContinueMobileSession,
   createExpoGoPairingUrl,
@@ -52,17 +47,22 @@ import {
   type MobileTaskSessionsResponse,
   type MobileTaskStrategyKind,
   type MobileTaskSummary,
-} from '@shared/mobile-api';
+} from '@lovstudio/yoda-protocol/mobile-api';
 import {
   MOBILE_SESSION_EVENT_VERSION,
   type MobileSessionInvalidationReason,
-} from '@shared/mobile-session-events';
-import { resolveMobileSessionInteraction } from '@shared/mobile-session-interaction';
+} from '@lovstudio/yoda-protocol/mobile-session-events';
+import { resolveMobileSessionInteraction } from '@lovstudio/yoda-protocol/mobile-session-interaction';
 import {
   DEFAULT_MOBILE_SYNC_MODE,
   isLoopbackRemoteAddress,
   lanSyncEnabled,
-} from '@shared/mobile-sync';
+} from '@lovstudio/yoda-protocol/mobile-sync';
+import { app } from 'electron';
+import { resolveAgentPermissionMode, type Agent } from '@shared/agents';
+import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
+import type { Conversation } from '@shared/conversations';
+import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import {
   INTERNAL_PROJECT_ID,
   projectDisplayName,
@@ -134,7 +134,10 @@ import {
   MobileInputAttachmentError,
   MobileInputAttachmentStore,
 } from './mobile-input-attachment-store';
-import { mapMobilePermissionMode } from './mobile-permission-modes';
+import {
+  mapMobilePermissionMode,
+  mobileAccessModePermissionModes,
+} from './mobile-permission-modes';
 import {
   ensureMobileConversationInputSession,
   resolveMobileSessionAvailability,
@@ -1369,7 +1372,7 @@ export class MobileGatewayService {
     const catalog = await skillsService.getCatalogIndex(projectPath);
     return {
       runtimeId,
-      skills: mobileSkillSummaries(catalog, allowedSkillKeys),
+      skills: mobileSkillSummaries(catalog, runtimeId, allowedSkillKeys),
     };
   }
 
@@ -1389,6 +1392,7 @@ export class MobileGatewayService {
     );
     const permissionModes: MobileConfigurationSnapshot['permissionModes'] = {};
     const defaultPermissionModes: MobileConfigurationSnapshot['defaultPermissionModes'] = {};
+    const accessModePermissionModes: MobileConfigurationSnapshot['accessModePermissionModes'] = {};
     for (const runtimeId of RUNTIME_IDS) {
       permissionModes[runtimeId] = getRuntimePermissionModes(runtimeId).map((mode) =>
         mapMobilePermissionMode(runtimeId, mode)
@@ -1398,6 +1402,7 @@ export class MobileGatewayService {
         legacyAutoApprove: runtimeAutoApproveDefaults,
         runtimeId,
       });
+      accessModePermissionModes[runtimeId] = mobileAccessModePermissionModes(runtimeId);
     }
 
     return {
@@ -1411,6 +1416,7 @@ export class MobileGatewayService {
       agents,
       permissionModes,
       defaultPermissionModes,
+      accessModePermissionModes,
     };
   }
 

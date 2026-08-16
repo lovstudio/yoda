@@ -1,10 +1,19 @@
-import type { MobilePermissionModeOption } from '@shared/mobile-api';
+import { AGENT_ACCESS_MODES } from '@lovstudio/yoda-protocol/access-mode';
+import type {
+  MobileConfigurationSnapshot,
+  MobilePermissionModeOption,
+} from '@lovstudio/yoda-protocol/mobile-api';
+import { resolveAgentPermissionMode } from '@shared/agents';
 import type { RuntimeId, RuntimePermissionMode } from '@shared/runtime-registry';
 
 type PermissionModeCopy = {
   label: string;
   description: string;
 };
+
+type MobileAccessModePermissionModes = NonNullable<
+  MobileConfigurationSnapshot['accessModePermissionModes'][string]
+>;
 
 const GENERIC_PERMISSION_MODE_COPY: Record<string, PermissionModeCopy> = {
   default: { label: '按客户端默认', description: '使用客户端默认权限设置' },
@@ -73,4 +82,20 @@ export function mapMobilePermissionMode(
       (mode.danger ? '使用客户端提供的最高权限模式' : '使用客户端默认权限设置'),
     danger: mode.danger,
   };
+}
+
+/**
+ * Flatten the Agent access tiers into concrete permission mode ids for one
+ * runtime. The client stores this table instead of the runtime registry, so
+ * the wire protocol stays free of desktop-only metadata.
+ */
+export function mobileAccessModePermissionModes(
+  runtimeId: RuntimeId
+): MobileAccessModePermissionModes {
+  const table: MobileAccessModePermissionModes = {};
+  for (const accessMode of AGENT_ACCESS_MODES) {
+    const resolved = resolveAgentPermissionMode(runtimeId, accessMode);
+    if (resolved) table[accessMode] = resolved;
+  }
+  return table;
 }

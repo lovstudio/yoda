@@ -1,8 +1,8 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   isAgentReplyDisplayLevel,
   type AgentReplyDisplayLevel,
-} from '../../../src/shared/agent-reply-display';
+} from '@lovstudio/yoda-protocol/agent-reply-display';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = 'yoda.mobile.session-display.v1';
 

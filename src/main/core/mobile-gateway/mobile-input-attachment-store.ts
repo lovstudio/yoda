@@ -7,7 +7,7 @@ import {
   type MobileInputAttachment,
   type MobileInputAttachmentChunkRequest,
   type MobileInputAttachmentCreateRequest,
-} from '@shared/mobile-api';
+} from '@lovstudio/yoda-protocol/mobile-api';
 
 const MAX_PENDING_ATTACHMENT_UPLOADS = 32;
 const STORED_ATTACHMENT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;

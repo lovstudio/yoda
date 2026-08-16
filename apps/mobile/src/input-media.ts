@@ -1,6 +1,6 @@
+import { MOBILE_INPUT_ATTACHMENT_MAX_BYTES } from '@lovstudio/yoda-protocol/mobile-api';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
-import { MOBILE_INPUT_ATTACHMENT_MAX_BYTES } from '../../../src/shared/mobile-api';
 import { mobileCropRectToImageRect, type MobileCropRect } from './input-image-editing';
 import {
   MOBILE_INPUT_IMAGE_JPEG_QUALITY,

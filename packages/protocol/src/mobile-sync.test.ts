@@ -4,7 +4,7 @@ import {
   isMobileSyncMode,
   lanSyncEnabled,
   relaySyncEnabled,
-} from './mobile-sync';
+} from './mobile-sync.js';
 
 describe('mobile sync mode', () => {
   it.each([

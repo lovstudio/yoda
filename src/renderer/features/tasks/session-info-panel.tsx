@@ -1,3 +1,4 @@
+import type { AgentReplyDisplayLevel } from '@lovstudio/yoda-protocol/agent-reply-display';
 import { useQuery } from '@tanstack/react-query';
 import {
   Copy,
@@ -11,7 +12,6 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AgentReplyDisplayLevel } from '@shared/agent-reply-display';
 import type {
   ClaudeSessionPrompt,
   Conversation,

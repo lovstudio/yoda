@@ -1,4 +1,4 @@
-import { MOBILE_RELAY_BASE_URL } from '../../../src/shared/mobile-relay';
+import { MOBILE_RELAY_BASE_URL } from '@lovstudio/yoda-protocol/mobile-relay';
 import type { MobileConnection } from './api-client';
 
 /** Where a stored connection points. `lan` is a desktop reachable over the local

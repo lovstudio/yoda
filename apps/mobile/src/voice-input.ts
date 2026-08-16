@@ -1,12 +1,12 @@
+import {
+  buildMobileSpeechContextualStrings,
+  resolveMobileSpeechLocale,
+} from '@lovstudio/yoda-protocol/mobile-api';
 import { getLocales } from 'expo-localization';
 import type {
   ExpoSpeechRecognitionErrorEvent,
   ExpoSpeechRecognitionResultEvent,
 } from 'expo-speech-recognition';
-import {
-  buildMobileSpeechContextualStrings,
-  resolveMobileSpeechLocale,
-} from '../../../src/shared/mobile-api';
 
 export type MobileVoiceInputSession = {
   abort: () => void;

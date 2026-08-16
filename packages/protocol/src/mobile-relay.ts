@@ -171,36 +171,57 @@ export function parseMobileRelayHostFrame(value: unknown): MobileRelayHostFrame 
   };
 }
 
-const MOBILE_RELAY_ALLOWED_PATHS = [
-  /^\/v1\/snapshot$/,
-  /^\/v1\/profile$/,
-  /^\/v1\/configuration$/,
-  /^\/v1\/skills$/,
-  /^\/v1\/demands$/,
-  /^\/v1\/attachments(?:\/[0-9a-f-]+\/(?:chunks|complete|discard))?$/i,
-  /^\/v1\/xhs\/jobs$/,
-  /^\/v1\/xhs\/jobs\/[^/?]+$/,
-  /^\/v1\/xhs\/jobs\/[^/?]+\/confirm$/,
-  /^\/v1\/projects\/[^/?]+\/skills$/,
-  /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions$/,
-  /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions\/[^/?]+(?:\/input|\/events|\/skills|\/config)?$/,
-  /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/actions$/,
+/**
+ * The complete set of gateway routes reachable through Relay, keyed by method.
+ * This table is the single source of truth: the desktop connector's request
+ * bridge and the Relay broker both gate on it, so a new mobile route is added
+ * here once. Patterns are anchored and reject `?`, so query strings never pass.
+ */
+const MOBILE_RELAY_ROUTES: readonly {
+  method: 'GET' | 'POST';
+  pattern: RegExp;
+  eventStream?: true;
+}[] = [
+  { method: 'GET', pattern: /^\/v1\/snapshot$/ },
+  { method: 'GET', pattern: /^\/v1\/profile$/ },
+  { method: 'GET', pattern: /^\/v1\/configuration$/ },
+  { method: 'GET', pattern: /^\/v1\/skills$/ },
+  { method: 'POST', pattern: /^\/v1\/demands$/ },
+  { method: 'POST', pattern: /^\/v1\/attachments$/ },
+  { method: 'POST', pattern: /^\/v1\/attachments\/[0-9a-f-]+\/(?:chunks|complete|discard)$/i },
+  { method: 'POST', pattern: /^\/v1\/xhs\/jobs$/ },
+  { method: 'GET', pattern: /^\/v1\/xhs\/jobs\/[^/?]+$/ },
+  { method: 'POST', pattern: /^\/v1\/xhs\/jobs\/[^/?]+\/confirm$/ },
+  { method: 'GET', pattern: /^\/v1\/projects\/[^/?]+\/skills$/ },
+  { method: 'POST', pattern: /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/actions$/ },
+  { method: 'GET', pattern: /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions$/ },
+  { method: 'GET', pattern: /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions\/[^/?]+$/ },
+  {
+    method: 'GET',
+    pattern: /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions\/[^/?]+\/events$/,
+    eventStream: true,
+  },
+  { method: 'GET', pattern: /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions\/[^/?]+\/skills$/ },
+  { method: 'POST', pattern: /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions\/[^/?]+\/input$/ },
+  { method: 'POST', pattern: /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/sessions\/[^/?]+\/config$/ },
 ];
 
-export function isAllowedMobileRelayRequest(method: string, path: string): boolean {
+export type MobileRelayRouteMatch = {
+  /** Long-lived SSE response: the broker must stream instead of buffering. */
+  isEventStream: boolean;
+};
+
+/** Resolve one upstream request against the allowlist, or null when rejected. */
+export function matchMobileRelayRoute(method: string, path: string): MobileRelayRouteMatch | null {
   const normalizedMethod = method.toUpperCase();
-  if (!['GET', 'POST'].includes(normalizedMethod)) return false;
-  if (path.startsWith('/v1/attachments') && normalizedMethod !== 'POST') return false;
-  if (path === '/v1/xhs/jobs' && normalizedMethod !== 'POST') return false;
-  if (/^\/v1\/xhs\/jobs\/[^/?]+$/.test(path) && normalizedMethod !== 'GET') return false;
-  if (/^\/v1\/xhs\/jobs\/[^/?]+\/confirm$/.test(path) && normalizedMethod !== 'POST') return false;
-  if (
-    /^\/v1\/projects\/[^/?]+\/tasks\/[^/?]+\/actions$/.test(path) &&
-    normalizedMethod !== 'POST'
-  ) {
-    return false;
-  }
-  return MOBILE_RELAY_ALLOWED_PATHS.some((pattern) => pattern.test(path));
+  const route = MOBILE_RELAY_ROUTES.find(
+    (candidate) => candidate.method === normalizedMethod && candidate.pattern.test(path)
+  );
+  return route ? { isEventStream: route.eventStream === true } : null;
+}
+
+export function isAllowedMobileRelayRequest(method: string, path: string): boolean {
+  return matchMobileRelayRoute(method, path) !== null;
 }
 
 export function relayWebSocketUrl(relayBaseUrl: string, deviceId: string): string {

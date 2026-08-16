@@ -1,9 +1,9 @@
-import { fetch as expoFetch } from 'expo/fetch';
 import {
   MobileServerSentEventParser,
   parseMobileSessionInvalidation,
   type MobileSessionInvalidation,
-} from '../../../src/shared/mobile-session-events';
+} from '@lovstudio/yoda-protocol/mobile-session-events';
+import { fetch as expoFetch } from 'expo/fetch';
 import { mobileApiHeaders, mobileApiUrl, type MobileConnection } from './api-client';
 
 const INITIAL_RECONNECT_DELAY_MS = 1_000;

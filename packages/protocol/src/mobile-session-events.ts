@@ -1,4 +1,4 @@
-import type { MobileSessionRuntimeStatus } from './mobile-api';
+import type { MobileSessionRuntimeStatus } from './mobile-api.js';
 
 export const MOBILE_SESSION_EVENT_NAME = 'session-invalidated';
 export const MOBILE_SESSION_EVENT_VERSION = 1 as const;

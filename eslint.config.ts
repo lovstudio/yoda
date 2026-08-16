@@ -8,6 +8,7 @@ export default tseslint.config(
   globalIgnores([
     'dist/**',
     'services/*/dist/**',
+    'packages/*/dist/**',
     'docs/dist/**',
     'out/**',
     'build/**',

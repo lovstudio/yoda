@@ -1,4 +1,4 @@
-import { MOBILE_GATEWAY_DEFAULT_PORT } from '../../../src/shared/mobile-api';
+import { MOBILE_GATEWAY_DEFAULT_PORT } from '@lovstudio/yoda-protocol/mobile-api';
 import { probeConnection, type MobileConnection } from './api-client';
 
 const SWEEP_BATCH_SIZE = 24;

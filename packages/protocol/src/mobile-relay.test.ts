@@ -7,7 +7,7 @@ import {
   parseMobileRelayHostFrame,
   parseMobileRelayPairingUrl,
   relayWebSocketUrl,
-} from './mobile-relay';
+} from './mobile-relay.js';
 
 describe('mobile relay contract', () => {
   it('round trips one-time pairing links', () => {

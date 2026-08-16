@@ -1,7 +1,7 @@
+import type { AgentReplyDisplayLevel } from '@lovstudio/yoda-protocol/agent-reply-display';
 import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AgentReplyDisplayLevel } from '@shared/agent-reply-display';
 import '../../index.css';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

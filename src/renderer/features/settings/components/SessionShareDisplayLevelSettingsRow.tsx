@@ -1,9 +1,9 @@
-import { useTranslation } from 'react-i18next';
 import {
   AGENT_REPLY_DISPLAY_LEVELS,
   isAgentReplyDisplayLevel,
   type AgentReplyDisplayLevel,
-} from '@shared/agent-reply-display';
+} from '@lovstudio/yoda-protocol/agent-reply-display';
+import { useTranslation } from 'react-i18next';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import {
   Select,

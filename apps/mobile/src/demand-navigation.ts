@@ -1,4 +1,7 @@
-import type { MobileDashboardSnapshot, MobileTaskSummary } from '../../../src/shared/mobile-api';
+import type {
+  MobileDashboardSnapshot,
+  MobileTaskSummary,
+} from '@lovstudio/yoda-protocol/mobile-api';
 
 export function prepareCreatedDemandNavigation(
   snapshot: MobileDashboardSnapshot,

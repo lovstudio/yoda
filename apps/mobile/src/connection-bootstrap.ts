@@ -1,5 +1,5 @@
-import { parseMobilePairingUrl } from '../../../src/shared/mobile-api';
-import { parseMobileRelayPairingUrl } from '../../../src/shared/mobile-relay';
+import { parseMobilePairingUrl } from '@lovstudio/yoda-protocol/mobile-api';
+import { parseMobileRelayPairingUrl } from '@lovstudio/yoda-protocol/mobile-relay';
 import type { MobileConnection } from './api-client';
 
 export type MobileConnectionBootstrapFallback = {

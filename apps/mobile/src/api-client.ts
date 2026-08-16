@@ -20,8 +20,8 @@ import {
   type MobileTaskActionRequest,
   type MobileTaskActionResponse,
   type MobileTaskSessionsResponse,
-} from '../../../src/shared/mobile-api';
-import { MOBILE_RELAY_BASE_URL } from '../../../src/shared/mobile-relay';
+} from '@lovstudio/yoda-protocol/mobile-api';
+import { MOBILE_RELAY_BASE_URL } from '@lovstudio/yoda-protocol/mobile-relay';
 import { endpointMatches, type MobileEndpoint } from './connection-endpoints';
 
 const RELAY_HEALTH_TIMEOUT_MS = 8_000;

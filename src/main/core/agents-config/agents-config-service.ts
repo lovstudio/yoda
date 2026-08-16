@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { isAgentAccessMode } from '@lovstudio/yoda-protocol/access-mode';
 import { desc, eq } from 'drizzle-orm';
-import { isAgentAccessMode, type Agent, type AgentDraft, type AgentSource } from '@shared/agents';
+import type { Agent, AgentDraft, AgentSource } from '@shared/agents';
 import { isValidRuntimeId } from '@shared/runtime-registry';
 import { db } from '@main/db/client';
 import { agents, type AgentRow } from '@main/db/schema';

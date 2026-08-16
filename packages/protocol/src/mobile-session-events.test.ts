@@ -4,7 +4,7 @@ import {
   MOBILE_SESSION_EVENT_NAME,
   MobileServerSentEventParser,
   parseMobileSessionInvalidation,
-} from './mobile-session-events';
+} from './mobile-session-events.js';
 
 describe('mobile session server-sent events', () => {
   it('encodes and parses a session invalidation split across chunks', () => {

@@ -1,6 +1,9 @@
+import type {
+  MobileDashboardSnapshot,
+  MobileTaskSummary,
+} from '@lovstudio/yoda-protocol/mobile-api';
 import { describe, expect, it } from 'vitest';
 import { prepareCreatedDemandNavigation } from '../../apps/mobile/src/demand-navigation';
-import type { MobileDashboardSnapshot, MobileTaskSummary } from './mobile-api';
 
 function task(id: string, projectId = 'project-1'): MobileTaskSummary {
   return {

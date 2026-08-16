@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
 import {
   appendMobileVoiceTranscript,
   buildMobileSpeechContextualStrings,
   mergeMobileVoiceRecognitionResult,
   MOBILE_SPEECH_CONTEXT_MAX_STRINGS,
   resolveMobileSpeechLocale,
-} from './mobile-api';
+} from '@lovstudio/yoda-protocol/mobile-api';
+import { describe, expect, it } from 'vitest';
 
 describe('mobile voice input text', () => {
   it('appends Chinese dictation without adding a visual gap', () => {

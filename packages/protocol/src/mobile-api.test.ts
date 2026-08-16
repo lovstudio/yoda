@@ -16,7 +16,7 @@ import {
   sortMobileTasks,
   type MobileProjectSummary,
   type MobileTaskSummary,
-} from './mobile-api';
+} from './mobile-api.js';
 
 describe('mobile Skill input', () => {
   const skills = [
@@ -25,12 +25,14 @@ describe('mobile Skill input', () => {
       id: 'frontend-design',
       displayName: 'Frontend Design',
       description: 'Build polished mobile interfaces',
+      insertText: '$frontend-design',
     },
     {
       key: 'skill:two',
       id: 'debug-pro',
       displayName: '调试专家',
       description: '定位运行时错误',
+      insertText: '$debug-pro',
     },
   ];
 
@@ -60,7 +62,12 @@ describe('mobile session continuation', () => {
 });
 
 describe('mobile execution defaults', () => {
-  const configuration = { defaultPermissionModes: { codex: 'bypass' } } as const;
+  const configuration = {
+    defaultPermissionModes: { codex: 'bypass' },
+    accessModePermissionModes: {
+      codex: { plan: 'plan', write: 'full-auto', 'full-access': 'bypass' },
+    },
+  } as const;
 
   it('uses the configured Agent access level before the runtime fallback', () => {
     expect(resolveMobilePermissionMode(configuration, { accessMode: 'full-access' }, 'codex')).toBe(

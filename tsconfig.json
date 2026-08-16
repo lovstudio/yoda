@@ -20,7 +20,8 @@
       "@main/*": ["./src/main/*"],
       "@shared/*": ["./src/shared/*"],
       "@root/*": ["./*"],
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@lovstudio/yoda-protocol/*": ["./packages/protocol/src/*"]
     }
   },
   "include": [

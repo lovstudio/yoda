@@ -1,5 +1,5 @@
-import type { AgentReplyDisplayLevel } from './agent-reply-display';
-import type { MobileSessionTranscriptBlock } from './mobile-api';
+import type { AgentReplyDisplayLevel } from './agent-reply-display.js';
+import type { MobileSessionTranscriptBlock } from './mobile-api.js';
 
 const INTERNAL_AGENT_REPLY_METADATA_PATTERN =
   /<oai-mem-citation\b[^>]*>[\s\S]*?<\/oai-mem-citation>/gi;

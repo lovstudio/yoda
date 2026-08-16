@@ -1,3 +1,4 @@
+import { MOBILE_RELAY_BASE_URL } from '@lovstudio/yoda-protocol/mobile-relay';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   configureConnectionFailover,
@@ -9,7 +10,6 @@ import {
   SESSION_INPUT_REQUEST_TIMEOUT_MS,
   uploadInputImage,
 } from '../../apps/mobile/src/api-client';
-import { MOBILE_RELAY_BASE_URL } from './mobile-relay';
 
 const relayConnection = {
   baseUrl: `${MOBILE_RELAY_BASE_URL}/v1/devices/device-1`,

@@ -1,5 +1,11 @@
-import { isAgentAccessMode, resolveAgentPermissionMode, type AgentAccessMode } from './agents';
-import type { RuntimeId } from './runtime-registry';
+import { isAgentAccessMode, type AgentAccessMode } from './access-mode.js';
+
+/**
+ * Client (Agent runtime) identifier as it travels on the wire. The desktop
+ * connector owns the authoritative list and narrows this at the gateway
+ * boundary; the phone treats it as an opaque string.
+ */
+export type MobileRuntimeId = string;
 
 export const MOBILE_GATEWAY_DEFAULT_PORT = 3879;
 export const MOBILE_GATEWAY_DEFAULT_DEV_TOKEN = 'dev-mobile-token';
@@ -600,7 +606,7 @@ export type MobilePermissionModeOption = {
 };
 
 export type MobileRuntimeOption = {
-  id: RuntimeId;
+  id: MobileRuntimeId;
   name: string;
 };
 
@@ -610,7 +616,7 @@ export type MobileAgentSummary = {
   name: string;
   description?: string;
   icon?: string;
-  preferredRuntime: RuntimeId;
+  preferredRuntime: MobileRuntimeId;
   model: string | null;
   reasoningEffort: string | null;
   accessMode: AgentAccessMode;
@@ -624,24 +630,35 @@ export type MobileSessionAgent = {
 
 export type MobileConfigurationSnapshot = {
   generatedAt: string;
-  defaultRuntimeId: RuntimeId;
+  defaultRuntimeId: MobileRuntimeId;
   defaultAgentId: string | null;
   runtimes: MobileRuntimeOption[];
   agents: MobileAgentSummary[];
-  permissionModes: Partial<Record<RuntimeId, MobilePermissionModeOption[]>>;
-  defaultPermissionModes: Partial<Record<RuntimeId, string>>;
+  permissionModes: Partial<Record<MobileRuntimeId, MobilePermissionModeOption[]>>;
+  defaultPermissionModes: Partial<Record<MobileRuntimeId, string>>;
+  /**
+   * Permission mode each Agent access tier maps to, precomputed by the desktop
+   * connector so the client never needs the runtime registry. `inherit` is
+   * absent by design: it means "fall back to `defaultPermissionModes`".
+   */
+  accessModePermissionModes: Partial<
+    Record<MobileRuntimeId, Partial<Record<AgentAccessMode, string>>>
+  >;
 };
 
 /** Resolve the permission mode shown for a new mobile session. Agent access is
  * concrete when configured; otherwise the desktop runtime default is shared. */
 export function resolveMobilePermissionMode(
-  configuration: Pick<MobileConfigurationSnapshot, 'defaultPermissionModes'>,
+  configuration: Pick<
+    MobileConfigurationSnapshot,
+    'defaultPermissionModes' | 'accessModePermissionModes'
+  >,
   agent: Pick<MobileAgentSummary, 'accessMode'> | null | undefined,
-  runtimeId: RuntimeId
+  runtimeId: MobileRuntimeId
 ): string | null {
   const accessMode = agent && isAgentAccessMode(agent.accessMode) ? agent.accessMode : 'inherit';
   return (
-    resolveAgentPermissionMode(runtimeId, accessMode) ??
+    configuration.accessModePermissionModes[runtimeId]?.[accessMode] ??
     configuration.defaultPermissionModes[runtimeId] ??
     null
   );
@@ -649,7 +666,7 @@ export function resolveMobilePermissionMode(
 
 export type MobileDemandConfiguration = {
   agentId: string | null;
-  runtimeId: RuntimeId;
+  runtimeId: MobileRuntimeId;
   strategyKind: MobileTaskStrategyKind;
   model: string | null;
   reasoningEffort: string | null;
@@ -682,10 +699,12 @@ export type MobileSkillSummary = {
   id: string;
   displayName: string;
   description: string;
+  /** Ready-to-insert invocation, already prefixed for the session's client. */
+  insertText: string;
 };
 
 export type MobileSkillsResponse = {
-  runtimeId: RuntimeId;
+  runtimeId: MobileRuntimeId;
   skills: MobileSkillSummary[];
 };
 
@@ -725,7 +744,7 @@ export type MobileSessionSummary = {
   projectId: string;
   taskId: string;
   title: string;
-  runtimeId: RuntimeId;
+  runtimeId: MobileRuntimeId;
   createdAt?: string;
   updatedAt?: string;
   lastInteractedAt: string | null;

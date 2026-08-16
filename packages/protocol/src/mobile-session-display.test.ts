@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { MobileSessionTranscriptBlock } from './mobile-api';
+import type { MobileSessionTranscriptBlock } from './mobile-api.js';
 import {
   filterMobileSessionTranscript,
   stripInternalAgentReplyMetadata,
-} from './mobile-session-display';
+} from './mobile-session-display.js';
 
 const transcript: MobileSessionTranscriptBlock[] = [
   { id: 'user', role: 'user', timestamp: null, format: 'plain', content: '请开始' },

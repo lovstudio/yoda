@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildMobileSessionInteractionAnswer,
   resolveMobileSessionInteraction,
-} from './mobile-session-interaction';
+} from './mobile-session-interaction.js';
 
 const awaitingDetail = {
   runtimeStatus: 'awaiting-input' as const,

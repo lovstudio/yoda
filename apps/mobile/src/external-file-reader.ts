@@ -1,7 +1,7 @@
+import { MOBILE_SESSION_INPUT_MAX_CHARS } from '@lovstudio/yoda-protocol/mobile-api';
 import { File } from 'expo-file-system';
 import { getInfoAsync, readAsStringAsync } from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
-import { MOBILE_SESSION_INPUT_MAX_CHARS } from '../../../src/shared/mobile-api';
 import type { MobileExternalFile } from './external-file-input';
 
 const MAX_EXTERNAL_TEXT_BYTES = 1 * 1024 * 1024;

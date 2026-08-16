@@ -6,7 +6,7 @@ import type {
   MobileSessionQuestion,
   MobileSessionRuntimeStatus,
   MobileSessionTranscriptBlock,
-} from './mobile-api';
+} from './mobile-api.js';
 
 const MAX_DESCRIPTION_CHARS = 480;
 const MAX_OPTION_CHARS = 180;

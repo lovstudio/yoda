@@ -1,6 +1,6 @@
+import type { MobileGatewayConnectionInfo } from '@lovstudio/yoda-protocol/mobile-api';
+import type { MobileRelayStatus } from '@lovstudio/yoda-protocol/mobile-relay';
 import { describe, expect, it } from 'vitest';
-import type { MobileGatewayConnectionInfo } from '@shared/mobile-api';
-import type { MobileRelayStatus } from '@shared/mobile-relay';
 import { deriveRelayConnectionUiState, hasReachableLocalGateway } from './mobile-connection-state';
 
 const NOW = Date.parse('2026-07-13T12:00:00.000Z');

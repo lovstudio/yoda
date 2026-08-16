@@ -1,5 +1,5 @@
-import type { MobileGatewayConnectionInfo } from '@shared/mobile-api';
-import type { MobileRelayStatus } from '@shared/mobile-relay';
+import type { MobileGatewayConnectionInfo } from '@lovstudio/yoda-protocol/mobile-api';
+import type { MobileRelayStatus } from '@lovstudio/yoda-protocol/mobile-relay';
 
 export type RelayConnectionPhase =
   | 'loading'

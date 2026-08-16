@@ -17,6 +17,7 @@
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
     "@expo/vector-icons": "^15.1.1",
+    "@lovstudio/yoda-protocol": "workspace:*",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "expo": "~54.0.36",
     "expo-clipboard": "~8.0.8",

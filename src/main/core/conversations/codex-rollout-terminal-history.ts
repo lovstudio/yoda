@@ -1,10 +1,10 @@
 import { open, readFile, stat } from 'node:fs/promises';
-import type { Conversation, ConversationSurfaceAnchor } from '@shared/conversations';
-import { isAgentSessionRunningStatus } from '@shared/events/agentEvents';
 import type {
   MobileSessionTranscriptAgentPhase,
   MobileSessionTranscriptToolStatus,
-} from '@shared/mobile-api';
+} from '@lovstudio/yoda-protocol/mobile-api';
+import type { Conversation, ConversationSurfaceAnchor } from '@shared/conversations';
+import { isAgentSessionRunningStatus } from '@shared/events/agentEvents';
 import {
   readCodexThreadRolloutPath,
   resolveCodexStatePath,

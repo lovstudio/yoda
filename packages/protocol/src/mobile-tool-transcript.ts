@@ -1,4 +1,4 @@
-import type { MobileSessionTranscriptBlock } from './mobile-api';
+import type { MobileSessionTranscriptBlock } from './mobile-api.js';
 
 const TOOL_PREVIEW_MAX_CHARS = 88;
 

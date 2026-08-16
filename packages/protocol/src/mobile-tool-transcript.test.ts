@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { MobileSessionTranscriptBlock } from './mobile-api';
+import type { MobileSessionTranscriptBlock } from './mobile-api.js';
 import {
   formatMobileToolTranscriptContent,
   groupAdjacentMobileToolBlocks,
   mobileToolGroupTitle,
   summarizeMobileToolTranscriptContent,
-} from './mobile-tool-transcript';
+} from './mobile-tool-transcript.js';
 
 function block(
   id: string,

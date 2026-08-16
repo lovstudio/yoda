@@ -1,4 +1,61 @@
 import { Ionicons } from '@expo/vector-icons';
+import {
+  AGENT_REPLY_DISPLAY_LEVELS,
+  type AgentReplyDisplayLevel,
+} from '@lovstudio/yoda-protocol/agent-reply-display';
+import {
+  appendMobileVoiceTranscript,
+  canContinueMobileSession,
+  filterMobileProjects,
+  filterMobileSkills,
+  filterMobileTasks,
+  getMobileProjectActivityById,
+  mergeMobileVoiceRecognitionResult,
+  MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
+  MOBILE_SESSION_INPUT_MAX_CHARS,
+  parseMobilePairingUrl,
+  parseMobileTimestamp,
+  prependMobileSkillCommand,
+  resolveMobilePermissionMode,
+  resolveMobileSiblingTaskAttribution,
+  sortMobileProjects,
+  sortMobileTaskAttributionCandidates,
+  sortMobileTasks,
+  type MobileConfigurationSnapshot,
+  type MobileDashboardSnapshot,
+  type MobileDemandConfiguration,
+  type MobileProfileSnapshot,
+  type MobileProjectSortMode,
+  type MobileProjectSummary,
+  type MobileSessionDetail,
+  type MobileSessionInteraction,
+  type MobileSessionRuntimeConfigurationUpdate,
+  type MobileSessionSummary,
+  type MobileSessionTranscriptBlock,
+  type MobileSkillSummary,
+  type MobileTaskAction,
+  type MobileTaskActivityStatus,
+  type MobileTaskSortMode,
+  type MobileTaskSummary,
+} from '@lovstudio/yoda-protocol/mobile-api';
+import {
+  canonicalizeMobileRelayPairing,
+  parseMobileRelayPairingUrl,
+} from '@lovstudio/yoda-protocol/mobile-relay';
+import {
+  filterMobileSessionTranscript,
+  stripInternalAgentReplyMetadata,
+} from '@lovstudio/yoda-protocol/mobile-session-display';
+import {
+  buildMobileSessionInteractionAnswer,
+  type MobileSessionInteractionSelections,
+} from '@lovstudio/yoda-protocol/mobile-session-interaction';
+import {
+  formatMobileToolTranscriptContent,
+  groupAdjacentMobileToolBlocks,
+  mobileToolGroupTitle,
+  summarizeMobileToolTranscriptContent,
+} from '@lovstudio/yoda-protocol/mobile-tool-transcript';
 import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
 import * as Network from 'expo-network';
@@ -38,64 +95,6 @@ import {
   type TextStyle,
 } from 'react-native';
 import yodaMarkSource from '../../../src/assets/images/yoda/yoda_logo.png';
-import { applyAgentCommandPrefix } from '../../../src/shared/agent-command-prefix';
-import {
-  AGENT_REPLY_DISPLAY_LEVELS,
-  type AgentReplyDisplayLevel,
-} from '../../../src/shared/agent-reply-display';
-import {
-  appendMobileVoiceTranscript,
-  canContinueMobileSession,
-  filterMobileProjects,
-  filterMobileSkills,
-  filterMobileTasks,
-  getMobileProjectActivityById,
-  mergeMobileVoiceRecognitionResult,
-  MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
-  MOBILE_SESSION_INPUT_MAX_CHARS,
-  parseMobilePairingUrl,
-  parseMobileTimestamp,
-  prependMobileSkillCommand,
-  resolveMobilePermissionMode,
-  resolveMobileSiblingTaskAttribution,
-  sortMobileProjects,
-  sortMobileTaskAttributionCandidates,
-  sortMobileTasks,
-  type MobileConfigurationSnapshot,
-  type MobileDashboardSnapshot,
-  type MobileDemandConfiguration,
-  type MobileProfileSnapshot,
-  type MobileProjectSortMode,
-  type MobileProjectSummary,
-  type MobileSessionDetail,
-  type MobileSessionInteraction,
-  type MobileSessionRuntimeConfigurationUpdate,
-  type MobileSessionSummary,
-  type MobileSessionTranscriptBlock,
-  type MobileSkillSummary,
-  type MobileTaskAction,
-  type MobileTaskActivityStatus,
-  type MobileTaskSortMode,
-  type MobileTaskSummary,
-} from '../../../src/shared/mobile-api';
-import {
-  canonicalizeMobileRelayPairing,
-  parseMobileRelayPairingUrl,
-} from '../../../src/shared/mobile-relay';
-import {
-  filterMobileSessionTranscript,
-  stripInternalAgentReplyMetadata,
-} from '../../../src/shared/mobile-session-display';
-import {
-  buildMobileSessionInteractionAnswer,
-  type MobileSessionInteractionSelections,
-} from '../../../src/shared/mobile-session-interaction';
-import {
-  formatMobileToolTranscriptContent,
-  groupAdjacentMobileToolBlocks,
-  mobileToolGroupTitle,
-  summarizeMobileToolTranscriptContent,
-} from '../../../src/shared/mobile-tool-transcript';
 import {
   configureConnectionFailover,
   createDemand,
@@ -4831,9 +4830,6 @@ function InputMediaControls({
   const [toolsOpen, setToolsOpen] = useState(false);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [skills, setSkills] = useState<MobileSkillSummary[]>([]);
-  const [skillsRuntimeId, setSkillsRuntimeId] = useState<MobileSessionSummary['runtimeId'] | null>(
-    null
-  );
   const [skillsLoading, setSkillsLoading] = useState(false);
   const [skillsError, setSkillsError] = useState<string | null>(null);
   const [voiceStarting, setVoiceStarting] = useState(false);
@@ -4842,7 +4838,6 @@ function InputMediaControls({
     projectId: skillProjectId,
     taskId: skillTaskId,
     sessionId: skillSessionId,
-    runtimeId: skillRuntimeId,
   } = skillContext;
   const voiceBaseValueRef = useRef('');
   const voiceFinalTranscriptRef = useRef('');
@@ -4930,7 +4925,6 @@ function InputMediaControls({
         sessionId: skillSessionId,
       });
       setSkills(response.skills);
-      setSkillsRuntimeId(response.runtimeId);
     } catch (error) {
       setSkills([]);
       setSkillsError(errorMessage(error));
@@ -4949,12 +4943,7 @@ function InputMediaControls({
 
   const selectSkill = useCallback(
     (skill: MobileSkillSummary) => {
-      const runtimeId = skillRuntimeId ?? skillsRuntimeId;
-      if (!runtimeId) return;
-      const nextValue = prependMobileSkillCommand(
-        value,
-        applyAgentCommandPrefix(runtimeId, skill.id)
-      );
+      const nextValue = prependMobileSkillCommand(value, skill.insertText);
       if (nextValue.length > MOBILE_SESSION_INPUT_MAX_CHARS) {
         onError('输入内容已接近上限，请精简后再选择技能。');
         return;
@@ -4962,7 +4951,7 @@ function InputMediaControls({
       onChange(nextValue);
       setSkillPickerOpen(false);
     },
-    [onChange, onError, skillRuntimeId, skillsRuntimeId, value]
+    [onChange, onError, value]
   );
 
   const startVoiceInput = useCallback(async () => {

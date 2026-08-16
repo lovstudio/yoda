@@ -1,8 +1,8 @@
+import { MOBILE_SYNC_MODES, type MobileSyncMode } from '@lovstudio/yoda-protocol/mobile-sync';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Cloud, Copy, RefreshCw, Smartphone, Wifi } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MOBILE_SYNC_MODES, type MobileSyncMode } from '@shared/mobile-sync';
 import {
   WORKSPACE_BAR_CARD_CLASS,
   WorkspaceBarCardHeader,
