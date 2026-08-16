@@ -5,18 +5,15 @@ import {
   MIN_TASK_NAMING_TIMEOUT_MS,
   normalizeTaskNamingTimeoutMs,
 } from '@shared/task-naming';
+import {
+  TASK_LANGUAGE_OPTIONS,
+  TaskLanguageSelect,
+} from '@renderer/features/tasks/components/task-language-select';
 import { UtilityAgentPicker } from '@renderer/features/tasks/components/utility-agent-picker';
 import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings';
 import { Checkbox } from '@renderer/lib/ui/checkbox';
 import { Input } from '@renderer/lib/ui/input';
 import { MicroLabel } from '@renderer/lib/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@renderer/lib/ui/select';
 import { cn } from '@renderer/utils/utils';
 
 const CONTEXT_KEYS = ['prompt', 'project', 'readme', 'recentTasks'] as const;
@@ -63,29 +60,14 @@ export const NamingConfigFields = observer(function NamingConfigFields({
       />
 
       <div className={cn('flex min-w-0 gap-2', compact ? 'flex-col' : 'flex-wrap items-end')}>
-        <Field
+        <TaskLanguageSelect
           label={t('settings.tasks.namingLanguageLabel')}
+          value={taskSettings.namingLanguage}
+          options={TASK_LANGUAGE_OPTIONS}
+          disabled={interactionDisabled}
+          onValueChange={taskSettings.updateNamingLanguage}
           className={compact ? 'min-w-0' : 'w-44 shrink-0'}
-        >
-          <Select
-            value={taskSettings.namingLanguage}
-            onValueChange={(value) =>
-              taskSettings.updateNamingLanguage(value as typeof taskSettings.namingLanguage)
-            }
-            disabled={interactionDisabled}
-          >
-            <SelectTrigger size="sm" className="h-8 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="skip">{t('settings.tasks.namingLanguageSkip')}</SelectItem>
-              <SelectItem value="app">{t('settings.tasks.namingLanguageApp')}</SelectItem>
-              <SelectItem value="prompt">{t('settings.tasks.namingLanguagePrompt')}</SelectItem>
-              <SelectItem value="zh-CN">{t('settings.tasks.namingLanguageZh')}</SelectItem>
-              <SelectItem value="en">{t('settings.tasks.namingLanguageEn')}</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
+        />
         <Field
           label={t('settings.tasks.namingTimeoutLabel')}
           className={compact ? 'min-w-0' : 'w-28 shrink-0'}

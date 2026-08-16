@@ -54,7 +54,11 @@ import {
   type LegacyRunMode,
 } from '@shared/paradigms/kinds';
 import { paradigmToTeam } from '@shared/paradigms/team-adapter';
-import type { ComposerDefaults, TaskOutputLanguage } from '@shared/project-settings';
+import {
+  isPromptRewriteEnabled,
+  type ComposerDefaults,
+  type TaskOutputLanguage,
+} from '@shared/project-settings';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
 import { taskNameFromPrompt } from '@shared/task-name';
@@ -924,7 +928,7 @@ export const HomeComposer = observer(function HomeComposer({
   const inputPromptLanguage = inputPromptLanguageField.value;
   const rewriteInputRequirement = useCallback(
     async (value: string) => {
-      if (!value.trim() || inputPromptLanguage === 'skip' || inputPromptLanguage === 'prompt') {
+      if (!value.trim() || !isPromptRewriteEnabled(inputPromptLanguage)) {
         return value;
       }
       const result = await rpc.conversations.rewritePrompt({
@@ -1012,9 +1016,7 @@ export const HomeComposer = observer(function HomeComposer({
       });
       const requirement = serialized.text.trim();
       const deferInitialPrompt =
-        requirement.length > 0 &&
-        inputPromptLanguage !== 'skip' &&
-        inputPromptLanguage !== 'prompt';
+        requirement.length > 0 && isPromptRewriteEnabled(inputPromptLanguage);
       const requirementPromise = deferInitialPrompt
         ? rewriteInputRequirement(requirement).catch((error: unknown) => {
             toast({

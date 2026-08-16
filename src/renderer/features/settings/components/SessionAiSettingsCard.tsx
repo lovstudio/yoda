@@ -7,7 +7,7 @@ import { SettingDisclosure } from './SettingDisclosure';
 import {
   AutoGenerateSummaryControl,
   AutoGenerateTaskNamesControl,
-  InputPromptLanguageControl,
+  PromptRewriteEnabledControl,
 } from './TaskSettingsRows';
 
 /**
@@ -25,9 +25,14 @@ const SessionAiSettingsCard: React.FC = () => {
         <SettingDisclosure
           title={t('settings.tasks.promptRewriteTitle')}
           description={t('settings.tasks.inputPromptLanguageDescription')}
-          control={<InputPromptLanguageControl />}
+          control={<PromptRewriteEnabledControl />}
         >
-          <PromptRewriteConfigFields />
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-foreground-passive">
+              {t('settings.tasks.promptRewriteConfigDescription')}
+            </p>
+            <PromptRewriteConfigFields />
+          </div>
         </SettingDisclosure>
       </div>
       <div className="py-4">

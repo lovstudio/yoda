@@ -2,7 +2,12 @@ import { SlidersHorizontal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { TaskOutputLanguage } from '@shared/project-settings';
+import { isPromptRewriteEnabled, type TaskOutputLanguage } from '@shared/project-settings';
+import {
+  PROMPT_REWRITE_LANGUAGE_OPTIONS,
+  TASK_LANGUAGE_OPTIONS_ON,
+  taskLanguageLabel,
+} from '@renderer/features/tasks/components/task-language-select';
 import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
 import {
   Select,
@@ -14,8 +19,6 @@ import {
 import { Switch } from '@renderer/lib/ui/switch';
 import { cn } from '@renderer/utils/utils';
 
-const TASK_OUTPUT_ENABLED_LANGUAGE_OPTIONS: TaskOutputLanguage[] = ['app', 'prompt', 'zh-CN', 'en'];
-const INPUT_PROMPT_ENABLED_LANGUAGE_OPTIONS: TaskOutputLanguage[] = ['app', 'zh-CN', 'en'];
 export const DEFAULT_TASK_OUTPUT_LANGUAGE: TaskOutputLanguage = 'skip';
 export const DEFAULT_SUMMARY_OUTPUT_LANGUAGE: TaskOutputLanguage = 'app';
 export const DEFAULT_INPUT_PROMPT_LANGUAGE: TaskOutputLanguage = 'skip';
@@ -71,20 +74,20 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
         <ComposerLanguageSelectRow
           label={t('settings.tasks.inputPromptLanguageLabel')}
           value={inputPromptLanguage}
-          options={INPUT_PROMPT_ENABLED_LANGUAGE_OPTIONS}
-          disabledValues={['skip', 'prompt']}
+          options={PROMPT_REWRITE_LANGUAGE_OPTIONS}
+          enabled={isPromptRewriteEnabled(inputPromptLanguage)}
           onValueChange={onInputPromptLanguageChange}
         />
         <ComposerLanguageSelectRow
           label={t('settings.tasks.sessionTitleLanguageLabel')}
           value={namingLanguage}
-          options={TASK_OUTPUT_ENABLED_LANGUAGE_OPTIONS}
+          options={TASK_LANGUAGE_OPTIONS_ON}
           onValueChange={onNamingLanguageChange}
         />
         <ComposerLanguageSelectRow
           label={t('settings.tasks.summaryLanguageLabel')}
           value={summaryLanguage}
-          options={TASK_OUTPUT_ENABLED_LANGUAGE_OPTIONS}
+          options={TASK_LANGUAGE_OPTIONS_ON}
           onValueChange={onSummaryLanguageChange}
         />
       </ComposerSettingsSection>
@@ -146,38 +149,26 @@ function ComposerSettingRow({
   );
 }
 
-function taskOutputLanguageLabel(t: ReturnType<typeof useTranslation>['t'], value: string): string {
-  switch (value) {
-    case 'skip':
-      return t('settings.tasks.namingLanguageSkip');
-    case 'app':
-      return t('settings.tasks.namingLanguageApp');
-    case 'prompt':
-      return t('settings.tasks.namingLanguagePrompt');
-    case 'zh-CN':
-      return t('settings.tasks.namingLanguageZh');
-    case 'en':
-      return t('settings.tasks.namingLanguageEn');
-    default:
-      return value;
-  }
-}
-
+/**
+ * One language-backed capability: a switch for whether it runs at all, plus the
+ * target language once it does. Same split as the Sessions settings tab, at
+ * composer density.
+ */
 function ComposerLanguageSelectRow({
   label,
   value,
   options,
-  disabledValues = ['skip'],
+  enabled = value !== 'skip',
   onValueChange,
 }: {
   label: string;
   value: TaskOutputLanguage;
   options: TaskOutputLanguage[];
-  disabledValues?: TaskOutputLanguage[];
+  /** Defaults to "anything but `skip`"; pass explicitly when a capability has more than one off value. */
+  enabled?: boolean;
   onValueChange: (value: TaskOutputLanguage) => void;
 }) {
   const { t } = useTranslation();
-  const enabled = !disabledValues.includes(value);
   return (
     <div className="flex min-h-10 items-center justify-between gap-3 px-3 py-2">
       <span
@@ -192,12 +183,12 @@ function ComposerLanguageSelectRow({
         {enabled ? (
           <Select value={value} onValueChange={(next) => onValueChange(next as TaskOutputLanguage)}>
             <SelectTrigger size="sm" className="h-7 w-28 text-[11px]">
-              <SelectValue>{taskOutputLanguageLabel(t, value)}</SelectValue>
+              <SelectValue>{taskLanguageLabel(t, value)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {options.map((option) => (
                 <SelectItem key={option} value={option}>
-                  {taskOutputLanguageLabel(t, option)}
+                  {taskLanguageLabel(t, option)}
                 </SelectItem>
               ))}
             </SelectContent>

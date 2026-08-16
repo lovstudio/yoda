@@ -1322,8 +1322,9 @@
       "promptRewriteTitle": "输入 Prompt 改写",
       "promptRewriteAgentLabel": "改写 Agent",
       "promptRewriteAgentHint": "负责改写输入 Prompt 的 Agent。若该 Agent 指定了客户端与模型则以其为准，否则沿用当前会话所选的客户端。",
-      "inputPromptLanguageLabel": "输入 Prompt 语言",
-      "inputPromptLanguageDescription": "发送前先把用户输入改写为目标语言；选择跳过表示禁用改写，选择 Prompt 语言表示保持原文。",
+      "inputPromptLanguageLabel": "改写语言",
+      "inputPromptLanguageDescription": "发送给 agent 之前，先把输入改写为目标语言。",
+      "promptRewriteConfigDescription": "用于改写输入 Prompt 的 Agent 与目标语言。",
       "sessionTitleLanguageLabel": "会话标题语言",
       "summaryLanguageLabel": "摘要语言",
       "summaryContext": {

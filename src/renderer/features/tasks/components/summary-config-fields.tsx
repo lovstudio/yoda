@@ -1,17 +1,14 @@
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { SUMMARY_CONTEXT_SOURCE_IDS } from '@shared/session-summary';
+import {
+  TASK_LANGUAGE_OPTIONS,
+  TaskLanguageSelect,
+} from '@renderer/features/tasks/components/task-language-select';
 import { UtilityAgentPicker } from '@renderer/features/tasks/components/utility-agent-picker';
 import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings';
 import { Checkbox } from '@renderer/lib/ui/checkbox';
 import { MicroLabel } from '@renderer/lib/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@renderer/lib/ui/select';
 import { cn } from '@renderer/utils/utils';
 
 /**
@@ -40,29 +37,16 @@ export const SummaryConfigFields = observer(function SummaryConfigFields({
         interactionDisabled={taskSettings.loading}
       />
 
-      <div className="mt-1 flex min-w-0 flex-col gap-1">
-        <MicroLabel className="text-foreground-passive">
-          {t('settings.tasks.summaryLanguageLabel')}
-        </MicroLabel>
-        <Select
-          value={taskSettings.summaryLanguage}
-          onValueChange={(value) =>
-            taskSettings.updateSummaryLanguage(value as typeof taskSettings.summaryLanguage)
-          }
-          disabled={disabled}
-        >
-          <SelectTrigger size="sm" className="h-8 w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="skip">{t('settings.tasks.namingLanguageSkip')}</SelectItem>
-            <SelectItem value="app">{t('settings.tasks.namingLanguageApp')}</SelectItem>
-            <SelectItem value="prompt">{t('settings.tasks.namingLanguagePrompt')}</SelectItem>
-            <SelectItem value="zh-CN">{t('settings.tasks.namingLanguageZh')}</SelectItem>
-            <SelectItem value="en">{t('settings.tasks.namingLanguageEn')}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <TaskLanguageSelect
+        label={t('settings.tasks.summaryLanguageLabel')}
+        value={taskSettings.summaryLanguage}
+        options={TASK_LANGUAGE_OPTIONS}
+        // Not `saving`: a controlled Select disabled mid-save makes base-ui
+        // abort the value change, so the selection visibly reverts.
+        disabled={taskSettings.loading}
+        onValueChange={taskSettings.updateSummaryLanguage}
+        className="mt-1"
+      />
 
       <SummaryContextGroup scope="recent" disabled={disabled} />
       <SummaryContextGroup scope="global" disabled={disabled} />

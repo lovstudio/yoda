@@ -2,7 +2,7 @@ import { Download, RefreshCw } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { TaskOutputLanguage } from '@shared/project-settings';
+import { isPromptRewriteEnabled } from '@shared/project-settings';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { AutoTrustWorktreesControl } from '@renderer/features/tasks/components/auto-trust-worktrees-control';
 import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings';
@@ -173,11 +173,12 @@ export const BranchNamingRow: React.FC = observer(() => {
 });
 
 /**
- * The target-language select on its own, so it can sit in the control slot of
- * the row that also folds away the rewrite configuration. `skip` is the off
- * position — there is no separate switch.
+ * The prompt-rewrite toggle, so the capability reads as a switch like its two
+ * siblings. There is no dedicated boolean behind it: the target language doubles
+ * as the state, with `skip` as the off position and `app` as the default target
+ * a fresh enable lands on.
  */
-export const InputPromptLanguageControl: React.FC = observer(() => {
+export const PromptRewriteEnabledControl: React.FC = observer(() => {
   const { t } = useTranslation();
   const taskSettings = useTaskSettings();
   const disabled = taskSettings.loading || taskSettings.saving;
@@ -186,28 +187,17 @@ export const InputPromptLanguageControl: React.FC = observer(() => {
     <>
       <ResetToDefaultButton
         visible={taskSettings.isFieldOverridden('inputPromptLanguage')}
-        defaultLabel={t('settings.tasks.namingLanguageSkip')}
+        defaultLabel={t('common.no')}
         onReset={taskSettings.resetInputPromptLanguage}
         disabled={disabled}
       />
-      <Select
-        value={taskSettings.inputPromptLanguage}
-        onValueChange={(value) =>
-          taskSettings.updateInputPromptLanguage(value as TaskOutputLanguage)
+      <Switch
+        checked={isPromptRewriteEnabled(taskSettings.inputPromptLanguage)}
+        disabled={disabled}
+        onCheckedChange={(checked) =>
+          taskSettings.updateInputPromptLanguage(checked ? 'app' : 'skip')
         }
-        disabled={taskSettings.loading}
-      >
-        <SelectTrigger className="h-8 w-44">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="skip">{t('settings.tasks.namingLanguageSkip')}</SelectItem>
-          <SelectItem value="app">{t('settings.tasks.namingLanguageApp')}</SelectItem>
-          <SelectItem value="prompt">{t('settings.tasks.namingLanguagePrompt')}</SelectItem>
-          <SelectItem value="zh-CN">{t('settings.tasks.namingLanguageZh')}</SelectItem>
-          <SelectItem value="en">{t('settings.tasks.namingLanguageEn')}</SelectItem>
-        </SelectContent>
-      </Select>
+      />
     </>
   );
 });

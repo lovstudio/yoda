@@ -134,6 +134,16 @@ export const taskOutputLanguageValues = ['skip', 'app', 'prompt', 'en', 'zh-CN']
 export type TaskOutputLanguage = (typeof taskOutputLanguageValues)[number];
 
 /**
+ * Whether an input-prompt language actually asks for a rewrite. Rewriting a
+ * prompt into the language it is already written in is the same as not
+ * rewriting, so `prompt` counts as off alongside `skip` — which is why the
+ * capability needs its own switch rather than reading on/off off the language.
+ */
+export function isPromptRewriteEnabled(language: TaskOutputLanguage | undefined): boolean {
+  return language !== undefined && language !== 'skip' && language !== 'prompt';
+}
+
+/**
  * A project's overrides for the home composer's run configuration. Every field
  * is optional: absent means "inherit the user's global homeDraft default",
  * present means "this project overrides it". Stored in project settings so it

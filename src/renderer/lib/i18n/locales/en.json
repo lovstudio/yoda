@@ -1322,8 +1322,9 @@
       "promptRewriteTitle": "Input prompt rewriting",
       "promptRewriteAgentLabel": "Rewrite agent",
       "promptRewriteAgentHint": "The agent that rewrites the input prompt. Its own client and model win when it pins them; otherwise the rewrite follows the client selected for the session.",
-      "inputPromptLanguageLabel": "Input prompt language",
-      "inputPromptLanguageDescription": "Rewrite the user's prompt into the target language before sending. Skip disables rewriting; Prompt language keeps it as written.",
+      "inputPromptLanguageLabel": "Rewrite language",
+      "inputPromptLanguageDescription": "Rewrite the input into a target language before sending it to the agent.",
+      "promptRewriteConfigDescription": "The agent that rewrites the input prompt, and the language it rewrites into.",
       "sessionTitleLanguageLabel": "Session title language",
       "summaryLanguageLabel": "Summary language",
       "summaryContext": {
