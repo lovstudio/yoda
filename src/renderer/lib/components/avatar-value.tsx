@@ -2,6 +2,13 @@ import { cn } from '@renderer/utils/utils';
 
 const AVATAR_IMAGE_RE = /^(data:image\/|https?:\/\/|blob:|file:\/\/)/i;
 
+/**
+ * Longest value still plausible as a glyph (an emoji sequence, initials). Past
+ * this an avatar value is a payload — an unrecognized data URI scheme, a path,
+ * raw markup — and printing it as text is never what the author meant.
+ */
+const MAX_GLYPH_LENGTH = 8;
+
 export function isAvatarImageValue(value: string | null | undefined): boolean {
   return AVATAR_IMAGE_RE.test(value?.trim() ?? '');
 }
@@ -12,7 +19,8 @@ export function avatarFallbackText(name: string): string {
 
 export function avatarDisplayText(name: string, value: string | null | undefined): string {
   const trimmed = value?.trim() ?? '';
-  return trimmed && !isAvatarImageValue(trimmed) ? trimmed : avatarFallbackText(name);
+  if (!trimmed || isAvatarImageValue(trimmed)) return avatarFallbackText(name);
+  return Array.from(trimmed).length <= MAX_GLYPH_LENGTH ? trimmed : avatarFallbackText(name);
 }
 
 export function AvatarValue({

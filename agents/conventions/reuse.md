@@ -21,6 +21,14 @@
 
 如果共享层缺能力，给它加，然后所有调用点受益——不要在调用点旁边造一个特化版本。
 
+## 3. 头像/图标值必须走共享 Avatar 组件
+
+Agent、Room 成员、范式的 `icon`/`avatar` 字段是「字形**或**图片」：可能是 emoji，也可能是上传得到的 `data:image/png;base64,...`，或预设头像的 `data:image/svg+xml,%3Csvg...`。直接把它当文本渲染，就会把整段 payload 打印到界面上并溢出容器（已发生过多次）。
+
+- 唯一来源：`src/renderer/lib/components/avatar-value.tsx`（`AvatarValue`），Agent 场景用 `agent-card/agent-avatar.tsx` 的 `AgentAvatar`。
+- 它负责判别图片值渲染 `<img>`、非图片值裁到字形长度内、超长 payload 回退成名字首字母，并且永远不溢出。
+- 禁止在 JSX 里直接写 `{agent.icon}`、`{icon || '🤖'}`。
+
 ## 自查
 
 提交前问自己：这个组件/行为，仓库里是不是已经有了？同一实体在别处是什么行为？答不上来就先搜（`task-context-menu`、`file-path-actions`、实体名）再动手。
