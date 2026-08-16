@@ -10,6 +10,9 @@ import { readFileSync } from 'node:fs';
  * test whose only job is to read text off disk.
  */
 const RUNTIME_BAR_SOURCE_FILES = [
+  // The row itself is host-agnostic and lives outside the renderer; Yoda's
+  // module below supplies only the entries and the styling.
+  '../../../../../packages/runtime-bar/src/strip.tsx',
   '../../workspace-runtime-bar.tsx',
   '../items/config-item.tsx',
   '../items/runtime-item.tsx',

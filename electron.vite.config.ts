@@ -66,6 +66,9 @@ export default defineConfig({
         '@': resolve('src'),
         '@renderer': resolve('src/renderer'),
         '@shared': resolve('src/shared'),
+        // The runtime bar's framework is host-agnostic and lives outside the
+        // renderer so the DSH plugin can build against the same source.
+        '@runtime-bar': resolve('packages/runtime-bar/src'),
         '@root': resolve('.'),
       },
     },

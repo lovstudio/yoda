@@ -31,10 +31,13 @@ describe('Workspace runtime bar responsive layout', () => {
   });
 
   it('keeps global configuration as the first footer action and aligns its popover left', () => {
+    // Order along the row belongs to the shared strip; which slot an entry sits
+    // in belongs to Yoda's registry. Neither one is the footer component's
+    // business any more.
     const footerStart = source.indexOf('<footer');
-    const leadSlot = source.indexOf('<RuntimeBarSlotItems slot="lead" />', footerStart);
-    const runtimeGroup = source.indexOf('{runtimeId ? (', footerStart);
-    const groupSpacer = source.indexOf('<span className="flex-1" />', footerStart);
+    const leadSlot = source.indexOf('<SlotItems items={items} slot="lead" />', footerStart);
+    const runtimeGroup = source.indexOf('{sessionActive ? (', footerStart);
+    const groupSpacer = source.indexOf('<span className={theme.spacer} />', footerStart);
     const configStart = source.indexOf(
       '<Popover open={isConfigPopoverOpen} onOpenChange={setIsConfigPopoverOpen}>'
     );

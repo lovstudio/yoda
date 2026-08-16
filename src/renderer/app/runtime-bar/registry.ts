@@ -1,4 +1,4 @@
-import type { RuntimeBarItem } from './contract';
+import type { RuntimeBarItem } from '@runtime-bar/contract';
 import { RuntimeBarAccountUsageItem } from './items/account-usage-item';
 import { RuntimeBarAgentSessionsItem } from './items/agent-sessions-item';
 import { RuntimeBarConfigItem } from './items/config-item';

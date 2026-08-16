@@ -12,6 +12,9 @@ export default tseslint.config(
     'out/**',
     'build/**',
     'node_modules/**',
+    // The DSH plugin's build output: bundled third-party code wrapped in a
+    // browser module-loader closure, linted by nothing that owns it.
+    'packages/dsh-runtime-bar/lib/**',
     // Vite's pre-bundled dependency cache. It lives inside the checkout so that
     // parallel worktrees cannot overwrite each other's chunks, which also puts
     // thousands of generated files in lint's path.
