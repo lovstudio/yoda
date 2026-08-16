@@ -167,7 +167,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     useAppSettingsKey('customThemes');
   const { value: systemThemesValue, isLoading: systemThemesLoading } =
     useAppSettingsKey('systemThemes');
-  const [, setCachedTheme] = useLocalStorage<Theme>('yoda-theme', null);
+  const [cachedTheme, setCachedTheme] = useLocalStorage<Theme>('yoda-theme', null);
 
   // OS appearance, kept reactive so follow-system re-resolves on change.
   const [systemMode, setSystemMode] = useState<EffectiveTheme>(getSystemTheme);
@@ -179,7 +179,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  const theme: Theme = themeValue ?? null;
+  // `undefined` means the main process has not answered yet — not "follow
+  // system". Treating an unanswered read as a real selection is what made a
+  // persisted skin revert to the system default on a slow restart, so fall
+  // back to the cached selection the pre-paint boot script already used.
+  const theme: Theme = themeValue === undefined ? cachedTheme : themeValue;
   const customThemes = customThemesValue?.items ?? [];
   const systemThemes = systemThemesValue ?? { light: 'ylight' as const, dark: 'ydark' as const };
 
@@ -208,10 +212,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     applyThemeToDocument(effectiveTheme, selectedCustomTheme);
   }, [activeSelection, effectiveTheme, selectedCustomTheme, isThemeLoading]);
 
+  // Only an authoritative value may update the pre-paint cache; caching a
+  // fallback would make the next cold boot paint the wrong theme too.
   useEffect(() => {
-    if (isThemeLoading) return;
-    setCachedTheme(theme);
-  }, [theme, isThemeLoading, setCachedTheme]);
+    if (themeValue === undefined) return;
+    setCachedTheme(themeValue);
+  }, [themeValue, setCachedTheme]);
 
   // Re-apply xterm theme after CSS classes have been updated by the effect above.
   useEffect(() => {
