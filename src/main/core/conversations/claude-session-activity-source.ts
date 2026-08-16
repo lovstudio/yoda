@@ -16,6 +16,8 @@ export interface ClaudeSessionActivity {
   status: ClaudeSessionStatus;
   waitingFor: string | null;
   updatedAt: number | null;
+  /** When the CLI process behind this record started. */
+  startedAt: number | null;
 }
 
 export interface ClaudeSessionActivityWatcher {
@@ -94,7 +96,30 @@ export function parseClaudeSessionActivity(raw: string): ClaudeSessionActivity |
     status: rec.status as ClaudeSessionStatus,
     waitingFor: typeof rec.waitingFor === 'string' ? rec.waitingFor : null,
     updatedAt: typeof rec.updatedAt === 'number' ? rec.updatedAt : null,
+    startedAt: typeof rec.startedAt === 'number' ? rec.startedAt : null,
   };
+}
+
+/**
+ * Whether an `idle` record is admissible evidence against a run state that was
+ * set at `runStateAt`.
+ *
+ * Claude writes its status about a second after the process starts, so a CLI
+ * sitting at its boot prompt is indistinguishable — by status alone — from one
+ * that just finished a turn. A process that started *after* the run state was
+ * set was never there for the turn that status describes, so its idle prompt
+ * says nothing about it. Starting a session is a consequence of the user opening
+ * the task, so honouring that read would tie run state to being looked at.
+ *
+ * A turn whose process really was replaced mid-flight is reported by the exit
+ * path, which knows the transport died and can say so as an interruption.
+ */
+export function idleActivitySettlesRunState(
+  activity: Pick<ClaudeSessionActivity, 'status' | 'startedAt'>,
+  runStateAt: number
+): boolean {
+  if (activity.status !== 'idle') return false;
+  return activity.startedAt === null || activity.startedAt <= runStateAt;
 }
 
 export async function getClaudeSessionActivity({
@@ -265,11 +290,14 @@ class ClaudeSessionActivityTailer implements ClaudeSessionActivityWatcher {
 
     if (activity.status === 'idle' && previous?.status !== 'idle') {
       this.awaitingInputObserved = false;
-      if (!previous) {
-        this.dispatch({ kind: 'watchdog-idle', at: Date.now() });
-        return;
-      }
-      this.scheduleIdle(previous.status, activity.updatedAt);
+      // A fresh tailer has no baseline, and Claude writes `idle` about a second
+      // after its process starts — so a first read of `idle` is equally
+      // consistent with a settled turn and with a CLI that has only just booted
+      // to its prompt. Attaching a watcher is a consequence of the user opening
+      // the task, so publishing a verdict from that first read would make run
+      // state depend on being looked at. Seed the baseline and let the next
+      // transition, or the reconciler below, speak with evidence.
+      if (previous) this.scheduleIdle(previous.status, activity.updatedAt);
     }
   }
 
@@ -283,11 +311,12 @@ class ClaudeSessionActivityTailer implements ClaudeSessionActivityWatcher {
    * matching resolution — has nothing left to contradict it, and the session
    * stays pinned at "running" until the user's next prompt.
    *
-   * An idle record is positive evidence that the CLI is neither processing nor
-   * blocked on the user, so it may settle a running status on its own. Nothing is
-   * inferred from a *missing* record: absence of a transport is not absence of an
-   * agent, and a conversation whose process is simply gone is already handled by
-   * the exit path.
+   * An idle record from the process that was running when the status was set is
+   * positive evidence that the CLI is neither processing nor blocked on the
+   * user, so it may settle a running status on its own. Nothing is inferred from
+   * a *missing* record, nor from one belonging to a process that started later:
+   * absence of a transport is not absence of an agent, and a conversation whose
+   * process is simply gone is already handled by the exit path.
    */
   private async reconcileRunningStatus(): Promise<void> {
     // A pending settle already owns this transition; let it land.
@@ -308,7 +337,10 @@ class ClaudeSessionActivityTailer implements ClaudeSessionActivityWatcher {
       processPid: this.ctx.processPid,
       claudeHomeDir: this.claudeHomeDir,
     }).catch(() => null);
-    if (this.stopped || activity?.status !== 'idle') return;
+    if (this.stopped || !activity) return;
+    // An idle record only counts when the process behind it was already running
+    // when this status was set; a newly resumed CLI is at its boot prompt.
+    if (!idleActivitySettlesRunState(activity, state.updatedAt)) return;
     if (activity.updatedAt === null || activity.updatedAt > settledBefore) return;
 
     this.awaitingInputObserved = false;
