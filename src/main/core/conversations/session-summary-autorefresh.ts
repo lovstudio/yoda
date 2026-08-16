@@ -1,6 +1,7 @@
 import { agentSessionStatusChangedChannel } from '@shared/events/agentEvents';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
+import { isAutoSessionSummaryEnabled } from './session-summary-auto';
 import { refreshConversationSummary } from './session-summary-context';
 
 const REFRESH_DELAY_MS = 1_200;
@@ -45,7 +46,12 @@ class SessionSummaryAutoRefreshService {
 
     const timer = setTimeout(() => {
       this.timers.delete(id);
-      void refreshConversationSummary(key, 'global').catch((error: unknown) => {
+      void (async () => {
+        // Read the switch when the turn actually ends, not when the listener was
+        // installed, so toggling it takes effect on the very next turn.
+        if (!(await isAutoSessionSummaryEnabled())) return;
+        await refreshConversationSummary(key, 'global');
+      })().catch((error: unknown) => {
         log.warn('session-summary auto-refresh failed', {
           conversationId: key.conversationId,
           error: String(error),

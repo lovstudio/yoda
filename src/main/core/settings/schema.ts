@@ -131,6 +131,13 @@ export const taskSettingsSchema = z.object({
   branchNaming: z.enum(['hash', 'ai']).catch('hash'),
   /** Agent that drives task naming. Empty = use the built-in naming Agent. */
   namingAgentId: z.string().catch(''),
+  /**
+   * Whether summaries may be generated without an explicit user request — the
+   * post-turn refresh and the panel's own `recent` note. An explicit
+   * regenerate always runs, so turning this off never makes summaries
+   * unreachable, only unprompted.
+   */
+  autoGenerateSummary: z.boolean().catch(true),
   /** Agent that drives session-summary generation. Empty = built-in summary Agent. */
   summaryAgentId: z.string().catch(''),
   /** Target language for rewriting the user's input prompt before sending. */

@@ -3,7 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { NamingConfigFields } from '@renderer/features/tasks/components/naming-config-fields';
 import { SummaryConfigFields } from '@renderer/features/tasks/components/summary-config-fields';
 import { SettingDisclosure } from './SettingDisclosure';
-import { AutoGenerateTaskNamesControl, InputPromptLanguageRow } from './TaskSettingsRows';
+import {
+  AutoGenerateSummaryControl,
+  AutoGenerateTaskNamesControl,
+  InputPromptLanguageRow,
+} from './TaskSettingsRows';
 
 /**
  * What an agent does for a session while it runs: rewrite the prompt, name the
@@ -35,10 +39,16 @@ const SessionAiSettingsCard: React.FC = () => {
       </div>
       <div className="pt-4">
         <SettingDisclosure
-          title={t('settings.tasks.summaryConfigTitle')}
-          description={t('settings.tasks.summaryConfigDescription')}
+          title={t('settings.tasks.autoGenerateSummary')}
+          description={t('settings.tasks.autoGenerateSummaryDescription')}
+          control={<AutoGenerateSummaryControl />}
         >
-          <SummaryConfigFields />
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-foreground-passive">
+              {t('settings.tasks.summaryConfigDescription')}
+            </p>
+            <SummaryConfigFields />
+          </div>
         </SettingDisclosure>
       </div>
     </div>

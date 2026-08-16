@@ -47,6 +47,31 @@ export const AutoGenerateTaskNamesControl: React.FC = observer(() => {
   );
 });
 
+/**
+ * The auto-summary toggle. Withholds unprompted generation only — a summary is
+ * still reachable on demand from the session panel — so the row is a switch
+ * like auto-naming rather than a destructive setting.
+ */
+export const AutoGenerateSummaryControl: React.FC = observer(() => {
+  const taskSettings = useTaskSettings();
+
+  return (
+    <>
+      <ResetToDefaultButton
+        visible={taskSettings.isFieldOverridden('autoGenerateSummary')}
+        defaultLabel="on"
+        onReset={taskSettings.resetAutoGenerateSummary}
+        disabled={taskSettings.loading || taskSettings.saving}
+      />
+      <Switch
+        checked={taskSettings.autoGenerateSummary}
+        disabled={taskSettings.loading || taskSettings.saving}
+        onCheckedChange={taskSettings.updateAutoGenerateSummary}
+      />
+    </>
+  );
+});
+
 export const WorkspacesEnabledRow: React.FC = () => {
   const { t } = useTranslation();
   const {
