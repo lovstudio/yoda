@@ -1053,6 +1053,21 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     void this.loadMoreSidebarArchivedTasks(this.taskGroupVisibleLimit).catch(() => {});
   }
 
+  /**
+   * Moves whenever archived hydration is discarded or extended. A scope change
+   * (project mounts, workspace switch, pin/unpin) releases every hydrated
+   * archived task, and the group's header count still comes from the database —
+   * so without re-hydrating, an open group renders nothing but its own "show
+   * more" row. Consumers read this to re-run hydration on reset.
+   */
+  get sidebarArchivedHydrationToken(): string {
+    let hydratedCount = 0;
+    for (const taskIds of this.sidebarArchivedTaskIdsByProject.values()) {
+      hydratedCount += taskIds.size;
+    }
+    return `${this.sidebarArchivedScopeKey} ${hydratedCount}`;
+  }
+
   /** Called on first load when no snapshot exists — expand all known projects. */
   expandAllProjects(): void {
     for (const project of this.orderedProjects) {

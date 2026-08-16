@@ -443,15 +443,20 @@ describe('SidebarStore task recency ordering', () => {
       'active',
       ...archivedTasks.slice(0, 10).map((task) => task.id),
     ]);
+    const firstPageToken = store.sidebarArchivedHydrationToken;
 
     await expect(store.loadMoreSidebarArchivedTasks(10)).resolves.toBe(10);
     expect(mocks.getArchivedTasksPage).toHaveBeenNthCalledWith(2, ['project-1'], 10, 10);
     expect(
       taskIds(store.sidebarRows).filter((taskId) => taskId.startsWith('archived-'))
     ).toHaveLength(20);
+    expect(store.sidebarArchivedHydrationToken).not.toBe(firstPageToken);
 
     store.setTaskPriorityMode(false);
     expect(project.mountedProject.taskManager.tasks.size).toBe(1);
+    // Releasing the hydrated pages must move the token, or a consumer keyed on
+    // it never re-hydrates the group it just emptied.
+    expect(store.sidebarArchivedHydrationToken).not.toBe(firstPageToken);
   });
 
   it('folds pinned projects and pinned tasks into priority groups until the mode is disabled', () => {

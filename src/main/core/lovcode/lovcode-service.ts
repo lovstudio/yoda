@@ -5,7 +5,7 @@ import {
   type LovcodeAvailability,
   type LovcodeSearchResult,
 } from '@shared/lovcode';
-import type { SearchItem } from '@shared/search';
+import { compareSearchItems, type SearchItem } from '@shared/search';
 import { sqlite } from '@main/db/client';
 import { log } from '@main/lib/logger';
 import {
@@ -276,7 +276,7 @@ export function mapLovcodeResults(
         },
       ];
     })
-    .sort((a, b) => a.score - b.score);
+    .sort(compareSearchItems);
 }
 
 function loadLovcodeConversations(sessionIds: string[]): LovcodeConversationRow[] {

@@ -157,8 +157,8 @@ export function AgentManagerWrapView({ children }: PropsWithChildren) {
   return <>{children}</>;
 }
 
-export function AgentManagerMainPanel() {
-  return <AgentManagerView />;
+export function AgentManagerMainPanel({ embedded = false }: { embedded?: boolean } = {}) {
+  return <AgentManagerView embedded={embedded} />;
 }
 
 export const agentManagerView = {

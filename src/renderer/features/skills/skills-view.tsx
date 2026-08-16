@@ -14,8 +14,8 @@ export function SkillsWrapView({ children }: PropsWithChildren<SkillsViewParams>
   return <>{children}</>;
 }
 
-export function SkillsMainPanel() {
-  return <SkillsView />;
+export function SkillsMainPanel({ embedded = false }: { embedded?: boolean } = {}) {
+  return <SkillsView embedded={embedded} />;
 }
 
 export const skillsView = {

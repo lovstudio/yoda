@@ -8,14 +8,22 @@ export const DREAM_SKIN_BUILTIN_IMAGE = DREAM_SKIN_BUILTIN_IMAGES[0];
 export const DREAM_SKIN_MAX_IMAGE_BYTES = 16 * 1024 * 1024;
 export const DREAM_SKIN_SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 
-export type BuiltInTheme =
-  | 'ylight'
-  | 'ydark'
-  | 'ywarm'
-  | 'ygreen'
-  | 'ylight2'
-  | 'ydream-arina'
-  | 'ydream-panther';
+/**
+ * Every selectable built-in theme. Single source of truth — the settings
+ * schema derives its enum from this, so adding a theme here is enough to make
+ * the main process accept it.
+ */
+export const BUILT_IN_THEMES = [
+  'ylight',
+  'ydark',
+  'ywarm',
+  'ygreen',
+  'ylight2',
+  'ydream-arina',
+  'ydream-panther',
+] as const;
+
+export type BuiltInTheme = (typeof BUILT_IN_THEMES)[number];
 
 export type DreamSkinBuiltInTheme = Extract<BuiltInTheme, `ydream${string}`>;
 

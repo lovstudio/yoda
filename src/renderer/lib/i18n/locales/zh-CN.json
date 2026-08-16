@@ -2623,10 +2623,6 @@
     }
   },
   "library": {
-    "groups": {
-      "basic": "基础",
-      "advanced": "高级"
-    },
     "sections": {
       "extensions": "扩展",
       "apps": "应用",
@@ -2868,6 +2864,7 @@
   },
   "promptLibrary": {
     "title": "提示词库",
+    "subtitle": "会话可随时取用的可复用提示词与系统指令。",
     "tabs": {
       "ariaLabel": "提示词配置范围",
       "global": "全局",
