@@ -53,12 +53,17 @@ describe('MaaS managed gateway GitHub stars', () => {
     const first = await service.list();
     const second = await service.list();
 
-    expect(first.map((item) => item.platformId)).toEqual(['litellm', 'cliproxyapi', 'newapi']);
+    expect(first.map((item) => item.platformId)).toEqual([
+      'litellm',
+      'cliproxyapi',
+      'newapi',
+      'ccswitch',
+    ]);
     expect(first.every((item) => item.starCount === 1234)).toBe(true);
     expect(first.every((item) => item.trend?.points.at(-1)?.starCount === 1234)).toBe(true);
     expect(first.every((item) => item.trend?.calibratedToCurrent === true)).toBe(true);
     expect(second).toEqual(first);
-    expect(mocks.fetch).toHaveBeenCalledTimes(6);
+    expect(mocks.fetch).toHaveBeenCalledTimes(8);
     expect(mocks.fetch).toHaveBeenNthCalledWith(
       1,
       'https://api.github.com/repos/BerriAI/litellm',
@@ -80,7 +85,7 @@ describe('MaaS managed gateway GitHub stars', () => {
     const historyUrls = mocks.fetch.mock.calls
       .map(([url]) => String(url))
       .filter((url) => url.startsWith('https://api.ossinsight.io/'));
-    expect(historyUrls).toHaveLength(3);
+    expect(historyUrls).toHaveLength(4);
     for (const url of historyUrls) {
       const parsedUrl = new URL(url);
       expect(parsedUrl.searchParams.get('per')).toBe('week');
@@ -105,6 +110,7 @@ describe('MaaS managed gateway GitHub stars', () => {
 
     expect(byId.get('litellm')?.starCount).toBe(9876);
     expect(byId.get('cliproxyapi')?.starCount).toBe(9876);
+    expect(byId.get('ccswitch')?.starCount).toBe(9876);
     expect(byId.get('newapi')?.starCount).toBeNull();
     expect(mocks.warn).toHaveBeenCalledOnce();
   });
@@ -121,6 +127,6 @@ describe('MaaS managed gateway GitHub stars', () => {
     const refreshed: MaasManagedGatewayStarSnapshot[] = await service.list(true);
 
     expect(refreshed.every((item) => item.starCount === 5678)).toBe(true);
-    expect(mocks.fetch).toHaveBeenCalledTimes(12);
+    expect(mocks.fetch).toHaveBeenCalledTimes(16);
   });
 });

@@ -1056,7 +1056,9 @@
       "sidebarStatusBarPrimary": "Sidebar status bar",
       "sidebarStatusBarPrimaryDescription": "Choose which identity is shown as the primary entry. The other remains available as a compact icon.",
       "sidebarStatusBarProduct": "Product info",
-      "sidebarStatusBarAccount": "Account info"
+      "sidebarStatusBarAccount": "Account info",
+      "sessionShareDisplayLevel": "Share link detail",
+      "sessionShareDisplayLevelDescription": "The level baked into a new public link. Anyone opening it can still switch."
     },
     "taskAppearance": {
       "title": "Task appearance",
@@ -2418,19 +2420,19 @@
       "agentReplyDisplay": {
         "hidden": {
           "label": "Hidden",
-          "description": "Show user messages only"
+          "description": "Show user prompts only"
         },
         "concise": {
           "label": "Concise",
-          "description": "Show only the final result from each agent reply"
+          "description": "Show the closing reply of each turn"
         },
         "detailed": {
           "label": "Detailed",
-          "description": "Show agent replies without tool calls"
+          "description": "Add the agent's narration and system notices"
         },
         "verbose": {
-          "label": "Verbose",
-          "description": "Show everything, nearly equivalent to the transcript"
+          "label": "Complete",
+          "description": "Add tool calls — the full transcript"
         }
       },
       "transcript": "Transcript",
@@ -4779,6 +4781,27 @@
         "adminOpened": "Management key copied and CLIProxyAPI console opened",
         "adminOpenedHint": "Paste the key in the console to sign in and add CLI or OAuth accounts",
         "openAdminFailed": "CLIProxyAPI console failed to open"
+      },
+      "ccSwitch": {
+        "managedDescription": "Switch between Claude Code / Codex provider configurations in one click",
+        "detecting": "Detecting CC Switch…",
+        "detectionFailed": "Detection ran into a problem; re-check to continue",
+        "installingDescription": "Installing CC Switch through Homebrew",
+        "installedDescription": "v{{version}} installed · local proxy off",
+        "proxyEnabledDescription": "v{{version}} installed · local proxy on",
+        "installing": "Installing CC Switch…",
+        "installed": "CC Switch installed",
+        "installFailed": "CC Switch installation failed",
+        "download": "Download",
+        "downloadOpened": "CC Switch download page opened",
+        "open": "Open",
+        "opened": "CC Switch opened",
+        "openFailed": "CC Switch failed to open",
+        "checkUpdates": "Check for updates",
+        "sourceRepository": "Source repository",
+        "actions": "CC Switch actions",
+        "manageActions": "Manage CC Switch",
+        "management": "CC Switch management"
       }
     },
     "categories": {

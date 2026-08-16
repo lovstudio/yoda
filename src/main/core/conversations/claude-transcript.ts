@@ -1,8 +1,15 @@
+import { unconcludedTurnReplyIndexes, type ReplyTurnKind } from '@shared/agent-reply-turns';
 import type {
   MobileSessionTranscriptAgentPhase,
   MobileSessionTranscriptBlock,
 } from '@shared/mobile-api';
 import { resolveClaudeTranscriptPath } from '@main/core/session-title/claude-title-source';
+import {
+  describeClaudeTaskNotification,
+  isClaudeInjectedUserRow,
+  isClaudeNoReplyNotice,
+  stripClaudeCompactSummaryPreamble,
+} from './claude-system-rows';
 import { IncrementalJsonlCursor } from './incremental-jsonl-cursor';
 
 const MAX_TOOL_CONTENT_CHARS = 16 * 1024;
@@ -112,12 +119,14 @@ function appendClaudeTranscriptLine(accumulator: TranscriptAccumulator, line: st
 
   const message = objectValue(row.message);
   const role = nullableString(message?.role);
+  const notice = extractSystemNoticeBlocks(row, message, accumulator.nextIndex);
   const produced =
-    row.type === 'user' && role === 'user'
+    notice ??
+    (row.type === 'user' && role === 'user'
       ? extractUserBlocks(message?.content, row, accumulator.nextIndex)
       : row.type === 'assistant' && role === 'assistant'
         ? extractAssistantBlocks(message?.content, row, accumulator.nextIndex)
-        : [];
+        : []);
 
   for (const block of produced) {
     accumulator.blocks.push(block);
@@ -148,7 +157,65 @@ function trimRetainedBlocks(accumulator: TranscriptAccumulator, maxContentChars:
 function deriveClaudeTranscript(
   blocks: MobileSessionTranscriptBlock[]
 ): MobileSessionTranscriptBlock[] {
-  return compactIncrementalAssistantBlocks(resolveClaudeToolStatuses(blocks));
+  return promoteUnconcludedTurnReplies(
+    compactIncrementalAssistantBlocks(resolveClaudeToolStatuses(blocks))
+  );
+}
+
+/**
+ * Runtime-authored `user` rows: background-task notifications and compaction
+ * handoffs. They must never render as conversation, but they stay in the
+ * transcript as status so a verbatim view still accounts for the turn.
+ */
+function extractSystemNoticeBlocks(
+  row: Record<string, unknown>,
+  message: Record<string, unknown> | null,
+  baseIndex: number
+): MobileSessionTranscriptBlock[] | null {
+  if (row.type !== 'user') return null;
+  const text = rawTextContent(message?.content);
+  if (!text) return null;
+
+  if (row.isCompactSummary === true) {
+    const content = stripClaudeCompactSummaryPreamble(text);
+    return content ? [statusBlock(row, baseIndex, '上下文压缩摘要', content)] : [];
+  }
+
+  if (!isClaudeInjectedUserRow(row)) return null;
+  const notice = describeClaudeTaskNotification(text);
+  return [
+    notice
+      ? statusBlock(row, baseIndex, notice.title, notice.content)
+      : statusBlock(row, baseIndex, '系统提示', text),
+  ];
+}
+
+function statusBlock(
+  row: Record<string, unknown>,
+  index: number,
+  title: string,
+  content: string
+): MobileSessionTranscriptBlock {
+  return {
+    id: transcriptId(row, index, 'status'),
+    role: 'status',
+    title,
+    timestamp: nullableString(row.timestamp),
+    format: 'markdown',
+    content,
+  };
+}
+
+function rawTextContent(content: unknown): string | null {
+  if (typeof content === 'string') return content.trim() || null;
+  if (!Array.isArray(content)) return null;
+  const parts: string[] = [];
+  for (const item of content) {
+    const block = objectValue(item);
+    if (block?.type === 'text' && typeof block.text === 'string') parts.push(block.text);
+  }
+  const text = parts.join('\n\n').trim();
+  return text ? text : null;
 }
 
 function extractUserBlocks(
@@ -231,19 +298,7 @@ function extractAssistantBlocks(
   const agentPhase = claudeAgentPhase(row);
   if (typeof content === 'string') {
     const text = cleanText(content);
-    return text
-      ? [
-          {
-            id: transcriptId(row, baseIndex, 'assistant'),
-            role: 'assistant',
-            agentPhase,
-            title: 'Claude',
-            timestamp: nullableString(row.timestamp),
-            format: 'markdown',
-            content: text,
-          },
-        ]
-      : [];
+    return text ? [assistantBlock(row, baseIndex, text, agentPhase)] : [];
   }
 
   if (!Array.isArray(content)) return [];
@@ -255,15 +310,7 @@ function extractAssistantBlocks(
     const text = cleanText(textParts.join('\n\n'));
     textParts.length = 0;
     if (!text) return;
-    out.push({
-      id: transcriptId(row, baseIndex + out.length, 'assistant'),
-      role: 'assistant',
-      agentPhase,
-      title: 'Claude',
-      timestamp: nullableString(row.timestamp),
-      format: 'markdown',
-      content: text,
-    });
+    out.push(assistantBlock(row, baseIndex + out.length, text, agentPhase));
   };
 
   for (const item of content) {
@@ -363,6 +410,48 @@ function claudeAgentPhase(row: Record<string, unknown>): MobileSessionTranscript
   const message = objectValue(row.message);
   const stopReason = nullableString(message?.stop_reason);
   return stopReason && stopReason !== 'tool_use' ? 'final' : 'commentary';
+}
+
+/**
+ * Agent prose, unless the runtime answered a wake-up with its fixed
+ * "no response requested" sentence — that is protocol bookkeeping, and marking
+ * it final would make it the session's headline reply.
+ */
+function assistantBlock(
+  row: Record<string, unknown>,
+  index: number,
+  text: string,
+  agentPhase: MobileSessionTranscriptAgentPhase
+): MobileSessionTranscriptBlock {
+  if (isClaudeNoReplyNotice(text)) {
+    return statusBlock(row, index, '无需回复', '本轮无需回复。');
+  }
+  return {
+    id: transcriptId(row, index, 'assistant'),
+    role: 'assistant',
+    agentPhase,
+    title: 'Claude',
+    timestamp: nullableString(row.timestamp),
+    format: 'markdown',
+    content: text,
+  };
+}
+
+/** Keeps every turn represented at concise level — see `agent-reply-turns`. */
+function promoteUnconcludedTurnReplies(
+  blocks: MobileSessionTranscriptBlock[]
+): MobileSessionTranscriptBlock[] {
+  const promoted = unconcludedTurnReplyIndexes(blocks.map(blockReplyTurnKind));
+  if (promoted.size === 0) return blocks;
+  return blocks.map((block, index) =>
+    promoted.has(index) ? { ...block, agentPhase: 'final' as const } : block
+  );
+}
+
+function blockReplyTurnKind(block: MobileSessionTranscriptBlock): ReplyTurnKind {
+  if (block.role === 'user') return 'turn-start';
+  if (block.role !== 'assistant') return 'other';
+  return block.agentPhase === 'final' ? 'final-reply' : 'reply';
 }
 
 function cleanText(value: string): string | null {
