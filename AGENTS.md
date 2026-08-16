@@ -29,6 +29,7 @@ optional_env:
   - YODA_MOBILE_INSTALL_URL
   - YODA_MOBILE_EXPO_URL
   - YODA_MOBILE_METRO_DISABLED
+  - YODA_MOBILE_REPO_PATH
   - YODA_REGISTER_DEEP_LINKS
   - CODEX_SANDBOX_MODE
   - CODEX_APPROVAL_POLICY
@@ -107,7 +108,7 @@ optional_env:
 ## 铁律
 
 - 合并前必须跑 `pnpm run format`、`pnpm run lint`、`pnpm run typecheck`、`pnpm test`。
-- 任何移动端代码或界面改动，必须构建、安装到已连接的真实 iPhone，并在设备上验证本次目标流程；模拟器、静态检查或截图都不能代替真机验收。若本机缺少对应 iOS 平台组件，先补齐组件再继续，不能将改动视为完成。
+- 手机客户端在独立仓库 `lovstudio/yoda-mobile`，本仓库只有 gateway 与 relay。gateway/relay 的改动若会影响手机上的可见行为，必须装到已连接的真实 iPhone 上验证本次目标流程；模拟器、静态检查或截图都不能代替真机验收。
 - 同一实体在所有 surface 行为必须一致、文件展示必须走共享组件——见 `agents/conventions/reuse.md`，违反算 bug。
 - 不要手改带编号的 Drizzle 迁移文件或 `drizzle/meta/`。
 - 新 RPC 方法写进对应的 `src/main/core/*/controller.ts`，由 `src/main/rpc.ts` 自动注册。

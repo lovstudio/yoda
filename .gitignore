@@ -91,9 +91,3 @@ src/main/appConfig.json
 # vitest browser failure artifacts
 .vitest-attachments/
 **/__screenshots__/
-
-# Expo native build outputs generated for physical-device delivery
-/apps/mobile/android/
-/apps/mobile/ios/
-/apps/mobile/.expo/prebuild/
-/apps/mobile/.expo/web/

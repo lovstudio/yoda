@@ -96,9 +96,9 @@ describe('terminal file links', () => {
 
   it('extracts every absolute path separated by Chinese ideographic commas', () => {
     const paths = [
-      '/Users/mark/lovstudio/coding/yoda/apps/mobile/src/App.tsx:1130',
-      '/Users/mark/lovstudio/coding/yoda/apps/mobile/src/api-client.ts:59',
-      '/Users/mark/lovstudio/coding/yoda/src/shared/mobile-retry-interaction.test.ts:1',
+      '/Users/mark/lovstudio/coding/yoda/src/renderer/lib/ipc.ts:1130',
+      '/Users/mark/lovstudio/coding/yoda/services/relay/src/headers.ts:59',
+      '/Users/mark/lovstudio/coding/yoda/src/main/core/git/remote-preference.test.ts:1',
     ];
     const line = `「相关实现：${paths.join('、')}。」`;
     const candidates = extractTerminalFileLinkCandidates(line);
@@ -116,23 +116,23 @@ describe('terminal file links', () => {
     ).toEqual([
       {
         originalText: paths[0],
-        filePath: 'apps/mobile/src/App.tsx',
-        absolutePath: '/Users/mark/lovstudio/coding/yoda/apps/mobile/src/App.tsx',
+        filePath: 'src/renderer/lib/ipc.ts',
+        absolutePath: '/Users/mark/lovstudio/coding/yoda/src/renderer/lib/ipc.ts',
         line: 1130,
         column: undefined,
       },
       {
         originalText: paths[1],
-        filePath: 'apps/mobile/src/api-client.ts',
-        absolutePath: '/Users/mark/lovstudio/coding/yoda/apps/mobile/src/api-client.ts',
+        filePath: 'services/relay/src/headers.ts',
+        absolutePath: '/Users/mark/lovstudio/coding/yoda/services/relay/src/headers.ts',
         line: 59,
         column: undefined,
       },
       {
         originalText: paths[2],
-        filePath: 'src/shared/mobile-retry-interaction.test.ts',
+        filePath: 'src/main/core/git/remote-preference.test.ts',
         absolutePath:
-          '/Users/mark/lovstudio/coding/yoda/src/shared/mobile-retry-interaction.test.ts',
+          '/Users/mark/lovstudio/coding/yoda/src/main/core/git/remote-preference.test.ts',
         line: 1,
         column: undefined,
       },
@@ -540,9 +540,9 @@ describe('terminal file links', () => {
 
   it('recognizes every ideographic-comma separated path across hard-wrapped rows', () => {
     const paths = [
-      '/Users/mark/lovstudio/coding/yoda/apps/mobile/src/App.tsx:1130',
-      '/Users/mark/lovstudio/coding/yoda/apps/mobile/src/api-client.ts:59',
-      '/Users/mark/lovstudio/coding/yoda/src/shared/mobile-retry-interaction.test.ts:1',
+      '/Users/mark/lovstudio/coding/yoda/src/renderer/lib/ipc.ts:1130',
+      '/Users/mark/lovstudio/coding/yoda/services/relay/src/headers.ts:59',
+      '/Users/mark/lovstudio/coding/yoda/src/main/core/git/remote-preference.test.ts:1',
     ];
     const line = `「相关实现：${paths.join('、')}。」`;
     const terminal = makeTerminal([line.slice(0, 80), line.slice(80, 160), line.slice(160)]);
@@ -555,19 +555,19 @@ describe('terminal file links', () => {
       {
         text: paths[0],
         range: { start: { x: 7, y: 1 }, end: { x: 68, y: 1 } },
-        filePath: 'apps/mobile/src/App.tsx',
+        filePath: 'src/renderer/lib/ipc.ts',
         line: 1130,
       },
       {
         text: paths[1],
         range: { start: { x: 70, y: 1 }, end: { x: 55, y: 2 } },
-        filePath: 'apps/mobile/src/api-client.ts',
+        filePath: 'services/relay/src/headers.ts',
         line: 59,
       },
       {
         text: paths[2],
         range: { start: { x: 57, y: 2 }, end: { x: 55, y: 3 } },
-        filePath: 'src/shared/mobile-retry-interaction.test.ts',
+        filePath: 'src/main/core/git/remote-preference.test.ts',
         line: 1,
       },
     ];

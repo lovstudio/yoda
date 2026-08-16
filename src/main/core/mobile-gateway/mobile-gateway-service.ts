@@ -207,11 +207,40 @@ function metroPidFilePath(): string {
   return path.join(app.getPath('userData'), 'metro-dev-server.pid');
 }
 
-function writeMetroPidFile(pid: number): void {
+/** The pid alone cannot be trusted across runs: the OS recycles pids, and
+ *  killing whatever inherited ours would be worse than leaking an orphan. So the
+ *  spawned command line is recorded next to the pid and has to match before we
+ *  signal anything. */
+type MetroPidRecord = { pid: number; command: string };
+
+function writeMetroPidFile(pid: number, command: string): void {
   try {
-    fs.writeFileSync(metroPidFilePath(), String(pid), 'utf8');
+    fs.writeFileSync(
+      metroPidFilePath(),
+      JSON.stringify({ pid, command } satisfies MetroPidRecord),
+      'utf8'
+    );
   } catch (error) {
     log.warn('MobileGateway: failed to write Metro pid file', { error: String(error) });
+  }
+}
+
+function readMetroPidFile(): MetroPidRecord | null {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(metroPidFilePath(), 'utf8').trim();
+  } catch {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as Partial<MetroPidRecord>;
+    if (!Number.isInteger(parsed.pid) || typeof parsed.command !== 'string') return null;
+    return { pid: parsed.pid as number, command: parsed.command };
+  } catch {
+    // Written by a build that spawned Metro as a workspace filter, before the
+    // mobile client moved to its own repository.
+    const pid = Number.parseInt(raw, 10);
+    return Number.isInteger(pid) ? { pid, command: '@yoda/mobile' } : null;
   }
 }
 
@@ -223,10 +252,10 @@ function removeMetroPidFile(): void {
   }
 }
 
-function isOurMetroProcess(pid: number): boolean {
+function isOurMetroProcess(pid: number, command: string): boolean {
   const result = spawnSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' });
   if (result.status !== 0) return false;
-  return result.stdout.includes('@yoda/mobile');
+  return result.stdout.includes(command);
 }
 
 // A previous Yoda instance that crashed or was force-killed leaves its detached
@@ -236,18 +265,15 @@ function isOurMetroProcess(pid: number): boolean {
 function killStaleMetroFromPidFile(): void {
   if (process.platform === 'win32') return;
 
-  let pid: number;
-  try {
-    pid = Number.parseInt(fs.readFileSync(metroPidFilePath(), 'utf8').trim(), 10);
-  } catch {
-    return;
-  }
-  if (!Number.isInteger(pid) || pid <= 1) {
+  const record = readMetroPidFile();
+  if (!record) return;
+  const { pid, command } = record;
+  if (pid <= 1) {
     removeMetroPidFile();
     return;
   }
 
-  if (isOurMetroProcess(pid)) {
+  if (isOurMetroProcess(pid, command)) {
     log.info('MobileGateway: killing stale Expo Metro from previous run', { pid });
     try {
       process.kill(-pid, 'SIGKILL');
@@ -269,6 +295,44 @@ function shouldAutoStartLocalMetro(): boolean {
   if (!isDevelopment()) return false;
   if (parseBooleanSetting(process.env.YODA_MOBILE_METRO_DISABLED) === true) return false;
   return !process.env.YODA_MOBILE_EXPO_URL?.trim();
+}
+
+/** The mobile client lives in its own repository (`lovstudio/yoda-mobile`), so
+ *  this repo cannot start Metro on its own: the developer has to say where that
+ *  checkout is. Not finding it is an ordinary development setup, not a fault —
+ *  the gateway still serves a paired phone, it just will not spawn a bundler. */
+type MobileRepoResolution =
+  | { kind: 'unset' }
+  | { kind: 'missing'; path: string }
+  | { kind: 'ready'; path: string };
+
+function resolveLocalMobileRepo(): MobileRepoResolution {
+  const configured = process.env.YODA_MOBILE_REPO_PATH?.trim();
+  if (!configured) return { kind: 'unset' };
+  const resolved = path.resolve(configured);
+  if (!fs.existsSync(path.join(resolved, 'package.json'))) {
+    return { kind: 'missing', path: resolved };
+  }
+  return { kind: 'ready', path: resolved };
+}
+
+// Opening the mobile view repeatedly should not repeat the same advice.
+let loggedMobileRepoResolution: string | null = null;
+
+function logMobileRepoResolutionOnce(resolution: MobileRepoResolution): void {
+  const key = resolution.kind === 'unset' ? 'unset' : `${resolution.kind}:${resolution.path}`;
+  if (loggedMobileRepoResolution === key) return;
+  loggedMobileRepoResolution = key;
+
+  if (resolution.kind === 'unset') {
+    log.info(
+      'MobileGateway: not auto-starting Expo Metro because the mobile client lives in its own repository. Set YODA_MOBILE_REPO_PATH=/path/to/yoda-mobile to auto-start it, or run `pnpm start` there yourself.'
+    );
+    return;
+  }
+  log.warn('MobileGateway: YODA_MOBILE_REPO_PATH does not look like a checkout', {
+    path: resolution.path,
+  });
 }
 
 function parsePort(value: string | undefined): number {
@@ -942,6 +1006,12 @@ export class MobileGatewayService {
   private async ensureLocalMetro(primaryUrl: string): Promise<void> {
     if (!shouldAutoStartLocalMetro()) return;
 
+    const mobileRepo = resolveLocalMobileRepo();
+    if (mobileRepo.kind !== 'ready') {
+      logMobileRepoResolutionOnce(mobileRepo);
+      return;
+    }
+
     const metroHost = metroHostFromGatewayUrl(primaryUrl);
     if (!metroHost) return;
 
@@ -971,24 +1041,27 @@ export class MobileGatewayService {
       return;
     }
 
-    const child = spawn(
-      pnpmCommand(),
-      ['--filter', '@yoda/mobile', 'start', '--', '--host', 'lan'],
-      {
-        cwd: process.cwd(),
-        detached: process.platform !== 'win32',
-        env: {
-          ...process.env,
-          EXPO_NO_TELEMETRY: '1',
-          REACT_NATIVE_PACKAGER_HOSTNAME: metroHost,
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }
-    );
+    // `--dir` is redundant next to `cwd`, but it puts the checkout path into the
+    // command line, and the command line is all a later run gets to identify
+    // this process by: pids are recycled, and a bare `start -- --host lan` is
+    // not distinctive enough to justify sending SIGKILL to whatever inherited
+    // one. The marker is the argv tail rather than the launcher, because `ps`
+    // prints the resolved `.../pnpm.cjs`, not `pnpm`.
+    const args = ['--dir', mobileRepo.path, 'start', '--', '--host', 'lan'];
+    const child = spawn(pnpmCommand(), args, {
+      cwd: mobileRepo.path,
+      detached: process.platform !== 'win32',
+      env: {
+        ...process.env,
+        EXPO_NO_TELEMETRY: '1',
+        REACT_NATIVE_PACKAGER_HOSTNAME: metroHost,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
     this.metroProcess = child;
     this.metroHost = metroHost;
-    if (child.pid) writeMetroPidFile(child.pid);
+    if (child.pid) writeMetroPidFile(child.pid, args.join(' '));
     pipeMetroLog(child.stdout, 'info', 'MobileGateway: Expo Metro');
     pipeMetroLog(child.stderr, 'warn', 'MobileGateway: Expo Metro');
 
