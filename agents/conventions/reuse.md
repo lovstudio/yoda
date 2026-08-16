@@ -8,6 +8,7 @@
 
 - 任务菜单的唯一来源：`src/renderer/features/tasks/components/task-context-menu.tsx`（`TaskContextMenu` 右键 / `TaskActionsMenu` 三点 / `useMenuItems` 菜单项集中定义）。任何 surface 上的任务实体都必须用它。
 - 会话菜单的唯一来源：`app-tab-context-menu.tsx` 的 `buildConversationSections()`。
+- 选择 Agent 的唯一来源：`src/renderer/lib/components/agent-picker/agent-picker.tsx`（`AgentPicker`）。搜索、新建、fork 都在弹层里，任何需要选 Agent 的地方都用它，`size="sm"` 适配设置行，禁止另写一个 Select。
 - 新增 surface 时：先找实体的现有菜单/行为定义并复用；找不到就把现有实现提取成共享定义再用，**禁止就地另写一份**。
 - 改菜单项时：只改集中定义，所有 surface 自动跟着变。如果发现某个 surface 是独立实现导致改不动，先合并再改。
 

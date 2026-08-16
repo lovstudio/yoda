@@ -55,8 +55,7 @@ export const NamingConfigFields = observer(function NamingConfigFields({
         hint={t('settings.tasks.namingAgentHint')}
         agentId={taskSettings.namingAgentId}
         onAgentIdChange={taskSettings.updateNamingAgentId}
-        disabled={disabled}
-        interactionDisabled={interactionDisabled}
+        disabled={interactionDisabled}
       />
 
       <div className={cn('flex min-w-0 gap-2', compact ? 'flex-col' : 'flex-wrap items-end')}>

@@ -138,7 +138,7 @@ export function AgentManagerView({ embedded = false }: { embedded?: boolean }) {
                 key={agent.id}
                 agent={agent}
                 onEdit={() => showAgentModal({ agent })}
-                onDuplicate={() => duplicate(agent.id)}
+                onDuplicate={() => void duplicate(agent.id)}
                 onDelete={() => handleDelete(agent)}
               />
             ))}

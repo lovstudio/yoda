@@ -9,8 +9,7 @@ import {
 import type { Agent } from '@shared/agents';
 import type { ParadigmIconId } from '@shared/paradigms/contract';
 import { useSkills } from '@renderer/features/skills/components/useSkills';
-import { AgentSlotSelector } from '@renderer/lib/components/agent-slot/agent-slot-selector';
-import { useNavigate } from '@renderer/lib/layout/navigation-provider';
+import { AgentPicker } from '@renderer/lib/components/agent-picker/agent-picker';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Checkbox } from '@renderer/lib/ui/checkbox';
 import {
@@ -53,7 +52,6 @@ export function ParadigmRosterEditor({
   onConfigurationChange: () => void;
 }) {
   const { t } = useTranslation();
-  const { navigate } = useNavigate();
   const showAgentModal = useShowModal('agentEditModal');
 
   const multiple = members.length > 1;
@@ -115,36 +113,18 @@ export function ParadigmRosterEditor({
           onEditAgent={(agent) =>
             showAgentModal({ agent, onSuccess: () => onConfigurationChange() })
           }
-          onCreateAgent={() =>
-            showAgentModal({
-              onSuccess: (created) => replaceAt(index, agentAsMember(created, member.role)),
-            })
-          }
-          onManageAgents={() => navigate('agentManager')}
         />
       ))}
 
       {/* Adding is the same picker a row uses, with nothing selected — so the way
           you choose the first Agent is the way you choose the fourth. */}
-      <AgentSlotSelector
+      <AgentPicker
         selectedAgent={null}
         agents={available}
         placeholder={t('agentTeams.addMember')}
-        onSelectAgent={(agentId) => {
-          const agent = agents.find((candidate) => candidate.id === agentId);
-          if (!agent) return;
-          onChange([...members, agentAsMember(agent, members.length === 0 ? 'leader' : 'worker')]);
-        }}
-        onCreateAgent={() =>
-          showAgentModal({
-            onSuccess: (created) =>
-              onChange([
-                ...members,
-                agentAsMember(created, members.length === 0 ? 'leader' : 'worker'),
-              ]),
-          })
+        onSelect={(agent) =>
+          onChange([...members, agentAsMember(agent, members.length === 0 ? 'leader' : 'worker')])
         }
-        onManageAgents={() => navigate('agentManager')}
         className="h-auto rounded-xl border border-dashed border-border/60 py-2 pl-2 pr-2.5 hover:bg-background-2/60"
       />
 
@@ -167,8 +147,6 @@ function RosterRow({
   onMakeLeader,
   onRemove,
   onEditAgent,
-  onCreateAgent,
-  onManageAgents,
 }: {
   member: AgentTeamMember;
   agents: Agent[];
@@ -180,8 +158,6 @@ function RosterRow({
   onMakeLeader: () => void;
   onRemove: () => void;
   onEditAgent: (agent: Agent) => void;
-  onCreateAgent: () => void;
-  onManageAgents: () => void;
 }) {
   const { t } = useTranslation();
   const { installedSkills } = useSkills();
@@ -225,15 +201,10 @@ function RosterRow({
             />
           </span>
         )}
-        <AgentSlotSelector
+        <AgentPicker
           selectedAgent={resolved}
           agents={agents}
-          onSelectAgent={(agentId) => {
-            const agent = agents.find((candidate) => candidate.id === agentId);
-            if (agent) onSelectAgent(agent);
-          }}
-          onCreateAgent={onCreateAgent}
-          onManageAgents={onManageAgents}
+          onSelect={onSelectAgent}
           eyebrow={eyebrow}
           className="h-auto min-w-0 flex-1 rounded-lg border-transparent bg-transparent py-1 pl-1 pr-1.5 hover:bg-background-2/60"
         />

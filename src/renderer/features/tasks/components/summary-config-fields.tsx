@@ -33,8 +33,7 @@ export const SummaryConfigFields = observer(function SummaryConfigFields({
         hint={t('settings.tasks.summaryAgentHint')}
         agentId={taskSettings.summaryAgentId}
         onAgentIdChange={taskSettings.updateSummaryAgentId}
-        disabled={disabled}
-        interactionDisabled={taskSettings.loading}
+        disabled={taskSettings.loading}
       />
 
       <TaskLanguageSelect

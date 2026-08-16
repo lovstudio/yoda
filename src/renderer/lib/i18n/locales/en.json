@@ -3685,6 +3685,7 @@
     "noDescription": "No description",
     "noDescriptionShort": "No description",
     "duplicate": "Duplicate agent",
+    "forkAgent": "Fork as a template",
     "anyRuntime": "Any client",
     "skillsCount": "{{count}} skills",
     "icon": "Icon",
