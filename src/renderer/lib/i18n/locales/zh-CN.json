@@ -5159,6 +5159,36 @@
       "title": "配置",
       "description": "调整常用输入与 Agent 选项。Prompt、指令文件等详细内容在资源库统一管理。"
     },
+    "sync": {
+      "title": "同步",
+      "description": "选择已配对手机连接这台电脑的方式。",
+      "statusLabel": "状态",
+      "modes": {
+        "lan": {
+          "label": "局域网",
+          "description": "同一 Wi-Fi 下的手机直接连接，数据不出本地网络。"
+        },
+        "relay": {
+          "label": "公网",
+          "description": "经 Lovstudio Relay 中转，手机在任意网络下都能连上。"
+        },
+        "both": {
+          "label": "两者兼用",
+          "description": "优先走局域网，电脑换网时自动回落到 Relay。"
+        }
+      },
+      "lanOff": "局域网同步已关闭",
+      "lanNoAddress": "当前没有可用的局域网地址",
+      "relayOff": "公网同步已关闭",
+      "relayConnected": "Relay 已连接",
+      "relayConnecting": "正在连接 Relay",
+      "relayNotPaired": "尚未配对 Relay",
+      "copyLanUrl": "复制地址",
+      "lanUrlCopied": "地址已复制",
+      "lanUrlCopyFailed": "复制地址失败",
+      "refresh": "刷新",
+      "openPairing": "配对设置"
+    },
     "prompt": {
       "label": "提示词",
       "triggerLabel": "打开 {{name}} 的提示词配置",

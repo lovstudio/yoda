@@ -5159,6 +5159,36 @@
       "title": "Config",
       "description": "Adjust common input and Agent options. Manage detailed prompts and instruction files in Library."
     },
+    "sync": {
+      "title": "Sync",
+      "description": "Choose how paired phones reach this desktop.",
+      "statusLabel": "Status",
+      "modes": {
+        "lan": {
+          "label": "Local network",
+          "description": "Phones on the same Wi-Fi connect directly. Nothing leaves the network."
+        },
+        "relay": {
+          "label": "Internet",
+          "description": "Traffic goes through Lovstudio Relay, so the phone works from anywhere."
+        },
+        "both": {
+          "label": "Both",
+          "description": "Prefer the local network, fall back to Relay when the desktop changes networks."
+        }
+      },
+      "lanOff": "Local network sync is off",
+      "lanNoAddress": "No local network address available",
+      "relayOff": "Internet sync is off",
+      "relayConnected": "Relay connected",
+      "relayConnecting": "Connecting to Relay",
+      "relayNotPaired": "Relay not paired yet",
+      "copyLanUrl": "Copy address",
+      "lanUrlCopied": "Address copied",
+      "lanUrlCopyFailed": "Could not copy the address",
+      "refresh": "Refresh",
+      "openPairing": "Pairing settings"
+    },
     "prompt": {
       "label": "Prompts",
       "triggerLabel": "Open {{name}} prompt configuration",

@@ -119,6 +119,7 @@ import {
   shouldReadOfficialAccountUsage,
 } from './workspace-runtime-usage-source';
 import { WorkspaceSkillPopover } from './workspace-skill-popover';
+import { WorkspaceSyncPopover } from './workspace-sync-popover';
 import {
   formatTrajectoryDuration,
   useTaskOpenTrajectories,
@@ -181,6 +182,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const [agentPanelTab, setAgentPanelTab] = useState<AgentPanelTab>('all');
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
   const [isConfigPopoverOpen, setIsConfigPopoverOpen] = useState(false);
+  const [isSyncPopoverOpen, setIsSyncPopoverOpen] = useState(false);
   const [isMaasPopoverOpen, setIsMaasPopoverOpen] = useState(false);
   const [accountUsageWarningThresholdDraft, setAccountUsageWarningThresholdDraft] = useState('95');
   const notifiedAccountUsageWindowsRef = useRef(new Set<string>());
@@ -934,6 +936,12 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       className="@container flex h-8 min-w-0 shrink-0 items-center gap-0.5 overflow-hidden whitespace-nowrap border-t border-border bg-background-secondary px-1.5 text-[11px] text-foreground-muted"
     >
       {renderConfigPopover()}
+      <WorkspaceSyncPopover
+        open={isSyncPopoverOpen}
+        onOpenChange={setIsSyncPopoverOpen}
+        triggerClassName={RUNTIME_BAR_ACTION_CLASS}
+        labelClassName={RUNTIME_BAR_ACTION_LABEL_CLASS}
+      />
       {runtimeId ? (
         <div className="flex min-w-0 items-center gap-0.5 overflow-hidden @min-[1121px]:gap-1.5">
           <Popover open={isRuntimePopoverOpen} onOpenChange={setIsRuntimePopoverOpen}>

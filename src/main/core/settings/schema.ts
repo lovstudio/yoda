@@ -17,6 +17,7 @@ import {
 } from '@shared/issue-worker';
 import { KANBAN_STATUSES } from '@shared/kanban';
 import { isMaasPlatformId, migrateLegacyMaasPlatformId, type MaasPlatformId } from '@shared/maas';
+import { DEFAULT_MOBILE_SYNC_MODE, MOBILE_SYNC_MODES } from '@shared/mobile-sync';
 import {
   MAX_CUSTOM_MODEL_PROVIDERS,
   MAX_CUSTOM_MODELS_PER_PROVIDER,
@@ -715,6 +716,11 @@ export const updatesSettingsSchema = z.object({
   proxyUrl: z.string().default(''),
 });
 
+/** Which transports paired phones may use to reach this desktop. */
+export const mobileSyncSettingsSchema = z.object({
+  mode: z.enum(MOBILE_SYNC_MODES).default(DEFAULT_MOBILE_SYNC_MODE),
+});
+
 export const APP_SETTINGS_SCHEMA_MAP = {
   localProject: localProjectSettingsSchema,
   project: projectSettingsSchema,
@@ -742,6 +748,7 @@ export const APP_SETTINGS_SCHEMA_MAP = {
   statusline: statuslineSettingsSchema,
   promptPrinciples: promptPrinciplesSettingsSchema,
   updates: updatesSettingsSchema,
+  mobileSync: mobileSyncSettingsSchema,
 } as const;
 
 export const appSettingsSchema = z.object({
@@ -771,4 +778,5 @@ export const appSettingsSchema = z.object({
   statusline: statuslineSettingsSchema,
   promptPrinciples: promptPrinciplesSettingsSchema,
   updates: updatesSettingsSchema,
+  mobileSync: mobileSyncSettingsSchema,
 });

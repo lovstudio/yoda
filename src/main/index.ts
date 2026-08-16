@@ -34,6 +34,7 @@ import { cliProxyApiManagedService } from './core/maas/cliproxyapi-managed-servi
 import { maasService } from './core/maas/maas-service';
 import { mobileGatewayService } from './core/mobile-gateway/mobile-gateway-service';
 import { mobileRelayService } from './core/mobile-gateway/mobile-relay-service';
+import { initializeMobileSyncMode } from './core/mobile-gateway/mobile-sync-mode';
 import { ensureInternalProject } from './core/projects/operations/ensureInternalProject';
 import { projectManager } from './core/projects/project-manager';
 import { promptLibraryService } from './core/prompt-library/prompt-library-service';
@@ -276,9 +277,18 @@ void app.whenReady().then(async () => {
     log.warn('Failed to resume pending team-room turns:', e);
   });
 
-  mobileGatewayService.initialize().catch((e) => {
-    log.error('Failed to start mobile gateway service:', e);
-  });
+  // The sync mode gates which transports answer at all, so it lands before the
+  // gateway starts listening — otherwise a relay-only desktop would briefly be
+  // reachable over the LAN on every launch.
+  initializeMobileSyncMode()
+    .catch((e) => {
+      log.error('Failed to apply the mobile sync mode:', e);
+    })
+    .finally(() => {
+      mobileGatewayService.initialize().catch((e) => {
+        log.error('Failed to start mobile gateway service:', e);
+      });
+    });
 
   automationScheduler.initialize().catch((e) => {
     log.error('Failed to start automation scheduler:', e);

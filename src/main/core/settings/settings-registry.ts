@@ -7,6 +7,7 @@ import {
   DEFAULT_LLM_PROFILE_NAME,
 } from '@shared/global-llm';
 import { MAAS_PLATFORMS } from '@shared/maas';
+import { DEFAULT_MOBILE_SYNC_MODE } from '@shared/mobile-sync';
 import type { OpenInAppId } from '@shared/openInApps';
 import {
   DEFAULT_SUMMARY_CONTEXT_GLOBAL,
@@ -200,6 +201,9 @@ export const SETTINGS_DEFAULTS = {
     source: 'official' as const,
     proxyMode: 'auto' as const,
     proxyUrl: '',
+  },
+  mobileSync: {
+    mode: DEFAULT_MOBILE_SYNC_MODE,
   },
 } satisfies SettingsDefaultsMap;
 

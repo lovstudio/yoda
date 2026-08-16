@@ -95,6 +95,7 @@ describe('hasReachableLocalGateway', () => {
     port: 3879,
     token: 'local-token',
     urls: ['http://192.168.1.8:3879'],
+    lanSyncEnabled: true,
     connectionKind: 'lan',
     localExpoUrl: null,
     installUrl: 'https://lovstudio.ai/yoda/mobile',
