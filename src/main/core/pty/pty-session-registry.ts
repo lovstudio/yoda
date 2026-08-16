@@ -20,6 +20,7 @@ import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import type { Pty, PtyDimensions, PtyExitInfo } from './pty';
 import { PtyRenderCheckpointTracker } from './pty-render-checkpoint';
+import { forgetPtyRepaint, notePtyRepaint } from './pty-repaint-window';
 import { TmuxTerminalReplyFilter } from './tmux-terminal-reply-filter';
 
 const FLUSH_INTERVAL_MS = 16; // One IPC output batch per display frame.
@@ -729,6 +730,9 @@ export class PtySessionRegistry {
 
     state.backendDimensions = { cols, rows };
     state.renderCheckpoint?.resize(cols, rows);
+    // A resized tmux client redraws its whole pane, scrollback included. Mark
+    // the burst so PTY observers do not mistake the redraw for new activity.
+    notePtyRepaint(sessionId);
     return { generation, changed: true };
   }
 
@@ -1768,6 +1772,7 @@ export class PtySessionRegistry {
     if (options.deleteState) {
       const tracker = state.renderCheckpoint;
       if (tracker) this.releaseRenderCheckpoint(sessionId, state, tracker);
+      forgetPtyRepaint(sessionId);
       this.sessions.delete(sessionId);
     }
   }

@@ -1,4 +1,5 @@
 import { stripAnsi } from '@main/core/agent-hooks/classifiers/base';
+import { isPtyRepainting } from '@main/core/pty/pty-repaint-window';
 import { log } from '@main/lib/logger';
 import { agentSessionRuntimeStore } from './agent-session-runtime';
 import { markInterrupted } from './interrupt-marker';
@@ -17,10 +18,14 @@ import { markInterrupted } from './interrupt-marker';
  * rendered effect — not the user's keystrokes, which are decoupled from what
  * the session actually did.
  *
- * False-positive surface: a full-screen redraw (e.g. resize) can re-emit an
- * old "Interrupted" line while a new turn is working. Cheap to tolerate — the
- * status drops to idle and the next `busy` activity transition re-asserts
- * `working`; the cooldown keeps repeated redraws from thrashing.
+ * The rendered effect is only evidence when it is *new*. A tmux-backed session
+ * re-emits its entire pane — scrollback included — on client attach and on
+ * every client resize, so opening a working task replays whatever interruption
+ * line an earlier turn left on screen. That replay used to clear the live
+ * turn's `working` status and leave a marker that suppressed the transcript's
+ * `working` verdict until the next user prompt. Two guards keep replays out:
+ * the repaint window a resize opens, and a priming phase covering the initial
+ * attach dump, which ends at the session's first quiet gap in output.
  */
 const INTERRUPT_UI_PATTERNS: readonly RegExp[] = [
   /Interrupted\s*·\s*What should Claude do instead\?/i,
@@ -30,6 +35,13 @@ const INTERRUPT_UI_PATTERNS: readonly RegExp[] = [
 /** Keep enough stripped tail to span a marker split across output chunks. */
 const TAIL_BUFFER_CHARS = 400;
 const COOLDOWN_MS = 5_000;
+/**
+ * An attach dump arrives as one uninterrupted burst, so the first gap this long
+ * means the session has settled and is rendering live output again. Turn output
+ * pauses far longer than this between tokens and tool calls, so priming always
+ * ends well before a user could interrupt.
+ */
+const PRIMING_QUIET_MS = 400;
 
 interface AgentSessionKey {
   projectId: string;
@@ -38,24 +50,39 @@ interface AgentSessionKey {
 }
 
 /** Returns an onData handler; attach to a Claude session's PTY. */
-export function createClaudeInterruptSniffer(session: AgentSessionKey): (chunk: string) => void {
+export function createClaudeInterruptSniffer(
+  session: AgentSessionKey & { ptySessionId: string }
+): (chunk: string) => void {
+  const { ptySessionId, ...agentSession } = session;
   let tail = '';
   let lastFiredAt = 0;
+  let lastChunkAt = 0;
+  let priming = true;
 
   return (chunk: string) => {
+    const now = Date.now();
+    if (priming && lastChunkAt !== 0 && now - lastChunkAt >= PRIMING_QUIET_MS) priming = false;
+    lastChunkAt = now;
+    if (priming || isPtyRepainting(ptySessionId, now)) {
+      tail = '';
+      return;
+    }
     tail = (tail + stripAnsi(chunk)).slice(-TAIL_BUFFER_CHARS);
-    if (Date.now() - lastFiredAt < COOLDOWN_MS) return;
+    if (now - lastFiredAt < COOLDOWN_MS) return;
     if (!INTERRUPT_UI_PATTERNS.some((pattern) => pattern.test(tail))) return;
-    lastFiredAt = Date.now();
+    lastFiredAt = now;
     tail = '';
-    const status = agentSessionRuntimeStore.getStatus(session);
+    const status = agentSessionRuntimeStore.getStatus(agentSession);
     if (status !== 'working' && status !== 'awaiting-input') return;
-    log.debug('AgentInterruptSniffer: interrupt UI detected, clearing running status', session);
+    log.debug(
+      'AgentInterruptSniffer: interrupt UI detected, clearing running status',
+      agentSession
+    );
     // Preserve the interrupt marker for other reconciliation paths.
-    markInterrupted(session.conversationId);
+    markInterrupted(agentSession.conversationId);
     agentSessionRuntimeStore.dispatch(
-      session,
-      { kind: 'turn-interrupted', at: Date.now() },
+      agentSession,
+      { kind: 'turn-interrupted', at: now },
       'interrupt-sniffer'
     );
   };

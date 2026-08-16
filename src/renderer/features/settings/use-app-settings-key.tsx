@@ -18,6 +18,17 @@ type SettingsMeta<K extends AppSettingsKey> = {
  */
 export const APP_SETTINGS_META_REQUEST_TIMEOUT_MS = 500;
 
+/**
+ * Failing fast is only safe if we also come back for the real value. A cold
+ * boot routinely keeps the main process busy for longer than the deadline
+ * above, and a settings key stuck on `undefined` reads to every consumer as
+ * "the user never changed this" — that is how a persisted theme silently
+ * reverted to the default on restart. Retries run in the background (the query
+ * is already out of its pending state, so `isLoading` stays false) until the
+ * main process answers.
+ */
+export const APP_SETTINGS_META_RETRY_INTERVAL_MS = 1_000;
+
 async function loadSettingsMeta<K extends AppSettingsKey>(key: K): Promise<SettingsMeta<K>> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const request = rpc.appSettings.getWithMeta(key) as Promise<SettingsMeta<K>>;
@@ -60,6 +71,11 @@ export function useAppSettingsKey<K extends AppSettingsKey>(key: K) {
     queryKey: ['appSettings', key, 'meta'] as const,
     queryFn: () => loadSettingsMeta(key),
     retry: false,
+    refetchInterval: (query) =>
+      query.state.status === 'error' ? APP_SETTINGS_META_RETRY_INTERVAL_MS : false,
+    // A cold boot often finishes while the window is unfocused; without this the
+    // recovery poll would wait for the user to click back in.
+    refetchIntervalInBackground: true,
     staleTime: 5 * 60_000,
   });
 
