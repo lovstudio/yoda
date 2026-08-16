@@ -2,6 +2,7 @@ import { Plus, Settings2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
+import { AgentAvatar } from '@renderer/lib/components/agent-card/agent-avatar';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
@@ -112,12 +113,16 @@ export const UtilityAgentPicker = observer(function UtilityAgentPicker({
   );
 });
 
+/**
+ * One Agent as a row: its avatar, then its name. The avatar goes through the
+ * shared `AgentAvatar` like every other surface — an Agent's icon is a glyph
+ * *or* an image payload (uploaded data URL, preset SVG data URI), so anything
+ * that renders the raw field as text prints the payload across the row.
+ */
 function AgentOptionLabel({ icon, name }: { icon?: string; name: string }) {
   return (
     <span className="flex min-w-0 items-center gap-2">
-      <span className="flex size-4 shrink-0 items-center justify-center text-[13px] leading-none">
-        {icon || '🤖'}
-      </span>
+      <AgentAvatar name={name} icon={icon} className="size-5 rounded-md text-xs" />
       <span className="truncate">{name}</span>
     </span>
   );
