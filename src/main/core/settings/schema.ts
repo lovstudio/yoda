@@ -1,6 +1,11 @@
 import z from 'zod';
 import { AGENT_REPLY_DISPLAY_LEVELS } from '@shared/agent-reply-display';
-import { customThemeSelectionSchema, customThemesSettingsSchema } from '@shared/custom-theme';
+import {
+  BUILT_IN_THEMES,
+  customThemeSelectionSchema,
+  customThemesSettingsSchema,
+  type BuiltInTheme,
+} from '@shared/custom-theme';
 import {
   DEFAULT_LLM_PROFILE_ACCESS_METHOD,
   DEFAULT_LLM_PROFILE_ID,
@@ -444,26 +449,24 @@ export const terminalSettingsSchema = z.object({
     .catch(DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES),
 });
 
+/** Selections that no longer ship; each maps onto the theme that replaced it. */
+const RETIRED_THEMES = ['emlight', 'emdark', 'ymatrix'] as const;
+
+const RETIRED_THEME_ALIASES: Record<(typeof RETIRED_THEMES)[number], BuiltInTheme> = {
+  emlight: 'ylight',
+  emdark: 'ydark',
+  // 'ymatrix' graduated into the ydark base palette.
+  ymatrix: 'ydark',
+};
+
 const legacyThemeSchema = z
-  .enum([
-    'ylight',
-    'ydark',
-    'ywarm',
-    'ygreen',
-    'ylight2',
-    'ydream-arina',
-    'ydream-panther',
-    'ymatrix',
-    'emlight',
-    'emdark',
-  ])
-  .transform((value) => {
-    if (value === 'emlight') return 'ylight' as const;
-    if (value === 'emdark') return 'ydark' as const;
-    // 'ymatrix' graduated into the ydark base palette.
-    if (value === 'ymatrix') return 'ydark' as const;
-    return value;
-  });
+  .enum([...BUILT_IN_THEMES, ...RETIRED_THEMES])
+  .transform(
+    (value): BuiltInTheme =>
+      value in RETIRED_THEME_ALIASES
+        ? RETIRED_THEME_ALIASES[value as (typeof RETIRED_THEMES)[number]]
+        : (value as BuiltInTheme)
+  );
 
 const themeSelectionSchema = z.union([legacyThemeSchema, customThemeSelectionSchema]);
 
