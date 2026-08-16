@@ -50,6 +50,7 @@ describe('parseClaudeSessionActivity', () => {
       status: 'busy',
       waitingFor: null,
       updatedAt: 1_781_115_179_335,
+      startedAt: null,
     });
   });
 
@@ -99,7 +100,13 @@ describe('watchClaudeSessionActivity', () => {
   function writeSession(
     status: 'busy' | 'idle' | 'waiting',
     updatedAt = Date.now(),
-    overrides: { pid?: number; sessionId?: string; cwd?: string; waitingFor?: string } = {}
+    overrides: {
+      pid?: number;
+      sessionId?: string;
+      cwd?: string;
+      waitingFor?: string;
+      startedAt?: number;
+    } = {}
   ): void {
     const pid = overrides.pid ?? 123;
     writeFileSync(
@@ -112,6 +119,7 @@ describe('watchClaudeSessionActivity', () => {
         waitingFor:
           status === 'waiting' ? (overrides.waitingFor ?? 'approve AskUserQuestion') : undefined,
         updatedAt,
+        startedAt: overrides.startedAt ?? 0,
       })
     );
   }
@@ -132,6 +140,7 @@ describe('watchClaudeSessionActivity', () => {
       status: 'busy',
       waitingFor: null,
       updatedAt: 1_781_115_179_335,
+      startedAt: 0,
     });
   });
 
@@ -211,11 +220,16 @@ describe('watchClaudeSessionActivity', () => {
     await waitFor(() => events.some((event) => event.kind === 'turn-interrupted'));
   });
 
-  it('reconciles an already-idle process on attach', async () => {
-    writeSession('idle');
+  it('leaves a running status alone when a resumed process boots to its prompt', async () => {
+    // Claude writes `idle` about a second after startup, and the watcher only
+    // exists because the user opened the task. Publishing that first read would
+    // make a running task go idle on click.
+    setStoreStatus('working', Date.now() - 60_000);
+    writeSession('idle', Date.now(), { startedAt: Date.now() });
     start();
 
-    await waitFor(() => events.some((event) => event.kind === 'watchdog-idle'));
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(events).toEqual([]);
   });
 
   it('ignores stale activity files when attaching a live watcher', async () => {
@@ -270,14 +284,26 @@ describe('watchClaudeSessionActivity', () => {
 
     it('waits for an idle record to settle before overruling a running status', async () => {
       // A record Claude wrote moments ago may simply not have caught up with the
-      // work it just picked up. (Attach still reconciles a fresh idle record via
-      // `watchdog-idle`; only the settle verdict has to wait.)
+      // work it just picked up.
       writeSession('idle', Date.now());
       setStoreStatus('working', Date.now() - 10_000);
       start({ ...seams, reconcileMinIdleAgeMs: 5_000 });
 
       await new Promise((resolve) => setTimeout(resolve, 120));
       expect(events.map((event) => event.kind)).not.toContain('turn-completed');
+    });
+
+    it('ignores an idle record from a process that started after the turn', async () => {
+      // The CLI was replaced (resume, idle-timeout release) after the status was
+      // set, so its prompt is a boot state and says nothing about that turn. A
+      // process that really died mid-turn is reported by the exit path instead.
+      const now = Date.now();
+      writeSession('idle', now - 9_000, { startedAt: now - 10_000 });
+      setStoreStatus('working', now - 20_000);
+      start(seams);
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      expect(events).toEqual([]);
     });
 
     it('leaves a terminal status alone', async () => {

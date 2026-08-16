@@ -17,7 +17,10 @@ import { conversations } from '@main/db/schema';
 import { resolveTask } from '../projects/utils';
 import { agentSessionRuntimeStore } from './agent-session-runtime';
 import { readClaudeTurnVerdictFile } from './claude-run-state-source';
-import { getClaudeSessionActivity } from './claude-session-activity-source';
+import {
+  getClaudeSessionActivity,
+  idleActivitySettlesRunState,
+} from './claude-session-activity-source';
 import { findClaudeTranscriptPathBySessionId } from './claude-transcript-locator';
 import { readCodexTurnVerdict } from './codex-run-state-source';
 import { resolveCodexThreadIdForConversation } from './codex-session-id';
@@ -155,7 +158,18 @@ async function deriveStatus(args: {
     }).catch(() => null);
     if (activity?.status === 'busy') truth = 'working';
     else if (activity?.status === 'waiting') truth = 'awaiting-input';
-    else if (activity?.status === 'idle') truth = 'idle';
+    else if (activity?.status === 'idle') {
+      // A CLI that started after the live status was set is sitting at its boot
+      // prompt, not at the end of the turn that status describes. Resuming a
+      // session is a consequence of opening the task, so trusting that read
+      // would make a running task go idle when the user merely clicked it.
+      if (
+        !isAgentSessionRunningStatus(memory) ||
+        idleActivitySettlesRunState(activity, agentSessionRuntimeStore.getState(session).updatedAt)
+      ) {
+        truth = 'idle';
+      }
+    }
   } else if (provider === 'claude' && statusMonitor === 'transcript') {
     const sessionId =
       sessionSource?.runtimeId === 'claude' ? sessionSource.sessionId : conversationId;
