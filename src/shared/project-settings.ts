@@ -1,5 +1,6 @@
 import z from 'zod';
 import { LEGACY_RUN_MODES, normalizeLegacyRunMode } from './paradigms/kinds';
+import { projectFacetSchema } from './project-facets';
 import {
   PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES,
   PROMPT_SOURCE_DEFAULT_TIMEOUT_SECONDS,
@@ -225,6 +226,7 @@ export const shareableProjectSettingsSchema = z.object({
   quickActions: z.array(quickActionSchema).optional(),
   promptPrinciples: projectPromptPrinciplesSchema.optional(),
   composerDefaults: composerDefaultsSchema.optional(),
+  facets: z.array(projectFacetSchema).optional(),
   docs: projectDocsSettingsSchema.optional(),
 });
 
@@ -296,6 +298,7 @@ export type ShareableProjectSettingsWriteField =
   | 'quickActions'
   | 'promptPrinciples'
   | 'composerDefaults'
+  | 'facets'
   | 'docs.localPath'
   | 'docs.cloudUrl';
 
@@ -308,6 +311,7 @@ export const SHAREABLE_PROJECT_SETTINGS_WRITE_FIELDS = [
   'quickActions',
   'promptPrinciples',
   'composerDefaults',
+  'facets',
   'docs.localPath',
   'docs.cloudUrl',
 ] as const satisfies ShareableProjectSettingsWriteField[];
@@ -338,6 +342,7 @@ export function emptyProjectSettingsOverrideState(): ProjectSettingsOverrideStat
     quickActions: [],
     promptPrinciples: [],
     composerDefaults: [],
+    facets: [],
     'docs.localPath': [],
     'docs.cloudUrl': [],
   };

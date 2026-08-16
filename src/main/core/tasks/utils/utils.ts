@@ -101,6 +101,7 @@ export function mapTaskRowToTask(
     workspaceProviderData: row.workspaceProviderData ?? undefined,
     sidebarWorkspaceId: row.sidebarWorkspaceId ?? undefined,
     parentTaskId: row.parentTaskId ?? undefined,
+    facetId: row.facetId ?? undefined,
     quickActionSource: quickActionSource(row.setupData),
     quickActionId: quickActionId(row.setupData),
     paradigmId: row.paradigmId ?? undefined,

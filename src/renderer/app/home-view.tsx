@@ -391,8 +391,8 @@ export const HomeComposer = observer(function HomeComposer({
   const setSelectedProjectId = useCallback(
     (next: string | undefined) => {
       if (isProjectLocked) return;
-      // The picked base branch belongs to the previous project — reset it.
-      updateDraft({ selectedProjectId: next ?? null, baseBranch: null });
+      // The picked base branch and facet belong to the previous project — reset both.
+      updateDraft({ selectedProjectId: next ?? null, baseBranch: null, facetId: null });
     },
     [isProjectLocked, updateDraft]
   );
@@ -407,7 +407,7 @@ export const HomeComposer = observer(function HomeComposer({
     if (isProjectLocked) return;
     if (homeProjectId === INTERNAL_PROJECT_ID) {
       if (draftProjectId !== null) {
-        updateDraft({ selectedProjectId: null, baseBranch: null });
+        updateDraft({ selectedProjectId: null, baseBranch: null, facetId: null });
         return;
       }
       setHomeParams({ projectId: undefined });
@@ -417,7 +417,7 @@ export const HomeComposer = observer(function HomeComposer({
     if (!homeRouteProject?.data) return;
     void projectManager.mountProject(homeProjectId).catch(() => {});
     if (homeProjectId !== draftProjectId) {
-      updateDraft({ selectedProjectId: homeProjectId, baseBranch: null });
+      updateDraft({ selectedProjectId: homeProjectId, baseBranch: null, facetId: null });
       return;
     }
     // Keep the navigation-scoped project until the optimistic settings update
@@ -478,6 +478,27 @@ export const HomeComposer = observer(function HomeComposer({
     (parentTaskStore && 'taskBranch' in parentTaskStore.data
       ? parentTaskStore.data.taskBranch
       : undefined);
+
+  // Facet membership for the task about to be created. A subtask starts on its
+  // parent's facet — the same rule the main process applies when no facet is
+  // stated — but stays switchable before launch, so the composer prefills the
+  // draft instead of resolving the fallback at submit time.
+  const projectFacets = projectSettings?.facets ?? [];
+  const parentFacetId =
+    parentTaskStore && 'facetId' in parentTaskStore.data
+      ? (parentTaskStore.data.facetId ?? null)
+      : null;
+  const draftFacetId = draft?.facetId ?? null;
+  useEffect(() => {
+    if (!parentFacetId || draftFacetId) return;
+    updateDraft({ facetId: parentFacetId });
+  }, [parentFacetId, draftFacetId, updateDraft]);
+  const setDraftFacetId = useCallback(
+    (next: string | null) => {
+      updateDraft({ facetId: next });
+    },
+    [updateDraft]
+  );
 
   const repo = selectedProjectId ? getRepositoryStore(selectedProjectId) : undefined;
   const defaultBranch = repo?.defaultBranch;
@@ -1075,6 +1096,7 @@ export const HomeComposer = observer(function HomeComposer({
         selectedBranch,
         currentBranchName,
         parentTaskId: parentTarget?.taskId,
+        facetId: draftFacetId,
         projectManager,
         queryClient,
         isAutoApproving: permissionModes.isDanger,
@@ -1107,6 +1129,8 @@ export const HomeComposer = observer(function HomeComposer({
             baseDefaultBranch: undefined,
             parentBranchName: null,
             parentTaskId: undefined,
+            // No project of its own to define facets, and no parent to inherit from.
+            facetId: null,
           }),
           params
         );
@@ -1157,6 +1181,8 @@ export const HomeComposer = observer(function HomeComposer({
             currentBranchName: null,
             parentBranchName: null,
             parentTaskId: undefined,
+            // No project of its own to define facets, and no parent to inherit from.
+            facetId: null,
           }),
           params
         );
@@ -1209,6 +1235,7 @@ export const HomeComposer = observer(function HomeComposer({
     selectedBranch,
     promptTokens,
     attachImagesAsPaths,
+    draftFacetId,
     promptRewriteEnabled,
     rewriteInputRequirement,
     clearPromptTokens,
@@ -1276,6 +1303,9 @@ export const HomeComposer = observer(function HomeComposer({
           namingLanguage={namingLanguageField.value}
           autoGenerateSummary={autoGenerateSummaryField.value}
           summaryLanguage={summaryLanguageField.value}
+          facets={projectFacets}
+          facetId={draftFacetId}
+          onFacetIdChange={setDraftFacetId}
           onAttachImagesAsPathsChange={attachImagesField.setValue}
           onPromptRewriteEnabledChange={promptRewriteEnabledField.setValue}
           onInputPromptLanguageChange={inputPromptLanguageField.setValue}

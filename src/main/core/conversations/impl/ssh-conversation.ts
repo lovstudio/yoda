@@ -43,15 +43,14 @@ import {
   cancelConversationHydrationBarrier,
   cancelConversationHydrationBarriersForTask,
 } from '../conversation-hydration-barrier';
-import { withExecutionModeInstructions } from '../execution-mode';
 import {
   recordConversationAuthProvider,
   snapshotConversationUsageOnSessionExit,
   snapshotTaskDiffOnSessionExit,
 } from '../session-stats-hooks';
 import { buildAgentCommand } from './agent-command';
+import { buildAppendSystemPrompt } from './append-system-prompt';
 import { substituteImageMentions } from './image-attachments';
-import { getEnabledPromptPrinciplesText } from './prompt-principles';
 import { classifyLostPtyTransport, type PtyExitClassification } from './pty-exit-classification';
 import { resolveRuntimeEnv, resolveRuntimeTmuxEnv } from './runtime-env';
 import { injectTuiStartupInput } from './tui-startup-input';
@@ -77,6 +76,7 @@ export class SshConversationProvider implements ConversationProvider {
   private readonly resolveProjectPromptPrinciples?: () => Promise<
     ProjectPromptPrinciples | undefined
   >;
+  private readonly resolveFacetInstructions?: () => Promise<string | undefined>;
   private readonly tmuxSessionNames = new Map<string, string>();
   private readonly transportDetachedAt = new Map<string, number>();
   private readonly inputTails = new Map<string, Promise<void>>();
@@ -95,6 +95,7 @@ export class SshConversationProvider implements ConversationProvider {
     proxy,
     connectionId,
     resolveProjectPromptPrinciples,
+    resolveFacetInstructions,
   }: {
     projectId: string;
     sidebarWorkspaceId?: string | null;
@@ -107,6 +108,7 @@ export class SshConversationProvider implements ConversationProvider {
     proxy: SshClientProxy;
     connectionId: string;
     resolveProjectPromptPrinciples?: () => Promise<ProjectPromptPrinciples | undefined>;
+    resolveFacetInstructions?: () => Promise<string | undefined>;
   }) {
     this.projectId = projectId;
     this.sidebarWorkspaceId = sidebarWorkspaceId;
@@ -119,6 +121,7 @@ export class SshConversationProvider implements ConversationProvider {
     this.proxy = proxy;
     this.connectionId = connectionId;
     this.resolveProjectPromptPrinciples = resolveProjectPromptPrinciples;
+    this.resolveFacetInstructions = resolveFacetInstructions;
   }
 
   async startSession(
@@ -194,13 +197,12 @@ export class SshConversationProvider implements ConversationProvider {
           runtimeId: conversation.runtimeId,
         });
       }
-      const appendSystemPrompt = withExecutionModeInstructions(
-        await getEnabledPromptPrinciplesText(await this.resolveProjectPromptPrinciples?.(), {
-          projectId: this.projectId,
-          workspaceId: this.sidebarWorkspaceId,
-        }),
-        conversation.executionMode
-      );
+      const appendSystemPrompt = await buildAppendSystemPrompt({
+        resolveFacetInstructions: this.resolveFacetInstructions,
+        resolveProjectPromptPrinciples: this.resolveProjectPromptPrinciples,
+        target: { projectId: this.projectId, workspaceId: this.sidebarWorkspaceId },
+        executionMode: conversation.executionMode,
+      });
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       const terminalThemeMode = await resolveTerminalThemeMode();
       if (!this.ownsPendingStart(sessionId, startToken)) return;

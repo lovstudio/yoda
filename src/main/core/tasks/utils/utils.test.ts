@@ -34,6 +34,7 @@ function taskRow(setupData: string | null): TaskRow {
     workspaceProviderData: null,
     sidebarWorkspaceId: null,
     parentTaskId: null,
+    facetId: null,
     paradigmId: null,
     paradigmKind: null,
     paradigmParams: null,

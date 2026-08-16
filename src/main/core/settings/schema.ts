@@ -725,6 +725,9 @@ export const homeDraftSchema = z.preprocess(
     /** When true, image attachments are sent as @path mentions instead of
      *  being pasted natively (clipboard + Ctrl+V) into the agent TUI. */
     attachImagesAsPaths: z.boolean(),
+    /** Project facet the next task should belong to. Facet ids are scoped to a
+     *  project, so this is cleared whenever the composer switches projects. */
+    facetId: z.string().nullable().default(null),
     /** Attachment-token registry backing the inline sentinels in `prompt` —
      *  label → absolute path. Persisted with the draft so tokens survive the
      *  composer remounting on navigation. */

@@ -176,6 +176,7 @@ export const SETTINGS_DEFAULTS = {
     selectedAgentIds: {},
     expressMode: false,
     attachImagesAsPaths: false,
+    facetId: null,
     promptTokens: [],
     preArchiveCommand: '',
   },

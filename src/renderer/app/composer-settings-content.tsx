@@ -2,6 +2,7 @@ import { SlidersHorizontal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { UNASSIGNED_FACET_VALUE, type ProjectFacet } from '@shared/project-facets';
 import type { TaskOutputLanguage } from '@shared/project-settings';
 import {
   PROMPT_REWRITE_LANGUAGE_OPTIONS,
@@ -34,6 +35,13 @@ export interface ComposerSettingsContentProps {
   onNamingLanguageChange: (value: TaskOutputLanguage) => void;
   onAutoGenerateSummaryChange: (value: boolean) => void;
   onSummaryLanguageChange: (value: TaskOutputLanguage) => void;
+  /**
+   * Facets the target project defines. Omitted where a facet has no meaning (the
+   * runtime bar edits project defaults, not a single task's membership).
+   */
+  facets?: ProjectFacet[];
+  facetId?: string | null;
+  onFacetIdChange?: (value: string | null) => void;
   footer?: ReactNode;
 }
 
@@ -57,6 +65,9 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
   onNamingLanguageChange,
   onAutoGenerateSummaryChange,
   onSummaryLanguageChange,
+  facets,
+  facetId,
+  onFacetIdChange,
   footer,
 }: ComposerSettingsContentProps) {
   const { t } = useTranslation();
@@ -67,6 +78,13 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
         icon={<SlidersHorizontal className="size-3.5" />}
         label={t('home.composerEssentialsSectionLabel')}
       >
+        {facets && facets.length > 0 && onFacetIdChange ? (
+          <ComposerFacetSelectRow
+            facets={facets}
+            value={facetId ?? null}
+            onValueChange={onFacetIdChange}
+          />
+        ) : null}
         <ComposerSettingRow
           label={t('home.attachImagesAsPathsLabel')}
           hint={t('home.attachImagesAsPathsDesc')}
@@ -159,6 +177,50 @@ function ComposerSettingRow({
       </div>
       <div className="flex shrink-0 items-center">{control}</div>
     </div>
+  );
+}
+
+/**
+ * Which project facet the new task belongs to. Membership drives the facet
+ * context injected at session start, so it belongs with the other pre-launch
+ * choices rather than in the task's own settings after the fact.
+ */
+function ComposerFacetSelectRow({
+  facets,
+  value,
+  onValueChange,
+}: {
+  facets: ProjectFacet[];
+  value: string | null;
+  onValueChange: (value: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  const selected = facets.find((facet) => facet.id === value);
+  return (
+    <ComposerSettingRow
+      label={t('facets.label')}
+      hint={t('facets.composerHint')}
+      control={
+        <Select
+          value={value ?? UNASSIGNED_FACET_VALUE}
+          onValueChange={(next) =>
+            onValueChange(next === UNASSIGNED_FACET_VALUE ? null : (next as string))
+          }
+        >
+          <SelectTrigger size="sm" className="h-7 w-36 text-[11px]">
+            <SelectValue>{selected?.name ?? t('facets.unassigned')}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={UNASSIGNED_FACET_VALUE}>{t('facets.unassigned')}</SelectItem>
+            {facets.map((facet) => (
+              <SelectItem key={facet.id} value={facet.id}>
+                {facet.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      }
+    />
   );
 }
 

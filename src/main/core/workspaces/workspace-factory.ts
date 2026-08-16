@@ -21,6 +21,7 @@ import type { Workspace } from '@main/core/workspaces/workspace';
 import { LifecycleScriptService } from '@main/core/workspaces/workspace-lifecycle-service';
 import { type WorkspaceFactoryResult } from '@main/core/workspaces/workspace-registry';
 import { log } from '@main/lib/logger';
+import { getTaskFacetInstructions } from '../projects/project-facets';
 import { getProjectPromptPrinciples } from '../projects/project-prompt-principles';
 import { getEffectiveTaskSettings } from '../projects/settings/effective-task-settings';
 import type { ProjectSettingsProvider } from '../projects/settings/provider';
@@ -274,6 +275,7 @@ export function buildTaskProviders(
         connectionId: type.connectionId,
         taskEnvVars: opts.taskEnvVars,
         resolveProjectPromptPrinciples: () => getProjectPromptPrinciples(opts.projectId),
+        resolveFacetInstructions: () => getTaskFacetInstructions(opts.projectId, opts.taskId),
       }),
       terminals: new SshTerminalProvider({
         projectId: opts.projectId,
@@ -301,6 +303,7 @@ export function buildTaskProviders(
       ctx,
       taskEnvVars: opts.taskEnvVars,
       resolveProjectPromptPrinciples: () => getProjectPromptPrinciples(opts.projectId),
+      resolveFacetInstructions: () => getTaskFacetInstructions(opts.projectId, opts.taskId),
     }),
     terminals: new LocalTerminalProvider({
       projectId: opts.projectId,
