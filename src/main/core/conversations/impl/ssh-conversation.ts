@@ -632,6 +632,18 @@ export class SshConversationProvider implements ConversationProvider {
     });
   }
 
+  /**
+   * Ask the tmux pane — not the attach channel — whether the agent still runs.
+   * A detached transport is Yoda's own doing and says nothing about the agent.
+   */
+  async isAgentBackendAlive(conversationId: string): Promise<boolean> {
+    const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
+    if (this.sessions.has(sessionId)) return true;
+    const tmuxSessionName = this.tmuxSessionNames.get(sessionId);
+    if (!tmuxSessionName) return false;
+    return (await classifyLostPtyTransport(this.ctx, tmuxSessionName)) === 'transport-lost';
+  }
+
   /** Release only the current SSH tmux attach channel after registry revalidation. */
   private detachRendererTransport(sessionId: string, pty: Pty, generation: number): void {
     if (this.sessions.get(sessionId) !== pty || !this.tmuxSessionNames.has(sessionId)) return;

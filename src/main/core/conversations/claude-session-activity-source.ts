@@ -2,7 +2,8 @@ import { watch, type FSWatcher } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { PendingAction, RunStateEvent } from '@shared/events/agent-run-state';
+import type { PendingAction, RunState, RunStateEvent } from '@shared/events/agent-run-state';
+import { isAgentSessionRunningStatus } from '@shared/events/agentEvents';
 import { log } from '@main/lib/logger';
 import { clearInterruptMarker, hasInterruptMarker } from './interrupt-marker';
 
@@ -30,14 +31,29 @@ export interface ClaudeSessionActivityContext {
   claudeHomeDir?: string;
   /** Test seam for the short interrupt-marker settle window. */
   idleSettleMs?: number;
+  /** Test seam for how often a running status is re-checked against the record. */
+  reconcileIntervalMs?: number;
+  /** Test seam for how settled a record must be before it overrules the reducer. */
+  reconcileMinIdleAgeMs?: number;
 }
 
 export type ClaudeSessionActivityDispatch = (event: RunStateEvent) => void;
+
+/** Run state this conversation currently holds, for reconciling divergence. */
+export type ClaudeSessionActivityStateReader = () => RunState;
 
 const READY_POLL_INTERVAL_MS = 1_000;
 const READY_POLL_MAX_MS = 5 * 60_000;
 const IDLE_SETTLE_MS = 250;
 const STALE_ACTIVITY_GRACE_MS = 5_000;
+const RECONCILE_INTERVAL_MS = 3_000;
+/**
+ * How long an idle record must have been sitting before it may overrule a
+ * running status. Claude rewrites the record within milliseconds of a turn
+ * starting, so anything older than this is a settled process rather than one
+ * that has yet to report the work it just picked up.
+ */
+const RECONCILE_MIN_IDLE_AGE_MS = 2_000;
 const PID_FILE_RE = /^\d+\.json$/;
 const SESSION_STATUSES = new Set(['busy', 'idle', 'waiting']);
 
@@ -47,12 +63,17 @@ const SESSION_STATUSES = new Set(['busy', 'idle', 'waiting']);
  * The PID-keyed activity record is Claude's direct process-state signal. It is
  * the sole source used here for `busy` / `waiting` / `idle`; transcripts remain
  * session artifacts and are not read for live status inference.
+ *
+ * `getState` reports the run state this conversation currently holds. The record
+ * is edge-triggered — only a *change* to it produces an event — so without a view
+ * of the reducer an idle record and a running status can disagree indefinitely.
  */
 export function watchClaudeSessionActivity(
   ctx: ClaudeSessionActivityContext,
-  dispatch: ClaudeSessionActivityDispatch
+  dispatch: ClaudeSessionActivityDispatch,
+  getState: ClaudeSessionActivityStateReader
 ): ClaudeSessionActivityWatcher {
-  return new ClaudeSessionActivityTailer(ctx, dispatch);
+  return new ClaudeSessionActivityTailer(ctx, dispatch, getState);
 }
 
 export function parseClaudeSessionActivity(raw: string): ClaudeSessionActivity | null {
@@ -95,6 +116,8 @@ class ClaudeSessionActivityTailer implements ClaudeSessionActivityWatcher {
   private readonly claudeHomeDir: string;
   private readonly sessionsDir: string;
   private readonly idleSettleMs: number;
+  private readonly reconcileIntervalMs: number;
+  private readonly minIdleAgeMs: number;
   private readonly minUpdatedAt = Date.now() - STALE_ACTIVITY_GRACE_MS;
   private readonly readyDeadline = Date.now() + READY_POLL_MAX_MS;
   private watcher: FSWatcher | undefined;
@@ -104,16 +127,20 @@ class ClaudeSessionActivityTailer implements ClaudeSessionActivityWatcher {
   private reading = false;
   private pendingRead = false;
   private stopped = false;
+  private reconcileTimer: NodeJS.Timeout | undefined;
   private lastActivity: Pick<ClaudeSessionActivity, 'status' | 'waitingFor' | 'updatedAt'> | null =
     null;
 
   constructor(
     private readonly ctx: ClaudeSessionActivityContext,
-    private readonly dispatch: ClaudeSessionActivityDispatch
+    private readonly dispatch: ClaudeSessionActivityDispatch,
+    private readonly getState: ClaudeSessionActivityStateReader
   ) {
     this.claudeHomeDir = ctx.claudeHomeDir ?? join(homedir(), '.claude');
     this.sessionsDir = join(this.claudeHomeDir, 'sessions');
     this.idleSettleMs = ctx.idleSettleMs ?? IDLE_SETTLE_MS;
+    this.reconcileIntervalMs = ctx.reconcileIntervalMs ?? RECONCILE_INTERVAL_MS;
+    this.minIdleAgeMs = ctx.reconcileMinIdleAgeMs ?? RECONCILE_MIN_IDLE_AGE_MS;
     this.waitForDirectory();
   }
 
@@ -121,6 +148,8 @@ class ClaudeSessionActivityTailer implements ClaudeSessionActivityWatcher {
     this.stopped = true;
     if (this.readyTimer) clearTimeout(this.readyTimer);
     if (this.idleTimer) clearTimeout(this.idleTimer);
+    if (this.reconcileTimer) clearInterval(this.reconcileTimer);
+    this.reconcileTimer = undefined;
     try {
       this.watcher?.close();
     } catch {}
@@ -157,6 +186,15 @@ class ClaudeSessionActivityTailer implements ClaudeSessionActivityWatcher {
       });
       return;
     }
+    this.reconcileTimer = setInterval(() => {
+      void this.reconcileRunningStatus().catch((err) => {
+        log.warn('ClaudeSessionActivitySource: reconcile error', {
+          conversationId: this.ctx.conversationId,
+          error: String(err),
+        });
+      });
+    }, this.reconcileIntervalMs);
+    this.reconcileTimer.unref?.();
     this.scheduleRead();
   }
 
@@ -233,6 +271,59 @@ class ClaudeSessionActivityTailer implements ClaudeSessionActivityWatcher {
       }
       this.scheduleIdle(previous.status, activity.updatedAt);
     }
+  }
+
+  /**
+   * Re-check a running status against the record, on a timer.
+   *
+   * Everything above is edge-triggered: it only speaks when the payload it reads
+   * *changes*, and Claude stops rewriting the record once its process settles. So
+   * a `working` / `awaiting-input` the record never confirmed — a settle dropped
+   * across a transport swap, a hook or a renderer mirror that fired without a
+   * matching resolution — has nothing left to contradict it, and the session
+   * stays pinned at "running" until the user's next prompt.
+   *
+   * An idle record is positive evidence that the CLI is neither processing nor
+   * blocked on the user, so it may settle a running status on its own. Nothing is
+   * inferred from a *missing* record: absence of a transport is not absence of an
+   * agent, and a conversation whose process is simply gone is already handled by
+   * the exit path.
+   */
+  private async reconcileRunningStatus(): Promise<void> {
+    // A pending settle already owns this transition; let it land.
+    if (this.stopped || this.idleTimer) return;
+    const state = this.getState();
+    if (!isAgentSessionRunningStatus(state.status)) return;
+
+    const settledBefore = Date.now() - this.minIdleAgeMs;
+    // Both clocks must be settled. The record because Claude rewrites it within
+    // milliseconds of picking up work, so a young `idle` may just not have caught
+    // up yet; the status because a submit is mirrored optimistically and would
+    // otherwise be cancelled before the CLI ever reported the turn.
+    if (state.updatedAt > settledBefore) return;
+
+    const activity = await getClaudeSessionActivity({
+      cwd: this.ctx.cwd,
+      conversationId: this.ctx.conversationId,
+      processPid: this.ctx.processPid,
+      claudeHomeDir: this.claudeHomeDir,
+    }).catch(() => null);
+    if (this.stopped || activity?.status !== 'idle') return;
+    if (activity.updatedAt === null || activity.updatedAt > settledBefore) return;
+
+    this.awaitingInputObserved = false;
+    this.lastActivity = {
+      status: activity.status,
+      waitingFor: activity.waitingFor,
+      updatedAt: activity.updatedAt,
+    };
+    // Only an interrupt marker can claim the turn was cut short. Without one the
+    // CLI finished while a stale prompt was still on screen; reporting that as an
+    // interruption would invent an outcome the user never caused.
+    this.dispatch({
+      kind: hasInterruptMarker(this.ctx.conversationId) ? 'turn-interrupted' : 'turn-completed',
+      at: Date.now(),
+    });
   }
 
   private scheduleIdle(previousStatus: ClaudeSessionStatus, updatedAt: number | null): void {
