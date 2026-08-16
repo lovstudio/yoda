@@ -1,10 +1,15 @@
-import type { NotificationReason, NotificationStatus } from '@shared/notifications';
+import {
+  DEFAULT_NOTIFICATION_CENTER_SOURCES,
+  type NotificationCenterSources,
+  type NotificationReason,
+  type NotificationSource,
+  type NotificationStatus,
+} from '@shared/notifications';
 
 export const WORKSPACE_NOTIFICATION_STORAGE_KEY = 'yoda:workspace-notifications:v2';
 export const WORKSPACE_NOTIFICATION_LIMIT = 200;
 
 export type WorkspaceNotificationKind = 'info' | 'success' | 'error' | 'loading';
-export type WorkspaceNotificationSource = 'toast' | 'agent' | 'automation' | 'system';
 
 export type WorkspaceNotificationTarget = {
   projectId: string;
@@ -18,7 +23,7 @@ export type WorkspaceNotification = {
   description?: string;
   details?: string;
   kind: WorkspaceNotificationKind;
-  source: WorkspaceNotificationSource;
+  source: NotificationSource;
   reason: NotificationReason;
   status: NotificationStatus;
   createdAt: string;
@@ -116,6 +121,7 @@ export class WorkspaceNotificationStore {
   private entries: WorkspaceNotification[] = [];
   private loaded = false;
   private storageListenerAttached = false;
+  private retainedSources: NotificationCenterSources = { ...DEFAULT_NOTIFICATION_CENTER_SOURCES };
   private readonly listeners = new Set<() => void>();
   private readonly actions = new Map<string, WorkspaceNotificationAction>();
 
@@ -136,11 +142,25 @@ export class WorkspaceNotificationStore {
     return () => this.listeners.delete(listener);
   };
 
+  /**
+   * The intake filter the user configures. Producers keep emitting whatever they
+   * emit; this decides what is worth keeping a record of.
+   */
+  setRetainedSources(next: NotificationCenterSources): void {
+    this.retainedSources = { ...next };
+  }
+
+  retainsSource(source: NotificationSource): boolean {
+    return this.retainedSources[source];
+  }
+
+  /** Returns the entry id, or null when the source is filtered out. */
   enqueue(
     input: WorkspaceNotificationInput,
     existingId?: string,
     action?: WorkspaceNotificationAction
-  ): string {
+  ): string | null {
+    if (!this.retainsSource(input.source)) return null;
     this.ensureLoaded();
     this.refreshFromStorage();
 

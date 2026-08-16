@@ -82,16 +82,7 @@ describe('maybeShowNotification', () => {
 
     expect(mocks.show).toHaveBeenCalledTimes(1);
     expect(mocks.notificationOptions[0]).toMatchObject({ silent: false });
-  });
-
-  it('leaves session state to the sidebar instead of the notification center', async () => {
-    await maybeShowNotification(
-      makeEvent('notification', { notificationType: 'permission_prompt' }),
-      false
-    );
-
-    expect(mocks.show).toHaveBeenCalledTimes(1);
-    expect(mocks.emit).not.toHaveBeenCalled();
+    expect(mocks.emit).toHaveBeenCalledTimes(1);
   });
 
   it('respects the completion focus mode instead of dropping the event', async () => {

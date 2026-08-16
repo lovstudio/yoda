@@ -22,6 +22,11 @@ import {
   MAX_CUSTOM_MODEL_PROVIDERS,
   MAX_CUSTOM_MODELS_PER_PROVIDER,
 } from '@shared/model-provider-catalog';
+import {
+  DEFAULT_NOTIFICATION_CENTER_SOURCES,
+  NOTIFICATION_SOURCES,
+  type NotificationSource,
+} from '@shared/notifications';
 import { openInAppIdSchema } from '@shared/openInApps';
 import { LEGACY_RUN_MODES, normalizeLegacyRunMode } from '@shared/paradigms/kinds';
 import { promptPrincipleSchema, taskOutputLanguageValues } from '@shared/project-settings';
@@ -81,6 +86,13 @@ export const localProjectSettingsSchema = z.object({
   writeAgentConfigToGitIgnore: z.boolean(),
 });
 
+const notificationCenterSourcesSchema = z.object(
+  Object.fromEntries(NOTIFICATION_SOURCES.map((source) => [source, z.boolean()])) as Record<
+    NotificationSource,
+    z.ZodBoolean
+  >
+);
+
 export const notificationSettingsSchema = z.object({
   enabled: z.boolean(),
   sound: z.boolean(),
@@ -92,6 +104,10 @@ export const notificationSettingsSchema = z.object({
   /** Show an in-app action when a Codex account quota reaches the configured threshold. */
   accountUsageWarningEnabled: z.boolean().catch(true),
   accountUsageWarningThreshold: z.number().int().min(1).max(100).catch(95),
+  /** Which producers may enter the in-app notification center. */
+  notificationCenterSources: notificationCenterSourcesSchema.catch(
+    DEFAULT_NOTIFICATION_CENTER_SOURCES
+  ),
 });
 
 const summaryContextSchema = z.object(

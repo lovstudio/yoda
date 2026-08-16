@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDreamSkinTheme } from '@shared/custom-theme';
+import { DEFAULT_NOTIFICATION_CENTER_SOURCES } from '@shared/notifications';
 import { SettingsStore } from './settings-service';
 
 const mocks = vi.hoisted(() => ({
@@ -147,6 +148,7 @@ describe('SettingsStore', () => {
       soundFocusMode: 'unfocused',
       accountUsageWarningEnabled: true,
       accountUsageWarningThreshold: 95,
+      notificationCenterSources: DEFAULT_NOTIFICATION_CENTER_SOURCES,
     });
   });
 });

@@ -11,6 +11,20 @@ const mocks = vi.hoisted(() => ({
   copyTextToClipboard: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+  updateSettings: vi.fn(),
+  retainedSources: {
+    toast: true,
+    agent: true,
+    automation: true,
+    system: true,
+  } as Record<string, boolean>,
+}));
+
+vi.mock('@renderer/features/settings/use-app-settings-key', () => ({
+  useAppSettingsKey: () => ({
+    value: { notificationCenterSources: mocks.retainedSources },
+    update: mocks.updateSettings,
+  }),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -57,6 +71,14 @@ describe('WorkspaceNotificationCenter', () => {
   beforeEach(() => {
     localStorage.clear();
     workspaceNotificationStore.clear();
+    mocks.retainedSources = { toast: true, agent: true, automation: true, system: true };
+    workspaceNotificationStore.setRetainedSources({
+      toast: true,
+      agent: true,
+      automation: true,
+      system: true,
+    });
+    mocks.updateSettings.mockReset();
     mocks.copyTextToClipboard.mockReset();
     mocks.copyTextToClipboard.mockResolvedValue(undefined);
     mocks.toastSuccess.mockReset();
@@ -89,11 +111,11 @@ describe('WorkspaceNotificationCenter', () => {
       { label: 'Open build', onClick: runAction }
     );
     workspaceNotificationStore.enqueue({
-      title: 'Card moved to Review',
-      details: 'Task: task-1',
+      title: 'Agent needs input',
+      details: 'Session: SESSION_ID',
       kind: 'info',
-      source: 'automation',
-      reason: 'subscribed-result',
+      source: 'agent',
+      reason: 'action-required',
       target: { projectId: 'project-1', taskId: 'task-1', conversationId: 'session-1' },
     });
 
@@ -130,7 +152,7 @@ describe('WorkspaceNotificationCenter', () => {
     await act(async () => actionButton?.click());
     expect(runAction).toHaveBeenCalledOnce();
     expect(workspaceNotificationStore.getSnapshot().map((entry) => entry.title)).toEqual([
-      'Card moved to Review',
+      'Agent needs input',
     ]);
     await vi.waitFor(() => {
       expect(document.querySelector('[data-slot="popover-content"]')).toBeNull();
@@ -150,10 +172,10 @@ describe('WorkspaceNotificationCenter', () => {
     expect(workspaceNotificationStore.getSnapshot()[0].readAt).not.toBeNull();
     expect(host.querySelector('[aria-label="Notifications 0"]')).not.toBeNull();
 
-    const openCard = document.querySelector<HTMLButtonElement>(
-      '[aria-label="Open Card moved to Review"]'
+    const openAgent = document.querySelector<HTMLButtonElement>(
+      '[aria-label="Open Agent needs input"]'
     );
-    await act(async () => openCard?.click());
+    await act(async () => openAgent?.click());
     const openTargetButton = Array.from(
       document.querySelectorAll<HTMLButtonElement>('button')
     ).find((button) => button.textContent?.includes('workspaceRuntime.notifications.openTarget'));
@@ -170,10 +192,10 @@ describe('WorkspaceNotificationCenter', () => {
 
   it('closes the panel when the window loses focus', async () => {
     workspaceNotificationStore.enqueue({
-      title: 'Card moved to Review',
+      title: 'Agent needs input',
       kind: 'info',
-      source: 'automation',
-      reason: 'subscribed-result',
+      source: 'agent',
+      reason: 'action-required',
     });
 
     await act(async () => {
@@ -250,6 +272,56 @@ describe('WorkspaceNotificationCenter', () => {
       'Target: {"projectId":"project-1","taskId":"task-1","conversationId":"session-1"}'
     );
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Debug info copied');
+  });
+
+  it('hides excluded sources and records the choice', async () => {
+    mocks.retainedSources = { toast: true, agent: false, automation: true, system: true };
+    workspaceNotificationStore.enqueue({
+      title: 'Agent needs input',
+      kind: 'info',
+      source: 'agent',
+      reason: 'action-required',
+    });
+    workspaceNotificationStore.enqueue({
+      title: 'Card moved to Review',
+      kind: 'info',
+      source: 'automation',
+      reason: 'subscribed-result',
+    });
+
+    await act(async () => {
+      root.render(
+        createElement(WorkspaceNotificationCenter, {
+          triggerClassName: 'trigger',
+          triggerLabelClassName: 'label',
+          onOpenTarget: vi.fn(),
+        })
+      );
+    });
+
+    const trigger = host.querySelector<HTMLButtonElement>('[aria-label="Notifications 1"]');
+    expect(trigger).not.toBeNull();
+    await act(async () => trigger?.click());
+    expect(document.body.textContent).toContain('Card moved to Review');
+    expect(document.body.textContent).not.toContain('Agent needs input');
+
+    const overflowTrigger = document.querySelector<HTMLButtonElement>('[aria-label="common.more"]');
+    expect(overflowTrigger).not.toBeNull();
+    await userEvent.click(overflowTrigger!);
+    const agentToggle = await vi.waitFor(() => {
+      const item = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-checkbox-item"]')
+      ).find((entry) =>
+        entry.textContent?.includes('workspaceRuntime.notifications.sourceValue.agent')
+      );
+      expect(item).toBeDefined();
+      return item!;
+    });
+
+    await userEvent.click(agentToggle);
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      notificationCenterSources: { toast: true, agent: true, automation: true, system: true },
+    });
   });
 });
 

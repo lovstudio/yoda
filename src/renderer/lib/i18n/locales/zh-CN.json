@@ -5279,9 +5279,16 @@
       },
       "sourceValue": {
         "toast": "应用提示",
-        "agent": "Agent",
+        "agent": "智能体",
         "automation": "自动化",
         "system": "系统"
+      },
+      "sources": {
+        "label": "收录范围",
+        "hint": "未勾选的来源仍会以其他方式提醒，只是不再记录在这里。"
+      },
+      "system": {
+        "agentAwaitingInput": "智能体正在等待输入"
       }
     },
     "model": {

@@ -13,7 +13,7 @@ export type RendererErrorNotificationContext = {
 export function enqueueRendererErrorNotification(
   error: Error,
   context: RendererErrorNotificationContext = {}
-): string {
+): string | null {
   const fingerprint = [
     context.component,
     context.operation,

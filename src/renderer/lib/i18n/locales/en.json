@@ -5282,6 +5282,13 @@
         "agent": "Agent",
         "automation": "Automation",
         "system": "System"
+      },
+      "sources": {
+        "label": "Recorded sources",
+        "hint": "Unchecked sources still reach you elsewhere; they are just not kept here."
+      },
+      "system": {
+        "agentAwaitingInput": "Agent is waiting for input"
       }
     },
     "model": {
