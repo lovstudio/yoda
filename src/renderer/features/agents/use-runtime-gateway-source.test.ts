@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readRuntimeBarSource } from '@renderer/app/runtime-bar/test-helpers/read-bar-source';
 import { resolveDefaultGatewaySource } from './gateway-source';
 
 describe('resolveDefaultGatewaySource', () => {
@@ -33,34 +34,23 @@ describe('resolveDefaultGatewaySource', () => {
 
 describe('workspace MaaS placement', () => {
   it('renders global MaaS independently from the current Agent account', () => {
-    const source = readFileSync(
-      new URL('../../app/workspace-runtime-bar.tsx', import.meta.url),
+    const source = readRuntimeBarSource();
+    const registry = readFileSync(
+      new URL('../../app/runtime-bar/registry.ts', import.meta.url),
       'utf8'
     );
-    const accountIndex = source.indexOf(
-      '{maasActiveForRuntime || shortAccountWindow || officialCodexAccountAvailable'
-    );
-    const accountEnd = source.indexOf('<span className="flex-1" />', accountIndex);
-    // The opening tag carries more props than fit on one line, so match the
-    // props that pin the placement rather than a formatted literal.
-    const popoverMatch =
-      /<Popover\s+open=\{isMaasPopoverOpen\}\s+onOpenChange=\{setIsMaasPopoverOpen\}/.exec(
-        source.slice(accountEnd)
-      );
-    const popoverIndex = popoverMatch ? accountEnd + popoverMatch.index : -1;
-    const selectorIndex = source.indexOf('<WorkspaceMaasPopover', popoverIndex);
-    const spacerIndex = source.indexOf('<span className="flex-1" />');
-    const terminalIndex = source.indexOf("title={t('workspaceRuntime.terminal')}", spacerIndex);
+    // Placement is data now: account quota rides the session group, routing and
+    // the terminal sit in the tray, in that order.
+    const accountEntry = registry.indexOf("{ id: 'account-usage', slot: 'session'");
+    const maasEntry = registry.indexOf("{ id: 'maas', slot: 'tray'");
+    const terminalEntry = registry.indexOf("{ id: 'terminal', slot: 'tray'");
 
-    expect(accountIndex).toBeGreaterThanOrEqual(0);
-    expect(accountEnd).toBeGreaterThan(accountIndex);
-    expect(popoverIndex).toBeGreaterThan(accountEnd);
-    expect(selectorIndex).toBeGreaterThan(popoverIndex);
-    expect(spacerIndex).toBeLessThan(selectorIndex);
-    expect(terminalIndex).toBeGreaterThan(spacerIndex);
+    expect(accountEntry).toBeGreaterThanOrEqual(0);
+    expect(maasEntry).toBeGreaterThan(accountEntry);
+    expect(terminalEntry).toBeGreaterThan(maasEntry);
     expect(source.match(/<WorkspaceMaasPopover/g)).toHaveLength(1);
     expect(source).toContain('aria-label={maasTriggerLabel}');
-    expect(source).toContain('const maasPresentation = useMemo(');
+    expect(source).toContain('const presentation = useMemo(');
     expect(source).toContain('getWorkspaceMaasPresentation(');
     expect(source).not.toContain('maasAccount');
     expect(source).not.toContain('<GatewayRuntimeSources');

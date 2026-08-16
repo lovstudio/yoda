@@ -19,11 +19,13 @@
       "@renderer/*": ["./src/renderer/*"],
       "@main/*": ["./src/main/*"],
       "@shared/*": ["./src/shared/*"],
+      "@runtime-bar/*": ["./packages/runtime-bar/src/*"],
       "@root/*": ["./*"],
       "@/*": ["./src/*"]
     }
   },
   "include": [
+    "packages/runtime-bar/src/**/*",
     "src/main/**/*",
     "src/renderer/**/*",
     "src/preload/**/*",

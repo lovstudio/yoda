@@ -8,6 +8,7 @@ const alias = {
   '@shared': resolve(__dirname, 'src/shared'),
   '@renderer': resolve(__dirname, 'src/renderer'),
   '@main': resolve(__dirname, 'src/main'),
+  '@runtime-bar': resolve(__dirname, 'packages/runtime-bar/src'),
 };
 
 // postinstall builds better-sqlite3 against Electron's ABI; vitest runs in
