@@ -31,6 +31,7 @@ import {
   tasks,
   teamRooms,
   terminals,
+  workspaceTerminals,
 } from '@main/db/schema';
 import { log } from '@main/lib/logger';
 import { checkIsValidDirectory } from '../path-utils';
@@ -353,36 +354,53 @@ async function mergeProjectIntoExisting(source: ProjectRow, target: ProjectRow):
 
   await prSyncEngine.deleteProjectData(source.id);
 
-  const [updatedTarget] = await db.transaction((tx) => {
+  // better-sqlite3 transactions are synchronous: every statement must be driven
+  // to completion with .run()/.all() inside the callback, and the callback must
+  // not return a promise (drizzle query builders are thenable, so returning one
+  // makes better-sqlite3 reject the whole transaction).
+  const [updatedTarget] = db.transaction((tx) => {
     tx.update(tasks)
-      .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(tasks.projectId, source.id));
+      // Facets live in the source project's settings, which this merge deletes,
+      // so a carried-over facetId would dangle forever.
+      .set({ projectId: target.id, facetId: null, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(tasks.projectId, source.id))
+      .run();
     tx.update(conversations)
       .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(conversations.projectId, source.id));
+      .where(eq(conversations.projectId, source.id))
+      .run();
     tx.update(terminals)
       .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(terminals.projectId, source.id));
+      .where(eq(terminals.projectId, source.id))
+      .run();
+    tx.update(workspaceTerminals)
+      .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(workspaceTerminals.projectId, source.id))
+      .run();
     tx.update(taskNamingSnapshots)
       .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(taskNamingSnapshots.projectId, source.id));
+      .where(eq(taskNamingSnapshots.projectId, source.id))
+      .run();
     tx.update(teamRooms)
       .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(teamRooms.projectId, source.id));
+      .where(eq(teamRooms.projectId, source.id))
+      .run();
     tx.update(automations)
       .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(automations.projectId, source.id));
+      .where(eq(automations.projectId, source.id))
+      .run();
 
-    tx.delete(editorBuffers).where(eq(editorBuffers.projectId, source.id));
-    tx.delete(projectSettings).where(eq(projectSettings.projectId, source.id));
-    tx.delete(projectRemotes).where(eq(projectRemotes.projectId, source.id));
-    tx.delete(projects).where(eq(projects.id, source.id));
+    tx.delete(editorBuffers).where(eq(editorBuffers.projectId, source.id)).run();
+    tx.delete(projectSettings).where(eq(projectSettings.projectId, source.id)).run();
+    tx.delete(projectRemotes).where(eq(projectRemotes.projectId, source.id)).run();
+    tx.delete(projects).where(eq(projects.id, source.id)).run();
 
     return tx
       .update(projects)
       .set({ updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(projects.id, target.id))
-      .returning();
+      .returning()
+      .all();
   });
   if (!updatedTarget) throw new Error(`Project ${target.id} not found`);
 

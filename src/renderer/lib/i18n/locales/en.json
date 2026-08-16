@@ -307,6 +307,7 @@
       "unchanged": "Name and path are unchanged.",
       "targetExistsTitle": "Target project exists",
       "targetExistsDescription": "This path is already registered as \"{{project}}\". Merge this project into that target instead?",
+      "targetExistsHint": "Tasks, sessions and terminals move into the target project and this project entry disappears. Nothing on disk is moved or deleted.",
       "submit": "Move",
       "saving": "Moving…",
       "mergeSubmit": "Merge",
