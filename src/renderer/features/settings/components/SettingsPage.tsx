@@ -15,8 +15,6 @@ import { PromptLibraryPanel } from '@renderer/features/prompt-library/prompt-lib
 import { RoadmapView } from '@renderer/features/roadmap/components/RoadmapView';
 import SkillsCatalogHint from '@renderer/features/skills/components/SkillsCatalogHint';
 import SkillsView from '@renderer/features/skills/components/SkillsView';
-import { NamingConfigFields } from '@renderer/features/tasks/components/naming-config-fields';
-import { SummaryConfigFields } from '@renderer/features/tasks/components/summary-config-fields';
 import { UsageView } from '@renderer/features/usage/components/UsageView';
 import { useIsPinHosted, useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Badge } from '@renderer/lib/ui/badge';
@@ -45,15 +43,14 @@ import {
 import ModelsSettingsCard, { ModelCatalogAutomaticUpdateSetting } from './ModelsSettingsCard';
 import NotificationSettingsCard from './NotificationSettingsCard';
 import OpenInAppsSettingsCard from './OpenInAppsSettingsCard';
+import SessionAiSettingsCard from './SessionAiSettingsCard';
 import SidebarStatusBarSettingsRow from './SidebarStatusBarSettingsRow';
 import TaskAppearanceSettingsCard from './TaskAppearanceSettingsCard';
 import {
-  AutoGenerateTaskNamesRow,
   AutoTrustWorktreesRow,
   BranchNamingRow,
   EnableTmuxRow,
   InitTaskNameFromSessionRow,
-  InputPromptLanguageRow,
   PreArchiveCommandRow,
   TmuxSettingsChapter,
   WorkspacesEnabledRow,
@@ -234,13 +231,6 @@ export function SettingsPage({
           component: <TelemetryCard />,
         },
         {
-          id: 'notifications',
-          title: t('settings.notifications.title'),
-          description: t('settings.notifications.description'),
-          surface: 'plain',
-          component: <NotificationSettingsCard />,
-        },
-        {
           id: 'update',
           component: <UpdateCard />,
         },
@@ -273,43 +263,28 @@ export function SettingsPage({
       description: t('settings.sessionsTab.description'),
       sections: [
         {
-          id: 'input-prompt-language',
-          component: <InputPromptLanguageRow />,
-        },
-        {
-          id: 'auto-generate-task-names',
-          component: <AutoGenerateTaskNamesRow />,
-        },
-        {
-          id: 'task-naming-config',
-          title: t('settings.tasks.namingConfigTitle'),
-          component: (
-            <div className="flex flex-col gap-2">
-              <p className="text-xs text-foreground-passive">
-                {t('settings.tasks.namingConfigDescription')}
-              </p>
-              <NamingConfigFields />
-            </div>
-          ),
-        },
-        {
-          id: 'session-summary-config',
-          title: t('settings.tasks.summaryConfigTitle'),
-          component: (
-            <div className="flex flex-col gap-2">
-              <p className="text-xs text-foreground-passive">
-                {t('settings.tasks.summaryConfigDescription')}
-              </p>
-              <SummaryConfigFields />
-            </div>
-          ),
-        },
-        {
-          id: 'enable-tmux',
+          id: 'session-create',
+          title: t('settings.sessions.createTitle'),
+          description: t('settings.sessions.createDescription'),
           component: <EnableTmuxRow />,
         },
         {
-          id: 'pre-archive-command',
+          id: 'session-assistance',
+          title: t('settings.sessions.assistanceTitle'),
+          description: t('settings.sessions.assistanceDescription'),
+          component: <SessionAiSettingsCard />,
+        },
+        {
+          id: 'session-events',
+          title: t('settings.sessions.eventsTitle'),
+          description: t('settings.sessions.eventsDescription'),
+          surface: 'plain',
+          component: <NotificationSettingsCard />,
+        },
+        {
+          id: 'session-archive',
+          title: t('settings.sessions.archiveTitle'),
+          description: t('settings.sessions.archiveDescription'),
           component: <PreArchiveCommandRow />,
         },
       ],

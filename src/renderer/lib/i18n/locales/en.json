@@ -553,7 +553,17 @@
       "description": "Configure how new tasks are created and run."
     },
     "sessionsTab": {
-      "description": "Configure session naming, summaries, archiving, and how sessions run."
+      "description": "Organized by a session's life cycle: created, running, archived."
+    },
+    "sessions": {
+      "createTitle": "Creation",
+      "createDescription": "How a new session starts by default.",
+      "assistanceTitle": "Assisted by agents",
+      "assistanceDescription": "Language, naming, and summaries an agent handles while a session runs.",
+      "eventsTitle": "Alerts and permissions",
+      "eventsDescription": "What a running session needs you to know or approve.",
+      "archiveTitle": "Archiving",
+      "archiveDescription": "What runs when you wrap up a session."
     },
     "account": {
       "description": "Manage your LovStudio account, credits, and Yoda cloud services.",
@@ -1273,11 +1283,11 @@
     "notifications": {
       "title": "Notifications",
       "description": "Get notified when a task finishes or an Agent needs your attention.",
-      "turnCompletion": "Turn completion notifications",
+      "turnCompletion": "Task completion alerts",
       "turnCompletionDescription": "Set when to alert you that a task has finished.",
-      "permissionNotifications": "Enable permission notifications",
+      "permissionNotifications": "Permission alerts",
       "permissionNotificationsDescription": "Show a system banner when an Agent needs permission.",
-      "questionNotifications": "Enable question notifications",
+      "questionNotifications": "Waiting-for-answer alerts",
       "questionNotificationsDescription": "Show a system banner when an Agent is waiting for your answer.",
       "enabled": "On",
       "deliveryModes": {

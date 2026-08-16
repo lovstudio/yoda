@@ -553,7 +553,17 @@
       "description": "配置新任务的创建与运行方式。"
     },
     "sessionsTab": {
-      "description": "管理会话的命名、摘要、归档与运行方式。"
+      "description": "按会话的生命周期组织：创建、运行、归档。"
+    },
+    "sessions": {
+      "createTitle": "创建",
+      "createDescription": "新会话默认怎么启动。",
+      "assistanceTitle": "智能处理",
+      "assistanceDescription": "会话运行时交给智能体代劳的语言、命名与摘要。",
+      "eventsTitle": "提醒与权限",
+      "eventsDescription": "会话运行中需要你知道或批准的事。",
+      "archiveTitle": "归档",
+      "archiveDescription": "你收尾一个会话时执行的动作。"
     },
     "account": {
       "description": "管理 LovStudio 账户、积分与 Yoda 云端服务。",
@@ -1273,11 +1283,11 @@
     "notifications": {
       "title": "通知",
       "description": "任务完成或 Agent 需要你处理时收到提醒。",
-      "turnCompletion": "任务完成通知",
+      "turnCompletion": "任务完成提醒",
       "turnCompletionDescription": "设置任务完成时何时提醒你。",
-      "permissionNotifications": "启用权限通知",
+      "permissionNotifications": "权限确认提醒",
       "permissionNotificationsDescription": "当 Agent 需要你确认权限时显示系统横幅。",
-      "questionNotifications": "启用问题通知",
+      "questionNotifications": "等待回答提醒",
       "questionNotificationsDescription": "当 Agent 等待你的回答才能继续时显示系统横幅。",
       "enabled": "开启",
       "deliveryModes": {

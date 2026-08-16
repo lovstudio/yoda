@@ -23,32 +23,29 @@ import { cn } from '@renderer/utils/utils';
 import { ResetToDefaultButton } from './ResetToDefaultButton';
 import { SettingRow } from './SettingRow';
 
-export const AutoGenerateTaskNamesRow: React.FC = () => {
-  const { t } = useTranslation();
+/**
+ * The auto-naming toggle on its own, so it can sit in the control slot of the
+ * row that also folds away the naming configuration.
+ */
+export const AutoGenerateTaskNamesControl: React.FC = observer(() => {
   const taskSettings = useTaskSettings();
 
   return (
-    <SettingRow
-      title={t('settings.tasks.autoGenerateName')}
-      description={t('settings.tasks.autoGenerateNameDescription')}
-      control={
-        <>
-          <ResetToDefaultButton
-            visible={taskSettings.isFieldOverridden('autoGenerateName')}
-            defaultLabel="on"
-            onReset={taskSettings.resetAutoGenerateName}
-            disabled={taskSettings.loading || taskSettings.saving}
-          />
-          <Switch
-            checked={taskSettings.autoGenerateName}
-            disabled={taskSettings.loading || taskSettings.saving}
-            onCheckedChange={taskSettings.updateAutoGenerateName}
-          />
-        </>
-      }
-    />
+    <>
+      <ResetToDefaultButton
+        visible={taskSettings.isFieldOverridden('autoGenerateName')}
+        defaultLabel="on"
+        onReset={taskSettings.resetAutoGenerateName}
+        disabled={taskSettings.loading || taskSettings.saving}
+      />
+      <Switch
+        checked={taskSettings.autoGenerateName}
+        disabled={taskSettings.loading || taskSettings.saving}
+        onCheckedChange={taskSettings.updateAutoGenerateName}
+      />
+    </>
   );
-};
+});
 
 export const WorkspacesEnabledRow: React.FC = () => {
   const { t } = useTranslation();
