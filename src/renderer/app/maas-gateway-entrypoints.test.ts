@@ -36,7 +36,7 @@ describe('MaaS Gateway entry-point wiring', () => {
     expect(source).toContain('onManage={openMaasManagement}');
     expect(source).toContain('onOpenLogs={openMaasLogs}');
     expect(source).toMatch(
-      /const openMaasManagement = useCallback\(\(\) => \{\s+dismissMaasPopoverThen\(\(\) => \{\s+appState\.sidePane\.pinView\('settings', \{\s+tab: 'maas',/
+      /const openMaasManagement = useCallback\(\(\) => \{\s+dismissMaasPopoverThen\(\(\) => \{\s+appState\.navigation\.navigate\('settings', \{\s+tab: 'maas',/
     );
     expect(source).toMatch(
       /const openMaasLogs = useCallback\(\(\) => \{\s+dismissMaasPopoverThen\(\(\) => \{\s+appState\.sidePane\.pinView\('settings', \{ tab: 'ai-logs' \}\);/

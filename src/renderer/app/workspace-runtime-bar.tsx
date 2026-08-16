@@ -328,12 +328,13 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   /**
    * Model access is configured in one place only — the Settings pane. Carrying
    * the bound Profile in expands it there, so the popover needs no second
-   * per-Profile entry point.
+   * per-Profile entry point. It navigates rather than pins: the pane is a full
+   * configuration surface, not a reference panel to keep open beside the work.
    */
   const boundMaasPlatformId = globalMaasBinding.data?.platformId;
   const openMaasManagement = useCallback(() => {
     dismissMaasPopoverThen(() => {
-      appState.sidePane.pinView('settings', {
+      appState.navigation.navigate('settings', {
         tab: 'maas',
         maasPlatformId: boundMaasPlatformId ?? undefined,
       });
