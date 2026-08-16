@@ -69,6 +69,14 @@ export interface ConversationProvider {
   stopSession(conversationId: string): Promise<void>;
   sendInput(conversationId: string, data: string): Promise<boolean>;
   getActiveSessions(): ActiveConversationSession[];
+  /**
+   * Whether this conversation's agent is still running, asked of the backend
+   * rather than of the transport. Yoda's PTY is a tmux attach client it releases
+   * whenever nobody is watching the task, so a missing transport proves only
+   * that Yoda stopped looking. Providers without a surviving backend for the
+   * conversation answer `false`.
+   */
+  isAgentBackendAlive(conversationId: string): Promise<boolean>;
   destroyAll(): Promise<void>;
   detachAll(): Promise<void>;
 }

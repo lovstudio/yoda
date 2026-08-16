@@ -1236,8 +1236,10 @@ export class LocalConversationProvider implements ConversationProvider {
           ? { conversationId: conversation.id, cwd: this.taskPath }
           : { conversationId: conversation.id, cwd: this.taskPath, processPid };
       this.runStateWatchers.set(conversation.id, [
-        watchClaudeSessionActivity({ ...activityContext, claudeHomeDir: stateRoot }, (event) =>
-          agentSessionRuntimeStore.dispatch(session, event, 'claude-session-activity')
+        watchClaudeSessionActivity(
+          { ...activityContext, claudeHomeDir: stateRoot },
+          (event) => agentSessionRuntimeStore.dispatch(session, event, 'claude-session-activity'),
+          () => agentSessionRuntimeStore.getState(session)
         ),
       ]);
     }
@@ -1301,6 +1303,18 @@ export class LocalConversationProvider implements ConversationProvider {
             }),
       };
     });
+  }
+
+  /**
+   * Ask the tmux pane — not the attach wrapper — whether the agent still runs.
+   * A detached transport is Yoda's own doing and says nothing about the agent.
+   */
+  async isAgentBackendAlive(conversationId: string): Promise<boolean> {
+    const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
+    if (this.sessions.has(sessionId)) return true;
+    const tmuxSessionName = this.tmuxSessionNames.get(sessionId);
+    if (!tmuxSessionName) return false;
+    return (await classifyLostPtyTransport(this.ctx, tmuxSessionName)) === 'transport-lost';
   }
 
   /**

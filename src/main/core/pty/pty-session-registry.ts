@@ -20,7 +20,11 @@ import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import type { Pty, PtyDimensions, PtyExitInfo } from './pty';
 import { PtyRenderCheckpointTracker } from './pty-render-checkpoint';
-import { forgetPtyRepaint, notePtyRepaint } from './pty-repaint-window';
+import {
+  forgetPtyRepaint,
+  notePtyRepaint,
+  PTY_ATTACH_REPAINT_WINDOW_MS,
+} from './pty-repaint-window';
 import { TmuxTerminalReplyFilter } from './tmux-terminal-reply-filter';
 
 const FLUSH_INTERVAL_MS = 16; // One IPC output batch per display frame.
@@ -504,6 +508,12 @@ export class PtySessionRegistry {
       lastInputAt: null,
     };
     this.sessions.set(sessionId, state);
+    if (state.tmuxBacked) {
+      // The PTY Yoda just spawned is an `attach-session` wrapper, and tmux opens
+      // by redrawing the whole pane. Everything in that first burst is a copy of
+      // earlier turns, so observers must not read it as fresh activity.
+      notePtyRepaint(sessionId, PTY_ATTACH_REPAINT_WINDOW_MS);
+    }
     for (const consumer of this.consumers.get(sessionId)?.values() ?? []) {
       consumer.generation = generation;
       consumer.acknowledgedSequence = 0;

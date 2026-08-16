@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { notePtyRepaint } from '@main/core/pty/pty-repaint-window';
+import { notePtyRepaint, PTY_ATTACH_REPAINT_WINDOW_MS } from '@main/core/pty/pty-repaint-window';
 import { createClaudeInterruptSniffer } from './claude-interrupt-sniffer';
 
 const mocks = vi.hoisted(() => ({
@@ -33,15 +33,10 @@ describe('createClaudeInterruptSniffer', () => {
   let ptySessionCounter = 0;
 
   /**
-   * Get past the initial attach dump: the sniffer only trusts output once the
-   * session has gone quiet at least once.
+   * A sniffer on a settled session: no repaint window is open, so its output is
+   * live rendering rather than a replay of what is already on screen.
    */
-  const settled = () => {
-    const onData = createClaudeInterruptSniffer({ ...session, ptySessionId });
-    onData('welcome to the agent CLI');
-    vi.advanceTimersByTime(500);
-    return onData;
-  };
+  const settled = () => createClaudeInterruptSniffer({ ...session, ptySessionId });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -132,13 +127,28 @@ describe('createClaudeInterruptSniffer', () => {
     expect(mocks.dispatch).toHaveBeenCalledOnce();
   });
 
-  it('ignores the interruption line dumped by a tmux attach before the session settles', () => {
+  it('ignores the interruption line dumped by a tmux attach', () => {
     const onData = createClaudeInterruptSniffer({ ...session, ptySessionId });
 
-    // One uninterrupted burst: the pane content tmux replays on attach.
+    // The PTY registry opens the attach window when it registers the wrapper.
+    notePtyRepaint(ptySessionId, PTY_ATTACH_REPAINT_WINDOW_MS);
     onData('some earlier output\r\n');
     onData('Conversation interrupted - tell the model what to do differently.');
 
     expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('recognizes an interruption typed after a long bursty turn', () => {
+    const onData = settled();
+
+    // A working turn's own output is bursty on the same timescale as an attach
+    // dump, so quiet gaps must never be treated as evidence of a replay.
+    for (let index = 0; index < 40; index += 1) {
+      onData(`tool call ${index}\r\n`);
+      vi.advanceTimersByTime(index % 7 === 0 ? 900 : 60);
+    }
+    onData('Conversation interrupted - tell the model what to do differently.');
+
+    expect(mocks.dispatch).toHaveBeenCalledOnce();
   });
 });

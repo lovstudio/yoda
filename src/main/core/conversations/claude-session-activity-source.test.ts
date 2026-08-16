@@ -2,11 +2,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RunStateEvent } from '@shared/events/agent-run-state';
+import { initialRunState, type RunState, type RunStateEvent } from '@shared/events/agent-run-state';
+import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import {
   getClaudeSessionActivity,
   parseClaudeSessionActivity,
   watchClaudeSessionActivity,
+  type ClaudeSessionActivityContext,
   type ClaudeSessionActivityWatcher,
 } from './claude-session-activity-source';
 import { clearInterruptMarker, markInterrupted } from './interrupt-marker';
@@ -63,12 +65,21 @@ describe('watchClaudeSessionActivity', () => {
   let claudeHomeDir: string;
   let sessionsDir: string;
   let watcher: ClaudeSessionActivityWatcher | null = null;
+  let events: RunStateEvent[] = [];
+  let storeState: RunState = initialRunState();
 
   beforeEach(() => {
     claudeHomeDir = mkdtempSync(join(tmpdir(), 'yoda-claude-activity-'));
     sessionsDir = join(claudeHomeDir, 'sessions');
     mkdirSync(sessionsDir, { recursive: true });
+    events = [];
+    storeState = initialRunState();
   });
+
+  /** The reducer status this conversation holds, as the store would report it. */
+  function setStoreStatus(status: AgentSessionRuntimeStatus, updatedAt = 0): void {
+    storeState = initialRunState(status, updatedAt);
+  }
 
   afterEach(() => {
     watcher?.stop();
@@ -76,6 +87,14 @@ describe('watchClaudeSessionActivity', () => {
     clearInterruptMarker('conv-1');
     rmSync(claudeHomeDir, { recursive: true, force: true });
   });
+
+  function start(ctx: Omit<ClaudeSessionActivityContext, 'cwd' | 'conversationId'> = {}): void {
+    watcher = watchClaudeSessionActivity(
+      { cwd: '/repo', conversationId: 'conv-1', claudeHomeDir, ...ctx },
+      (event) => events.push(event),
+      () => storeState
+    );
+  }
 
   function writeSession(
     status: 'busy' | 'idle' | 'waiting',
@@ -134,12 +153,8 @@ describe('watchClaudeSessionActivity', () => {
   });
 
   it('dispatches working and awaiting-input directly from activity status', async () => {
-    const events: RunStateEvent[] = [];
     writeSession('busy');
-    watcher = watchClaudeSessionActivity(
-      { cwd: '/repo', conversationId: 'conv-1', claudeHomeDir },
-      (event) => events.push(event)
-    );
+    start();
 
     await waitFor(() => events.some((event) => event.kind === 'turn-started'));
     writeSession('waiting', Date.now() + 1);
@@ -155,12 +170,8 @@ describe('watchClaudeSessionActivity', () => {
   });
 
   it('forces working when Claude resumes after waiting', async () => {
-    const events: RunStateEvent[] = [];
     writeSession('waiting');
-    watcher = watchClaudeSessionActivity(
-      { cwd: '/repo', conversationId: 'conv-1', claudeHomeDir },
-      (event) => events.push(event)
-    );
+    start();
 
     await waitFor(() => events.some((event) => event.kind === 'awaiting-input'));
     writeSession('busy', Date.now() + 1);
@@ -178,12 +189,8 @@ describe('watchClaudeSessionActivity', () => {
   ] as const)(
     'maps %s to idle without reading a transcript',
     async (initial, initialEvent, idleEvent) => {
-      const events: RunStateEvent[] = [];
       writeSession(initial);
-      watcher = watchClaudeSessionActivity(
-        { cwd: '/repo', conversationId: 'conv-1', claudeHomeDir, idleSettleMs: 10 },
-        (event) => events.push(event)
-      );
+      start({ idleSettleMs: 10 });
 
       await waitFor(() => events.some((event) => event.kind === initialEvent));
       writeSession('idle', Date.now() + 1);
@@ -194,12 +201,8 @@ describe('watchClaudeSessionActivity', () => {
   );
 
   it('preserves a user interrupt when busy returns to idle', async () => {
-    const events: RunStateEvent[] = [];
     writeSession('busy');
-    watcher = watchClaudeSessionActivity(
-      { cwd: '/repo', conversationId: 'conv-1', claudeHomeDir, idleSettleMs: 10 },
-      (event) => events.push(event)
-    );
+    start({ idleSettleMs: 10 });
 
     await waitFor(() => events.some((event) => event.kind === 'turn-started'));
     markInterrupted('conv-1');
@@ -209,25 +212,81 @@ describe('watchClaudeSessionActivity', () => {
   });
 
   it('reconciles an already-idle process on attach', async () => {
-    const events: RunStateEvent[] = [];
     writeSession('idle');
-    watcher = watchClaudeSessionActivity(
-      { cwd: '/repo', conversationId: 'conv-1', claudeHomeDir },
-      (event) => events.push(event)
-    );
+    start();
 
     await waitFor(() => events.some((event) => event.kind === 'watchdog-idle'));
   });
 
   it('ignores stale activity files when attaching a live watcher', async () => {
-    const events: RunStateEvent[] = [];
     writeSession('busy', Date.now() - 10_000);
-    watcher = watchClaudeSessionActivity(
-      { cwd: '/repo', conversationId: 'conv-1', claudeHomeDir },
-      (event) => events.push(event)
-    );
+    start();
 
     await new Promise((resolve) => setTimeout(resolve, 80));
     expect(events).toEqual([]);
+  });
+
+  describe('reconciling a running status the record contradicts', () => {
+    const seams = { reconcileIntervalMs: 20, reconcileMinIdleAgeMs: 50 };
+
+    it('settles an awaiting-input the record never confirmed', async () => {
+      // The record is well past the edge-triggered path's staleness window, so
+      // nothing but the reconciler can correct the status.
+      writeSession('idle', Date.now() - 10_000);
+      setStoreStatus('awaiting-input', Date.now() - 10_000);
+      start(seams);
+
+      await waitFor(() => events.some((event) => event.kind === 'turn-completed'));
+    });
+
+    it('reports a settled turn as interrupted when the user cut it short', async () => {
+      writeSession('idle', Date.now() - 10_000);
+      setStoreStatus('working', Date.now() - 10_000);
+      markInterrupted('conv-1');
+      start(seams);
+
+      await waitFor(() => events.some((event) => event.kind === 'turn-interrupted'));
+    });
+
+    it('leaves a running status alone while the record still reports busy', async () => {
+      writeSession('busy', Date.now() - 10_000);
+      setStoreStatus('working', Date.now() - 10_000);
+      start(seams);
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      expect(events).toEqual([]);
+    });
+
+    it('leaves a turn the reducer only just started alone', async () => {
+      // A submit is mirrored optimistically before Claude rewrites the record,
+      // so a young `working` must outlive an already-idle record.
+      writeSession('idle', Date.now() - 10_000);
+      setStoreStatus('working', Date.now());
+      start({ ...seams, reconcileMinIdleAgeMs: 5_000 });
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      expect(events).toEqual([]);
+    });
+
+    it('waits for an idle record to settle before overruling a running status', async () => {
+      // A record Claude wrote moments ago may simply not have caught up with the
+      // work it just picked up. (Attach still reconciles a fresh idle record via
+      // `watchdog-idle`; only the settle verdict has to wait.)
+      writeSession('idle', Date.now());
+      setStoreStatus('working', Date.now() - 10_000);
+      start({ ...seams, reconcileMinIdleAgeMs: 5_000 });
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      expect(events.map((event) => event.kind)).not.toContain('turn-completed');
+    });
+
+    it('leaves a terminal status alone', async () => {
+      writeSession('idle', Date.now() - 10_000);
+      setStoreStatus('completed', Date.now() - 10_000);
+      start(seams);
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      expect(events).toEqual([]);
+    });
   });
 });
