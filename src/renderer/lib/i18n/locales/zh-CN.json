@@ -4787,6 +4787,27 @@
         "adminOpened": "管理密钥已复制，CLIProxyAPI 控制台已打开",
         "adminOpenedHint": "在控制台中粘贴密钥，即可登录并添加 CLI 或 OAuth 账号",
         "openAdminFailed": "CLIProxyAPI 控制台打开失败"
+      },
+      "ccSwitch": {
+        "managedDescription": "在多个 Claude Code / Codex 供应商配置之间一键切换",
+        "detecting": "正在检测 CC Switch…",
+        "detectionFailed": "应用检测遇到问题，重新检测后即可继续",
+        "installingDescription": "正在通过 Homebrew 安装 CC Switch",
+        "installedDescription": "已安装 v{{version}} · 未启用本地代理",
+        "proxyEnabledDescription": "已安装 v{{version}} · 本地代理已启用",
+        "installing": "正在安装 CC Switch…",
+        "installed": "CC Switch 已安装",
+        "installFailed": "CC Switch 安装失败",
+        "download": "下载",
+        "downloadOpened": "已打开 CC Switch 下载页",
+        "open": "打开",
+        "opened": "CC Switch 已打开",
+        "openFailed": "CC Switch 打开失败",
+        "checkUpdates": "检查更新",
+        "sourceRepository": "源码仓库",
+        "actions": "CC Switch 操作",
+        "manageActions": "管理 CC Switch",
+        "management": "CC Switch 管理"
       }
     },
     "categories": {

@@ -10,6 +10,7 @@ import type {
   MaasSetRuntimeBindingInput,
   MaasUsageSummaryInput,
 } from '@shared/maas';
+import { ccSwitchIntegrationService } from './cc-switch-integration-service';
 import { cliProxyApiManagedService } from './cliproxyapi-managed-service';
 import { liteLlmManagedService } from './litellm-managed-service';
 import { maasService } from './maas-service';
@@ -144,4 +145,7 @@ export const maasController = createRPCController({
   stopCliProxyApi: () => cliProxyApiManagedService.stop(),
   copyCliProxyApiManagementKey: () => cliProxyApiManagedService.copyManagementKey(),
   openCliProxyApiAdmin: () => cliProxyApiManagedService.openAdmin(),
+  getCcSwitchIntegrationStatus: () => ccSwitchIntegrationService.getStatus(),
+  installCcSwitch: () => ccSwitchIntegrationService.install(),
+  openCcSwitch: () => ccSwitchIntegrationService.open(),
 });

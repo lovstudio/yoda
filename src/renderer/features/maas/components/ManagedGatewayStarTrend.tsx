@@ -2,9 +2,9 @@ import { Loader2, TrendingUp } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  getMaasPlatformDefinition,
-  MAAS_MANAGED_GATEWAY_IDS,
-  type MaasManagedGatewayId,
+  getMaasLocalIntegrationName,
+  MAAS_LOCAL_INTEGRATION_IDS,
+  type MaasLocalIntegrationId,
   type MaasManagedGatewayStarSnapshot,
   type MaasManagedGatewayStarTrendPoint,
 } from '@shared/maas';
@@ -15,10 +15,11 @@ const CHART_HEIGHT = 176;
 const CHART_PADDING_X = 6;
 const CHART_PADDING_Y = 10;
 
-const SERIES_COLORS: Record<MaasManagedGatewayId, string> = {
+const SERIES_COLORS: Record<MaasLocalIntegrationId, string> = {
   litellm: 'var(--foreground-diff-added)',
   cliproxyapi: 'var(--foreground-diff-modified)',
   newapi: 'var(--foreground-diff-deleted)',
+  ccswitch: 'var(--primary)',
 };
 
 type ManagedGatewayStarTrendProps = {
@@ -27,7 +28,7 @@ type ManagedGatewayStarTrendProps = {
 };
 
 type TrendSeries = {
-  platformId: MaasManagedGatewayId;
+  platformId: MaasLocalIntegrationId;
   label: string;
   color: string;
   points: MaasManagedGatewayStarTrendPoint[];
@@ -43,11 +44,11 @@ export function ManagedGatewayStarTrend({ snapshots, isPending }: ManagedGateway
   );
   const series = useMemo<TrendSeries[]>(
     () =>
-      MAAS_MANAGED_GATEWAY_IDS.map((platformId) => {
+      MAAS_LOCAL_INTEGRATION_IDS.map((platformId) => {
         const snapshot = snapshotById.get(platformId);
         return {
           platformId,
-          label: getMaasPlatformDefinition(platformId).name,
+          label: getMaasLocalIntegrationName(platformId),
           color: SERIES_COLORS[platformId],
           points: snapshot?.trend?.points ?? [],
           snapshot,

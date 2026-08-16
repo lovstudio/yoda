@@ -1,9 +1,9 @@
 import { net } from 'electron';
 import {
-  MAAS_MANAGED_GATEWAY_IDS,
-  MAAS_MANAGED_GATEWAY_REPOSITORIES,
-  type MaasManagedGatewayId,
-  type MaasManagedGatewayRepository,
+  MAAS_LOCAL_INTEGRATION_IDS,
+  MAAS_LOCAL_INTEGRATION_REPOSITORIES,
+  type MaasLocalIntegrationId,
+  type MaasLocalIntegrationRepository,
   type MaasManagedGatewayStarSnapshot,
 } from '@shared/maas';
 import { TTLCache } from '@main/core/utils/ttl-cache';
@@ -100,16 +100,16 @@ export class MaasManagedGatewayStarsService {
     if (forceRefresh) this.cache.invalidate();
     return this.cache.get(() =>
       Promise.all(
-        MAAS_MANAGED_GATEWAY_IDS.map((platformId) =>
-          this.fetchSnapshot(platformId, MAAS_MANAGED_GATEWAY_REPOSITORIES[platformId])
+        MAAS_LOCAL_INTEGRATION_IDS.map((platformId) =>
+          this.fetchSnapshot(platformId, MAAS_LOCAL_INTEGRATION_REPOSITORIES[platformId])
         )
       )
     );
   }
 
   private async fetchSnapshot(
-    platformId: MaasManagedGatewayId,
-    repository: MaasManagedGatewayRepository
+    platformId: MaasLocalIntegrationId,
+    repository: MaasLocalIntegrationRepository
   ): Promise<MaasManagedGatewayStarSnapshot> {
     const [starCount, historyPoints] = await Promise.all([
       this.fetchCurrentStarCount(repository.repository),
