@@ -44,6 +44,7 @@ import { searchService } from './core/search/search-service';
 import { modelProviderCatalogService } from './core/settings/model-provider-catalog-service';
 import { runtimeModelCandidatesService } from './core/settings/runtime-model-candidates-service';
 import { appSettingsService } from './core/settings/settings-service';
+import { archivedTaskReactivationService } from './core/tasks/archived-task-reactivation';
 import { resumePendingTaskArchives } from './core/tasks/operations/archiveTask';
 import { taskManager } from './core/tasks/task-manager';
 import { roomConductor } from './core/team-rooms/conductor';
@@ -169,6 +170,7 @@ void app.whenReady().then(async () => {
       log.warn('Failed to restore pending Yoda Build tasks:', error);
     });
     sessionSummaryAutoRefreshService.initialize();
+    archivedTaskReactivationService.initialize();
     searchService.initialize();
     __bootMark('searchService.initialize done');
     void editorBufferService.pruneStale();
@@ -346,6 +348,7 @@ function prepareShutdown(mode: TeardownMode): Promise<void> {
     try {
       agentHookService.dispose();
       sessionSummaryAutoRefreshService.dispose();
+      archivedTaskReactivationService.dispose();
       agentSessionRuntimeStore.dispose();
       aiLabService.dispose();
       mobileGatewayService.dispose();

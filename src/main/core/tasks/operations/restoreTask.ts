@@ -1,10 +1,12 @@
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { taskStatusUpdatedChannel } from '@shared/events/taskEvents';
 import type { RestoreTaskResult } from '@shared/tasks';
 import { unarchiveConversation } from '@main/core/conversations/unarchiveConversation';
 import { taskEvents } from '@main/core/tasks/task-events';
 import { mapTaskRowToTask } from '@main/core/tasks/utils/utils';
 import { db } from '@main/db/client';
 import { conversations, tasks } from '@main/db/schema';
+import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { emitTaskRestoredEvents } from '../task-restored-events';
 import { getDescendantTaskIds } from './task-hierarchy';
@@ -35,6 +37,20 @@ export async function restoreTask(id: string): Promise<RestoreTaskResult> {
   return { restoredTaskIds };
 }
 
+/**
+ * Restore exactly one task, leaving its archived descendants archived.
+ *
+ * Used when a task comes back to life on its own — an archived session that
+ * starts a new turn. Only the task that is actually running should leave the
+ * archive; cascading to its subtree there would unarchive work nobody touched.
+ */
+export async function restoreTaskWithoutDescendants(id: string): Promise<boolean> {
+  const restoredTasks: Array<{ id: string; projectId: string }> = [];
+  await restoreSingleTask(id, restoredTasks);
+  emitTaskRestoredEvents(restoredTasks);
+  return restoredTasks.length > 0;
+}
+
 async function restoreSingleTask(
   id: string,
   restoredTasks: Array<{ id: string; projectId: string }>
@@ -55,6 +71,14 @@ async function restoreSingleTask(
 
   restoredTasks.push({ id: updatedRow.id, projectId: updatedRow.projectId });
   taskEvents._emit('task:updated', mapTaskRowToTask(updatedRow));
+  // `taskRestoredChannel` only clears the archive flags in renderer stores; the
+  // lifecycle status is carried by its own channel, so a restored task would
+  // keep rendering as "archived" in every mounted store without this.
+  events.emit(taskStatusUpdatedChannel, {
+    taskId: updatedRow.id,
+    projectId: updatedRow.projectId,
+    status: 'in_progress',
+  });
 
   // Symmetric to archiveTask, which cascade-archives every live conversation:
   // restore must un-archive them too, otherwise a restored task has no active
