@@ -33,13 +33,37 @@ export function subnetPrefix(ipv4: string): string | null {
   return parts.slice(0, 3).join('.');
 }
 
-/** The ranges worth sweeping for a phone at `localIpv4`, in the order they are
- *  tried. The phone's own subnet comes first because that is the common case. */
-export function sweepRanges(localIpv4: string | null): SweepRange[] {
-  const own = localIpv4 ? subnetPrefix(localIpv4) : null;
-  if (!own) return [HOTSPOT_SUBNET];
-  if (own === HOTSPOT_SUBNET.prefix) return [HOTSPOT_SUBNET];
-  return [{ prefix: own, lastHost: 254 }, HOTSPOT_SUBNET];
+/** The subnet a stored address lived on. A desktop that only changed host within
+ *  its own network — the common case, since DHCP hands out a new lease on the
+ *  same router — is found by sweeping this even when the phone sits on a
+ *  different /24 of a wider subnet than the /24 its own address implies. */
+export function subnetPrefixOfBaseUrl(baseUrl: string): string | null {
+  try {
+    return subnetPrefix(new URL(baseUrl.trim()).hostname);
+  } catch {
+    return null;
+  }
+}
+
+/** The ranges worth sweeping, in the order they are tried: the phone's own
+ *  subnet first, then the subnets its stored addresses used to live on, then the
+ *  hotspot bridge the phone cannot see. */
+export function sweepRanges(
+  localIpv4: string | null,
+  knownBaseUrls: readonly string[] = []
+): SweepRange[] {
+  const prefixes: string[] = [];
+  const add = (prefix: string | null) => {
+    if (prefix && !prefixes.includes(prefix)) prefixes.push(prefix);
+  };
+  add(localIpv4 ? subnetPrefix(localIpv4) : null);
+  for (const baseUrl of knownBaseUrls) add(subnetPrefixOfBaseUrl(baseUrl));
+  return [
+    ...prefixes
+      .filter((prefix) => prefix !== HOTSPOT_SUBNET.prefix)
+      .map((prefix) => ({ prefix, lastHost: 254 })),
+    HOTSPOT_SUBNET,
+  ];
 }
 
 async function respondsToHealth(baseUrl: string): Promise<boolean> {
@@ -67,9 +91,10 @@ async function respondsToHealth(baseUrl: string): Promise<boolean> {
 export async function discoverLanGateways(
   localIpv4: string | null,
   token: string,
+  knownBaseUrls: readonly string[] = [],
   port: number = MOBILE_GATEWAY_DEFAULT_PORT
 ): Promise<LanDiscoveryResult> {
-  const ranges = sweepRanges(localIpv4);
+  const ranges = sweepRanges(localIpv4, knownBaseUrls);
   const hosts = ranges.flatMap((range) =>
     Array.from({ length: range.lastHost }, (_, index) => `${range.prefix}.${index + 1}`)
   );

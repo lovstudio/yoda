@@ -128,6 +128,7 @@ import {
   removeEndpoint,
   withActiveEndpointFirst,
   type MobileConnectionSettings,
+  type MobileEndpoint,
   type MobileEndpointKind,
   type MobileTransportPreference,
 } from './connection-endpoints';
@@ -186,6 +187,10 @@ const SESSION_DETAIL_RECONCILE_INTERVAL_MS = 60_000;
 const SESSION_DETAIL_REQUEST_TIMEOUT_MS = 15_000;
 const SESSION_EVENT_REFRESH_DELAY_MS = 500;
 const RELAY_PAIR_TIMEOUT_MS = 15_000;
+/** How long to wait before sweeping the network again after a fruitless sweep.
+ *  Well above the dashboard poll interval, so a desktop that stays off does not
+ *  put the phone into a permanent scan. */
+const LAN_REDISCOVERY_INTERVAL_MS = 60_000;
 const DEV_GATEWAY_DEFAULT_PORT = '3879';
 const SWIPE_BACK_EDGE_WIDTH = 34;
 const SWIPE_BACK_ACTIVATION_DISTANCE = 12;
@@ -679,6 +684,10 @@ export function App() {
     DEFAULT_MOBILE_CONNECTION_SETTINGS
   );
   const connectionRef = useRef<MobileConnection | null>(null);
+  const lanSweepRef = useRef<{ at: number; inFlight: Promise<MobileEndpoint | null> | null }>({
+    at: 0,
+    inFlight: null,
+  });
   const [connectDraft, setConnectDraft] = useState<ConnectDraft>({
     baseUrl: 'http://192.168.1.10:3879',
     token: '',
@@ -734,24 +743,6 @@ export function App() {
     },
     []
   );
-
-  useEffect(() => {
-    configureConnectionFailover({
-      candidates: () =>
-        withActiveEndpointFirst(
-          orderedEndpoints(connectionSettingsRef.current),
-          connectionRef.current
-        ),
-      onSwitch: (endpoint) => {
-        // In-memory only: the stored preference stays whatever the user picked,
-        // so a temporary Wi-Fi outage never rewrites their configuration.
-        const next = { baseUrl: endpoint.baseUrl, token: endpoint.token };
-        connectionRef.current = next;
-        setConnection(next);
-      },
-    });
-    return () => configureConnectionFailover(null);
-  }, []);
 
   const applyPairingUrl = useCallback(
     async (url: string | null) => {
@@ -1199,10 +1190,14 @@ export function App() {
     [applyConnectionSettings]
   );
 
-  /** Sweeps the phone's own subnet and adopts the first desktop that accepts a
-   *  token we already hold, which is how a phone recovers after the desktop
-   *  moved to another Wi-Fi and its stored LAN address went dead. */
-  const handleScanLan = useCallback(async () => {
+  /** Sweeps the reachable subnets and adopts the first desktop that accepts a
+   *  token we already hold, which is how a phone recovers after the desktop moved
+   *  to another Wi-Fi and its stored LAN address went dead. Returns the subnets it
+   *  tried so a fruitless sweep can say where it looked. */
+  const findLanGateway = useCallback(async (): Promise<{
+    endpoint: MobileEndpoint | null;
+    subnets: string[];
+  }> => {
     const settings = connectionSettingsRef.current;
     const token =
       settings.endpoints.lan?.token ??
@@ -1212,19 +1207,80 @@ export function App() {
     if (!token) throw new Error('还没有可用的令牌，请先扫描桌面端的配对二维码。');
 
     const address = await Network.getIpAddressAsync().catch(() => null);
-    const result = await discoverLanGateways(address, token);
+    // The stored addresses aim the sweep at the subnet the desktop used to be on,
+    // which is where it still is whenever it merely picked up a new DHCP lease —
+    // and that subnet is not always the one the phone's own address implies.
+    const knownBaseUrls = [settings.endpoints.lan?.baseUrl, settings.endpoints.manual?.baseUrl];
+    const result = await discoverLanGateways(
+      address,
+      token,
+      knownBaseUrls.filter((baseUrl): baseUrl is string => Boolean(baseUrl))
+    );
     const found = result.matches[0];
-    if (!found) {
+    if (!found) return { endpoint: null, subnets: result.subnets };
+
+    const connection: MobileConnection = { baseUrl: found, token };
+    await applyConnectionSettings(
+      putEndpoint(connectionSettingsRef.current, 'lan', connection),
+      connection
+    );
+    return { endpoint: { kind: 'lan', ...connection }, subnets: result.subnets };
+  }, [applyConnectionSettings]);
+
+  const handleScanLan = useCallback(async () => {
+    const { endpoint, subnets } = await findLanGateway();
+    if (!endpoint) {
       throw new Error(
-        `已扫描 ${result.subnets.map((subnet) => `${subnet}.x`).join('、')}，没有找到可连接的桌面端。`
+        `已扫描 ${subnets.map((subnet) => `${subnet}.x`).join('、')}，没有找到可连接的桌面端。`
       );
     }
-
-    const next: MobileConnection = { baseUrl: found, token };
-    await applyConnectionSettings(putEndpoint(settings, 'lan', next), next);
     setError(null);
-    return found;
-  }, [applyConnectionSettings]);
+    return endpoint.baseUrl;
+  }, [findLanGateway]);
+
+  /** Automatic rediscovery, used when no stored endpoint answers. Throttled and
+   *  de-duplicated because a sweep outlasts the dashboard poll interval, so an
+   *  unguarded version would stack one sweep on top of another indefinitely. */
+  const rediscoverLanGateway = useCallback(async (): Promise<MobileEndpoint | null> => {
+    const { preference } = connectionSettingsRef.current;
+    if (preference !== 'lan' && preference !== 'auto') return null;
+
+    const state = lanSweepRef.current;
+    if (state.inFlight) return state.inFlight;
+    if (Date.now() - state.at < LAN_REDISCOVERY_INTERVAL_MS) return null;
+
+    // A sweep outlasts several poll intervals, so say what is happening rather
+    // than leaving the phone looking hung. Whoever awaits the sweep overwrites
+    // this the moment it finishes, either with fresh data or with the real error.
+    setError('连接地址已失效，正在扫描局域网寻找桌面端…');
+    const attempt = findLanGateway()
+      .then(({ endpoint }) => endpoint)
+      .catch(() => null)
+      .finally(() => {
+        lanSweepRef.current = { at: Date.now(), inFlight: null };
+      });
+    lanSweepRef.current = { at: state.at, inFlight: attempt };
+    return attempt;
+  }, [findLanGateway]);
+
+  useEffect(() => {
+    configureConnectionFailover({
+      candidates: () =>
+        withActiveEndpointFirst(
+          orderedEndpoints(connectionSettingsRef.current),
+          connectionRef.current
+        ),
+      onSwitch: (endpoint) => {
+        // In-memory only: the stored preference stays whatever the user picked,
+        // so a temporary Wi-Fi outage never rewrites their configuration.
+        const next = { baseUrl: endpoint.baseUrl, token: endpoint.token };
+        connectionRef.current = next;
+        setConnection(next);
+      },
+      rediscover: rediscoverLanGateway,
+    });
+    return () => configureConnectionFailover(null);
+  }, [rediscoverLanGateway]);
 
   const handleDisconnect = useCallback(() => {
     void clearConnectionSettings();
