@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getClaudeSessionActivity: vi.fn(),
   getProviderConfig: vi.fn(),
   getRuntimeStatus: vi.fn(),
+  getRuntimeState: vi.fn(),
   isProviderTurnConfirmed: vi.fn(),
   isInterruptedSinceLastPrompt: vi.fn(),
   monitorRegistryGet: vi.fn(),
@@ -50,6 +51,7 @@ vi.mock('@main/db/client', () => ({
 vi.mock('./agent-session-runtime', () => ({
   agentSessionRuntimeStore: {
     getStatus: mocks.getRuntimeStatus,
+    getState: mocks.getRuntimeState,
     isProviderTurnConfirmed: mocks.isProviderTurnConfirmed,
     publishSnapshot: mocks.publishRuntimeSnapshot,
     setProviderTurnConfirmed: mocks.setProviderTurnConfirmed,
@@ -61,9 +63,12 @@ vi.mock('./claude-run-state-source', () => ({
   readClaudeTurnVerdictFile: mocks.readClaudeTurnVerdictFile,
 }));
 
-vi.mock('./claude-session-activity-source', () => ({
-  getClaudeSessionActivity: mocks.getClaudeSessionActivity,
-}));
+vi.mock('./claude-session-activity-source', async (importOriginal) => {
+  // `idleActivitySettlesRunState` is a pure predicate over a record; keep the
+  // real one so this test exercises the same admissibility rule as production.
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return { ...actual, getClaudeSessionActivity: mocks.getClaudeSessionActivity };
+});
 
 vi.mock('./claude-transcript-locator', () => ({
   findClaudeTranscriptPathBySessionId: mocks.findClaudeTranscriptPathBySessionId,
@@ -122,6 +127,7 @@ describe('getConversationRunStatus', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getRuntimeStatus.mockReturnValue('idle');
+    mocks.getRuntimeState.mockReturnValue({ status: 'idle', updatedAt: 0 });
     mocks.isProviderTurnConfirmed.mockReturnValue(false);
     mocks.dbSelect.mockReturnValue({
       from: () => ({
@@ -298,6 +304,47 @@ describe('getConversationRunStatus', () => {
       { projectId: 'project-1', taskId: 'task-1', conversationId: 'conv-1' },
       true
     );
+  });
+
+  it('keeps a running status when a resumed Claude process boots to an idle prompt', async () => {
+    // The record belongs to a CLI that started after the turn's status was set,
+    // so its prompt is a boot state. Opening the task is what spawns it, and run
+    // state must not follow from being looked at.
+    const now = Date.now();
+    mocks.getRuntimeStatus.mockReturnValue('working');
+    mocks.getRuntimeState.mockReturnValue({ status: 'working', updatedAt: now - 60_000 });
+    mocks.resolveTask.mockReturnValue(mountedTask(['conv-1']));
+    mocks.getClaudeSessionActivity.mockResolvedValue({
+      pid: 4321,
+      sessionId: 'conv-1',
+      cwd: '/repo',
+      status: 'idle',
+      waitingFor: null,
+      updatedAt: now,
+      startedAt: now - 1_000,
+    });
+    mocks.ptyGet.mockReturnValue({});
+
+    await expect(readStatus()).resolves.toBe('working');
+  });
+
+  it('settles a running status from an idle record the same process wrote', async () => {
+    const now = Date.now();
+    mocks.getRuntimeStatus.mockReturnValue('working');
+    mocks.getRuntimeState.mockReturnValue({ status: 'working', updatedAt: now - 60_000 });
+    mocks.resolveTask.mockReturnValue(mountedTask(['conv-1']));
+    mocks.getClaudeSessionActivity.mockResolvedValue({
+      pid: 4321,
+      sessionId: 'conv-1',
+      cwd: '/repo',
+      status: 'idle',
+      waitingFor: null,
+      updatedAt: now,
+      startedAt: now - 600_000,
+    });
+    mocks.ptyGet.mockReturnValue({});
+
+    await expect(readStatus()).resolves.toBe('idle');
   });
 
   it('does not downgrade a live completed status when the monitor reports idle', async () => {
