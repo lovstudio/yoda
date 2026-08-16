@@ -44,6 +44,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popove
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { cn } from '@renderer/utils/utils';
 import {
+  WORKSPACE_BAR_ACTION_COUNT_CLASS,
+  WORKSPACE_BAR_ACTION_INLINE_COUNT_CLASS,
+  WorkspaceBarActionGlyph,
+} from './workspace-bar-action-indicator';
+import {
   WORKSPACE_BAR_CARD_CLASS,
   WorkspaceBarCardHeader,
   WorkspaceBarCardMenu,
@@ -79,6 +84,7 @@ export function WorkspaceNotificationCenter({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = notifications.find((notification) => notification.id === selectedId) ?? null;
   const unreadCount = notifications.filter((notification) => notification.readAt === null).length;
+  const unreadBadge = unreadCount > 99 ? '99+' : String(unreadCount);
   const { actionsRef, dismissThen } = usePopoverDismiss(open, setOpen);
 
   return (
@@ -104,11 +110,22 @@ export function WorkspaceNotificationCenter({
           count: unreadCount,
         })}
       >
-        <Bell aria-hidden className="size-3.5" />
+        <WorkspaceBarActionGlyph icon={Bell}>
+          {unreadCount > 0 ? (
+            <span className={cn(WORKSPACE_BAR_ACTION_COUNT_CLASS, 'font-semibold text-foreground')}>
+              {unreadBadge}
+            </span>
+          ) : null}
+        </WorkspaceBarActionGlyph>
         <span className={triggerLabelClassName}>{t('workspaceRuntime.notifications.title')}</span>
         {unreadCount > 0 ? (
-          <span className="absolute top-0 right-0 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-background-secondary px-0.5 font-mono text-[8px] font-semibold leading-none text-foreground tabular-nums ring-1 ring-border/60 @min-[1441px]:static @min-[1441px]:h-4 @min-[1441px]:min-w-4 @min-[1441px]:px-1 @min-[1441px]:text-[9px]">
-            {unreadCount > 99 ? '99+' : unreadCount}
+          <span
+            className={cn(
+              WORKSPACE_BAR_ACTION_INLINE_COUNT_CLASS,
+              'font-semibold text-foreground ring-1 ring-border/60'
+            )}
+          >
+            {unreadBadge}
           </span>
         ) : null}
       </PopoverTrigger>

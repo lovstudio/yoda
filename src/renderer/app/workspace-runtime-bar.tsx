@@ -86,6 +86,12 @@ import {
 import { startRendererPerformanceReporter } from './renderer-performance-reporter';
 import { rankWorkspaceAgentSessions } from './workspace-agent-sessions';
 import {
+  WORKSPACE_BAR_ACTION_COUNT_CLASS,
+  WORKSPACE_BAR_ACTION_DOT_CLASS,
+  WORKSPACE_BAR_ACTION_INLINE_DOT_CLASS,
+  WorkspaceBarActionGlyph,
+} from './workspace-bar-action-indicator';
+import {
   WORKSPACE_BAR_CARD_CLASS,
   WorkspaceBarCardFooter,
   WorkspaceBarCardHeader,
@@ -424,6 +430,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         provider: maasPresentation.providerName,
       })
     : t('workspaceRuntime.maas.title');
+  const maasDotToneClass = globalMaasBinding.data?.effective
+    ? 'bg-emerald-500'
+    : globalMaasBinding.data?.enabled
+      ? 'bg-amber-500'
+      : 'bg-foreground-disabled';
   const usageTriggerLabel = maasActiveForRuntime
     ? t('workspaceRuntime.maasUsageTitle', {
         provider: maasPresentation.providerName ?? t('workspaceRuntime.maas.title'),
@@ -1419,25 +1430,26 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             attention: attentionAgentCount,
           })}
         >
-          <Bot className="size-3.5" />
+          <WorkspaceBarActionGlyph icon={Bot}>
+            <span
+              className={cn(
+                WORKSPACE_BAR_ACTION_COUNT_CLASS,
+                attentionAgentCount > 0
+                  ? 'text-amber-600 dark:text-amber-300'
+                  : workingAgentCount > 0
+                    ? 'text-primary'
+                    : 'text-foreground-passive'
+              )}
+            >
+              {agentSessionCount}
+            </span>
+          </WorkspaceBarActionGlyph>
           <span className="tabular-nums @max-[1440px]:hidden">{agentTriggerText}</span>
-          <span
-            className={cn(
-              'absolute top-0 right-0 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-background-secondary px-0.5 font-mono text-[8px] leading-none tabular-nums ring-1 ring-border/60 @min-[1441px]:hidden',
-              attentionAgentCount > 0
-                ? 'text-amber-600 dark:text-amber-300'
-                : workingAgentCount > 0
-                  ? 'text-primary'
-                  : 'text-foreground-passive'
-            )}
-          >
-            {agentSessionCount}
-          </span>
           {attentionAgentCount > 0 || workingAgentCount > 0 ? (
             <span
               aria-hidden
               className={cn(
-                'hidden size-1.5 rounded-full @min-[1441px]:inline-block',
+                WORKSPACE_BAR_ACTION_INLINE_DOT_CLASS,
                 attentionAgentCount > 0 ? 'bg-amber-500' : 'bg-primary'
               )}
             />
@@ -1696,7 +1708,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           )}
           title={maasTriggerLabel}
         >
-          <Cloud aria-hidden className="size-3.5" />
+          <WorkspaceBarActionGlyph icon={Cloud}>
+            <span aria-hidden className={cn(WORKSPACE_BAR_ACTION_DOT_CLASS, maasDotToneClass)} />
+          </WorkspaceBarActionGlyph>
           {maasPresentation.providerName ? (
             <span className="inline-block max-w-40 truncate @max-[1440px]:hidden">
               {t('workspaceRuntime.maas.providerSuffix', {
@@ -1710,14 +1724,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           )}
           <span
             aria-hidden
-            className={cn(
-              'absolute top-1 right-0.5 size-1.5 rounded-full @min-[1441px]:static',
-              globalMaasBinding.data?.effective
-                ? 'bg-emerald-500'
-                : globalMaasBinding.data?.enabled
-                  ? 'bg-amber-500'
-                  : 'bg-foreground-disabled'
-            )}
+            className={cn(WORKSPACE_BAR_ACTION_INLINE_DOT_CLASS, maasDotToneClass)}
           />
         </PopoverTrigger>
         {isMaasPopoverOpen ? (
