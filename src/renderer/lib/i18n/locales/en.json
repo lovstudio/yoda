@@ -547,7 +547,7 @@
       "roadmap": "Roadmap"
     },
     "general": {
-      "description": "Manage your account, privacy settings, notifications, and app updates."
+      "description": "Manage language, privacy settings, and app updates."
     },
     "tasksTab": {
       "description": "Configure how new tasks are created and run."
