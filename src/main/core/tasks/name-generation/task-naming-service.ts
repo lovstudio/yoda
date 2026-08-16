@@ -18,6 +18,11 @@ import {
   type TaskNamingStatus,
 } from '@shared/task-naming';
 import type { CreateTaskParams } from '@shared/tasks';
+import {
+  AgentCliError,
+  describeCliTimeout,
+  formatCommandFailure,
+} from '@main/core/agent-cli/run-agent-cli';
 import { resolveSelectedUtilityAgent } from '@main/core/agents-config/builtin-agent-resolver';
 import { aiLogService } from '@main/core/ai-logs/ai-log-service';
 import { parseShellWords } from '@main/core/conversations/impl/agent-command';
@@ -49,7 +54,6 @@ const MAX_TASK_NAME_CHARS = 36;
 const MAX_SESSION_TITLE_CHARS = 48;
 const MAX_BRANCH_NAME_CHARS = 48;
 const MAX_COMMAND_OUTPUT_CHARS = 32_000;
-const MAX_COMMAND_ERROR_CHARS = 2_000;
 const README_CANDIDATES = ['README.md', 'README.mdx', 'readme.md', 'Readme.md'];
 
 type GenerateTaskNamesInput = {
@@ -1287,6 +1291,12 @@ async function runAgentNamingCommand(input: {
     await aiLogService.finish(logId, {
       status: 'failed',
       error: error instanceof Error ? error.message : String(error),
+      // Whatever the dying process printed is the only evidence it leaves.
+      output:
+        error instanceof AgentCliError
+          ? [error.stdout.trim(), error.stderr.trim()].filter(Boolean).join('\n').trim() ||
+            undefined
+          : undefined,
     });
     throw error;
   }
@@ -1428,12 +1438,26 @@ function spawnAgentNamingProcess(input: {
       });
       if (settled) return;
       if (timedOut) {
-        rejectCommand(new Error(`${input.runtimeName} naming command timed out.`));
+        rejectCommand(
+          new AgentCliError(
+            describeCliTimeout(input.runtimeName, input.timeoutMs, stdout, stderr),
+            stdout,
+            stderr,
+            true
+          )
+        );
         return;
       }
       if (code !== 0) {
-        const detail = formatNamingCommandFailure(stdout, stderr, code);
-        rejectCommand(new Error(`${input.runtimeName} naming command failed: ${detail}`));
+        const detail = formatCommandFailure(stdout, stderr, code);
+        rejectCommand(
+          new AgentCliError(
+            `${input.runtimeName} naming command failed: ${detail}`,
+            stdout,
+            stderr,
+            false
+          )
+        );
         return;
       }
       resolveCommand();
@@ -1441,23 +1465,6 @@ function spawnAgentNamingProcess(input: {
 
     child.stdin.end(input.stdin ?? '');
   });
-}
-
-function formatNamingCommandFailure(stdout: string, stderr: string, code: number | null): string {
-  const combined = [stderr.trim(), stdout.trim()].filter(Boolean).join('\n').trim();
-  if (!combined) return `exit code ${code ?? 'unknown'}`;
-
-  const explicitErrors = combined
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(
-      (line) =>
-        /^ERROR\b/i.test(line) ||
-        /\binvalid_request_error\b/i.test(line) ||
-        /"type":"error"/i.test(line)
-    );
-  const detail = explicitErrors.length > 0 ? explicitErrors.join('\n') : combined;
-  return clipEnd(detail, MAX_COMMAND_ERROR_CHARS);
 }
 
 function inspectCodexJsonlChunk(
@@ -1495,9 +1502,4 @@ function isCodexAgentMessageEvent(event: unknown): boolean {
   const item = (event as { item?: unknown }).item;
   if (!item || typeof item !== 'object') return false;
   return (item as { type?: unknown }).type === 'agent_message';
-}
-
-function clipEnd(value: string, max: number): string {
-  if (value.length <= max) return value;
-  return `...${value.slice(value.length - max + 3)}`;
 }

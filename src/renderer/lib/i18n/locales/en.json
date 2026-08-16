@@ -4564,7 +4564,7 @@
   },
   "aiLogs": {
     "title": "AI Logs",
-    "subtitle": "Every AI invocation the app makes — background CLI runs, API calls, and interactive sessions — with timings and full details for debugging.",
+    "subtitle": "Every AI invocation the app makes — interactive sessions and the turns inside them, background CLI work, API calls — with purpose, account, endpoint, timings and full input/output for debugging.",
     "filter": {
       "all": "All",
       "running": "Running",
@@ -4587,7 +4587,7 @@
     "finished": "Finished",
     "duration": "Duration",
     "command": "Command",
-    "prompt": "Prompt",
+    "prompt": "Input",
     "output": "Output",
     "error": "Error",
     "detailActions": "{{label}} actions",
@@ -4614,7 +4614,82 @@
       "llm-debug": "LLM debug",
       "interactive-session": "Interactive session",
       "interactive-turn": "Chat turn",
-      "utility": "Utility"
+      "utility": "Utility",
+      "avatar-generation": "Avatar generation",
+      "quick-action-compilation": "Quick action compilation",
+      "prompt-rewrite": "Prompt rewrite",
+      "skill-trigger-queries": "Skill trigger test",
+      "skill-revision": "Skill description rewrite"
+    },
+    "categoryLabel": "Category",
+    "category": {
+      "all": "All categories",
+      "conversation": "Conversation",
+      "builtin": "Built-in",
+      "image": "Image",
+      "inspect": "Debug"
+    },
+    "searchPlaceholder": "Search purpose, model, content…",
+    "noMatchTitle": "No matching invocations",
+    "noMatchDescription": "Try another keyword or filter.",
+    "summary": {
+      "total": "{{count}} total",
+      "succeeded": "{{count}} succeeded",
+      "failed": "{{count}} failed",
+      "running": "{{count}} running"
+    },
+    "chip": {
+      "mode": "Mode",
+      "runtime": "Client",
+      "model": "Model",
+      "agent": "Agent",
+      "account": "Account",
+      "endpoint": "Endpoint"
+    },
+    "account": {
+      "unrecorded": "Not recorded",
+      "unrecordedHint": "This invocation did not record where its account came from."
+    },
+    "endpoint": {
+      "clientManaged": "Client-managed",
+      "overriddenHint": "Base URL Yoda injected for this invocation.",
+      "clientHint": "Yoda did not override the base URL — the real endpoint comes from the client's own configuration."
+    },
+    "diagnosis": {
+      "timeoutSilent": "Timed out without printing anything: the selected model is most likely unavailable on the current endpoint (not enabled, unpriced, or throttled), so the request hung until the timeout. Switch to your main model and retry.",
+      "timeout": "The command did not finish within its timeout — the output below shows where it stalled.",
+      "interrupted": "The app quit while this invocation was still running, so its outcome is unknown.",
+      "sessionExited": "The session process exited before this turn finished, so the turn never settled.",
+      "missingCli": "The CLI client could not be found — make sure it is installed and on PATH.",
+      "upstream": "The upstream model service returned an error; see the raw error below."
+    },
+    "metadata": {
+      "projectId": "Project",
+      "taskId": "Task",
+      "conversationId": "Session",
+      "scope": "Scope",
+      "target": "Target",
+      "attempt": "Attempt",
+      "platform": "Platform",
+      "profileId": "Profile"
+    },
+    "purposeDescription": {
+      "interactive-session": "One client process from launch to exit; every chat turn inside it is nested below.",
+      "interactive-turn": "One turn of a session: from your message until the AI stops working.",
+      "task-naming": "Names the task and branch from the first message.",
+      "session-title": "Generates the session title.",
+      "session-summary": "Condenses the session transcript into a delivery summary.",
+      "commit-message": "Writes a commit message from the current changes.",
+      "logo-generation": "Generates a logo image.",
+      "avatar-generation": "Generates an avatar image.",
+      "app-image-edit": "Edits an image in AI Lab.",
+      "maas-chat": "A direct chat from the model-access panel.",
+      "llm-debug": "A connectivity probe started from settings.",
+      "quick-action-compilation": "Compiles a custom quick action into an executable prompt.",
+      "prompt-rewrite": "Rewrites the prompt in the composer as requested.",
+      "skill-trigger-queries": "Generates trigger test queries for a skill.",
+      "skill-revision": "Rewrites a skill description from its evaluation results.",
+      "utility": "A built-in general-purpose AI task."
     }
   },
   "maas": {

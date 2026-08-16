@@ -23,6 +23,7 @@ import { applyHookOverrides } from '@main/core/agent-hooks/inspect/hook-override
 import { hookOverridesStore } from '@main/core/agent-hooks/inspect/hook-overrides-store';
 import { aiLogService } from '@main/core/ai-logs/ai-log-service';
 import { interactiveTurnLogger } from '@main/core/ai-logs/interactive-turn-logger';
+import { describeInvocationEndpoint } from '@main/core/ai-logs/invocation-endpoint';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-reconciler';
 import { createClaudeInterruptSniffer } from '@main/core/conversations/claude-interrupt-sniffer';
@@ -636,6 +637,7 @@ export class LocalConversationProvider implements ConversationProvider {
       // wrapper around it is launch plumbing, useless for debugging the run).
       // The initial prompt arg is dropped — it's recorded in the prompt field.
       let invocationLogId: string;
+      const invocationEndpoint = describeInvocationEndpoint(providerEnv);
       try {
         invocationLogId = await aiLogService.start({
           purpose: 'interactive-session',
@@ -654,9 +656,11 @@ export class LocalConversationProvider implements ConversationProvider {
             authProvider,
             maasEffective: String(maasEffective),
             ...(maasCredentials ? { maasPlatformId: maasCredentials.platformId } : {}),
+            ...(invocationEndpoint ? { endpoint: invocationEndpoint } : {}),
           },
         });
         invocationLogIdForRollback = invocationLogId;
+        interactiveTurnLogger.attachSessionLog(conversation.id, invocationLogId);
       } catch (error) {
         preparedSettings.cleanup?.();
         preparedSettingsCleanup = undefined;

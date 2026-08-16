@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { aiLogService } from '@main/core/ai-logs/ai-log-service';
+import { describeInvocationEndpoint } from '@main/core/ai-logs/invocation-endpoint';
 
 const MAX_COMMAND_OUTPUT_CHARS = 32_000;
 const MAX_COMMAND_ERROR_CHARS = 2_000;
@@ -8,6 +9,46 @@ export type AgentCliResult = {
   stdout: string;
   stderrChars: number;
 };
+
+/**
+ * A failed CLI run that still carries what the process had printed.
+ *
+ * A run that dies — timeout above all — used to reject with a bare message,
+ * throwing away the only record of what the provider actually said. The
+ * partial streams travel with the error so the AI invocation log can store
+ * them as the failure's evidence.
+ */
+export class AgentCliError extends Error {
+  constructor(
+    message: string,
+    readonly stdout: string,
+    readonly stderr: string,
+    readonly timedOut: boolean
+  ) {
+    super(message);
+    this.name = 'AgentCliError';
+  }
+}
+
+/**
+ * A timeout is a symptom, never a cause — so the message says how long we
+ * waited and what (if anything) arrived. "No output at all" is itself the
+ * diagnosis: the endpoint took the request and never answered, which is what a
+ * model the endpoint cannot serve looks like from the outside.
+ */
+export function describeCliTimeout(
+  runtimeName: string,
+  timeoutMs: number,
+  stdout: string,
+  stderr: string
+): string {
+  const waited = `${(timeoutMs / 1000).toFixed(0)}s`;
+  const evidence = [stderr.trim(), stdout.trim()].filter(Boolean).join('\n').trim();
+  if (!evidence) {
+    return `${runtimeName} command timed out after ${waited} without printing anything — the endpoint accepted the request and never responded.`;
+  }
+  return `${runtimeName} command timed out after ${waited}. Last output:\n${clipEnd(evidence, MAX_COMMAND_ERROR_CHARS)}`;
+}
 
 export type RunAgentCliInput = {
   command: string;
@@ -42,6 +83,7 @@ export type RunAgentCliInput = {
  * `agent_message` event arrives, instead of waiting for the CLI to exit.
  */
 export async function runAgentCli(input: RunAgentCliInput): Promise<AgentCliResult> {
+  const endpoint = describeInvocationEndpoint(input.env);
   const logId = await aiLogService.start({
     purpose: input.purpose ?? 'utility',
     mode: 'cli',
@@ -49,7 +91,7 @@ export async function runAgentCli(input: RunAgentCliInput): Promise<AgentCliResu
     model: input.model ?? null,
     command: [input.command, ...input.args].join(' '),
     prompt: input.stdin ?? null,
-    metadata: input.metadata,
+    metadata: { ...input.metadata, ...(endpoint ? { endpoint } : {}) },
   });
   try {
     const result = await spawnAgentCli(input);
@@ -62,9 +104,16 @@ export async function runAgentCli(input: RunAgentCliInput): Promise<AgentCliResu
     await aiLogService.finish(logId, {
       status: 'failed',
       error: error instanceof Error ? error.message : String(error),
+      // Whatever the dying process printed is the only evidence it leaves.
+      output: error instanceof AgentCliError ? partialOutputEvidence(error) : undefined,
     });
     throw error;
   }
+}
+
+function partialOutputEvidence(error: AgentCliError): string | undefined {
+  const evidence = [error.stdout.trim(), error.stderr.trim()].filter(Boolean).join('\n').trim();
+  return evidence || undefined;
 }
 
 function spawnAgentCli(input: RunAgentCliInput): Promise<AgentCliResult> {
@@ -137,13 +186,23 @@ function spawnAgentCli(input: RunAgentCliInput): Promise<AgentCliResult> {
     child.on('close', (code) => {
       if (settled) return;
       if (timedOut) {
-        fail(new Error(`${input.runtimeName} command timed out.`));
+        fail(
+          new AgentCliError(
+            describeCliTimeout(input.runtimeName, input.timeoutMs, stdout, stderr),
+            stdout,
+            stderr,
+            true
+          )
+        );
         return;
       }
       if (code !== 0) {
         fail(
-          new Error(
-            `${input.runtimeName} command failed: ${formatCommandFailure(stdout, stderr, code)}`
+          new AgentCliError(
+            `${input.runtimeName} command failed: ${formatCommandFailure(stdout, stderr, code)}`,
+            stdout,
+            stderr,
+            false
           )
         );
         return;
@@ -226,7 +285,8 @@ function isCodexAgentMessageEvent(event: unknown): boolean {
   return (item as { type?: unknown }).type === 'agent_message';
 }
 
-function formatCommandFailure(stdout: string, stderr: string, code: number | null): string {
+/** Best-effort one-line cause for a non-zero CLI exit, preferring explicit error lines. */
+export function formatCommandFailure(stdout: string, stderr: string, code: number | null): string {
   const combined = [stderr.trim(), stdout.trim()].filter(Boolean).join('\n').trim();
   if (!combined) return `exit code ${code ?? 'unknown'}`;
   const explicitErrors = combined

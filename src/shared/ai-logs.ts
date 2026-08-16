@@ -14,11 +14,17 @@ export const AI_LOG_KNOWN_PURPOSES = [
   'session-title',
   'session-summary',
   'commit-message',
+  'quick-action-compilation',
+  'prompt-rewrite',
+  'skill-trigger-queries',
+  'skill-revision',
   'logo-generation',
+  'avatar-generation',
   'app-image-edit',
   'maas-chat',
   'llm-debug',
   'interactive-session',
+  'interactive-turn',
   'utility',
 ] as const;
 

@@ -104,6 +104,7 @@ vi.mock('@main/core/ai-logs/ai-log-service', () => ({
 vi.mock('@main/core/ai-logs/interactive-turn-logger', () => ({
   interactiveTurnLogger: {
     setSessionContext: mocks.setInteractiveSessionContext,
+    attachSessionLog: vi.fn(),
     clearSessionContext: vi.fn(),
     onAgentEvent: vi.fn().mockResolvedValue(undefined),
     onSessionExit: vi.fn().mockResolvedValue(undefined),

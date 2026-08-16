@@ -33,6 +33,9 @@ export interface ResolvedSummaryRuntime extends SummaryPromptRuntime {
   runtimeId: RuntimeId;
   runtimeName: string;
   model: string | null;
+  /** Which Agent's settings produced this configuration — surfaced in the AI log. */
+  agentId: string | null;
+  agentName: string | null;
 }
 
 /**
@@ -59,6 +62,8 @@ export async function resolveSummaryRuntime(
     runtimeId,
     runtimeName: getRuntime(runtimeId)?.name ?? runtimeId,
     model: summaryAgent.model,
+    agentId: summaryAgent.agentId,
+    agentName: summaryAgent.agentName,
     systemPrompt: summaryAgent.systemPrompt,
     language: composerDefaults?.summaryLanguage ?? taskSettings.summaryLanguage,
     context:
@@ -114,7 +119,11 @@ export async function generateSessionSummary(
       runtimeName,
       purpose: 'session-summary',
       model: runtime.model,
-      metadata: { scope },
+      metadata: {
+        scope,
+        ...(runtime.agentId ? { agentId: runtime.agentId } : {}),
+        ...(runtime.agentName ? { agent: runtime.agentName } : {}),
+      },
       onDelta,
     });
     const cliDurationMs = Date.now() - cliStartedAt;
