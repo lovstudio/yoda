@@ -179,8 +179,8 @@ export const SIDEBAR_TASK_PRIORITY_GROUPS = [
   'error',
   'completed',
   'interrupted',
-  'working',
   'idle',
+  'working',
   'pending-review',
   'long-term',
   'archived',
@@ -220,6 +220,12 @@ export type SidebarSnapshot = {
   taskPriorityMode?: boolean;
   /** Priority group order. Archived is normalized to the final position. */
   taskPriorityOrder?: SidebarTaskPriorityGroup[];
+  /**
+   * Set once the user reorders a priority group by hand. A stored order that
+   * happens to equal a default we have since superseded is otherwise
+   * indistinguishable from an untouched one, and would be migrated away.
+   */
+  taskPriorityOrderCustomized?: boolean;
   taskGroupVisibleLimit?: SidebarTaskGroupVisibleLimit;
   taskBranchDisplay?: SidebarBranchDisplay;
   /** Lightly blur project and task metadata in the sidebar for privacy-conscious captures. */

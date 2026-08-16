@@ -50,6 +50,8 @@ describe('generateSessionSummary CLI failures', () => {
       runtimeId: 'claude' as const,
       runtimeName: 'Claude Code',
       model: 'claude-haiku-4-5',
+      agentId: null,
+      agentName: null,
       systemPrompt: 'Summarize faithfully.',
       language: 'zh-CN' as const,
       context: { user: true, assistant: true, project: false },

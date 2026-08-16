@@ -36,21 +36,24 @@ describe('MaaS Gateway entry-point wiring', () => {
     expect(source).toContain('onManage={openMaasManagement}');
     expect(source).toContain('onOpenLogs={openMaasLogs}');
     expect(source).toMatch(
-      /const openMaasManagement = useCallback\(\(\) => \{\s+dismissMaasPopoverThen\(\(\) => \{\s+appState\.navigation\.navigate\('maas'\);/
+      /const openMaasManagement = useCallback\(\(\) => \{\s+dismissMaasPopoverThen\(\(\) => \{\s+appState\.navigation\.navigate\('settings', \{\s+tab: 'maas',/
     );
     expect(source).toMatch(
       /const openMaasLogs = useCallback\(\(\) => \{\s+dismissMaasPopoverThen\(\(\) => \{\s+appState\.sidePane\.pinView\('settings', \{ tab: 'ai-logs' \}\);/
     );
   });
 
-  it('routes the Settings MaaS requirement to Library Extensions', () => {
+  it('keeps model access on the Settings pane instead of a standalone route', () => {
     const source = readFileSync(
       new URL('../features/settings/components/SettingsPage.tsx', import.meta.url),
       'utf8'
     );
 
     expect(source).toMatch(
-      /<MaasView\s+embedded\s+onOpenMarketplace=\{\(\) =>\s+navigate\('library', \{ section: 'extensions' \}\)\s*\}/
+      /<MaasView\s+key=\{focusMaasPlatformId \?\? ''\}\s+embedded\s+requestedPlatformId=\{focusMaasPlatformId\}\s+onOpenMarketplace=\{\(\) =>\s+navigate\('library', \{ section: 'extensions' \}\)\s*\}/
+    );
+    expect(readFileSync(new URL('./view-registry.ts', import.meta.url), 'utf8')).not.toContain(
+      'maas: maasView'
     );
   });
 });

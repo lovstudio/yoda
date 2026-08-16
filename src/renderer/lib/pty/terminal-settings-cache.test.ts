@@ -22,7 +22,7 @@ vi.mock('@renderer/lib/ipc', () => ({
 function terminalSettings(overrides: Partial<TerminalSettings> = {}): TerminalSettings {
   return {
     autoCopyOnSelection: true,
-    smartPathOpenMode: 'internal',
+    linkOpen: { file: 'yoda', url: 'yoda', fileRules: [] },
     scrollbackLines: 50_000,
     hotTerminalMode: 'auto',
     hotTerminalLimit: 4,

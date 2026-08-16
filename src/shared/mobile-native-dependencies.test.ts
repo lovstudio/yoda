@@ -22,6 +22,20 @@ describe('mobile native dependencies', () => {
     expect(mobilePackage.dependencies?.['expo-font']).toBe(`~${installedExpoFont.version}`);
   });
 
+  it('declares the network module the LAN gateway sweep needs', () => {
+    const mobilePackageUrl = new URL('../../apps/mobile/package.json', import.meta.url);
+    const mobilePackage = JSON.parse(readFileSync(mobilePackageUrl, 'utf8')) as {
+      dependencies?: Record<string, string>;
+    };
+    const expoNativeModules = JSON.parse(
+      readFileSync(require.resolve('expo/bundledNativeModules.json'), 'utf8')
+    ) as Record<string, string>;
+
+    // Scanning the phone's own /24 starts from the phone's IPv4 address, which
+    // only expo-network can report; without it the sweep silently finds nothing.
+    expect(mobilePackage.dependencies?.['expo-network']).toBe(expoNativeModules['expo-network']);
+  });
+
   it('declares and configures image, locale, and speech input native modules', () => {
     const mobilePackage = JSON.parse(
       readFileSync(new URL('../../apps/mobile/package.json', import.meta.url), 'utf8')

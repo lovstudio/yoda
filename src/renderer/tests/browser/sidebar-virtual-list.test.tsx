@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
     taskPriorityMode: boolean;
     collapsedTaskGroupIds: Set<string>;
     sidebarArchivedTaskLoadState: 'idle' | 'loading' | 'error';
+    sidebarArchivedHydrationToken: string;
     taskGroupVisibleLimit: number;
     taskGroupBy: 'project';
     holdTaskReflow: ReturnType<typeof vi.fn>;
@@ -82,6 +83,7 @@ vi.mock('@renderer/lib/stores/app-state', async () => {
     taskPriorityMode: false,
     collapsedTaskGroupIds: observable.set<string>(),
     sidebarArchivedTaskLoadState: 'idle' as const,
+    sidebarArchivedHydrationToken: ' 0',
     taskGroupVisibleLimit: 5,
     taskGroupBy: 'project' as const,
     holdTaskReflow: vi.fn(),
@@ -243,6 +245,7 @@ describe('SidebarVirtualList', () => {
       mocks.sidebarStore.taskPriorityMode = false;
       mocks.sidebarStore.collapsedTaskGroupIds.clear();
       mocks.sidebarStore.sidebarArchivedTaskLoadState = 'idle';
+      mocks.sidebarStore.sidebarArchivedHydrationToken = ' 0';
       mocks.loadMoreSidebarArchivedTasks.mockReset().mockResolvedValue(0);
       mocks.staleVirtualItemKey = null;
       mocks.virtualizerOptions = [];
@@ -414,6 +417,44 @@ describe('SidebarVirtualList', () => {
     });
     expect(mocks.loadMoreSidebarArchivedTasks).toHaveBeenCalledWith(10);
     expect(document.querySelectorAll('[data-testid^="task-"]')).toHaveLength(10);
+  });
+
+  it('re-hydrates the open archived group after its hydration scope resets', async () => {
+    const archivedGroup: SidebarRow = {
+      kind: 'group',
+      group: { kind: 'priority', priority: 'archived', count: 4 },
+    };
+    const archivedRows: SidebarRow[] = Array.from(
+      { length: 4 },
+      (_, index): SidebarRow => ({
+        kind: 'task',
+        projectId: 'project-1',
+        taskId: `archived-${index + 1}`,
+        showProjectTag: true,
+      })
+    );
+    runInAction(() => {
+      mocks.sidebarStore.taskPriorityMode = true;
+      mocks.sidebarStore.sidebarRows = [archivedGroup, ...archivedRows];
+      mocks.sidebarStore.sidebarArchivedHydrationToken = 'project-1 4';
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mocks.ensureSidebarArchivedTasksHydrated).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-testid="show-more-tasks"]')).toBeNull();
+
+    // A project mount / workspace switch releases every hydrated archived row
+    // while the group header keeps its database count.
+    runInAction(() => {
+      mocks.sidebarStore.sidebarRows = [archivedGroup];
+      mocks.sidebarStore.sidebarArchivedHydrationToken = ' 0';
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(mocks.ensureSidebarArchivedTasksHydrated).toHaveBeenCalledTimes(2);
   });
 
   it('shows copyable diagnostics when archived priority rows fail to load', async () => {

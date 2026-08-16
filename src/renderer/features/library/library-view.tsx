@@ -1,18 +1,4 @@
-import {
-  AppWindow,
-  Bot,
-  Boxes,
-  Check,
-  FileText,
-  Menu,
-  Plug,
-  Puzzle,
-  Store,
-  Webhook,
-  Workflow,
-  type LucideIcon,
-} from 'lucide-react';
-import { createContext, Fragment, useCallback, useContext, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_LIBRARY_SECTION } from '@renderer/app/route-identity';
 import { GlobalHooksMainPanel } from '@renderer/features/agent-hooks/global-hooks-view';
@@ -25,15 +11,9 @@ import PluginsView from '@renderer/features/plugins/PluginsView';
 import { PromptLibraryPanel } from '@renderer/features/prompt-library/prompt-library-panel';
 import { SkillsMainPanel } from '@renderer/features/skills/skills-view';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
-import { useIsPinHosted, useParams } from '@renderer/lib/layout/navigation-provider';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from '@renderer/lib/ui/dropdown-menu';
-import { cn } from '@renderer/utils/utils';
+import { useParams } from '@renderer/lib/layout/navigation-provider';
+import { SectionNavDropdown, type SectionNavGroup } from '@renderer/lib/ui/section-nav';
+import { SectionPage } from '@renderer/lib/ui/section-page';
 
 /** The Library groups the user's reusable resources behind one nav entry. */
 export type LibrarySection =
@@ -49,8 +29,10 @@ export type LibrarySection =
 
 type LibrarySectionEntry = {
   id: LibrarySection;
-  icon: LucideIcon;
   labelKey: string;
+  descriptionKey: string;
+  /** Sections that own their height and scrolling (a running app) fill instead. */
+  fill?: boolean;
 };
 
 /**
@@ -60,33 +42,63 @@ type LibrarySectionEntry = {
  */
 const SECTION_GROUPS: {
   id: 'basic' | 'advanced';
-  labelKey: string;
   sections: LibrarySectionEntry[];
 }[] = [
   {
     id: 'basic',
-    labelKey: 'library.groups.basic',
     sections: [
-      { id: 'prompts', icon: FileText, labelKey: 'library.sections.prompts' },
-      { id: 'skills', icon: Boxes, labelKey: 'library.sections.skills' },
-      { id: 'plugins', icon: Puzzle, labelKey: 'library.sections.plugins' },
-      { id: 'hooks', icon: Webhook, labelKey: 'library.sections.hooks' },
-      { id: 'mcp', icon: Plug, labelKey: 'library.sections.mcp' },
-      { id: 'agents', icon: Bot, labelKey: 'library.sections.agents' },
+      {
+        id: 'prompts',
+        labelKey: 'library.sections.prompts',
+        descriptionKey: 'promptLibrary.subtitle',
+      },
+      { id: 'skills', labelKey: 'library.sections.skills', descriptionKey: 'skills.subtitle' },
+      { id: 'plugins', labelKey: 'library.sections.plugins', descriptionKey: 'plugins.subtitle' },
+      { id: 'hooks', labelKey: 'library.sections.hooks', descriptionKey: 'hooksLibrary.subtitle' },
+      { id: 'mcp', labelKey: 'library.sections.mcp', descriptionKey: 'mcp.subtitle' },
+      {
+        id: 'agents',
+        labelKey: 'library.sections.agents',
+        descriptionKey: 'agentManager.subtitle',
+      },
     ],
   },
   {
     id: 'advanced',
-    labelKey: 'library.groups.advanced',
     sections: [
-      { id: 'automation', icon: Workflow, labelKey: 'library.sections.automation' },
-      { id: 'extensions', icon: Store, labelKey: 'library.sections.extensions' },
-      { id: 'apps', icon: AppWindow, labelKey: 'library.sections.apps' },
+      {
+        id: 'automation',
+        labelKey: 'library.sections.automation',
+        descriptionKey: 'automation.subtitle',
+      },
+      {
+        id: 'extensions',
+        labelKey: 'library.sections.extensions',
+        descriptionKey: 'extensions.subtitle',
+      },
+      {
+        id: 'apps',
+        labelKey: 'library.sections.apps',
+        descriptionKey: 'aiLab.subtitle',
+        fill: true,
+      },
     ],
   },
 ];
 
 const SECTIONS: LibrarySectionEntry[] = SECTION_GROUPS.flatMap((group) => group.sections);
+
+/** SECTION_GROUPS with labels resolved, in the shape the shared nav rail takes. */
+function useLibraryNavGroups(): SectionNavGroup<LibrarySection>[] {
+  const { t } = useTranslation();
+  return SECTION_GROUPS.map(({ id, sections }) => ({
+    id,
+    items: sections.map(({ id: sectionId, labelKey }) => ({
+      id: sectionId,
+      label: t(labelKey),
+    })),
+  }));
+}
 
 const LibrarySectionContext = createContext<{
   section: LibrarySection;
@@ -171,30 +183,33 @@ function LibrarySectionContent({
   createPrompt: boolean;
   onCreatePromptConsumed: () => void;
 }) {
+  // Every panel renders embedded: the shell already supplies the page frame,
+  // the title and the description, so a panel only brings its own body.
   switch (section) {
     case 'extensions':
-      return <ExtensionMarketplaceView />;
+      return <ExtensionMarketplaceView embedded />;
     case 'apps':
       return <AiLabView embedded activeAppId={appId} onActiveAppChange={onAppChange} />;
     case 'prompts':
       return (
         <PromptLibraryPanel
+          embedded
           initialAction={createPrompt ? 'create' : undefined}
           onInitialActionConsumed={onCreatePromptConsumed}
         />
       );
     case 'agents':
-      return <AgentManagerMainPanel />;
+      return <AgentManagerMainPanel embedded />;
     case 'skills':
-      return <SkillsMainPanel />;
+      return <SkillsMainPanel embedded />;
     case 'plugins':
-      return <PluginsView />;
+      return <PluginsView embedded />;
     case 'hooks':
-      return <GlobalHooksMainPanel />;
+      return <GlobalHooksMainPanel embedded />;
     case 'mcp':
-      return <McpMainPanel />;
+      return <McpMainPanel embedded />;
     case 'automation':
-      return <AutomationMainPanel />;
+      return <AutomationMainPanel embedded />;
   }
 }
 
@@ -210,33 +225,15 @@ export function LibrarySectionDropdown({
   className?: string;
 }) {
   const { t } = useTranslation();
+  const navGroups = useLibraryNavGroups();
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label={t('sidebar.library')}
-        title={t('sidebar.library')}
-        className={cn(
-          'flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground',
-          className
-        )}
-      >
-        <Menu className="size-4" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        {SECTION_GROUPS.map(({ id: groupId, labelKey: groupLabelKey, sections }) => (
-          <Fragment key={groupId}>
-            <DropdownMenuLabel>{t(groupLabelKey)}</DropdownMenuLabel>
-            {sections.map(({ id, icon: Icon, labelKey }) => (
-              <DropdownMenuItem key={id} onClick={() => onSectionChange(id)}>
-                <Icon className="size-4 shrink-0" />
-                <span className="truncate">{t(labelKey)}</span>
-                {id === activeSection && <Check className="ml-auto size-3.5" />}
-              </DropdownMenuItem>
-            ))}
-          </Fragment>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <SectionNavDropdown
+      groups={navGroups}
+      activeId={activeSection}
+      onSelect={onSectionChange}
+      label={t('sidebar.library')}
+      className={className}
+    />
   );
 }
 
@@ -247,68 +244,32 @@ export function LibraryPaneHeaderSlot() {
 }
 
 export function LibraryMainPanel() {
-  const { t } = useTranslation();
   const { section, onSectionChange, appId, onAppChange, createPrompt, onCreatePromptConsumed } =
     useLibrarySection();
-  // In the side pane the chip-strip row hosts the picker — don't double it.
-  const isPinHosted = useIsPinHosted();
+  const { t } = useTranslation();
+  const navGroups = useLibraryNavGroups();
+  const entry = SECTIONS.find(({ id }) => id === section) ?? SECTIONS[0];
   return (
     // @container so the layout adapts to its host's width (full window, shell
     // side pane, …) instead of the viewport.
     <div className="@container flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background text-foreground">
-      {/* The nav rail collapses below @lg, where it's too cramped to be usable;
-          the picker moves into the content header (or the chip-strip when
-          pin-hosted). */}
-      <nav className="flex w-52 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border bg-background-secondary p-2 @max-lg:hidden">
-        {SECTION_GROUPS.map(({ id: groupId, labelKey: groupLabelKey, sections }, groupIndex) => (
-          <Fragment key={groupId}>
-            <div
-              className={cn(
-                'px-2.5 pb-1 text-[10px] font-medium uppercase tracking-wider text-foreground-passive',
-                groupIndex === 0 ? 'pt-1' : 'pt-3'
-              )}
-            >
-              {t(groupLabelKey)}
-            </div>
-            {sections.map(({ id, icon: Icon, labelKey }) => {
-              const active = id === section;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => onSectionChange(id)}
-                  aria-current={active}
-                  className={cn(
-                    'flex h-8 items-center gap-2 rounded-md px-2.5 text-sm transition-colors',
-                    active
-                      ? 'bg-background-1 text-foreground'
-                      : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
-                  )}
-                >
-                  <Icon className="size-4 shrink-0" />
-                  <span className="truncate">{t(labelKey)}</span>
-                </button>
-              );
-            })}
-          </Fragment>
-        ))}
-      </nav>
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {!isPinHosted && (
-          <div className="hidden shrink-0 items-center justify-end border-b border-border px-3 py-1.5 @max-lg:flex">
-            <LibrarySectionDropdown section={section} onSectionChange={onSectionChange} />
-          </div>
-        )}
-        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-          <LibrarySectionContent
-            section={section}
-            appId={appId}
-            onAppChange={onAppChange}
-            createPrompt={createPrompt}
-            onCreatePromptConsumed={onCreatePromptConsumed}
-          />
-        </div>
-      </div>
+      <SectionPage
+        groups={navGroups}
+        activeId={section}
+        onSelect={onSectionChange}
+        navLabel={t('sidebar.library')}
+        title={t(entry.labelKey)}
+        description={t(entry.descriptionKey)}
+        fill={entry.fill}
+      >
+        <LibrarySectionContent
+          section={section}
+          appId={appId}
+          onAppChange={onAppChange}
+          createPrompt={createPrompt}
+          onCreatePromptConsumed={onCreatePromptConsumed}
+        />
+      </SectionPage>
     </div>
   );
 }

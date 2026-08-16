@@ -26,7 +26,7 @@ describe('enqueueRendererErrorNotification', () => {
       title: 'Application error',
       description: 'render failed',
       kind: 'error',
-      source: 'system',
+      source: 'app',
       reason: 'error',
       occurrenceCount: 2,
     });

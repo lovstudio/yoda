@@ -1,6 +1,10 @@
-import { homedir } from 'node:os';
+import { cpus, homedir, totalmem } from 'node:os';
 import type { AiLabWindowTarget } from '@shared/ai-lab-window';
-import type { AppResourceSnapshotOptions, RendererPerformanceSample } from '@shared/app-resource';
+import type {
+  AppResourceSnapshotOptions,
+  MachineCapacity,
+  RendererPerformanceSample,
+} from '@shared/app-resource';
 import type { ComparisonWindowTarget } from '@shared/comparison-window';
 import type { TaskWindowReturnPayload } from '@shared/events/appEvents';
 import { createRPCController } from '@shared/ipc/rpc';
@@ -187,6 +191,10 @@ export const appController = createRPCController({
   },
   getElectronVersion: () => process.versions.electron,
   getPlatform: () => process.platform,
+  getMachineCapacity: (): MachineCapacity => ({
+    totalMemoryBytes: totalmem(),
+    cpuCount: cpus().length,
+  }),
   getHomeDir: () => homedir(),
   consumePendingDeepLinks: () => deepLinkService.consumePendingTargets(),
   consumePendingExternalFiles: () => appService.consumePendingExternalFiles(),

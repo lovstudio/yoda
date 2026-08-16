@@ -3,6 +3,11 @@ import { observer } from 'mobx-react-lite';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TaskOutputLanguage } from '@shared/project-settings';
+import {
+  PROMPT_REWRITE_LANGUAGE_OPTIONS,
+  TASK_LANGUAGE_OPTIONS,
+  taskLanguageLabel,
+} from '@renderer/features/tasks/components/task-language-select';
 import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
 import {
   Select,
@@ -14,20 +19,20 @@ import {
 import { Switch } from '@renderer/lib/ui/switch';
 import { cn } from '@renderer/utils/utils';
 
-const TASK_OUTPUT_ENABLED_LANGUAGE_OPTIONS: TaskOutputLanguage[] = ['app', 'prompt', 'zh-CN', 'en'];
-const INPUT_PROMPT_ENABLED_LANGUAGE_OPTIONS: TaskOutputLanguage[] = ['app', 'zh-CN', 'en'];
-export const DEFAULT_TASK_OUTPUT_LANGUAGE: TaskOutputLanguage = 'skip';
-export const DEFAULT_SUMMARY_OUTPUT_LANGUAGE: TaskOutputLanguage = 'app';
-export const DEFAULT_INPUT_PROMPT_LANGUAGE: TaskOutputLanguage = 'skip';
-
 export interface ComposerSettingsContentProps {
   attachImagesAsPaths: boolean;
+  promptRewriteEnabled: boolean;
   inputPromptLanguage: TaskOutputLanguage;
+  autoGenerateName: boolean;
   namingLanguage: TaskOutputLanguage;
+  autoGenerateSummary: boolean;
   summaryLanguage: TaskOutputLanguage;
   onAttachImagesAsPathsChange: (value: boolean) => void;
+  onPromptRewriteEnabledChange: (value: boolean) => void;
   onInputPromptLanguageChange: (value: TaskOutputLanguage) => void;
+  onAutoGenerateNameChange: (value: boolean) => void;
   onNamingLanguageChange: (value: TaskOutputLanguage) => void;
+  onAutoGenerateSummaryChange: (value: boolean) => void;
   onSummaryLanguageChange: (value: TaskOutputLanguage) => void;
   footer?: ReactNode;
 }
@@ -39,12 +44,18 @@ export interface ComposerSettingsContentProps {
  */
 export const ComposerSettingsContent = observer(function ComposerSettingsContent({
   attachImagesAsPaths,
+  promptRewriteEnabled,
   inputPromptLanguage,
+  autoGenerateName,
   namingLanguage,
+  autoGenerateSummary,
   summaryLanguage,
   onAttachImagesAsPathsChange,
+  onPromptRewriteEnabledChange,
   onInputPromptLanguageChange,
+  onAutoGenerateNameChange,
   onNamingLanguageChange,
+  onAutoGenerateSummaryChange,
   onSummaryLanguageChange,
   footer,
 }: ComposerSettingsContentProps) {
@@ -71,20 +82,25 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
         <ComposerLanguageSelectRow
           label={t('settings.tasks.inputPromptLanguageLabel')}
           value={inputPromptLanguage}
-          options={INPUT_PROMPT_ENABLED_LANGUAGE_OPTIONS}
-          disabledValues={['skip', 'prompt']}
+          options={PROMPT_REWRITE_LANGUAGE_OPTIONS}
+          enabled={promptRewriteEnabled}
+          onEnabledChange={onPromptRewriteEnabledChange}
           onValueChange={onInputPromptLanguageChange}
         />
         <ComposerLanguageSelectRow
           label={t('settings.tasks.sessionTitleLanguageLabel')}
           value={namingLanguage}
-          options={TASK_OUTPUT_ENABLED_LANGUAGE_OPTIONS}
+          options={TASK_LANGUAGE_OPTIONS}
+          enabled={autoGenerateName}
+          onEnabledChange={onAutoGenerateNameChange}
           onValueChange={onNamingLanguageChange}
         />
         <ComposerLanguageSelectRow
           label={t('settings.tasks.summaryLanguageLabel')}
           value={summaryLanguage}
-          options={TASK_OUTPUT_ENABLED_LANGUAGE_OPTIONS}
+          options={TASK_LANGUAGE_OPTIONS}
+          enabled={autoGenerateSummary}
+          onEnabledChange={onAutoGenerateSummaryChange}
           onValueChange={onSummaryLanguageChange}
         />
       </ComposerSettingsSection>
@@ -146,38 +162,28 @@ function ComposerSettingRow({
   );
 }
 
-function taskOutputLanguageLabel(t: ReturnType<typeof useTranslation>['t'], value: string): string {
-  switch (value) {
-    case 'skip':
-      return t('settings.tasks.namingLanguageSkip');
-    case 'app':
-      return t('settings.tasks.namingLanguageApp');
-    case 'prompt':
-      return t('settings.tasks.namingLanguagePrompt');
-    case 'zh-CN':
-      return t('settings.tasks.namingLanguageZh');
-    case 'en':
-      return t('settings.tasks.namingLanguageEn');
-    default:
-      return value;
-  }
-}
-
+/**
+ * One language-backed capability: a switch for whether it runs at all, plus the
+ * target language it uses when it does. Same split as the Sessions settings tab,
+ * at composer density — and, as there, the language stays editable while the
+ * capability is off, so it can be configured before being switched on.
+ */
 function ComposerLanguageSelectRow({
   label,
   value,
   options,
-  disabledValues = ['skip'],
+  enabled,
+  onEnabledChange,
   onValueChange,
 }: {
   label: string;
   value: TaskOutputLanguage;
   options: TaskOutputLanguage[];
-  disabledValues?: TaskOutputLanguage[];
+  enabled: boolean;
+  onEnabledChange: (value: boolean) => void;
   onValueChange: (value: TaskOutputLanguage) => void;
 }) {
   const { t } = useTranslation();
-  const enabled = !disabledValues.includes(value);
   return (
     <div className="flex min-h-10 items-center justify-between gap-3 px-3 py-2">
       <span
@@ -189,20 +195,21 @@ function ComposerLanguageSelectRow({
         {label}
       </span>
       <div className="flex shrink-0 items-center justify-end gap-1.5">
-        {enabled ? (
-          <Select value={value} onValueChange={(next) => onValueChange(next as TaskOutputLanguage)}>
-            <SelectTrigger size="sm" className="h-7 w-28 text-[11px]">
-              <SelectValue>{taskOutputLanguageLabel(t, value)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {options.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {taskOutputLanguageLabel(t, option)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : null}
+        <Select value={value} onValueChange={(next) => onValueChange(next as TaskOutputLanguage)}>
+          <SelectTrigger
+            size="sm"
+            className={cn('h-7 w-28 text-[11px]', !enabled && 'text-foreground-passive')}
+          >
+            <SelectValue>{taskLanguageLabel(t, value)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((option) => (
+              <SelectItem key={option} value={option}>
+                {taskLanguageLabel(t, option)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Switch
           size="sm"
           checked={enabled}
@@ -214,7 +221,7 @@ function ComposerLanguageSelectRow({
             enabled ? 'home.composerLanguageCallDisable' : 'home.composerLanguageCallEnable',
             { label }
           )}
-          onCheckedChange={(next) => onValueChange(next ? 'app' : 'skip')}
+          onCheckedChange={onEnabledChange}
         />
       </div>
     </div>

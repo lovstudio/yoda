@@ -20,6 +20,7 @@ import type {
 } from '@main/core/conversations/types';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import { SshFileSystem } from '@main/core/fs/impl/ssh-fs';
+import { captureAgentExitTail, describeAgentExit } from '@main/core/pty/agent-exit-diagnostics';
 import type { Pty } from '@main/core/pty/pty';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { resolveSshCommand } from '@main/core/pty/spawn-utils';
@@ -386,7 +387,7 @@ export class SshConversationProvider implements ConversationProvider {
       // `working` while the provider CLI is still mid-turn.
       let exitClassification: Promise<PtyExitClassification> | null = null;
       let exitedBeforeCommit = false;
-      pty.onExit(({ exitCode }) => {
+      pty.onExit(({ exitCode, signal }) => {
         if (this.intentionallyDetachedPtys.delete(pty)) {
           this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
           return;
@@ -394,6 +395,12 @@ export class SshConversationProvider implements ConversationProvider {
         if (!startCommitted) exitedBeforeCommit = true;
         this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
         if (this.sessions.get(sessionId) !== pty) return;
+        // A CLI that dies mid-turn writes no API error and no crash report, so
+        // its last screen is the only evidence of why the turn stopped. Exit
+        // finalization clears the replay ring buffer, hence the snapshot here,
+        // synchronously, before the asynchronous tmux probe below.
+        const exitTail = captureAgentExitTail(sessionId);
+        const exitReason = describeAgentExit({ exitCode, signal });
         // The transport is gone either way, so stop routing input into a dead
         // channel before the probe resolves; `sendInput` falls back to headless
         // `tmux send-keys` exactly as it does for an idle detach.
@@ -414,6 +421,13 @@ export class SshConversationProvider implements ConversationProvider {
           // A replacement transport that registered while the probe was in
           // flight owns the run state now.
           if (this.sessions.has(sessionId)) return 'transport-lost';
+          log.warn('SshConversation: agent CLI exited', {
+            sessionId,
+            conversationId: conversation.id,
+            runtimeId: conversation.runtimeId,
+            exitReason,
+            exitTail: exitTail || '(no output captured)',
+          });
           this.sessionInfos.delete(sessionId);
           markRuntimeSessionExited({
             projectId: conversation.projectId,

@@ -43,6 +43,10 @@ vi.mock('@renderer/features/tasks/task-view-context', () => ({
   useRequireProvisionedTask: () => mocks.provisioned,
 }));
 
+vi.mock('@renderer/features/tasks/terminals/use-workspace-file-links', () => ({
+  useWorkspaceFileLinks: () => null,
+}));
+
 vi.mock('@renderer/features/tasks/terminals/use-workspace-web-links', () => ({
   useWorkspaceWebLinks: () => null,
 }));

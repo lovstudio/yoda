@@ -5,8 +5,8 @@ export function McpTitlebar() {
   return <Titlebar />;
 }
 
-export function McpMainPanel() {
-  return <McpView />;
+export function McpMainPanel({ embedded = false }: { embedded?: boolean } = {}) {
+  return <McpView embedded={embedded} />;
 }
 
 export const mcpView = {

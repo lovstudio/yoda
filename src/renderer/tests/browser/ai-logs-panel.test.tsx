@@ -61,6 +61,7 @@ vi.mock('react-i18next', () => ({
 vi.mock('@renderer/features/ai-logs/use-ai-logs', () => ({
   useAiLogs: () => ({ data: [fixture], isLoading: false }),
   useClearAiLogs: () => ({ mutate: vi.fn(), isPending: false }),
+  useAiLogTrace: () => ({ data: null, isLoading: false }),
 }));
 
 vi.mock('@renderer/lib/hooks/use-toast', () => ({
@@ -86,7 +87,9 @@ describe('AiLogsPanel', () => {
     document.body.appendChild(host);
     root = createRoot(host);
     await act(async () => root.render(createElement(AiLogsPanel)));
-    await act(async () => host.querySelector<HTMLTableRowElement>('tbody tr')?.click());
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('[data-testid="ai-log-row"]')?.click()
+    );
   });
 
   afterEach(async () => {

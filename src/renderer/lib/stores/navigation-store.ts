@@ -23,7 +23,6 @@ export const viewEvents: Record<
   | 'skills_viewed'
   | 'mcp_viewed'
   | 'agents_viewed'
-  | 'maas_viewed'
   | 'automation_viewed'
   | 'mobile_viewed'
   | 'usage_viewed'
@@ -44,7 +43,6 @@ export const viewEvents: Record<
   mcp: 'mcp_viewed',
   agentManager: 'agents_viewed',
   agents: 'agents_viewed',
-  maas: 'maas_viewed',
   automation: 'automation_viewed',
   mobile: 'mobile_viewed',
   usage: 'usage_viewed',

@@ -1,26 +1,12 @@
-import dreamSkinArt from '@/assets/images/themes/codex-dream-skin.jpg';
-import dreamBloomArt from '@/assets/images/themes/dream-bloom.svg';
-import dreamClearArt from '@/assets/images/themes/dream-clear.svg';
-import dreamCosmosArt from '@/assets/images/themes/dream-cosmos.svg';
-import dreamFortuneArt from '@/assets/images/themes/dream-fortune.svg';
-import dreamGoldArt from '@/assets/images/themes/dream-gold.svg';
-import dreamPurpleArt from '@/assets/images/themes/dream-purple.svg';
-import dreamScifiArt from '@/assets/images/themes/dream-scifi.svg';
-import dreamVirtualArt from '@/assets/images/themes/dream-virtual.svg';
+import dreamArinaArt from '@/assets/images/themes/dream-arina.jpg';
+import dreamPantherArt from '@/assets/images/themes/dream-panther.jpg';
 import type { DREAM_SKIN_BUILTIN_IMAGES } from '@shared/custom-theme';
 
 const dreamSkinObjectUrls = new Map<string, string>();
 
 export const DREAM_SKIN_ASSETS: Record<(typeof DREAM_SKIN_BUILTIN_IMAGES)[number], string> = {
-  'builtin:dream-bloom': dreamBloomArt,
-  'builtin:dream-portal': dreamSkinArt,
-  'builtin:dream-fortune': dreamFortuneArt,
-  'builtin:dream-scifi': dreamScifiArt,
-  'builtin:dream-clear': dreamClearArt,
-  'builtin:dream-cosmos': dreamCosmosArt,
-  'builtin:dream-purple': dreamPurpleArt,
-  'builtin:dream-virtual': dreamVirtualArt,
-  'builtin:dream-gold': dreamGoldArt,
+  'builtin:dream-arina': dreamArinaArt,
+  'builtin:dream-panther': dreamPantherArt,
 };
 
 export function resolveDreamSkinAsset(image: string): string {

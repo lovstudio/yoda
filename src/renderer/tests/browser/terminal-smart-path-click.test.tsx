@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TERMINAL_LINK_OPEN_CHANGED_EVENT } from '@shared/terminal-settings';
 import { FrontendPty } from '@renderer/lib/pty/pty';
 import { PtyPane } from '@renderer/lib/pty/pty-pane';
 import type { TerminalFileLinkTarget } from '@renderer/lib/pty/terminal-file-links';
@@ -9,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   openFile: vi.fn<(target: TerminalFileLinkTarget) => void>(),
   openUrl: vi.fn<(url: string) => void>(),
   openExternal: vi.fn(async () => undefined),
+  openIn: vi.fn(async () => ({ success: true })),
 }));
 
 vi.mock('@renderer/lib/ipc', () => ({
@@ -19,12 +21,12 @@ vi.mock('@renderer/lib/ipc', () => ({
     app: {
       clipboardWriteText: vi.fn(async () => ({ success: true })),
       openExternal: mocks.openExternal,
-      openIn: vi.fn(async () => ({ success: true })),
+      openIn: mocks.openIn,
     },
     appSettings: {
       get: vi.fn(async () => ({
         autoCopyOnSelection: false,
-        smartPathOpenMode: 'internal',
+        linkOpen: { file: 'yoda', url: 'yoda', fileRules: [] },
         scrollbackLines: 10_000,
       })),
     },
@@ -62,6 +64,7 @@ describe('terminal link primary click', () => {
     mocks.openFile.mockReset();
     mocks.openUrl.mockReset();
     mocks.openExternal.mockClear();
+    mocks.openIn.mockClear();
     host = document.createElement('div');
     Object.assign(host.style, { width: '1000px', height: '400px' });
     document.body.appendChild(host);
@@ -174,12 +177,12 @@ describe('terminal link primary click', () => {
     expect(mocks.openUrl).toHaveBeenCalledWith(url);
   });
 
-  it('uses the system default app when terminal link behavior is external', async () => {
+  it('sends a URL to the system browser when the URL handler is system', async () => {
     const url = 'https://lovstudio.ai/about';
     await writeTerminal(pty, url);
     window.dispatchEvent(
-      new CustomEvent('terminal-smart-path-open-mode-changed', {
-        detail: { smartPathOpenMode: 'external' },
+      new CustomEvent(TERMINAL_LINK_OPEN_CHANGED_EVENT, {
+        detail: { file: 'yoda', url: 'system', fileRules: [] },
       })
     );
 
@@ -202,5 +205,42 @@ describe('terminal link primary click', () => {
     expect(mouseDown.defaultPrevented).toBe(true);
     expect(mocks.openExternal).toHaveBeenCalledWith(url);
     expect(mocks.openUrl).not.toHaveBeenCalled();
+  });
+
+  it('routes a file matching a per-format rule to an external app', async () => {
+    const path = '/Users/mark/Documents/shot.png';
+    await writeTerminal(pty, path);
+    window.dispatchEvent(
+      new CustomEvent(TERMINAL_LINK_OPEN_CHANGED_EVENT, {
+        detail: {
+          file: 'yoda',
+          url: 'yoda',
+          fileRules: [{ extensions: ['png'], handler: 'system' }],
+        },
+      })
+    );
+
+    const screen = host.querySelector<HTMLElement>('.xterm-screen');
+    if (!screen) throw new Error('xterm screen was not mounted');
+    const rect = screen.getBoundingClientRect();
+    const cellWidth = rect.width / pty.terminal.cols;
+    const cellHeight = rect.height / pty.terminal.rows;
+    const mouseDown = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 1,
+      clientX: rect.left + cellWidth * 10.5,
+      clientY: rect.top + cellHeight * 0.5,
+    });
+
+    screen.dispatchEvent(mouseDown);
+
+    expect(mouseDown.defaultPrevented).toBe(true);
+    // No line number, so the system default handler is Finder-without-reveal.
+    expect(mocks.openIn).toHaveBeenCalledWith(
+      expect.objectContaining({ app: 'finder', path, reveal: false })
+    );
+    expect(mocks.openFile).not.toHaveBeenCalled();
   });
 });

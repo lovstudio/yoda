@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDreamSkinTheme } from '@shared/custom-theme';
+import { DEFAULT_NOTIFICATION_CENTER_SOURCES } from '@shared/notifications';
 import { SettingsStore } from './settings-service';
 
 const mocks = vi.hoisted(() => ({
@@ -82,12 +83,26 @@ describe('SettingsStore', () => {
 
     expect(result).toEqual({
       autoCopyOnSelection: false,
-      smartPathOpenMode: 'internal',
+      linkOpen: { file: 'yoda', url: 'yoda', fileRules: [] },
       scrollbackLines: 10_000,
       hotTerminalMode: 'auto',
       hotTerminalLimit: 4,
       idleSessionTimeoutMinutes: 5,
     });
+  });
+
+  it('migrates the legacy smart-path switch into per-target link handlers', async () => {
+    mocks.selectExecute.mockResolvedValue([
+      {
+        key: 'terminal',
+        value: JSON.stringify({ autoCopyOnSelection: true, smartPathOpenMode: 'external' }),
+      },
+    ]);
+
+    const result = await new SettingsStore().get('terminal');
+
+    expect(result.linkOpen).toEqual({ file: 'system', url: 'system', fileRules: [] });
+    expect(result).not.toHaveProperty('smartPathOpenMode');
   });
 
   it('adds task appearance defaults to legacy interface settings', async () => {
@@ -147,6 +162,7 @@ describe('SettingsStore', () => {
       soundFocusMode: 'unfocused',
       accountUsageWarningEnabled: true,
       accountUsageWarningThreshold: 95,
+      notificationCenterSources: DEFAULT_NOTIFICATION_CENTER_SOURCES,
     });
   });
 });

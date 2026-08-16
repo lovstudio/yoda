@@ -7,7 +7,7 @@ import {
   otherNewTaskOpenMode,
 } from '@renderer/app/open-new-task';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
-import { useAltKeyHeld } from '@renderer/lib/hooks/use-alt-key-held';
+import { isAltOnlyModifier, useAltOnlyHeld } from '@renderer/lib/hooks/use-alt-only-held';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { SidebarMenuButton } from './sidebar-primitives';
 
@@ -26,7 +26,7 @@ export function NewTaskMenuButton({
 }) {
   const { t } = useTranslation();
   const { value: interfaceSettings } = useAppSettingsKey('interface');
-  const altHeld = useAltKeyHeld();
+  const altHeld = useAltOnlyHeld();
   const alternateMode = otherNewTaskOpenMode(interfaceSettings?.newTaskOpenMode ?? 'home');
   const alternateLabel = t(NEW_TASK_OPEN_MODE_LABEL_KEYS[alternateMode]);
   const label = altHeld
@@ -34,7 +34,7 @@ export function NewTaskMenuButton({
     : t('sidebar.newTask');
   const handleClick = React.useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
-      void openNewTaskFromPreference(currentProjectId, event.altKey);
+      void openNewTaskFromPreference(currentProjectId, isAltOnlyModifier(event));
     },
     [currentProjectId]
   );

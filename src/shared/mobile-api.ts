@@ -892,6 +892,10 @@ export type MobileGatewayConnectionInfo = {
   port: number;
   token: string | null;
   urls: string[];
+  /** False when the desktop only answers loopback, i.e. sync mode is relay-only.
+   *  `urls`, `localExpoUrl` and `pairingUrl` are empty in that case because none
+   *  of them would work from another host. */
+  lanSyncEnabled: boolean;
   connectionKind: 'tailscale' | 'lan' | 'local';
   localExpoUrl: string | null;
   installUrl: string;

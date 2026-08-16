@@ -6,18 +6,23 @@ describe('settings defaults', () => {
     expect(getDefaultForKey('project').tmuxByDefault).toBe(true);
   });
 
-  it('enables delivery summaries while leaving other language calls disabled', () => {
+  it('keeps naming and summaries on while prompt rewriting stays opt-in', () => {
     const tasks = getDefaultForKey('tasks');
     expect(tasks.workspacesEnabled).toBe(false);
+    expect(tasks.autoGenerateName).toBe(true);
+    expect(tasks.autoGenerateSummary).toBe(true);
+    // No default: absent means "never set", which makes the switch fall back to
+    // the legacy inference from `inputPromptLanguage` — 'skip' reads as off.
+    expect(tasks.promptRewriteEnabled).toBeUndefined();
     expect(tasks.inputPromptLanguage).toBe('skip');
-    expect(tasks.namingLanguage).toBe('skip');
+    expect(tasks.namingLanguage).toBe('app');
     expect(tasks.summaryLanguage).toBe('app');
   });
 
   it('uses stable terminal defaults without exposing a renderer switch', () => {
     expect(getDefaultForKey('terminal')).toMatchObject({
       autoCopyOnSelection: true,
-      smartPathOpenMode: 'internal',
+      linkOpen: { file: 'yoda', url: 'yoda', fileRules: [] },
       hotTerminalMode: 'auto',
       hotTerminalLimit: 4,
     });

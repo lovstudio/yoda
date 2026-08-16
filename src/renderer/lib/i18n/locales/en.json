@@ -189,10 +189,10 @@
       "error": "Error",
       "completed": "Completed",
       "interrupted": "Interrupted",
+      "idle": "Idle",
       "working": "In progress",
       "pending-review": "Completed · Review",
       "long-term": "Long-term",
-      "idle": "Dormant",
       "archived": "Archived"
     },
     "pinned": "Pinned",
@@ -553,7 +553,17 @@
       "description": "Configure how new tasks are created and run."
     },
     "sessionsTab": {
-      "description": "Configure session naming, summaries, archiving, and how sessions run."
+      "description": "Organized by a session's life cycle: created, running, archived."
+    },
+    "sessions": {
+      "createTitle": "Creation",
+      "createDescription": "How a new session starts by default.",
+      "assistanceTitle": "Assisted by agents",
+      "assistanceDescription": "Language, naming, and summaries an agent handles while a session runs.",
+      "eventsTitle": "Alerts and permissions",
+      "eventsDescription": "What a running session needs you to know or approve.",
+      "archiveTitle": "Archiving",
+      "archiveDescription": "What runs when you wrap up a session."
     },
     "account": {
       "description": "Manage your LovStudio account, credits, and Yoda cloud services.",
@@ -789,12 +799,6 @@
       "namingProfileDescription": "Profile used for automatic session and task naming.",
       "imageGenerationProfile": "Image generation Profile",
       "imageGenerationProfileDescription": "Profile used for Yoda AI avatar and other direct image generation calls.",
-      "promptTranslation": "Translate prompt before sending",
-      "promptTranslationDescription": "Reserved global preprocessing switch for translating Chinese prompts to English before sending them to the target Agent.",
-      "promptTranslationProfile": "Prompt translation Profile",
-      "promptTranslationProfileDescription": "Prompt translation uses this Profile, so Chinese preprocessing is not delegated to the target Agent.",
-      "showOriginalPrompt": "Keep original prompt",
-      "showOriginalPromptDescription": "When prompt translation is enabled, keep the user's original Chinese content in UI and debug surfaces.",
       "debugTitle": "Debug",
       "debugPrompt": "Test prompt",
       "debugDefaultPrompt": "Reply in one sentence that the current LLM Profile is working.",
@@ -1105,32 +1109,16 @@
       "yodaDark": "Yoda Dark",
       "yodaWarm": "Yoda Warm",
       "yodaDarkGreen": "Yoda Dark Green",
-      "yodaDream": "Blush Custom",
       "yodaDreamArina": "Arina Hashimoto Custom",
-      "yodaDreamNight": "Classic Night",
-      "yodaDreamFortune": "Fortune at Work",
-      "yodaDreamScifi": "Red White Sci-Fi",
-      "yodaDreamClear": "Crystal Clear",
-      "yodaDreamCosmos": "Idea Cosmos",
-      "yodaDreamPurple": "Purple Night",
-      "yodaDreamVirtual": "Future Rhythm",
-      "yodaDreamGold": "Stage Black Gold",
+      "yodaDreamPanther": "Pink Panther",
       "ariaSystem": "Set theme to system preference",
       "ariaLight": "Set theme to Yoda Light",
       "ariaLightGreen": "Set theme to Yoda Light Green",
       "ariaDark": "Set theme to Yoda Dark",
       "ariaWarm": "Set theme to Yoda Warm",
       "ariaDarkGreen": "Set theme to Yoda Dark Green",
-      "ariaDream": "Set theme to Yoda Dream Skin",
       "ariaDreamArina": "Set theme to the Arina Hashimoto custom skin",
-      "ariaDreamNight": "Set theme to Yoda Dream Night Skin",
-      "ariaDreamFortune": "Set theme to Fortune at Work skin",
-      "ariaDreamScifi": "Set theme to Red White Sci-Fi skin",
-      "ariaDreamClear": "Set theme to Crystal Clear skin",
-      "ariaDreamCosmos": "Set theme to Idea Cosmos skin",
-      "ariaDreamPurple": "Set theme to Purple Night skin",
-      "ariaDreamVirtual": "Set theme to Future Rhythm skin",
-      "ariaDreamGold": "Set theme to Stage Black Gold skin",
+      "ariaDreamPanther": "Set theme to the Pink Panther skin",
       "dreamSkinGallery": "Dream Skin gallery",
       "dreamSkinGalleryDescription": "A curated set of distinct, interactive Yoda skins.",
       "activeSkin": "Active",
@@ -1267,11 +1255,11 @@
     "notifications": {
       "title": "Notifications",
       "description": "Get notified when a task finishes or an Agent needs your attention.",
-      "turnCompletion": "Turn completion notifications",
+      "turnCompletion": "Task completion alerts",
       "turnCompletionDescription": "Set when to alert you that a task has finished.",
-      "permissionNotifications": "Enable permission notifications",
+      "permissionNotifications": "Permission alerts",
       "permissionNotificationsDescription": "Show a system banner when an Agent needs permission.",
-      "questionNotifications": "Enable question notifications",
+      "questionNotifications": "Waiting-for-answer alerts",
       "questionNotificationsDescription": "Show a system banner when an Agent is waiting for your answer.",
       "enabled": "On",
       "deliveryModes": {
@@ -1301,14 +1289,20 @@
       "branchNamingAi": "AI semantic name",
       "namingConfigTitle": "Naming",
       "namingConfigDescription": "Target language and context sources used to name sessions and tasks. Model calls are controlled by LLM Profiles.",
+      "autoGenerateSummary": "Auto-generate session summaries",
+      "autoGenerateSummaryDescription": "Refresh a session's summary after each reply. With this off, summaries are still available on demand from the session panel.",
       "summaryConfigTitle": "Session summary",
       "summaryConfigDescription": "The agent used to generate session summaries. Runs on its own client and model, independent of each session's runtime.",
       "namingAgentLabel": "Naming agent",
       "namingAgentHint": "Provides additional system prompt context for auto-naming; the actual Client, access method, and model come from the LLM Profile.",
       "summaryAgentLabel": "Summary agent",
       "summaryAgentHint": "The agent that generates session summaries. It runs entirely on its own client and model, so summaries keep working even if the session's own runtime is unavailable.",
-      "inputPromptLanguageLabel": "Input prompt language",
-      "inputPromptLanguageDescription": "Rewrite the user's prompt into the target language before sending. Skip disables rewriting; Prompt language keeps it as written.",
+      "promptRewriteTitle": "Input prompt rewriting",
+      "promptRewriteAgentLabel": "Rewrite agent",
+      "promptRewriteAgentHint": "The agent that rewrites the input prompt. Its own client and model win when it pins them; otherwise the rewrite follows the client selected for the session.",
+      "inputPromptLanguageLabel": "Rewrite language",
+      "inputPromptLanguageDescription": "Rewrite the input into a target language before sending it to the agent.",
+      "promptRewriteConfigDescription": "The agent that rewrites the input prompt, and the language it rewrites into.",
       "sessionTitleLanguageLabel": "Session title language",
       "summaryLanguageLabel": "Summary language",
       "summaryContext": {
@@ -1373,14 +1367,27 @@
       "linesUnit": "lines",
       "autoCopySelected": "Auto-copy selected text",
       "autoCopySelectedDescription": "Automatically copy text to clipboard when you select it in the terminal.",
-      "smartPathOpenMode": "Default terminal link behavior",
-      "smartPathOpenModeDescription": "Choose whether a single click on terminal URLs and file paths opens them in Yoda or with the system default app.",
-      "smartPathOpenInternal": "Open in Yoda",
-      "smartPathOpenExternal": "Open with default app",
+      "linkOpen": {
+        "fileTitle": "Open files with",
+        "fileDescription": "Handler for a file path clicked in the terminal.",
+        "urlTitle": "Open URLs with",
+        "urlDescription": "Handler for a URL clicked in the terminal.",
+        "rulesTitle": "Per-format overrides",
+        "rulesDescription": "Route specific extensions elsewhere; the first matching rule from the top wins.",
+        "addRule": "Add rule",
+        "removeRule": "Remove rule",
+        "extensionsPlaceholder": "png, jpg, pdf",
+        "yoda": "Open in Yoda",
+        "system": "System default app",
+        "browserYoda": "Yoda browser",
+        "browserSystem": "System browser"
+      },
       "hotTerminalLimit": "Background terminal cache",
-      "hotTerminalLimitDescription": "Auto keeps the four most recent terminal renderers warm and may reclaim more under sustained output or app memory pressure. Evicted sessions retain a bounded scrollback checkpoint.",
-      "hotTerminalAuto": "Auto (4 most recent)",
-      "hotTerminalFixed": "Fixed count",
+      "hotTerminalLimitDescription": "Auto derives how many terminal renderers stay resident from this machine’s memory and CPU cores, and reclaims more under sustained output or app memory pressure. Evicted sessions retain a bounded scrollback checkpoint.",
+      "hotTerminalMachineSummary": "This machine reports {{cores}} cores and {{memory}} GB, so auto resolves to {{limit}}.",
+      "hotTerminalMachineProbing": "Reading this machine’s capacity; using {{limit}} until it arrives.",
+      "hotTerminalAuto": "Auto",
+      "hotTerminalFixed": "Manual",
       "hotTerminalFixedLimit": "Background terminal cache count",
       "idleSessionTimeout": "Idle session hibernation",
       "idleSessionTimeoutDescription": "Release hidden completed or idle tmux agents after this timeout. Set to 0 to keep them.",
@@ -2402,6 +2409,8 @@
       "summaryFailedDescription": "Summary generation failed. It will retry after the next reply.",
       "summarySkipped": "Summary disabled",
       "summarySkippedDescription": "Summary generation is skipped by the current language setting.",
+      "summaryAutoDisabled": "Not generated yet",
+      "summaryAutoDisabledDescription": "Automatic summaries are off. Generate one for this session whenever you need it.",
       "summaryFromCompaction": "From the agent's compaction summary",
       "summaryGenerated": "Generated from the conversation",
       "agentReplyDisplayControl": "Agent reply display level: {{level}}",
@@ -2608,10 +2617,6 @@
     }
   },
   "library": {
-    "groups": {
-      "basic": "Basics",
-      "advanced": "Advanced"
-    },
     "sections": {
       "extensions": "Extensions",
       "apps": "Apps",
@@ -2853,6 +2858,7 @@
   },
   "promptLibrary": {
     "title": "Prompts",
+    "subtitle": "Reusable prompts and system instructions your sessions can draw on.",
     "tabs": {
       "ariaLabel": "Prompt configuration scope",
       "global": "Global",
@@ -3670,6 +3676,7 @@
     "noDescription": "No description",
     "noDescriptionShort": "No description",
     "duplicate": "Duplicate agent",
+    "forkAgent": "Fork as a template",
     "anyRuntime": "Any client",
     "skillsCount": "{{count}} skills",
     "icon": "Icon",
@@ -4556,7 +4563,7 @@
   },
   "aiLogs": {
     "title": "AI Logs",
-    "subtitle": "Every AI invocation the app makes — background CLI runs, API calls, and interactive sessions — with timings and full details for debugging.",
+    "subtitle": "Every AI invocation the app makes — interactive sessions and the turns inside them, background CLI work, API calls — with purpose, account, endpoint, timings and full input/output for debugging.",
     "filter": {
       "all": "All",
       "running": "Running",
@@ -4579,7 +4586,7 @@
     "finished": "Finished",
     "duration": "Duration",
     "command": "Command",
-    "prompt": "Prompt",
+    "prompt": "Input",
     "output": "Output",
     "error": "Error",
     "detailActions": "{{label}} actions",
@@ -4606,7 +4613,105 @@
       "llm-debug": "LLM debug",
       "interactive-session": "Interactive session",
       "interactive-turn": "Chat turn",
-      "utility": "Utility"
+      "utility": "Utility",
+      "avatar-generation": "Avatar generation",
+      "quick-action-compilation": "Quick action compilation",
+      "prompt-rewrite": "Prompt rewrite",
+      "skill-trigger-queries": "Skill trigger test",
+      "skill-revision": "Skill description rewrite"
+    },
+    "categoryLabel": "Category",
+    "category": {
+      "all": "All categories",
+      "conversation": "Conversation",
+      "builtin": "Built-in",
+      "image": "Image",
+      "inspect": "Debug"
+    },
+    "searchPlaceholder": "Search purpose, model, content…",
+    "noMatchTitle": "No matching invocations",
+    "noMatchDescription": "Try another keyword or filter.",
+    "summary": {
+      "total": "{{count}} total",
+      "succeeded": "{{count}} succeeded",
+      "failed": "{{count}} failed",
+      "running": "{{count}} running"
+    },
+    "chip": {
+      "mode": "Mode",
+      "runtime": "Client",
+      "model": "Model",
+      "agent": "Agent",
+      "account": "Account",
+      "endpoint": "Endpoint"
+    },
+    "account": {
+      "unrecorded": "Not recorded",
+      "unrecordedHint": "This invocation did not record where its account came from."
+    },
+    "endpoint": {
+      "clientManaged": "Client-managed",
+      "overriddenHint": "Base URL Yoda injected for this invocation.",
+      "clientHint": "Yoda did not override the base URL — the real endpoint comes from the client's own configuration."
+    },
+    "diagnosis": {
+      "timeoutSilent": "Timed out without printing anything: the selected model is most likely unavailable on the current endpoint (not enabled, unpriced, or throttled), so the request hung until the timeout. Switch to your main model and retry.",
+      "timeout": "The command did not finish within its timeout — the output below shows where it stalled.",
+      "interrupted": "The app quit while this invocation was still running, so its outcome is unknown.",
+      "sessionExited": "The session process exited before this turn finished, so the turn never settled.",
+      "missingCli": "The CLI client could not be found — make sure it is installed and on PATH.",
+      "upstream": "The upstream model service returned an error; see the raw error below."
+    },
+    "metadata": {
+      "projectId": "Project",
+      "taskId": "Task",
+      "conversationId": "Session",
+      "scope": "Scope",
+      "target": "Target",
+      "attempt": "Attempt",
+      "platform": "Platform",
+      "profileId": "Profile"
+    },
+    "trace": {
+      "title": "Process",
+      "loading": "Reading transcript…",
+      "summary": "{{requests}} requests · {{tokens}}",
+      "tokens": "in {{input}} · cached {{cached}} · out {{output}}",
+      "stepTokens": "in {{input}} out {{output}}",
+      "capped": "Showing the first {{shown}} of {{total}} steps",
+      "clipped": "{{count}} characters omitted — see the transcript for the full text",
+      "kind": {
+        "prompt": "Input",
+        "thinking": "Thinking",
+        "text": "Reply",
+        "tool-use": "Tool call",
+        "tool-result": "Tool result",
+        "compact": "Context compacted"
+      },
+      "unavailable": {
+        "unsupported-runtime": "This client's transcript format cannot be parsed yet, so there is no step detail.",
+        "no-conversation": "This invocation belongs to no session — the input and output above are the whole process.",
+        "no-transcript": "No matching transcript file; the worktree may have been removed.",
+        "empty-window": "The transcript has no rows in this time span."
+      }
+    },
+    "purposeDescription": {
+      "interactive-session": "One client process from launch to exit; every chat turn inside it is nested below.",
+      "interactive-turn": "One turn of a session: from your message until the AI stops working.",
+      "task-naming": "Names the task and branch from the first message.",
+      "session-title": "Generates the session title.",
+      "session-summary": "Condenses the session transcript into a delivery summary.",
+      "commit-message": "Writes a commit message from the current changes.",
+      "logo-generation": "Generates a logo image.",
+      "avatar-generation": "Generates an avatar image.",
+      "app-image-edit": "Edits an image in AI Lab.",
+      "maas-chat": "A direct chat from the model-access panel.",
+      "llm-debug": "A connectivity probe started from settings.",
+      "quick-action-compilation": "Compiles a custom quick action into an executable prompt.",
+      "prompt-rewrite": "Rewrites the prompt in the composer as requested.",
+      "skill-trigger-queries": "Generates trigger test queries for a skill.",
+      "skill-revision": "Rewrites a skill description from its evaluation results.",
+      "utility": "A built-in general-purpose AI task."
     }
   },
   "maas": {
@@ -5153,6 +5258,38 @@
       "title": "Config",
       "description": "Adjust common input and Agent options. Manage detailed prompts and instruction files in Library."
     },
+    "sync": {
+      "title": "Sync",
+      "description": "Choose how paired phones reach this desktop.",
+      "statusLabel": "Status",
+      "modes": {
+        "lan": {
+          "label": "Local network",
+          "description": "Phones on the same Wi-Fi connect directly. Nothing leaves the network."
+        },
+        "relay": {
+          "label": "Internet",
+          "description": "Traffic goes through Lovstudio Relay, so the phone works from anywhere."
+        },
+        "both": {
+          "label": "Both",
+          "description": "Prefer the local network, fall back to Relay when the desktop changes networks."
+        }
+      },
+      "lanOff": "Local network sync is off",
+      "lanNoAddress": "No local network address available",
+      "relayOff": "Internet sync is off",
+      "relayConnected": "Relay connected",
+      "relayConnecting": "Connecting to Relay",
+      "relayNotPaired": "Relay not paired yet",
+      "copyLanUrl": "Copy address",
+      "copyRelayError": "Copy error",
+      "relayErrorCopied": "Error copied",
+      "lanUrlCopied": "Address copied",
+      "lanUrlCopyFailed": "Could not copy the address",
+      "refresh": "Refresh",
+      "openPairing": "Pairing settings"
+    },
     "prompt": {
       "label": "Prompts",
       "triggerLabel": "Open {{name}} prompt configuration",
@@ -5238,10 +5375,13 @@
         "resolved": "Resolved"
       },
       "sourceValue": {
-        "toast": "App toast",
+        "app": "App",
         "agent": "Agent",
-        "automation": "Automation",
-        "system": "System"
+        "automation": "Automation"
+      },
+      "sources": {
+        "label": "Recorded sources",
+        "hint": "App covers Yoda's own failures and results. Unchecked sources still reach you elsewhere; they are just not kept here."
       },
       "system": {
         "agentAwaitingInput": "Agent is waiting for input"

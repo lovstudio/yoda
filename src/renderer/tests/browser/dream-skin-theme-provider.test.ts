@@ -3,9 +3,9 @@ import '@renderer/index.css';
 import {
   createDreamSkinTheme,
   DREAM_SKIN_BUILTIN_IMAGES,
+  DREAM_SKIN_LIGHT_BASE,
   YODA_DREAM_ARINA_THEME,
-  YODA_DREAM_GOLD_THEME,
-  YODA_DREAM_THEME,
+  YODA_DREAM_PANTHER_THEME,
   type CustomTheme,
 } from '@shared/custom-theme';
 import {
@@ -65,7 +65,7 @@ describe('Dream Skin document theme', () => {
     workspace.append(sidebar, main);
     document.body.appendChild(workspace);
 
-    applyThemeToDocument('ylight', YODA_DREAM_THEME);
+    applyThemeToDocument('ylight', DREAM_SKIN_LIGHT_BASE);
 
     expect(getComputedStyle(workspace, '::after').animationName).toBe('none');
     expect(getComputedStyle(sidebar).backdropFilter).toBe('none');
@@ -86,11 +86,11 @@ describe('Dream Skin document theme', () => {
     }
   });
 
-  it('uses the original floral gallery artwork for the default light skin', () => {
-    applyThemeToDocument('ylight', YODA_DREAM_THEME);
+  it('uses the bundled gallery artwork for the light palette base', () => {
+    applyThemeToDocument('ylight', DREAM_SKIN_LIGHT_BASE);
 
     const root = document.documentElement;
-    expect(root.style.getPropertyValue('--dream-skin-art')).toContain('dream-bloom.svg');
+    expect(root.style.getPropertyValue('--dream-skin-art')).toContain('dream-arina');
   });
 
   it('never paints skin metadata onto the artwork', () => {
@@ -107,17 +107,17 @@ describe('Dream Skin document theme', () => {
     applyThemeToDocument('ylight', YODA_DREAM_ARINA_THEME);
 
     const root = document.documentElement;
-    expect(root.style.getPropertyValue('--dream-skin-art')).toContain('dream-bloom.svg');
+    expect(root.style.getPropertyValue('--dream-skin-art')).toContain('dream-arina');
     expect(root.dataset.dreamDecoration).toBe('petals');
   });
 
   it('resolves a bundled gallery skin to its packaged artwork', () => {
-    applyThemeToDocument('ydark', YODA_DREAM_GOLD_THEME);
+    applyThemeToDocument('ylight', YODA_DREAM_PANTHER_THEME);
 
     const root = document.documentElement;
-    expect(root.dataset.dreamShell).toBe('dark');
+    expect(root.dataset.dreamShell).toBe('light');
     expect(root.dataset.dreamDecoration).toBe('glow');
-    expect(root.style.getPropertyValue('--dream-skin-art')).toContain('data:image/svg+xml');
+    expect(root.style.getPropertyValue('--dream-skin-art')).toContain('dream-panther');
   });
 
   it('normalizes a cached legacy skin before reading composition fields', () => {

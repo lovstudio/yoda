@@ -5,11 +5,43 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
 import * as React from 'react';
 import { cn } from '@renderer/utils/utils';
 
+type DerivedSelectItem = { label: React.ReactNode; value: unknown };
+
+/**
+ * Base UI resolves the trigger label from `Select.Root`'s `items` prop only — an unmounted popup
+ * registers nothing, so `<Select.Value />` would print the raw value (`internal`, `auto`, …).
+ * Collect the labels from the JSX tree so every call site keeps its translated label for free.
+ */
+function collectSelectItems(node: React.ReactNode, acc: DerivedSelectItem[]): void {
+  React.Children.forEach(node, (child) => {
+    if (!React.isValidElement(child)) return;
+    const props = child.props as { value?: unknown; children?: React.ReactNode };
+    if (child.type === SelectItem || child.type === SelectPrimitive.Item) {
+      if ('value' in props) acc.push({ label: props.children, value: props.value });
+      return;
+    }
+    if (props.children != null) collectSelectItems(props.children, acc);
+  });
+}
+
 function Select<Value, Multiple extends boolean | undefined = false>(
   props: SelectPrimitive.Root.Props<Value, Multiple>
 ) {
-  const normalizedProps =
-    'value' in props && props.value === undefined ? { ...props, value: null } : props;
+  const { items, children } = props;
+  const derivedItems = React.useMemo(() => {
+    if (items !== undefined) return undefined;
+    const collected: DerivedSelectItem[] = [];
+    collectSelectItems(children, collected);
+    return collected.length > 0
+      ? (collected as ReadonlyArray<{ label: React.ReactNode; value: Value }>)
+      : undefined;
+  }, [items, children]);
+
+  const normalizedProps = {
+    ...props,
+    ...(derivedItems ? { items: derivedItems } : null),
+    ...('value' in props && props.value === undefined ? { value: null } : null),
+  };
   return <SelectPrimitive.Root {...normalizedProps} />;
 }
 

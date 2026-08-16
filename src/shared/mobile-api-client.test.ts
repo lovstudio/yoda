@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  configureConnectionFailover,
   createDemand,
   fetchProfile,
   fetchSkills,
@@ -263,5 +264,94 @@ describe('mobile API connectivity diagnostics', () => {
       [{ receivedBytes: 6, totalBytes: 7 }],
       [{ receivedBytes: 7, totalBytes: 7 }],
     ]);
+  });
+});
+
+describe('mobile connection failover', () => {
+  afterEach(() => {
+    configureConnectionFailover(null);
+    vi.unstubAllGlobals();
+  });
+
+  const dead = { baseUrl: 'http://192.168.100.124:3879', token: 'dev-mobile-token' };
+  const alive = { baseUrl: 'http://192.168.100.60:3879', token: 'dev-mobile-token' };
+
+  it('rediscovers the desktop when the only stored endpoint is the dead one', async () => {
+    // The phone locked to the LAN holds exactly one address, so there is nothing
+    // to fail over to. Without a sweep it retries that dead address forever.
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementation((input) =>
+        String(input).startsWith(alive.baseUrl)
+          ? Promise.resolve(new Response(JSON.stringify({ tasks: [] }), { status: 200 }))
+          : Promise.reject(new TypeError('Network request timed out'))
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const rediscover = vi.fn().mockResolvedValue({ kind: 'lan' as const, ...alive });
+    configureConnectionFailover({
+      candidates: () => [{ kind: 'lan', ...dead }],
+      onSwitch: vi.fn(),
+      rediscover,
+    });
+
+    await expect(fetchSnapshot(dead)).resolves.toMatchObject({ tasks: [] });
+    expect(rediscover).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not send a write twice, but adopts the rediscovered address for the retry', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementation((input) =>
+        String(input).startsWith(alive.baseUrl)
+          ? Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+          : Promise.reject(new TypeError('Network request timed out'))
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const rediscover = vi.fn().mockResolvedValue({ kind: 'lan' as const, ...alive });
+    configureConnectionFailover({
+      candidates: () => [{ kind: 'lan', ...dead }],
+      onSwitch: vi.fn(),
+      rediscover,
+    });
+
+    await expect(createDemand(dead, { projectId: 'p1', prompt: 'hi' })).rejects.toThrow(
+      `已切换到 ${alive.baseUrl}`
+    );
+    expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith(alive.baseUrl))).toBe(
+      false
+    );
+  });
+
+  it('reports the original failure when the sweep finds nothing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>().mockRejectedValue(new TypeError('Network request timed out'))
+    );
+    const rediscover = vi.fn().mockResolvedValue(null);
+    configureConnectionFailover({
+      candidates: () => [{ kind: 'lan', ...dead }],
+      onSwitch: vi.fn(),
+      rediscover,
+    });
+
+    await expect(fetchSnapshot(dead)).rejects.toThrow('Cannot reach the local Yoda gateway');
+    expect(rediscover).toHaveBeenCalledTimes(1);
+  });
+
+  it('never adopts an address that just failed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>().mockRejectedValue(new TypeError('Network request timed out'))
+    );
+    const rediscover = vi.fn().mockResolvedValue({ kind: 'lan' as const, ...dead });
+    configureConnectionFailover({
+      candidates: () => [{ kind: 'lan', ...dead }],
+      onSwitch: vi.fn(),
+      rediscover,
+    });
+
+    await expect(fetchSnapshot(dead)).rejects.toThrow('Cannot reach the local Yoda gateway');
   });
 });

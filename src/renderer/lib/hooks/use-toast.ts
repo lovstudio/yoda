@@ -305,14 +305,18 @@ function recordToast(
       description,
       details,
       kind,
-      source: 'toast',
+      source: 'app',
       reason,
       dedupeKey: notificationKey,
     },
     existingNotificationId,
     notificationAction
   );
-  toastNotificationIds.set(toastKey, notificationId);
+  if (notificationId) {
+    toastNotificationIds.set(toastKey, notificationId);
+  } else {
+    toastNotificationIds.delete(toastKey);
+  }
 }
 
 function toNotificationAction(action: unknown): WorkspaceNotificationAction | undefined {

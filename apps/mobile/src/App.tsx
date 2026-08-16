@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
+import * as Network from 'expo-network';
 import { StatusBar } from 'expo-status-bar';
 import {
   useCallback,
@@ -96,6 +97,7 @@ import {
   summarizeMobileToolTranscriptContent,
 } from '../../../src/shared/mobile-tool-transcript';
 import {
+  configureConnectionFailover,
   createDemand,
   discardInputAttachment,
   fetchConfiguration,
@@ -105,6 +107,7 @@ import {
   fetchSnapshot,
   fetchTaskSessions,
   performTaskAction,
+  probeConnection,
   sendSessionInput,
   updateSessionRuntimeConfiguration,
   type MobileConnection,
@@ -113,7 +116,27 @@ import {
   explicitMobilePairingUrl,
   selectMobileConnectionBootstrapFallback,
 } from './connection-bootstrap';
-import { clearConnection, loadConnection, saveConnection } from './connection-storage';
+import {
+  classifyEndpointKind,
+  DEFAULT_MOBILE_CONNECTION_SETTINGS,
+  endpointMatches,
+  MOBILE_ENDPOINT_KINDS,
+  MOBILE_TRANSPORT_PREFERENCES,
+  orderedEndpoints,
+  primaryEndpoint,
+  putEndpoint,
+  removeEndpoint,
+  withActiveEndpointFirst,
+  type MobileConnectionSettings,
+  type MobileEndpoint,
+  type MobileEndpointKind,
+  type MobileTransportPreference,
+} from './connection-endpoints';
+import {
+  clearConnectionSettings,
+  loadConnectionSettings,
+  saveConnectionSettings,
+} from './connection-storage';
 import { prepareCreatedDemandNavigation } from './demand-navigation';
 import { parseMobileExternalFileUrl, type MobileExternalFile } from './external-file-input';
 import { readMobileExternalTextFile, resolveMobileExternalFile } from './external-file-reader';
@@ -125,6 +148,7 @@ import {
   type MobileImageDraft,
   type MobileInputUploadProgress,
 } from './input-upload';
+import { discoverLanGateways } from './lan-discovery';
 import { parseMarkdownBlocks, tokenizeInlineMarkdown } from './markdown';
 import {
   DEFAULT_SESSION_DISPLAY_PREFERENCES,
@@ -163,6 +187,10 @@ const SESSION_DETAIL_RECONCILE_INTERVAL_MS = 60_000;
 const SESSION_DETAIL_REQUEST_TIMEOUT_MS = 15_000;
 const SESSION_EVENT_REFRESH_DELAY_MS = 500;
 const RELAY_PAIR_TIMEOUT_MS = 15_000;
+/** How long to wait before sweeping the network again after a fruitless sweep.
+ *  Well above the dashboard poll interval, so a desktop that stays off does not
+ *  put the phone into a permanent scan. */
+const LAN_REDISCOVERY_INTERVAL_MS = 60_000;
 const DEV_GATEWAY_DEFAULT_PORT = '3879';
 const SWIPE_BACK_EDGE_WIDTH = 34;
 const SWIPE_BACK_ACTIVATION_DISTANCE = 12;
@@ -646,7 +674,20 @@ function SwipeBackScreen({ children, onBack }: { children: ReactNode; onBack: ()
 
 export function App() {
   const [booting, setBooting] = useState(true);
+  const [connectionSettings, setConnectionSettings] = useState<MobileConnectionSettings>(
+    DEFAULT_MOBILE_CONNECTION_SETTINGS
+  );
   const [connection, setConnection] = useState<MobileConnection | null>(null);
+  // Failover runs inside the API client, far away from React, so both values are
+  // mirrored into refs it can read without re-registering on every state change.
+  const connectionSettingsRef = useRef<MobileConnectionSettings>(
+    DEFAULT_MOBILE_CONNECTION_SETTINGS
+  );
+  const connectionRef = useRef<MobileConnection | null>(null);
+  const lanSweepRef = useRef<{ at: number; inFlight: Promise<MobileEndpoint | null> | null }>({
+    at: 0,
+    inFlight: null,
+  });
   const [connectDraft, setConnectDraft] = useState<ConnectDraft>({
     baseUrl: 'http://192.168.1.10:3879',
     token: '',
@@ -686,72 +727,95 @@ export function App() {
   const shareExtensionProbeRef = useRef(false);
   const [newTaskDismissOnBackdrop, setNewTaskDismissOnBackdrop] = useState(true);
 
-  const applyPairingUrl = useCallback(async (url: string | null) => {
-    if (!url) return false;
-    const parsedRelayPairing = parseMobileRelayPairingUrl(url);
-    const relayPairing = parsedRelayPairing
-      ? canonicalizeMobileRelayPairing(parsedRelayPairing)
-      : null;
-    let next = parseMobilePairingUrl(url);
-    if (relayPairing) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), RELAY_PAIR_TIMEOUT_MS);
-      let response: Response;
-      try {
-        response = await fetch(`${relayPairing.relayBaseUrl}/v1/pair`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            deviceId: relayPairing.deviceId,
-            pairingCode: relayPairing.pairingCode,
-          }),
-          signal: controller.signal,
-        });
-      } catch {
-        throw new Error('Cannot reach Yoda Relay. Check your network and try a new pairing code.');
-      } finally {
-        clearTimeout(timeout);
-      }
-      if (!response.ok) {
-        throw new Error(
-          response.status === 402
-            ? 'Yoda Relay Pass is not active.'
-            : 'Relay pairing code is invalid or expired. Generate a new code on the desktop.'
-        );
-      }
-      const exchanged = (await response.json()) as Partial<MobileConnection>;
-      const expectedBaseUrl = `${relayPairing.relayBaseUrl}/v1/devices/${encodeURIComponent(
-        relayPairing.deviceId
-      )}`;
-      if (
-        exchanged.baseUrl !== expectedBaseUrl ||
-        typeof exchanged.token !== 'string' ||
-        !exchanged.token ||
-        exchanged.token.length > 512
-      ) {
-        throw new Error('Yoda Relay returned an invalid pairing response.');
-      }
-      next = { baseUrl: exchanged.baseUrl, token: exchanged.token };
-    }
-    if (!next) return false;
+  /** The single writer for stored endpoints. Persists first, then republishes the
+   *  active connection so the rest of the app always follows the ordering the
+   *  user's preference implies. `activeOverride` exists for the case where the
+   *  user just proved a specific endpoint works and expects to land on it. */
+  const applyConnectionSettings = useCallback(
+    async (next: MobileConnectionSettings, activeOverride?: MobileConnection) => {
+      connectionSettingsRef.current = next;
+      await saveConnectionSettings(next);
+      setConnectionSettings(next);
+      const active = activeOverride ?? primaryEndpoint(next);
+      connectionRef.current = active;
+      setConnection(active);
+      return active;
+    },
+    []
+  );
 
-    await saveConnection(next);
-    setConnectDraft(next);
-    setConnection(next);
-    setSnapshot(null);
-    setProfile(null);
-    setHomeTab(DEFAULT_HOME_TAB);
-    setNewTaskOpen(false);
-    setNewTaskParent(null);
-    setNewTaskParentId(null);
-    setNewTaskSiblingOf(null);
-    setSelectedProjectId('all');
-    setTaskScope('all');
-    setSelectedTaskId(null);
-    setSelectedSessionId(null);
-    setError(null);
-    return true;
-  }, []);
+  const applyPairingUrl = useCallback(
+    async (url: string | null) => {
+      if (!url) return false;
+      const parsedRelayPairing = parseMobileRelayPairingUrl(url);
+      const relayPairing = parsedRelayPairing
+        ? canonicalizeMobileRelayPairing(parsedRelayPairing)
+        : null;
+      let next = parseMobilePairingUrl(url);
+      if (relayPairing) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), RELAY_PAIR_TIMEOUT_MS);
+        let response: Response;
+        try {
+          response = await fetch(`${relayPairing.relayBaseUrl}/v1/pair`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              deviceId: relayPairing.deviceId,
+              pairingCode: relayPairing.pairingCode,
+            }),
+            signal: controller.signal,
+          });
+        } catch {
+          throw new Error(
+            'Cannot reach Yoda Relay. Check your network and try a new pairing code.'
+          );
+        } finally {
+          clearTimeout(timeout);
+        }
+        if (!response.ok) {
+          throw new Error(
+            response.status === 402
+              ? 'Yoda Relay Pass is not active.'
+              : 'Relay pairing code is invalid or expired. Generate a new code on the desktop.'
+          );
+        }
+        const exchanged = (await response.json()) as Partial<MobileConnection>;
+        const expectedBaseUrl = `${relayPairing.relayBaseUrl}/v1/devices/${encodeURIComponent(
+          relayPairing.deviceId
+        )}`;
+        if (
+          exchanged.baseUrl !== expectedBaseUrl ||
+          typeof exchanged.token !== 'string' ||
+          !exchanged.token ||
+          exchanged.token.length > 512
+        ) {
+          throw new Error('Yoda Relay returned an invalid pairing response.');
+        }
+        next = { baseUrl: exchanged.baseUrl, token: exchanged.token };
+      }
+      if (!next) return false;
+
+      await applyConnectionSettings(
+        putEndpoint(connectionSettingsRef.current, classifyEndpointKind(next.baseUrl), next)
+      );
+      setConnectDraft(next);
+      setSnapshot(null);
+      setProfile(null);
+      setHomeTab(DEFAULT_HOME_TAB);
+      setNewTaskOpen(false);
+      setNewTaskParent(null);
+      setNewTaskParentId(null);
+      setNewTaskSiblingOf(null);
+      setSelectedProjectId('all');
+      setTaskScope('all');
+      setSelectedTaskId(null);
+      setSelectedSessionId(null);
+      setError(null);
+      return true;
+    },
+    [applyConnectionSettings]
+  );
 
   const handleIncomingUrl = useCallback(
     async (url: string) => {
@@ -764,20 +828,35 @@ export function App() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([loadConnection(), getInitialPairing()])
+    Promise.all([loadConnectionSettings(), getInitialPairing()])
       .then(async ([saved, initial]) => {
         if (!active) return;
+        connectionSettingsRef.current = saved;
+        setConnectionSettings(saved);
         try {
           if (await applyPairingUrl(initial.pairingUrl)) return;
         } catch (e) {
           if (active) setError(errorMessage(e));
         }
         if (initial.externalFile) setPendingExternalFile(initial.externalFile);
-        const fallback = selectMobileConnectionBootstrapFallback(saved, initial.devConnection);
+        const fallback = selectMobileConnectionBootstrapFallback(
+          primaryEndpoint(saved),
+          initial.devConnection
+        );
         if (!fallback) return;
-        if (fallback.shouldPersist) await saveConnection(fallback.connection);
+        if (fallback.shouldPersist) {
+          await applyConnectionSettings(
+            putEndpoint(
+              saved,
+              classifyEndpointKind(fallback.connection.baseUrl),
+              fallback.connection
+            )
+          );
+        } else {
+          connectionRef.current = fallback.connection;
+          setConnection(fallback.connection);
+        }
         if (!active) return;
-        setConnection(fallback.connection);
         setConnectDraft(fallback.connection);
       })
       .catch((e: unknown) => {
@@ -789,7 +868,7 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [applyPairingUrl]);
+  }, [applyConnectionSettings, applyPairingUrl]);
 
   useEffect(() => {
     const subscription = Linking.addEventListener('url', ({ url }) => {
@@ -1065,15 +1144,155 @@ export function App() {
     setLoading(true);
     try {
       await fetchSnapshot(next);
-      await saveConnection(next);
-      setConnection(next);
+      // A hand-typed address lands in its own slot so it never clobbers the
+      // paired LAN or Relay endpoint, and becomes active because the user just
+      // watched it succeed.
+      await applyConnectionSettings(
+        putEndpoint(connectionSettingsRef.current, 'manual', next),
+        next
+      );
       setError(null);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [connectDraft]);
+  }, [applyConnectionSettings, connectDraft]);
+
+  const handleChangeTransportPreference = useCallback(
+    async (preference: MobileTransportPreference) => {
+      await applyConnectionSettings({ ...connectionSettingsRef.current, preference });
+      setError(null);
+    },
+    [applyConnectionSettings]
+  );
+
+  const handleSaveManualEndpoint = useCallback(
+    async (next: MobileConnection) => {
+      // Verified before it is stored, so the settings screen can never show a
+      // saved address that was already unreachable when it was typed.
+      if (!(await probeConnection(next))) {
+        throw new Error(`无法连接 ${next.baseUrl}，请检查地址、令牌与网络。`);
+      }
+      await applyConnectionSettings(
+        putEndpoint(connectionSettingsRef.current, 'manual', next),
+        next
+      );
+      setError(null);
+    },
+    [applyConnectionSettings]
+  );
+
+  const handleRemoveEndpoint = useCallback(
+    async (kind: MobileEndpointKind) => {
+      await applyConnectionSettings(removeEndpoint(connectionSettingsRef.current, kind));
+    },
+    [applyConnectionSettings]
+  );
+
+  /** Sweeps the reachable subnets and adopts the first desktop that accepts a
+   *  token we already hold, which is how a phone recovers after the desktop moved
+   *  to another Wi-Fi and its stored LAN address went dead. Returns the subnets it
+   *  tried so a fruitless sweep can say where it looked. */
+  const findLanGateway = useCallback(async (): Promise<{
+    endpoint: MobileEndpoint | null;
+    subnets: string[];
+  }> => {
+    const settings = connectionSettingsRef.current;
+    const token =
+      settings.endpoints.lan?.token ??
+      settings.endpoints.manual?.token ??
+      connectionRef.current?.token ??
+      null;
+    if (!token) throw new Error('还没有可用的令牌，请先扫描桌面端的配对二维码。');
+
+    const address = await Network.getIpAddressAsync().catch(() => null);
+    // The stored addresses aim the sweep at the subnet the desktop used to be on,
+    // which is where it still is whenever it merely picked up a new DHCP lease —
+    // and that subnet is not always the one the phone's own address implies.
+    const knownBaseUrls = [settings.endpoints.lan?.baseUrl, settings.endpoints.manual?.baseUrl];
+    const result = await discoverLanGateways(
+      address,
+      token,
+      knownBaseUrls.filter((baseUrl): baseUrl is string => Boolean(baseUrl))
+    );
+    const found = result.matches[0];
+    if (!found) return { endpoint: null, subnets: result.subnets };
+
+    const connection: MobileConnection = { baseUrl: found, token };
+    await applyConnectionSettings(
+      putEndpoint(connectionSettingsRef.current, 'lan', connection),
+      connection
+    );
+    return { endpoint: { kind: 'lan', ...connection }, subnets: result.subnets };
+  }, [applyConnectionSettings]);
+
+  const handleScanLan = useCallback(async () => {
+    const { endpoint, subnets } = await findLanGateway();
+    if (!endpoint) {
+      throw new Error(
+        `已扫描 ${subnets.map((subnet) => `${subnet}.x`).join('、')}，没有找到可连接的桌面端。`
+      );
+    }
+    setError(null);
+    return endpoint.baseUrl;
+  }, [findLanGateway]);
+
+  /** Automatic rediscovery, used when no stored endpoint answers. Throttled and
+   *  de-duplicated because a sweep outlasts the dashboard poll interval, so an
+   *  unguarded version would stack one sweep on top of another indefinitely. */
+  const rediscoverLanGateway = useCallback(async (): Promise<MobileEndpoint | null> => {
+    const { preference } = connectionSettingsRef.current;
+    if (preference !== 'lan' && preference !== 'auto') return null;
+
+    const state = lanSweepRef.current;
+    if (state.inFlight) return state.inFlight;
+    if (Date.now() - state.at < LAN_REDISCOVERY_INTERVAL_MS) return null;
+
+    // A sweep outlasts several poll intervals, so say what is happening rather
+    // than leaving the phone looking hung. Whoever awaits the sweep overwrites
+    // this the moment it finishes, either with fresh data or with the real error.
+    setError('连接地址已失效，正在扫描局域网寻找桌面端…');
+    const attempt = findLanGateway()
+      .then(({ endpoint }) => endpoint)
+      .catch(() => null)
+      .finally(() => {
+        lanSweepRef.current = { at: Date.now(), inFlight: null };
+      });
+    lanSweepRef.current = { at: state.at, inFlight: attempt };
+    return attempt;
+  }, [findLanGateway]);
+
+  useEffect(() => {
+    configureConnectionFailover({
+      candidates: () =>
+        withActiveEndpointFirst(
+          orderedEndpoints(connectionSettingsRef.current),
+          connectionRef.current
+        ),
+      onSwitch: (endpoint) => {
+        // In-memory only: the stored preference stays whatever the user picked,
+        // so a temporary Wi-Fi outage never rewrites their configuration.
+        const next = { baseUrl: endpoint.baseUrl, token: endpoint.token };
+        connectionRef.current = next;
+        setConnection(next);
+      },
+      rediscover: rediscoverLanGateway,
+    });
+    return () => configureConnectionFailover(null);
+  }, [rediscoverLanGateway]);
+
+  const handleDisconnect = useCallback(() => {
+    void clearConnectionSettings();
+    connectionSettingsRef.current = DEFAULT_MOBILE_CONNECTION_SETTINGS;
+    setConnectionSettings(DEFAULT_MOBILE_CONNECTION_SETTINGS);
+    connectionRef.current = null;
+    setConnection(null);
+    setSnapshot(null);
+    setProfile(null);
+    setSelectedTaskId(null);
+    setSelectedSessionId(null);
+  }, []);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -1350,26 +1569,289 @@ export function App() {
                       setTaskScope('all');
                       setHomeTab('tasks');
                     }}
-                    onDisconnect={() => {
-                      void clearConnection();
-                      setConnection(null);
-                      setSnapshot(null);
-                      setProfile(null);
-                      setSelectedTaskId(null);
-                      setSelectedSessionId(null);
-                    }}
+                    onDisconnect={handleDisconnect}
                     onRetry={() => void loadProfile(false)}
                   />
                 ) : null}
               </>
             ) : null}
+
+            {homeTab === 'settings' ? (
+              <ConnectionSettingsScreen
+                settings={connectionSettings}
+                activeConnection={connection}
+                onChangePreference={handleChangeTransportPreference}
+                onSaveManualEndpoint={handleSaveManualEndpoint}
+                onRemoveEndpoint={handleRemoveEndpoint}
+                onScanLan={handleScanLan}
+                onDisconnect={handleDisconnect}
+              />
+            ) : null}
           </ScrollView>
-          <FloatingNewTaskButton onPress={() => openNewTask()} />
+          {/* Settings ends in a destructive full-width action the floating button
+              would sit on top of, and creating a task is not what that tab is for. */}
+          {homeTab === 'settings' ? null : <FloatingNewTaskButton onPress={() => openNewTask()} />}
           <HomeTabBar activeTab={homeTab} onSelect={setHomeTab} />
         </View>
       </KeyboardAvoidingView>
       {newTaskModal}
     </SafeAreaView>
+  );
+}
+
+const TRANSPORT_PREFERENCE_COPY: Record<
+  MobileTransportPreference,
+  { label: string; detail: string; icon: keyof typeof Ionicons.glyphMap }
+> = {
+  auto: {
+    label: '自动',
+    detail: '优先局域网，连不上时自动切换到公网',
+    icon: 'shuffle-outline',
+  },
+  lan: {
+    label: '仅局域网',
+    detail: '只在同一 Wi-Fi 下连接，不经过任何服务器',
+    icon: 'wifi-outline',
+  },
+  relay: {
+    label: '仅公网',
+    detail: '始终经 Yoda Relay 转发，换网络也不用重配',
+    icon: 'cloud-outline',
+  },
+  manual: { label: '仅手动地址', detail: '只使用下方手动填写的中转地址', icon: 'create-outline' },
+};
+
+const ENDPOINT_KIND_COPY: Record<
+  MobileEndpointKind,
+  { label: string; icon: keyof typeof Ionicons.glyphMap }
+> = {
+  lan: { label: '局域网地址', icon: 'wifi-outline' },
+  relay: { label: '公网中转地址', icon: 'cloud-outline' },
+  manual: { label: '手动地址', icon: 'create-outline' },
+};
+
+function ConnectionSettingsScreen({
+  settings,
+  activeConnection,
+  onChangePreference,
+  onSaveManualEndpoint,
+  onRemoveEndpoint,
+  onScanLan,
+  onDisconnect,
+}: {
+  settings: MobileConnectionSettings;
+  activeConnection: MobileConnection | null;
+  onChangePreference: (preference: MobileTransportPreference) => Promise<void>;
+  onSaveManualEndpoint: (connection: MobileConnection) => Promise<void>;
+  onRemoveEndpoint: (kind: MobileEndpointKind) => Promise<void>;
+  onScanLan: () => Promise<string>;
+  onDisconnect: () => void;
+}) {
+  const [manualDraft, setManualDraft] = useState<ConnectDraft>({
+    baseUrl: settings.endpoints.manual?.baseUrl ?? '',
+    token: settings.endpoints.manual?.token ?? '',
+  });
+  const [busy, setBusy] = useState<'save' | 'scan' | null>(null);
+  const [notice, setNotice] = useState<{ message: string; tone: 'error' | 'info' } | null>(null);
+
+  // Filtered before rendering so the row separators follow what is on screen
+  // rather than the position of each slot in the full endpoint list.
+  const savedEndpoints = MOBILE_ENDPOINT_KINDS.flatMap((kind) => {
+    const endpoint = settings.endpoints[kind];
+    return endpoint ? [{ endpoint, kind }] : [];
+  });
+
+  const run = useCallback(async (kind: 'save' | 'scan', action: () => Promise<string | void>) => {
+    setBusy(kind);
+    setNotice(null);
+    try {
+      const message = await action();
+      if (message) setNotice({ message, tone: 'info' });
+    } catch (e) {
+      setNotice({ message: errorMessage(e), tone: 'error' });
+    } finally {
+      setBusy(null);
+    }
+  }, []);
+
+  const saveManual = useCallback(() => {
+    const next = { baseUrl: manualDraft.baseUrl.trim(), token: manualDraft.token.trim() };
+    if (!next.baseUrl || !next.token) {
+      setNotice({ message: '地址和令牌都不能为空。', tone: 'error' });
+      return;
+    }
+    void run('save', async () => {
+      await onSaveManualEndpoint(next);
+      return `已保存并连接 ${next.baseUrl}`;
+    });
+  }, [manualDraft, onSaveManualEndpoint, run]);
+
+  return (
+    <View style={styles.profileScreen}>
+      {notice ? <Notice message={notice.message} tone={notice.tone} /> : null}
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>连接方式</Text>
+          <Text style={styles.sectionMeta}>当前生效</Text>
+        </View>
+        <View style={styles.profileCloudCard}>
+          {MOBILE_TRANSPORT_PREFERENCES.map((preference, index) => {
+            const copy = TRANSPORT_PREFERENCE_COPY[preference];
+            const selected = settings.preference === preference;
+            return (
+              <View key={preference}>
+                {index > 0 ? <View style={styles.profileCloudDivider} /> : null}
+                <Pressable
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  style={({ pressed }) => [
+                    styles.settingsOptionRow,
+                    pressed ? styles.buttonPressed : null,
+                  ]}
+                  onPress={() => void onChangePreference(preference)}
+                >
+                  <Ionicons
+                    color={selected ? COLORS.green : COLORS.muted}
+                    name={copy.icon}
+                    size={19}
+                  />
+                  <View style={styles.settingsOptionText}>
+                    <Text style={styles.settingsOptionLabel}>{copy.label}</Text>
+                    <Text style={styles.settingsOptionDetail}>{copy.detail}</Text>
+                  </View>
+                  <Ionicons
+                    color={selected ? COLORS.green : COLORS.line}
+                    name={selected ? 'radio-button-on' : 'radio-button-off'}
+                    size={19}
+                  />
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>已保存的地址</Text>
+          <Pressable
+            accessibilityRole="button"
+            disabled={busy !== null}
+            onPress={() => void run('scan', async () => `已找到并连接 ${await onScanLan()}`)}
+          >
+            <Text style={styles.sectionAction}>{busy === 'scan' ? '扫描中…' : '扫描局域网'}</Text>
+          </Pressable>
+        </View>
+        <View style={styles.profileCloudCard}>
+          {savedEndpoints.length === 0 ? (
+            <Text style={styles.profileEmptyText}>
+              还没有保存任何地址，请扫描桌面端的配对二维码。
+            </Text>
+          ) : (
+            savedEndpoints.map(({ endpoint, kind }, index) => {
+              const copy = ENDPOINT_KIND_COPY[kind];
+              const active = activeConnection ? endpointMatches(endpoint, activeConnection) : false;
+              return (
+                <View key={kind}>
+                  {index > 0 ? <View style={styles.profileCloudDivider} /> : null}
+                  <View style={styles.settingsOptionRow}>
+                    <Ionicons
+                      color={active ? COLORS.green : COLORS.muted}
+                      name={copy.icon}
+                      size={19}
+                    />
+                    <View style={styles.settingsOptionText}>
+                      <Text style={styles.settingsOptionLabel}>
+                        {copy.label}
+                        {active ? ' · 使用中' : ''}
+                      </Text>
+                      <Text style={styles.settingsOptionDetail} numberOfLines={2}>
+                        {endpoint.baseUrl}
+                      </Text>
+                    </View>
+                    <Pressable
+                      accessibilityLabel={`移除${copy.label}`}
+                      accessibilityRole="button"
+                      hitSlop={8}
+                      onPress={() => void onRemoveEndpoint(kind)}
+                    >
+                      <Ionicons color={COLORS.muted} name="close-circle-outline" size={19} />
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>手动指定</Text>
+          <Text style={styles.sectionMeta}>自建中转或固定内网地址</Text>
+        </View>
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>地址</Text>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            placeholder="http://192.168.1.10:3879"
+            placeholderTextColor="#9A958C"
+            style={styles.input}
+            value={manualDraft.baseUrl}
+            onChangeText={(baseUrl) => setManualDraft({ ...manualDraft, baseUrl })}
+          />
+        </View>
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>令牌</Text>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="桌面端网关令牌"
+            placeholderTextColor="#9A958C"
+            secureTextEntry
+            style={styles.input}
+            value={manualDraft.token}
+            onChangeText={(token) => setManualDraft({ ...manualDraft, token })}
+          />
+        </View>
+        <Pressable
+          accessibilityLabel="保存并连接手动地址"
+          accessibilityRole="button"
+          disabled={busy !== null}
+          style={({ pressed }) => [
+            styles.primaryButton,
+            pressed ? styles.buttonPressed : null,
+            busy !== null ? styles.buttonDisabled : null,
+          ]}
+          onPress={saveManual}
+        >
+          {busy === 'save' ? (
+            <ActivityIndicator color={COLORS.surface} />
+          ) : (
+            <>
+              <Ionicons color={COLORS.surface} name="link-outline" size={18} />
+              <Text style={styles.primaryButtonText}>保存并连接</Text>
+            </>
+          )}
+        </Pressable>
+      </View>
+
+      <Pressable
+        accessibilityLabel="断开当前桌面"
+        accessibilityRole="button"
+        style={({ pressed }) => [
+          styles.disconnectDesktopButton,
+          pressed ? styles.buttonPressed : null,
+        ]}
+        onPress={onDisconnect}
+      >
+        <Ionicons color={COLORS.muted} name="log-out-outline" size={17} />
+        <Text style={styles.disconnectDesktopButtonText}>断开并清除所有地址</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -7423,6 +7905,28 @@ const styles = StyleSheet.create({
   profileCloudDivider: {
     height: 1,
     backgroundColor: COLORS.faint,
+  },
+  settingsOptionRow: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  settingsOptionText: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+  },
+  settingsOptionLabel: {
+    color: COLORS.ink,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  settingsOptionDetail: {
+    color: COLORS.muted,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
   },
   disconnectDesktopButton: {
     minHeight: 40,

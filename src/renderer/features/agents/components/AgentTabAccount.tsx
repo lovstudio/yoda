@@ -392,7 +392,12 @@ export const AgentTabAccount: React.FC<AgentTabAccountProps> = observer(function
                     />
                     {t('agents.account.testConnection')}
                   </Button>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => navigate('maas')}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate('settings', { tab: 'maas' })}
+                  >
                     {t('agents.account.manageMaas')}
                   </Button>
                 </>

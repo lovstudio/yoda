@@ -54,7 +54,15 @@ import {
   type LegacyRunMode,
 } from '@shared/paradigms/kinds';
 import { paradigmToTeam } from '@shared/paradigms/team-adapter';
-import type { ComposerDefaults, TaskOutputLanguage } from '@shared/project-settings';
+import {
+  resolveOutputLanguage,
+  resolveOutputLanguageOverride,
+  resolvePromptRewriteEnabled,
+  resolvePromptRewriteLanguage,
+  resolvePromptRewriteLanguageOverride,
+  type ComposerDefaults,
+  type TaskOutputLanguage,
+} from '@shared/project-settings';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
 import { taskNameFromPrompt } from '@shared/task-name';
@@ -125,12 +133,7 @@ import {
   type ComposerOverrideScope,
 } from './composer-project-overrides';
 import { ComposerPromptInput, type ComposerPromptInputProps } from './composer-prompt-input';
-import {
-  ComposerSettingsContent,
-  DEFAULT_INPUT_PROMPT_LANGUAGE,
-  DEFAULT_SUMMARY_OUTPUT_LANGUAGE,
-  DEFAULT_TASK_OUTPUT_LANGUAGE,
-} from './composer-settings-content';
+import { ComposerSettingsContent } from './composer-settings-content';
 import {
   branchNeedsCheckout,
   resolveProjectSubmitSourceBranch,
@@ -878,23 +881,57 @@ export const HomeComposer = observer(function HomeComposer({
     hasProject: hasProjectOverrideTarget,
   });
   const attachImagesAsPaths = attachImagesField.value;
+  // Each AI capability is a switch plus its own configuration. The two are
+  // separate fields on purpose: the language used to double as the switch, which
+  // made a switched-off capability impossible to configure.
+  const globalPromptRewriteEnabled = resolvePromptRewriteEnabled(
+    taskSettings?.promptRewriteEnabled,
+    taskSettings?.inputPromptLanguage
+  );
+  const promptRewriteEnabledField = dualField<boolean>({
+    override: composerDefaults?.promptRewriteEnabled,
+    globalValue: globalPromptRewriteEnabled,
+    setGlobal: (value) => updateTaskSettings({ promptRewriteEnabled: value }),
+    setOverride: (value) => setComposerDefault('promptRewriteEnabled', value),
+    hasProject: hasProjectOverrideTarget,
+  });
   const inputPromptLanguageField = dualField<TaskOutputLanguage>({
-    override: composerDefaults?.inputPromptLanguage,
-    globalValue: taskSettings?.inputPromptLanguage ?? DEFAULT_INPUT_PROMPT_LANGUAGE,
-    setGlobal: (value) => updateTaskSettings({ inputPromptLanguage: value }),
+    override: resolvePromptRewriteLanguageOverride(composerDefaults?.inputPromptLanguage),
+    globalValue: resolvePromptRewriteLanguage(taskSettings?.inputPromptLanguage),
+    // Writing the language also pins the switch, so the legacy inference from
+    // the old language-as-switch value can never flip it afterwards.
+    setGlobal: (value) =>
+      updateTaskSettings({
+        inputPromptLanguage: value,
+        promptRewriteEnabled: globalPromptRewriteEnabled,
+      }),
     setOverride: (value) => setComposerDefault('inputPromptLanguage', value),
     hasProject: hasProjectOverrideTarget,
   });
+  const autoGenerateNameField = dualField<boolean>({
+    override: composerDefaults?.autoGenerateName,
+    globalValue: taskSettings?.autoGenerateName ?? false,
+    setGlobal: (value) => updateTaskSettings({ autoGenerateName: value }),
+    setOverride: (value) => setComposerDefault('autoGenerateName', value),
+    hasProject: hasProjectOverrideTarget,
+  });
   const namingLanguageField = dualField<TaskOutputLanguage>({
-    override: composerDefaults?.namingLanguage,
-    globalValue: taskSettings?.namingLanguage ?? DEFAULT_TASK_OUTPUT_LANGUAGE,
+    override: resolveOutputLanguageOverride(composerDefaults?.namingLanguage),
+    globalValue: resolveOutputLanguage(taskSettings?.namingLanguage),
     setGlobal: (value) => updateTaskSettings({ namingLanguage: value }),
     setOverride: (value) => setComposerDefault('namingLanguage', value),
     hasProject: hasProjectOverrideTarget,
   });
+  const autoGenerateSummaryField = dualField<boolean>({
+    override: composerDefaults?.autoGenerateSummary,
+    globalValue: taskSettings?.autoGenerateSummary ?? true,
+    setGlobal: (value) => updateTaskSettings({ autoGenerateSummary: value }),
+    setOverride: (value) => setComposerDefault('autoGenerateSummary', value),
+    hasProject: hasProjectOverrideTarget,
+  });
   const summaryLanguageField = dualField<TaskOutputLanguage>({
-    override: composerDefaults?.summaryLanguage,
-    globalValue: taskSettings?.summaryLanguage ?? DEFAULT_SUMMARY_OUTPUT_LANGUAGE,
+    override: resolveOutputLanguageOverride(composerDefaults?.summaryLanguage),
+    globalValue: resolveOutputLanguage(taskSettings?.summaryLanguage),
     setGlobal: (value) => updateTaskSettings({ summaryLanguage: value }),
     setOverride: (value) => setComposerDefault('summaryLanguage', value),
     hasProject: hasProjectOverrideTarget,
@@ -911,9 +948,10 @@ export const HomeComposer = observer(function HomeComposer({
     [i18n.language, i18n.resolvedLanguage]
   );
   const inputPromptLanguage = inputPromptLanguageField.value;
+  const promptRewriteEnabled = promptRewriteEnabledField.value;
   const rewriteInputRequirement = useCallback(
     async (value: string) => {
-      if (!value.trim() || inputPromptLanguage === 'skip' || inputPromptLanguage === 'prompt') {
+      if (!value.trim() || !promptRewriteEnabled) {
         return value;
       }
       const result = await rpc.conversations.rewritePrompt({
@@ -925,7 +963,7 @@ export const HomeComposer = observer(function HomeComposer({
       });
       return result.prompt;
     },
-    [appPromptLanguage, inputPromptLanguage, runtimeId, selectedProjectId]
+    [appPromptLanguage, inputPromptLanguage, promptRewriteEnabled, runtimeId, selectedProjectId]
   );
   // A slot can run only when it has an Agent assigned (the Agent supplies the
   // runtime + prompt). Every slot the paradigm declares must be filled.
@@ -1000,10 +1038,7 @@ export const HomeComposer = observer(function HomeComposer({
         imagesAsPaths: attachImagesAsPaths,
       });
       const requirement = serialized.text.trim();
-      const deferInitialPrompt =
-        requirement.length > 0 &&
-        inputPromptLanguage !== 'skip' &&
-        inputPromptLanguage !== 'prompt';
+      const deferInitialPrompt = requirement.length > 0 && promptRewriteEnabled;
       const requirementPromise = deferInitialPrompt
         ? rewriteInputRequirement(requirement).catch((error: unknown) => {
             toast({
@@ -1174,7 +1209,7 @@ export const HomeComposer = observer(function HomeComposer({
     selectedBranch,
     promptTokens,
     attachImagesAsPaths,
-    inputPromptLanguage,
+    promptRewriteEnabled,
     rewriteInputRequirement,
     clearPromptTokens,
     projectSubmitSourceBranch,
@@ -1235,12 +1270,18 @@ export const HomeComposer = observer(function HomeComposer({
       >
         <ComposerSettingsContent
           attachImagesAsPaths={attachImagesAsPaths}
+          promptRewriteEnabled={promptRewriteEnabledField.value}
           inputPromptLanguage={inputPromptLanguageField.value}
+          autoGenerateName={autoGenerateNameField.value}
           namingLanguage={namingLanguageField.value}
+          autoGenerateSummary={autoGenerateSummaryField.value}
           summaryLanguage={summaryLanguageField.value}
           onAttachImagesAsPathsChange={attachImagesField.setValue}
+          onPromptRewriteEnabledChange={promptRewriteEnabledField.setValue}
           onInputPromptLanguageChange={inputPromptLanguageField.setValue}
+          onAutoGenerateNameChange={autoGenerateNameField.setValue}
           onNamingLanguageChange={namingLanguageField.setValue}
+          onAutoGenerateSummaryChange={autoGenerateSummaryField.setValue}
           onSummaryLanguageChange={summaryLanguageField.setValue}
           footer={
             <Collapsible
