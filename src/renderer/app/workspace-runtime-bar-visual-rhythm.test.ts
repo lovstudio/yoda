@@ -10,7 +10,7 @@ describe('Workspace runtime bar visual rhythm', () => {
 
   it('uses one consistent compact action geometry', () => {
     expect(source).toContain(
-      'relative flex h-6 w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0'
+      'relative flex h-6 w-7 shrink-0 items-center justify-center gap-0 rounded-md p-0'
     );
     expect(source).toContain('@min-[1441px]:w-auto');
   });
@@ -38,8 +38,8 @@ describe('Workspace runtime bar visual rhythm', () => {
     expect(indicatorSource).toContain(
       'relative flex size-3.5 shrink-0 items-center justify-center'
     );
-    expect(indicatorSource).toContain('absolute -top-1.5 -right-0.5 inline-flex h-3 min-w-3');
-    expect(indicatorSource).toContain('absolute -top-1 -right-0.5 size-1.5 rounded-full');
+    expect(indicatorSource).toContain('absolute -top-1.5 right-0 inline-flex h-3 min-w-3');
+    expect(indicatorSource).toContain('absolute -top-1 right-0 size-1.5 rounded-full');
     expect(indicatorSource).not.toContain('absolute top-0 right-0');
 
     for (const barSource of [source, notificationSource]) {

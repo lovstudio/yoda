@@ -149,7 +149,7 @@ type PendingAcceptanceTask = {
 type AgentPanelTab = 'all' | 'working' | 'needs-reply' | 'pending-acceptance';
 
 const RUNTIME_BAR_ACTION_CLASS =
-  'relative flex h-6 w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border @min-[1441px]:w-auto @min-[1441px]:gap-1 @min-[1441px]:px-1.5';
+  'relative flex h-6 w-7 shrink-0 items-center justify-center gap-0 rounded-md p-0 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border @min-[1441px]:w-auto @min-[1441px]:gap-1 @min-[1441px]:px-1.5';
 const RUNTIME_BAR_ACTION_LABEL_CLASS = 'hidden @min-[1441px]:inline';
 
 function agentSessionKey(
