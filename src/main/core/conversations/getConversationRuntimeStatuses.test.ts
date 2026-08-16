@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   isInterruptedSinceLastPrompt: vi.fn(),
   monitorRegistryGet: vi.fn(),
   ptyGet: vi.fn(),
+  ptyGetDiagnostics: vi.fn(),
   readClaudeTurnVerdictFile: vi.fn(),
   readCodexTurnVerdict: vi.fn(),
   resolveTask: vi.fn(),
@@ -25,6 +26,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@main/core/pty/pty-session-registry', () => ({
   ptySessionRegistry: {
     get: mocks.ptyGet,
+    getDiagnostics: mocks.ptyGetDiagnostics,
   },
 }));
 
@@ -85,12 +87,13 @@ vi.mock('../projects/utils', () => ({
   resolveTask: mocks.resolveTask,
 }));
 
-function mountedTask(activeConversationIds: string[] = []) {
+function mountedTask(activeConversationIds: string[] = [], agentBackendAlive = false) {
   return {
     conversations: {
       taskPath: '/repo',
       getActiveSessions: () =>
         activeConversationIds.map((conversationId) => ({ conversationId, pid: 4321 })),
+      isAgentBackendAlive: () => Promise.resolve(agentBackendAlive),
     },
   };
 }
@@ -130,6 +133,7 @@ describe('getConversationRunStatus', () => {
     mocks.isInterruptedSinceLastPrompt.mockReturnValue(false);
     mocks.monitorRegistryGet.mockReturnValue(undefined);
     mocks.ptyGet.mockReturnValue(undefined);
+    mocks.ptyGetDiagnostics.mockReturnValue(undefined);
   });
 
   it('derives Claude working directly from the active PID activity record', async () => {
@@ -201,6 +205,24 @@ describe('getConversationRunStatus', () => {
       'idle',
       { providerTurnConfirmed: false }
     );
+  });
+
+  it('keeps cached working while the agent survives behind a released transport', async () => {
+    // Reopening a task detaches nothing and attaches a fresh tmux client, so a
+    // momentarily missing PTY must not be read as a finished turn.
+    mocks.getRuntimeStatus.mockReturnValue('working');
+    mocks.resolveTask.mockReturnValue(mountedTask([], true));
+
+    await expect(readStatus()).resolves.toBe('working');
+    expect(mocks.setRuntimeStatus).not.toHaveBeenCalled();
+  });
+
+  it('keeps cached working while a replacement transport is still registering', async () => {
+    mocks.getRuntimeStatus.mockReturnValue('working');
+    mocks.resolveTask.mockReturnValue(mountedTask());
+    mocks.ptyGetDiagnostics.mockReturnValue({ registering: true });
+
+    await expect(readStatus()).resolves.toBe('working');
   });
 
   it('falls back to the stored outcome when nothing running can be observed', async () => {

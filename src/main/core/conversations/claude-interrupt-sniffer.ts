@@ -23,9 +23,11 @@ import { markInterrupted } from './interrupt-marker';
  * every client resize, so opening a working task replays whatever interruption
  * line an earlier turn left on screen. That replay used to clear the live
  * turn's `working` status and leave a marker that suppressed the transcript's
- * `working` verdict until the next user prompt. Two guards keep replays out:
- * the repaint window a resize opens, and a priming phase covering the initial
- * attach dump, which ends at the session's first quiet gap in output.
+ * `working` verdict until the next user prompt. Both redraws are bounded by the
+ * repaint window the PTY registry opens when it causes them, which is the only
+ * guard here: inferring "the attach dump is over" from a gap in output would
+ * silently disable detection for a real interrupt, because a working turn's own
+ * output is bursty on exactly the same timescale.
  */
 const INTERRUPT_UI_PATTERNS: readonly RegExp[] = [
   /Interrupted\s*·\s*What should Claude do instead\?/i,
@@ -35,13 +37,6 @@ const INTERRUPT_UI_PATTERNS: readonly RegExp[] = [
 /** Keep enough stripped tail to span a marker split across output chunks. */
 const TAIL_BUFFER_CHARS = 400;
 const COOLDOWN_MS = 5_000;
-/**
- * An attach dump arrives as one uninterrupted burst, so the first gap this long
- * means the session has settled and is rendering live output again. Turn output
- * pauses far longer than this between tokens and tool calls, so priming always
- * ends well before a user could interrupt.
- */
-const PRIMING_QUIET_MS = 400;
 
 interface AgentSessionKey {
   projectId: string;
@@ -56,14 +51,10 @@ export function createClaudeInterruptSniffer(
   const { ptySessionId, ...agentSession } = session;
   let tail = '';
   let lastFiredAt = 0;
-  let lastChunkAt = 0;
-  let priming = true;
 
   return (chunk: string) => {
     const now = Date.now();
-    if (priming && lastChunkAt !== 0 && now - lastChunkAt >= PRIMING_QUIET_MS) priming = false;
-    lastChunkAt = now;
-    if (priming || isPtyRepainting(ptySessionId, now)) {
+    if (isPtyRepainting(ptySessionId, now)) {
       tail = '';
       return;
     }

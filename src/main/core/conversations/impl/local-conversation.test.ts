@@ -1758,6 +1758,7 @@ describe('LocalConversationProvider', () => {
     );
     expect(mocks.watchClaudeSessionActivity).toHaveBeenCalledWith(
       { conversationId: conversation.id, cwd: '/workspace', processPid: 4321 },
+      expect.any(Function),
       expect.any(Function)
     );
 

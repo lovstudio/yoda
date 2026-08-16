@@ -29,6 +29,7 @@ import {
 import { parseConversationSessionSource } from './conversation-session-source';
 import { isInterruptedSinceLastPrompt } from './interrupt-marker';
 import { runtimeStatusMonitorRegistry } from './runtime-status-monitor-registry';
+import type { ConversationProvider } from './types';
 
 /**
  * Stateless run-state for a task's conversations.
@@ -245,8 +246,13 @@ async function deriveStatus(args: {
         : (truth ?? memory);
   if (isAgentSessionRunningStatus(derived)) {
     const livePty = hasLivePty(projectId, taskId, conversationId);
-    if (truth === undefined && !livePty) derived = 'idle';
-    else if (
+    if (
+      truth === undefined &&
+      !livePty &&
+      !(await hasSurvivingBackend(mountedTask?.conversations, projectId, taskId, conversationId))
+    ) {
+      derived = 'idle';
+    } else if (
       runtimeId === 'codex' &&
       statusMonitor === 'rollout' &&
       truth !== undefined &&
@@ -293,6 +299,29 @@ async function deriveStatus(args: {
 function hasLivePty(projectId: string, taskId: string, conversationId: string): boolean {
   const sessionId = makePtySessionId(projectId, taskId, conversationId);
   return ptySessionRegistry.get(sessionId) !== undefined;
+}
+
+/**
+ * Whether a backend still exists for a conversation whose PTY is not registered.
+ *
+ * An in-memory `working` with no truth source to check it against is the one
+ * case where absence of a transport used to stand in for absence of an agent.
+ * The two are not the same: Yoda's PTY is a tmux attach client it releases
+ * whenever nobody is watching the task, and reopening the task needs a moment
+ * to spawn the replacement. Reading either as "nothing is running" published an
+ * `idle` over a live turn — visible as a flash to idle and straight back the
+ * moment the transport came up. Ask the pane instead, and count a registration
+ * already in flight as a transport.
+ */
+async function hasSurvivingBackend(
+  provider: ConversationProvider | undefined,
+  projectId: string,
+  taskId: string,
+  conversationId: string
+): Promise<boolean> {
+  const sessionId = makePtySessionId(projectId, taskId, conversationId);
+  if (ptySessionRegistry.getDiagnostics(sessionId)?.registering === true) return true;
+  return (await provider?.isAgentBackendAlive(conversationId)) === true;
 }
 
 function parseTimestampMs(value: string | null | undefined): number | undefined {
