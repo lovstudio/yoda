@@ -60,6 +60,10 @@ function parseSidebarBranchDisplay(value: unknown): SidebarBranchDisplay | undef
  * untouched default, not a user preference, so it is upgraded to the current
  * default wholesale. Genuinely customized orders keep their sequence, and any
  * group added since they were stored is spliced in beside its default neighbour.
+ *
+ * Once a superseded default differs from the current one only by a swap, shape
+ * alone can no longer tell it apart from a hand-reordered list — that is what
+ * `taskPriorityOrderCustomized` is for.
  */
 const SUPERSEDED_DEFAULT_SIDEBAR_TASK_PRIORITY_ORDERS: readonly (readonly SidebarTaskPriorityGroup[])[] =
   [
@@ -77,6 +81,17 @@ const SUPERSEDED_DEFAULT_SIDEBAR_TASK_PRIORITY_ORDERS: readonly (readonly Sideba
       'awaiting-input',
       'error',
       'completed',
+      'working',
+      'idle',
+      'pending-review',
+      'long-term',
+      'archived',
+    ],
+    [
+      'awaiting-input',
+      'error',
+      'completed',
+      'interrupted',
       'working',
       'idle',
       'pending-review',
@@ -139,8 +154,11 @@ function insertAtDefaultNeighbour(
   else normalized.splice(at, 0, group);
 }
 
-export function normalizeSidebarTaskPriorityOrder(value: unknown): SidebarTaskPriorityGroup[] {
-  if (isUntouchedSidebarTaskPriorityOrder(value)) {
+export function normalizeSidebarTaskPriorityOrder(
+  value: unknown,
+  customized = false
+): SidebarTaskPriorityGroup[] {
+  if (!customized && isUntouchedSidebarTaskPriorityOrder(value)) {
     return [...DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER];
   }
   const valid = new Set<SidebarTaskPriorityGroup>(SIDEBAR_TASK_PRIORITY_GROUPS);
@@ -295,6 +313,8 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   taskGroupBy: SidebarTaskGroupBy = 'project';
   taskPriorityMode = false;
   taskPriorityOrder: SidebarTaskPriorityGroup[] = [...DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER];
+  /** True once the user reorders a group by hand — see `SidebarSnapshot`. */
+  taskPriorityOrderCustomized = false;
   taskGroupVisibleLimit = DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT;
   taskBranchDisplay: SidebarBranchDisplay = 'compact';
   redactTaskContent = false;
@@ -897,6 +917,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       taskGroupBy: this.taskGroupBy,
       taskPriorityMode: this.taskPriorityMode,
       taskPriorityOrder: [...this.taskPriorityOrder],
+      taskPriorityOrderCustomized: this.taskPriorityOrderCustomized,
       taskGroupVisibleLimit: this.taskGroupVisibleLimit,
       taskBranchDisplay: this.taskBranchDisplay,
       redactTaskContent: this.redactTaskContent,
@@ -946,8 +967,14 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     if (snapshot.taskPriorityMode !== undefined) {
       this.taskPriorityMode = snapshot.taskPriorityMode === true;
     }
+    if (snapshot.taskPriorityOrderCustomized !== undefined) {
+      this.taskPriorityOrderCustomized = snapshot.taskPriorityOrderCustomized === true;
+    }
     if (snapshot.taskPriorityOrder !== undefined) {
-      this.taskPriorityOrder = normalizeSidebarTaskPriorityOrder(snapshot.taskPriorityOrder);
+      this.taskPriorityOrder = normalizeSidebarTaskPriorityOrder(
+        snapshot.taskPriorityOrder,
+        this.taskPriorityOrderCustomized
+      );
     }
     if (snapshot.taskGroupVisibleLimit !== undefined) {
       const v = parseSidebarTaskGroupVisibleLimit(snapshot.taskGroupVisibleLimit);
@@ -1425,10 +1452,12 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     if (index < 0 || target < 0 || target >= movable.length) return;
     [movable[index], movable[target]] = [movable[target]!, movable[index]!];
     this.taskPriorityOrder = [...movable, 'archived'];
+    this.taskPriorityOrderCustomized = true;
   }
 
   resetTaskPriorityOrder(): void {
     this.taskPriorityOrder = [...DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER];
+    this.taskPriorityOrderCustomized = false;
   }
 
   setTaskGroupVisibleLimit(limit: SidebarTaskGroupVisibleLimit): void {

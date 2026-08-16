@@ -2,7 +2,11 @@ import { observable, runInAction } from 'mobx';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LocalProject } from '@shared/projects';
 import type { Task } from '@shared/tasks';
-import type { SidebarTaskGroupVisibleLimit, SidebarTaskPriorityGroup } from '@shared/view-state';
+import {
+  DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER,
+  type SidebarTaskGroupVisibleLimit,
+  type SidebarTaskPriorityGroup,
+} from '@shared/view-state';
 import { DEFAULT_WORKSPACE_ID } from '@shared/workspaces';
 import type { ProjectStore } from '@renderer/features/projects/stores/project';
 import type { ProjectManagerStore } from '@renderer/features/projects/stores/project-manager';
@@ -173,8 +177,8 @@ describe('SidebarStore task recency ordering', () => {
       'awaiting-input',
       'error',
       'completed',
-      'working',
       'idle',
+      'working',
       'pending-review',
       'long-term',
       'archived',
@@ -183,8 +187,8 @@ describe('SidebarStore task recency ordering', () => {
       'awaiting',
       'failed',
       'completed',
-      'working',
       'idle',
+      'working',
       'review',
       'long-term',
     ]);
@@ -253,8 +257,8 @@ describe('SidebarStore task recency ordering', () => {
       'error',
       'completed',
       'interrupted',
-      'working',
       'idle',
+      'working',
       'pending-review',
       'long-term',
       'archived',
@@ -280,6 +284,21 @@ describe('SidebarStore task recency ordering', () => {
         'awaiting-input',
         'error',
         'completed',
+        'working',
+        'idle',
+        'pending-review',
+        'long-term',
+        'archived',
+      ])
+    ).toEqual(currentDefault);
+
+    // The default that shipped before `idle` was raised above `working`.
+    expect(
+      normalizeSidebarTaskPriorityOrder([
+        'awaiting-input',
+        'error',
+        'completed',
+        'interrupted',
         'working',
         'idle',
         'pending-review',
@@ -482,8 +501,8 @@ describe('SidebarStore task recency ordering', () => {
       'awaiting-input',
       'error',
       'completed',
-      'working',
       'interrupted',
+      'working',
       'idle',
       'pending-review',
       'long-term',
@@ -491,6 +510,27 @@ describe('SidebarStore task recency ordering', () => {
     ]);
     store.moveTaskPriorityGroup('archived', -1);
     expect(store.taskPriorityOrder.at(-1)).toBe('archived');
+  });
+
+  it('keeps a hand-reordered list that matches a superseded default', () => {
+    const store = makeSidebarStore([]);
+
+    // Moving `working` up one lands exactly on the default we shipped before
+    // `idle` was raised above it. The customization flag is what tells the two
+    // apart on restore.
+    store.moveTaskPriorityGroup('working', -1);
+    const customized = store.snapshot.taskPriorityOrder;
+
+    const restored = makeSidebarStore([]);
+    restored.restoreSnapshot({
+      taskPriorityOrder: customized,
+      taskPriorityOrderCustomized: true,
+    });
+    expect(restored.taskPriorityOrder).toEqual(customized);
+
+    const migrated = makeSidebarStore([]);
+    migrated.restoreSnapshot({ taskPriorityOrder: customized });
+    expect(migrated.taskPriorityOrder).toEqual([...DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER]);
   });
 
   it('keeps a project in place when its most-recent task is archived (updated-at)', () => {

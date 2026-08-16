@@ -189,10 +189,10 @@
       "error": "Error",
       "completed": "Completed",
       "interrupted": "Interrupted",
+      "idle": "Idle",
       "working": "In progress",
       "pending-review": "Completed · Review",
       "long-term": "Long-term",
-      "idle": "Dormant",
       "archived": "Archived"
     },
     "pinned": "Pinned",
