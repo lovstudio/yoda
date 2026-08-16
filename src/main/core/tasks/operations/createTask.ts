@@ -385,14 +385,21 @@ export async function createTask(
   // Subtask parent: validate it exists in the same project; degrade to a top-level
   // task instead of failing creation when the parent is gone or mismatched.
   let parentTaskId: string | null = null;
+  let inheritedFacetId: string | null = null;
   if (params.parentTaskId) {
     const [parent] = await db
-      .select({ id: tasks.id, projectId: tasks.projectId, archivedAt: tasks.archivedAt })
+      .select({
+        id: tasks.id,
+        projectId: tasks.projectId,
+        archivedAt: tasks.archivedAt,
+        facetId: tasks.facetId,
+      })
       .from(tasks)
       .where(eq(tasks.id, params.parentTaskId))
       .limit(1);
     if (parent && parent.projectId === params.projectId && !parent.archivedAt) {
       parentTaskId = parent.id;
+      inheritedFacetId = parent.facetId;
     }
   }
 
@@ -408,6 +415,8 @@ export async function createTask(
       workspaceProvider: params.workspaceProvider ?? null,
       sidebarWorkspaceId: params.sidebarWorkspaceId ?? null,
       parentTaskId,
+      // An explicit null means "unassigned"; only an absent field inherits.
+      facetId: params.facetId !== undefined ? params.facetId : inheritedFacetId,
       paradigmId: params.paradigm?.paradigmId ?? null,
       paradigmKind: params.paradigm?.paradigmKind ?? null,
       paradigmParams: params.paradigm?.paradigmParams ?? null,

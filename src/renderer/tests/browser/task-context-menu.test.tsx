@@ -47,6 +47,11 @@ vi.mock('@renderer/features/tasks/components/move-to-project-submenu', async () 
   };
 });
 
+vi.mock('@renderer/features/tasks/components/facet-assign-submenu', () => ({
+  FacetAssignContextSubmenu: () => null,
+  FacetAssignDropdownSubmenu: () => null,
+}));
+
 vi.mock('@renderer/features/tasks/components/task-project-submenu', async () => {
   const { createElement: create, Fragment } = await import('react');
   const submenu = () =>

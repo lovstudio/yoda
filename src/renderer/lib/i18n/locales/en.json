@@ -6235,6 +6235,12 @@
     "emptyActive": "No active projects.",
     "archiveFailed": "Failed to archive project"
   },
+  "facets": {
+    "label": "Facet",
+    "assignToFacet": "Assign to facet",
+    "unassigned": "No facet",
+    "composerHint": "The project facet this task belongs to. Its scope and context file are appended to the session's system prompt."
+  },
   "projects": {
     "selectProject": "Select project",
     "noProject": "Do not use a project",
@@ -6443,6 +6449,15 @@
         "add": "Add project prompt",
         "remove": "Remove prompt"
       },
+      "facets": {
+        "title": "Facets",
+        "description": "Long-lived sub-scopes of this project. A task assigned to a facet gets the facet scope and context file appended to its session prompt.",
+        "namePlaceholder": "Name, e.g. Mobile",
+        "pathsPlaceholder": "Covered paths, one glob per line, e.g. apps/mobile/**",
+        "contextFilePlaceholder": "Context file, e.g. apps/mobile/AGENTS.md",
+        "add": "Add facet",
+        "remove": "Remove facet"
+      },
       "shareable": {
         "fields": {
           "promptPrinciples": {
@@ -6484,6 +6499,10 @@
               "leafLabel": "cloud docs URL",
               "description": "URL of a deployed documentation site, opened in-app on the Docs page."
             }
+          },
+          "facets": {
+            "modalLabel": "Facets",
+            "leafLabel": "facets"
           }
         }
       },

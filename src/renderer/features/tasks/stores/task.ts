@@ -50,6 +50,7 @@ export type UnregisteredTaskData = {
   setupError?: string;
   setupRequiresBranchName?: boolean;
   sidebarWorkspaceId?: string;
+  facetId?: string;
   quickActionId?: string;
   /**
    * Paradigm stamp as of creation, mirroring `Task` so a surface can read
@@ -418,6 +419,25 @@ export class TaskStore {
     } catch (e) {
       runInAction(() => {
         task.isLongTerm = previous;
+      });
+      log.error(e);
+      throw e;
+    }
+  }
+
+  async setFacet(facetId: string | null): Promise<void> {
+    if (this.state === 'unregistered') return;
+    const task = registeredTaskData(this);
+    if (!task || (task.facetId ?? null) === facetId) return;
+    const previous = task.facetId;
+    runInAction(() => {
+      task.facetId = facetId ?? undefined;
+    });
+    try {
+      await rpc.tasks.setTaskFacet(task.id, facetId);
+    } catch (e) {
+      runInAction(() => {
+        task.facetId = previous;
       });
       log.error(e);
       throw e;

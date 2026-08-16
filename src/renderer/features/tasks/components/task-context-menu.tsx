@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import type { ProjectFacet } from '@shared/project-facets';
 import type { RuntimeId } from '@shared/runtime-registry';
 import {
   WorkspaceAssignContextSubmenu,
@@ -47,6 +48,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
+import { FacetAssignContextSubmenu, FacetAssignDropdownSubmenu } from './facet-assign-submenu';
 import {
   MoveToProjectContextSubmenu,
   MoveToProjectDropdownSubmenu,
@@ -112,6 +114,12 @@ export interface TaskMenuActions extends TaskMenuInfoFields {
   currentWorkspaceId?: string | null;
   /** Assign this task to a sidebar workspace, or null for the default. */
   onAssignWorkspace?: (workspaceId: string | null) => void;
+  /** Facets the task's project defines, for the facet submenu. */
+  facets?: ProjectFacet[];
+  /** Current project facet membership (null = unassigned). */
+  currentFacetId?: string | null;
+  /** Assign this task to a project facet, or null to clear the membership. */
+  onAssignFacet?: (facetId: string | null) => void;
   /** Add an existing or new session-less task under this one. */
   onCreateSubtask?: () => void;
   /** Create a child task and start its first Agent session. */
@@ -545,6 +553,14 @@ export function TaskContextMenuItems(actions: TaskMenuActions) {
           showSeparator={!actions.onMoveToProject || !actions.projectId}
         />
       )}
+      {actions.onAssignFacet && (
+        <FacetAssignContextSubmenu
+          facets={actions.facets ?? []}
+          currentFacetId={actions.currentFacetId ?? null}
+          onAssign={actions.onAssignFacet}
+          showSeparator={!actions.onAssignWorkspace}
+        />
+      )}
     </>
   );
 }
@@ -623,6 +639,14 @@ export function TaskActionsMenu({
             currentWorkspaceId={actions.currentWorkspaceId ?? null}
             onAssign={actions.onAssignWorkspace}
             showSeparator={!actions.onMoveToProject || !actions.projectId}
+          />
+        )}
+        {actions.onAssignFacet && (
+          <FacetAssignDropdownSubmenu
+            facets={actions.facets ?? []}
+            currentFacetId={actions.currentFacetId ?? null}
+            onAssign={actions.onAssignFacet}
+            showSeparator={!actions.onAssignWorkspace}
           />
         )}
       </DropdownMenuContent>

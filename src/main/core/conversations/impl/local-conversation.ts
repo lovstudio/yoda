@@ -91,7 +91,6 @@ import {
   cancelConversationHydrationBarriersForTask,
 } from '../conversation-hydration-barrier';
 import { getConversationRuntimeStateRoot } from '../conversation-session-source';
-import { withExecutionModeInstructions } from '../execution-mode';
 import { createLocalAgentSessionCatalogId } from '../local-agent-session-catalog';
 import { recordPendingInitialPromptAttempt } from '../pending-initial-prompt-store';
 import { withRuntimeStateRoot } from '../session-state-roots';
@@ -102,8 +101,8 @@ import {
 } from '../session-stats-hooks';
 import { storeConversationSessionSource } from '../stored-conversation-session-source';
 import { buildAgentCommand } from './agent-command';
+import { buildAppendSystemPrompt } from './append-system-prompt';
 import { injectClipboardImagesAndPrompt, substituteImageMentions } from './image-attachments';
-import { getEnabledPromptPrinciplesText } from './prompt-principles';
 import { classifyLostPtyTransport, type PtyExitClassification } from './pty-exit-classification';
 import {
   resolveAgentApiEnvVars,
@@ -135,6 +134,7 @@ export class LocalConversationProvider implements ConversationProvider {
   private readonly resolveProjectPromptPrinciples?: () => Promise<
     ProjectPromptPrinciples | undefined
   >;
+  private readonly resolveFacetInstructions?: () => Promise<string | undefined>;
   private readonly hookConfigWriter: HookConfigWriter;
   private readonly preparedHookProviders = new Map<string, boolean>();
   private readonly tmuxSessionNames = new Map<string, string>();
@@ -159,6 +159,7 @@ export class LocalConversationProvider implements ConversationProvider {
     ctx,
     taskEnvVars = {},
     resolveProjectPromptPrinciples,
+    resolveFacetInstructions,
   }: {
     projectId: string;
     sidebarWorkspaceId?: string | null;
@@ -169,6 +170,7 @@ export class LocalConversationProvider implements ConversationProvider {
     ctx: IExecutionContext;
     taskEnvVars?: Record<string, string>;
     resolveProjectPromptPrinciples?: () => Promise<ProjectPromptPrinciples | undefined>;
+    resolveFacetInstructions?: () => Promise<string | undefined>;
   }) {
     this.projectId = projectId;
     this.sidebarWorkspaceId = sidebarWorkspaceId;
@@ -179,6 +181,7 @@ export class LocalConversationProvider implements ConversationProvider {
     this.ctx = ctx;
     this.taskEnvVars = taskEnvVars;
     this.resolveProjectPromptPrinciples = resolveProjectPromptPrinciples;
+    this.resolveFacetInstructions = resolveFacetInstructions;
     this.hookConfigWriter = new HookConfigWriter(new LocalFileSystem(taskPath), ctx);
   }
 
@@ -508,13 +511,12 @@ export class LocalConversationProvider implements ConversationProvider {
         pendingImagePaths && !useClipboardImagePaste
           ? substituteImageMentions(initialPrompt, pendingImagePaths)
           : initialPrompt;
-      const appendSystemPrompt = withExecutionModeInstructions(
-        await getEnabledPromptPrinciplesText(await this.resolveProjectPromptPrinciples?.(), {
-          projectId: this.projectId,
-          workspaceId: this.sidebarWorkspaceId,
-        }),
-        conversation.executionMode
-      );
+      const appendSystemPrompt = await buildAppendSystemPrompt({
+        resolveFacetInstructions: this.resolveFacetInstructions,
+        resolveProjectPromptPrinciples: this.resolveProjectPromptPrinciples,
+        target: { projectId: this.projectId, workspaceId: this.sidebarWorkspaceId },
+        executionMode: conversation.executionMode,
+      });
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       const terminalThemeMode = await resolveTerminalThemeMode();
       if (!this.ownsPendingStart(sessionId, startToken)) return;

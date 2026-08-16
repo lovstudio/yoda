@@ -1,3 +1,4 @@
+import type { ProjectFacet } from './project-facets';
 import {
   SHAREABLE_PROJECT_SETTINGS_WRITE_FIELDS,
   type ComposerDefaults,
@@ -159,6 +160,20 @@ export const SHAREABLE_FIELD_ACCESSORS = {
       return keys.length ? keys.join(', ') : null;
     },
   },
+  facets: {
+    path: ['facets'],
+    get: (settings) => settings.facets,
+    set: (settings, value) => {
+      settings.facets = value as ProjectFacet[] | undefined;
+    },
+    clear: (settings) => {
+      delete settings.facets;
+    },
+    displayValue: (settings) => {
+      const value = settings.facets?.filter((facet) => facet.name.trim());
+      return value?.length ? value.map((facet) => facet.name).join('\n') : null;
+    },
+  },
   'docs.localPath': {
     path: ['docs', 'localPath'],
     get: (settings) => settings.docs?.localPath,
@@ -196,6 +211,7 @@ export function clearShareableProjectSettingsFields<T extends ProjectSettings>(
     quickActions: settings.quickActions ? [...settings.quickActions] : undefined,
     promptPrinciples: settings.promptPrinciples ? { ...settings.promptPrinciples } : undefined,
     composerDefaults: settings.composerDefaults ? { ...settings.composerDefaults } : undefined,
+    facets: settings.facets ? [...settings.facets] : undefined,
     docs: settings.docs ? { ...settings.docs } : undefined,
   };
 

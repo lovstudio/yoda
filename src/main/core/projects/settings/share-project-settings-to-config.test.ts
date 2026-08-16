@@ -564,6 +564,7 @@ describe('shareProjectSettingsToConfig', () => {
       quickActions: [],
       promptPrinciples: [],
       composerDefaults: [],
+      facets: [],
       'docs.localPath': [],
       'docs.cloudUrl': [],
     });

@@ -6235,6 +6235,12 @@
     "emptyActive": "暂无活跃项目。",
     "archiveFailed": "归档项目失败"
   },
+  "facets": {
+    "label": "切面",
+    "assignToFacet": "归属切面",
+    "unassigned": "未归属",
+    "composerHint": "任务归属的项目切面。启动会话时会把该切面的范围与上下文文件注入系统提示。"
+  },
   "projects": {
     "selectProject": "选择项目",
     "noProject": "不使用项目",
@@ -6443,6 +6449,15 @@
         "add": "添加项目提示词",
         "remove": "移除提示词"
       },
+      "facets": {
+        "title": "项目切面",
+        "description": "项目下长期存在的子领域。任务归属到某个切面后，启动会话时会注入该切面的范围与上下文文件。",
+        "namePlaceholder": "名称，如 移动端",
+        "pathsPlaceholder": "覆盖路径，一行一个 glob，如 apps/mobile/**",
+        "contextFilePlaceholder": "上下文文件，如 apps/mobile/AGENTS.md",
+        "add": "新增切面",
+        "remove": "移除切面"
+      },
       "shareable": {
         "fields": {
           "promptPrinciples": {
@@ -6484,6 +6499,10 @@
               "leafLabel": "云端文档 URL",
               "description": "已部署的文档站 URL，在文档页以应用内浏览器打开。"
             }
+          },
+          "facets": {
+            "modalLabel": "项目切面",
+            "leafLabel": "项目切面"
           }
         }
       },

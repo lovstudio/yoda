@@ -844,6 +844,7 @@ export class TaskManagerStore {
       setupRequiresBranchName,
       sidebarWorkspaceId,
       quickActionId: params.quickActionId,
+      facetId: params.facetId ?? undefined,
       // Carried into the optimistic record so the sidebar draws the right paradigm
       // on the first frame, not once the DB row comes back.
       paradigmId: params.paradigm?.paradigmId,

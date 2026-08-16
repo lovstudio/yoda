@@ -238,6 +238,9 @@ describe('runBundledMigrations', () => {
           task_id text
         );
         INSERT INTO automation_runs (id, task_id) VALUES ('existing-run', 'task-1');
+        -- Only the newest bundled migration runs here, so every table it alters
+        -- must exist for the tail of the journal to apply.
+        CREATE TABLE tasks (id text PRIMARY KEY NOT NULL);
       `);
 
       runBundledMigrations(db);

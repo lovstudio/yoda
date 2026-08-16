@@ -80,6 +80,11 @@ export type Task = {
   sidebarWorkspaceId?: string;
   /** Parent task id for subtask trees (same project only). */
   parentTaskId?: string;
+  /**
+   * The project facet this task belongs to (membership), as opposed to
+   * `parentTaskId` (lineage). Drives facet context injection at session start.
+   */
+  facetId?: string;
   /** Natural-language quick-action entry that may be distilled after the task finishes. */
   quickActionSource?: QuickActionTaskSource;
   /** Saved quick action that started this task, used to return to its live run. */
@@ -150,6 +155,12 @@ export type CreateTaskParams = {
   sidebarWorkspaceId?: string;
   /** Create the task as a subtask of this parent (must be in the same project). */
   parentTaskId?: string;
+  /**
+   * Project facet to assign the task to. `null` means explicitly unassigned;
+   * omitting it inherits the parent task's facet, so a caller with an opinion
+   * must state it rather than leave the field out.
+   */
+  facetId?: string | null;
   /** Marks a natural-language quick-action task for non-blocking post-run distillation. */
   quickActionSource?: QuickActionTaskSource;
   /** Saved quick action that started this task. */

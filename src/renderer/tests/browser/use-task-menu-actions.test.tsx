@@ -35,6 +35,7 @@ vi.mock('@shared/deep-links', () => ({ buildTaskDeepLink: vi.fn() }));
 vi.mock('@shared/projects', () => ({ INTERNAL_PROJECT_ID: '__drafts__' }));
 vi.mock('@renderer/app/open-new-task', () => ({ openNewTaskFromCurrentContext: vi.fn() }));
 vi.mock('@renderer/features/projects/stores/project-selectors', () => ({
+  getProjectSettingsStore: () => undefined,
   getProjectStore: () => undefined,
   getRepositoryStore: () => undefined,
 }));

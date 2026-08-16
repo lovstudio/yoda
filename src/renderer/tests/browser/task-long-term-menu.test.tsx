@@ -29,6 +29,11 @@ vi.mock('@renderer/features/workspaces/workspace-assign-submenu', () => ({
   WorkspaceAssignDropdownSubmenu: () => null,
 }));
 
+vi.mock('@renderer/features/tasks/components/facet-assign-submenu', () => ({
+  FacetAssignContextSubmenu: () => null,
+  FacetAssignDropdownSubmenu: () => null,
+}));
+
 vi.mock('@renderer/features/tasks/components/task-project-submenu', () => ({
   TaskProjectContextSubmenu: () => null,
   TaskProjectDropdownSubmenu: () => null,

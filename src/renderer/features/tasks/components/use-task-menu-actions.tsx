@@ -3,6 +3,7 @@ import { buildTaskDeepLink } from '@shared/deep-links';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { openNewTaskFromCurrentContext } from '@renderer/app/open-new-task';
 import {
+  getProjectSettingsStore,
   getProjectStore,
   getRepositoryStore,
 } from '@renderer/features/projects/stores/project-selectors';
@@ -63,6 +64,9 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
       : [];
   const isArchiving = taskManager?.archivingTaskIds.has(taskId) ?? false;
   const canAssignWorkspace = projectId === INTERNAL_PROJECT_ID || task.data.isPinned;
+  // Facets are defined per project, so projectless Drafts tasks have nothing to
+  // belong to.
+  const canAssignFacet = projectId !== INTERNAL_PROJECT_ID && task.state !== 'unregistered';
 
   const project = getProjectStore(projectId);
   const projectName =
@@ -186,6 +190,13 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
       : undefined,
     onAssignWorkspace: canAssignWorkspace
       ? (workspaceId: string | null) => void task.setSidebarWorkspaceId(workspaceId)
+      : undefined,
+    facets: canAssignFacet
+      ? (getProjectSettingsStore(projectId)?.settings?.facets ?? [])
+      : undefined,
+    currentFacetId: canAssignFacet ? (registeredTaskData(task)?.facetId ?? null) : undefined,
+    onAssignFacet: canAssignFacet
+      ? (facetId: string | null) => void task.setFacet(facetId)
       : undefined,
     // Subtask tree entries — projectless Drafts tasks stay flat for now.
     onCreateSubtask:
