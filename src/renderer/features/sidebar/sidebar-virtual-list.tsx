@@ -117,10 +117,15 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     [displayRows]
   );
   const archivedGroupCollapsed = collapsedTaskGroupIds.has(ARCHIVED_PRIORITY_COLLAPSE_ID);
+  // Re-hydrate when the token moves: a project mount or workspace switch resets
+  // the archived scope and releases every hydrated row, and the header count
+  // still comes from the database — so an open group would keep showing only its
+  // disclosure row until the user collapsed and reopened it.
+  const archivedHydrationToken = sidebarStore.sidebarArchivedHydrationToken;
   useEffect(() => {
     if (!archivedGroupPresent || archivedGroupCollapsed) return;
     sidebarStore.ensureSidebarArchivedTasksHydrated();
-  }, [archivedGroupCollapsed, archivedGroupPresent]);
+  }, [archivedGroupCollapsed, archivedGroupPresent, archivedHydrationToken]);
   const pinnedRows = useMemo(
     () =>
       limitPinnedTaskListRows(
