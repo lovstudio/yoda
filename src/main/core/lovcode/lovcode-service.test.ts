@@ -234,7 +234,7 @@ describe('Lovcode search result mapping', () => {
     ]);
   });
 
-  it('orders transcript matches by last activity, archived last', () => {
+  it('orders transcript matches by last activity, archived included', () => {
     const items = mapLovcodeResults(
       [
         conversationRow({
@@ -262,7 +262,7 @@ describe('Lovcode search result mapping', () => {
       ]
     );
 
-    expect(items.map((item) => item.id)).toEqual(['fresh', 'stale', 'archived-newest']);
+    expect(items.map((item) => item.id)).toEqual(['archived-newest', 'fresh', 'stale']);
   });
 });
 

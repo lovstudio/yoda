@@ -154,12 +154,12 @@ describe('SearchService ranking', () => {
     const service = new SearchService();
 
     // 'stale-task' has the shorter (better BM25) title but is older, and the
-    // archived row is the newest of all — archived still sorts last.
+    // archived row is the newest of all — recency alone decides the order.
     expect(service.search({ query: 'alpha' }).map((item) => item.id)).toEqual([
+      'archived-alpha-task',
       'fresh-task',
       'stale-task',
       'undated-task',
-      'archived-alpha-task',
     ]);
   });
 
@@ -168,10 +168,10 @@ describe('SearchService ranking', () => {
     const service = new SearchService();
 
     expect(service.search({ query: 'al' }).map((item) => item.id)).toEqual([
+      'archived-alpha-task',
       'fresh-task',
       'stale-task',
       'undated-task',
-      'archived-alpha-task',
     ]);
   });
 
@@ -187,10 +187,10 @@ describe('SearchService ranking', () => {
       context: {},
     });
     expect(page.items.map((item) => item.id)).toEqual([
+      'archived-alpha-task',
       'fresh-task',
       'stale-task',
       'undated-task',
-      'archived-alpha-task',
     ]);
   });
 });

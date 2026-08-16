@@ -289,7 +289,7 @@ export class SearchService {
             `SELECT item_type, item_id, project_id, task_id, archived, title, bm25(search_index) AS rank
              FROM search_index
              WHERE search_index MATCH ? AND item_type = ? ${extraSql}
-             ORDER BY archived, ${ACTIVITY_TS_EXPR} DESC, rank
+             ORDER BY ${ACTIVITY_TS_EXPR} DESC, rank
              LIMIT ? OFFSET ?`
           )
           .all(ftsQuery, kind, ...extraParams, limit, offset) as FtsRow[];
@@ -303,7 +303,7 @@ export class SearchService {
            FROM search_index
            WHERE (title LIKE ? ESCAPE '\\' OR keywords LIKE ? ESCAPE '\\')
              AND item_type = ? ${extraSql}
-           ORDER BY archived, ${ACTIVITY_TS_EXPR} DESC
+           ORDER BY ${ACTIVITY_TS_EXPR} DESC
            LIMIT ? OFFSET ?`
         )
         .all(like, like, kind, ...extraParams, limit, offset) as FtsRow[];
@@ -332,7 +332,7 @@ export class SearchService {
            WHERE search_index MATCH ?
              ${convSql}
              ${ws ? `AND ${ws.sql}` : ''}
-           ORDER BY archived, ${ACTIVITY_TS_EXPR} DESC, rank
+           ORDER BY ${ACTIVITY_TS_EXPR} DESC, rank
            LIMIT 30`
         )
         .all(
@@ -362,7 +362,7 @@ export class SearchService {
            WHERE (title LIKE ? ESCAPE '\\' OR keywords LIKE ? ESCAPE '\\')
              ${convSql}
              ${ws ? `AND ${ws.sql}` : ''}
-           ORDER BY archived, ${ACTIVITY_TS_EXPR} DESC
+           ORDER BY ${ACTIVITY_TS_EXPR} DESC
            LIMIT 30`
         )
         .all(
@@ -402,7 +402,7 @@ export class SearchService {
     return results;
   }
 
-  /** Recent tasks — active first, then archived (both surfaced). */
+  /** Recent tasks, newest first. Archived tasks are surfaced inline, not last. */
   private recentTasks(
     context?: CommandPaletteQuery['context'],
     limit = 10,
@@ -432,7 +432,7 @@ export class SearchService {
          FROM tasks t
          LEFT JOIN projects p ON t.project_id = p.id
          ${conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''}
-         ORDER BY (t.archived_at IS NOT NULL), t.last_interacted_at DESC
+         ORDER BY t.last_interacted_at DESC
          LIMIT ? OFFSET ?`
       )
       .all(...params, limit, offset) as (RecentTaskRow & {
@@ -453,14 +453,14 @@ export class SearchService {
     }));
   }
 
-  /** Recent projects — active first, then archived. Internal projects are hidden. */
+  /** Recent projects, newest first. Internal projects are hidden. */
   private recentProjects(limit = 8, offset = 0): SearchItem[] {
     const rows = sqlite
       .prepare(
         `SELECT p.id, p.name, p.archived_at, p.updated_at
          FROM projects p
          WHERE p.is_internal = 0
-         ORDER BY (p.archived_at IS NOT NULL), p.updated_at DESC
+         ORDER BY p.updated_at DESC
          LIMIT ? OFFSET ?`
       )
       .all(limit, offset) as {
@@ -484,9 +484,9 @@ export class SearchService {
   }
 
   /**
-   * Recent conversations. Scoped to the current task when one is open, otherwise
-   * the most recent conversations across all tasks. Archived conversations stay
-   * visible and sort after active ones so completed work remains findable.
+   * Recent conversations, newest first. Scoped to the current task when one is
+   * open, otherwise across all tasks. Archived conversations stay visible and
+   * rank purely on their own recency — the row carries an Archived badge.
    */
   private recentConversations(
     context?: CommandPaletteQuery['context'],
@@ -504,8 +504,7 @@ export class SearchService {
                FROM conversations c
                INNER JOIN tasks t ON c.task_id = t.id
                WHERE c.task_id = ?
-               ORDER BY (c.archived_at IS NOT NULL OR t.archived_at IS NOT NULL),
-                        c.last_interacted_at DESC
+               ORDER BY c.last_interacted_at DESC
                LIMIT ? OFFSET ?`
             )
             .all(context.taskId, limit, offset)
@@ -516,8 +515,7 @@ export class SearchService {
                       t.archived_at AS task_archived_at
                FROM conversations c
                INNER JOIN tasks t ON c.task_id = t.id
-               ORDER BY (c.archived_at IS NOT NULL OR t.archived_at IS NOT NULL),
-                        c.last_interacted_at DESC
+               ORDER BY c.last_interacted_at DESC
                LIMIT ? OFFSET ?`
             )
             .all(limit, offset)
