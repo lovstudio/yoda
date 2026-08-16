@@ -1,4 +1,3 @@
-import { Check, Menu } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { MaasPlatformId } from '@shared/maas';
@@ -16,18 +15,9 @@ import { RoadmapView } from '@renderer/features/roadmap/components/RoadmapView';
 import SkillsCatalogHint from '@renderer/features/skills/components/SkillsCatalogHint';
 import SkillsView from '@renderer/features/skills/components/SkillsView';
 import { UsageView } from '@renderer/features/usage/components/UsageView';
-import { useIsPinHosted, useNavigate } from '@renderer/lib/layout/navigation-provider';
-import { Badge } from '@renderer/lib/ui/badge';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@renderer/lib/ui/dropdown-menu';
-import { SectionNav, type SectionNavGroup } from '@renderer/lib/ui/section-nav';
-import { Separator } from '@renderer/lib/ui/separator';
-import { cn } from '@renderer/utils/utils';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
+import { SectionNavDropdown, type SectionNavGroup } from '@renderer/lib/ui/section-nav';
+import { SectionPage } from '@renderer/lib/ui/section-page';
 import { AccountTab } from './AccountTab';
 import ArchivedProjectsCard from './ArchivedProjectsCard';
 import { CliAgentsRescanButton } from './CliAgentsList';
@@ -184,36 +174,13 @@ export function SettingsTabsDropdown({
   const { t } = useTranslation();
   const tabGroups = useSettingsTabGroups();
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label={t('common.settings')}
-        title={t('common.settings')}
-        className={cn(
-          'flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground',
-          className
-        )}
-      >
-        <Menu className="size-4" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        {tabGroups.map((group, groupIndex) => (
-          <React.Fragment key={group.id}>
-            {groupIndex > 0 && <DropdownMenuSeparator />}
-            {group.items.map((tab) => (
-              <DropdownMenuItem key={tab.id} onClick={() => onTabChange(tab.id)}>
-                {tab.label}
-                {tab.badge && (
-                  <Badge variant="secondary" className="text-[10px]">
-                    {tab.badge}
-                  </Badge>
-                )}
-                {tab.id === activeTab && <Check className="ml-auto size-3.5" />}
-              </DropdownMenuItem>
-            ))}
-          </React.Fragment>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <SectionNavDropdown
+      groups={tabGroups}
+      activeId={activeTab}
+      onSelect={onTabChange}
+      label={t('common.settings')}
+      className={className}
+    />
   );
 }
 
@@ -231,8 +198,6 @@ export function SettingsPage({
   const { t } = useTranslation();
   const tabGroups = useSettingsTabGroups();
   const { navigate } = useNavigate();
-  // In the side pane the chip-strip row hosts the tab picker — don't double it.
-  const isPinHosted = useIsPinHosted();
 
   const tabContent: Record<string, TabContentConfig> = {
     general: {
@@ -527,88 +492,49 @@ export function SettingsPage({
   };
 
   const currentContent = tabContent[activeTab as keyof typeof tabContent];
+  if (!currentContent) return null;
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1060px] flex-col gap-6 px-8 @max-lg:px-6 @max-md:px-4">
-        {/* Narrow containers (shell side pane, slim windows) hide the nav
-            column; tab switching moves into the content header's dropdown.
-            The collapse happens at @max-lg so the two-column layout never
-            shows while too cramped to be usable. */}
-        <div className="grid min-h-0 flex-1 grid-cols-[auto_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-6 overflow-hidden @max-lg:grid-cols-1 @max-lg:gap-4">
-          <div className="flex min-h-0 flex-col py-10 @max-lg:hidden">
-            <SectionNav
-              groups={tabGroups}
-              activeId={activeTab}
-              onSelect={onTabChange}
-              className="w-max min-w-28 pr-2 [scrollbar-gutter:stable]"
-            />
-          </div>
-          {/* Content container */}
-          {currentContent && (
-            <div className="min-h-0 min-w-0 flex-1 justify-center overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]">
-              <div className="mx-auto w-full max-w-4xl space-y-8 py-10 pr-4 pl-1 @max-md:py-4 @max-md:pr-0 @max-md:pl-0">
-                <div className="flex flex-col gap-6">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex min-w-0 flex-col gap-1">
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-xl">{currentContent.title}</h2>
-                        {currentContent.titleHint}
-                      </div>
-                      <p className="text-sm text-foreground-muted">{currentContent.description}</p>
-                    </div>
-                    {/* Narrow main-area fallback — in the side pane the
-                        chip-strip row hosts the picker instead. */}
-                    {!isPinHosted && (
-                      <SettingsTabsDropdown
-                        tab={activeTab}
-                        onTabChange={onTabChange}
-                        className="hidden @max-lg:flex"
-                      />
-                    )}
-                  </div>
-                  <Separator />
+    <SectionPage
+      groups={tabGroups}
+      activeId={activeTab}
+      onSelect={onTabChange}
+      navLabel={t('common.settings')}
+      title={currentContent.title}
+      titleHint={currentContent.titleHint}
+      description={currentContent.description}
+    >
+      {currentContent.component}
+      {currentContent.sections?.map((section) => {
+        const hasChapterHeader = Boolean(section.title || section.description || section.action);
+        const usePanelSurface = section.surface !== 'plain';
+        return (
+          <div key={section.id} className="flex flex-col gap-3">
+            {hasChapterHeader && (
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  {section.title && (
+                    <h3 className="text-base font-semibold text-foreground">{section.title}</h3>
+                  )}
+                  {section.description && (
+                    <p className="mt-1 max-w-2xl text-sm leading-relaxed text-foreground-muted">
+                      {section.description}
+                    </p>
+                  )}
                 </div>
-                {currentContent.component}
-                {currentContent.sections?.map((section) => {
-                  const hasChapterHeader = Boolean(
-                    section.title || section.description || section.action
-                  );
-                  const usePanelSurface = section.surface !== 'plain';
-                  return (
-                    <div key={section.id} className="flex flex-col gap-3">
-                      {hasChapterHeader && (
-                        <div className="flex min-w-0 items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            {section.title && (
-                              <h3 className="text-base font-semibold text-foreground">
-                                {section.title}
-                              </h3>
-                            )}
-                            {section.description && (
-                              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-foreground-muted">
-                                {section.description}
-                              </p>
-                            )}
-                          </div>
-                          {section.action && <div className="shrink-0">{section.action}</div>}
-                        </div>
-                      )}
-                      {usePanelSurface ? (
-                        <div className="rounded-xl border border-border/70 bg-background p-4 @max-md:p-3">
-                          {section.component}
-                        </div>
-                      ) : (
-                        section.component
-                      )}
-                    </div>
-                  );
-                })}
+                {section.action && <div className="shrink-0">{section.action}</div>}
               </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+            )}
+            {usePanelSurface ? (
+              <div className="rounded-xl border border-border/70 bg-background p-4 @max-md:p-3">
+                {section.component}
+              </div>
+            ) : (
+              section.component
+            )}
+          </div>
+        );
+      })}
+    </SectionPage>
   );
 }

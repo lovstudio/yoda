@@ -1,5 +1,4 @@
-import { Check, Menu } from 'lucide-react';
-import { createContext, Fragment, useCallback, useContext, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_LIBRARY_SECTION } from '@renderer/app/route-identity';
 import { GlobalHooksMainPanel } from '@renderer/features/agent-hooks/global-hooks-view';
@@ -12,16 +11,9 @@ import PluginsView from '@renderer/features/plugins/PluginsView';
 import { PromptLibraryPanel } from '@renderer/features/prompt-library/prompt-library-panel';
 import { SkillsMainPanel } from '@renderer/features/skills/skills-view';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
-import { useIsPinHosted, useParams } from '@renderer/lib/layout/navigation-provider';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@renderer/lib/ui/dropdown-menu';
-import { SectionNav, type SectionNavGroup } from '@renderer/lib/ui/section-nav';
-import { cn } from '@renderer/utils/utils';
+import { useParams } from '@renderer/lib/layout/navigation-provider';
+import { SectionNavDropdown, type SectionNavGroup } from '@renderer/lib/ui/section-nav';
+import { SectionPage } from '@renderer/lib/ui/section-page';
 
 /** The Library groups the user's reusable resources behind one nav entry. */
 export type LibrarySection =
@@ -38,6 +30,9 @@ export type LibrarySection =
 type LibrarySectionEntry = {
   id: LibrarySection;
   labelKey: string;
+  descriptionKey: string;
+  /** Sections that own their height and scrolling (a running app) fill instead. */
+  fill?: boolean;
 };
 
 /**
@@ -52,20 +47,41 @@ const SECTION_GROUPS: {
   {
     id: 'basic',
     sections: [
-      { id: 'prompts', labelKey: 'library.sections.prompts' },
-      { id: 'skills', labelKey: 'library.sections.skills' },
-      { id: 'plugins', labelKey: 'library.sections.plugins' },
-      { id: 'hooks', labelKey: 'library.sections.hooks' },
-      { id: 'mcp', labelKey: 'library.sections.mcp' },
-      { id: 'agents', labelKey: 'library.sections.agents' },
+      {
+        id: 'prompts',
+        labelKey: 'library.sections.prompts',
+        descriptionKey: 'promptLibrary.subtitle',
+      },
+      { id: 'skills', labelKey: 'library.sections.skills', descriptionKey: 'skills.subtitle' },
+      { id: 'plugins', labelKey: 'library.sections.plugins', descriptionKey: 'plugins.subtitle' },
+      { id: 'hooks', labelKey: 'library.sections.hooks', descriptionKey: 'hooksLibrary.subtitle' },
+      { id: 'mcp', labelKey: 'library.sections.mcp', descriptionKey: 'mcp.subtitle' },
+      {
+        id: 'agents',
+        labelKey: 'library.sections.agents',
+        descriptionKey: 'agentManager.subtitle',
+      },
     ],
   },
   {
     id: 'advanced',
     sections: [
-      { id: 'automation', labelKey: 'library.sections.automation' },
-      { id: 'extensions', labelKey: 'library.sections.extensions' },
-      { id: 'apps', labelKey: 'library.sections.apps' },
+      {
+        id: 'automation',
+        labelKey: 'library.sections.automation',
+        descriptionKey: 'automation.subtitle',
+      },
+      {
+        id: 'extensions',
+        labelKey: 'library.sections.extensions',
+        descriptionKey: 'extensions.subtitle',
+      },
+      {
+        id: 'apps',
+        labelKey: 'library.sections.apps',
+        descriptionKey: 'aiLab.subtitle',
+        fill: true,
+      },
     ],
   },
 ];
@@ -167,30 +183,33 @@ function LibrarySectionContent({
   createPrompt: boolean;
   onCreatePromptConsumed: () => void;
 }) {
+  // Every panel renders embedded: the shell already supplies the page frame,
+  // the title and the description, so a panel only brings its own body.
   switch (section) {
     case 'extensions':
-      return <ExtensionMarketplaceView />;
+      return <ExtensionMarketplaceView embedded />;
     case 'apps':
       return <AiLabView embedded activeAppId={appId} onActiveAppChange={onAppChange} />;
     case 'prompts':
       return (
         <PromptLibraryPanel
+          embedded
           initialAction={createPrompt ? 'create' : undefined}
           onInitialActionConsumed={onCreatePromptConsumed}
         />
       );
     case 'agents':
-      return <AgentManagerMainPanel />;
+      return <AgentManagerMainPanel embedded />;
     case 'skills':
-      return <SkillsMainPanel />;
+      return <SkillsMainPanel embedded />;
     case 'plugins':
-      return <PluginsView />;
+      return <PluginsView embedded />;
     case 'hooks':
-      return <GlobalHooksMainPanel />;
+      return <GlobalHooksMainPanel embedded />;
     case 'mcp':
-      return <McpMainPanel />;
+      return <McpMainPanel embedded />;
     case 'automation':
-      return <AutomationMainPanel />;
+      return <AutomationMainPanel embedded />;
   }
 }
 
@@ -206,32 +225,15 @@ export function LibrarySectionDropdown({
   className?: string;
 }) {
   const { t } = useTranslation();
+  const navGroups = useLibraryNavGroups();
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label={t('sidebar.library')}
-        title={t('sidebar.library')}
-        className={cn(
-          'flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground',
-          className
-        )}
-      >
-        <Menu className="size-4" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        {SECTION_GROUPS.map(({ id: groupId, sections }, groupIndex) => (
-          <Fragment key={groupId}>
-            {groupIndex > 0 && <DropdownMenuSeparator />}
-            {sections.map(({ id, labelKey }) => (
-              <DropdownMenuItem key={id} onClick={() => onSectionChange(id)}>
-                <span className="truncate">{t(labelKey)}</span>
-                {id === activeSection && <Check className="ml-auto size-3.5" />}
-              </DropdownMenuItem>
-            ))}
-          </Fragment>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <SectionNavDropdown
+      groups={navGroups}
+      activeId={activeSection}
+      onSelect={onSectionChange}
+      label={t('sidebar.library')}
+      className={className}
+    />
   );
 }
 
@@ -244,38 +246,30 @@ export function LibraryPaneHeaderSlot() {
 export function LibraryMainPanel() {
   const { section, onSectionChange, appId, onAppChange, createPrompt, onCreatePromptConsumed } =
     useLibrarySection();
+  const { t } = useTranslation();
   const navGroups = useLibraryNavGroups();
-  // In the side pane the chip-strip row hosts the picker — don't double it.
-  const isPinHosted = useIsPinHosted();
+  const entry = SECTIONS.find(({ id }) => id === section) ?? SECTIONS[0];
   return (
     // @container so the layout adapts to its host's width (full window, shell
     // side pane, …) instead of the viewport.
     <div className="@container flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background text-foreground">
-      {/* The nav rail collapses below @lg, where it's too cramped to be usable;
-          the picker moves into the content header (or the chip-strip when
-          pin-hosted). */}
-      <SectionNav
+      <SectionPage
         groups={navGroups}
         activeId={section}
         onSelect={onSectionChange}
-        className="w-max min-w-32 shrink-0 border-r border-border p-2 @max-lg:hidden"
-      />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {!isPinHosted && (
-          <div className="hidden shrink-0 items-center justify-end border-b border-border px-3 py-1.5 @max-lg:flex">
-            <LibrarySectionDropdown section={section} onSectionChange={onSectionChange} />
-          </div>
-        )}
-        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-          <LibrarySectionContent
-            section={section}
-            appId={appId}
-            onAppChange={onAppChange}
-            createPrompt={createPrompt}
-            onCreatePromptConsumed={onCreatePromptConsumed}
-          />
-        </div>
-      </div>
+        navLabel={t('sidebar.library')}
+        title={t(entry.labelKey)}
+        description={t(entry.descriptionKey)}
+        fill={entry.fill}
+      >
+        <LibrarySectionContent
+          section={section}
+          appId={appId}
+          onAppChange={onAppChange}
+          createPrompt={createPrompt}
+          onCreatePromptConsumed={onCreatePromptConsumed}
+        />
+      </SectionPage>
     </div>
   );
 }

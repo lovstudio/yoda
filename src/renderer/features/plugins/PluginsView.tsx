@@ -103,7 +103,7 @@ const PluginCard: React.FC<{
   );
 };
 
-const PluginsView: React.FC = () => {
+const PluginsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
   const { t } = useTranslation();
   const {
     plugins,
@@ -118,21 +118,38 @@ const PluginsView: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center bg-background text-foreground">
+      <div
+        className={cn(
+          'flex items-center justify-center bg-background text-foreground',
+          embedded ? 'h-48' : 'h-full'
+        )}
+      >
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="@container flex h-full flex-col overflow-y-auto bg-background text-foreground">
-      <div className="mx-auto w-full max-w-3xl px-8 py-8">
-        <div className="mb-6">
-          <h1 className="text-lg font-semibold">{t('plugins.title')}</h1>
-          <p className="mt-1 text-xs text-muted-foreground">{t('plugins.subtitle')}</p>
-        </div>
+    <div
+      className={cn(
+        '@container flex flex-col bg-background text-foreground',
+        !embedded && 'h-full overflow-y-auto'
+      )}
+    >
+      <div className={cn('w-full', !embedded && 'mx-auto max-w-3xl px-8 py-8')}>
+        {!embedded && (
+          <div className="mb-6">
+            <h1 className="text-lg font-semibold">{t('plugins.title')}</h1>
+            <p className="mt-1 text-xs text-muted-foreground">{t('plugins.subtitle')}</p>
+          </div>
+        )}
 
-        <div className="sticky top-0 z-20 -mx-8 mb-6 flex items-center gap-2 border-b border-border/60 bg-background/95 px-8 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div
+          className={cn(
+            'sticky top-0 z-20 mb-6 flex items-center gap-2 border-b border-border/60 bg-background/95 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80',
+            !embedded && '-mx-8 px-8'
+          )}
+        >
           <div className="relative min-w-0 flex-1">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input

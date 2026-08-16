@@ -2623,10 +2623,6 @@
     }
   },
   "library": {
-    "groups": {
-      "basic": "Basics",
-      "advanced": "Advanced"
-    },
     "sections": {
       "extensions": "Extensions",
       "apps": "Apps",
@@ -2868,6 +2864,7 @@
   },
   "promptLibrary": {
     "title": "Prompts",
+    "subtitle": "Reusable prompts and system instructions your sessions can draw on.",
     "tabs": {
       "ariaLabel": "Prompt configuration scope",
       "global": "Global",
