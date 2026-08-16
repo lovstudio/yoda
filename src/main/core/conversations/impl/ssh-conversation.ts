@@ -377,6 +377,7 @@ export class SshConversationProvider implements ConversationProvider {
             projectId: conversation.projectId,
             taskId: conversation.taskId,
             conversationId: conversation.id,
+            ptySessionId: sessionId,
           })
         );
       }

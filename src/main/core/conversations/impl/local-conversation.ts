@@ -870,6 +870,7 @@ export class LocalConversationProvider implements ConversationProvider {
             projectId: conversation.projectId,
             taskId: conversation.taskId,
             conversationId: conversation.id,
+            ptySessionId: sessionId,
           })
         );
       }
