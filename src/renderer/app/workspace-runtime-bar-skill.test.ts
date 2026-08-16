@@ -1,16 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readRuntimeBarSource } from '@renderer/app/runtime-bar/test-helpers/read-bar-source';
 
 describe('workspace Skill placement', () => {
   it('opens an integrated popover after Prompt before context usage', () => {
-    const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+    const source = readRuntimeBarSource();
     const skillSource = readFileSync(
       new URL('./workspace-skill-popover.tsx', import.meta.url),
       'utf8'
     );
     const promptTriggerIndex = source.indexOf('<WorkspacePromptPopover');
     const skillTriggerIndex = source.indexOf('<WorkspaceSkillPopover');
-    const contextEntry = source.indexOf('{sessionContext && contextPercent != null ? (');
+    const contextEntry = source.indexOf('export const RuntimeBarContextItem');
     const terminalTriggerIndex = source.indexOf("title={t('workspaceRuntime.terminal')}");
 
     expect(skillTriggerIndex).toBeGreaterThan(promptTriggerIndex);
@@ -28,14 +29,14 @@ describe('workspace Skill placement', () => {
   });
 
   it('reads Codex model details without requesting full session context', () => {
-    const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+    const source = readRuntimeBarSource();
 
     expect(source).toContain('rpc.conversations.getCodexSessionRuntimeMetadata(');
     expect(source).not.toContain('rpc.conversations.getCodexSessionContext(');
   });
 
   it('renders the active model only from provider-reported session metadata', () => {
-    const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+    const source = readRuntimeBarSource();
 
     expect(source).toContain('const activeSessionModel = sessionModelDetails?.model ?? null;');
     expect(source).toContain('{activeSessionModel}');

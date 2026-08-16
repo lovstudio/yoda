@@ -8,6 +8,7 @@ const alias = {
   '@shared': resolve(__dirname, 'src/shared'),
   '@renderer': resolve(__dirname, 'src/renderer'),
   '@main': resolve(__dirname, 'src/main'),
+  '@runtime-bar': resolve(__dirname, 'packages/runtime-bar/src'),
   // Resolve the protocol package from source so desktop builds and tests never
   // depend on packages/protocol/dist being freshly compiled.
   '@lovstudio/yoda-protocol': resolve(__dirname, 'packages/protocol/src'),

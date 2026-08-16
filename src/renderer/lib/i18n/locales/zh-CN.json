@@ -305,6 +305,7 @@
       "unchanged": "项目名和路径没有变化。",
       "targetExistsTitle": "目标项目已存在",
       "targetExistsDescription": "该路径已注册为「{{project}}」。要将当前项目合并到该目标项目吗？",
+      "targetExistsHint": "任务、会话与终端会归入目标项目，当前项目条目随之消失；磁盘上的文件不会移动或删除。",
       "submit": "移动",
       "saving": "移动中…",
       "mergeSubmit": "合并",
@@ -547,7 +548,7 @@
       "roadmap": "Roadmap"
     },
     "general": {
-      "description": "管理你的账户、隐私设置、通知与应用更新。"
+      "description": "管理语言、隐私设置与应用更新。"
     },
     "tasksTab": {
       "description": "配置新任务的创建与运行方式。"

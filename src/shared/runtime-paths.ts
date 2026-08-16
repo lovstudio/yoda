@@ -107,6 +107,10 @@ export function resolveRuntimePaths(id: RuntimeId): RuntimePaths {
       return { config: '~/.antigravity' };
     case 'grok':
       return { config: '~/.grok' };
+    // The harness owns credentials, providers and MCP under `~/.dsh`; the TUI
+    // plugin keeps only its own presentation state in `~/.dsh-tui`.
+    case 'dsh':
+      return { config: '~/.dsh', settings: '~/.dsh/settings.yaml' };
   }
 }
 

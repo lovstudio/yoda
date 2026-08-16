@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readRuntimeBarSource } from '@renderer/app/runtime-bar/test-helpers/read-bar-source';
 
 describe('workspace agent sessions', () => {
-  const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+  const source = readRuntimeBarSource();
 
   it('merges live resource sessions with globally routable sessions', () => {
     expect(source).toContain('resourceSnapshot?.agentSessions');

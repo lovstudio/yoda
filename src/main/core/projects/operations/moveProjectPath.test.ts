@@ -2,6 +2,8 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { getTableName } from 'drizzle-orm';
+import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { moveProjectPath } from './moveProjectPath';
 
@@ -17,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   set: vi.fn(),
   updateWhere: vi.fn(),
   returning: vi.fn(),
+  transaction: vi.fn(),
   syncAgentProjectPathArtifacts: vi.fn(),
 }));
 
@@ -58,7 +61,7 @@ vi.mock('@main/db/client', () => ({
   db: {
     select: mocks.select,
     update: mocks.update,
-    transaction: vi.fn(),
+    transaction: mocks.transaction,
   },
   sqlite: {
     prepare: vi.fn(() => ({ run: vi.fn() })),
@@ -70,6 +73,48 @@ vi.mock('./sync-agent-project-path-artifacts', () => ({
 }));
 
 const temporaryRoots: string[] = [];
+
+type ExecutedStatement = { kind: 'update' | 'delete'; table: string };
+
+/**
+ * Stands in for a better-sqlite3 transaction: statements only reach the
+ * database once they are driven with `.run()`/`.all()`, and returning a
+ * thenable (an un-executed drizzle builder) aborts the whole transaction.
+ */
+function runFakeTransaction<T>(
+  fn: (tx: unknown) => T,
+  finalRows: unknown[]
+): { result: T; executed: ExecutedStatement[] } {
+  const executed: ExecutedStatement[] = [];
+  const statement = (kind: ExecutedStatement['kind'], table: SQLiteTable) => {
+    const record = () => executed.push({ kind, table: getTableName(table) });
+    const builder = {
+      set: () => builder,
+      where: () => builder,
+      returning: () => builder,
+      // drizzle builders are lazy thenables — that is exactly why returning one
+      // from a synchronous transaction blows up instead of running the query.
+      then: () => {
+        throw new Error('awaited a statement inside a synchronous transaction');
+      },
+      run: record,
+      all: () => {
+        record();
+        return finalRows;
+      },
+    };
+    return builder;
+  };
+
+  const result = fn({
+    update: (table: SQLiteTable) => statement('update', table),
+    delete: (table: SQLiteTable) => statement('delete', table),
+  });
+  if (typeof (result as { then?: unknown })?.then === 'function') {
+    throw new TypeError('Transaction function cannot return a promise');
+  }
+  return { result, executed };
+}
 
 function makeProjectRow(projectPath: string) {
   return {
@@ -233,5 +278,36 @@ describe('moveProjectPath', () => {
       expect.objectContaining({ id: 'project-1', path: source })
     );
     expect(mocks.syncAgentProjectPathArtifacts).not.toHaveBeenCalled();
+  });
+
+  it('merges into the project already registered at the target path', async () => {
+    const { source, target } = makeRepository();
+    fs.mkdirSync(target, { recursive: true });
+    execFileSync('git', ['-C', target, 'init', '-q']);
+    const row = makeProjectRow(source);
+    const targetRow = { ...makeProjectRow(target), id: 'project-2', alias: null };
+    mocks.limit.mockResolvedValueOnce([row]).mockResolvedValueOnce([targetRow]);
+    mocks.detectInfo
+      .mockResolvedValueOnce({ isGitRepo: true, rootPath: source, baseRef: 'main' })
+      .mockResolvedValueOnce({ isGitRepo: true, rootPath: target, baseRef: 'main' });
+    let executed: ExecutedStatement[] = [];
+    mocks.transaction.mockImplementation((fn: (tx: unknown) => unknown) => {
+      const outcome = runFakeTransaction(fn, [targetRow]);
+      executed = outcome.executed;
+      return outcome.result;
+    });
+
+    const result = await moveProjectPath('project-1', {
+      name: '重命名后的项目',
+      path: target,
+      mergeExistingProjectId: 'project-2',
+    });
+
+    expect(result).toMatchObject({ id: 'project-2', path: target });
+    expect(executed).toContainEqual({ kind: 'update', table: 'tasks' });
+    expect(executed).toContainEqual({ kind: 'update', table: 'conversations' });
+    expect(executed).toContainEqual({ kind: 'update', table: 'workspace_terminals' });
+    expect(executed).toContainEqual({ kind: 'delete', table: 'projects' });
+    expect(mocks.syncAgentProjectPathArtifacts).toHaveBeenCalledWith(source, target);
   });
 });

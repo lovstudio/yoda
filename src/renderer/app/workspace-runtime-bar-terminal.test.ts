@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readRuntimeBarSource } from '@renderer/app/runtime-bar/test-helpers/read-bar-source';
 
 describe('Workspace runtime bar Terminal ownership', () => {
-  const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+  const source = readRuntimeBarSource();
 
   it('uses the quick-action project/global Terminal as its only button state', () => {
     expect(source).toContain('const workspaceTerminalOpen = workspaceTerminalStore.isOpen;');

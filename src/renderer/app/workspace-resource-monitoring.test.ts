@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
 import type { AppResourceSnapshot } from '@shared/app-resource';
+import { readRuntimeBarSource } from '@renderer/app/runtime-bar/test-helpers/read-bar-source';
 import {
   getWorkspaceResourcePollInterval,
   getWorkspaceResourceQueryPollInterval,
@@ -73,10 +74,7 @@ describe('workspace resource monitoring', () => {
   });
 
   it('uses one AppResourceSnapshot query key in the runtime bar and detail observer', () => {
-    const runtimeBarSource = readFileSync(
-      new URL('./workspace-runtime-bar.tsx', import.meta.url),
-      'utf8'
-    );
+    const runtimeBarSource = readRuntimeBarSource();
     const detailsSource = readFileSync(
       new URL('./workspace-resource-details-modal.tsx', import.meta.url),
       'utf8'
@@ -84,7 +82,10 @@ describe('workspace resource monitoring', () => {
 
     expect(WORKSPACE_RESOURCE_QUERY_KEY).toEqual(['app', 'resourceSnapshot']);
     expect(runtimeBarSource).toContain('queryKey: WORKSPACE_RESOURCE_QUERY_KEY');
-    expect(runtimeBarSource).toContain('freshAgentProcesses: isAgentPopoverOpen');
+    // One query, many readers: the Agent panel registers its demand for
+    // per-process figures instead of passing its own flag into the query.
+    expect(runtimeBarSource).toContain('useFreshAgentProcesses(isAgentPopoverOpen)');
+    expect(runtimeBarSource).toContain('freshAgentProcesses: fresh');
     expect(runtimeBarSource).toContain('if (isAgentPopoverOpen) void refreshResourceSnapshot()');
     expect(detailsSource).toContain('queryKey: WORKSPACE_RESOURCE_QUERY_KEY');
     expect(detailsSource).not.toContain("['app', 'resourceDetails']");

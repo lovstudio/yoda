@@ -29,6 +29,7 @@ export const RUNTIME_IDS = [
   'autohand',
   'antigravity',
   'grok',
+  'dsh',
 ] as const;
 
 export type RuntimeId = (typeof RUNTIME_IDS)[number];
@@ -930,6 +931,38 @@ export const RUNTIMES: RuntimeDefinition[] = [
     invertInDark: true,
     terminalOnly: true,
   },
+  {
+    id: 'dsh',
+    name: 'dsh-TUI',
+    description:
+      'Claude Code-style terminal client for DeepSeek Harness, with streaming thoughts, session rewind, and a context/TPS gauge.',
+    docUrl: 'https://github.com/ccch1mneyyy/dsh-TUI',
+    versionHistoryUrl: 'https://github.com/ccch1mneyyy/dsh-TUI/releases',
+    // Two packages are installed together, so the npm command is ambiguous to
+    // read back from — name the one that publishes the `dsh-tui` launcher.
+    npmPackage: '@deepseek-harness-tui/dsh-tui',
+    installCommand: 'npm install -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui',
+    uninstallCommand: 'npm uninstall -g @deepseek-harness-tui/dsh-tui',
+    // The launcher refuses to start when the profile copy is older than the
+    // global one, so both have to move together.
+    updateCommand:
+      'npm install -g @deepseek-harness-tui/dsh-tui@latest && dsh plugin --profile dsh-tui add @deepseek-harness-tui/dsh-tui@latest',
+    commands: ['dsh-tui'],
+    // The launcher forwards unknown flags to `dsh --profile dsh-tui`, so the
+    // reported version is the harness CLI's, not the plugin's.
+    versionArgs: ['--version'],
+    cli: 'dsh-tui',
+    // A bare positional would be read as a workspace target when it happens to
+    // name an existing path — type the prompt into the TUI instead.
+    initialPromptFlag: '',
+    useKeystrokeInjection: true,
+    clipboardImagePaste: true,
+    resumeFlag: '--resume',
+    commandPrefix: '/',
+    icon: 'dsh.svg',
+    alt: 'dsh-TUI',
+    terminalOnly: true,
+  },
 ];
 
 const OPENAI_API_ENV = [
@@ -1201,6 +1234,19 @@ export const RUNTIME_ACCOUNT_PROFILES = {
       },
     },
     maas: { supported: true, providerHints: ['xai', 'grok'] },
+  },
+  dsh: {
+    officialSubscription: { supported: true },
+    officialApi: {
+      envVars: ['DEEPSEEK_API_KEY'],
+      probe: {
+        defaultBaseUrl: 'https://api.deepseek.com',
+        path: '/models',
+        authEnvVars: ['DEEPSEEK_API_KEY'],
+        auth: 'bearer',
+      },
+    },
+    maas: { supported: true, providerHints: ['deepseek'] },
   },
 } satisfies Record<RuntimeId, RuntimeAccountProfile>;
 

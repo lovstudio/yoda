@@ -1,0 +1,17 @@
+# dsh-runtime-bar bundle patch
+#
+# The `dsh.bundle.patch` layer of the published npm package: installing through
+# the official CLI —
+#
+#   dsh plugin --profile <name> add dsh-runtime-bar@<version>
+#
+# — reconciles `dsh.profile.bundles` against installed packages and, seeing
+# this declaration, appends `dsh-runtime-bar` to the bundle stack. The profile
+# boot then merges this patch (a single `insert` of the plugin row), so no
+# profile file needs editing by hand.
+#
+# If the profile still carries a manual mount line for this plugin, remove it
+# before switching to the bundle channel — two host halves mean two bars.
+- insert:
+    - id: runtime-bar
+      name: 'dsh-runtime-bar'

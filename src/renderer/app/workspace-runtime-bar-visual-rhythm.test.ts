@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readRuntimeBarSource } from '@renderer/app/runtime-bar/test-helpers/read-bar-source';
 
 describe('Workspace runtime bar visual rhythm', () => {
-  const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+  const source = readRuntimeBarSource();
   const notificationSource = readFileSync(
     new URL('./workspace-notification-center.tsx', import.meta.url),
     'utf8'
