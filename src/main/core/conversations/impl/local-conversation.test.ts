@@ -893,6 +893,8 @@ describe('LocalConversationProvider', () => {
     expect(mocks.aiLogFinish).toHaveBeenCalledWith('ai-log-id', {
       status: 'failed',
       error: 'Signal SIGTERM',
+      // The dying screen is the only evidence a mid-turn CLI death leaves behind.
+      output: 'immediate output',
     });
     expect(mocks.stopTitle).toHaveBeenCalledWith(conversation.id);
     ptySessionRegistry.unsubscribe(sessionId, consumerId);
