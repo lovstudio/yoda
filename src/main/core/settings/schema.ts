@@ -134,6 +134,13 @@ export const taskSettingsSchema = z.object({
   /** Agent that rewrites the input prompt. Empty = built-in prompt-rewrite Agent. */
   promptRewriteAgentId: z.string().catch(''),
   /**
+   * Whether the input prompt is rewritten before it is sent. Optional on
+   * purpose: absent means "never set explicitly", so the value is inferred from
+   * `inputPromptLanguage`, which carried the on/off state before this switch
+   * existed. See resolvePromptRewriteEnabled.
+   */
+  promptRewriteEnabled: z.boolean().optional(),
+  /**
    * Whether summaries may be generated without an explicit user request — the
    * post-turn refresh and the panel's own `recent` note. An explicit
    * regenerate always runs, so turning this off never makes summaries
@@ -151,7 +158,8 @@ export const taskSettingsSchema = z.object({
   /** Which transcript parts feed the `global` summary (defaults to everything). */
   summaryContextGlobal: summaryContextSchema.catch(DEFAULT_SUMMARY_CONTEXT_GLOBAL),
   namingModel: z.string(),
-  namingLanguage: z.enum(taskOutputLanguageValues).catch('skip'),
+  /** Output language for generated task/session names. */
+  namingLanguage: z.enum(taskOutputLanguageValues).catch('app'),
   namingContext: z.object(
     Object.fromEntries(TASK_NAMING_CONTEXT_SOURCE_IDS.map((id) => [id, z.boolean()])) as Record<
       (typeof TASK_NAMING_CONTEXT_SOURCE_IDS)[number],

@@ -34,12 +34,12 @@ export const NamingConfigFields = observer(function NamingConfigFields({
 }) {
   const { t } = useTranslation();
   const taskSettings = useTaskSettings();
-  const disabled = taskSettings.loading || taskSettings.saving || !taskSettings.autoGenerateName;
+  const disabled = taskSettings.loading || taskSettings.saving;
   // Controlled inputs (Select) must NOT be disabled mid-save: toggling `disabled`
   // between the click and React's commit makes base-ui abort the value change,
   // so the selection visibly reverts. Optimistic updates keep the value live, so
   // omitting the transient `saving` flag here is safe.
-  const interactionDisabled = taskSettings.loading || !taskSettings.autoGenerateName;
+  const interactionDisabled = taskSettings.loading;
 
   const contextLabels: Record<(typeof CONTEXT_KEYS)[number], string> = {
     prompt: t('settings.tasks.namingContextPrompt'),

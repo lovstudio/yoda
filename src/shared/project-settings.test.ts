@@ -14,7 +14,7 @@ describe('shareableProjectSettingsSchema', () => {
     expect(parsed.composerDefaults?.runMode).toBe('normal');
   });
 
-  it('accepts composer language overrides', () => {
+  it('accepts composer language overrides, including the legacy skip value', () => {
     const parsed = shareableProjectSettingsSchema.parse({
       composerDefaults: {
         inputPromptLanguage: 'skip',
@@ -27,6 +27,24 @@ describe('shareableProjectSettingsSchema', () => {
       inputPromptLanguage: 'skip',
       namingLanguage: 'zh-CN',
       summaryLanguage: 'skip',
+    });
+  });
+
+  it('accepts per-capability switches independent of the languages', () => {
+    const parsed = shareableProjectSettingsSchema.parse({
+      composerDefaults: {
+        promptRewriteEnabled: true,
+        autoGenerateName: false,
+        autoGenerateSummary: false,
+        namingLanguage: 'en',
+      },
+    });
+
+    expect(parsed.composerDefaults).toMatchObject({
+      promptRewriteEnabled: true,
+      autoGenerateName: false,
+      autoGenerateSummary: false,
+      namingLanguage: 'en',
     });
   });
 

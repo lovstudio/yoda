@@ -1,3 +1,4 @@
+import { getProjectComposerDefaults } from '@main/core/projects/settings/composer-default-overrides';
 import { appSettingsService } from '@main/core/settings/settings-service';
 
 /**
@@ -8,7 +9,10 @@ import { appSettingsService } from '@main/core/settings/settings-service';
  * runs, it does not make summaries unreachable. Read at the moment generation
  * would start, never cached, so toggling it takes effect on the next turn.
  */
-export async function isAutoSessionSummaryEnabled(): Promise<boolean> {
-  const taskSettings = await appSettingsService.get('tasks');
-  return taskSettings.autoGenerateSummary;
+export async function isAutoSessionSummaryEnabled(projectId?: string | null): Promise<boolean> {
+  const [taskSettings, composerDefaults] = await Promise.all([
+    appSettingsService.get('tasks'),
+    getProjectComposerDefaults(projectId),
+  ]);
+  return composerDefaults?.autoGenerateSummary ?? taskSettings.autoGenerateSummary;
 }

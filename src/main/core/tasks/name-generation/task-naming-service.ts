@@ -4,6 +4,7 @@ import type { GlobalLlmSettings, RuntimeCustomConfig } from '@shared/app-setting
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
 import { taskNamingUpdatedChannel } from '@shared/events/taskEvents';
 import { getLlmProfile, normalizeLlmSettings, type LlmProfile } from '@shared/global-llm';
+import { resolveOutputLanguage } from '@shared/project-settings';
 import { findRuntimePermissionMode, getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import { deriveTaskSlug, normalizeTaskDisplayName } from '@shared/task-name';
 import {
@@ -12,7 +13,6 @@ import {
   type TaskNamingContextSource,
   type TaskNamingDebugStage,
   type TaskNamingDebugTrace,
-  type TaskNamingLanguage,
   type TaskNamingSettings,
   type TaskNamingSnapshot,
   type TaskNamingStatus,
@@ -175,7 +175,9 @@ export async function resolveNamingRuntime(
   );
   const settings: TaskNamingSettings = {
     model,
-    language: composerDefaults?.namingLanguage ?? taskSettings.namingLanguage,
+    language: resolveOutputLanguage(
+      composerDefaults?.namingLanguage ?? taskSettings.namingLanguage
+    ),
     context: taskSettings.namingContext,
     recentTaskLimit: taskSettings.namingRecentTaskLimit,
     requestTimeoutMs: normalizeTaskNamingTimeoutMs(taskSettings.namingRequestTimeoutMs),
@@ -204,14 +206,17 @@ export async function resolveNamingRuntime(
   };
 }
 
-export async function resolveTaskNamingLanguage(
-  projectId?: string | null
-): Promise<TaskNamingLanguage> {
+/**
+ * Whether a freshly created task should be named by the AI without being asked.
+ * The switch is a plain boolean, project override first — the naming language is
+ * configuration only and no longer decides whether naming runs.
+ */
+export async function resolveAutoTaskNamingEnabled(projectId?: string | null): Promise<boolean> {
   const [taskSettings, composerDefaults] = await Promise.all([
     appSettingsService.get('tasks'),
     getProjectComposerDefaults(projectId),
   ]);
-  return composerDefaults?.namingLanguage ?? taskSettings.namingLanguage;
+  return composerDefaults?.autoGenerateName ?? taskSettings.autoGenerateName;
 }
 
 export async function buildCommonProjectNamingSources(input: {
@@ -380,24 +385,6 @@ export async function generateTaskNames(
     recentTaskLimit: settings.recentTaskLimit,
     timeoutMs: settings.requestTimeoutMs,
   });
-  if (settings.language === 'skip') {
-    const message = 'Task naming is disabled by language setting.';
-    const context = await buildTaskNamingContextSnapshot(input, settings);
-    const snapshot = await saveNamingSnapshot({
-      taskId: input.taskId,
-      projectId: input.projectId,
-      status: 'skipped',
-      model: settings.model,
-      context,
-      error: message,
-    });
-    console.log('[DEBUG][task-naming] skipped:', {
-      taskId: input.taskId,
-      projectId: input.projectId,
-      totalDurationMs: Date.now() - startedAt,
-    });
-    return { success: false, message, snapshot };
-  }
   recordStage('providerConfig', Date.now() - startedAt, {
     runtimeId,
     hasProviderConfig: Boolean(providerConfig),

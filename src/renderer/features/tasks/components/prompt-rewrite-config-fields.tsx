@@ -1,6 +1,5 @@
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
-import { isPromptRewriteEnabled } from '@shared/project-settings';
 import {
   PROMPT_REWRITE_LANGUAGE_OPTIONS,
   TaskLanguageSelect,
@@ -13,7 +12,7 @@ import { cn } from '@renderer/utils/utils';
  * Configuration for rewriting the user's prompt before it is sent: which Agent
  * does the work, and what language it rewrites into. The capability's on/off
  * state lives on the row itself, as it does for naming and summary, so both
- * fields here read purely as parameters.
+ * fields here read purely as parameters — and stay editable while it is off.
  */
 export const PromptRewriteConfigFields = observer(function PromptRewriteConfigFields({
   className,
@@ -22,8 +21,6 @@ export const PromptRewriteConfigFields = observer(function PromptRewriteConfigFi
 }) {
   const { t } = useTranslation();
   const taskSettings = useTaskSettings();
-  const off = !isPromptRewriteEnabled(taskSettings.inputPromptLanguage);
-  const disabled = taskSettings.loading || taskSettings.saving || off;
 
   return (
     <div className={cn('flex min-w-0 flex-col gap-3', className)}>
@@ -32,8 +29,8 @@ export const PromptRewriteConfigFields = observer(function PromptRewriteConfigFi
         hint={t('settings.tasks.promptRewriteAgentHint')}
         agentId={taskSettings.promptRewriteAgentId}
         onAgentIdChange={taskSettings.updatePromptRewriteAgentId}
-        disabled={disabled}
-        interactionDisabled={taskSettings.loading || off}
+        disabled={taskSettings.loading || taskSettings.saving}
+        interactionDisabled={taskSettings.loading}
       />
       <TaskLanguageSelect
         label={t('settings.tasks.inputPromptLanguageLabel')}
@@ -41,7 +38,7 @@ export const PromptRewriteConfigFields = observer(function PromptRewriteConfigFi
         options={PROMPT_REWRITE_LANGUAGE_OPTIONS}
         // A controlled Select must not be disabled mid-save, or base-ui aborts
         // the value change and the selection visibly reverts.
-        disabled={taskSettings.loading || off}
+        disabled={taskSettings.loading}
         onValueChange={taskSettings.updateInputPromptLanguage}
         className="w-44"
       />
