@@ -1,12 +1,8 @@
-import { Plus, Settings2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { SUMMARY_CONTEXT_SOURCE_IDS } from '@shared/session-summary';
-import { useAgents } from '@renderer/features/agents-config/use-agents';
+import { UtilityAgentPicker } from '@renderer/features/tasks/components/utility-agent-picker';
 import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings';
-import { useNavigate } from '@renderer/lib/layout/navigation-provider';
-import { useShowModal } from '@renderer/lib/modal/modal-provider';
-import { Button } from '@renderer/lib/ui/button';
 import { Checkbox } from '@renderer/lib/ui/checkbox';
 import { MicroLabel } from '@renderer/lib/ui/label';
 import {
@@ -31,86 +27,18 @@ export const SummaryConfigFields = observer(function SummaryConfigFields({
 }) {
   const { t } = useTranslation();
   const taskSettings = useTaskSettings();
-  const { agents } = useAgents();
-  const { navigate } = useNavigate();
-  const showAgentModal = useShowModal('agentEditModal');
   const disabled = taskSettings.loading || taskSettings.saving;
-
-  const selectedAgent = agents.find((agent) => agent.id === taskSettings.summaryAgentId) ?? null;
 
   return (
     <div className={cn('flex min-w-0 flex-col gap-1', className)}>
-      <MicroLabel className="text-foreground-passive">
-        {t('settings.tasks.summaryAgentLabel')}
-      </MicroLabel>
-      {agents.length === 0 ? (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={disabled}
-          className="h-8 w-full justify-start gap-1.5"
-          onClick={() =>
-            showAgentModal({
-              onSuccess: (created) => taskSettings.updateSummaryAgentId(created.id),
-            })
-          }
-        >
-          <Plus className="size-3.5" />
-          {t('home.slotNoAgents')}
-        </Button>
-      ) : (
-        <div className="flex min-w-0 items-center gap-1.5">
-          <Select
-            value={selectedAgent?.id ?? ''}
-            onValueChange={(value) => taskSettings.updateSummaryAgentId(value as string)}
-            disabled={disabled}
-          >
-            <SelectTrigger size="sm" className="h-8 min-w-0 flex-1">
-              <SelectValue placeholder={t('home.slotPickAgent')}>
-                {() =>
-                  selectedAgent ? (
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="flex size-4 shrink-0 items-center justify-center text-[13px] leading-none">
-                        {selectedAgent.icon || '🤖'}
-                      </span>
-                      <span className="truncate">{selectedAgent.name}</span>
-                    </span>
-                  ) : (
-                    t('home.slotPickAgent')
-                  )
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {agents.map((agent) => (
-                <SelectItem key={agent.id} value={agent.id} label={agent.name}>
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="flex size-4 shrink-0 items-center justify-center text-[13px] leading-none">
-                      {agent.icon || '🤖'}
-                    </span>
-                    <span className="truncate">{agent.name}</span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            disabled={disabled}
-            aria-label={t('home.slotManageAgents')}
-            title={t('home.slotManageAgents')}
-            onClick={() => navigate('agentManager')}
-          >
-            <Settings2 className="size-3.5" />
-          </Button>
-        </div>
-      )}
-      <p className="text-[11px] leading-relaxed text-foreground-passive">
-        {t('settings.tasks.summaryAgentHint')}
-      </p>
+      <UtilityAgentPicker
+        label={t('settings.tasks.summaryAgentLabel')}
+        hint={t('settings.tasks.summaryAgentHint')}
+        agentId={taskSettings.summaryAgentId}
+        onAgentIdChange={taskSettings.updateSummaryAgentId}
+        disabled={disabled}
+        interactionDisabled={taskSettings.loading}
+      />
 
       <div className="mt-1 flex min-w-0 flex-col gap-1">
         <MicroLabel className="text-foreground-passive">

@@ -12,6 +12,7 @@ export interface TaskSettingsModel {
   initTaskNameFromSession: boolean;
   branchNaming: 'hash' | 'ai';
   namingAgentId: string;
+  promptRewriteAgentId: string;
   autoGenerateSummary: boolean;
   summaryAgentId: string;
   inputPromptLanguage: TaskOutputLanguage;
@@ -38,6 +39,7 @@ export interface TaskSettingsModel {
       | 'branchNaming'
       | 'inputPromptLanguage'
       | 'namingAgentId'
+      | 'promptRewriteAgentId'
       | 'autoGenerateSummary'
       | 'namingModel'
       | 'namingLanguage'
@@ -50,6 +52,7 @@ export interface TaskSettingsModel {
   updateInitTaskNameFromSession: (next: boolean) => void;
   updateBranchNaming: (next: 'hash' | 'ai') => void;
   updateNamingAgentId: (next: string) => void;
+  updatePromptRewriteAgentId: (next: string) => void;
   updateAutoGenerateSummary: (next: boolean) => void;
   updateSummaryAgentId: (next: string) => void;
   updateInputPromptLanguage: (next: TaskOutputLanguage) => void;
@@ -83,6 +86,7 @@ export function useTaskSettings(): TaskSettingsModel {
     initTaskNameFromSession: tasks?.initTaskNameFromSession ?? true,
     branchNaming: tasks?.branchNaming ?? 'hash',
     namingAgentId: tasks?.namingAgentId ?? '',
+    promptRewriteAgentId: tasks?.promptRewriteAgentId ?? '',
     autoGenerateSummary: tasks?.autoGenerateSummary ?? true,
     summaryAgentId: tasks?.summaryAgentId ?? '',
     inputPromptLanguage: tasks?.inputPromptLanguage ?? 'skip',
@@ -107,6 +111,7 @@ export function useTaskSettings(): TaskSettingsModel {
     updateInitTaskNameFromSession: (next) => update({ initTaskNameFromSession: next }),
     updateBranchNaming: (next) => update({ branchNaming: next }),
     updateNamingAgentId: (next) => update({ namingAgentId: next }),
+    updatePromptRewriteAgentId: (next) => update({ promptRewriteAgentId: next }),
     updateAutoGenerateSummary: (next) => update({ autoGenerateSummary: next }),
     updateSummaryAgentId: (next) => update({ summaryAgentId: next }),
     updateInputPromptLanguage: (next) => update({ inputPromptLanguage: next }),

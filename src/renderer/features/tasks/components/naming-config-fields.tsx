@@ -1,4 +1,3 @@
-import { Plus, Settings2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import {
@@ -6,11 +5,8 @@ import {
   MIN_TASK_NAMING_TIMEOUT_MS,
   normalizeTaskNamingTimeoutMs,
 } from '@shared/task-naming';
-import { useAgents } from '@renderer/features/agents-config/use-agents';
+import { UtilityAgentPicker } from '@renderer/features/tasks/components/utility-agent-picker';
 import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings';
-import { useNavigate } from '@renderer/lib/layout/navigation-provider';
-import { useShowModal } from '@renderer/lib/modal/modal-provider';
-import { Button } from '@renderer/lib/ui/button';
 import { Checkbox } from '@renderer/lib/ui/checkbox';
 import { Input } from '@renderer/lib/ui/input';
 import { MicroLabel } from '@renderer/lib/ui/label';
@@ -41,18 +37,12 @@ export const NamingConfigFields = observer(function NamingConfigFields({
 }) {
   const { t } = useTranslation();
   const taskSettings = useTaskSettings();
-  const { agents } = useAgents();
-  const { navigate } = useNavigate();
-  const showAgentModal = useShowModal('agentEditModal');
   const disabled = taskSettings.loading || taskSettings.saving || !taskSettings.autoGenerateName;
   // Controlled inputs (Select) must NOT be disabled mid-save: toggling `disabled`
   // between the click and React's commit makes base-ui abort the value change,
   // so the selection visibly reverts. Optimistic updates keep the value live, so
   // omitting the transient `saving` flag here is safe.
   const interactionDisabled = taskSettings.loading || !taskSettings.autoGenerateName;
-
-  const selectedNamingAgent =
-    agents.find((agent) => agent.id === taskSettings.namingAgentId) ?? null;
 
   const contextLabels: Record<(typeof CONTEXT_KEYS)[number], string> = {
     prompt: t('settings.tasks.namingContextPrompt'),
@@ -63,76 +53,14 @@ export const NamingConfigFields = observer(function NamingConfigFields({
 
   return (
     <div className={cn('flex min-w-0 flex-col gap-3', className)}>
-      <Field label={t('settings.tasks.namingAgentLabel')} className="min-w-0">
-        {agents.length === 0 ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={disabled}
-            className="h-8 w-full justify-start gap-1.5"
-            onClick={() =>
-              showAgentModal({
-                onSuccess: (created) => taskSettings.updateNamingAgentId(created.id),
-              })
-            }
-          >
-            <Plus className="size-3.5" />
-            {t('home.slotNoAgents')}
-          </Button>
-        ) : (
-          <div className="flex min-w-0 items-center gap-1.5">
-            <Select
-              value={selectedNamingAgent?.id ?? ''}
-              onValueChange={(value) => taskSettings.updateNamingAgentId(value as string)}
-              disabled={interactionDisabled}
-            >
-              <SelectTrigger size="sm" className="h-8 min-w-0 flex-1">
-                <SelectValue placeholder={t('home.slotPickAgent')}>
-                  {() =>
-                    selectedNamingAgent ? (
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="flex size-4 shrink-0 items-center justify-center text-[13px] leading-none">
-                          {selectedNamingAgent.icon || '🤖'}
-                        </span>
-                        <span className="truncate">{selectedNamingAgent.name}</span>
-                      </span>
-                    ) : (
-                      t('home.slotPickAgent')
-                    )
-                  }
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id} label={agent.name}>
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="flex size-4 shrink-0 items-center justify-center text-[13px] leading-none">
-                        {agent.icon || '🤖'}
-                      </span>
-                      <span className="truncate">{agent.name}</span>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              disabled={disabled}
-              aria-label={t('home.slotManageAgents')}
-              title={t('home.slotManageAgents')}
-              onClick={() => navigate('agentManager')}
-            >
-              <Settings2 className="size-3.5" />
-            </Button>
-          </div>
-        )}
-        <p className="text-[11px] leading-relaxed text-foreground-passive">
-          {t('settings.tasks.namingAgentHint')}
-        </p>
-      </Field>
+      <UtilityAgentPicker
+        label={t('settings.tasks.namingAgentLabel')}
+        hint={t('settings.tasks.namingAgentHint')}
+        agentId={taskSettings.namingAgentId}
+        onAgentIdChange={taskSettings.updateNamingAgentId}
+        disabled={disabled}
+        interactionDisabled={interactionDisabled}
+      />
 
       <div className={cn('flex min-w-0 gap-2', compact ? 'flex-col' : 'flex-wrap items-end')}>
         <Field

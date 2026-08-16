@@ -2,7 +2,7 @@ import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
 import type { TaskOutputLanguage } from '@shared/project-settings';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import { extractAgentMessageText, runAgentCli } from '@main/core/agent-cli/run-agent-cli';
-import { resolveUtilityAgent } from '@main/core/agents-config/builtin-agent-resolver';
+import { resolveSelectedUtilityAgent } from '@main/core/agents-config/builtin-agent-resolver';
 import { projectManager } from '@main/core/projects/project-manager';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { appSettingsService } from '@main/core/settings/settings-service';
@@ -52,10 +52,16 @@ export async function rewritePrompt(params: RewritePromptParams): Promise<Rewrit
     };
   }
 
-  const [defaultRuntime, promptRewriteAgent] = await Promise.all([
+  const [defaultRuntime, taskSettings] = await Promise.all([
     appSettingsService.get('defaultRuntime'),
-    resolveUtilityAgent(BUILTIN_AGENT_KEYS.promptRewrite),
+    appSettingsService.get('tasks'),
   ]);
+  // Same resolution as naming and summary: the user's chosen Agent supplies the
+  // runtime, model and framing, falling back to the built-in preset.
+  const promptRewriteAgent = await resolveSelectedUtilityAgent(
+    taskSettings.promptRewriteAgentId,
+    BUILTIN_AGENT_KEYS.promptRewrite
+  );
   const runtimeId = promptRewriteAgent.runtimeId ?? params.runtimeId ?? defaultRuntime;
   const runtimeName = getRuntime(runtimeId)?.name ?? runtimeId;
   const model = promptRewriteAgent.model ?? params.model ?? null;
@@ -88,6 +94,8 @@ export async function rewritePrompt(params: RewritePromptParams): Promise<Rewrit
     metadata: {
       targetLanguage,
       source: params.language,
+      ...(promptRewriteAgent.agentId ? { agentId: promptRewriteAgent.agentId } : {}),
+      ...(promptRewriteAgent.agentName ? { agent: promptRewriteAgent.agentName } : {}),
     },
   });
   const rewritten = cleanRewrittenPrompt(extractAgentMessageText(result.stdout));

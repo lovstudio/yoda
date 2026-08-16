@@ -1,12 +1,13 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { NamingConfigFields } from '@renderer/features/tasks/components/naming-config-fields';
+import { PromptRewriteConfigFields } from '@renderer/features/tasks/components/prompt-rewrite-config-fields';
 import { SummaryConfigFields } from '@renderer/features/tasks/components/summary-config-fields';
 import { SettingDisclosure } from './SettingDisclosure';
 import {
   AutoGenerateSummaryControl,
   AutoGenerateTaskNamesControl,
-  InputPromptLanguageRow,
+  InputPromptLanguageControl,
 } from './TaskSettingsRows';
 
 /**
@@ -21,7 +22,13 @@ const SessionAiSettingsCard: React.FC = () => {
   return (
     <div className="flex flex-col divide-y divide-border/70">
       <div className="pb-4">
-        <InputPromptLanguageRow />
+        <SettingDisclosure
+          title={t('settings.tasks.promptRewriteTitle')}
+          description={t('settings.tasks.inputPromptLanguageDescription')}
+          control={<InputPromptLanguageControl />}
+        >
+          <PromptRewriteConfigFields />
+        </SettingDisclosure>
       </div>
       <div className="py-4">
         <SettingDisclosure

@@ -55,6 +55,7 @@ export const SETTINGS_DEFAULTS = {
     initTaskNameFromSession: true,
     branchNaming: 'hash' as const,
     namingAgentId: '',
+    promptRewriteAgentId: '',
     autoGenerateSummary: true,
     summaryAgentId: '',
     inputPromptLanguage: 'skip' as const,

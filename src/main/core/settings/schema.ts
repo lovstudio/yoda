@@ -131,6 +131,8 @@ export const taskSettingsSchema = z.object({
   branchNaming: z.enum(['hash', 'ai']).catch('hash'),
   /** Agent that drives task naming. Empty = use the built-in naming Agent. */
   namingAgentId: z.string().catch(''),
+  /** Agent that rewrites the input prompt. Empty = built-in prompt-rewrite Agent. */
+  promptRewriteAgentId: z.string().catch(''),
   /**
    * Whether summaries may be generated without an explicit user request — the
    * post-turn refresh and the panel's own `recent` note. An explicit
