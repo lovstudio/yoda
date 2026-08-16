@@ -13,10 +13,9 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
   updateSettings: vi.fn(),
   retainedSources: {
-    toast: true,
+    app: true,
     agent: true,
     automation: true,
-    system: true,
   } as Record<string, boolean>,
 }));
 
@@ -71,12 +70,11 @@ describe('WorkspaceNotificationCenter', () => {
   beforeEach(() => {
     localStorage.clear();
     workspaceNotificationStore.clear();
-    mocks.retainedSources = { toast: true, agent: true, automation: true, system: true };
+    mocks.retainedSources = { app: true, agent: true, automation: true };
     workspaceNotificationStore.setRetainedSources({
-      toast: true,
+      app: true,
       agent: true,
       automation: true,
-      system: true,
     });
     mocks.updateSettings.mockReset();
     mocks.copyTextToClipboard.mockReset();
@@ -104,7 +102,7 @@ describe('WorkspaceNotificationCenter', () => {
         description: 'Desktop bundle is ready.',
         details: 'Build finished\n\nArtifact: release/Yoda.dmg',
         kind: 'success',
-        source: 'toast',
+        source: 'app',
         reason: 'action-required',
       },
       undefined,
@@ -227,7 +225,7 @@ describe('WorkspaceNotificationCenter', () => {
       description: 'The packager exited with code 1.',
       details: 'Error: EACCES\nPath: /tmp/output',
       kind: 'error',
-      source: 'system',
+      source: 'app',
       reason: 'error',
       target: { projectId: 'project-1', taskId: 'task-1', conversationId: 'session-1' },
     });
@@ -266,7 +264,7 @@ describe('WorkspaceNotificationCenter', () => {
     expect(copied).toContain('Error: Build failed');
     expect(copied).toContain('Error: EACCES');
     expect(copied).toContain(`Notification ID: ${notification?.id}`);
-    expect(copied).toContain('Source: system');
+    expect(copied).toContain('Source: app');
     expect(copied).toContain('Reason: error');
     expect(copied).toContain(
       'Target: {"projectId":"project-1","taskId":"task-1","conversationId":"session-1"}'
@@ -275,7 +273,7 @@ describe('WorkspaceNotificationCenter', () => {
   });
 
   it('hides excluded sources and records the choice', async () => {
-    mocks.retainedSources = { toast: true, agent: false, automation: true, system: true };
+    mocks.retainedSources = { app: true, agent: false, automation: true };
     workspaceNotificationStore.enqueue({
       title: 'Agent needs input',
       kind: 'info',
@@ -320,7 +318,7 @@ describe('WorkspaceNotificationCenter', () => {
 
     await userEvent.click(agentToggle);
     expect(mocks.updateSettings).toHaveBeenCalledWith({
-      notificationCenterSources: { toast: true, agent: true, automation: true, system: true },
+      notificationCenterSources: { app: true, agent: true, automation: true },
     });
   });
 });

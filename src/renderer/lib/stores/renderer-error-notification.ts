@@ -48,7 +48,7 @@ export function enqueueRendererErrorNotification(
     description: error.message,
     details,
     kind: 'error',
-    source: 'system',
+    source: 'app',
     reason: 'error',
     dedupeKey: `renderer-error:${fingerprint}`,
   });

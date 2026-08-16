@@ -5353,14 +5353,13 @@
         "resolved": "Resolved"
       },
       "sourceValue": {
-        "toast": "App toast",
+        "app": "App",
         "agent": "Agent",
-        "automation": "Automation",
-        "system": "System"
+        "automation": "Automation"
       },
       "sources": {
         "label": "Recorded sources",
-        "hint": "Unchecked sources still reach you elsewhere; they are just not kept here."
+        "hint": "App covers Yoda's own failures and results. Unchecked sources still reach you elsewhere; they are just not kept here."
       },
       "system": {
         "agentAwaitingInput": "Agent is waiting for input"

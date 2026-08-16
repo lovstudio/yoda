@@ -305,7 +305,7 @@ function recordToast(
       description,
       details,
       kind,
-      source: 'toast',
+      source: 'app',
       reason,
       dedupeKey: notificationKey,
     },

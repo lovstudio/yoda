@@ -1,5 +1,6 @@
 import {
   DEFAULT_NOTIFICATION_CENTER_SOURCES,
+  normalizeNotificationSource,
   type NotificationCenterSources,
   type NotificationReason,
   type NotificationSource,
@@ -72,6 +73,7 @@ function createNotificationId(): string {
 function parseNotification(value: unknown): WorkspaceNotification | null {
   if (!value || typeof value !== 'object') return null;
   const entry = value as Partial<WorkspaceNotification>;
+  const source = normalizeNotificationSource(entry.source);
   if (
     typeof entry.id !== 'string' ||
     typeof entry.title !== 'string' ||
@@ -80,10 +82,7 @@ function parseNotification(value: unknown): WorkspaceNotification | null {
       entry.kind !== 'success' &&
       entry.kind !== 'error' &&
       entry.kind !== 'loading') ||
-    (entry.source !== 'toast' &&
-      entry.source !== 'agent' &&
-      entry.source !== 'automation' &&
-      entry.source !== 'system')
+    source === null
   ) {
     return null;
   }
@@ -93,7 +92,7 @@ function parseNotification(value: unknown): WorkspaceNotification | null {
     id: entry.id,
     title: entry.title,
     kind: entry.kind,
-    source: entry.source,
+    source,
     createdAt: entry.createdAt,
     updatedAt: typeof entry.updatedAt === 'string' ? entry.updatedAt : entry.createdAt,
     reason:

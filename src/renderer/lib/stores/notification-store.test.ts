@@ -24,7 +24,7 @@ describe('WorkspaceNotificationStore', () => {
       store.enqueue({
         title: `Notification ${index}`,
         kind: 'info',
-        source: 'toast',
+        source: 'app',
         reason: 'action-required',
       });
     }
@@ -40,18 +40,18 @@ describe('WorkspaceNotificationStore', () => {
       store.enqueue({
         title: 'Working…',
         kind: 'loading',
-        source: 'toast',
+        source: 'app',
         reason: 'subscribed-result',
       })
     );
 
     store.enqueue(
-      { title: 'Finished', kind: 'success', source: 'toast', reason: 'subscribed-result' },
+      { title: 'Finished', kind: 'success', source: 'app', reason: 'subscribed-result' },
       id
     );
 
     expect(store.getSnapshot()).toMatchObject([
-      { id, title: 'Finished', kind: 'success', source: 'toast' },
+      { id, title: 'Finished', kind: 'success', source: 'app' },
     ]);
   });
 
@@ -62,11 +62,11 @@ describe('WorkspaceNotificationStore', () => {
       store.enqueue({
         title: 'First',
         kind: 'info',
-        source: 'system',
+        source: 'app',
         reason: 'action-required',
       })
     );
-    store.enqueue({ title: 'Second', kind: 'error', source: 'toast', reason: 'error' });
+    store.enqueue({ title: 'Second', kind: 'error', source: 'app', reason: 'error' });
 
     store.remove(first);
     expect(store.getSnapshot().map((entry) => entry.title)).toEqual(['Second']);
@@ -83,7 +83,7 @@ describe('WorkspaceNotificationStore', () => {
       store.enqueue({
         title: 'First',
         kind: 'info',
-        source: 'system',
+        source: 'app',
         reason: 'action-required',
       })
     );
@@ -91,7 +91,7 @@ describe('WorkspaceNotificationStore', () => {
       store.enqueue({
         title: 'Second',
         kind: 'success',
-        source: 'toast',
+        source: 'app',
         reason: 'subscribed-result',
       })
     );
@@ -119,7 +119,7 @@ describe('WorkspaceNotificationStore', () => {
           id: 'legacy',
           title: 'Earlier notification',
           kind: 'info',
-          source: 'system',
+          source: 'app',
           createdAt: '2026-08-01T00:00:00.000Z',
         },
       ])
@@ -127,6 +127,32 @@ describe('WorkspaceNotificationStore', () => {
     const store = new WorkspaceNotificationStore('notifications', () => storage);
 
     expect(store.getSnapshot()[0].readAt).toBe('2026-08-01T00:00:00.000Z');
+  });
+
+  it('reads notifications stored under the split toast and system sources as app', () => {
+    const storage = createStorage();
+    storage.setItem(
+      'notifications',
+      JSON.stringify([
+        {
+          id: 'from-toast',
+          title: 'Opening the session failed',
+          kind: 'error',
+          source: 'toast',
+          createdAt: '2026-08-15T00:00:00.000Z',
+        },
+        {
+          id: 'from-system',
+          title: 'Program error',
+          kind: 'error',
+          source: 'system',
+          createdAt: '2026-08-15T01:00:00.000Z',
+        },
+      ])
+    );
+    const store = new WorkspaceNotificationStore('notifications', () => storage);
+
+    expect(store.getSnapshot().map((entry) => entry.source)).toEqual(['app', 'app']);
   });
 
   it('keeps live actions executable without persisting callbacks', () => {
@@ -138,7 +164,7 @@ describe('WorkspaceNotificationStore', () => {
         {
           title: 'Reusable operation',
           kind: 'info',
-          source: 'toast',
+          source: 'app',
           reason: 'action-required',
         },
         undefined,
@@ -162,7 +188,7 @@ describe('WorkspaceNotificationStore', () => {
       store.enqueue({
         title: 'Connection unavailable',
         kind: 'info',
-        source: 'system',
+        source: 'app',
         reason: 'blocking-warning',
         dedupeKey: 'gateway:offline',
       })
@@ -170,7 +196,7 @@ describe('WorkspaceNotificationStore', () => {
     const secondId = store.enqueue({
       title: 'Connection still unavailable',
       kind: 'info',
-      source: 'system',
+      source: 'app',
       reason: 'blocking-warning',
       dedupeKey: 'gateway:offline',
     });
@@ -201,7 +227,7 @@ describe('WorkspaceNotificationStore', () => {
   it('drops sources the user excluded from the center', () => {
     const storage = createStorage();
     const store = new WorkspaceNotificationStore('notifications', () => storage);
-    store.setRetainedSources({ toast: true, agent: false, automation: true, system: true });
+    store.setRetainedSources({ app: true, agent: false, automation: true });
 
     const filtered = store.enqueue({
       title: 'Agent is waiting for input',
@@ -209,12 +235,12 @@ describe('WorkspaceNotificationStore', () => {
       source: 'agent',
       reason: 'action-required',
     });
-    store.enqueue({ title: 'Build failed', kind: 'error', source: 'toast', reason: 'error' });
+    store.enqueue({ title: 'Build failed', kind: 'error', source: 'app', reason: 'error' });
 
     expect(filtered).toBeNull();
     expect(store.getSnapshot().map((entry) => entry.title)).toEqual(['Build failed']);
 
-    store.setRetainedSources({ toast: true, agent: true, automation: true, system: true });
+    store.setRetainedSources({ app: true, agent: true, automation: true });
     store.enqueue({
       title: 'Agent is waiting for input',
       kind: 'info',
