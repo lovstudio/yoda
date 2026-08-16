@@ -3,9 +3,11 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { appPasteChannel } from '@shared/events/appEvents';
 import { ptyDataChannel, ptyExitChannel, type PtyExitEvent } from '@shared/events/ptyEvents';
 import {
+  DEFAULT_TERMINAL_LINK_OPEN,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
-  DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE,
-  type TerminalSmartPathOpenMode,
+  resolveTerminalFileHandler,
+  TERMINAL_LINK_OPEN_CHANGED_EVENT,
+  type TerminalLinkOpenSettings,
 } from '@shared/terminal-settings';
 import { imagePathMention, isImagePath } from '@renderer/lib/image-path-mention';
 import { events, rpc } from '@renderer/lib/ipc';
@@ -31,7 +33,7 @@ import {
   shouldPasteToTerminal,
 } from './pty-keybindings';
 import { writeTextToClipboard } from './terminal-clipboard';
-import { buildTerminalFileLinkExternalOpenRequest } from './terminal-file-link-open';
+import { buildTerminalFileLinkOpenRequest } from './terminal-file-link-open';
 import type { TerminalFileLinkOptions, TerminalFileLinkTarget } from './terminal-file-links';
 import { transformTerminalPasteText } from './terminal-image-paste';
 import { registerTerminalImeDiagnostics } from './terminal-ime-diagnostics';
@@ -238,9 +240,7 @@ export function usePty(
   pasteImagesAsPathsRef.current = pasteImagesAsPaths ?? false;
   const fileLinksRef = useRef(fileLinks ?? null);
   fileLinksRef.current = fileLinks ?? null;
-  const smartPathOpenModeRef = useRef<TerminalSmartPathOpenMode>(
-    DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE
-  );
+  const linkOpenRef = useRef<TerminalLinkOpenSettings>(DEFAULT_TERMINAL_LINK_OPEN);
   const webLinksRef = useRef(webLinks ?? null);
   webLinksRef.current = webLinks ?? null;
   const themeRef = useRef(theme);
@@ -496,7 +496,7 @@ export function usePty(
   // on surfaces that do not provide Yoda's in-app web link handler.
   const openUrl = useCallback((url: string) => {
     const handler = webLinksRef.current?.onOpen;
-    if (smartPathOpenModeRef.current === 'internal' && handler) {
+    if (linkOpenRef.current.url === 'yoda' && handler) {
       handler(url);
       return;
     }
@@ -509,18 +509,18 @@ export function usePty(
     const options = fileLinksRef.current;
     if (!options) return;
 
-    const externalRequest = buildTerminalFileLinkExternalOpenRequest(
-      smartPathOpenModeRef.current,
+    const openRequest = buildTerminalFileLinkOpenRequest(
+      resolveTerminalFileHandler(linkOpenRef.current, target.absolutePath ?? target.filePath),
       target,
       options
     );
-    if (!externalRequest) {
+    if (!openRequest) {
       options.onOpen(target);
       return;
     }
 
     void rpc.app
-      .openIn(externalRequest)
+      .openIn(openRequest)
       .then((result) => {
         if (!result.success) {
           log.warn('Failed to open terminal smart path externally', {
@@ -667,8 +667,7 @@ export function usePty(
             terminalSettings?.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK_LINES
           );
           autoCopyOnSelectionRef.current = terminalSettings?.autoCopyOnSelection ?? true;
-          smartPathOpenModeRef.current =
-            terminalSettings?.smartPathOpenMode ?? DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE;
+          linkOpenRef.current = terminalSettings?.linkOpen ?? DEFAULT_TERMINAL_LINK_OPEN;
         })
         .catch((error: unknown) => {
           log.warn('useTerminal: terminal settings unavailable, keeping defaults', {
@@ -1047,10 +1046,9 @@ export function usePty(
           detail?.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK_LINES
         );
       };
-      const handleSmartPathOpenModeChange = (e: Event) => {
-        const detail = (e as CustomEvent<{ smartPathOpenMode?: TerminalSmartPathOpenMode }>).detail;
-        const mode = detail?.smartPathOpenMode;
-        if (mode === 'internal' || mode === 'external') smartPathOpenModeRef.current = mode;
+      const handleLinkOpenChange = (e: Event) => {
+        const detail = (e as CustomEvent<TerminalLinkOpenSettings | undefined>).detail;
+        if (detail) linkOpenRef.current = detail;
       };
       // Host position changes (tab pin/unpin/reclaim between panes) only need a
       // measurement pass. FrontendPty.mount() owns the one canonical repaint;
@@ -1062,19 +1060,12 @@ export function usePty(
       window.addEventListener('terminal-font-changed', handleFontChange);
       window.addEventListener('terminal-auto-copy-changed', handleAutoCopyChange);
       window.addEventListener('terminal-scrollback-lines-changed', handleScrollbackLinesChange);
-      window.addEventListener(
-        'terminal-smart-path-open-mode-changed',
-        handleSmartPathOpenModeChange
-      );
+      window.addEventListener(TERMINAL_LINK_OPEN_CHANGED_EVENT, handleLinkOpenChange);
       cleanups.push(
         () => window.removeEventListener(TERMINAL_RELAYOUT_EVENT, handleRelayout),
         () => window.removeEventListener('terminal-font-changed', handleFontChange),
         () => window.removeEventListener('terminal-auto-copy-changed', handleAutoCopyChange),
-        () =>
-          window.removeEventListener(
-            'terminal-smart-path-open-mode-changed',
-            handleSmartPathOpenModeChange
-          ),
+        () => window.removeEventListener(TERMINAL_LINK_OPEN_CHANGED_EVENT, handleLinkOpenChange),
         () =>
           window.removeEventListener(
             'terminal-scrollback-lines-changed',

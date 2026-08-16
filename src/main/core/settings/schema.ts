@@ -58,15 +58,15 @@ import {
   DEFAULT_HOT_TERMINAL_LIMIT,
   DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
   DEFAULT_TERMINAL_CACHE_MODE,
+  DEFAULT_TERMINAL_LINK_OPEN,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
-  DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE,
   MAX_HOT_TERMINAL_LIMIT,
   MAX_IDLE_SESSION_TIMEOUT_MINUTES,
   MAX_TERMINAL_SCROLLBACK_LINES,
   MIN_HOT_TERMINAL_LIMIT,
   MIN_TERMINAL_SCROLLBACK_LINES,
   TERMINAL_CACHE_MODES,
-  TERMINAL_SMART_PATH_OPEN_MODES,
+  TERMINAL_LINK_URL_HANDLERS,
 } from '@shared/terminal-settings';
 import { DEFAULT_RUNTIME_ID } from './settings-registry';
 
@@ -433,33 +433,66 @@ export const runtimeModelCandidatesSettingsSchema = z.preprocess(
   })
 );
 
-export const terminalSettingsSchema = z.object({
-  fontFamily: z.string().optional(),
-  autoCopyOnSelection: z.boolean(),
-  smartPathOpenMode: z
-    .enum(TERMINAL_SMART_PATH_OPEN_MODES)
-    .catch(DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE)
-    .default(DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE),
-  scrollbackLines: z
-    .number()
-    .int()
-    .min(MIN_TERMINAL_SCROLLBACK_LINES)
-    .max(MAX_TERMINAL_SCROLLBACK_LINES)
-    .catch(DEFAULT_TERMINAL_SCROLLBACK_LINES),
-  hotTerminalMode: z.enum(TERMINAL_CACHE_MODES).catch(DEFAULT_TERMINAL_CACHE_MODE),
-  hotTerminalLimit: z
-    .number()
-    .int()
-    .min(MIN_HOT_TERMINAL_LIMIT)
-    .max(MAX_HOT_TERMINAL_LIMIT)
-    .catch(DEFAULT_HOT_TERMINAL_LIMIT),
-  idleSessionTimeoutMinutes: z
-    .number()
-    .int()
-    .min(0)
-    .max(MAX_IDLE_SESSION_TIMEOUT_MINUTES)
-    .catch(DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES),
+const terminalLinkFileHandlerSchema = z.union([
+  z.literal('yoda'),
+  z.literal('system'),
+  openInAppIdSchema,
+]);
+
+export const terminalLinkOpenSettingsSchema = z.object({
+  file: terminalLinkFileHandlerSchema.catch('yoda').default('yoda'),
+  url: z.enum(TERMINAL_LINK_URL_HANDLERS).catch('yoda').default('yoda'),
+  fileRules: z
+    .array(
+      z.object({
+        extensions: z.array(z.string()).catch([]).default([]),
+        handler: terminalLinkFileHandlerSchema.catch('yoda'),
+      })
+    )
+    .catch([])
+    .default([]),
 });
+
+export const terminalSettingsSchema = z.preprocess(
+  // Migrate the single internal/external switch this replaced: it decided files
+  // and URLs together, so "external" seeds both new handlers. Only a row written
+  // by the old version still carries the key — `z.object` strips it on the next
+  // write — so its presence is the migration signal. The reader merges defaults
+  // in before parsing, which means `linkOpen` is always present here and cannot
+  // be used to detect an already-migrated row.
+  (value) => {
+    if (!value || typeof value !== 'object') return value;
+    if ((value as { smartPathOpenMode?: unknown }).smartPathOpenMode !== 'external') return value;
+    return { ...value, linkOpen: { file: 'system', url: 'system', fileRules: [] } };
+  },
+  z.object({
+    fontFamily: z.string().optional(),
+    autoCopyOnSelection: z.boolean(),
+    linkOpen: terminalLinkOpenSettingsSchema.catch(DEFAULT_TERMINAL_LINK_OPEN).default(
+      // Cloned so a mutation through the settings object cannot reach the shared default.
+      () => ({ ...DEFAULT_TERMINAL_LINK_OPEN, fileRules: [] })
+    ),
+    scrollbackLines: z
+      .number()
+      .int()
+      .min(MIN_TERMINAL_SCROLLBACK_LINES)
+      .max(MAX_TERMINAL_SCROLLBACK_LINES)
+      .catch(DEFAULT_TERMINAL_SCROLLBACK_LINES),
+    hotTerminalMode: z.enum(TERMINAL_CACHE_MODES).catch(DEFAULT_TERMINAL_CACHE_MODE),
+    hotTerminalLimit: z
+      .number()
+      .int()
+      .min(MIN_HOT_TERMINAL_LIMIT)
+      .max(MAX_HOT_TERMINAL_LIMIT)
+      .catch(DEFAULT_HOT_TERMINAL_LIMIT),
+    idleSessionTimeoutMinutes: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_IDLE_SESSION_TIMEOUT_MINUTES)
+      .catch(DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES),
+  })
+);
 
 const legacyThemeSchema = z
   .enum([

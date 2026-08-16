@@ -17,7 +17,7 @@ describe('settings defaults', () => {
   it('uses stable terminal defaults without exposing a renderer switch', () => {
     expect(getDefaultForKey('terminal')).toMatchObject({
       autoCopyOnSelection: true,
-      smartPathOpenMode: 'internal',
+      linkOpen: { file: 'yoda', url: 'yoda', fileRules: [] },
       hotTerminalMode: 'auto',
       hotTerminalLimit: 4,
     });

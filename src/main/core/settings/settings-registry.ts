@@ -25,8 +25,8 @@ import {
   DEFAULT_HOT_TERMINAL_LIMIT,
   DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
   DEFAULT_TERMINAL_CACHE_MODE,
+  DEFAULT_TERMINAL_LINK_OPEN,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
-  DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE,
 } from '@shared/terminal-settings';
 import { getDefaultLocalWorktreeDirectory } from './worktree-defaults';
 
@@ -126,7 +126,7 @@ export const SETTINGS_DEFAULTS = {
   },
   terminal: {
     autoCopyOnSelection: true,
-    smartPathOpenMode: DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE,
+    linkOpen: { ...DEFAULT_TERMINAL_LINK_OPEN, fileRules: [] },
     scrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
     hotTerminalMode: DEFAULT_TERMINAL_CACHE_MODE,
     hotTerminalLimit: DEFAULT_HOT_TERMINAL_LIMIT,

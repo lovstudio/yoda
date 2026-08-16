@@ -1,3 +1,5 @@
+import type { OpenInAppId } from './openInApps';
+
 export const DEFAULT_TERMINAL_SCROLLBACK_LINES = 50_000;
 export const MIN_TERMINAL_SCROLLBACK_LINES = 1_000;
 export const MAX_TERMINAL_SCROLLBACK_LINES = 500_000;
@@ -11,9 +13,75 @@ export const MIN_HOT_TERMINAL_LIMIT = 1;
 export const MAX_HOT_TERMINAL_LIMIT = 64;
 export const DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES = 5;
 export const MAX_IDLE_SESSION_TIMEOUT_MINUTES = 120;
-export const TERMINAL_SMART_PATH_OPEN_MODES = ['internal', 'external'] as const;
-export type TerminalSmartPathOpenMode = (typeof TERMINAL_SMART_PATH_OPEN_MODES)[number];
-export const DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE: TerminalSmartPathOpenMode = 'internal';
+/**
+ * Who receives a link the user activated in a terminal.
+ *
+ * `yoda` hands the target to the surface that printed the link, which owns the
+ * placement decision (a main-column terminal opens into the task sidebar; a
+ * session pinned into the sidebar opens into the main area). `system` is the OS
+ * default handler. Anything else names one installed app.
+ */
+export type TerminalLinkFileHandler = 'yoda' | 'system' | OpenInAppId;
+/** URLs have only two homes: Yoda's builtin browser, or the system browser. */
+export const TERMINAL_LINK_URL_HANDLERS = ['yoda', 'system'] as const;
+export type TerminalLinkUrlHandler = (typeof TERMINAL_LINK_URL_HANDLERS)[number];
+
+/** Per-format override. Extensions are stored normalized: lowercase, no dot. */
+export type TerminalFileHandlerRule = {
+  extensions: string[];
+  handler: TerminalLinkFileHandler;
+};
+
+export type TerminalLinkOpenSettings = {
+  file: TerminalLinkFileHandler;
+  url: TerminalLinkUrlHandler;
+  /** Consulted top-down; the first rule that matches the filename wins. */
+  fileRules: TerminalFileHandlerRule[];
+};
+
+export const DEFAULT_TERMINAL_LINK_OPEN: TerminalLinkOpenSettings = {
+  file: 'yoda',
+  url: 'yoda',
+  fileRules: [],
+};
+
+/** Settings changes reach live terminals through this window event. */
+export const TERMINAL_LINK_OPEN_CHANGED_EVENT = 'terminal-link-open-changed';
+
+export function normalizeFileHandlerExtension(value: string): string {
+  return value.trim().replace(/^\.+/, '').toLowerCase();
+}
+
+/** Split a user-typed rule field (`png, jpg .webp`) into normalized extensions. */
+export function parseFileHandlerExtensions(value: string): string[] {
+  const seen = new Set<string>();
+  for (const part of value.split(/[\s,;]+/)) {
+    const extension = normalizeFileHandlerExtension(part);
+    if (extension) seen.add(extension);
+  }
+  return [...seen];
+}
+
+/**
+ * Resolve which handler opens `path`. Matching is a suffix test rather than a
+ * "text after the last dot" comparison so a single `tar.gz` rule works without
+ * inventing extra syntax.
+ */
+export function resolveTerminalFileHandler(
+  settings: TerminalLinkOpenSettings,
+  path: string | null | undefined
+): TerminalLinkFileHandler {
+  const basename = path ? (path.split(/[/\\]/).pop() ?? '').toLowerCase() : '';
+  if (basename) {
+    for (const rule of settings.fileRules) {
+      for (const extension of rule.extensions) {
+        const normalized = normalizeFileHandlerExtension(extension);
+        if (normalized && basename.endsWith(`.${normalized}`)) return rule.handler;
+      }
+    }
+  }
+  return settings.file;
+}
 
 const RING_BUFFER_BYTES_PER_LINE = 128;
 const MIN_TERMINAL_RING_BUFFER_BYTES = 1024 * 1024;
