@@ -1,6 +1,6 @@
+import type { MobileSessionTranscriptBlock } from '@lovstudio/yoda-protocol/mobile-api';
 import { describe, expect, it } from 'vitest';
 import { getLatestAssistantReply } from './latest-session-reply';
-import type { MobileSessionTranscriptBlock } from './mobile-api';
 
 function block(
   id: string,

@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@lovstudio/yoda-protocol": "workspace:*",
     "ws": "8.19.0"
   },
   "devDependencies": {

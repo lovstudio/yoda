@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { DEFAULT_MOBILE_SYNC_MODE } from '@lovstudio/yoda-protocol/mobile-sync';
 import type { AppSettings, AppSettingsKey } from '@shared/app-settings';
 import {
   createDefaultLlmProfile,
@@ -7,7 +8,6 @@ import {
   DEFAULT_LLM_PROFILE_NAME,
 } from '@shared/global-llm';
 import { MAAS_PLATFORMS } from '@shared/maas';
-import { DEFAULT_MOBILE_SYNC_MODE } from '@shared/mobile-sync';
 import { DEFAULT_NOTIFICATION_CENTER_SOURCES } from '@shared/notifications';
 import type { OpenInAppId } from '@shared/openInApps';
 import {

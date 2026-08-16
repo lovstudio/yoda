@@ -182,7 +182,10 @@ Yoda 是一个 Electron 桌面应用，主要分为三层：
 - **Main process** (`src/main/`)：管理 SQLite 存储、Drizzle schema、PTY/session 编排、git worktree、SSH 隧道和客户端注册表，并向 renderer 暴露类型化 RPC。
 - **Renderer** (`src/renderer/`)：React + MobX UI，通过 React Query 读数据，通过 RPC 写数据，终端由 `node-pty` 和 xterm 前端协作呈现。
 - **Shared** (`src/shared/`)：两端共享的类型、IPC contract 和客户端注册表。
-- **Mobile** (`apps/mobile/`)：Expo 应用，通过默认开启且带 token 的 desktop gateway 读取项目状态并提交新需求。
+
+手机端另有两层：`src/main/core/mobile-gateway/` 是默认开启且带 token 的桌面网关，`services/relay/`
+是公网中继；三方共用的 wire 协议在 `packages/protocol/`，发布为 `@lovstudio/yoda-protocol`。
+Expo 客户端本身在独立仓库 [`lovstudio/yoda-mobile`](https://github.com/lovstudio/yoda-mobile)。
 
 完整主题地图见 [`AGENTS.md`](./AGENTS.md) 和 [`agents/`](./agents/)。
 

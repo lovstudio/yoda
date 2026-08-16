@@ -1,5 +1,4 @@
 import { hostname } from 'node:os';
-import WebSocket from 'ws';
 import {
   createMobileRelayPairingUrl,
   MOBILE_RELAY_BASE_URL,
@@ -7,8 +6,9 @@ import {
   parseMobileRelayHostFrame,
   relayWebSocketUrl,
   type MobileRelayStatus,
-} from '@shared/mobile-relay';
-import { DEFAULT_MOBILE_SYNC_MODE, relaySyncEnabled } from '@shared/mobile-sync';
+} from '@lovstudio/yoda-protocol/mobile-relay';
+import { DEFAULT_MOBILE_SYNC_MODE, relaySyncEnabled } from '@lovstudio/yoda-protocol/mobile-sync';
+import WebSocket from 'ws';
 import { yodaAccountService } from '@main/core/account/services/yoda-account-service';
 import { yodaCommerceService } from '@main/core/account/services/yoda-commerce-service';
 import { log } from '@main/lib/logger';

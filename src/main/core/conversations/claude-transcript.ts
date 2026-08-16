@@ -1,8 +1,8 @@
-import { unconcludedTurnReplyIndexes, type ReplyTurnKind } from '@shared/agent-reply-turns';
 import type {
   MobileSessionTranscriptAgentPhase,
   MobileSessionTranscriptBlock,
-} from '@shared/mobile-api';
+} from '@lovstudio/yoda-protocol/mobile-api';
+import { unconcludedTurnReplyIndexes, type ReplyTurnKind } from '@shared/agent-reply-turns';
 import { resolveClaudeTranscriptPath } from '@main/core/session-title/claude-title-source';
 import {
   describeClaudeTaskNotification,

@@ -1,5 +1,5 @@
+import { isMobileSyncMode, type MobileSyncMode } from '@lovstudio/yoda-protocol/mobile-sync';
 import { createRPCController } from '@shared/ipc/rpc';
-import { isMobileSyncMode, type MobileSyncMode } from '@shared/mobile-sync';
 import { mobileGatewayService } from './mobile-gateway-service';
 import { mobileRelayService } from './mobile-relay-service';
 import { getMobileSyncMode, setMobileSyncMode } from './mobile-sync-mode';

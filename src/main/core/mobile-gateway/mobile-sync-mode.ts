@@ -3,7 +3,7 @@ import {
   lanSyncEnabled,
   relaySyncEnabled,
   type MobileSyncMode,
-} from '@shared/mobile-sync';
+} from '@lovstudio/yoda-protocol/mobile-sync';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { log } from '@main/lib/logger';
 import { mobileGatewayService } from './mobile-gateway-service';

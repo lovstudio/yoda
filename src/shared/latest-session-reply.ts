@@ -1,4 +1,4 @@
-import type { MobileSessionTranscriptBlock } from './mobile-api';
+import type { MobileSessionTranscriptBlock } from '@lovstudio/yoda-protocol/mobile-api';
 
 /**
  * Returns the latest Agent reply as one renderable block. A completed final

@@ -1,5 +1,6 @@
+import { AGENT_REPLY_DISPLAY_LEVELS } from '@lovstudio/yoda-protocol/agent-reply-display';
+import { DEFAULT_MOBILE_SYNC_MODE, MOBILE_SYNC_MODES } from '@lovstudio/yoda-protocol/mobile-sync';
 import z from 'zod';
-import { AGENT_REPLY_DISPLAY_LEVELS } from '@shared/agent-reply-display';
 import {
   BUILT_IN_THEMES,
   customThemeSelectionSchema,
@@ -22,7 +23,6 @@ import {
 } from '@shared/issue-worker';
 import { KANBAN_STATUSES } from '@shared/kanban';
 import { isMaasPlatformId, migrateLegacyMaasPlatformId, type MaasPlatformId } from '@shared/maas';
-import { DEFAULT_MOBILE_SYNC_MODE, MOBILE_SYNC_MODES } from '@shared/mobile-sync';
 import {
   MAX_CUSTOM_MODEL_PROVIDERS,
   MAX_CUSTOM_MODELS_PER_PROVIDER,

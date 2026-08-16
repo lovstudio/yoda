@@ -6,6 +6,9 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "types": ["node"],
+    // The relay is a deployed Node service: consume the published protocol
+    // package through its real `exports`, not the repo's source aliases.
+    "paths": {},
     "rootDir": "src",
     "outDir": "dist",
     "noEmit": true

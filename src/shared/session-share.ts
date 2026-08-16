@@ -1,5 +1,8 @@
-import type { AgentReplyDisplayLevel } from './agent-reply-display';
-import type { MobileSessionDetail, MobileSessionTranscriptBlock } from './mobile-api';
+import type { AgentReplyDisplayLevel } from '@lovstudio/yoda-protocol/agent-reply-display';
+import type {
+  MobileSessionDetail,
+  MobileSessionTranscriptBlock,
+} from '@lovstudio/yoda-protocol/mobile-api';
 
 export const YODA_SESSION_SHARE_KIND = 'yoda-session-share' as const;
 export const YODA_SESSION_SHARE_VERSION = 1 as const;

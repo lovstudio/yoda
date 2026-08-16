@@ -1,5 +1,6 @@
+import { isAgentAccessMode } from '@lovstudio/yoda-protocol/access-mode';
 import { and, eq, isNull } from 'drizzle-orm';
-import { isAgentAccessMode, resolveAgentPermissionMode } from '@shared/agents';
+import { resolveAgentPermissionMode } from '@shared/agents';
 import type { Conversation } from '@shared/conversations';
 import {
   getDefaultPermissionModeId,
