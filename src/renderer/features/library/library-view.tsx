@@ -1,17 +1,4 @@
-import {
-  AppWindow,
-  Bot,
-  Boxes,
-  Check,
-  FileText,
-  Menu,
-  Plug,
-  Puzzle,
-  Store,
-  Webhook,
-  Workflow,
-  type LucideIcon,
-} from 'lucide-react';
+import { Check, Menu } from 'lucide-react';
 import { createContext, Fragment, useCallback, useContext, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_LIBRARY_SECTION } from '@renderer/app/route-identity';
@@ -30,7 +17,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { SectionNav, type SectionNavGroup } from '@renderer/lib/ui/section-nav';
@@ -50,7 +37,6 @@ export type LibrarySection =
 
 type LibrarySectionEntry = {
   id: LibrarySection;
-  icon: LucideIcon;
   labelKey: string;
 };
 
@@ -61,28 +47,25 @@ type LibrarySectionEntry = {
  */
 const SECTION_GROUPS: {
   id: 'basic' | 'advanced';
-  labelKey: string;
   sections: LibrarySectionEntry[];
 }[] = [
   {
     id: 'basic',
-    labelKey: 'library.groups.basic',
     sections: [
-      { id: 'prompts', icon: FileText, labelKey: 'library.sections.prompts' },
-      { id: 'skills', icon: Boxes, labelKey: 'library.sections.skills' },
-      { id: 'plugins', icon: Puzzle, labelKey: 'library.sections.plugins' },
-      { id: 'hooks', icon: Webhook, labelKey: 'library.sections.hooks' },
-      { id: 'mcp', icon: Plug, labelKey: 'library.sections.mcp' },
-      { id: 'agents', icon: Bot, labelKey: 'library.sections.agents' },
+      { id: 'prompts', labelKey: 'library.sections.prompts' },
+      { id: 'skills', labelKey: 'library.sections.skills' },
+      { id: 'plugins', labelKey: 'library.sections.plugins' },
+      { id: 'hooks', labelKey: 'library.sections.hooks' },
+      { id: 'mcp', labelKey: 'library.sections.mcp' },
+      { id: 'agents', labelKey: 'library.sections.agents' },
     ],
   },
   {
     id: 'advanced',
-    labelKey: 'library.groups.advanced',
     sections: [
-      { id: 'automation', icon: Workflow, labelKey: 'library.sections.automation' },
-      { id: 'extensions', icon: Store, labelKey: 'library.sections.extensions' },
-      { id: 'apps', icon: AppWindow, labelKey: 'library.sections.apps' },
+      { id: 'automation', labelKey: 'library.sections.automation' },
+      { id: 'extensions', labelKey: 'library.sections.extensions' },
+      { id: 'apps', labelKey: 'library.sections.apps' },
     ],
   },
 ];
@@ -92,13 +75,11 @@ const SECTIONS: LibrarySectionEntry[] = SECTION_GROUPS.flatMap((group) => group.
 /** SECTION_GROUPS with labels resolved, in the shape the shared nav rail takes. */
 function useLibraryNavGroups(): SectionNavGroup<LibrarySection>[] {
   const { t } = useTranslation();
-  return SECTION_GROUPS.map(({ id, labelKey, sections }) => ({
+  return SECTION_GROUPS.map(({ id, sections }) => ({
     id,
-    label: t(labelKey),
-    items: sections.map(({ id: sectionId, icon, labelKey: sectionLabelKey }) => ({
+    items: sections.map(({ id: sectionId, labelKey }) => ({
       id: sectionId,
-      icon,
-      label: t(sectionLabelKey),
+      label: t(labelKey),
     })),
   }));
 }
@@ -238,12 +219,11 @@ export function LibrarySectionDropdown({
         <Menu className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
-        {SECTION_GROUPS.map(({ id: groupId, labelKey: groupLabelKey, sections }) => (
+        {SECTION_GROUPS.map(({ id: groupId, sections }, groupIndex) => (
           <Fragment key={groupId}>
-            <DropdownMenuLabel>{t(groupLabelKey)}</DropdownMenuLabel>
-            {sections.map(({ id, icon: Icon, labelKey }) => (
+            {groupIndex > 0 && <DropdownMenuSeparator />}
+            {sections.map(({ id, labelKey }) => (
               <DropdownMenuItem key={id} onClick={() => onSectionChange(id)}>
-                <Icon className="size-4 shrink-0" />
                 <span className="truncate">{t(labelKey)}</span>
                 {id === activeSection && <Check className="ml-auto size-3.5" />}
               </DropdownMenuItem>
@@ -278,7 +258,7 @@ export function LibraryMainPanel() {
         groups={navGroups}
         activeId={section}
         onSelect={onSectionChange}
-        className="w-48 shrink-0 border-r border-border p-2 @max-lg:hidden"
+        className="w-max min-w-32 shrink-0 border-r border-border p-2 @max-lg:hidden"
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {!isPinHosted && (
