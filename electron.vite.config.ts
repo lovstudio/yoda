@@ -55,6 +55,11 @@ export default defineConfig({
   },
   renderer: {
     root: 'src/renderer',
+    // Some linked worktrees share the root node_modules directory. Keep the
+    // pre-bundled browser dependencies beside each worktree instead of in the
+    // shared node_modules/.vite cache: otherwise one Vite server can replace
+    // chunk files while another renderer still imports them.
+    cacheDir: resolve('.vite/renderer'),
     plugins: [lovinspPlugin({ bundler: 'vite' }), react(), tailwindcss()],
     resolve: {
       alias: {
