@@ -9,7 +9,7 @@
 
 <p align="center">
   <strong>Your Orchestra of Delegated Agents</strong><br>
-  <sub>Harness for your Agent Workspace——把 Claude Code、Codex、Gemini 等 31 种客户端收进同一个工作区：按任务挑选、并行开工、互相 review，Skills / Hooks / Memory / 上下文尽收眼底。</sub>
+  <sub>Harness for your Agent Workspace——把 Claude Code、Codex、Gemini 等 32 种客户端收进同一个工作区：按任务挑选、并行开工、互相 review，Skills / Hooks / Memory / 上下文尽收眼底。</sub>
 </p>
 
 <div align="center">
@@ -48,7 +48,7 @@
 
 Harness 是 agent 与真实世界之间的那一层：进程、会话、Skills、Hooks、Memory、上下文。agent 的表现好不好，一半取决于模型，另一半取决于这层 harness 搭得好不好。Yoda 把这一层做成了产品。
 
-**工具太多，工作区只有一个。** 每家 coding agent 各有所长，但各开各的终端、各管各的会话。Yoda 统一编排 31 种客户端：按任务选择、会话随时恢复、跑对比和 review；Linear、GitHub、Jira 等工单直接进入会话，CI/CD 状态就在 diff 旁边。
+**工具太多，工作区只有一个。** 每家 coding agent 各有所长，但各开各的终端、各管各的会话。Yoda 统一编排 32 种客户端：按任务选择、会话随时恢复、跑对比和 review；Linear、GitHub、Jira 等工单直接进入会话，CI/CD 状态就在 diff 旁边。
 
 **你的工作流，而不是工具的工作流。** 想快就主分支直跑——不建分支不开 worktree，开任务、AI 干活、归档收尾，归档前还能自动执行你预设的 Skill（比如让 agent 把它改过的文件提交好）；想稳就分支隔离——每任务一个 git worktree，并行互不干扰，diff 审查后合并；还有对比、review、team 模式应对更复杂的协作。
 
@@ -64,7 +64,7 @@ Harness 是 agent 与真实世界之间的那一层：进程、会话、Skills�
 
 核心差异点：
 
-- **31 种客户端**：Claude Code、Codex、Gemini、Cursor、Copilot、Amp、OpenCode 等 [全部客户端](#providers) 按任务自由切换，统一管理会话与恢复。
+- **32 种客户端**：Claude Code、Codex、Gemini、Cursor、Copilot、Amp、OpenCode 等 [全部客户端](#providers) 按任务自由切换，统一管理会话与恢复。
 - **运行模式**：normal / brainstorm / compare / review / team——多个客户端同时干活、互相审查、按角色分工。
 - **自定义 Agent**：System Prompt + Skills + 首选模型组合成可复用角色，**不绑定任何客户端**——换 CLI 不用重写资产。
 - **Harness 观测**：每个客户端的 Skills、Hooks、Memory 文件、会话上下文逐项检查，hooks 支持覆写与持久化。
@@ -134,6 +134,7 @@ Yoda 可以通过 SSH/SFTP 连接远程机器，让你在远程代码库上工�
 | [Cursor](https://cursor.com/cli) | <code>curl https://cursor.com/install -fsS &#124; bash</code> |
 | [Devin](https://cli.devin.ai/docs) | <code>curl -fsSL https://cli.devin.ai/install.sh &#124; bash</code> |
 | [Droid (Factory)](https://docs.factory.ai/cli/getting-started/quickstart) | <code>curl -fsSL https://app.factory.ai/cli &#124; sh</code> |
+| [dsh-TUI (DeepSeek Harness)](https://github.com/ccch1mneyyy/dsh-TUI) | `npm install -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui` |
 | [Gemini](https://github.com/google-gemini/gemini-cli) | `npm install -g @google/gemini-cli` |
 | [GitHub Copilot](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli) | `npm install -g @github/copilot` |
 | [Goose](https://block.github.io/goose/docs/quickstart/) | <code>curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh &#124; bash</code> |
