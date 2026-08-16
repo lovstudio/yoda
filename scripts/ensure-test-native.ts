@@ -20,6 +20,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import https from 'node:https';
+import { createRequire } from 'node:module';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -34,7 +35,9 @@ type Spec = {
 };
 
 function getSpec(): Spec {
-  const pkgPath = path.resolve('node_modules/better-sqlite3/package.json');
+  // Resolve rather than joining onto cwd: git worktrees have no node_modules of
+  // their own and inherit the checkout's, which only node resolution finds.
+  const pkgPath = createRequire(import.meta.url).resolve('better-sqlite3/package.json');
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { version: string };
   return {
     version: pkg.version,

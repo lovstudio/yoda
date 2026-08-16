@@ -33,6 +33,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
+import { SectionNav, type SectionNavGroup } from '@renderer/lib/ui/section-nav';
 import { cn } from '@renderer/utils/utils';
 
 /** The Library groups the user's reusable resources behind one nav entry. */
@@ -87,6 +88,20 @@ const SECTION_GROUPS: {
 ];
 
 const SECTIONS: LibrarySectionEntry[] = SECTION_GROUPS.flatMap((group) => group.sections);
+
+/** SECTION_GROUPS with labels resolved, in the shape the shared nav rail takes. */
+function useLibraryNavGroups(): SectionNavGroup<LibrarySection>[] {
+  const { t } = useTranslation();
+  return SECTION_GROUPS.map(({ id, labelKey, sections }) => ({
+    id,
+    label: t(labelKey),
+    items: sections.map(({ id: sectionId, icon, labelKey: sectionLabelKey }) => ({
+      id: sectionId,
+      icon,
+      label: t(sectionLabelKey),
+    })),
+  }));
+}
 
 const LibrarySectionContext = createContext<{
   section: LibrarySection;
@@ -247,9 +262,9 @@ export function LibraryPaneHeaderSlot() {
 }
 
 export function LibraryMainPanel() {
-  const { t } = useTranslation();
   const { section, onSectionChange, appId, onAppChange, createPrompt, onCreatePromptConsumed } =
     useLibrarySection();
+  const navGroups = useLibraryNavGroups();
   // In the side pane the chip-strip row hosts the picker — don't double it.
   const isPinHosted = useIsPinHosted();
   return (
@@ -259,40 +274,12 @@ export function LibraryMainPanel() {
       {/* The nav rail collapses below @lg, where it's too cramped to be usable;
           the picker moves into the content header (or the chip-strip when
           pin-hosted). */}
-      <nav className="flex w-52 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border bg-background-secondary p-2 @max-lg:hidden">
-        {SECTION_GROUPS.map(({ id: groupId, labelKey: groupLabelKey, sections }, groupIndex) => (
-          <Fragment key={groupId}>
-            <div
-              className={cn(
-                'px-2.5 pb-1 text-[10px] font-medium uppercase tracking-wider text-foreground-passive',
-                groupIndex === 0 ? 'pt-1' : 'pt-3'
-              )}
-            >
-              {t(groupLabelKey)}
-            </div>
-            {sections.map(({ id, icon: Icon, labelKey }) => {
-              const active = id === section;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => onSectionChange(id)}
-                  aria-current={active}
-                  className={cn(
-                    'flex h-8 items-center gap-2 rounded-md px-2.5 text-sm transition-colors',
-                    active
-                      ? 'bg-background-1 text-foreground'
-                      : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
-                  )}
-                >
-                  <Icon className="size-4 shrink-0" />
-                  <span className="truncate">{t(labelKey)}</span>
-                </button>
-              );
-            })}
-          </Fragment>
-        ))}
-      </nav>
+      <SectionNav
+        groups={navGroups}
+        activeId={section}
+        onSelect={onSectionChange}
+        className="w-48 shrink-0 border-r border-border p-2 @max-lg:hidden"
+      />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {!isPinHosted && (
           <div className="hidden shrink-0 items-center justify-end border-b border-border px-3 py-1.5 @max-lg:flex">
