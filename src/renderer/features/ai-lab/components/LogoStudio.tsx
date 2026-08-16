@@ -193,7 +193,11 @@ export const LogoStudio: React.FC<{
                 : t('aiLab.logo.engineUnavailableCodex')}
             </span>
             {engine === 'zenmux' && (
-              <Button size="xs" variant="outline" onClick={() => navigate('maas')}>
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => navigate('settings', { tab: 'maas' })}
+              >
                 {t('aiLab.logo.connectZenmux')}
               </Button>
             )}

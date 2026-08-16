@@ -2,6 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { migratePersistedViewRoute } from './route-migrations';
 
 describe('persisted view route migrations', () => {
+  it('moves the standalone model-access route onto the Settings pane', () => {
+    expect(
+      migratePersistedViewRoute({
+        viewId: 'maas',
+        params: { platformId: 'zenmux' },
+      })
+    ).toEqual({
+      viewId: 'settings',
+      params: { tab: 'maas', maasPlatformId: 'zenmux' },
+    });
+
+    expect(migratePersistedViewRoute({ viewId: 'maas', params: {} })).toEqual({
+      viewId: 'settings',
+      params: { tab: 'maas', maasPlatformId: undefined },
+    });
+  });
+
   it('moves Marketplace Apps back into Library without losing the selected app', () => {
     expect(
       migratePersistedViewRoute({

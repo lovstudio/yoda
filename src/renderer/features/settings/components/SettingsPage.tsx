@@ -1,6 +1,7 @@
 import { Check, Menu } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import type { MaasPlatformId } from '@shared/maas';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { AgentManagerView } from '@renderer/features/agents-config/agent-manager-view';
 import { RuntimeAccordion } from '@renderer/features/agents/components/RuntimeAccordion';
@@ -205,10 +206,12 @@ export function SettingsTabsDropdown({
 export function SettingsPage({
   tab: activeTab,
   focusRuntimeId,
+  focusMaasPlatformId,
   onTabChange,
 }: {
   tab: SettingsPageTab;
   focusRuntimeId?: RuntimeId;
+  focusMaasPlatformId?: MaasPlatformId;
   onTabChange: (tab: SettingsPageTab) => void;
 }) {
   const { t } = useTranslation();
@@ -402,8 +405,12 @@ export function SettingsPage({
       title: t('maas.title'),
       description: t('maas.subtitle'),
       component: (
+        // Remount on a new deep-link so the requested Profile expands even when
+        // the pane is already open.
         <MaasView
+          key={focusMaasPlatformId ?? ''}
           embedded
+          requestedPlatformId={focusMaasPlatformId}
           onOpenMarketplace={() => navigate('library', { section: 'extensions' })}
         />
       ),

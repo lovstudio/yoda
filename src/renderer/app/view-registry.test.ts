@@ -11,7 +11,6 @@ describe('view registry startup boundary', () => {
       'automation/automation-view',
       'extensions/marketplace-view',
       'library/library-view',
-      'maas/maas-view',
       'mcp/mcp-view',
       'mobile/mobile-view',
       'roadmap/roadmap-view',

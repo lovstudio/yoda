@@ -29,7 +29,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { AppAgentSessionResource, TmuxReclamationSnapshot } from '@shared/app-resource';
 import type { Conversation } from '@shared/conversations';
-import type { MaasPlatformId, MaasUsageSummary } from '@shared/maas';
+import type { MaasUsageSummary } from '@shared/maas';
 import type { ComposerDefaults } from '@shared/project-settings';
 import {
   getRuntime,
@@ -190,19 +190,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     isMaasPopoverOpen,
     setIsMaasPopoverOpen
   );
-  const openMaasManagement = useCallback(() => {
-    dismissMaasPopoverThen(() => {
-      appState.navigation.navigate('maas');
-    });
-  }, [dismissMaasPopoverThen]);
-  const openMaasPlatform = useCallback(
-    (platformId: MaasPlatformId) => {
-      dismissMaasPopoverThen(() => {
-        appState.navigation.navigate('maas', { platformId });
-      });
-    },
-    [dismissMaasPopoverThen]
-  );
   const openMaasLogs = useCallback(() => {
     dismissMaasPopoverThen(() => {
       appState.sidePane.pinView('settings', { tab: 'ai-logs' });
@@ -338,6 +325,20 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const activeMaasPlatformId = maasActiveForRuntime
     ? globalMaasBinding.data?.platformId
     : undefined;
+  /**
+   * Model access is configured in one place only — the Settings pane. Carrying
+   * the bound Profile in expands it there, so the popover needs no second
+   * per-Profile entry point.
+   */
+  const boundMaasPlatformId = globalMaasBinding.data?.platformId;
+  const openMaasManagement = useCallback(() => {
+    dismissMaasPopoverThen(() => {
+      appState.sidePane.pinView('settings', {
+        tab: 'maas',
+        maasPlatformId: boundMaasPlatformId ?? undefined,
+      });
+    });
+  }, [boundMaasPlatformId, dismissMaasPopoverThen]);
   const {
     summary: maasUsage,
     loading: isLoadingMaasUsage,
@@ -1728,7 +1729,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             <WorkspaceMaasPopover
               binding={globalMaasBinding.data}
               onManage={openMaasManagement}
-              onManagePlatform={openMaasPlatform}
               onOpenLogs={openMaasLogs}
             />
           </PopoverContent>

@@ -1,4 +1,4 @@
-import { ChevronDown, Loader2, Settings2 } from 'lucide-react';
+import { ChevronDown, Loader2 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -7,7 +7,6 @@ import {
   type MaasPlatformId,
 } from '@shared/maas';
 import { useToast } from '@renderer/lib/hooks/use-toast';
-import { Button } from '@renderer/lib/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,12 +17,15 @@ import { Switch } from '@renderer/lib/ui/switch';
 import { cn } from '@renderer/utils/utils';
 import { useMaasConnections, useMaasGlobalBinding, useSetMaasGlobalBinding } from '../useMaas';
 
+/**
+ * Picks which Profile is globally in effect. Selection only — configuring a
+ * Profile lives in Settings → Model access, reached from the surrounding
+ * surface's overflow menu, so this control never navigates away.
+ */
 export const MaasGlobalSelector: React.FC<{
   platformId?: MaasPlatformId;
-  onManagePlatform?: (platformId: MaasPlatformId) => void;
-  onOpenMarketplace?: () => void;
   showSelectedStatus?: boolean;
-}> = ({ platformId, onManagePlatform, showSelectedStatus = true }) => {
+}> = ({ platformId, showSelectedStatus = true }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const connections = useMaasConnections();
@@ -66,7 +68,6 @@ export const MaasGlobalSelector: React.FC<{
     };
   });
   const selectedProfile = profiles.find((profile) => profile.selected) ?? null;
-  const manageProfile = selectedProfile ?? (platformId ? profiles[0] : null);
 
   const updateBinding = (nextPlatformId: MaasPlatformId, enabled: boolean) => {
     const connection = connections.data?.find((item) => item.platformId === nextPlatformId);
@@ -151,12 +152,17 @@ export const MaasGlobalSelector: React.FC<{
                 const toggleLabel = profile.selected
                   ? t('maas.global.disableAria', { platform: profile.platformName })
                   : t('maas.global.enableAria', { platform: profile.platformName });
+                const toggleDisabled =
+                  setBinding.isPending || (!profile.available && !profile.selected);
                 return (
                   <DropdownMenuItem
                     key={profile.platformId}
                     data-maas-platform-id={profile.platformId}
-                    title={t('maas.global.manage', { platform: profile.platformName })}
-                    onClick={() => onManagePlatform?.(profile.platformId)}
+                    title={
+                      toggleDisabled && !profile.selected ? profile.unavailableReason : toggleLabel
+                    }
+                    disabled={toggleDisabled}
+                    onClick={() => updateBinding(profile.platformId, !profile.selected)}
                     className="gap-2.5 py-1.5"
                   >
                     <span className="grid min-w-0 flex-1 gap-0.5">
@@ -182,10 +188,10 @@ export const MaasGlobalSelector: React.FC<{
                       <Switch
                         size="sm"
                         checked={profile.selected}
-                        disabled={setBinding.isPending || (!profile.available && !profile.selected)}
+                        disabled={toggleDisabled}
                         aria-label={toggleLabel}
                         title={
-                          !profile.available && !profile.selected
+                          toggleDisabled && !profile.selected
                             ? profile.unavailableReason
                             : toggleLabel
                         }
@@ -199,18 +205,6 @@ export const MaasGlobalSelector: React.FC<{
               })}
             </DropdownMenuContent>
           </DropdownMenu>
-          {onManagePlatform && manageProfile ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              title={t('maas.global.manage', { platform: manageProfile.platformName })}
-              aria-label={t('maas.global.manage', { platform: manageProfile.platformName })}
-              onClick={() => onManagePlatform(manageProfile.platformId)}
-            >
-              <Settings2 className="size-3.5" />
-            </Button>
-          ) : null}
         </div>
       )}
     </section>
