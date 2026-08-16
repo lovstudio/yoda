@@ -303,9 +303,13 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
   }
 
   return (
+    // Block, not flex: as a row flex container this stretches its child to the
+    // scroller's height, and the cards inside — flex items with overflow-hidden,
+    // so their automatic minimum size is 0 — silently absorb the overflow by
+    // clipping their own content instead of letting the page scroll.
     <div
       className={cn(
-        '@container flex bg-background text-foreground',
+        '@container bg-background text-foreground',
         !embedded && 'h-full min-h-0 overflow-y-auto'
       )}
     >
