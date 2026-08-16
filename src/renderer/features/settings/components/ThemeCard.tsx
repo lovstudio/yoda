@@ -280,10 +280,6 @@ const ThemeCard: React.FC = () => {
           mode: analysis.mode,
           colors: analysis.colors,
           skin: {
-            brandSubtitle: `${baseName.toUpperCase()} · YODA DREAM SKIN`,
-            tagline: t('settings.theme.skinDefaultTagline'),
-            statusText: t('settings.theme.skinDefaultStatus'),
-            quote: baseName.toUpperCase(),
             decorations: {
               preset: suggestDreamSkinDecoration(analysis.accent),
               density: 0.55,

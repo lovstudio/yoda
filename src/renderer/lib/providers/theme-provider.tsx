@@ -31,11 +31,6 @@ type EffectiveTheme = 'ylight' | 'ydark';
 
 const DREAM_SKIN_CSS_VARIABLES = [
   '--dream-skin-art',
-  '--dream-skin-brand',
-  '--dream-skin-subtitle',
-  '--dream-skin-tagline',
-  '--dream-skin-status',
-  '--dream-skin-quote',
   '--dream-skin-position-x',
   '--dream-skin-position-y',
   '--dream-skin-zoom',
@@ -88,11 +83,6 @@ export function applyThemeToDocument(
     root.classList.add('ydream');
     root.dataset.dreamShell = effective === 'ydark' ? 'dark' : 'light';
     root.style.setProperty('--dream-skin-art', dreamSkinBackgroundImage(dreamSkin.image));
-    root.style.setProperty('--dream-skin-brand', JSON.stringify(resolvedCustomTheme.name));
-    root.style.setProperty('--dream-skin-subtitle', JSON.stringify(dreamSkin.brandSubtitle));
-    root.style.setProperty('--dream-skin-tagline', JSON.stringify(dreamSkin.tagline));
-    root.style.setProperty('--dream-skin-status', JSON.stringify(dreamSkin.statusText));
-    root.style.setProperty('--dream-skin-quote', JSON.stringify(dreamSkin.quote));
     root.style.setProperty('--dream-skin-position-x', `${dreamSkin.imageTreatment.positionX}%`);
     root.style.setProperty('--dream-skin-position-y', `${dreamSkin.imageTreatment.positionY}%`);
     root.style.setProperty('--dream-skin-zoom', String(dreamSkin.imageTreatment.zoom));
@@ -135,7 +125,6 @@ export function applyThemeToDocument(
     root.dataset.dreamTypography = dreamSkin.typography;
     root.dataset.dreamTextSide = dreamSkin.imageTreatment.textSide;
     root.dataset.dreamExtend = dreamSkin.imageTreatment.extendToWorkspace ? 'on' : 'off';
-    root.dataset.dreamOverlayCopy = dreamSkin.imageTreatment.showOverlayCopy ? 'on' : 'off';
   } else {
     root.removeAttribute('data-dream-shell');
     root.removeAttribute('data-dream-decoration');
@@ -143,7 +132,6 @@ export function applyThemeToDocument(
     root.removeAttribute('data-dream-typography');
     root.removeAttribute('data-dream-text-side');
     root.removeAttribute('data-dream-extend');
-    root.removeAttribute('data-dream-overlay-copy');
     for (const variable of DREAM_SKIN_CSS_VARIABLES) {
       root.style.removeProperty(variable);
     }

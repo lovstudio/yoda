@@ -102,10 +102,13 @@ export const dreamSkinSchema = z
         ),
     ]),
     imageName: z.string().trim().min(1).max(255),
-    brandSubtitle: z.string().trim().max(80).default('YODA DREAM SKIN'),
-    tagline: z.string().trim().max(160).default('Make something wonderful.'),
-    statusText: z.string().trim().max(80).default('DREAM SKIN ONLINE'),
-    quote: z.string().trim().max(80).default('MAKE SOMETHING WONDERFUL'),
+    // Retired overlay copy. Nothing renders these any more — skin metadata must
+    // not sit on the artwork — but the schema is strict, so previously saved or
+    // exported skins keep parsing.
+    brandSubtitle: z.string().trim().max(80).optional(),
+    tagline: z.string().trim().max(160).optional(),
+    statusText: z.string().trim().max(80).optional(),
+    quote: z.string().trim().max(80).optional(),
     imageTreatment: z
       .object({
         positionX: z.number().min(0).max(100).default(50),
@@ -115,7 +118,7 @@ export const dreamSkinSchema = z
         blur: z.number().min(0).max(20).default(0),
         artOpacity: z.number().min(0.25).max(1).default(1),
         textSide: z.enum(['left', 'right']).default('left'),
-        showOverlayCopy: z.boolean().default(true),
+        showOverlayCopy: z.boolean().optional(),
         extendToWorkspace: z.boolean().default(true),
       })
       .strict()
@@ -127,7 +130,6 @@ export const dreamSkinSchema = z
         blur: 0,
         artOpacity: 1,
         textSide: 'left',
-        showOverlayCopy: true,
         extendToWorkspace: true,
       }),
     decorations: z
@@ -348,10 +350,6 @@ const DEFAULT_DREAM_SKIN: DreamSkin = {
   kind: 'dream-skin',
   image: DREAM_SKIN_BUILTIN_IMAGE,
   imageName: 'dream-bloom.svg',
-  brandSubtitle: 'YODA DREAM SKIN',
-  tagline: 'Turn inspiration into an interactive agent workspace.',
-  statusText: 'DREAM SKIN ONLINE',
-  quote: 'MAKE SOMETHING WONDERFUL',
   imageTreatment: {
     positionX: 50,
     positionY: 50,
@@ -360,7 +358,6 @@ const DEFAULT_DREAM_SKIN: DreamSkin = {
     blur: 0,
     artOpacity: 1,
     textSide: 'left',
-    showOverlayCopy: true,
     extendToWorkspace: true,
   },
   decorations: { preset: 'petals', density: 0.55, motion: true },
@@ -409,8 +406,6 @@ export const YODA_DREAM_NIGHT_THEME: CustomTheme = {
     ...DEFAULT_DREAM_SKIN,
     image: 'builtin:dream-portal',
     imageName: 'codex-dream-skin.jpg',
-    brandSubtitle: 'YODA DREAM NIGHT',
-    statusText: 'NIGHT SKIN ONLINE',
     decorations: { preset: 'stars', density: 0.62, motion: true },
   },
   colors: {
@@ -445,9 +440,6 @@ export const YODA_DREAM_ARINA_THEME = createBuiltInDreamVariant({
   mode: 'light',
   image: 'builtin:dream-bloom',
   imageName: 'dream-bloom.svg',
-  brandSubtitle: '桥本有菜 专属定制皮肤',
-  tagline: '在玫瑰与灵感之间，创造只属于你的作品。',
-  statusText: 'ARINA CUSTOM ONLINE',
   decoration: 'petals',
   colors: {
     background: '#fff7f5',
@@ -474,9 +466,6 @@ function createBuiltInDreamVariant(input: {
   mode: CustomThemeMode;
   image: (typeof DREAM_SKIN_BUILTIN_IMAGES)[number];
   imageName: string;
-  brandSubtitle: string;
-  tagline: string;
-  statusText: string;
   decoration?: DreamSkinDecorationPreset;
   colors: Partial<CustomThemeColors>;
 }): CustomTheme {
@@ -490,9 +479,6 @@ function createBuiltInDreamVariant(input: {
       ...base.skin,
       image: input.image,
       imageName: input.imageName,
-      brandSubtitle: input.brandSubtitle,
-      tagline: input.tagline,
-      statusText: input.statusText,
       decorations: {
         ...base.skin?.decorations,
         preset: input.decoration ?? (input.mode === 'dark' ? 'stars' : 'glow'),
@@ -508,9 +494,6 @@ export const YODA_DREAM_FORTUNE_THEME = createBuiltInDreamVariant({
   mode: 'dark',
   image: 'builtin:dream-fortune',
   imageName: 'dream-fortune.svg',
-  brandSubtitle: 'FORTUNE AT WORK',
-  tagline: 'Good ideas compound when you keep shipping.',
-  statusText: 'FORTUNE FLOW ONLINE',
   decoration: 'embers',
   colors: {
     background: '#21070a',
@@ -538,9 +521,6 @@ export const YODA_DREAM_SCIFI_THEME = createBuiltInDreamVariant({
   mode: 'light',
   image: 'builtin:dream-scifi',
   imageName: 'dream-scifi.svg',
-  brandSubtitle: 'RED WHITE SCI-FI',
-  tagline: 'A precise workspace for ambitious systems.',
-  statusText: 'SCI-FI CORE ONLINE',
   decoration: 'orbit',
   colors: {
     background: '#f5f3f1',
@@ -567,9 +547,6 @@ export const YODA_DREAM_CLEAR_THEME = createBuiltInDreamVariant({
   mode: 'light',
   image: 'builtin:dream-clear',
   imageName: 'dream-clear.svg',
-  brandSubtitle: 'CRYSTAL CLEAR',
-  tagline: 'Quiet light, clear context, focused momentum.',
-  statusText: 'CLEAR FLOW ONLINE',
   decoration: 'glow',
   colors: {
     background: '#eff9f9',
@@ -596,9 +573,6 @@ export const YODA_DREAM_COSMOS_THEME = createBuiltInDreamVariant({
   mode: 'dark',
   image: 'builtin:dream-cosmos',
   imageName: 'dream-cosmos.svg',
-  brandSubtitle: 'IDEA COSMOS',
-  tagline: 'Orbit the problem until the right idea appears.',
-  statusText: 'COSMOS ONLINE',
   decoration: 'orbit',
   colors: {
     background: '#071322',
@@ -626,9 +600,6 @@ export const YODA_DREAM_PURPLE_THEME = createBuiltInDreamVariant({
   mode: 'dark',
   image: 'builtin:dream-purple',
   imageName: 'dream-purple.svg',
-  brandSubtitle: 'PURPLE NIGHT',
-  tagline: 'Deep focus after the city lights fade.',
-  statusText: 'PURPLE NIGHT ONLINE',
   decoration: 'stars',
   colors: {
     background: '#0b0818',
@@ -656,9 +627,6 @@ export const YODA_DREAM_VIRTUAL_THEME = createBuiltInDreamVariant({
   mode: 'dark',
   image: 'builtin:dream-virtual',
   imageName: 'dream-virtual.svg',
-  brandSubtitle: 'FUTURE RHYTHM',
-  tagline: 'Code in tempo with a bright digital current.',
-  statusText: 'RHYTHM ENGINE ONLINE',
   decoration: 'orbit',
   colors: {
     background: '#05151d',
@@ -686,9 +654,6 @@ export const YODA_DREAM_GOLD_THEME = createBuiltInDreamVariant({
   mode: 'dark',
   image: 'builtin:dream-gold',
   imageName: 'dream-gold.svg',
-  brandSubtitle: 'STAGE BLACK GOLD',
-  tagline: 'Put the work under a single decisive spotlight.',
-  statusText: 'MAIN STAGE ONLINE',
   decoration: 'glow',
   colors: {
     background: '#090806',

@@ -24,17 +24,21 @@ vi.mock('@renderer/lib/hooks/useLocalStorage', () => ({
 
 const DREAM_VARIABLES = [
   '--dream-skin-art',
-  '--dream-skin-brand',
-  '--dream-skin-subtitle',
-  '--dream-skin-tagline',
-  '--dream-skin-status',
-  '--dream-skin-quote',
   '--dream-skin-position-x',
   '--dream-skin-position-y',
   '--dream-skin-zoom',
   '--dream-skin-overlay',
   '--dream-skin-blur',
   '--dream-skin-art-opacity',
+] as const;
+
+/** Skin metadata must never be painted over the artwork. */
+const RETIRED_COPY_VARIABLES = [
+  '--dream-skin-brand',
+  '--dream-skin-subtitle',
+  '--dream-skin-tagline',
+  '--dream-skin-status',
+  '--dream-skin-quote',
 ] as const;
 
 afterEach(() => {
@@ -47,7 +51,6 @@ afterEach(() => {
   root.removeAttribute('data-dream-typography');
   root.removeAttribute('data-dream-text-side');
   root.removeAttribute('data-dream-extend');
-  root.removeAttribute('data-dream-overlay-copy');
   root.removeAttribute('style');
 });
 
@@ -88,17 +91,24 @@ describe('Dream Skin document theme', () => {
 
     const root = document.documentElement;
     expect(root.style.getPropertyValue('--dream-skin-art')).toContain('dream-bloom.svg');
-    expect(root.style.getPropertyValue('--dream-skin-subtitle')).toContain('YODA DREAM SKIN');
   });
 
-  it('applies the Arina Hashimoto custom branding and floral artwork', () => {
+  it('never paints skin metadata onto the artwork', () => {
+    applyThemeToDocument('ylight', YODA_DREAM_ARINA_THEME);
+
+    const root = document.documentElement;
+    for (const variable of RETIRED_COPY_VARIABLES) {
+      expect(root.style.getPropertyValue(variable)).toBe('');
+    }
+    expect(root.dataset.dreamOverlayCopy).toBeUndefined();
+  });
+
+  it('applies the Arina Hashimoto custom artwork and decorations', () => {
     applyThemeToDocument('ylight', YODA_DREAM_ARINA_THEME);
 
     const root = document.documentElement;
     expect(root.style.getPropertyValue('--dream-skin-art')).toContain('dream-bloom.svg');
-    expect(root.style.getPropertyValue('--dream-skin-brand')).toContain('桥本有菜专属定制');
-    expect(root.style.getPropertyValue('--dream-skin-subtitle')).toContain('桥本有菜 专属定制皮肤');
-    expect(root.style.getPropertyValue('--dream-skin-status')).toContain('ARINA CUSTOM ONLINE');
+    expect(root.dataset.dreamDecoration).toBe('petals');
   });
 
   it('resolves a bundled gallery skin to its packaged artwork', () => {
@@ -108,7 +118,6 @@ describe('Dream Skin document theme', () => {
     expect(root.dataset.dreamShell).toBe('dark');
     expect(root.dataset.dreamDecoration).toBe('glow');
     expect(root.style.getPropertyValue('--dream-skin-art')).toContain('data:image/svg+xml');
-    expect(root.style.getPropertyValue('--dream-skin-brand')).toContain('Stage Black Gold');
   });
 
   it('normalizes a cached legacy skin before reading composition fields', () => {
@@ -165,7 +174,6 @@ describe('Dream Skin document theme', () => {
     expect(root.style.getPropertyValue('--dream-skin-position-y')).toBe('34%');
     expect(root.style.getPropertyValue('--dream-skin-zoom')).toBe('1.4');
     expect(root.style.getPropertyValue('--dream-skin-art')).toMatch(/^url\("blob:/);
-    expect(root.style.getPropertyValue('--dream-skin-brand')).toContain('Browser Dream');
     expect(root.style.getPropertyValue('--background')).toMatch(/^rgba\(/);
 
     applyThemeToDocument('ydark');
