@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   markTaskSeen: vi.fn(),
   pushNavigation: vi.fn(),
   recordProjectActivity: vi.fn(),
+  seedCurrent: vi.fn(),
 }));
 
 vi.mock('./app-state', () => ({
@@ -15,6 +16,7 @@ vi.mock('./app-state', () => ({
     },
     history: {
       pushNavigation: mocks.pushNavigation,
+      seedCurrent: mocks.seedCurrent,
     },
     sidebar: {
       recordProjectActivity: mocks.recordProjectActivity,
@@ -60,6 +62,23 @@ describe('NavigationStore navigation side effects', () => {
     expect(mocks.markTaskSeen).toHaveBeenCalledWith('project-1', 'task-1');
   });
 
+  it('leaves the task page entry to the task view instead of pushing its own', () => {
+    const store = new NavigationStore();
+    store.navigate('home');
+    mocks.pushNavigation.mockClear();
+
+    store.navigate('task', { projectId: 'project-1', taskId: 'task-1' });
+
+    // TaskViewStore appends the `kind: 'tab'` entry once the active tab is known.
+    // A view entry here would be a second entry for the same page.
+    expect(mocks.pushNavigation).not.toHaveBeenCalled();
+    expect(mocks.seedCurrent).toHaveBeenCalledWith({
+      kind: 'view',
+      viewId: 'home',
+      params: {},
+    });
+  });
+
   it('advances its revision once for each navigation intent', () => {
     const store = new NavigationStore();
 
@@ -101,9 +120,34 @@ describe('NavigationStore in-view page history', () => {
     store.updateViewParams('settings', { tab: 'account' });
 
     expect(mocks.pushNavigation).toHaveBeenCalledWith(
-      { kind: 'view', viewId: 'settings', params: {} },
+      { kind: 'view', viewId: 'settings', params: { tab: 'general' } },
       { kind: 'view', viewId: 'settings', params: { tab: 'account' } }
     );
+  });
+
+  it('does not record selecting the settings pane already on screen', () => {
+    const store = new NavigationStore();
+    // Opening Settings without params lands on the default pane.
+    store.navigate('settings');
+    mocks.pushNavigation.mockClear();
+
+    store.updateViewParams('settings', { tab: 'general' });
+
+    expect(mocks.pushNavigation).not.toHaveBeenCalled();
+  });
+
+  it('records the default settings pane the same way whether or not it is named', () => {
+    const store = new NavigationStore();
+
+    store.navigate('settings');
+    const implicit = mocks.pushNavigation.mock.calls.at(-1)?.[1];
+    mocks.pushNavigation.mockClear();
+
+    store.navigate('home');
+    store.navigate('settings', { tab: 'general' });
+    const explicit = mocks.pushNavigation.mock.calls.at(-1)?.[1];
+
+    expect(implicit).toEqual(explicit);
   });
 
   it('keeps a focus-only settings param out of history', () => {

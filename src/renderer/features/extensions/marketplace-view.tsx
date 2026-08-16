@@ -1,6 +1,7 @@
 import { AppWindow, Check, Menu, Store, type LucideIcon } from 'lucide-react';
 import { createContext, useCallback, useContext, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { DEFAULT_MARKETPLACE_SECTION } from '@renderer/app/route-identity';
 import { AiLabView } from '@renderer/features/ai-lab/components/AiLabView';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { useIsPinHosted, useParams } from '@renderer/lib/layout/navigation-provider';
@@ -38,7 +39,7 @@ const MarketplaceSectionContext = createContext<{
 
 export function MarketplaceViewWrapper({
   children,
-  section = 'extensions',
+  section = DEFAULT_MARKETPLACE_SECTION,
   appId,
 }: {
   children: ReactNode;
@@ -46,7 +47,7 @@ export function MarketplaceViewWrapper({
   appId?: string;
 }) {
   const { setParams } = useParams('marketplace');
-  const resolvedSection = isMarketplaceSection(section) ? section : 'extensions';
+  const resolvedSection = isMarketplaceSection(section) ? section : DEFAULT_MARKETPLACE_SECTION;
   const onSectionChange = useCallback(
     (next: MarketplaceSection) => setParams({ section: next }),
     [setParams]

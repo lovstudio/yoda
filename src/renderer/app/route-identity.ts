@@ -2,7 +2,20 @@ import type { ViewId, WrapParams } from '@renderer/app/view-registry';
 import { paramsEqual } from '@renderer/lib/stores/navigation-history-store';
 
 /**
- * Which params make up a view's page identity.
+ * The pane a view opens on when its identity param is absent.
+ *
+ * These live here rather than in the views because history has to agree with the
+ * view about what page an entry denotes: an absent param and its default are the
+ * same page, so recording them as different entries puts one page in the stack
+ * twice. The views read these constants for their own defaults, so there is one
+ * literal per default.
+ */
+export const DEFAULT_SETTINGS_TAB = 'general' as const;
+export const DEFAULT_LIBRARY_SECTION = 'prompts' as const;
+export const DEFAULT_MARKETPLACE_SECTION = 'extensions' as const;
+
+/**
+ * Which params make up a view's page identity, and what each one defaults to.
  *
  * Back/forward holds one entry per page the user perceives as distinct. A
  * view-id change always is one. An in-view param change only is one when it
@@ -11,59 +24,72 @@ import { paramsEqual } from '@renderer/lib/stores/navigation-history-store';
  * create a back step: composer preselects, display names carried for chrome,
  * one-shot intents the view clears after consuming them.
  *
- * Only the in-view update path (`useParams().setParams`) consults this table.
- * `navigate()` is an explicit page change and always pushes.
+ * A listed param maps to the value the view falls back to, or `undefined` when
+ * absent is its own page (no app opened, no platform selected). Both the in-view
+ * update path (`useParams().setParams`) and the recorded history entry resolve
+ * params through this table, so `{}` and `{ tab: 'general' }` are one page.
  *
  * Every view is listed, so adding one forces this decision.
  */
 export const PAGE_IDENTITY_PARAMS: {
-  [K in ViewId]: readonly (keyof WrapParams<K> & string)[];
+  [K in ViewId]: Readonly<Partial<WrapParams<K>>>;
 } = {
   // Index pages with no params — the view id is the whole identity.
-  agentManager: [],
-  agents: [],
-  aiLab: [],
-  automation: [],
-  kanban: [],
-  mcp: [],
-  mobile: [],
-  projectsOverview: [],
-  roadmap: [],
-  usage: [],
+  agentManager: {},
+  agents: {},
+  aiLab: {},
+  automation: {},
+  kanban: {},
+  mcp: {},
+  mobile: {},
+  projectsOverview: {},
+  roadmap: {},
+  usage: {},
 
   // The composer. `projectId`/`runMode` preselect its controls and are cleared
   // once applied; neither changes the page.
-  home: [],
+  home: {},
 
   // Secondary navigation inside one surface: the section is the page, and an
   // opened app is a page below it. `createPrompt` is a one-shot open intent.
-  library: ['section', 'appId'],
-  marketplace: ['section', 'appId'],
+  library: { section: DEFAULT_LIBRARY_SECTION, appId: undefined },
+  marketplace: { section: DEFAULT_MARKETPLACE_SECTION, appId: undefined },
 
   // One page per platform account.
-  maas: ['platformId'],
+  maas: { platformId: undefined },
 
   // 23 panes behind one tab picker, each its own page. `runtimeId` only scrolls
   // a runtime into focus within the pane it is already on.
-  settings: ['tab'],
+  settings: { tab: DEFAULT_SETTINGS_TAB },
 
   // The catalog index; `focusSkillId` scrolls a row into view.
-  skills: [],
+  skills: {},
   // Display names ride along for chrome only.
-  skill: ['skillId'],
-  skillCompare: ['baseSkillId', 'targetSkillId'],
+  skill: { skillId: undefined },
+  skillCompare: { baseSkillId: undefined, targetSkillId: undefined },
 
   // Entity scopes. Every page move inside them goes through `navigate()` or
-  // `appTabs`, never `setParams` — listing the params keeps the intent explicit
-  // if that ever changes.
-  project: ['projectId', 'view'],
-  file: ['projectId', 'filePath'],
+  // `appTabs`, which always pass complete params — listing them keeps the intent
+  // explicit if that ever changes.
+  project: { projectId: undefined, view: undefined },
+  file: { projectId: undefined, filePath: undefined },
 
   // Task pages are recorded as `kind: 'tab'` history entries by TaskViewStore,
   // which follows the task's own tab manager. Pushing a view entry here too
-  // would double-count every tab switch.
-  task: [],
+  // would put the same page in the stack twice.
+  task: {},
 };
+
+function identityValues<TId extends ViewId>(
+  viewId: TId,
+  params: WrapParams<TId>
+): Record<string, unknown> {
+  const defaults = PAGE_IDENTITY_PARAMS[viewId] as Record<string, unknown>;
+  const source = params as Record<string, unknown>;
+  return Object.fromEntries(
+    Object.keys(defaults).map((key) => [key, source[key] ?? defaults[key]])
+  );
+}
 
 /** Whether moving a view's params from `prev` to `next` lands on another page. */
 export function isPageIdentityChange<TId extends ViewId>(
@@ -71,8 +97,25 @@ export function isPageIdentityChange<TId extends ViewId>(
   prev: WrapParams<TId>,
   next: WrapParams<TId>
 ): boolean {
-  const keys = PAGE_IDENTITY_PARAMS[viewId] as readonly string[];
-  const prevRecord = prev as Record<string, unknown>;
-  const nextRecord = next as Record<string, unknown>;
-  return keys.some((key) => !paramsEqual(prevRecord[key], nextRecord[key]));
+  const prevValues = identityValues(viewId, prev);
+  const nextValues = identityValues(viewId, next);
+  return Object.keys(prevValues).some((key) => !paramsEqual(prevValues[key], nextValues[key]));
+}
+
+/**
+ * Fills in defaulted identity params so one page has one representation in
+ * history. Without this, opening Settings records `{}` and then selecting the
+ * pane it already shows records `{ tab: 'general' }` — two entries for the pane
+ * the user is looking at, so Back and Forward both appear to do nothing.
+ */
+export function canonicalPageParams<TId extends ViewId>(
+  viewId: TId,
+  params: WrapParams<TId>
+): WrapParams<TId> {
+  const defaults = PAGE_IDENTITY_PARAMS[viewId] as Record<string, unknown>;
+  const canonical = { ...(params as Record<string, unknown>) };
+  for (const [key, fallback] of Object.entries(defaults)) {
+    if (canonical[key] === undefined && fallback !== undefined) canonical[key] = fallback;
+  }
+  return canonical as WrapParams<TId>;
 }

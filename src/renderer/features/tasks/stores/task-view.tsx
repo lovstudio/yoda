@@ -149,9 +149,10 @@ export class TaskViewStore {
       this.diffView
     );
 
-    // Keep task navigation history tied to the visible task route. Explicit
-    // navigate('task') pushes a task-view placeholder; once a tab is available,
-    // replace that placeholder so Back lands on the concrete task tab.
+    // Task pages are recorded here, not by navigate('task'): a task's page is the
+    // tab it shows, which only this store knows. replaceCurrent covers the one case
+    // that still leaves a view entry behind — an empty stack seeded with the task
+    // route the app restored into.
     this.disposers.push(
       reaction(
         () => {

@@ -126,15 +126,29 @@ export class NavigationHistoryStore {
     return undefined;
   }
 
+  /**
+   * Records the page being left, for destinations that append their own entry.
+   * A task page is appended by TaskViewStore as a `kind: 'tab'` entry once its
+   * active tab is known, so `navigate('task')` must not also append a view entry
+   * — that would be a second entry for the page the user lands on.
+   *
+   * Only seeds an empty stack: on a live stack the page being left is already
+   * the entry under the cursor.
+   */
+  seedCurrent(currentEntry: HistoryEntry): void {
+    if (this.navigating) return;
+    if (this.entries.length > 0) return;
+
+    this.entries.push(currentEntry);
+    this.index = 0;
+    this.revision++;
+  }
+
   pushNavigation(currentEntry: HistoryEntry | undefined, nextEntry: HistoryEntry): void {
     if (this.navigating) return;
     if (currentEntry && entriesEqual(currentEntry, nextEntry)) return;
 
-    if (this.entries.length === 0 && currentEntry) {
-      this.entries.push(currentEntry);
-      this.index = 0;
-      this.revision++;
-    }
+    if (currentEntry) this.seedCurrent(currentEntry);
 
     this.push(nextEntry);
   }

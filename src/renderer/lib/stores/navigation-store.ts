@@ -1,6 +1,6 @@
 import { makeAutoObservable, toJS } from 'mobx';
 import type { NavigationSnapshot } from '@shared/view-state';
-import { isPageIdentityChange } from '@renderer/app/route-identity';
+import { canonicalPageParams, isPageIdentityChange } from '@renderer/app/route-identity';
 import { migratePersistedViewRoute } from '@renderer/app/route-migrations';
 import { type ViewId, type WrapParams } from '@renderer/app/view-registry';
 import { modalStore } from '@renderer/lib/modal/modal-store';
@@ -71,10 +71,18 @@ export class NavigationStore implements Snapshottable<NavigationSnapshot> {
   }
 
   navigate<T extends ViewId>(viewId: T, params?: WrapParams<T>): void {
-    appState.history.pushNavigation(
-      this._historyEntry(this.currentViewId),
-      this._historyEntry(viewId, params)
-    );
+    if (viewId === 'task') {
+      // TaskViewStore appends the concrete `kind: 'tab'` entry for the page a
+      // task lands on. Recording a view entry here as well would put that page in
+      // the stack twice whenever the task's active tab does not change — re-opening
+      // the task you are already on — leaving Back and Forward both pointing at it.
+      appState.history.seedCurrent(this._historyEntry(this.currentViewId));
+    } else {
+      appState.history.pushNavigation(
+        this._historyEntry(this.currentViewId),
+        this._historyEntry(viewId, params)
+      );
+    }
     this._applyNavigation(viewId, params);
   }
 
@@ -83,7 +91,7 @@ export class NavigationStore implements Snapshottable<NavigationSnapshot> {
     return {
       kind: 'view',
       viewId,
-      params: toJS(effectiveParams) as WrapParams<ViewId>,
+      params: canonicalPageParams(viewId, toJS(effectiveParams)) as WrapParams<ViewId>,
     };
   }
 

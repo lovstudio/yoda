@@ -44,6 +44,30 @@ describe('NavigationHistoryStore', () => {
     expect(history.canGoBack).toBe(true);
   });
 
+  it('seeds a task destination without appending an entry for it', () => {
+    const history = new NavigationHistoryStore();
+
+    // navigate('task') records only the page being left; TaskViewStore appends the
+    // task's own tab entry once its active tab is known.
+    history.seedCurrent(view('home'));
+    history.push(tab('project-1', 'task-1', 'session-a'));
+
+    expect(history.entries).toEqual([view('home'), tab('project-1', 'task-1', 'session-a')]);
+  });
+
+  it('does not re-record the current page on a live stack', () => {
+    const history = new NavigationHistoryStore();
+    history.push(view('home'));
+    history.push(tab('project-1', 'task-1', 'session-a'));
+
+    // Re-opening the task already on screen: no tab change, so nothing appends.
+    history.seedCurrent(tab('project-1', 'task-1', 'session-a'));
+
+    expect(history.entries).toEqual([view('home'), tab('project-1', 'task-1', 'session-a')]);
+    expect(history.index).toBe(1);
+    expect(history.canGoForward).toBe(false);
+  });
+
   it('returns the latest task page from the current history branch', () => {
     const history = new NavigationHistoryStore();
     history.push(tab('project-1', 'task-1', 'session-a'));

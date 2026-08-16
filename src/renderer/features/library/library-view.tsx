@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { createContext, Fragment, useCallback, useContext, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { DEFAULT_LIBRARY_SECTION } from '@renderer/app/route-identity';
 import { GlobalHooksMainPanel } from '@renderer/features/agent-hooks/global-hooks-view';
 import { AgentManagerMainPanel } from '@renderer/features/agents-config/agent-manager-view';
 import { AiLabView } from '@renderer/features/ai-lab/components/AiLabView';
@@ -105,7 +106,7 @@ const LibrarySectionContext = createContext<{
 
 export function LibraryViewWrapper({
   children,
-  section = 'prompts',
+  section = DEFAULT_LIBRARY_SECTION,
   appId,
   createPrompt = false,
 }: {
@@ -115,7 +116,7 @@ export function LibraryViewWrapper({
   createPrompt?: boolean;
 }) {
   const { params, setParams } = useParams('library');
-  const resolvedSection = isLibrarySection(section) ? section : 'prompts';
+  const resolvedSection = isLibrarySection(section) ? section : DEFAULT_LIBRARY_SECTION;
   const shouldCreatePrompt = createPrompt || params.createPrompt === true;
   const onSectionChange = useCallback(
     (next: LibrarySection) => setParams({ section: next }),

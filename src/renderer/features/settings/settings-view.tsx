@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, type ReactNode } from 'react';
 import type { RuntimeId } from '@shared/runtime-registry';
+import { DEFAULT_SETTINGS_TAB } from '@renderer/app/route-identity';
 import {
   SettingsPage,
   SettingsTabsDropdown,
@@ -12,12 +13,12 @@ const SettingsTabContext = createContext<{
   tab: SettingsPageTab;
   runtimeId?: RuntimeId;
   onTabChange: (tab: SettingsPageTab) => void;
-}>({ tab: 'general', onTabChange: () => {} });
+}>({ tab: DEFAULT_SETTINGS_TAB, onTabChange: () => {} });
 
 /** Minimal passthrough — exists so the registry can infer WrapParams<'settings'>. */
 export function SettingsViewWrapper({
   children,
-  tab = 'general',
+  tab = DEFAULT_SETTINGS_TAB,
   runtimeId,
 }: {
   children: ReactNode;
