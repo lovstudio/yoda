@@ -936,12 +936,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       className="@container flex h-8 min-w-0 shrink-0 items-center gap-0.5 overflow-hidden whitespace-nowrap border-t border-border bg-background-secondary px-1.5 text-[11px] text-foreground-muted"
     >
       {renderConfigPopover()}
-      <WorkspaceSyncPopover
-        open={isSyncPopoverOpen}
-        onOpenChange={setIsSyncPopoverOpen}
-        triggerClassName={RUNTIME_BAR_ACTION_CLASS}
-        labelClassName={RUNTIME_BAR_ACTION_LABEL_CLASS}
-      />
       {runtimeId ? (
         <div className="flex min-w-0 items-center gap-0.5 overflow-hidden @min-[1121px]:gap-1.5">
           <Popover open={isRuntimePopoverOpen} onOpenChange={setIsRuntimePopoverOpen}>
@@ -1853,6 +1847,12 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           ) : null}
         </Popover>
       ) : null}
+      <WorkspaceSyncPopover
+        open={isSyncPopoverOpen}
+        onOpenChange={setIsSyncPopoverOpen}
+        triggerClassName={RUNTIME_BAR_ACTION_CLASS}
+        labelClassName={RUNTIME_BAR_ACTION_LABEL_CLASS}
+      />
       <button
         type="button"
         title={t('workspaceRuntime.doctor')}

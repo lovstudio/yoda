@@ -113,7 +113,7 @@ export function WorkspaceSyncPopover({
         <span className={labelClassName}>{t('workspaceRuntime.sync.title')}</span>
       </PopoverTrigger>
       <PopoverContent
-        align="start"
+        align="end"
         side="top"
         sideOffset={8}
         className={cn(WORKSPACE_BAR_CARD_CLASS, 'w-80')}
