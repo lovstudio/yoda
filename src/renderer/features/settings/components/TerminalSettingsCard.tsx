@@ -50,6 +50,8 @@ const POPULAR_FONTS = [
   'MesloLGS NF',
 ];
 
+const BYTES_PER_GIB = 1024 ** 3;
+
 const toOptionId = (font: string) =>
   `font-${font
     .toLowerCase()
@@ -86,6 +88,20 @@ const TerminalSettingsCard: React.FC = () => {
     () => resolveAutoTerminalCachePolicy(machineCapacity ?? {}).limit,
     [machineCapacity]
   );
+  // The derived number belongs next to the machine it was derived from, not in
+  // the option label — a bare "自动 (5)" reads like a fixed setting.
+  const hotTerminalMachineSummary = useMemo(() => {
+    const totalMemoryBytes = machineCapacity?.totalMemoryBytes ?? 0;
+    const cpuCount = machineCapacity?.cpuCount ?? 0;
+    if (totalMemoryBytes <= 0 || cpuCount <= 0) {
+      return t('settings.terminal.hotTerminalMachineProbing', { limit: autoHotTerminalLimit });
+    }
+    return t('settings.terminal.hotTerminalMachineSummary', {
+      cores: cpuCount,
+      memory: Math.round(totalMemoryBytes / BYTES_PER_GIB),
+      limit: autoHotTerminalLimit,
+    });
+  }, [autoHotTerminalLimit, machineCapacity, t]);
   const idleSessionTimeoutMinutes =
     terminal?.idleSessionTimeoutMinutes ?? DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES;
   const scrollbackLines = normalizeTerminalScrollbackLines(terminal?.scrollbackLines);
@@ -444,9 +460,7 @@ const TerminalSettingsCard: React.FC = () => {
       />
       <SettingRow
         title={t('settings.terminal.hotTerminalLimit')}
-        description={t('settings.terminal.hotTerminalLimitDescription', {
-          limit: autoHotTerminalLimit,
-        })}
+        description={`${t('settings.terminal.hotTerminalLimitDescription')} ${hotTerminalMachineSummary}`}
         control={
           <div className="flex items-center gap-2">
             <Select
@@ -455,15 +469,13 @@ const TerminalSettingsCard: React.FC = () => {
               onValueChange={(value) => updateHotTerminalMode(value as 'auto' | 'fixed')}
             >
               <SelectTrigger
-                className="h-8 w-[110px]"
+                className="h-8 w-[103px]"
                 aria-label={t('settings.terminal.hotTerminalLimit')}
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="auto">
-                  {t('settings.terminal.hotTerminalAuto', { limit: autoHotTerminalLimit })}
-                </SelectItem>
+                <SelectItem value="auto">{t('settings.terminal.hotTerminalAuto')}</SelectItem>
                 <SelectItem value="fixed">{t('settings.terminal.hotTerminalFixed')}</SelectItem>
               </SelectContent>
             </Select>
