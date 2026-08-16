@@ -22,9 +22,11 @@ import {
   type MobileTaskSessionsResponse,
 } from '../../../src/shared/mobile-api';
 import { MOBILE_RELAY_BASE_URL } from '../../../src/shared/mobile-relay';
+import { endpointMatches, type MobileEndpoint } from './connection-endpoints';
 
 const RELAY_HEALTH_TIMEOUT_MS = 8_000;
 export const SESSION_INPUT_REQUEST_TIMEOUT_MS = 20_000;
+const ENDPOINT_PROBE_TIMEOUT_MS = 6_000;
 
 export type MobileConnection = {
   baseUrl: string;
@@ -101,31 +103,47 @@ async function probeRelayHealth(): Promise<RelayHealthProbe> {
   }
 }
 
-async function gatewayNetworkError(baseUrl: string, error: unknown): Promise<Error> {
+/** A failure to get *any* HTTP response out of an endpoint, as opposed to a
+ *  desktop that answered with an error. Only these are worth failing over. */
+export class MobileTransportError extends Error {
+  readonly baseUrl: string;
+
+  constructor(baseUrl: string, message: string) {
+    super(message);
+    this.name = 'MobileTransportError';
+    this.baseUrl = baseUrl;
+  }
+}
+
+async function gatewayNetworkError(baseUrl: string, error: unknown): Promise<MobileTransportError> {
   const detail = error instanceof Error ? error.message : String(error);
   if (!isOfficialRelayConnection(baseUrl)) {
-    return new Error(
+    return new MobileTransportError(
+      baseUrl,
       `Cannot reach the local Yoda gateway at ${baseUrl}. Check Local Network permission, Wi-Fi, and that the desktop gateway is running. Diagnostic: ${detail}`
     );
   }
 
   const health = await probeRelayHealth();
   if (!health.reachedEdge) {
-    return new Error(
+    return new MobileTransportError(
+      baseUrl,
       `Cannot reach Yoda Relay from this phone's current network. No HTTP response was received from ${MOBILE_RELAY_BASE_URL}. On iPhone, enable Settings > Cellular > Yoda Mobile, then retry. If it is already enabled, switch between cellular and Wi-Fi. Diagnostic: gateway=${detail}; health=${health.error}`
     );
   }
   if (!health.healthy) {
-    return new Error(
+    return new MobileTransportError(
+      baseUrl,
       `Yoda Relay is reachable, but its health check returned HTTP ${health.status}. Wait a moment and retry. Diagnostic: gateway=${detail}`
     );
   }
-  return new Error(
+  return new MobileTransportError(
+    baseUrl,
     `Yoda Relay is reachable, but this desktop device route did not return an HTTP response: ${baseUrl}. Keep Yoda open on the desktop, confirm Relay shows connected, then retry or generate a new pairing code. Diagnostic: ${detail}`
   );
 }
 
-async function request<T>(
+async function sendOnce<T>(
   connection: MobileConnection,
   path: string,
   init: RequestInit = {}
@@ -162,6 +180,131 @@ async function request<T>(
   }
 
   return (await response.json()) as T;
+}
+
+export type MobileFailoverHooks = {
+  /** Every endpoint the phone is currently allowed to use, best first. */
+  candidates: () => readonly MobileEndpoint[];
+  /** Called once a different endpoint has been proven to work. */
+  onSwitch: (endpoint: MobileEndpoint) => void;
+  /** Last resort when no stored endpoint answers: look for the desktop again on
+   *  the local network. Returning an endpoint means it has already been verified,
+   *  stored and activated, so `onSwitch` is not called for it. */
+  rediscover?: () => Promise<MobileEndpoint | null>;
+};
+
+let failoverHooks: MobileFailoverHooks | null = null;
+
+export function configureConnectionFailover(hooks: MobileFailoverHooks | null): void {
+  failoverHooks = hooks;
+}
+
+function alternateEndpoints(current: MobileConnection): MobileEndpoint[] {
+  if (!failoverHooks) return [];
+  return failoverHooks
+    .candidates()
+    .filter((candidate) => !endpointMatches(candidate, current))
+    .map((candidate) => ({ ...candidate }));
+}
+
+async function rediscoverEndpoint(
+  exclude: readonly MobileConnection[]
+): Promise<MobileEndpoint | null> {
+  const rediscover = failoverHooks?.rediscover;
+  if (!rediscover) return null;
+  try {
+    const found = await rediscover();
+    if (!found) return null;
+    // A sweep that only rediscovers an address we just failed on would send the
+    // request straight back into the same timeout.
+    return exclude.some((seen) => endpointMatches(seen, found)) ? null : { ...found };
+  } catch {
+    return null;
+  }
+}
+
+/** Requests go through whichever stored endpoint currently works.
+ *
+ *  A desktop that hops between Wi-Fi networks changes its LAN address, which
+ *  used to strand the phone until it re-paired. Read-only requests simply
+ *  replay on the next candidate. Writes are never replayed — the desktop may
+ *  well have accepted the first one — so instead the working endpoint is found
+ *  and adopted, and the caller is told to retry.
+ *
+ *  When no stored endpoint answers at all — the everyday case for a phone locked
+ *  to the LAN, which has exactly one — the network is swept for the desktop's new
+ *  address before giving up, so the poll loop recovers on its own instead of
+ *  spinning on a stale address forever. */
+async function request<T>(
+  connection: MobileConnection,
+  path: string,
+  init: RequestInit = {}
+): Promise<T> {
+  try {
+    return await sendOnce<T>(connection, path, init);
+  } catch (error) {
+    if (!(error instanceof MobileTransportError) || init.signal?.aborted) throw error;
+    const alternates = alternateEndpoints(connection);
+    const method = (init.method ?? 'GET').toUpperCase();
+
+    if (method === 'GET' || method === 'HEAD') {
+      for (const candidate of alternates) {
+        if (init.signal?.aborted) throw error;
+        try {
+          const result = await sendOnce<T>(candidate, path, init);
+          failoverHooks?.onSwitch(candidate);
+          return result;
+        } catch (retryError) {
+          if (!(retryError instanceof MobileTransportError)) throw retryError;
+        }
+      }
+      if (init.signal?.aborted) throw error;
+      const rediscovered = await rediscoverEndpoint([connection, ...alternates]);
+      if (!rediscovered || init.signal?.aborted) throw error;
+      return await sendOnce<T>(rediscovered, path, init);
+    }
+
+    for (const candidate of alternates) {
+      if (!(await probeConnection(candidate))) continue;
+      failoverHooks?.onSwitch(candidate);
+      throw switchedAwayError(error, candidate);
+    }
+    const rediscovered = await rediscoverEndpoint([connection, ...alternates]);
+    if (rediscovered) throw switchedAwayError(error, rediscovered);
+    throw error;
+  }
+}
+
+function switchedAwayError(
+  cause: MobileTransportError,
+  adopted: MobileConnection
+): MobileTransportError {
+  return new MobileTransportError(
+    cause.baseUrl,
+    `原来的连接地址已失效，已切换到 ${adopted.baseUrl}。这次操作没有发出，请重试。Diagnostic: ${cause.message}`
+  );
+}
+
+/** Cheap liveness check for one endpoint. `/v1/profile` is the smallest
+ *  authenticated payload, so a 200 proves both reachability and a valid token —
+ *  unlike `/health`, which any desktop answers regardless of pairing. */
+export async function probeConnection(
+  connection: MobileConnection,
+  timeoutMs = ENDPOINT_PROBE_TIMEOUT_MS
+): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(mobileApiUrl(connection, '/v1/profile'), {
+      headers: mobileApiHeaders(connection),
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export function fetchSnapshot(connection: MobileConnection): Promise<MobileDashboardSnapshot> {

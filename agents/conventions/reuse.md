@@ -8,6 +8,7 @@
 
 - 任务菜单的唯一来源：`src/renderer/features/tasks/components/task-context-menu.tsx`（`TaskContextMenu` 右键 / `TaskActionsMenu` 三点 / `useMenuItems` 菜单项集中定义）。任何 surface 上的任务实体都必须用它。
 - 会话菜单的唯一来源：`app-tab-context-menu.tsx` 的 `buildConversationSections()`。
+- 选择 Agent 的唯一来源：`src/renderer/lib/components/agent-picker/agent-picker.tsx`（`AgentPicker`）。搜索、新建、fork 都在弹层里，任何需要选 Agent 的地方都用它，`size="sm"` 适配设置行，禁止另写一个 Select。
 - 新增 surface 时：先找实体的现有菜单/行为定义并复用；找不到就把现有实现提取成共享定义再用，**禁止就地另写一份**。
 - 改菜单项时：只改集中定义，所有 surface 自动跟着变。如果发现某个 surface 是独立实现导致改不动，先合并再改。
 
@@ -20,6 +21,14 @@
 - 文件图标：`src/renderer/lib/editor/file-icon.tsx`
 
 如果共享层缺能力，给它加，然后所有调用点受益——不要在调用点旁边造一个特化版本。
+
+## 3. 头像/图标值必须走共享 Avatar 组件
+
+Agent、Room 成员、范式的 `icon`/`avatar` 字段是「字形**或**图片」：可能是 emoji，也可能是上传得到的 `data:image/png;base64,...`，或预设头像的 `data:image/svg+xml,%3Csvg...`。直接把它当文本渲染，就会把整段 payload 打印到界面上并溢出容器（已发生过多次）。
+
+- 唯一来源：`src/renderer/lib/components/avatar-value.tsx`（`AvatarValue`），Agent 场景用 `agent-card/agent-avatar.tsx` 的 `AgentAvatar`。
+- 它负责判别图片值渲染 `<img>`、非图片值裁到字形长度内、超长 payload 回退成名字首字母，并且永远不溢出。
+- 禁止在 JSX 里直接写 `{agent.icon}`、`{icon || '🤖'}`。
 
 ## 自查
 

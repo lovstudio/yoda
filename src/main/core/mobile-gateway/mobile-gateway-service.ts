@@ -59,6 +59,11 @@ import {
 } from '@shared/mobile-session-events';
 import { resolveMobileSessionInteraction } from '@shared/mobile-session-interaction';
 import {
+  DEFAULT_MOBILE_SYNC_MODE,
+  isLoopbackRemoteAddress,
+  lanSyncEnabled,
+} from '@shared/mobile-sync';
+import {
   INTERNAL_PROJECT_ID,
   projectDisplayName,
   type OpenProjectError,
@@ -846,6 +851,7 @@ export class MobileGatewayService {
   private token = '';
   private host = '0.0.0.0';
   private port = MOBILE_GATEWAY_DEFAULT_PORT;
+  private lanEnabled = lanSyncEnabled(DEFAULT_MOBILE_SYNC_MODE);
 
   async initialize(): Promise<void> {
     this.lifecycleGeneration += 1;
@@ -1043,7 +1049,9 @@ export class MobileGatewayService {
 
   getConnectionInfo(): MobileGatewayConnectionInfo {
     this.ensureLocalMetroLazy();
-    const networkUrls = mobileGatewayNetworkUrls(networkInterfaces(), this.port);
+    const networkUrls = this.lanEnabled
+      ? mobileGatewayNetworkUrls(networkInterfaces(), this.port)
+      : [];
     const urls = networkUrls.map(({ url }) => url);
     const primaryUrl = urls[0] ?? `http://localhost:${this.port}`;
     return {
@@ -1054,11 +1062,12 @@ export class MobileGatewayService {
       port: this.port,
       token: this.token || null,
       urls,
+      lanSyncEnabled: this.lanEnabled,
       connectionKind: networkUrls[0]?.kind ?? 'local',
-      localExpoUrl: this.token ? localExpoUrl(primaryUrl, this.token) : null,
+      localExpoUrl: this.token && urls.length > 0 ? localExpoUrl(primaryUrl, this.token) : null,
       installUrl: mobileInstallUrl(),
       pairingUrl:
-        this.server && this.token
+        this.server && this.token && urls.length > 0
           ? createMobilePairingUrl({ baseUrl: primaryUrl, token: this.token })
           : null,
     };
@@ -1069,7 +1078,29 @@ export class MobileGatewayService {
     return { baseUrl: `http://127.0.0.1:${this.port}`, token: this.token };
   }
 
+  /** Relay-only mode keeps the listener bound but refuses everything that is not
+   *  loopback. Rebinding the socket instead would tear down every in-flight SSE
+   *  stream, and the Relay bridge itself talks to `127.0.0.1`, so it is
+   *  unaffected. */
+  setLanSyncEnabled(enabled: boolean): void {
+    if (this.lanEnabled === enabled) return;
+    this.lanEnabled = enabled;
+    log.info('MobileGateway: LAN sync toggled', { enabled });
+  }
+
+  isLanSyncEnabled(): boolean {
+    return this.lanEnabled;
+  }
+
   private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    if (!this.lanEnabled && !isLoopbackRemoteAddress(req.socket.remoteAddress)) {
+      throw new MobileGatewayError(
+        403,
+        'lan_sync_disabled',
+        'This desktop is set to public sync only. Enable LAN sync on the desktop, or connect through Yoda Relay.'
+      );
+    }
+
     if (req.method === 'OPTIONS') {
       writeJson(res, 204, {});
       return;

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, type ReactNode } from 'react';
+import type { MaasPlatformId } from '@shared/maas';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { DEFAULT_SETTINGS_TAB } from '@renderer/app/route-identity';
 import {
@@ -12,6 +13,7 @@ import { useParams } from '@renderer/lib/layout/navigation-provider';
 const SettingsTabContext = createContext<{
   tab: SettingsPageTab;
   runtimeId?: RuntimeId;
+  maasPlatformId?: MaasPlatformId;
   onTabChange: (tab: SettingsPageTab) => void;
 }>({ tab: DEFAULT_SETTINGS_TAB, onTabChange: () => {} });
 
@@ -20,10 +22,12 @@ export function SettingsViewWrapper({
   children,
   tab = DEFAULT_SETTINGS_TAB,
   runtimeId,
+  maasPlatformId,
 }: {
   children: ReactNode;
   tab?: SettingsPageTab;
   runtimeId?: RuntimeId;
+  maasPlatformId?: MaasPlatformId;
 }) {
   const { setParams } = useParams('settings');
   const handleTabChange = useCallback(
@@ -33,7 +37,9 @@ export function SettingsViewWrapper({
     [setParams]
   );
   return (
-    <SettingsTabContext.Provider value={{ tab, runtimeId, onTabChange: handleTabChange }}>
+    <SettingsTabContext.Provider
+      value={{ tab, runtimeId, maasPlatformId, onTabChange: handleTabChange }}
+    >
       {children}
     </SettingsTabContext.Provider>
   );
@@ -57,12 +63,17 @@ export function SettingsPaneHeaderSlot() {
 }
 
 export function SettingsMainPanel() {
-  const { tab, runtimeId, onTabChange } = useSettingsTab();
+  const { tab, runtimeId, maasPlatformId, onTabChange } = useSettingsTab();
   return (
     // @container so SettingsPage adapts to its host's width (full window,
     // shell side pane, …) instead of the viewport.
     <div className="@container relative z-10 flex min-h-0 flex-1 overflow-hidden bg-background">
-      <SettingsPage tab={tab} focusRuntimeId={runtimeId} onTabChange={onTabChange} />
+      <SettingsPage
+        tab={tab}
+        focusRuntimeId={runtimeId}
+        focusMaasPlatformId={maasPlatformId}
+        onTabChange={onTabChange}
+      />
     </div>
   );
 }

@@ -55,11 +55,9 @@ export const PAGE_IDENTITY_PARAMS: {
   library: { section: DEFAULT_LIBRARY_SECTION, appId: undefined },
   marketplace: { section: DEFAULT_MARKETPLACE_SECTION, appId: undefined },
 
-  // One page per platform account.
-  maas: { platformId: undefined },
-
-  // 23 panes behind one tab picker, each its own page. `runtimeId` only scrolls
-  // a runtime into focus within the pane it is already on.
+  // 23 panes behind one tab picker, each its own page. `runtimeId` and
+  // `maasPlatformId` only scroll a runtime or Profile into focus within the pane
+  // it is already on.
   settings: { tab: DEFAULT_SETTINGS_TAB },
 
   // The catalog index; `focusSkillId` scrolls a row into view.

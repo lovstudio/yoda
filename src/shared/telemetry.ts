@@ -19,7 +19,6 @@ export type FocusView =
   | 'mcp'
   | 'agentManager'
   | 'agents'
-  | 'maas'
   | 'aiLab'
   | 'automation'
   | 'mobile'
@@ -73,7 +72,6 @@ export type TelemetryEventProperties = {
   skills_viewed: { from_view: FocusView | null };
   mcp_viewed: { from_view: FocusView | null };
   agents_viewed: { from_view: FocusView | null };
-  maas_viewed: { from_view: FocusView | null };
   ai_lab_viewed: { from_view: FocusView | null };
   usage_viewed: { from_view: FocusView | null };
   roadmap_viewed: { from_view: FocusView | null };

@@ -29,8 +29,16 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { AppAgentSessionResource, TmuxReclamationSnapshot } from '@shared/app-resource';
 import type { Conversation } from '@shared/conversations';
-import type { MaasPlatformId, MaasUsageSummary } from '@shared/maas';
-import type { ComposerDefaults } from '@shared/project-settings';
+import type { MaasUsageSummary } from '@shared/maas';
+import {
+  resolveOutputLanguage,
+  resolveOutputLanguageOverride,
+  resolvePromptRewriteEnabled,
+  resolvePromptRewriteLanguage,
+  resolvePromptRewriteLanguageOverride,
+  type ComposerDefaults,
+  type TaskOutputLanguage,
+} from '@shared/project-settings';
 import {
   getRuntime,
   getRuntimeAccountProfile,
@@ -77,14 +85,15 @@ import { agentConfig } from '@renderer/utils/agentConfig';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
 import { dualField, withComposerDefault } from './composer-project-overrides';
-import {
-  ComposerSettingsContent,
-  DEFAULT_INPUT_PROMPT_LANGUAGE,
-  DEFAULT_SUMMARY_OUTPUT_LANGUAGE,
-  DEFAULT_TASK_OUTPUT_LANGUAGE,
-} from './composer-settings-content';
+import { ComposerSettingsContent } from './composer-settings-content';
 import { startRendererPerformanceReporter } from './renderer-performance-reporter';
 import { rankWorkspaceAgentSessions } from './workspace-agent-sessions';
+import {
+  WORKSPACE_BAR_ACTION_COUNT_CLASS,
+  WORKSPACE_BAR_ACTION_DOT_CLASS,
+  WORKSPACE_BAR_ACTION_INLINE_DOT_CLASS,
+  WorkspaceBarActionGlyph,
+} from './workspace-bar-action-indicator';
 import {
   WORKSPACE_BAR_CARD_CLASS,
   WorkspaceBarCardFooter,
@@ -119,6 +128,7 @@ import {
   shouldReadOfficialAccountUsage,
 } from './workspace-runtime-usage-source';
 import { WorkspaceSkillPopover } from './workspace-skill-popover';
+import { WorkspaceSyncPopover } from './workspace-sync-popover';
 import {
   formatTrajectoryDuration,
   useTaskOpenTrajectories,
@@ -142,7 +152,7 @@ type PendingAcceptanceTask = {
 type AgentPanelTab = 'all' | 'working' | 'needs-reply' | 'pending-acceptance';
 
 const RUNTIME_BAR_ACTION_CLASS =
-  'relative flex h-6 w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border @min-[1441px]:w-auto @min-[1441px]:gap-1 @min-[1441px]:px-1.5';
+  'relative flex h-6 w-7 shrink-0 items-center justify-center gap-0 rounded-md p-0 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border @min-[1441px]:w-auto @min-[1441px]:gap-1 @min-[1441px]:px-1.5';
 const RUNTIME_BAR_ACTION_LABEL_CLASS = 'hidden @min-[1441px]:inline';
 
 function agentSessionKey(
@@ -181,25 +191,13 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const [agentPanelTab, setAgentPanelTab] = useState<AgentPanelTab>('all');
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
   const [isConfigPopoverOpen, setIsConfigPopoverOpen] = useState(false);
+  const [isSyncPopoverOpen, setIsSyncPopoverOpen] = useState(false);
   const [isMaasPopoverOpen, setIsMaasPopoverOpen] = useState(false);
   const [accountUsageWarningThresholdDraft, setAccountUsageWarningThresholdDraft] = useState('95');
   const notifiedAccountUsageWindowsRef = useRef(new Set<string>());
   const { actionsRef: maasActionsRef, dismissThen: dismissMaasPopoverThen } = usePopoverDismiss(
     isMaasPopoverOpen,
     setIsMaasPopoverOpen
-  );
-  const openMaasManagement = useCallback(() => {
-    dismissMaasPopoverThen(() => {
-      appState.navigation.navigate('maas');
-    });
-  }, [dismissMaasPopoverThen]);
-  const openMaasPlatform = useCallback(
-    (platformId: MaasPlatformId) => {
-      dismissMaasPopoverThen(() => {
-        appState.navigation.navigate('maas', { platformId });
-      });
-    },
-    [dismissMaasPopoverThen]
   );
   const openMaasLogs = useCallback(() => {
     dismissMaasPopoverThen(() => {
@@ -247,23 +245,55 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     setOverride: (value) => setComposerDefault('attachImagesAsPaths', value),
     hasProject: Boolean(activeProjectId),
   });
-  const inputPromptLanguageField = dualField({
-    override: composerDefaults?.inputPromptLanguage,
-    globalValue: taskSettings?.inputPromptLanguage ?? DEFAULT_INPUT_PROMPT_LANGUAGE,
-    setGlobal: (value) => updateTaskSettings({ inputPromptLanguage: value }),
+  // A capability's switch and its configuration are separate fields, so a
+  // project (or the user) can configure one that is currently switched off.
+  const globalPromptRewriteEnabled = resolvePromptRewriteEnabled(
+    taskSettings?.promptRewriteEnabled,
+    taskSettings?.inputPromptLanguage
+  );
+  const promptRewriteEnabledField = dualField<boolean>({
+    override: composerDefaults?.promptRewriteEnabled,
+    globalValue: globalPromptRewriteEnabled,
+    setGlobal: (value) => updateTaskSettings({ promptRewriteEnabled: value }),
+    setOverride: (value) => setComposerDefault('promptRewriteEnabled', value),
+    hasProject: Boolean(activeProjectId),
+  });
+  const inputPromptLanguageField = dualField<TaskOutputLanguage>({
+    override: resolvePromptRewriteLanguageOverride(composerDefaults?.inputPromptLanguage),
+    globalValue: resolvePromptRewriteLanguage(taskSettings?.inputPromptLanguage),
+    // Writing the language pins the switch too — see home-view.
+    setGlobal: (value) =>
+      updateTaskSettings({
+        inputPromptLanguage: value,
+        promptRewriteEnabled: globalPromptRewriteEnabled,
+      }),
     setOverride: (value) => setComposerDefault('inputPromptLanguage', value),
     hasProject: Boolean(activeProjectId),
   });
-  const namingLanguageField = dualField({
-    override: composerDefaults?.namingLanguage,
-    globalValue: taskSettings?.namingLanguage ?? DEFAULT_TASK_OUTPUT_LANGUAGE,
+  const autoGenerateNameField = dualField<boolean>({
+    override: composerDefaults?.autoGenerateName,
+    globalValue: taskSettings?.autoGenerateName ?? false,
+    setGlobal: (value) => updateTaskSettings({ autoGenerateName: value }),
+    setOverride: (value) => setComposerDefault('autoGenerateName', value),
+    hasProject: Boolean(activeProjectId),
+  });
+  const namingLanguageField = dualField<TaskOutputLanguage>({
+    override: resolveOutputLanguageOverride(composerDefaults?.namingLanguage),
+    globalValue: resolveOutputLanguage(taskSettings?.namingLanguage),
     setGlobal: (value) => updateTaskSettings({ namingLanguage: value }),
     setOverride: (value) => setComposerDefault('namingLanguage', value),
     hasProject: Boolean(activeProjectId),
   });
-  const summaryLanguageField = dualField({
-    override: composerDefaults?.summaryLanguage,
-    globalValue: taskSettings?.summaryLanguage ?? DEFAULT_SUMMARY_OUTPUT_LANGUAGE,
+  const autoGenerateSummaryField = dualField<boolean>({
+    override: composerDefaults?.autoGenerateSummary,
+    globalValue: taskSettings?.autoGenerateSummary ?? true,
+    setGlobal: (value) => updateTaskSettings({ autoGenerateSummary: value }),
+    setOverride: (value) => setComposerDefault('autoGenerateSummary', value),
+    hasProject: Boolean(activeProjectId),
+  });
+  const summaryLanguageField = dualField<TaskOutputLanguage>({
+    override: resolveOutputLanguageOverride(composerDefaults?.summaryLanguage),
+    globalValue: resolveOutputLanguage(taskSettings?.summaryLanguage),
     setGlobal: (value) => updateTaskSettings({ summaryLanguage: value }),
     setOverride: (value) => setComposerDefault('summaryLanguage', value),
     hasProject: Boolean(activeProjectId),
@@ -336,6 +366,21 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const activeMaasPlatformId = maasActiveForRuntime
     ? globalMaasBinding.data?.platformId
     : undefined;
+  /**
+   * Model access is configured in one place only — the Settings pane. Carrying
+   * the bound Profile in expands it there, so the popover needs no second
+   * per-Profile entry point. It navigates rather than pins: the pane is a full
+   * configuration surface, not a reference panel to keep open beside the work.
+   */
+  const boundMaasPlatformId = globalMaasBinding.data?.platformId;
+  const openMaasManagement = useCallback(() => {
+    dismissMaasPopoverThen(() => {
+      appState.navigation.navigate('settings', {
+        tab: 'maas',
+        maasPlatformId: boundMaasPlatformId ?? undefined,
+      });
+    });
+  }, [boundMaasPlatformId, dismissMaasPopoverThen]);
   const {
     summary: maasUsage,
     loading: isLoadingMaasUsage,
@@ -420,6 +465,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         provider: maasPresentation.providerName,
       })
     : t('workspaceRuntime.maas.title');
+  const maasDotToneClass = globalMaasBinding.data?.effective
+    ? 'bg-emerald-500'
+    : globalMaasBinding.data?.enabled
+      ? 'bg-amber-500'
+      : 'bg-foreground-disabled';
   const usageTriggerLabel = maasActiveForRuntime
     ? t('workspaceRuntime.maasUsageTitle', {
         provider: maasPresentation.providerName ?? t('workspaceRuntime.maas.title'),
@@ -915,12 +965,18 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         <WorkspaceBarCardSection>
           <ComposerSettingsContent
             attachImagesAsPaths={attachImagesField.value}
+            promptRewriteEnabled={promptRewriteEnabledField.value}
             inputPromptLanguage={inputPromptLanguageField.value}
+            autoGenerateName={autoGenerateNameField.value}
             namingLanguage={namingLanguageField.value}
+            autoGenerateSummary={autoGenerateSummaryField.value}
             summaryLanguage={summaryLanguageField.value}
             onAttachImagesAsPathsChange={attachImagesField.setValue}
+            onPromptRewriteEnabledChange={promptRewriteEnabledField.setValue}
             onInputPromptLanguageChange={inputPromptLanguageField.setValue}
+            onAutoGenerateNameChange={autoGenerateNameField.setValue}
             onNamingLanguageChange={namingLanguageField.setValue}
+            onAutoGenerateSummaryChange={autoGenerateSummaryField.setValue}
             onSummaryLanguageChange={summaryLanguageField.setValue}
           />
         </WorkspaceBarCardSection>
@@ -1415,25 +1471,26 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             attention: attentionAgentCount,
           })}
         >
-          <Bot className="size-3.5" />
+          <WorkspaceBarActionGlyph icon={Bot}>
+            <span
+              className={cn(
+                WORKSPACE_BAR_ACTION_COUNT_CLASS,
+                attentionAgentCount > 0
+                  ? 'text-amber-600 dark:text-amber-300'
+                  : workingAgentCount > 0
+                    ? 'text-primary'
+                    : 'text-foreground-passive'
+              )}
+            >
+              {agentSessionCount}
+            </span>
+          </WorkspaceBarActionGlyph>
           <span className="tabular-nums @max-[1440px]:hidden">{agentTriggerText}</span>
-          <span
-            className={cn(
-              'absolute top-0 right-0 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-background-secondary px-0.5 font-mono text-[8px] leading-none tabular-nums ring-1 ring-border/60 @min-[1441px]:hidden',
-              attentionAgentCount > 0
-                ? 'text-amber-600 dark:text-amber-300'
-                : workingAgentCount > 0
-                  ? 'text-primary'
-                  : 'text-foreground-passive'
-            )}
-          >
-            {agentSessionCount}
-          </span>
           {attentionAgentCount > 0 || workingAgentCount > 0 ? (
             <span
               aria-hidden
               className={cn(
-                'hidden size-1.5 rounded-full @min-[1441px]:inline-block',
+                WORKSPACE_BAR_ACTION_INLINE_DOT_CLASS,
                 attentionAgentCount > 0 ? 'bg-amber-500' : 'bg-primary'
               )}
             />
@@ -1692,7 +1749,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           )}
           title={maasTriggerLabel}
         >
-          <Cloud aria-hidden className="size-3.5" />
+          <WorkspaceBarActionGlyph icon={Cloud}>
+            <span aria-hidden className={cn(WORKSPACE_BAR_ACTION_DOT_CLASS, maasDotToneClass)} />
+          </WorkspaceBarActionGlyph>
           {maasPresentation.providerName ? (
             <span className="inline-block max-w-40 truncate @max-[1440px]:hidden">
               {t('workspaceRuntime.maas.providerSuffix', {
@@ -1706,14 +1765,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           )}
           <span
             aria-hidden
-            className={cn(
-              'absolute top-1 right-0.5 size-1.5 rounded-full @min-[1441px]:static',
-              globalMaasBinding.data?.effective
-                ? 'bg-emerald-500'
-                : globalMaasBinding.data?.enabled
-                  ? 'bg-amber-500'
-                  : 'bg-foreground-disabled'
-            )}
+            className={cn(WORKSPACE_BAR_ACTION_INLINE_DOT_CLASS, maasDotToneClass)}
           />
         </PopoverTrigger>
         {isMaasPopoverOpen ? (
@@ -1726,7 +1778,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             <WorkspaceMaasPopover
               binding={globalMaasBinding.data}
               onManage={openMaasManagement}
-              onManagePlatform={openMaasPlatform}
               onOpenLogs={openMaasLogs}
             />
           </PopoverContent>
@@ -1845,6 +1896,12 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           ) : null}
         </Popover>
       ) : null}
+      <WorkspaceSyncPopover
+        open={isSyncPopoverOpen}
+        onOpenChange={setIsSyncPopoverOpen}
+        triggerClassName={RUNTIME_BAR_ACTION_CLASS}
+        labelClassName={RUNTIME_BAR_ACTION_LABEL_CLASS}
+      />
       <button
         type="button"
         title={t('workspaceRuntime.doctor')}

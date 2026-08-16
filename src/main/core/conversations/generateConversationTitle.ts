@@ -136,30 +136,6 @@ export async function generateConversationTitle(
       hasProviderConfig: Boolean(runtime),
       hasNamingCommand: Boolean(runtime?.providerConfig.namingCommand?.trim()),
     });
-    if (settings.language === 'skip') {
-      const snapshot = saveConversationNamingSnapshot({
-        conversation,
-        status: 'skipped',
-        model,
-        runtimeId,
-        runtimeName,
-        context,
-        systemPrompt,
-        systemPromptEstimatedTokens,
-        prompt,
-        promptEstimatedTokens,
-        error: 'Session title generation is disabled by language setting.',
-      });
-      return {
-        title: conversation.title,
-        runtimeId,
-        runtimeName,
-        model,
-        messageCount: messages.length,
-        promptChars: prompt.length,
-        snapshot,
-      };
-    }
     if (!runtime) {
       throw new Error(`No provider configuration is available for ${runtimeName}.`);
     }
@@ -262,21 +238,6 @@ export async function getConversationNamingPreview(
 ): Promise<ConversationNamingSnapshot> {
   try {
     const draft = await buildConversationNamingDraft(projectId, taskId, conversationId, cwd);
-    if (draft.settings.language === 'skip') {
-      return createConversationNamingSnapshot({
-        conversation: draft.conversation,
-        status: 'skipped',
-        model: draft.model,
-        runtimeId: draft.runtimeId,
-        runtimeName: draft.runtimeName,
-        context: draft.context,
-        systemPrompt: draft.systemPrompt,
-        systemPromptEstimatedTokens: draft.systemPromptEstimatedTokens,
-        prompt: draft.prompt,
-        promptEstimatedTokens: draft.promptEstimatedTokens,
-        error: 'Session title generation is disabled by language setting.',
-      });
-    }
     if (!draft.runtime) {
       throw new Error(`No provider configuration is available for ${draft.runtimeName}.`);
     }

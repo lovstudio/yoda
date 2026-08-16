@@ -134,6 +134,53 @@ export const taskOutputLanguageValues = ['skip', 'app', 'prompt', 'en', 'zh-CN']
 export type TaskOutputLanguage = (typeof taskOutputLanguageValues)[number];
 
 /**
+ * 目标语言里的 `skip` 是历史遗留：它曾兼作「关闭该能力」的开关，于是配置和开关
+ * 挤在同一个字段里，关掉就没法再配置。开关现在由各能力自己的布尔字段承担
+ * （命名 `autoGenerateName`、概要 `autoGenerateSummary`、改写
+ * `promptRewriteEnabled`），语言只表示目标语言，旧的 `skip` 按「跟随应用语言」读。
+ */
+export function resolveOutputLanguage(
+  language: TaskOutputLanguage | undefined
+): TaskOutputLanguage {
+  return language === undefined || language === 'skip' ? 'app' : language;
+}
+
+/**
+ * 改写开关。旧版本没有独立开关，靠语言兼作开关，所以未显式设置时按旧语言推断：
+ * `skip` 与 `prompt`（改写成原文语言等于不改写）都算关。
+ */
+export function resolvePromptRewriteEnabled(
+  enabled: boolean | undefined,
+  language: TaskOutputLanguage | undefined
+): boolean {
+  if (enabled !== undefined) return enabled;
+  return language !== undefined && language !== 'skip' && language !== 'prompt';
+}
+
+/** 改写的目标语言：把原文语言（`prompt`）和历史开关值（`skip`）收敛到默认目标。 */
+export function resolvePromptRewriteLanguage(
+  language: TaskOutputLanguage | undefined
+): TaskOutputLanguage {
+  return language === 'zh-CN' || language === 'en' ? language : 'app';
+}
+
+/**
+ * 项目覆盖层用的两个变体：`undefined` 表示「不覆盖，继承全局」，必须原样保留，
+ * 只把已写入的历史值收敛成真实目标语言。
+ */
+export function resolveOutputLanguageOverride(
+  language: TaskOutputLanguage | undefined
+): TaskOutputLanguage | undefined {
+  return language === undefined ? undefined : resolveOutputLanguage(language);
+}
+
+export function resolvePromptRewriteLanguageOverride(
+  language: TaskOutputLanguage | undefined
+): TaskOutputLanguage | undefined {
+  return language === undefined ? undefined : resolvePromptRewriteLanguage(language);
+}
+
+/**
  * A project's overrides for the home composer's run configuration. Every field
  * is optional: absent means "inherit the user's global homeDraft default",
  * present means "this project overrides it". Stored in project settings so it
@@ -156,6 +203,14 @@ export const composerDefaultsSchema = z.object({
   baseBranch: composerBaseBranchSchema.optional(),
   standardStrategyKind: z.enum(composerStrategyKindValues).optional(),
   attachImagesAsPaths: z.boolean().optional(),
+  /**
+   * Per-capability switches. They live beside the language fields so a project
+   * can turn a capability off without also losing its configuration — the
+   * language used to carry both roles.
+   */
+  promptRewriteEnabled: z.boolean().optional(),
+  autoGenerateName: z.boolean().optional(),
+  autoGenerateSummary: z.boolean().optional(),
   inputPromptLanguage: z.enum(taskOutputLanguageValues).optional(),
   namingLanguage: z.enum(taskOutputLanguageValues).optional(),
   summaryLanguage: z.enum(taskOutputLanguageValues).optional(),

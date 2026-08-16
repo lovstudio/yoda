@@ -121,7 +121,7 @@ describe('toast', () => {
     expect(mocks.writeText).toHaveBeenCalledWith('Something broke');
     expect(mocks.sonnerToast.success).toHaveBeenCalledWith('Copied', undefined);
     expect(workspaceNotificationStore.getSnapshot()).toMatchObject([
-      { title: 'Something broke', kind: 'error', source: 'toast' },
+      { title: 'Something broke', kind: 'error', source: 'app' },
     ]);
   });
 

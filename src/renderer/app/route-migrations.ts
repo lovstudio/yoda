@@ -6,6 +6,16 @@ export type PersistedViewRoute = {
 /** Keep restored tabs, navigation, and side-pane pins on the Library surface
  * after Marketplace's sections move back under its secondary navigation. */
 export function migratePersistedViewRoute(route: PersistedViewRoute): PersistedViewRoute {
+  // Model access is a Settings pane, not a surface of its own — the standalone
+  // route rendered the same view minus the global-binding control, which left
+  // two designs for one thing.
+  if (route.viewId === 'maas') {
+    return {
+      viewId: 'settings',
+      params: { tab: 'maas', maasPlatformId: route.params.platformId },
+    };
+  }
+
   if (route.viewId === 'marketplace') {
     return {
       viewId: 'library',

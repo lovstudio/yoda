@@ -64,7 +64,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@renderer/lib/ui/select';
-import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
@@ -167,10 +166,6 @@ export const LlmProfilesCard: React.FC = () => {
         settings.imageGenerationProfileId === selectedProfile.id
           ? fallbackId
           : settings.imageGenerationProfileId,
-      promptTranslationProfileId:
-        settings.promptTranslationProfileId === selectedProfile.id
-          ? fallbackId
-          : settings.promptTranslationProfileId,
     });
     setSelectedProfileId(fallbackId);
   };
@@ -634,40 +629,6 @@ export const LlmProfileAssignmentsCard: React.FC = () => {
             disabled={disabled}
             value={settings.imageGenerationProfileId}
             onValueChange={(value) => updateLlm({ imageGenerationProfileId: value })}
-          />
-        }
-      />
-      <SettingRow
-        title={t('settings.llm.promptTranslation')}
-        description={t('settings.llm.promptTranslationDescription')}
-        control={
-          <Switch
-            checked={settings.promptTranslationEnabled}
-            disabled={disabled}
-            onCheckedChange={(checked) => updateLlm({ promptTranslationEnabled: checked })}
-          />
-        }
-      />
-      <SettingRow
-        title={t('settings.llm.promptTranslationProfile')}
-        description={t('settings.llm.promptTranslationProfileDescription')}
-        control={
-          <ProfileSelect
-            settings={settings}
-            disabled={disabled}
-            value={settings.promptTranslationProfileId}
-            onValueChange={(value) => updateLlm({ promptTranslationProfileId: value })}
-          />
-        }
-      />
-      <SettingRow
-        title={t('settings.llm.showOriginalPrompt')}
-        description={t('settings.llm.showOriginalPromptDescription')}
-        control={
-          <Switch
-            checked={settings.promptTranslationShowOriginal}
-            disabled={disabled || !settings.promptTranslationEnabled}
-            onCheckedChange={(checked) => updateLlm({ promptTranslationShowOriginal: checked })}
           />
         }
       />

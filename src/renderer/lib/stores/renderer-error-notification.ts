@@ -13,7 +13,7 @@ export type RendererErrorNotificationContext = {
 export function enqueueRendererErrorNotification(
   error: Error,
   context: RendererErrorNotificationContext = {}
-): string {
+): string | null {
   const fingerprint = [
     context.component,
     context.operation,
@@ -48,7 +48,7 @@ export function enqueueRendererErrorNotification(
     description: error.message,
     details,
     kind: 'error',
-    source: 'system',
+    source: 'app',
     reason: 'error',
     dedupeKey: `renderer-error:${fingerprint}`,
   });

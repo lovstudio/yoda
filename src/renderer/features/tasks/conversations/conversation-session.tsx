@@ -1,7 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
 import { Check, Copy, Loader2, Power, RotateCcw, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAttachImagesAsPaths } from '@renderer/features/tasks/hooks/use-attach-images-as-paths';
@@ -13,9 +12,8 @@ import {
   useRequireProvisionedTask,
   useTaskViewContext,
 } from '@renderer/features/tasks/task-view-context';
+import { useWorkspaceFileLinks } from '@renderer/features/tasks/terminals/use-workspace-file-links';
 import { useWorkspaceWebLinks } from '@renderer/features/tasks/terminals/use-workspace-web-links';
-import { buildFilePathDefaultOpenRequest } from '@renderer/lib/components/file-path-open';
-import { rpc } from '@renderer/lib/ipc';
 import type { FrontendPty } from '@renderer/lib/pty/pty';
 import {
   getCellMetrics,
@@ -25,11 +23,6 @@ import {
   type TerminalDimensions,
 } from '@renderer/lib/pty/pty-dimensions';
 import { PtyPane } from '@renderer/lib/pty/pty-pane';
-import {
-  getTerminalFileLinkInternalDestination,
-  openTerminalGlobalFileInYoda,
-} from '@renderer/lib/pty/terminal-file-link-open';
-import type { TerminalFileLinkOptions } from '@renderer/lib/pty/terminal-file-links';
 import { TerminalSearchOverlay } from '@renderer/lib/pty/terminal-search-overlay';
 import { useTerminalSearch } from '@renderer/lib/pty/use-terminal-search';
 import { Button } from '@renderer/lib/ui/button';
@@ -159,7 +152,6 @@ export const ConversationSession = observer(function ConversationSession({
   const attachImagesAsPaths = useAttachImagesAsPaths(projectId);
   const { conversations } = provisioned;
   const mountedProject = asMounted(getProjectStore(projectId));
-  const projectRoot = mountedProject?.data.path;
   const remoteConnectionId =
     mountedProject?.data.type === 'ssh' ? mountedProject.data.connectionId : undefined;
 
@@ -760,47 +752,7 @@ export const ConversationSession = observer(function ConversationSession({
     debugCopyResetRef.current = setTimeout(() => setDebugCopied(false), 1500);
   };
 
-  const { data: homeDir } = useQuery({
-    queryKey: ['homeDir'],
-    queryFn: () => rpc.app.getHomeDir(),
-    staleTime: Infinity,
-    enabled: !remoteConnectionId,
-  });
-  const fileLinks = useMemo<TerminalFileLinkOptions>(
-    () => ({
-      workspaceRoot: provisioned.path,
-      workspaceRootAliases: projectRoot ? [projectRoot] : undefined,
-      homeDir: typeof homeDir === 'string' ? homeDir : undefined,
-      sshConnectionId: remoteConnectionId,
-      onOpen: (target) => {
-        const { absolutePath, line, column, isDirectory } = target;
-        const destination = getTerminalFileLinkInternalDestination(target, {
-          sshConnectionId: remoteConnectionId,
-        });
-        if (destination?.placement === 'workspace') {
-          provisioned.taskView.tabManager.openFileInSidebar(destination.path, { line, column });
-          provisioned.taskView.setSidebarCollapsed(false);
-          return;
-        }
-        if (destination?.placement === 'global') {
-          void openTerminalGlobalFileInYoda(destination.path);
-          return;
-        }
-        if (absolutePath) {
-          void rpc.app.openIn(
-            buildFilePathDefaultOpenRequest({
-              absolutePath,
-              kind: isDirectory ? 'directory' : 'file',
-              sshConnectionId: remoteConnectionId,
-              line,
-              column,
-            })
-          );
-        }
-      },
-    }),
-    [provisioned.path, provisioned.taskView, projectRoot, remoteConnectionId, homeDir]
-  );
+  const fileLinks = useWorkspaceFileLinks(remoteConnectionId);
   const webLinks = useWorkspaceWebLinks();
   const canonicalFrameVisible = visibleFrame.pty === sessionPty && visibleFrame.ready;
   const hasSlowFrameVerification = Boolean(

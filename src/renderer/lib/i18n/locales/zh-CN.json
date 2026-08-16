@@ -189,10 +189,10 @@
       "error": "已报错",
       "completed": "已完成",
       "interrupted": "已中断",
+      "idle": "空闲",
       "working": "正在进行",
       "pending-review": "已完成 · 待审阅",
       "long-term": "长期",
-      "idle": "休眠",
       "archived": "已归档"
     },
     "pinned": "已置顶",
@@ -553,7 +553,17 @@
       "description": "配置新任务的创建与运行方式。"
     },
     "sessionsTab": {
-      "description": "管理会话的命名、摘要、归档与运行方式。"
+      "description": "按会话的生命周期组织：创建、运行、归档。"
+    },
+    "sessions": {
+      "createTitle": "创建",
+      "createDescription": "新会话默认怎么启动。",
+      "assistanceTitle": "智能处理",
+      "assistanceDescription": "会话运行时交给智能体代劳的语言、命名与摘要。",
+      "eventsTitle": "提醒与权限",
+      "eventsDescription": "会话运行中需要你知道或批准的事。",
+      "archiveTitle": "归档",
+      "archiveDescription": "你收尾一个会话时执行的动作。"
     },
     "account": {
       "description": "管理 LovStudio 账户、积分与 Yoda 云端服务。",
@@ -789,12 +799,6 @@
       "namingProfileDescription": "会话和任务自动命名使用这份 Profile。",
       "imageGenerationProfile": "图片生成 Profile",
       "imageGenerationProfileDescription": "Yoda AI 头像及其他直接图片生成调用使用这份 Profile。",
-      "promptTranslation": "发送前翻译 Prompt",
-      "promptTranslationDescription": "预留的全局预处理开关。开启后可用于把中文 Prompt 翻译成英文再发送给目标 Agent。",
-      "promptTranslationProfile": "Prompt 翻译 Profile",
-      "promptTranslationProfileDescription": "发送前翻译会使用这份 Profile，避免把中文预处理交给目标 Agent。",
-      "showOriginalPrompt": "保留原始 Prompt",
-      "showOriginalPromptDescription": "Prompt 翻译启用后，在界面与调试信息中保留用户原始中文内容。",
       "debugTitle": "调试",
       "debugPrompt": "测试 Prompt",
       "debugDefaultPrompt": "用一句话说明当前 LLM Profile 工作正常。",
@@ -1107,32 +1111,16 @@
       "yodaDark": "尤达黑",
       "yodaWarm": "尤达暖",
       "yodaDarkGreen": "尤达暗绿",
-      "yodaDream": "粉系定制",
       "yodaDreamArina": "桥本有菜专属定制",
-      "yodaDreamNight": "经典夜色",
-      "yodaDreamFortune": "财神打工",
-      "yodaDreamScifi": "红白科幻",
-      "yodaDreamClear": "清透定制",
-      "yodaDreamCosmos": "灵感小宇宙",
-      "yodaDreamPurple": "紫夜限定",
-      "yodaDreamVirtual": "未来音律",
-      "yodaDreamGold": "舞台黑金",
+      "yodaDreamPanther": "粉红豹",
       "ariaSystem": "设置主题为跟随系统",
       "ariaLight": "设置主题为尤达白",
       "ariaLightGreen": "设置主题为尤达浅绿",
       "ariaDark": "设置主题为尤达黑",
       "ariaWarm": "设置主题为尤达暖",
       "ariaDarkGreen": "设置主题为尤达暗绿",
-      "ariaDream": "设置主题为尤达梦境皮肤",
       "ariaDreamArina": "设置主题为桥本有菜专属定制皮肤",
-      "ariaDreamNight": "设置主题为尤达梦境夜色皮肤",
-      "ariaDreamFortune": "设置主题为财神打工皮肤",
-      "ariaDreamScifi": "设置主题为红白科幻皮肤",
-      "ariaDreamClear": "设置主题为清透定制皮肤",
-      "ariaDreamCosmos": "设置主题为灵感小宇宙皮肤",
-      "ariaDreamPurple": "设置主题为紫夜限定皮肤",
-      "ariaDreamVirtual": "设置主题为未来音律皮肤",
-      "ariaDreamGold": "设置主题为舞台黑金皮肤",
+      "ariaDreamPanther": "设置主题为粉红豹皮肤",
       "dreamSkinGallery": "梦境皮肤库",
       "dreamSkinGalleryDescription": "精选风格各异的原生可交互 Yoda 皮肤。",
       "activeSkin": "使用中",
@@ -1275,11 +1263,11 @@
     "notifications": {
       "title": "通知",
       "description": "任务完成或 Agent 需要你处理时收到提醒。",
-      "turnCompletion": "任务完成通知",
+      "turnCompletion": "任务完成提醒",
       "turnCompletionDescription": "设置任务完成时何时提醒你。",
-      "permissionNotifications": "启用权限通知",
+      "permissionNotifications": "权限确认提醒",
       "permissionNotificationsDescription": "当 Agent 需要你确认权限时显示系统横幅。",
-      "questionNotifications": "启用问题通知",
+      "questionNotifications": "等待回答提醒",
       "questionNotificationsDescription": "当 Agent 等待你的回答才能继续时显示系统横幅。",
       "enabled": "开启",
       "deliveryModes": {
@@ -1309,14 +1297,20 @@
       "branchNamingAi": "AI 语义命名",
       "namingConfigTitle": "命名",
       "namingConfigDescription": "用于命名会话与任务的目标语言和上下文来源；模型调用由 LLM Profile 统一决定。",
+      "autoGenerateSummary": "自动生成会话摘要",
+      "autoGenerateSummaryDescription": "每轮回复结束后自动更新会话摘要；关闭后仍可在会话面板手动生成。",
       "summaryConfigTitle": "会话摘要",
       "summaryConfigDescription": "用于生成会话摘要的 Agent。使用其自身的客户端与模型运行，独立于各会话的运行时。",
       "namingAgentLabel": "命名 Agent",
       "namingAgentHint": "用于补充自动命名的系统提示；实际 Client、接入方式和模型由 LLM Profile 决定。",
       "summaryAgentLabel": "摘要 Agent",
       "summaryAgentHint": "负责生成会话摘要的 Agent，完全使用其自身的客户端与模型运行；即使当前会话的运行时已不可用，摘要仍可正常生成。",
-      "inputPromptLanguageLabel": "输入 Prompt 语言",
-      "inputPromptLanguageDescription": "发送前先把用户输入改写为目标语言；选择跳过表示禁用改写，选择 Prompt 语言表示保持原文。",
+      "promptRewriteTitle": "输入 Prompt 改写",
+      "promptRewriteAgentLabel": "改写 Agent",
+      "promptRewriteAgentHint": "负责改写输入 Prompt 的 Agent。若该 Agent 指定了客户端与模型则以其为准，否则沿用当前会话所选的客户端。",
+      "inputPromptLanguageLabel": "改写语言",
+      "inputPromptLanguageDescription": "发送给 agent 之前，先把输入改写为目标语言。",
+      "promptRewriteConfigDescription": "用于改写输入 Prompt 的 Agent 与目标语言。",
       "sessionTitleLanguageLabel": "会话标题语言",
       "summaryLanguageLabel": "摘要语言",
       "summaryContext": {
@@ -1381,14 +1375,27 @@
       "linesUnit": "行",
       "autoCopySelected": "自动复制选中文本",
       "autoCopySelectedDescription": "在终端中选中文本后自动复制到剪贴板。",
-      "smartPathOpenMode": "终端链接默认打开方式",
-      "smartPathOpenModeDescription": "设置单击终端中的网址与文件路径时，默认在 Yoda 内打开或交给系统默认应用。",
-      "smartPathOpenInternal": "在 Yoda 内打开",
-      "smartPathOpenExternal": "使用默认应用打开",
+      "linkOpen": {
+        "fileTitle": "文件默认打开方式",
+        "fileDescription": "单击终端里的文件路径时交给谁打开。",
+        "urlTitle": "网址默认打开方式",
+        "urlDescription": "单击终端里的网址时交给谁打开。",
+        "rulesTitle": "按文件格式覆盖",
+        "rulesDescription": "为特定扩展名指定不同的打开方式，自上而下首个命中生效。",
+        "addRule": "添加规则",
+        "removeRule": "删除该规则",
+        "extensionsPlaceholder": "png, jpg, pdf",
+        "yoda": "在 Yoda 内打开",
+        "system": "系统默认应用",
+        "browserYoda": "Yoda 内置浏览器",
+        "browserSystem": "系统浏览器"
+      },
       "hotTerminalLimit": "后台终端缓存",
-      "hotTerminalLimitDescription": "自动模式常驻最近 4 个终端渲染器；持续高输出或应用内存压力下会进一步回收。被回收的会话保留有界的滚动上下文检查点。",
-      "hotTerminalAuto": "自动（最近 4 个）",
-      "hotTerminalFixed": "固定数量",
+      "hotTerminalLimitDescription": "自动模式按本机内存与 CPU 核心数推断可常驻的终端渲染器数量；持续高输出或应用内存压力下会进一步回收，被回收的会话保留有界的滚动上下文检查点。",
+      "hotTerminalMachineSummary": "当前设备读取到 {{cores}} 核 / {{memory}} GB，推断值为 {{limit}} 个。",
+      "hotTerminalMachineProbing": "正在读取本机配置，暂按 {{limit}} 个。",
+      "hotTerminalAuto": "自动",
+      "hotTerminalFixed": "手动",
       "hotTerminalFixedLimit": "后台终端缓存数量",
       "idleSessionTimeout": "空闲会话休眠",
       "idleSessionTimeoutDescription": "隐藏且已完成或空闲的 tmux Agent 超时后释放；设为 0 表示始终保留。",
@@ -2410,6 +2417,8 @@
       "summaryFailedDescription": "摘要生成失败，将在下一次回复后重试。",
       "summarySkipped": "摘要已禁用",
       "summarySkippedDescription": "当前语言设置为跳过，不会生成摘要。",
+      "summaryAutoDisabled": "未自动生成",
+      "summaryAutoDisabledDescription": "自动生成摘要已关闭，点击生成即可获取本次会话的摘要。",
       "summaryFromCompaction": "来自 agent 的压缩摘要",
       "summaryGenerated": "根据对话生成",
       "agentReplyDisplayControl": "Agent 回复显示级别：{{level}}",
@@ -2616,10 +2625,6 @@
     }
   },
   "library": {
-    "groups": {
-      "basic": "基础",
-      "advanced": "高级"
-    },
     "sections": {
       "extensions": "扩展",
       "apps": "应用",
@@ -2861,6 +2866,7 @@
   },
   "promptLibrary": {
     "title": "提示词库",
+    "subtitle": "会话可随时取用的可复用提示词与系统指令。",
     "tabs": {
       "ariaLabel": "提示词配置范围",
       "global": "全局",
@@ -3678,6 +3684,7 @@
     "noDescription": "暂无描述",
     "noDescriptionShort": "暂无描述",
     "duplicate": "创建副本",
+    "forkAgent": "以此为模板新建",
     "anyRuntime": "任意客户端",
     "skillsCount": "{{count}} 个 skill",
     "icon": "图标",
@@ -4564,7 +4571,7 @@
   },
   "aiLogs": {
     "title": "AI 日志",
-    "subtitle": "记录本应用发起的每一次 AI 调用——后台 CLI、API 请求与交互式会话，含起止时间与完整细节，便于复盘。",
+    "subtitle": "记录本应用发起的每一次 AI 调用——交互式会话与其中的每一轮对话、后台 CLI 任务、API 请求，含用途、账号、端点、耗时与完整输入输出，便于复盘与排查。",
     "filter": {
       "all": "全部",
       "running": "进行中",
@@ -4587,7 +4594,7 @@
     "finished": "结束时间",
     "duration": "耗时",
     "command": "命令",
-    "prompt": "Prompt",
+    "prompt": "输入",
     "output": "输出",
     "error": "错误",
     "detailActions": "{{label}}操作",
@@ -4614,7 +4621,105 @@
       "llm-debug": "LLM 调试",
       "interactive-session": "交互式会话",
       "interactive-turn": "对话轮次",
-      "utility": "通用任务"
+      "utility": "通用任务",
+      "avatar-generation": "头像生成",
+      "quick-action-compilation": "快捷动作编译",
+      "prompt-rewrite": "提示改写",
+      "skill-trigger-queries": "技能触发测试",
+      "skill-revision": "技能描述改写"
+    },
+    "categoryLabel": "分类",
+    "category": {
+      "all": "全部分类",
+      "conversation": "对话",
+      "builtin": "内置功能",
+      "image": "图像",
+      "inspect": "调试"
+    },
+    "searchPlaceholder": "搜索用途、模型、内容…",
+    "noMatchTitle": "没有匹配的调用",
+    "noMatchDescription": "换个关键词或筛选条件再试。",
+    "summary": {
+      "total": "共 {{count}} 次",
+      "succeeded": "成功 {{count}}",
+      "failed": "失败 {{count}}",
+      "running": "进行中 {{count}}"
+    },
+    "chip": {
+      "mode": "模式",
+      "runtime": "客户端",
+      "model": "模型",
+      "agent": "智能体",
+      "account": "账号",
+      "endpoint": "端点"
+    },
+    "account": {
+      "unrecorded": "未记录",
+      "unrecordedHint": "这次调用没有记录账号来源。"
+    },
+    "endpoint": {
+      "clientManaged": "客户端自配",
+      "overriddenHint": "Yoda 为这次调用注入的 base URL。",
+      "clientHint": "Yoda 没有覆盖 base URL，实际端点由该客户端自己的配置决定。"
+    },
+    "diagnosis": {
+      "timeoutSilent": "命令超时且全程没有任何输出：所选模型在当前端点很可能不可用（未开通、未配置价格或被限流），请求一直挂着直到超时。换成主力模型再试。",
+      "timeout": "命令在超时时间内没有完成，下方输出可以看出它卡在哪一步。",
+      "interrupted": "应用退出时这次调用还在进行，结果未知。",
+      "sessionExited": "会话进程在本轮结束前退出，这一轮没有正常收尾。",
+      "missingCli": "找不到对应的命令行客户端，确认它已安装且在 PATH 中。",
+      "upstream": "上游模型服务返回了错误，详见下方原始错误。"
+    },
+    "metadata": {
+      "projectId": "项目",
+      "taskId": "任务",
+      "conversationId": "会话",
+      "scope": "范围",
+      "target": "目标",
+      "attempt": "第几次尝试",
+      "platform": "平台",
+      "profileId": "配置档"
+    },
+    "trace": {
+      "title": "过程",
+      "loading": "正在读取转录…",
+      "summary": "{{requests}} 次请求 · {{tokens}}",
+      "tokens": "入 {{input}} · 缓存 {{cached}} · 出 {{output}}",
+      "stepTokens": "入 {{input}} 出 {{output}}",
+      "capped": "仅显示前 {{shown}} 步，共 {{total}} 步",
+      "clipped": "此处省略 {{count}} 个字符，完整内容见转录文件",
+      "kind": {
+        "prompt": "输入",
+        "thinking": "思考",
+        "text": "回复",
+        "tool-use": "工具调用",
+        "tool-result": "工具结果",
+        "compact": "上下文压缩"
+      },
+      "unavailable": {
+        "unsupported-runtime": "该客户端的转录格式暂不支持解析，拿不到过程明细。",
+        "no-conversation": "这次调用不属于任何会话，上面的输入与输出就是全部过程。",
+        "no-transcript": "找不到对应的转录文件，工作树可能已被清理。",
+        "empty-window": "转录文件里这段时间没有留下任何记录。"
+      }
+    },
+    "purposeDescription": {
+      "interactive-session": "一次客户端进程的完整生命周期：从启动到退出，期间的每一轮对话列在它下面。",
+      "interactive-turn": "会话中的一轮：从你发出消息，到 AI 停止工作。",
+      "task-naming": "根据首条消息为任务与分支生成名称。",
+      "session-title": "为会话生成标题。",
+      "session-summary": "把会话转录压缩成交付摘要。",
+      "commit-message": "根据当前改动生成提交信息。",
+      "logo-generation": "生成 Logo 图片。",
+      "avatar-generation": "生成头像图片。",
+      "app-image-edit": "在 AI Lab 里编辑图片。",
+      "maas-chat": "模型接入面板里的直接对话。",
+      "llm-debug": "设置里发起的连通性调试请求。",
+      "quick-action-compilation": "把自定义快捷动作编译成可执行提示。",
+      "prompt-rewrite": "按要求改写输入框里的提示。",
+      "skill-trigger-queries": "为技能生成触发测试问句。",
+      "skill-revision": "根据评测结果改写技能描述。",
+      "utility": "内置的通用 AI 任务。"
     }
   },
   "maas": {
@@ -5161,6 +5266,38 @@
       "title": "配置",
       "description": "调整常用输入与 Agent 选项。Prompt、指令文件等详细内容在资源库统一管理。"
     },
+    "sync": {
+      "title": "同步",
+      "description": "选择已配对手机连接这台电脑的方式。",
+      "statusLabel": "状态",
+      "modes": {
+        "lan": {
+          "label": "局域网",
+          "description": "同一 Wi-Fi 下的手机直接连接，数据不出本地网络。"
+        },
+        "relay": {
+          "label": "公网",
+          "description": "经 Lovstudio Relay 中转，手机在任意网络下都能连上。"
+        },
+        "both": {
+          "label": "两者兼用",
+          "description": "优先走局域网，电脑换网时自动回落到 Relay。"
+        }
+      },
+      "lanOff": "局域网同步已关闭",
+      "lanNoAddress": "当前没有可用的局域网地址",
+      "relayOff": "公网同步已关闭",
+      "relayConnected": "Relay 已连接",
+      "relayConnecting": "正在连接 Relay",
+      "relayNotPaired": "尚未配对 Relay",
+      "copyLanUrl": "复制地址",
+      "copyRelayError": "复制错误信息",
+      "relayErrorCopied": "已复制错误信息",
+      "lanUrlCopied": "地址已复制",
+      "lanUrlCopyFailed": "复制地址失败",
+      "refresh": "刷新",
+      "openPairing": "配对设置"
+    },
     "prompt": {
       "label": "提示词",
       "triggerLabel": "打开 {{name}} 的提示词配置",
@@ -5246,13 +5383,16 @@
         "resolved": "已恢复"
       },
       "sourceValue": {
-        "toast": "应用提示",
-        "agent": "Agent",
-        "automation": "自动化",
-        "system": "系统"
+        "app": "应用",
+        "agent": "智能体",
+        "automation": "自动化"
+      },
+      "sources": {
+        "label": "收录范围",
+        "hint": "「应用」是 Yoda 自身的失败与操作结果。未勾选的来源仍会以其他方式提醒，只是不再记录在这里。"
       },
       "system": {
-        "agentAwaitingInput": "Agent 正在等待输入"
+        "agentAwaitingInput": "智能体正在等待输入"
       }
     },
     "model": {

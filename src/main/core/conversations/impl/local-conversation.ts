@@ -23,6 +23,7 @@ import { applyHookOverrides } from '@main/core/agent-hooks/inspect/hook-override
 import { hookOverridesStore } from '@main/core/agent-hooks/inspect/hook-overrides-store';
 import { aiLogService } from '@main/core/ai-logs/ai-log-service';
 import { interactiveTurnLogger } from '@main/core/ai-logs/interactive-turn-logger';
+import { describeInvocationEndpoint } from '@main/core/ai-logs/invocation-endpoint';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-reconciler';
 import { createClaudeInterruptSniffer } from '@main/core/conversations/claude-interrupt-sniffer';
@@ -53,6 +54,7 @@ import {
   resolveMaasRuntimeEnv,
   rewriteCodexMaasModelArgs,
 } from '@main/core/maas/runtime-env';
+import { captureAgentExitTail, describeAgentExit } from '@main/core/pty/agent-exit-diagnostics';
 import { spawnLocalPty } from '@main/core/pty/local-pty';
 import type { Pty } from '@main/core/pty/pty';
 import { buildAgentEnv } from '@main/core/pty/pty-env';
@@ -635,6 +637,7 @@ export class LocalConversationProvider implements ConversationProvider {
       // wrapper around it is launch plumbing, useless for debugging the run).
       // The initial prompt arg is dropped — it's recorded in the prompt field.
       let invocationLogId: string;
+      const invocationEndpoint = describeInvocationEndpoint(providerEnv);
       try {
         invocationLogId = await aiLogService.start({
           purpose: 'interactive-session',
@@ -653,9 +656,11 @@ export class LocalConversationProvider implements ConversationProvider {
             authProvider,
             maasEffective: String(maasEffective),
             ...(maasCredentials ? { maasPlatformId: maasCredentials.platformId } : {}),
+            ...(invocationEndpoint ? { endpoint: invocationEndpoint } : {}),
           },
         });
         invocationLogIdForRollback = invocationLogId;
+        interactiveTurnLogger.attachSessionLog(conversation.id, invocationLogId);
       } catch (error) {
         preparedSettings.cleanup?.();
         preparedSettingsCleanup = undefined;
@@ -892,22 +897,25 @@ export class LocalConversationProvider implements ConversationProvider {
         this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
         const exitedBySignal = signal !== undefined && signal !== 0;
         const failed = exitedBySignal || (typeof exitCode === 'number' && exitCode !== 0);
-        const finishAsAgentExit = () => {
+        const exitReason = describeAgentExit({ exitCode, signal });
+        const finishAsAgentExit = (exitTail?: string) => {
           if (invocationLogFinished) return;
           invocationLogFinished = true;
           void aiLogService.finish(invocationLogId, {
             status: failed ? 'failed' : 'succeeded',
-            error: exitedBySignal
-              ? `Signal ${String(signal)}`
-              : failed
-                ? `Exit code ${exitCode}`
-                : undefined,
+            error: failed ? exitReason : undefined,
+            output: exitTail || undefined,
           });
         };
         if (this.sessions.get(sessionId) !== pty) {
           finishAsAgentExit();
           return;
         }
+        // A CLI that dies mid-turn writes no API error and no crash report, so
+        // its last screen is the only evidence of why the turn stopped. Exit
+        // finalization clears the replay ring buffer, hence the snapshot here,
+        // synchronously, before the asynchronous tmux probe below.
+        const exitTail = captureAgentExitTail(sessionId);
         // The transport is gone either way, so stop routing input into a dead
         // file descriptor before the probe resolves; `sendInput` falls back to
         // headless `tmux send-keys` exactly as it does for an idle detach.
@@ -919,7 +927,7 @@ export class LocalConversationProvider implements ConversationProvider {
               invocationLogFinished = true;
               void aiLogService.finish(invocationLogId, {
                 status: 'succeeded',
-                output: `Lost Yoda renderer transport (${exitedBySignal ? `signal ${String(signal)}` : `exit code ${exitCode}`}); tmux agent remains running.`,
+                output: `Lost Yoda renderer transport (${exitReason}); tmux agent remains running.`,
               });
             }
             log.warn('LocalConversation: PTY transport died while the tmux agent stayed alive', {
@@ -931,7 +939,17 @@ export class LocalConversationProvider implements ConversationProvider {
             this.cleanupSessionArtifacts(sessionId, pty);
             return verdict;
           }
-          finishAsAgentExit();
+          finishAsAgentExit(exitTail);
+          // The dying screen is the only place a mid-turn CLI death explains
+          // itself; keep it in the main log too so a dev session sees it without
+          // opening the AI log.
+          log.warn('LocalConversation: agent CLI exited', {
+            sessionId,
+            conversationId: conversation.id,
+            runtimeId: conversation.runtimeId,
+            exitReason,
+            exitTail: exitTail || '(no output captured)',
+          });
           // A replacement transport that registered while the probe was in
           // flight owns the run state now; tearing it down here would kill a
           // freshly resumed session.

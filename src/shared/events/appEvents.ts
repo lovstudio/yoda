@@ -1,7 +1,11 @@
 import type { DeepLinkTarget } from '@shared/deep-links';
 import type { DependencyStatusUpdatedEvent } from '@shared/dependencies';
 import { defineEvent } from '@shared/ipc/events';
-import type { NotificationReason, NotificationStatus } from '@shared/notifications';
+import type {
+  NotificationReason,
+  NotificationSource,
+  NotificationStatus,
+} from '@shared/notifications';
 import type { RuntimeId } from '@shared/runtime-registry';
 import type { TaskWindowTarget } from '@shared/task-window';
 
@@ -38,7 +42,7 @@ export type AppNotificationCreated = {
   description?: string;
   details?: string;
   kind: 'info' | 'success' | 'error';
-  source: 'agent' | 'automation' | 'system';
+  source: NotificationSource;
   /** Setting a reason opts the event into the retained notification queue. */
   reason?: NotificationReason;
   /** A resolved event updates its matching active entry instead of creating a new one. */

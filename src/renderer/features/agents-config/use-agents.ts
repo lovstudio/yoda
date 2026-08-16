@@ -49,13 +49,28 @@ export function useAgents() {
       toast({ title: 'Duplicate failed', description: error.message, variant: 'destructive' }),
   });
 
+  const { mutateAsync: duplicateAgent } = duplicateMutation;
+  // Resolves to the copy so callers can seat or edit it right away, and to null
+  // on failure — the error is already surfaced as a toast above, so no call site
+  // has to carry a rejection just to ignore it.
+  const duplicate = useCallback(
+    async (id: string): Promise<Agent | null> => {
+      try {
+        return await duplicateAgent(id);
+      } catch {
+        return null;
+      }
+    },
+    [duplicateAgent]
+  );
+
   return {
     agents,
     isLoading,
     create: createMutation.mutateAsync,
     update: updateMutation.mutateAsync,
     remove: removeMutation.mutateAsync,
-    duplicate: duplicateMutation.mutate,
+    duplicate,
     isMutating: createMutation.isPending || updateMutation.isPending || removeMutation.isPending,
   };
 }

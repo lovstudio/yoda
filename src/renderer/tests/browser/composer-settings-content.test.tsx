@@ -43,12 +43,18 @@ describe('ComposerSettingsContent', () => {
       root.render(
         createElement(ComposerSettingsContent, {
           attachImagesAsPaths: true,
-          inputPromptLanguage: 'skip',
+          promptRewriteEnabled: false,
+          inputPromptLanguage: 'app',
+          autoGenerateName: true,
           namingLanguage: 'app',
+          autoGenerateSummary: true,
           summaryLanguage: 'app',
           onAttachImagesAsPathsChange: vi.fn(),
+          onPromptRewriteEnabledChange: vi.fn(),
           onInputPromptLanguageChange: vi.fn(),
+          onAutoGenerateNameChange: vi.fn(),
           onNamingLanguageChange: vi.fn(),
+          onAutoGenerateSummaryChange: vi.fn(),
           onSummaryLanguageChange: vi.fn(),
         })
       );

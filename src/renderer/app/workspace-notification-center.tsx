@@ -12,8 +12,15 @@ import {
   MoreHorizontal,
   Trash2,
 } from 'lucide-react';
-import { useState, useSyncExternalStore } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  DEFAULT_NOTIFICATION_CENTER_SOURCES,
+  NOTIFICATION_SOURCES,
+  type NotificationCenterSources,
+  type NotificationSource,
+} from '@shared/notifications';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { usePopoverDismiss } from '@renderer/lib/hooks/use-popover-dismiss';
 import { copyTextToClipboard, useToast } from '@renderer/lib/hooks/use-toast';
 import {
@@ -25,14 +32,22 @@ import {
 import { Button } from '@renderer/lib/ui/button';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { cn } from '@renderer/utils/utils';
+import {
+  WORKSPACE_BAR_ACTION_COUNT_CLASS,
+  WORKSPACE_BAR_ACTION_INLINE_COUNT_CLASS,
+  WorkspaceBarActionGlyph,
+} from './workspace-bar-action-indicator';
 import {
   WORKSPACE_BAR_CARD_CLASS,
   WorkspaceBarCardHeader,
@@ -51,15 +66,25 @@ export function WorkspaceNotificationCenter({
   onOpenTarget,
 }: WorkspaceNotificationCenterProps) {
   const { t } = useTranslation();
-  const notifications = useSyncExternalStore(
+  const { value: notificationSettings, update } = useAppSettingsKey('notifications');
+  const retainedSources =
+    notificationSettings?.notificationCenterSources ?? DEFAULT_NOTIFICATION_CENTER_SOURCES;
+  const retained = useSyncExternalStore(
     workspaceNotificationStore.subscribe,
     workspaceNotificationStore.getSnapshot,
     workspaceNotificationStore.getSnapshot
+  );
+  // Entries recorded before a source was switched off stay in storage, but the
+  // center is the user's declared view of what matters, so they drop out of it.
+  const notifications = useMemo(
+    () => retained.filter((notification) => retainedSources[notification.source]),
+    [retained, retainedSources]
   );
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = notifications.find((notification) => notification.id === selectedId) ?? null;
   const unreadCount = notifications.filter((notification) => notification.readAt === null).length;
+  const unreadBadge = unreadCount > 99 ? '99+' : String(unreadCount);
   const { actionsRef, dismissThen } = usePopoverDismiss(open, setOpen);
 
   return (
@@ -85,11 +110,22 @@ export function WorkspaceNotificationCenter({
           count: unreadCount,
         })}
       >
-        <Bell aria-hidden className="size-3.5" />
+        <WorkspaceBarActionGlyph icon={Bell}>
+          {unreadCount > 0 ? (
+            <span className={cn(WORKSPACE_BAR_ACTION_COUNT_CLASS, 'font-semibold text-foreground')}>
+              {unreadBadge}
+            </span>
+          ) : null}
+        </WorkspaceBarActionGlyph>
         <span className={triggerLabelClassName}>{t('workspaceRuntime.notifications.title')}</span>
         {unreadCount > 0 ? (
-          <span className="absolute top-0 right-0 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-background-secondary px-0.5 font-mono text-[8px] font-semibold leading-none text-foreground tabular-nums ring-1 ring-border/60 @min-[1441px]:static @min-[1441px]:h-4 @min-[1441px]:min-w-4 @min-[1441px]:px-1 @min-[1441px]:text-[9px]">
-            {unreadCount > 99 ? '99+' : unreadCount}
+          <span
+            className={cn(
+              WORKSPACE_BAR_ACTION_INLINE_COUNT_CLASS,
+              'font-semibold text-foreground ring-1 ring-border/60'
+            )}
+          >
+            {unreadBadge}
           </span>
         ) : null}
       </PopoverTrigger>
@@ -113,6 +149,10 @@ export function WorkspaceNotificationCenter({
         ) : (
           <NotificationList
             notifications={notifications}
+            retainedSources={retainedSources}
+            onToggleSource={(source, next) =>
+              update({ notificationCenterSources: { ...retainedSources, [source]: next } })
+            }
             onSelect={(id) => {
               workspaceNotificationStore.markRead(id);
               setSelectedId(id);
@@ -130,6 +170,8 @@ export function WorkspaceNotificationCenter({
 
 function NotificationList({
   notifications,
+  retainedSources,
+  onToggleSource,
   onSelect,
   onDelete,
   onMarkRead,
@@ -137,6 +179,8 @@ function NotificationList({
   onMarkAllRead,
 }: {
   notifications: WorkspaceNotification[];
+  retainedSources: NotificationCenterSources;
+  onToggleSource: (source: NotificationSource, next: boolean) => void;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onMarkRead: (id: string) => void;
@@ -164,14 +208,34 @@ function NotificationList({
             : t('workspaceRuntime.notifications.description')
         }
         actions={
-          unreadCount > 0 ? (
-            <WorkspaceBarCardMenu>
-              <DropdownMenuItem onClick={onMarkAllRead}>
-                <CheckCheck aria-hidden />
-                {t('workspaceRuntime.notifications.markAllRead')}
-              </DropdownMenuItem>
-            </WorkspaceBarCardMenu>
-          ) : null
+          <WorkspaceBarCardMenu>
+            {unreadCount > 0 ? (
+              <>
+                <DropdownMenuItem onClick={onMarkAllRead}>
+                  <CheckCheck aria-hidden />
+                  {t('workspaceRuntime.notifications.markAllRead')}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>
+                {t('workspaceRuntime.notifications.sources.label')}
+              </DropdownMenuLabel>
+              {NOTIFICATION_SOURCES.map((source) => (
+                <DropdownMenuCheckboxItem
+                  key={source}
+                  checked={retainedSources[source]}
+                  onCheckedChange={(next) => onToggleSource(source, next)}
+                >
+                  {t(`workspaceRuntime.notifications.sourceValue.${source}`)}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuGroup>
+            <p className="px-2 pt-1.5 pb-0.5 text-[11px] leading-4 text-foreground-passive">
+              {t('workspaceRuntime.notifications.sources.hint')}
+            </p>
+          </WorkspaceBarCardMenu>
         }
       />
       {notifications.length > 0 ? (

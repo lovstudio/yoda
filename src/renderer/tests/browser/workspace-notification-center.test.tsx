@@ -11,6 +11,19 @@ const mocks = vi.hoisted(() => ({
   copyTextToClipboard: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+  updateSettings: vi.fn(),
+  retainedSources: {
+    app: true,
+    agent: true,
+    automation: true,
+  } as Record<string, boolean>,
+}));
+
+vi.mock('@renderer/features/settings/use-app-settings-key', () => ({
+  useAppSettingsKey: () => ({
+    value: { notificationCenterSources: mocks.retainedSources },
+    update: mocks.updateSettings,
+  }),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -57,6 +70,13 @@ describe('WorkspaceNotificationCenter', () => {
   beforeEach(() => {
     localStorage.clear();
     workspaceNotificationStore.clear();
+    mocks.retainedSources = { app: true, agent: true, automation: true };
+    workspaceNotificationStore.setRetainedSources({
+      app: true,
+      agent: true,
+      automation: true,
+    });
+    mocks.updateSettings.mockReset();
     mocks.copyTextToClipboard.mockReset();
     mocks.copyTextToClipboard.mockResolvedValue(undefined);
     mocks.toastSuccess.mockReset();
@@ -82,7 +102,7 @@ describe('WorkspaceNotificationCenter', () => {
         description: 'Desktop bundle is ready.',
         details: 'Build finished\n\nArtifact: release/Yoda.dmg',
         kind: 'success',
-        source: 'toast',
+        source: 'app',
         reason: 'action-required',
       },
       undefined,
@@ -205,7 +225,7 @@ describe('WorkspaceNotificationCenter', () => {
       description: 'The packager exited with code 1.',
       details: 'Error: EACCES\nPath: /tmp/output',
       kind: 'error',
-      source: 'system',
+      source: 'app',
       reason: 'error',
       target: { projectId: 'project-1', taskId: 'task-1', conversationId: 'session-1' },
     });
@@ -244,12 +264,62 @@ describe('WorkspaceNotificationCenter', () => {
     expect(copied).toContain('Error: Build failed');
     expect(copied).toContain('Error: EACCES');
     expect(copied).toContain(`Notification ID: ${notification?.id}`);
-    expect(copied).toContain('Source: system');
+    expect(copied).toContain('Source: app');
     expect(copied).toContain('Reason: error');
     expect(copied).toContain(
       'Target: {"projectId":"project-1","taskId":"task-1","conversationId":"session-1"}'
     );
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Debug info copied');
+  });
+
+  it('hides excluded sources and records the choice', async () => {
+    mocks.retainedSources = { app: true, agent: false, automation: true };
+    workspaceNotificationStore.enqueue({
+      title: 'Agent needs input',
+      kind: 'info',
+      source: 'agent',
+      reason: 'action-required',
+    });
+    workspaceNotificationStore.enqueue({
+      title: 'Card moved to Review',
+      kind: 'info',
+      source: 'automation',
+      reason: 'subscribed-result',
+    });
+
+    await act(async () => {
+      root.render(
+        createElement(WorkspaceNotificationCenter, {
+          triggerClassName: 'trigger',
+          triggerLabelClassName: 'label',
+          onOpenTarget: vi.fn(),
+        })
+      );
+    });
+
+    const trigger = host.querySelector<HTMLButtonElement>('[aria-label="Notifications 1"]');
+    expect(trigger).not.toBeNull();
+    await act(async () => trigger?.click());
+    expect(document.body.textContent).toContain('Card moved to Review');
+    expect(document.body.textContent).not.toContain('Agent needs input');
+
+    const overflowTrigger = document.querySelector<HTMLButtonElement>('[aria-label="common.more"]');
+    expect(overflowTrigger).not.toBeNull();
+    await userEvent.click(overflowTrigger!);
+    const agentToggle = await vi.waitFor(() => {
+      const item = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-checkbox-item"]')
+      ).find((entry) =>
+        entry.textContent?.includes('workspaceRuntime.notifications.sourceValue.agent')
+      );
+      expect(item).toBeDefined();
+      return item!;
+    });
+
+    await userEvent.click(agentToggle);
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      notificationCenterSources: { app: true, agent: true, automation: true },
+    });
   });
 });
 

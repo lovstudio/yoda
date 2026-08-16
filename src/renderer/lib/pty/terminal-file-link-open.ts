@@ -1,6 +1,9 @@
-import type { OpenInRequest } from '@shared/openInApps';
-import type { TerminalSmartPathOpenMode } from '@shared/terminal-settings';
-import { buildFilePathDefaultOpenRequest } from '@renderer/lib/components/file-path-open';
+import { getAppById, type OpenInRequest } from '@shared/openInApps';
+import type { TerminalLinkFileHandler } from '@shared/terminal-settings';
+import {
+  buildFilePathDefaultOpenRequest,
+  buildFilePathOpenInRequest,
+} from '@renderer/lib/components/file-path-open';
 import type { TerminalFileLinkOptions, TerminalFileLinkTarget } from './terminal-file-links';
 
 /**
@@ -37,21 +40,29 @@ export async function openTerminalGlobalFileInYoda(filePath: string): Promise<vo
 }
 
 /**
- * Returns an OS-level request only when the user prefers external smart-path
- * opening. Without an absolute path, the current surface keeps ownership.
+ * Turn the resolved handler into an OS-level open request, or null when the
+ * current surface should keep ownership and open the target inside Yoda.
  */
-export function buildTerminalFileLinkExternalOpenRequest(
-  mode: TerminalSmartPathOpenMode,
+export function buildTerminalFileLinkOpenRequest(
+  handler: TerminalLinkFileHandler,
   target: TerminalFileLinkTarget,
-  options: TerminalFileLinkOptions
+  options: Pick<TerminalFileLinkOptions, 'sshConnectionId'>
 ): OpenInRequest | null {
-  if (mode !== 'external' || !target.absolutePath) return null;
+  // A relative path means nothing to an external app, so the surface that
+  // resolved it against its workspace root stays in charge.
+  if (handler === 'yoda' || !target.absolutePath) return null;
 
-  return buildFilePathDefaultOpenRequest({
+  const openTarget = {
     absolutePath: target.absolutePath,
-    kind: target.isDirectory ? 'directory' : 'file',
+    kind: target.isDirectory ? ('directory' as const) : ('file' as const),
     sshConnectionId: options.sshConnectionId,
     line: target.line,
     column: target.column,
-  });
+  };
+
+  if (handler === 'system') return buildFilePathDefaultOpenRequest(openTarget);
+  // Handing a remote path to an app that cannot reach the remote host only
+  // produces a failed request; fall back to opening it inside Yoda.
+  if (options.sshConnectionId != null && getAppById(handler)?.supportsRemote !== true) return null;
+  return buildFilePathOpenInRequest(handler, openTarget);
 }

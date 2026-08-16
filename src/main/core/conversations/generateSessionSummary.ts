@@ -1,5 +1,6 @@
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
 import type { SessionSummary, SessionSummaryScope } from '@shared/conversations';
+import { resolveOutputLanguage } from '@shared/project-settings';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import { extractAgentMessageText, runAgentCli } from '@main/core/agent-cli/run-agent-cli';
 import { resolveSelectedUtilityAgent } from '@main/core/agents-config/builtin-agent-resolver';
@@ -33,6 +34,9 @@ export interface ResolvedSummaryRuntime extends SummaryPromptRuntime {
   runtimeId: RuntimeId;
   runtimeName: string;
   model: string | null;
+  /** Which Agent's settings produced this configuration — surfaced in the AI log. */
+  agentId: string | null;
+  agentName: string | null;
 }
 
 /**
@@ -59,8 +63,12 @@ export async function resolveSummaryRuntime(
     runtimeId,
     runtimeName: getRuntime(runtimeId)?.name ?? runtimeId,
     model: summaryAgent.model,
+    agentId: summaryAgent.agentId,
+    agentName: summaryAgent.agentName,
     systemPrompt: summaryAgent.systemPrompt,
-    language: composerDefaults?.summaryLanguage ?? taskSettings.summaryLanguage,
+    language: resolveOutputLanguage(
+      composerDefaults?.summaryLanguage ?? taskSettings.summaryLanguage
+    ),
     context:
       scope === 'recent' ? taskSettings.summaryContextRecent : taskSettings.summaryContextGlobal,
   };
@@ -83,9 +91,6 @@ export async function generateSessionSummary(
   scope: SessionSummaryScope,
   onDelta?: (delta: string) => void
 ): Promise<SessionSummaryGenerationResult> {
-  if (runtime.language === 'skip') {
-    return { summary: null, error: 'Session summary generation is disabled.' };
-  }
   const { runtimeId, runtimeName } = runtime;
   const { messages: transcriptMessages, prompt } = draft;
 
@@ -114,7 +119,11 @@ export async function generateSessionSummary(
       runtimeName,
       purpose: 'session-summary',
       model: runtime.model,
-      metadata: { scope },
+      metadata: {
+        scope,
+        ...(runtime.agentId ? { agentId: runtime.agentId } : {}),
+        ...(runtime.agentName ? { agent: runtime.agentName } : {}),
+      },
       onDelta,
     });
     const cliDurationMs = Date.now() - cliStartedAt;
