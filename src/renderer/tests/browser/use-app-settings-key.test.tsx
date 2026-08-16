@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   APP_SETTINGS_META_REQUEST_TIMEOUT_MS,
+  APP_SETTINGS_META_RETRY_INTERVAL_MS,
   useAppSettingsKey,
 } from '@renderer/features/settings/use-app-settings-key';
 
@@ -112,6 +113,24 @@ describe('useAppSettingsKey', () => {
     staleRequest.resolve(interfaceMeta(2));
     await flushRealTimers();
     expect(latest).toEqual({ isLoading: false, rows: 8 });
+    expect(unhandledRejections).toEqual([]);
+  });
+
+  it('keeps polling after a rejection so the real value still arrives', async () => {
+    mocks.getWithMeta.mockRejectedValueOnce(new Error('main process still booting'));
+    mocks.getWithMeta.mockResolvedValue(interfaceMeta(5));
+
+    await renderHarness();
+    await waitFor(() => !latest.isLoading, 850);
+    // Layout is released with no value, exactly as before...
+    expect(latest).toEqual({ isLoading: false, rows: undefined });
+
+    // ...but the hook comes back for the persisted value on its own.
+    await waitFor(
+      () => latest.rows === 5,
+      APP_SETTINGS_META_RETRY_INTERVAL_MS + APP_SETTINGS_META_REQUEST_TIMEOUT_MS + 1_000
+    );
+    expect(latest).toEqual({ isLoading: false, rows: 5 });
     expect(unhandledRejections).toEqual([]);
   });
 
