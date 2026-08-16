@@ -5184,6 +5184,8 @@
       "relayConnecting": "正在连接 Relay",
       "relayNotPaired": "尚未配对 Relay",
       "copyLanUrl": "复制地址",
+      "copyRelayError": "复制错误信息",
+      "relayErrorCopied": "已复制错误信息",
       "lanUrlCopied": "地址已复制",
       "lanUrlCopyFailed": "复制地址失败",
       "refresh": "刷新",

@@ -90,12 +90,15 @@ export function WorkspaceSyncPopover({
   const ModeIcon = SYNC_MODE_ICONS[mode];
   const lanUrl = connectionInfo.data?.urls[0] ?? null;
   const relay = relayStatus.data;
+  // Surfaced with a copy button, because a relay handshake failure is the one
+  // status here a user will want to paste somewhere to get help with.
+  const relayError =
+    mode !== 'lan' && relay?.configured && !relay.connected ? relay.lastError : null;
 
-  const copyLanUrl = () => {
-    if (!lanUrl) return;
+  const copyToClipboard = (value: string, successKey: string) => {
     void navigator.clipboard
-      ?.writeText(lanUrl)
-      .then(() => toast.success(t('workspaceRuntime.sync.lanUrlCopied')))
+      ?.writeText(value)
+      .then(() => toast.success(t(successKey)))
       .catch(() => toast.error(t('workspaceRuntime.sync.lanUrlCopyFailed')));
   };
 
@@ -157,7 +160,7 @@ export function WorkspaceSyncPopover({
                   type="button"
                   variant="ghost"
                   size="icon-xs"
-                  onClick={copyLanUrl}
+                  onClick={() => copyToClipboard(lanUrl, 'workspaceRuntime.sync.lanUrlCopied')}
                   title={t('workspaceRuntime.sync.copyLanUrl')}
                   aria-label={t('workspaceRuntime.sync.copyLanUrl')}
                 >
@@ -165,25 +168,41 @@ export function WorkspaceSyncPopover({
                 </Button>
               ) : null}
             </div>
-            <StatusLine
-              tone={
-                mode === 'lan'
-                  ? 'idle'
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <StatusLine
+                tone={
+                  mode === 'lan'
+                    ? 'idle'
+                    : relay?.connected
+                      ? 'ok'
+                      : relay?.configured
+                        ? 'warn'
+                        : 'idle'
+                }
+              >
+                {mode === 'lan'
+                  ? t('workspaceRuntime.sync.relayOff')
                   : relay?.connected
-                    ? 'ok'
+                    ? t('workspaceRuntime.sync.relayConnected')
                     : relay?.configured
-                      ? 'warn'
-                      : 'idle'
-              }
-            >
-              {mode === 'lan'
-                ? t('workspaceRuntime.sync.relayOff')
-                : relay?.connected
-                  ? t('workspaceRuntime.sync.relayConnected')
-                  : relay?.configured
-                    ? (relay.lastError ?? t('workspaceRuntime.sync.relayConnecting'))
-                    : t('workspaceRuntime.sync.relayNotPaired')}
-            </StatusLine>
+                      ? (relayError ?? t('workspaceRuntime.sync.relayConnecting'))
+                      : t('workspaceRuntime.sync.relayNotPaired')}
+              </StatusLine>
+              {relayError ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() =>
+                    copyToClipboard(relayError, 'workspaceRuntime.sync.relayErrorCopied')
+                  }
+                  title={t('workspaceRuntime.sync.copyRelayError')}
+                  aria-label={t('workspaceRuntime.sync.copyRelayError')}
+                >
+                  <Copy aria-hidden className="size-3" />
+                </Button>
+              ) : null}
+            </div>
           </div>
         </WorkspaceBarCardSection>
         <WorkspaceBarCardSection className="flex items-center justify-between gap-2">

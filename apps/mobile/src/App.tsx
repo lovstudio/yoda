@@ -1531,7 +1531,9 @@ export function App() {
               />
             ) : null}
           </ScrollView>
-          <FloatingNewTaskButton onPress={() => openNewTask()} />
+          {/* Settings ends in a destructive full-width action the floating button
+              would sit on top of, and creating a task is not what that tab is for. */}
+          {homeTab === 'settings' ? null : <FloatingNewTaskButton onPress={() => openNewTask()} />}
           <HomeTabBar activeTab={homeTab} onSelect={setHomeTab} />
         </View>
       </KeyboardAvoidingView>
@@ -1594,6 +1596,13 @@ function ConnectionSettingsScreen({
   });
   const [busy, setBusy] = useState<'save' | 'scan' | null>(null);
   const [notice, setNotice] = useState<{ message: string; tone: 'error' | 'info' } | null>(null);
+
+  // Filtered before rendering so the row separators follow what is on screen
+  // rather than the position of each slot in the full endpoint list.
+  const savedEndpoints = MOBILE_ENDPOINT_KINDS.flatMap((kind) => {
+    const endpoint = settings.endpoints[kind];
+    return endpoint ? [{ endpoint, kind }] : [];
+  });
 
   const run = useCallback(async (kind: 'save' | 'scan', action: () => Promise<string | void>) => {
     setBusy(kind);
@@ -1678,14 +1687,12 @@ function ConnectionSettingsScreen({
           </Pressable>
         </View>
         <View style={styles.profileCloudCard}>
-          {MOBILE_ENDPOINT_KINDS.filter((kind) => settings.endpoints[kind]).length === 0 ? (
+          {savedEndpoints.length === 0 ? (
             <Text style={styles.profileEmptyText}>
               还没有保存任何地址，请扫描桌面端的配对二维码。
             </Text>
           ) : (
-            MOBILE_ENDPOINT_KINDS.map((kind, index) => {
-              const endpoint = settings.endpoints[kind];
-              if (!endpoint) return null;
+            savedEndpoints.map(({ endpoint, kind }, index) => {
               const copy = ENDPOINT_KIND_COPY[kind];
               const active = activeConnection ? endpointMatches(endpoint, activeConnection) : false;
               return (

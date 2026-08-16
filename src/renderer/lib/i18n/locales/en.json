@@ -5184,6 +5184,8 @@
       "relayConnecting": "Connecting to Relay",
       "relayNotPaired": "Relay not paired yet",
       "copyLanUrl": "Copy address",
+      "copyRelayError": "Copy error",
+      "relayErrorCopied": "Error copied",
       "lanUrlCopied": "Address copied",
       "lanUrlCopyFailed": "Could not copy the address",
       "refresh": "Refresh",
