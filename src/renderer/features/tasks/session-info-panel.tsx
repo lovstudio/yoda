@@ -51,6 +51,7 @@ import {
   type TaskMenuSessionFields,
 } from '@renderer/features/tasks/components/task-menu-session-info';
 import { useConversationPromptRestore } from '@renderer/features/tasks/conversations/use-conversation-prompt-restore';
+import { useConversationTranscriptSubscription } from '@renderer/features/tasks/conversations/use-conversation-transcript-subscription';
 import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import { SessionConversationList } from '@renderer/features/tasks/session-conversation-list';
@@ -466,6 +467,21 @@ export function useSessionPrompts(active: boolean): {
     })
   );
   const conversationData: SessionConversationData | undefined = conversationQuery.data;
+  // The interval above is the fallback for runtimes with no transcript on disk
+  // (cohub) or a watcher that never attached. When the file *is* watched, this
+  // push is what makes the history track the session instead of trailing it by
+  // up to one refresh interval.
+  useConversationTranscriptSubscription({
+    active,
+    projectId: conversation?.projectId,
+    taskId: conversation?.taskId,
+    conversationId: conversation?.id,
+    onChange: () => {
+      // refetch, not invalidate: it ignores staleTime, so an append arriving
+      // moments after the last poll is not held back by it.
+      void conversationQuery.refetch();
+    },
+  });
   const showSessionPrompts = useShowModal('sessionPromptsModal');
   const { restoringPrompt, requestRestorePrompt: requestConversationPromptRestore } =
     useConversationPromptRestore();

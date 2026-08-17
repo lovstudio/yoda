@@ -64,6 +64,7 @@ import { getSessionSummarySnapshot } from './session-summary-snapshot';
 import { getStoredConversationSessionSource } from './stored-conversation-session-source';
 import { touchConversation } from './touchConversation';
 import {
+  conversationTranscriptRevision,
   getConversationTranscript,
   subscribeConversationTranscript,
   unsubscribeConversationTranscript,
@@ -109,17 +110,26 @@ async function getConfiguredClaudeSessionContext(cwd: string, sessionId: string)
   });
 }
 
+/**
+ * The transcript revision is part of the cache key on the two live conversation
+ * readers: a read triggered by a transcript-changed push must not be answered
+ * from an entry parsed before that write, which a TTL alone cannot guarantee.
+ */
 async function getConfiguredClaudeSessionConversation(cwd: string, sessionId: string) {
-  return claudeSessionConversationCache.get(sessionContextCacheKey([cwd, sessionId]), async () => {
-    const providerConfig = await runtimeOverrideSettings.getItem('claude');
-    const source = await getStoredConversationSessionSource(sessionId);
-    return getClaudeSessionConversation(cwd, source?.sessionId ?? sessionId, {
-      claudeConfigDir:
-        source?.runtimeId === 'claude'
-          ? source.stateRoot
-          : resolveRuntimeStateDirectory('claude', providerConfig),
-    });
-  });
+  const revision = conversationTranscriptRevision(sessionId);
+  return claudeSessionConversationCache.get(
+    sessionContextCacheKey([cwd, sessionId, String(revision)]),
+    async () => {
+      const providerConfig = await runtimeOverrideSettings.getItem('claude');
+      const source = await getStoredConversationSessionSource(sessionId);
+      return getClaudeSessionConversation(cwd, source?.sessionId ?? sessionId, {
+        claudeConfigDir:
+          source?.runtimeId === 'claude'
+            ? source.stateRoot
+            : resolveRuntimeStateDirectory('claude', providerConfig),
+      });
+    }
+  );
 }
 
 function getCachedClaudeSessionMetadata(cwd: string, sessionId: string) {
@@ -170,7 +180,13 @@ async function getConfiguredCodexSessionConversation(
   conversationCreatedAt?: string | null
 ) {
   return codexSessionConversationCache.get(
-    sessionContextCacheKey([cwd, conversationId, conversationTitle, conversationCreatedAt]),
+    sessionContextCacheKey([
+      cwd,
+      conversationId,
+      conversationTitle,
+      conversationCreatedAt,
+      String(conversationTranscriptRevision(conversationId)),
+    ]),
     async () => {
       const providerConfig = await runtimeOverrideSettings.getItem('codex');
       const source = await getStoredConversationSessionSource(conversationId);
