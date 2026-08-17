@@ -10,6 +10,7 @@ import {
 import { WORKSPACE_BAR_CARD_CLASS } from '@renderer/app/workspace-bar-card';
 import { WorkspaceMaasPopover } from '@renderer/app/workspace-maas-popover';
 import { usePopoverDismiss } from '@renderer/lib/hooks/use-popover-dismiss';
+import { rpc } from '@renderer/lib/ipc';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { cn } from '@renderer/utils/utils';
@@ -49,6 +50,13 @@ export const RuntimeBarMaasItem = observer(function RuntimeBarMaasItem() {
       appState.sidePane.pinView('settings', { tab: 'ai-logs' });
     });
   }, [dismissMaasPopoverThen]);
+  // Leaves for the browser rather than another pane behind the popover, so this
+  // one dismisses too — coming back to a popover left open reads as a stray.
+  const websiteUrl = maasPresentation.websiteUrl;
+  const openMaasWebsite = useCallback(() => {
+    if (!websiteUrl) return;
+    dismissMaasPopoverThen(() => void rpc.app.openExternal(websiteUrl));
+  }, [dismissMaasPopoverThen, websiteUrl]);
 
   return (
     <Popover
@@ -91,7 +99,10 @@ export const RuntimeBarMaasItem = observer(function RuntimeBarMaasItem() {
         >
           <WorkspaceMaasPopover
             binding={maas.binding}
+            providerName={maasPresentation.providerName}
+            websiteUrl={websiteUrl}
             onManage={openMaasManagement}
+            onOpenWebsite={openMaasWebsite}
             onOpenLogs={openMaasLogs}
           />
         </PopoverContent>

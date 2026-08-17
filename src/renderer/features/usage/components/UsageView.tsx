@@ -1,8 +1,8 @@
 import { Archive, ChartColumn, Database, Loader2 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AgentAccountProviderId } from '@shared/runtime-registry';
 import type { ProjectUsage, TokenBuckets, UsageOverview } from '@shared/stats';
+import { accountProviderLabelKey } from '@renderer/features/agents/account-provider-label';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Badge } from '@renderer/lib/ui/badge';
@@ -18,12 +18,6 @@ import { formatDiffLineCount } from '@renderer/utils/format-diff-line-count';
 import { cn } from '@renderer/utils/utils';
 import { useUsageOverview } from '../useUsageOverview';
 import { DailyTokenChart } from './DailyTokenChart';
-
-const AUTH_PROVIDER_LABEL_KEYS: Record<AgentAccountProviderId, string> = {
-  'official-subscription': 'tasks.overview.stats.authProvider.official-subscription',
-  'official-api': 'tasks.overview.stats.authProvider.official-api',
-  'yoda-maas': 'tasks.overview.stats.authProvider.yoda-maas',
-};
 
 /**
  * Lifetime usage dashboard: overview cards, a daily token-burn chart, and
@@ -205,7 +199,7 @@ function UsageContent({ overview }: { overview: UsageOverview }) {
                   leading={
                     <Badge variant="secondary">
                       {entry.authProvider
-                        ? t(AUTH_PROVIDER_LABEL_KEYS[entry.authProvider])
+                        ? t(accountProviderLabelKey(entry.authProvider))
                         : t('usage.sourceUnknown')}
                     </Badge>
                   }

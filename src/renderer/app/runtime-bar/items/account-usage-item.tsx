@@ -3,7 +3,11 @@ import { ExternalLink, Gauge } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getRuntimeAccountProfile, type AgentAccountUsage } from '@shared/runtime-registry';
+import {
+  getRuntimeAccountProfile,
+  type AgentAccountProviderId,
+  type AgentAccountUsage,
+} from '@shared/runtime-registry';
 import { YODA_ACCOUNT_USAGE_DOC_URL } from '@shared/urls';
 import {
   WORKSPACE_BAR_CARD_CLASS,
@@ -19,12 +23,14 @@ import {
   getQuotaWindowLabel,
 } from '@renderer/app/workspace-runtime-bar-format';
 import { shouldReadOfficialAccountUsage } from '@renderer/app/workspace-runtime-usage-source';
+import { accountProviderLabelKey } from '@renderer/features/agents/account-provider-label';
 import { useMaasUsageSummary } from '@renderer/features/maas/useMaas';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { copyTextToClipboard, useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
+import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
 import { DropdownMenuItem } from '@renderer/lib/ui/dropdown-menu';
 import { Input } from '@renderer/lib/ui/input';
@@ -62,7 +68,7 @@ export const RuntimeBarAccountUsageItem = observer(function RuntimeBarAccountUsa
   const maas = useRuntimeBarMaas(runtimeId);
   const maasPresentation = maas.presentation;
   const maasActiveForRuntime = maas.activeForRuntime;
-  const { sessionContext } = useRuntimeBarSessionUsage();
+  const { sessionContext, sessionAuthProvider } = useRuntimeBarSessionUsage();
   const {
     summary: maasUsage,
     loading: isLoadingMaasUsage,
@@ -107,11 +113,16 @@ export const RuntimeBarAccountUsageItem = observer(function RuntimeBarAccountUsa
   useEffect(() => {
     setAccountUsageWarningThresholdDraft(String(accountUsageWarningThreshold));
   }, [accountUsageWarningThreshold]);
-  const usageTriggerLabel = maasActiveForRuntime
-    ? t('workspaceRuntime.maasUsageTitle', {
-        provider: maasPresentation.providerName ?? t('workspaceRuntime.maas.title'),
-      })
-    : t('workspaceRuntime.accountUsage');
+  /**
+   * Which kind of account is being spent. A live model-access binding decides
+   * the card's branch, so it decides the type too; otherwise the mode recorded
+   * on the session at spawn time answers. Naming *which* platform, and rebinding
+   * it, belong to the model-access entry — this card only says what type it is.
+   */
+  const accountProviderId: AgentAccountProviderId | null = maasActiveForRuntime
+    ? 'yoda-maas'
+    : sessionAuthProvider;
+  const usageTriggerLabel = t('workspaceRuntime.accountUsage');
 
   const manageAccount = () => {
     if (!runtimeId || connectionId) return;
@@ -267,11 +278,7 @@ export const RuntimeBarAccountUsageItem = observer(function RuntimeBarAccountUsa
           title={usageTriggerLabel}
         >
           <Gauge aria-hidden className="size-3.5" />
-          <span className="@max-[1120px]:hidden">
-            {maasActiveForRuntime
-              ? t('workspaceRuntime.maasUsageShort')
-              : t('workspaceRuntime.accountUsageShort')}
-          </span>
+          <span className="@max-[1120px]:hidden">{t('workspaceRuntime.accountUsageShort')}</span>
           {shortAccountWindow ? (
             <ContextProgressBar
               compact
@@ -286,43 +293,48 @@ export const RuntimeBarAccountUsageItem = observer(function RuntimeBarAccountUsa
           sideOffset={8}
           className={cn(WORKSPACE_BAR_CARD_CLASS, 'w-[21rem] max-w-[calc(100vw-1rem)]')}
         >
+          {/* One card, one identity. Both branches answer the same question, so
+              they share the header and differ only in the figures below it. */}
+          <WorkspaceBarCardHeader
+            icon={Gauge}
+            title={t('workspaceRuntime.accountUsage')}
+            titleBadge={
+              accountProviderId ? (
+                <Badge variant="secondary">{t(accountProviderLabelKey(accountProviderId))}</Badge>
+              ) : null
+            }
+            description={t('workspaceRuntime.accountUsageCardDescription')}
+            actions={
+              <WorkspaceBarCardMenu>
+                <DropdownMenuItem
+                  onClick={() => void rpc.app.openExternal(YODA_ACCOUNT_USAGE_DOC_URL)}
+                >
+                  <ExternalLink aria-hidden />
+                  {t('workspaceRuntime.accountDocs')}
+                </DropdownMenuItem>
+                {!maasActiveForRuntime && officialUsageUrl ? (
+                  <DropdownMenuItem onClick={() => void rpc.app.openExternal(officialUsageUrl)}>
+                    <ExternalLink aria-hidden />
+                    {t('workspaceRuntime.officialAccountUsage', {
+                      name: runtime?.name ?? runtimeId,
+                    })}
+                  </DropdownMenuItem>
+                ) : null}
+              </WorkspaceBarCardMenu>
+            }
+          />
           {maasActiveForRuntime ? (
             <WorkspaceMaasUsageContent
               providerName={maasPresentation.providerName ?? t('workspaceRuntime.maas.title')}
-              websiteUrl={maasPresentation.websiteUrl}
               usage={maasUsage}
               loading={isLoadingMaasUsage}
               refreshing={isRefreshingMaasUsage}
               error={maasUsageError}
               onRefresh={refreshMaasUsage}
               onCopyError={copyMaasUsageError}
-              onManage={maas.openManagement}
             />
           ) : (
             <>
-              <WorkspaceBarCardHeader
-                icon={Gauge}
-                title={t('workspaceRuntime.accountUsage')}
-                description={t('workspaceRuntime.accountUsageDescription')}
-                actions={
-                  <WorkspaceBarCardMenu>
-                    <DropdownMenuItem
-                      onClick={() => void rpc.app.openExternal(YODA_ACCOUNT_USAGE_DOC_URL)}
-                    >
-                      <ExternalLink aria-hidden />
-                      {t('workspaceRuntime.accountDocs')}
-                    </DropdownMenuItem>
-                    {officialUsageUrl ? (
-                      <DropdownMenuItem onClick={() => void rpc.app.openExternal(officialUsageUrl)}>
-                        <ExternalLink aria-hidden />
-                        {t('workspaceRuntime.officialAccountUsage', {
-                          name: runtime?.name ?? runtimeId,
-                        })}
-                      </DropdownMenuItem>
-                    ) : null}
-                  </WorkspaceBarCardMenu>
-                }
-              />
               <WorkspaceBarCardSection className="flex flex-col gap-3">
                 {accountRateLimits.map((limit) => {
                   const percent = Math.round(limit.usedPercent);
