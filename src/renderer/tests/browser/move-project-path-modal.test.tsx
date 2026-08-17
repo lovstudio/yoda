@@ -1,5 +1,6 @@
 import { act, createElement, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import type * as ReactI18next from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -26,7 +27,10 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('react-i18next', () => ({
+// The modal reaches the i18n singleton through inline-error -> clipboard -> use-toast,
+// so the mock has to keep every real export besides useTranslation alive.
+vi.mock('react-i18next', async (importOriginal) => ({
+  ...(await importOriginal<typeof ReactI18next>()),
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
