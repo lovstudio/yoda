@@ -20,6 +20,7 @@ import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
 import type { FrontendPty } from '@renderer/lib/pty/pty';
+import { isStandaloneKanbanWindowLaunch } from '@renderer/lib/standalone-kanban-window-launch-target';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
@@ -154,9 +155,16 @@ export const ConversationsPanel = observer(function ConversationsPanel({
   // PaneSizingProvider only validates resize ownership for the active session.
   // Supplying every open conversation used to resolve every tab before the
   // terminal could mount; one stable O(1) entry is sufficient here.
+  //
+  // The standalone board is an observer: its cards show the session output but
+  // do not resize the backend PTY. Only the main window (or a routed task window)
+  // controls PTY dimensions. This prevents the narrow board cards (420px) from
+  // overriding a wider main-window layout.
+  const effectiveActiveSessionId =
+    !isStandaloneKanbanWindowLaunch && activeSessionId ? activeSessionId : null;
   const paneSessionIds = useMemo(
-    () => (activeSessionId ? [activeSessionId] : []),
-    [activeSessionId]
+    () => (effectiveActiveSessionId ? [effectiveActiveSessionId] : []),
+    [effectiveActiveSessionId]
   );
 
   const isDebugTracing = log.level === 'debug';
@@ -274,7 +282,7 @@ export const ConversationsPanel = observer(function ConversationsPanel({
           <PaneSizingProvider
             paneId={`conversations:${projectId}:${taskId}`}
             sessionIds={paneSessionIds}
-            activeSessionId={activeSessionId}
+            activeSessionId={effectiveActiveSessionId}
             registrationEnabled={!isInterfaceSettingsLoading}
           >
             {hasConversationLoadError ? (
