@@ -284,7 +284,7 @@ export const RuntimeBarAccountUsageItem = observer(function RuntimeBarAccountUsa
           align="start"
           side="top"
           sideOffset={8}
-          className={cn(WORKSPACE_BAR_CARD_CLASS, 'w-72')}
+          className={cn(WORKSPACE_BAR_CARD_CLASS, 'w-[21rem] max-w-[calc(100vw-1rem)]')}
         >
           {maasActiveForRuntime ? (
             <WorkspaceMaasUsageContent
