@@ -116,6 +116,23 @@ export function WorkspaceMaasUsageContent({
         <WorkspaceBarCardSection className="text-[11px] leading-relaxed text-foreground-passive">
           {t('workspaceRuntime.maasUsageKeyScopeNote')}
         </WorkspaceBarCardSection>
+      ) : usage?.accountUsageStatus === 'credential-rejected' ? (
+        <WorkspaceBarCardSection className="text-[11px] leading-relaxed">
+          <div className="font-medium text-foreground-muted">
+            {t('workspaceRuntime.maasUsageAccountCredentialRejected')}
+          </div>
+          <div className="mt-0.5 text-foreground-passive">
+            {t('workspaceRuntime.maasUsageAccountCredentialRejectedHint')}
+          </div>
+          <button
+            type="button"
+            className="mt-1 inline-flex items-center gap-1 text-foreground-muted underline-offset-2 hover:text-foreground hover:underline"
+            onClick={() => onCopyError(usage.accountUsageError)}
+          >
+            <Copy aria-hidden className="size-3" />
+            {t('workspaceRuntime.maasUsageCopyError')}
+          </button>
+        </WorkspaceBarCardSection>
       ) : usage?.accountUsageStatus === 'error' && usage.accountUsageError ? (
         <WorkspaceBarCardSection className="text-[11px] leading-relaxed">
           <div className="font-medium text-foreground-muted">
