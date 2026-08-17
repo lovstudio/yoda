@@ -1,3 +1,4 @@
+import { gzipSync } from 'node:zlib';
 import type { YodaApiErrorPayload } from '@shared/yoda-account';
 import { ACCOUNT_CONFIG } from '../config';
 import { yodaAccountService } from './yoda-account-service';
@@ -73,13 +74,33 @@ export class LovStudioApiClient {
   ): Promise<Response> {
     const signals = [accountSignal, AbortSignal.timeout(timeoutMs)];
     if (init.signal) signals.push(init.signal);
-    return fetch(`${ACCOUNT_CONFIG.authServer.baseUrl}${path}`, {
-      ...init,
-      headers: {
+
+    let body = init.body;
+    let headers: HeadersInit;
+
+    // Compress large session-share uploads — the server gunzips before parsing.
+    // Vercel serverless functions measure the wire body against their 4.5 MB limit,
+    // so gzip bypasses the platform ceiling while staying within the app's semantic limit.
+    if (path === '/api/yoda/session-shares' && init.method === 'POST' && typeof body === 'string') {
+      const compressed = gzipSync(Buffer.from(body, 'utf8'));
+      body = compressed;
+      headers = {
+        Authorization: `Bearer ${token}`,
+        'Content-Encoding': 'gzip',
+        ...init.headers,
+      };
+    } else {
+      headers = {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
         ...init.headers,
-      },
+      };
+    }
+
+    return fetch(`${ACCOUNT_CONFIG.authServer.baseUrl}${path}`, {
+      ...init,
+      body,
+      headers,
       signal: AbortSignal.any(signals),
     });
   }

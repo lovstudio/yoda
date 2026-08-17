@@ -576,9 +576,31 @@ async function shareConversationPublicly(
       conversationId,
       error,
     });
+
+    let description = t('tasks.tabs.publicShareFailedDescription');
+    if (
+      error &&
+      typeof error === 'object' &&
+      'status' in error &&
+      'code' in error &&
+      'message' in error
+    ) {
+      const e = error as { status: number; code: string; message: string };
+      description = `${e.message} (${e.status} ${e.code})`;
+    } else if (error instanceof Error) {
+      description = error.message;
+    }
+
     toast.error(t('tasks.tabs.publicShareFailed'), {
       id: toastId,
-      description: t('tasks.tabs.publicShareFailedDescription'),
+      description,
+      action: {
+        label: t('common.copy'),
+        onClick: () => {
+          const text = typeof description === 'string' ? description : String(description);
+          void rpc.app.clipboardWriteText(text);
+        },
+      },
     });
   }
 }
