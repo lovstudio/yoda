@@ -12,13 +12,17 @@ import { Button } from '@renderer/lib/ui/button';
 import { DropdownMenuItem } from '@renderer/lib/ui/dropdown-menu';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
-import { ContextMetric, ContextProgressBar } from './bar-chrome';
+import { ContextProgressBar, RuntimeMetricRow } from './bar-chrome';
 import { formatPopoverTime, formatUsagePeriod, formatUsd, getUsageTone } from './display';
 
 /**
  * Account usage as reported by a model-access provider rather than by the CLI's
  * own subscription. What a provider can answer varies — tokens, credits, or
- * neither — so every figure is conditional and the card says which API it read.
+ * neither — so every figure is conditional.
+ *
+ * Which API answered and when belong to the footer, next to the reload that
+ * re-reads it. Keeping them out of the title row leaves the provider's own name
+ * room to render, which is the one thing the card must not truncate.
  */
 export function WorkspaceMaasUsageContent({
   providerName,
@@ -42,38 +46,25 @@ export function WorkspaceMaasUsageContent({
   onManage: () => void;
 }) {
   const { t } = useTranslation();
-  const hasTokenUsage = usage?.totalInputTokens != null || usage?.totalOutputTokens != null;
-  const hasCreditUsage =
-    usage?.totalCostUsd != null ||
-    usage?.totalCreditsUsd != null ||
-    usage?.remainingCreditsUsd != null ||
-    usage?.keyLimitRemainingUsd != null;
+  const title = t('workspaceRuntime.maasUsageTitle', { provider: providerName });
+  const metrics = readUsageMetrics(usage);
   const usageProgressPercent =
     usage?.totalCostUsd != null && usage.totalCreditsUsd != null && usage.totalCreditsUsd > 0
       ? Math.round((usage.totalCostUsd / usage.totalCreditsUsd) * 100)
       : null;
-  const sourceLabel =
-    usage?.source === 'zenmux-management-statistics'
-      ? t('workspaceRuntime.maasUsageSourceZenmux')
-      : usage?.source === 'openrouter-key' || usage?.source === 'openrouter-key-and-credits'
-        ? t('workspaceRuntime.maasUsageSourceOpenRouter')
-        : usage?.source === 'new-api-account'
-          ? t('workspaceRuntime.maasUsageSourceNewApiAccount')
-          : usage?.source === 'new-api-token'
-            ? t('workspaceRuntime.maasUsageSourceNewApi')
-            : t('workspaceRuntime.maasUsageSourceUnavailable');
+  const periodLabel = usage?.period
+    ? formatUsagePeriod(usage.period.startingAt, usage.period.endingAt)
+    : t('workspaceRuntime.maasUsageCurrentAccount');
+  const provenance = usage
+    ? `${t(readSourceLabelKey(usage.source))} · ${periodLabel}`
+    : periodLabel;
 
   return (
     <>
       <WorkspaceBarCardHeader
         icon={Gauge}
-        title={t('workspaceRuntime.maasUsageTitle', { provider: providerName })}
-        titleBadge={
-          <span className="shrink-0 rounded-full border border-border bg-background-secondary px-2 py-0.5 text-[10px] text-foreground-muted">
-            {sourceLabel}
-          </span>
-        }
-        description={t('workspaceRuntime.maasUsageDescription', { provider: providerName })}
+        title={<span title={title}>{title}</span>}
+        description={t('workspaceRuntime.maasUsageDescription')}
         actions={
           websiteUrl ? (
             <WorkspaceBarCardMenu>
@@ -113,14 +104,14 @@ export function WorkspaceMaasUsageContent({
               </Button>
             </div>
           </div>
-        ) : usage?.source === 'none' || (!hasTokenUsage && !hasCreditUsage) ? (
+        ) : usage == null || usage.source === 'none' || metrics.length === 0 ? (
           <div className="text-xs leading-relaxed text-foreground-passive">
             {t('workspaceRuntime.maasUsageNoReadableApi', { provider: providerName })}
           </div>
         ) : (
-          <div className="grid gap-3">
+          <div className="grid gap-2.5">
             {usageProgressPercent != null ? (
-              <div className="grid gap-2 rounded-lg border border-border/70 bg-background-secondary/45 px-2.5 py-2">
+              <div className="grid gap-1.5">
                 <div className="flex items-center justify-between gap-3 text-[11px]">
                   <span className="text-foreground-passive">
                     {t('workspaceRuntime.maasUsageProgress')}
@@ -133,102 +124,64 @@ export function WorkspaceMaasUsageContent({
                   percent={usageProgressPercent}
                   tone={getUsageTone(usageProgressPercent)}
                 />
-                <div className="flex items-center justify-between gap-3 text-[10px] text-foreground-passive">
-                  <span>{formatUsd(usage.totalCostUsd ?? 0)}</span>
-                  <span>{formatUsd(usage.totalCreditsUsd ?? 0)}</span>
-                </div>
               </div>
             ) : null}
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
-              {usage.remainingCreditsUsd != null ? (
-                <ContextMetric
-                  label={t('workspaceRuntime.maasUsageRemainingCredits')}
-                  value={formatUsd(usage.remainingCreditsUsd)}
+            {/* One row per figure, values in an aligned mono column: a provider
+                answering a single number reads the same as one answering eight,
+                where a two-column grid would leave a hole beside the lone cell. */}
+            <div className="grid gap-1.5 text-xs">
+              {metrics.map((metric) => (
+                <RuntimeMetricRow
+                  key={metric.labelKey}
+                  label={t(metric.labelKey)}
+                  value={
+                    metric.format === 'usd'
+                      ? formatUsd(metric.value)
+                      : formatCompactNumber(metric.value)
+                  }
                 />
-              ) : null}
-              {usage.totalCreditsUsd != null ? (
-                <ContextMetric
-                  label={t('workspaceRuntime.maasUsageTotalCredits')}
-                  value={formatUsd(usage.totalCreditsUsd)}
-                />
-              ) : null}
-              {usage.keyLimitRemainingUsd != null ? (
-                <ContextMetric
-                  label={t('workspaceRuntime.maasUsageKeyRemaining')}
-                  value={formatUsd(usage.keyLimitRemainingUsd)}
-                />
-              ) : null}
-              {usage.totalCostUsd != null ? (
-                <ContextMetric
-                  label={t('workspaceRuntime.maasUsageTotalCost')}
-                  value={formatUsd(usage.totalCostUsd)}
-                />
-              ) : null}
-              {usage.usageDailyUsd != null ? (
-                <ContextMetric
-                  label={t('workspaceRuntime.maasUsageToday')}
-                  value={formatUsd(usage.usageDailyUsd)}
-                />
-              ) : null}
-              {usage.usageWeeklyUsd != null ? (
-                <ContextMetric
-                  label={t('workspaceRuntime.maasUsageThisWeek')}
-                  value={formatUsd(usage.usageWeeklyUsd)}
-                />
-              ) : null}
-              {usage.totalInputTokens != null ? (
-                <ContextMetric
-                  label={t('workspaceRuntime.maasUsageInputTokens')}
-                  value={formatCompactNumber(usage.totalInputTokens)}
-                />
-              ) : null}
-              {usage.totalOutputTokens != null ? (
-                <ContextMetric
-                  label={t('workspaceRuntime.maasUsageOutputTokens')}
-                  value={formatCompactNumber(usage.totalOutputTokens)}
-                />
-              ) : null}
+              ))}
             </div>
-            {usage.accountUsageStatus === 'credential-required' ? (
-              <div className="rounded-md border border-border/70 bg-background-secondary/35 px-2.5 py-2 text-[11px] leading-relaxed text-foreground-passive">
-                <div className="font-medium text-foreground-muted">
-                  {t(
-                    usage.quotaUnlimited
-                      ? 'workspaceRuntime.maasUsageUnlimitedToken'
-                      : 'workspaceRuntime.maasUsageTokenScope'
-                  )}
-                </div>
-                <div className="mt-0.5">
-                  {t('workspaceRuntime.maasUsageAccountCredentialRequired')}
-                </div>
-              </div>
-            ) : usage.accountUsageStatus === 'error' && usage.accountUsageError ? (
-              <div className="rounded-md border border-amber-500/25 bg-amber-500/5 px-2.5 py-2 text-[11px] leading-relaxed">
-                <div className="font-medium text-foreground-muted">
-                  {t('workspaceRuntime.maasUsageAccountUnavailable')}
-                </div>
-                <div className="mt-0.5 break-words text-foreground-passive">
-                  {usage.accountUsageError}
-                </div>
-                <button
-                  type="button"
-                  className="mt-1.5 text-foreground-muted underline-offset-2 hover:text-foreground hover:underline"
-                  onClick={() => onCopyError(usage.accountUsageError)}
-                >
-                  {t('workspaceRuntime.maasUsageCopyError')}
-                </button>
-              </div>
-            ) : null}
           </div>
         )}
       </WorkspaceBarCardSection>
 
+      {/* A partial read — token figures answered, account figures not — is worth
+          saying. A whole failed read already says it above, so the note stays
+          out of the way in that case rather than explaining a second time. */}
+      {error ? null : usage?.accountUsageStatus === 'credential-required' ? (
+        <WorkspaceBarCardSection className="text-[11px] leading-relaxed text-foreground-passive">
+          <span className="font-medium text-foreground-muted">
+            {t(
+              usage.quotaUnlimited
+                ? 'workspaceRuntime.maasUsageUnlimitedToken'
+                : 'workspaceRuntime.maasUsageTokenScope'
+            )}
+          </span>
+          <span> {t('workspaceRuntime.maasUsageAccountCredentialRequired')}</span>
+        </WorkspaceBarCardSection>
+      ) : usage?.accountUsageStatus === 'error' && usage.accountUsageError ? (
+        <WorkspaceBarCardSection className="text-[11px] leading-relaxed">
+          <div className="font-medium text-foreground-muted">
+            {t('workspaceRuntime.maasUsageAccountUnavailable')}
+          </div>
+          <div className="mt-0.5 break-words text-foreground-passive">
+            {usage.accountUsageError}
+          </div>
+          <button
+            type="button"
+            className="mt-1 text-foreground-muted underline-offset-2 hover:text-foreground hover:underline"
+            onClick={() => onCopyError(usage.accountUsageError)}
+          >
+            {t('workspaceRuntime.maasUsageCopyError')}
+          </button>
+        </WorkspaceBarCardSection>
+      ) : null}
+
       <WorkspaceBarCardFooter>
         <div className="flex items-center justify-between gap-3 text-[11px] text-foreground-passive">
-          <span className="min-w-0 truncate">
-            {usage?.period
-              ? formatUsagePeriod(usage.period.startingAt, usage.period.endingAt)
-              : t('workspaceRuntime.maasUsageCurrentAccount')}
+          <span className="min-w-0 truncate" title={provenance}>
+            {provenance}
           </span>
           <span className="shrink-0 font-mono tabular-nums">
             {usage?.fetchedAt
@@ -261,4 +214,49 @@ export function WorkspaceMaasUsageContent({
       </WorkspaceBarCardFooter>
     </>
   );
+}
+
+type UsageMetric = {
+  labelKey: string;
+  value: number;
+  format: 'usd' | 'count';
+};
+
+/**
+ * The figures a provider actually answered, in reading order: what is left
+ * before what was spent, money before tokens. Absent fields drop out rather
+ * than rendering as a zero the provider never reported.
+ */
+function readUsageMetrics(usage: MaasUsageSummary | null): UsageMetric[] {
+  if (!usage) return [];
+  const candidates: Array<[string, number | null | undefined, UsageMetric['format']]> = [
+    ['workspaceRuntime.maasUsageRemainingCredits', usage.remainingCreditsUsd, 'usd'],
+    ['workspaceRuntime.maasUsageTotalCredits', usage.totalCreditsUsd, 'usd'],
+    ['workspaceRuntime.maasUsageKeyRemaining', usage.keyLimitRemainingUsd, 'usd'],
+    ['workspaceRuntime.maasUsageTotalCost', usage.totalCostUsd, 'usd'],
+    ['workspaceRuntime.maasUsageToday', usage.usageDailyUsd, 'usd'],
+    ['workspaceRuntime.maasUsageThisWeek', usage.usageWeeklyUsd, 'usd'],
+    ['workspaceRuntime.maasUsageInputTokens', usage.totalInputTokens, 'count'],
+    ['workspaceRuntime.maasUsageOutputTokens', usage.totalOutputTokens, 'count'],
+  ];
+  return candidates.flatMap(([labelKey, value, format]) =>
+    value == null ? [] : [{ labelKey, value, format }]
+  );
+}
+
+/** Which API answered, as a translation key so the switch stays pure. */
+function readSourceLabelKey(source: MaasUsageSummary['source']): string {
+  switch (source) {
+    case 'zenmux-management-statistics':
+      return 'workspaceRuntime.maasUsageSourceZenmux';
+    case 'openrouter-key':
+    case 'openrouter-key-and-credits':
+      return 'workspaceRuntime.maasUsageSourceOpenRouter';
+    case 'new-api-account':
+      return 'workspaceRuntime.maasUsageSourceNewApiAccount';
+    case 'new-api-token':
+      return 'workspaceRuntime.maasUsageSourceNewApi';
+    default:
+      return 'workspaceRuntime.maasUsageSourceUnavailable';
+  }
 }

@@ -55,8 +55,9 @@ export function ContextProgressBar({
 
 /**
  * Label/value row shared by the bar's popovers: label flush left, value flush
- * right in mono digits so a stack of rows reads as an aligned column.
- * `ContextMetric` stays for the dense two-column grids where labels wrap.
+ * right in mono digits so a stack of rows reads as an aligned column — and so a
+ * provider answering one figure looks like a short version of the same card,
+ * not a two-column grid with a hole in it.
  */
 export function RuntimeMetricRow({
   label,
@@ -73,15 +74,6 @@ export function RuntimeMetricRow({
       <span className="text-right font-mono tabular-nums text-foreground" title={title}>
         {value}
       </span>
-    </div>
-  );
-}
-
-export function ContextMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <div className="truncate text-foreground-passive">{label}</div>
-      <div className="mt-0.5 truncate font-mono tabular-nums text-foreground-muted">{value}</div>
     </div>
   );
 }

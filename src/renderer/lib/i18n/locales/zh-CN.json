@@ -5685,7 +5685,7 @@
     "maasUsageTitle": "{{provider}} 用量",
     "maasUsageOpenWebsite": "打开 {{provider}} 官网",
     "maasUsageShort": "用量",
-    "maasUsageDescription": "当前会话通过 {{provider}} 路由，显示服务商返回的真实统计。",
+    "maasUsageDescription": "当前会话经该服务商路由，数值由服务商接口返回。",
     "maasUsageSourceZenmux": "管理统计",
     "maasUsageSourceOpenRouter": "Key API",
     "maasUsageSourceNewApi": "Token API",
