@@ -1,5 +1,6 @@
+import { PanelRightOpen } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { standaloneKanbanPanesChangedChannel } from '@shared/events/appEvents';
 import {
@@ -8,6 +9,7 @@ import {
   type StandaloneKanbanWindowTarget,
 } from '@shared/standalone-kanban-window';
 import { openProvisionedTaskTab } from '@renderer/app/open-task-target';
+import { TaskPaneHeader } from '@renderer/features/tasks/components/task-pane-header';
 import { EditorProvider } from '@renderer/features/tasks/editor/editor-provider';
 import { useHostedTaskLifecycle } from '@renderer/features/tasks/hooks/use-hosted-task-lifecycle';
 import {
@@ -20,7 +22,7 @@ import { CommandShortcutBinder } from '@renderer/lib/commands/command-shortcut-b
 import { ErrorBoundary } from '@renderer/lib/components/error-boundary';
 import { MonacoKeyboardBridge } from '@renderer/lib/components/monaco-keyboard-bridge';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
-import { events } from '@renderer/lib/ipc';
+import { events, rpc } from '@renderer/lib/ipc';
 import { ModalRenderer } from '@renderer/lib/modal/modal-renderer';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Toaster } from '@renderer/lib/ui/toaster';
@@ -44,6 +46,7 @@ export const StandaloneKanbanWindow = observer(function StandaloneKanbanWindow({
   useTheme();
   const { t } = useTranslation();
   const [panes, setPanes] = useState<StandaloneKanbanPane[]>(initialTarget.panes);
+  const scrollRef = useHorizontalWheelScroll();
 
   useEffect(() => {
     return events.on(standaloneKanbanPanesChangedChannel, (target) => {
@@ -73,7 +76,7 @@ export const StandaloneKanbanWindow = observer(function StandaloneKanbanWindow({
             {t('standaloneKanban.title', { count: panes.length })}
           </span>
         </div>
-        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
           {panes.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm text-foreground-muted">{t('standaloneKanban.emptyState')}</p>
@@ -83,12 +86,30 @@ export const StandaloneKanbanWindow = observer(function StandaloneKanbanWindow({
               {panes.map((pane) => (
                 <div
                   key={`${pane.projectId}:${pane.taskId}`}
-                  className="flex-1 basis-0 overflow-hidden rounded-lg border border-border bg-background-1"
+                  className="flex min-h-0 flex-1 basis-0 flex-col overflow-hidden rounded-lg border border-border bg-background-1"
                   style={{ minWidth: STANDALONE_KANBAN_MIN_PANE_WIDTH }}
                 >
-                  <ErrorBoundary variant="inline" componentName="StandaloneKanbanCard">
-                    <StandaloneKanbanCard projectId={pane.projectId} taskId={pane.taskId} />
-                  </ErrorBoundary>
+                  <TaskPaneHeader projectId={pane.projectId} taskId={pane.taskId}>
+                    <button
+                      type="button"
+                      aria-label={t('standaloneKanban.openInMainWindow')}
+                      title={t('standaloneKanban.openInMainWindow')}
+                      onClick={() =>
+                        void rpc.app.focusTaskInMainWindow({
+                          projectId: pane.projectId,
+                          taskId: pane.taskId,
+                        })
+                      }
+                      className="flex size-5 shrink-0 items-center justify-center rounded text-foreground-muted hover:bg-background-2 hover:text-foreground"
+                    >
+                      <PanelRightOpen className="size-3.5" />
+                    </button>
+                  </TaskPaneHeader>
+                  <div className="min-h-0 flex-1 overflow-hidden">
+                    <ErrorBoundary variant="inline" componentName="StandaloneKanbanCard">
+                      <StandaloneKanbanCard projectId={pane.projectId} taskId={pane.taskId} />
+                    </ErrorBoundary>
+                  </div>
                 </div>
               ))}
             </div>
@@ -102,6 +123,34 @@ export const StandaloneKanbanWindow = observer(function StandaloneKanbanWindow({
     </>
   );
 });
+
+/**
+ * Horizontal wheel scrolling that survives the terminals. Cards are full TUIs
+ * and xterm claims every wheel event over its viewport for scrollback, so the
+ * board's `overflow-x-auto` would never see a trackpad swipe made over a
+ * session. Listening in the CAPTURE phase on the scroller intercepts the event
+ * before it reaches the terminal — but only when the gesture is horizontal
+ * (dominant `deltaX`, or shift+wheel), so vertical scrollback keeps working.
+ */
+function useHorizontalWheelScroll(): RefObject<HTMLDivElement | null> {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWheel = (event: WheelEvent) => {
+      const delta = event.shiftKey && event.deltaX === 0 ? event.deltaY : event.deltaX;
+      if (delta === 0) return;
+      if (!event.shiftKey && Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+      if (el.scrollWidth <= el.clientWidth) return;
+      event.preventDefault();
+      event.stopPropagation();
+      el.scrollLeft += delta;
+    };
+    el.addEventListener('wheel', onWheel, { capture: true, passive: false });
+    return () => el.removeEventListener('wheel', onWheel, { capture: true });
+  }, []);
+  return ref;
+}
 
 /**
  * One board card: the task's TUI only — no tabs, no sidebars, no bottom drawer.

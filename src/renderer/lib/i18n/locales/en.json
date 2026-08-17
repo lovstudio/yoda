@@ -6706,5 +6706,6 @@
   },
   "standaloneKanban.title": "Agent Board ({{count}})",
   "standaloneKanban.emptyState": "No active sessions to display",
-  "standaloneKanban.cardLoading": "Loading session..."
+  "standaloneKanban.cardLoading": "Loading session...",
+  "standaloneKanban.openInMainWindow": "Open in main window"
 }

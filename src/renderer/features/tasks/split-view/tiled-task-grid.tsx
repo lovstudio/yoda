@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { Fragment, type ReactNode } from 'react';
+import { TaskPaneHeader } from '@renderer/features/tasks/components/task-pane-header';
 import { EditorProvider } from '@renderer/features/tasks/editor/editor-provider';
 import { useHostedTaskLifecycle } from '@renderer/features/tasks/hooks/use-hosted-task-lifecycle';
 import { TaskMainPanel } from '@renderer/features/tasks/main-panel';
@@ -60,7 +61,7 @@ export const SelfContainedTaskPane = observer(function SelfContainedTaskPane({
   );
 });
 
-/** Slim header on extra panes: name (click → make primary) + close. */
+/** Slim header on extra panes: shared identity strip + close. */
 const ExtraPaneHeader = observer(function ExtraPaneHeader({
   projectId,
   taskId,
@@ -69,22 +70,17 @@ const ExtraPaneHeader = observer(function ExtraPaneHeader({
   taskId: string;
 }) {
   const { navigate } = useNavigate();
-  const name = getTaskStore(projectId, taskId)?.data.name ?? taskId.slice(0, 8);
 
   return (
-    <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border bg-background-1/50 pl-2 pr-1">
-      <button
-        type="button"
-        title={name}
-        onClick={() => {
-          // Promote this pane to primary: route to it and drop it from extras.
-          splitViewStore.remove(taskId);
-          navigate('task', { projectId, taskId });
-        }}
-        className="min-w-0 flex-1 truncate text-left text-xs font-medium text-foreground-muted hover:text-foreground"
-      >
-        {name}
-      </button>
+    <TaskPaneHeader
+      projectId={projectId}
+      taskId={taskId}
+      onTitleClick={() => {
+        // Promote this pane to primary: route to it and drop it from extras.
+        splitViewStore.remove(taskId);
+        navigate('task', { projectId, taskId });
+      }}
+    >
       <button
         type="button"
         aria-label="Close pane"
@@ -93,7 +89,7 @@ const ExtraPaneHeader = observer(function ExtraPaneHeader({
       >
         <X className="size-3.5" />
       </button>
-    </div>
+    </TaskPaneHeader>
   );
 });
 
