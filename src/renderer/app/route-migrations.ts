@@ -6,6 +6,18 @@ export type PersistedViewRoute = {
 /** Keep restored tabs, navigation, and side-pane pins on the Library surface
  * after Marketplace's sections move back under its secondary navigation. */
 export function migratePersistedViewRoute(route: PersistedViewRoute): PersistedViewRoute {
+  // A task IS its session: the task-overview page is retired, and the task
+  // route's own identity is now "no tab target". Drop the stale target so a
+  // restored tab lands on the task's session surface instead of nothing.
+  if (route.viewId === 'task') {
+    const tab = route.params.tab as { kind?: string } | undefined;
+    if (tab?.kind === 'overview') {
+      const { tab: _retired, ...rest } = route.params;
+      return { viewId: route.viewId, params: rest };
+    }
+    return route;
+  }
+
   // Model access is a Settings pane, not a surface of its own — the standalone
   // route rendered the same view minus the global-binding control, which left
   // two designs for one thing.

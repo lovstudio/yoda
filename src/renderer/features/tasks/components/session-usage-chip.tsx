@@ -23,7 +23,7 @@ export function SessionUsageChip({ usage }: { usage: ConversationUsageSummary | 
         className="font-mono text-xs tabular-nums text-foreground-passive"
         title={tokenBreakdownTitle(usage.tokens, t)}
       >
-        {t('tasks.overview.stats.tokens', { value: formatCompactNumber(usage.tokens.total) })}
+        {t('tasks.details.stats.tokens', { value: formatCompactNumber(usage.tokens.total) })}
       </span>
     </span>
   );

@@ -18,8 +18,8 @@ function isTaskSessionTarget(
 
 /**
  * Resolves the target used when a task row is opened. Navigation history also
- * contains Overview, file, diff, and room-member pages; those are not the
- * task's last session and must not win a normal task-row click.
+ * contains file, diff, and room-member pages; those are not the task's last
+ * session and must not win a normal task-row click.
  */
 export function resolveLastTaskSessionTarget(
   history: TaskSessionHistory,

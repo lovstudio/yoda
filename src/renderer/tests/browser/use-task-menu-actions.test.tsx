@@ -69,7 +69,6 @@ vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
   getTaskStore: () => mocks.task,
   taskChildren: () => [],
 }));
-vi.mock('@renderer/features/tasks/tabs/tab-manager-store', () => ({ OVERVIEW_TAB_ID: 'overview' }));
 vi.mock('@renderer/lib/ipc', () => ({ rpc: { conversations: {} } }));
 vi.mock('@renderer/lib/layout/navigation-provider', () => ({
   useNavigate: () => ({ navigate: mocks.navigate }),

@@ -138,7 +138,6 @@ vi.mock('@renderer/features/tasks/editor/markdown-editor-panel', () => ({
   MarkdownEditorPanel: () => null,
 }));
 vi.mock('@renderer/features/tasks/task-titlebar', () => ({ ActiveTaskTitlebar: () => null }));
-vi.mock('@renderer/features/tasks/view/overview-panel', () => ({ OverviewPanel: () => null }));
 vi.mock('@renderer/features/tasks/view/task-sidebar', () => ({ TaskSidebar: () => null }));
 vi.mock('@renderer/features/tasks/open-task-when-ready', () => ({ openTaskWhenReady: vi.fn() }));
 vi.mock('@renderer/features/tasks/task-open-performance', () => ({

@@ -28,7 +28,6 @@ import {
   getTaskStore,
   taskViewKind,
 } from '@renderer/features/tasks/stores/task-selectors';
-import { OVERVIEW_TAB_ID } from '@renderer/features/tasks/tabs/tab-manager-store';
 import {
   buildTaskWindowTarget,
   getTabMeta,
@@ -71,7 +70,7 @@ export const AppSidePane = observer(function AppSidePane() {
   // reopen) leaves `shellPinTabIds` — drop its pin so no ghost chip remains.
   useEffect(() => {
     for (const pin of pins) {
-      if (pin.kind !== 'task' || pin.tabId === OVERVIEW_TAB_ID) continue;
+      if (pin.kind !== 'task') continue;
       const provisioned = asProvisioned(getTaskStore(pin.projectId, pin.taskId));
       if (!provisioned) continue;
       const { tabManager } = provisioned.taskView;
@@ -83,9 +82,9 @@ export const AppSidePane = observer(function AppSidePane() {
 
   // Closing a pin mirrors the task sidebar's policy: conversations return to
   // the strip as a background top-level tab so the session stays reachable;
-  // files/diffs are stateless and just close; copies (views, overview) unpin.
+  // files/diffs are stateless and just close; copies (views, whole tasks) unpin.
   const closePin = (pin: SidePanePin) => {
-    if (pin.kind === 'task' && pin.tabId !== OVERVIEW_TAB_ID) {
+    if (pin.kind === 'task') {
       const provisioned = asProvisioned(getTaskStore(pin.projectId, pin.taskId));
       const { tabManager } = provisioned?.taskView ?? {};
       const resolved = tabManager?.resolveTab(pin.tabId);
@@ -109,7 +108,7 @@ export const AppSidePane = observer(function AppSidePane() {
   };
 
   const chipMeta = (pin: SidePanePin): { label: string; title?: string; icon: ReactNode } => {
-    if (pin.kind === 'task' && pin.tabId !== OVERVIEW_TAB_ID) {
+    if (pin.kind === 'task') {
       const provisioned = asProvisioned(getTaskStore(pin.projectId, pin.taskId));
       const resolved = provisioned?.taskView.tabManager.resolveTab(pin.tabId);
       if (resolved) {
@@ -118,26 +117,26 @@ export const AppSidePane = observer(function AppSidePane() {
       }
       return { label: t('appTabs.task'), icon: null };
     }
-    // Task-overview and whole-task-view pins both chip as the task itself.
+    // A whole-task pin chips as the task itself.
     const entry: AppTabEntry =
       pin.kind === 'view'
         ? { id: pin.id, viewId: pin.viewId, params: pin.params }
         : {
             id: pin.id,
             viewId: 'task',
-            params: { projectId: pin.projectId, taskId: pin.taskId, tab: { kind: 'overview' } },
+            params: { projectId: pin.projectId, taskId: pin.taskId },
           };
     return describeTab(entry, t, branchPrefix);
   };
 
   // Moved task entities drag as such (placeable in any area); copy-semantics
-  // pins (views, overview) drag for in-pane reorder only.
+  // pins (views, whole tasks) drag for in-pane reorder only.
   const dragPayload = (pin: SidePanePin): TabDragPayload => {
-    if (pin.kind === 'task' && pin.tabId !== OVERVIEW_TAB_ID) {
+    if (pin.kind === 'task') {
       const resolved = asProvisioned(
         getTaskStore(pin.projectId, pin.taskId)
       )?.taskView.tabManager.resolveTab(pin.tabId);
-      if (resolved && resolved.kind !== 'overview') {
+      if (resolved) {
         return {
           kind: 'task-entity',
           from: 'shellPane',
@@ -156,11 +155,11 @@ export const AppSidePane = observer(function AppSidePane() {
   // pinned chips: placement (back to strip / task sidebar / window), then
   // kind-specific actions. Copy-semantics pins keep the plain chip.
   const pinSections = (pin: SidePanePin): ReactNode[][] => {
-    if (pin.kind !== 'task' || pin.tabId === OVERVIEW_TAB_ID) return [];
+    if (pin.kind !== 'task') return [];
     const provisioned = asProvisioned(getTaskStore(pin.projectId, pin.taskId));
     const tabManager = provisioned?.taskView.tabManager;
     const resolved = tabManager?.resolveTab(pin.tabId);
-    if (!provisioned || !tabManager || !resolved || resolved.kind === 'overview') return [];
+    if (!provisioned || !tabManager || !resolved) return [];
     const target = buildTaskWindowTarget(pin.projectId, pin.taskId, resolved);
 
     const placement: ReactNode[] = [
@@ -265,7 +264,7 @@ export const AppSidePane = observer(function AppSidePane() {
         const tab = payload.appTab;
         const { projectId, taskId } = tab.params as { projectId?: string; taskId?: string };
         if (tab.viewId === 'task' && projectId && taskId) {
-          appState.sidePane.pinTask(projectId, taskId, OVERVIEW_TAB_ID);
+          appState.sidePane.pinTaskView(projectId, taskId);
         } else {
           appState.sidePane.pinView(tab.viewId, tab.params);
         }

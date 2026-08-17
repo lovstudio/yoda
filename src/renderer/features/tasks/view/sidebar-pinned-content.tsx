@@ -33,12 +33,11 @@ import {
 } from '@renderer/lib/pty/terminal-file-link-actions';
 import { getTerminalFileLinkInternalDestination } from '@renderer/lib/pty/terminal-file-link-open';
 import type { TerminalFileLinkOptions } from '@renderer/lib/pty/terminal-file-links';
-import { OverviewPanel } from './overview-panel';
 
 /**
- * Renders the content of a pinned tab (conversation PTY, file editor, diff,
- * or the task overview), filling its host pane — the task sidebar strip or
- * the shell-level side pane.
+ * Renders the content of a pinned tab (conversation PTY, file editor, or
+ * diff), filling its host pane — the task sidebar strip or the shell-level
+ * side pane.
  */
 export const SidebarPinnedContent = observer(function SidebarPinnedContent({
   entry,
@@ -46,14 +45,6 @@ export const SidebarPinnedContent = observer(function SidebarPinnedContent({
   entry: TabEntry;
 }) {
   const { conversations } = useRequireProvisionedTask();
-
-  if (entry.kind === 'overview') {
-    return (
-      <div key={entry.tabId} className="h-full overflow-y-auto">
-        <OverviewPanel />
-      </div>
-    );
-  }
 
   if (entry.kind === 'conversation') {
     const conversation = conversations.conversations.get(entry.conversationId);

@@ -10,6 +10,7 @@ import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
 import type { ConversationStore } from '@renderer/features/tasks/conversations/conversation-manager';
+import type { ProvisionedTask } from '@renderer/features/tasks/stores/task';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -125,11 +126,6 @@ vi.mock('@renderer/features/tasks/components/session-usage-chip', () => ({
   SessionUsageChip: () => null,
 }));
 
-vi.mock('@renderer/features/tasks/task-view-context', () => ({
-  useRequireProvisionedTask: () => mocks.provisioned,
-  useTaskViewContext: () => ({ projectId: 'project-1', taskId: 'task-1' }),
-}));
-
 vi.mock('@renderer/features/tasks/conversations/conversation-title-utils', () => ({
   formatConversationTitleForDisplay: (_runtimeId: string, title: string) => title,
 }));
@@ -190,6 +186,11 @@ describe('ConversationTree', () => {
     await act(async () => {
       root.render(
         createElement(ConversationTree, {
+          owner: {
+            projectId: 'project-1',
+            taskId: 'task-1',
+            provisioned: mocks.provisioned as unknown as ProvisionedTask,
+          },
           activeConversations: active.map(activeStore),
           archivedConversations: archived,
           activeConversationId,

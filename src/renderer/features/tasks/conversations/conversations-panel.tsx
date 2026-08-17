@@ -1,16 +1,21 @@
+import { useQuery } from '@tanstack/react-query';
 import { MessageSquare } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Conversation } from '@shared/conversations';
+import { TaskRoomChat } from '@renderer/features/agent-room/task-room-chat';
+import { taskRoomQueryKey } from '@renderer/features/agent-room/team-room-queries';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { DockedSessionHistory } from '@renderer/features/tasks/conversations/session-history-panel';
 import { useIsActiveTask } from '@renderer/features/tasks/hooks/use-is-active-task';
 import { splitViewStore } from '@renderer/features/tasks/split-view/split-view-store';
+import type { ProvisionedTask } from '@renderer/features/tasks/stores/task';
 import {
   useRequireProvisionedTask,
   useTaskViewContext,
 } from '@renderer/features/tasks/task-view-context';
+import { rpc } from '@renderer/lib/ipc';
 import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
@@ -398,6 +403,12 @@ const ConversationLandingSurface = observer(function ConversationLandingSurface(
   const conversationStores = Array.from(conversations.conversations.values());
   const archivedConversations = useArchivedConversations(projectId, taskId);
   const conversationCount = conversationStores.length + archivedConversations.length;
+  // A team-room task works through its group chat, so that IS the task's own
+  // surface — the same way a single-session task lands on its session.
+  const { data: teamRoom } = useQuery({
+    queryKey: taskRoomQueryKey(projectId, taskId),
+    queryFn: () => rpc.teamRooms.getRoomForTask(projectId, taskId),
+  });
 
   const handleCreate = () => {
     log.debug('[conversation-panel] create requested', { projectId, taskId });
@@ -418,6 +429,8 @@ const ConversationLandingSurface = observer(function ConversationLandingSurface(
       },
     });
   };
+
+  if (teamRoom) return <TaskRoomChat projectId={projectId} taskId={taskId} />;
 
   if (conversationCount === 0) {
     return (
@@ -442,6 +455,7 @@ const ConversationLandingSurface = observer(function ConversationLandingSurface(
 
   return (
     <ConversationSessionList
+      owner={{ projectId, taskId, provisioned }}
       conversations={conversationStores}
       archivedConversations={archivedConversations}
       activeConversationId={tm.activeConversationId}
@@ -464,6 +478,7 @@ const ConversationLandingSurface = observer(function ConversationLandingSurface(
 });
 
 const ConversationSessionList = observer(function ConversationSessionList({
+  owner,
   conversations,
   archivedConversations,
   activeConversationId,
@@ -473,6 +488,7 @@ const ConversationSessionList = observer(function ConversationSessionList({
   onOpen,
   onArchivedRestored,
 }: {
+  owner: { projectId: string; taskId: string; provisioned?: ProvisionedTask };
   conversations: ConversationStore[];
   archivedConversations: Conversation[];
   activeConversationId?: string | null;
@@ -504,6 +520,7 @@ const ConversationSessionList = observer(function ConversationSessionList({
       <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-1">
           <ConversationTree
+            owner={owner}
             activeConversations={conversations}
             archivedConversations={archivedConversations}
             activeConversationId={activeConversationId}

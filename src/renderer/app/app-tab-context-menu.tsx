@@ -43,10 +43,7 @@ import {
   getTaskManagerStore,
   getTaskStore,
 } from '@renderer/features/tasks/stores/task-selectors';
-import {
-  OVERVIEW_TAB_ID,
-  type TabManagerStore,
-} from '@renderer/features/tasks/tabs/tab-manager-store';
+import { type TabManagerStore } from '@renderer/features/tasks/tabs/tab-manager-store';
 import { openTaskTabInWindow } from '@renderer/features/tasks/tabs/tab-meta';
 import { copyYodaLink } from '@renderer/lib/clipboard';
 import { FilePathMenuItems, type FilePathTarget } from '@renderer/lib/components/file-path-actions';
@@ -83,12 +80,11 @@ export const AppTabContextMenu = observer(function AppTabContextMenu({
   const { setCollapsed } = useWorkspaceLayoutContext();
   const revealInSidebar = () => revealTabInSidebar(tab, () => setCollapsed('left', false));
 
-  // A task's overview tab is the task entity itself on the strip — it gets the
+  // A target-less task tab IS the task entity on the strip — it gets the
   // shared task menu (identical to the sidebar row and the kanban row).
   if (tab.viewId === 'task') {
     const { projectId, taskId } = tab.params as { projectId?: string; taskId?: string };
-    const target = (tab.params.tab as TaskWindowTabTarget | undefined) ?? { kind: 'overview' };
-    if (projectId && taskId && target.kind === 'overview') {
+    if (projectId && taskId && tab.params.tab === undefined) {
       return (
         <TaskOverviewTabMenu
           tab={tab}
@@ -231,7 +227,7 @@ const TaskOverviewTabMenu = observer(function TaskOverviewTabMenu({
       <ContextMenuItem
         key="global-pin"
         className="whitespace-nowrap"
-        onClick={() => appState.sidePane.pinTask(projectId, taskId, OVERVIEW_TAB_ID)}
+        onClick={() => appState.sidePane.pinTaskView(projectId, taskId)}
       >
         <PanelRightOpen className="size-4" />
         {t('appTabs.openInGlobalSidePane')}
@@ -264,9 +260,9 @@ const TaskOverviewTabMenu = observer(function TaskOverviewTabMenu({
 
 function buildTaskSections(tab: AppTabEntry, t: Translate, reveal: ReactNode[]): ReactNode[][] {
   const { projectId, taskId } = tab.params as { projectId?: string; taskId?: string };
-  const target = (tab.params.tab as TaskWindowTabTarget | undefined) ?? { kind: 'overview' };
-  // Overview tabs are intercepted by TaskOverviewTabMenu before reaching here.
-  if (!projectId || !taskId || target.kind === 'overview') return [];
+  const target = tab.params.tab as TaskWindowTabTarget | undefined;
+  // The task's own tab is intercepted by TaskOverviewTabMenu before reaching here.
+  if (!projectId || !taskId || !target) return [];
 
   const provisioned = asProvisioned(getTaskStore(projectId, taskId));
   const retry = buildProvisionRetrySection(projectId, taskId, t);

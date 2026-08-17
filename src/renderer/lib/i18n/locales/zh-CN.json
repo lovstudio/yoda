@@ -1802,7 +1802,6 @@
       "openInWindow": "在独立窗口打开",
       "openInWindowFailed": "打开独立窗口失败",
       "returnFromWindowFailed": "恢复标签页失败",
-      "overview": "概览",
       "newConversation": "新建会话",
       "archiveConversation": "归档",
       "archiveConversationDirect": "直接归档",
@@ -1813,11 +1812,11 @@
       "forkConversationFailed": "Fork 会话失败",
       "preview": "预览"
     },
-    "overview": {
+    "details": {
+      "title": "任务详情",
+      "openTask": "进入任务",
       "sessions": "会话（{{count}}）",
       "noSessions": "暂无会话",
-      "archivedSessions": "已归档（{{count}}）",
-      "unarchiveFailed": "取消归档失败",
       "stats": {
         "linesTitle": "本任务代码变更（已提交 + 工作区）",
         "tokens": "{{value}} tokens",

@@ -434,7 +434,7 @@ function tokenBreakdownTitle(
   tokens: TokenBuckets,
   t: (key: string, options?: Record<string, unknown>) => string
 ): string {
-  return t('tasks.overview.stats.tokenBreakdown', {
+  return t('tasks.details.stats.tokenBreakdown', {
     input: formatCompactNumber(tokens.input),
     output: formatCompactNumber(tokens.output),
     cache: formatCompactNumber(tokens.cacheRead + tokens.cacheCreation),

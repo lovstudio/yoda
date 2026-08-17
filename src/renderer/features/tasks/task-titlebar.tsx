@@ -1,4 +1,4 @@
-import { PanelBottom, PanelRight } from 'lucide-react';
+import { Info, PanelBottom, PanelRight } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
@@ -13,6 +13,8 @@ import {
 import { SidebarChip } from '@renderer/lib/components/sidebar-chip';
 import { OpenInMenu } from '@renderer/lib/components/titlebar/open-in-menu';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
+import { useShowModal } from '@renderer/lib/modal/modal-provider';
+import { Button } from '@renderer/lib/ui/button';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { Toggle } from '@renderer/lib/ui/toggle';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
@@ -48,6 +50,7 @@ export const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
   const hosted = useIsHostedTaskView();
   const projectStore = asMounted(getProjectStore(projectId));
   const isRemoteProject = projectStore?.data.type === 'ssh';
+  const showTaskDetails = useShowModal('taskDetailsModal');
 
   return (
     <Titlebar
@@ -58,6 +61,23 @@ export const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
           <DevServerPills projectId={projectId} taskId={taskId} />
           <QuickActionSuggestionControl />
           <TaskFinishControl />
+          {/* The task's own info is a secondary page, deliberately quiet: the
+              working surface is the task. */}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => showTaskDetails({ projectId, taskId })}
+                  aria-label={t('tasks.details.title')}
+                >
+                  <Info className="size-3.5" />
+                </Button>
+              }
+            />
+            <TooltipContent>{t('tasks.details.title')}</TooltipContent>
+          </Tooltip>
           {!isRemoteProject && (
             <OpenInMenu path={provisionedTask.path} className="h-7 bg-background" borderless />
           )}
@@ -113,7 +133,7 @@ export const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
  * Per-pane tab strip for a hosted (split-view extra) task. A hosted pane drops
  * the top-level bridge, so its `tabManager` tabs never reach the global
  * AppTabStrip — render them here, scoped to THIS pane's task, so the pane can
- * switch between its own overview / conversations / files / diffs.
+ * switch between its own sessions / files / diffs.
  */
 const HostedTaskTabStrip = observer(function HostedTaskTabStrip() {
   const { t } = useTranslation();
@@ -124,7 +144,6 @@ const HostedTaskTabStrip = observer(function HostedTaskTabStrip() {
     <div className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [-webkit-app-region:no-drag] [&::-webkit-scrollbar]:hidden">
       {tabManager.resolvedTabs.map((tab) => {
         const meta = getTabMeta(tab);
-        const isOverview = tab.kind === 'overview';
         return (
           <SidebarChip
             key={tab.tabId}
@@ -134,7 +153,7 @@ const HostedTaskTabStrip = observer(function HostedTaskTabStrip() {
             isActive={activeId === tab.tabId}
             closeLabel={t('common.close')}
             onSelect={() => tabManager.setActiveTab(tab.tabId)}
-            onClose={isOverview ? undefined : () => tabManager.closeTab(tab.tabId)}
+            onClose={() => tabManager.closeTab(tab.tabId)}
           />
         );
       })}

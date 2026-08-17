@@ -77,26 +77,7 @@ export class RoomMemberTabEntry {
   }
 }
 
-/**
- * The fixed task-overview tab. There is at most one, it is always pinned to the
- * first position, cannot be closed/reordered, and is synthesized fresh on each
- * mount — it is intentionally excluded from the persisted snapshot.
- */
-export class OverviewTabEntry {
-  readonly kind = 'overview' as const;
-  readonly tabId = OVERVIEW_TAB_ID;
-  readonly isPreview = false;
-}
-
-/** Stable id for the singleton overview tab. */
-export const OVERVIEW_TAB_ID = 'overview';
-
-export type TabEntry =
-  | FileTabStore
-  | DiffTabStore
-  | ConversationTabEntry
-  | RoomMemberTabEntry
-  | OverviewTabEntry;
+export type TabEntry = FileTabStore | DiffTabStore | ConversationTabEntry | RoomMemberTabEntry;
 
 // ---------------------------------------------------------------------------
 // Resolved tabs — enriched with live store references and derived state
@@ -134,13 +115,6 @@ export type ResolvedDiffTab = {
   isActive: boolean;
 };
 
-export type ResolvedOverviewTab = {
-  kind: 'overview';
-  tabId: string;
-  isPreview: false;
-  isActive: boolean;
-};
-
 export type ResolvedRoomMemberTab = {
   kind: 'room-member';
   tabId: string;
@@ -153,8 +127,7 @@ export type ResolvedTab =
   | ResolvedConversationTab
   | ResolvedFileTab
   | ResolvedDiffTab
-  | ResolvedRoomMemberTab
-  | ResolvedOverviewTab;
+  | ResolvedRoomMemberTab;
 
 interface OpenFileOptions {
   line?: number;
@@ -326,7 +299,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     // Auto-close conversation tabs only after the manager has a completed
     // backend snapshot. An unhydrated manager also has an empty map; treating
     // that temporary shape as deletion erases restored session tabs while a
-    // cold task is opening and forces the visible target back to Overview.
+    // cold task is opening, dropping the task back to its empty session state.
     this.disposers.push(
       reaction(
         () => ({
@@ -442,12 +415,12 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
   /**
    * The active entry expressed as a top-level tab target. Used by the view
    * layer to resolve a tab-less route (scope entry) to this task's own
-   * last-active tab instead of forcing the overview.
+   * last-active tab. Null when the task holds no tab yet: a zero-session task
+   * lands on its own session surface, which needs no route target.
    */
   get activeTopLevelTarget(): TaskWindowTabTarget | null {
     const tabId = this.resolvedActiveTabId;
-    const target = tabId ? this.topLevelTargetForTabId(tabId) : undefined;
-    return target?.kind === 'overview' ? null : (target ?? null);
+    return (tabId ? this.topLevelTargetForTabId(tabId) : undefined) ?? null;
   }
 
   /** The most recently interacted conversation, expressed as a route target. */
@@ -459,7 +432,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
   /** Converts a persisted task-history tab id into its routable page target. */
   topLevelTargetForTabId(tabId: string): TaskWindowTabTarget | undefined {
     const desc = this.entries.get(tabId);
-    if (!desc || desc.kind === 'overview') return desc ? { kind: 'overview' } : undefined;
+    if (!desc) return undefined;
     if (desc.kind === 'conversation') {
       return { kind: 'conversation', conversationId: desc.conversationId };
     }
@@ -581,7 +554,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
    * Intents that arrive before the bridge mounts (e.g. initializeDefault
    * opening the initial conversation during provisioning) are remembered and
    * flushed by the view layer once the bridge is injected — so a fresh task
-   * lands on its session tab, not the overview.
+   * lands on its session tab.
    */
   private _forwardToTopLevel(target: TaskWindowTabTarget): boolean {
     const bridge = this.topLevelBridge;
@@ -947,8 +920,6 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
   // ---------------------------------------------------------------------------
 
   closeTab(id: string): void {
-    // The overview tab is fixed and cannot be closed.
-    if (this.entries.get(id)?.kind === 'overview') return;
     this._removeTab(id);
   }
 
@@ -957,7 +928,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     this.closeTab(this.activeTabId);
   }
 
-  /** Close every closeable tab except the given one (and the fixed overview tab). */
+  /** Close every closeable tab except the given one. */
   closeOtherTabs(keepId: string): void {
     for (const id of [...this.tabOrder]) {
       if (id !== keepId) this.closeTab(id);
@@ -973,7 +944,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     }
   }
 
-  /** Close every closeable tab (the fixed overview tab always remains). */
+  /** Close every tab. A task left with none lands on its session surface. */
   closeAllTabs(): void {
     for (const id of [...this.tabOrder]) {
       this.closeTab(id);
@@ -981,9 +952,6 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
   }
 
   setActiveTab(id: string): void {
-    // Overview activation surfaces as a top-level tab; other ids are internal
-    // mechanics (close-reassign, restore) and stay below the bridge.
-    if (id === OVERVIEW_TAB_ID && this._forwardToTopLevel({ kind: 'overview' })) return;
     this.activeTabId = id;
     const entry = this.activeDescriptor;
     if (entry?.kind === 'conversation' && this.isVisible) {
@@ -992,12 +960,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
   }
 
   reorderTabs(fromIndex: number, toIndex: number): void {
-    // The overview tab is fixed at index 0: never move it, and never let another
-    // tab take its slot.
-    if (this.entries.get(this.tabOrder[fromIndex] ?? '')?.kind === 'overview') return;
-    const hasOverview = this.entries.get(this.tabOrder[0] ?? '')?.kind === 'overview';
-    const clampedTo = hasOverview ? Math.max(1, toIndex) : toIndex;
-    reorderTabIds(this, fromIndex, clampedTo);
+    reorderTabIds(this, fromIndex, toIndex);
   }
 
   setNextTabActive(): void {
@@ -1014,7 +977,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
 
   pinTab(tabId: string): void {
     const entry = this.entries.get(tabId);
-    if (entry && entry.kind !== 'overview') entry.isPreview = false;
+    if (entry) entry.isPreview = false;
   }
 
   // ---------------------------------------------------------------------------
@@ -1027,7 +990,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
    */
   moveTabToSidebar(tabId: string): void {
     const entry = this.entries.get(tabId);
-    if (!entry || entry.kind === 'overview' || this.sidebarTabIds.includes(tabId)) return;
+    if (!entry || this.sidebarTabIds.includes(tabId)) return;
     // Pinning aside is a deliberate act — never keep preview semantics.
     entry.isPreview = false;
     removeTabId(this, tabId);
@@ -1073,14 +1036,10 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
   // Actions — shell-pane pinned tabs (cross-route)
   // ---------------------------------------------------------------------------
 
-  /**
-   * Move a tab out of the strip into the shell-level side pane. The overview
-   * tab is fixed and shell pins of it use copy semantics at the call site —
-   * it never enters this list.
-   */
+  /** Move a tab out of the strip into the shell-level side pane. */
   moveTabToShellPin(tabId: string): void {
     const entry = this.entries.get(tabId);
-    if (!entry || entry.kind === 'overview' || this.shellPinTabIds.includes(tabId)) return;
+    if (!entry || this.shellPinTabIds.includes(tabId)) return;
     // Pinning aside is a deliberate act — never keep preview semantics.
     entry.isPreview = false;
     removeTabId(this, tabId);
@@ -1218,30 +1177,16 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
         this.activeSidebarTabId = snapshot.activeSidebarTabId;
       }
     }
-    this._ensureOverviewTab();
     if (snapshot.activeTabId !== undefined) this.activeTabId = snapshot.activeTabId;
   }
 
   initializeDefault(): void {
-    this._ensureOverviewTab();
     for (const [id, store] of this.conversations.conversations) {
       if (store.isInitialConversation) {
         this.openConversation(id);
         return;
       }
     }
-  }
-
-  /**
-   * Inject the fixed overview tab at the first position if missing. Called after
-   * snapshot restore (overview is never persisted) and during default init.
-   * Active-tab selection is left untouched so the conversation stays focused.
-   */
-  private _ensureOverviewTab(): void {
-    if (this.entries.has(OVERVIEW_TAB_ID)) return;
-    const entry = new OverviewTabEntry();
-    this.entries.set(entry.tabId, entry);
-    this.tabOrder.unshift(entry.tabId);
   }
 
   dispose(): void {
@@ -1263,7 +1208,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
    * Activate an already-open tab found by an open* dedupe lookup. Activating a
    * sidebar-pinned tab (list click / top-level route replay) means "show it in
    * the MAIN area" — reclaim it, otherwise resolvedActiveTabId skips it and
-   * silently falls back to the overview while every upstream step looks
+   * silently leaves the task on no tab while every upstream step looks
    * successful.
    */
   private _activateExisting(tabId: string): void {
@@ -1274,9 +1219,6 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
   }
 
   private _resolveTab(entry: TabEntry, isActive: boolean): ResolvedTab | undefined {
-    if (entry.kind === 'overview') {
-      return { kind: 'overview', tabId: entry.tabId, isPreview: false, isActive };
-    }
     if (entry.kind === 'conversation') {
       const store = this.conversations.conversations.get(entry.conversationId);
       if (!store) return undefined;
@@ -1324,9 +1266,8 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     };
   }
 
-  /** Serialize an entry to its persisted descriptor. Overview is never persisted. */
+  /** Serialize an entry to its persisted descriptor. */
   private _describeTab(entry: TabEntry): TabDescriptor | undefined {
-    if (entry.kind === 'overview') return undefined;
     if (entry.kind === 'conversation') {
       return {
         kind: 'conversation',

@@ -18,13 +18,16 @@ const LIFECYCLE_LABEL_KEY: Record<TaskLifecycleStatus, string> = {
   cancelled: 'tasks.lifecycle.cancelled',
 };
 
-/** Subtasks of the current task — Overview tab section with a create entry. */
+/** A task's sub-tasks, with entries to create one or re-parent this task. */
 export const SubtaskList = observer(function SubtaskList({
   projectId,
   taskId,
+  onNavigate,
 }: {
   projectId: string;
   taskId: string;
+  /** Called once a row has navigated away — lets a modal host dismiss itself. */
+  onNavigate?: () => void;
 }) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
@@ -39,7 +42,7 @@ export const SubtaskList = observer(function SubtaskList({
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium text-foreground">
-          {t('tasks.overview.subtasks', { count: children.length })}
+          {t('tasks.details.subtasks', { count: children.length })}
         </h2>
         <div className="flex items-center gap-1">
           <Button size="sm" variant="ghost" onClick={() => showSetParent({ projectId, taskId })}>
@@ -62,7 +65,10 @@ export const SubtaskList = observer(function SubtaskList({
             <SubtaskRow
               key={store.data.id}
               store={store}
-              onOpen={() => void openTaskWhenReady(projectId, store.data.id, navigate)}
+              onOpen={() => {
+                void openTaskWhenReady(projectId, store.data.id, navigate);
+                onNavigate?.();
+              }}
             />
           ))}
         </ul>

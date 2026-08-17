@@ -1802,7 +1802,6 @@
       "openInWindow": "Open in separate window",
       "openInWindowFailed": "Failed to open separate window",
       "returnFromWindowFailed": "Failed to return tab",
-      "overview": "Overview",
       "newConversation": "New conversation",
       "archiveConversation": "Archive",
       "archiveConversationDirect": "Archive directly",
@@ -1813,11 +1812,11 @@
       "forkConversationFailed": "Failed to fork conversation",
       "preview": "Preview"
     },
-    "overview": {
+    "details": {
+      "title": "Task details",
+      "openTask": "Open task",
       "sessions": "Sessions ({{count}})",
       "noSessions": "No sessions yet",
-      "archivedSessions": "Archived ({{count}})",
-      "unarchiveFailed": "Failed to unarchive conversation",
       "stats": {
         "linesTitle": "Lines changed by this task (committed + working tree)",
         "tokens": "{{value}} tokens",

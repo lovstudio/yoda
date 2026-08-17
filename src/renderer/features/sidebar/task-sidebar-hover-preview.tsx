@@ -138,7 +138,7 @@ export const TaskSidebarHoverPreview = observer(function TaskSidebarHoverPreview
       <div className="flex items-center gap-2 border-t border-border/60 bg-background-tertiary-1/20 px-3 py-1.5 text-[10px] text-foreground-tertiary-passive">
         <span className="inline-flex min-w-0 items-center gap-1.5">
           <MessageSquare className="size-3 shrink-0" />
-          <span>{t('tasks.overview.sessions', { count: sessionCount })}</span>
+          <span>{t('tasks.details.sessions', { count: sessionCount })}</span>
         </span>
         {sessionStatus.backgroundJobCount > 0 && (
           <span className="inline-flex min-w-0 shrink-0 items-center gap-1.5">

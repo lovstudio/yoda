@@ -8,7 +8,6 @@ import {
   getRepositoryStore,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useArchiveTask } from '@renderer/features/tasks/archive-task';
-import { openTaskWhenReady } from '@renderer/features/tasks/open-task-when-ready';
 import { splitViewStore } from '@renderer/features/tasks/split-view/split-view-store';
 import { registeredTaskData } from '@renderer/features/tasks/stores/task';
 import {
@@ -44,6 +43,7 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
   const showArchiveWithNote = useShowModal('archiveTaskWithNoteModal');
   const showCreateSubtask = useShowModal('newSubtaskModal');
   const showSetParent = useShowModal('setParentTaskModal');
+  const showTaskDetails = useShowModal('taskDetailsModal');
   const showCreateParent = useShowModal('createParentTaskModal');
   const showCreateProject = useShowModal('expressCreateProjectModal');
   const moveTaskToProject = useMoveTaskToProject();
@@ -104,11 +104,11 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
   const canMoveToProject =
     !isArchived && task.state !== 'unregistered' && childTaskIds.length === 0;
 
-  // The menu "open details" entry enters the task and activates its fixed
-  // Overview tab (task info / sessions / sub-tasks), distinguishing it from a
-  // plain row click which only enters the task view on the last-active tab.
-  const handleOpenOverview = () => {
-    void openTaskWhenReady(projectId, taskId, navigate, { kind: 'overview' });
+  // A task IS its session, so a row click goes straight to the working surface.
+  // Its own info (identity, stats, session tree, sub-tasks) is a secondary page
+  // reached from here, without entering the task at all.
+  const handleOpenDetails = () => {
+    showTaskDetails({ projectId, taskId });
   };
 
   // Pending acceptance leaves the active-workspace list just like archive.
@@ -155,7 +155,7 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
     projectPath,
     workingDirectory: provisionedTask?.path,
     openDetailsLabel: t('tasks.context.openDetails'),
-    onOpenDetails: isArchived ? undefined : handleOpenOverview,
+    onOpenDetails: isArchived ? undefined : handleOpenDetails,
     onPin: () => void task.setPinned(true),
     onUnpin: () => void task.setPinned(false),
     onFavorite: () => void task.setFavorite(true),

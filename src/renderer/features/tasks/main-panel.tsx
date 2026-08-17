@@ -43,7 +43,6 @@ import { taskOpenTransitionStore } from './task-open-transition-store';
 import { TaskRendererActivity } from './task-renderer-activity';
 import { ActiveTaskTitlebar } from './task-titlebar';
 import { stableTaskOpeningMessageKey } from './task-view-opening';
-import { OverviewPanel } from './view/overview-panel';
 import { TaskSidebar } from './view/task-sidebar';
 
 export const TaskMainPanel = observer(function TaskMainPanel() {
@@ -670,9 +669,6 @@ export const TaskActiveTabContent = observer(function TaskActiveTabContent({
           file actions for every code file (mirrors the markdown preview). */}
       {renderer === 'monaco' && <MonacoFileToolbar />}
 
-      <TaskRendererActivity active={renderer === 'overview'}>
-        <OverviewPanel />
-      </TaskRendererActivity>
       <TaskRendererActivity active={renderer === 'markdown'}>
         <MarkdownEditorPanel />
       </TaskRendererActivity>

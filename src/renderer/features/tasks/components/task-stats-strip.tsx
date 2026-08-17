@@ -23,7 +23,7 @@ export function tokenBreakdownTitle(
   tokens: TokenBuckets,
   t: (key: string, options?: Record<string, unknown>) => string
 ): string {
-  return t('tasks.overview.stats.tokenBreakdown', {
+  return t('tasks.details.stats.tokenBreakdown', {
     input: formatCompactNumber(tokens.input),
     output: formatCompactNumber(tokens.output),
     cache: formatCompactNumber(tokens.cacheRead + tokens.cacheCreation),
@@ -48,7 +48,7 @@ export function TaskStatsStrip({ stats, className }: { stats: TaskStats; classNa
       {showDiff && (
         <span
           className="flex items-center gap-1.5 tabular-nums"
-          title={t('tasks.overview.stats.linesTitle')}
+          title={t('tasks.details.stats.linesTitle')}
         >
           <GitCompare className="size-3.5 shrink-0" />
           <span className="text-foreground-diff-added">+{formatDiffLineCount(diff.additions)}</span>
@@ -63,7 +63,7 @@ export function TaskStatsStrip({ stats, className }: { stats: TaskStats; classNa
           title={tokenBreakdownTitle(tokens, t)}
         >
           <Flame className="size-3.5 shrink-0" />
-          {t('tasks.overview.stats.tokens', { value: formatCompactNumber(tokens.total) })}
+          {t('tasks.details.stats.tokens', { value: formatCompactNumber(tokens.total) })}
         </span>
       )}
     </div>

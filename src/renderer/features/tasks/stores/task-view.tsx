@@ -30,14 +30,7 @@ import { TaskSidebarPreferenceStore } from './task-sidebar-preferences';
  * - `'room-member'` — a team-room member's identity / detail
  * - `'other-file'`  — image, svg preview, pdf, binary, too-large, file-error
  */
-export type RendererKind =
-  | 'overview'
-  | 'monaco'
-  | 'markdown'
-  | 'diff'
-  | 'agents'
-  | 'room-member'
-  | 'other-file';
+export type RendererKind = 'monaco' | 'markdown' | 'diff' | 'agents' | 'room-member' | 'other-file';
 
 interface TaskViewResources {
   conversations: ConversationManagerStore;
@@ -226,10 +219,11 @@ export class TaskViewStore {
 
   get activeRenderer(): RendererKind {
     const desc = this.tabManager.activeDescriptor;
-    if (desc?.kind === 'overview') return 'overview';
     if (desc?.kind === 'room-member') return 'room-member';
     if (desc?.kind === 'diff') return 'diff';
     const tab = this.tabManager.activeFileEntry;
+    // A task IS its session: with no file tab — including a task holding no tab
+    // at all — the session surface is the default page.
     if (!tab) return 'agents';
     switch (tab.renderer.kind) {
       case 'text':

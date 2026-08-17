@@ -35,6 +35,7 @@ import { RenameConversationModal } from '@renderer/features/tasks/rename-convers
 import { RenameTaskModal } from '@renderer/features/tasks/rename-task-modal';
 import { SessionPromptsModal } from '@renderer/features/tasks/session-prompts-modal';
 import { SetParentTaskModal } from '@renderer/features/tasks/set-parent-task-modal';
+import { TaskDetailsModal } from '@renderer/features/tasks/task-details-modal';
 import { CreateWorkspaceModal } from '@renderer/features/workspaces/create-workspace-modal';
 import { ManageWorkspacesModal } from '@renderer/features/workspaces/manage-workspaces-modal';
 import { ProjectWorkspaceConflictModal } from '@renderer/features/workspaces/project-workspace-conflict-modal';
@@ -94,6 +95,7 @@ export const modalRegistry = {
   createPrModal: createModal(CreatePrModal, { size: 'md' }),
   renameTaskModal: createModal(RenameTaskModal, { size: 'xs', scope: 'container' }),
   renameConversationModal: createModal(RenameConversationModal, { size: 'xs' }),
+  taskDetailsModal: createModal(TaskDetailsModal, { size: 'lg' }),
   setParentTaskModal: createModal(SetParentTaskModal, { size: 'sm' }),
   createParentTaskModal: createModal(CreateParentTaskModal, { size: 'xs' }),
   sessionPromptsModal: createModal(SessionPromptsModal, { size: 'lg' }),

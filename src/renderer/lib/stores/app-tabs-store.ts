@@ -27,8 +27,7 @@ function createTabId(): string {
 
 /**
  * Canonical identity of a route for tab deduplication. Task routes normalize a
- * missing `tab` target to overview so `{task}` and `{task, tab:overview}` are
- * the same tab.
+ * A task route's identity is the task itself when it carries no `tab` target.
  */
 export function routeKey(viewId: ViewId | string, params: Record<string, unknown>): string {
   if (viewId === 'task') {
@@ -37,7 +36,7 @@ export function routeKey(viewId: ViewId | string, params: Record<string, unknown
       taskId?: string;
       tab?: unknown;
     };
-    return JSON.stringify(['task', projectId, taskId, tab ?? { kind: 'overview' }]);
+    return JSON.stringify(['task', projectId, taskId, tab ?? null]);
   }
   if (viewId === 'project') {
     const { projectId, view } = params as { projectId?: string; view?: string };
@@ -79,9 +78,6 @@ function normalizeTabParams(
   viewId: ViewId | string,
   params: Record<string, unknown>
 ): Record<string, unknown> {
-  if (viewId === 'task' && params.tab === undefined) {
-    return { ...params, tab: { kind: 'overview' } };
-  }
   if (viewId === 'project' && params.view === undefined) {
     return { ...params, view: 'overview' };
   }
@@ -136,15 +132,13 @@ export function tabScopeKey(viewId: ViewId | string, params: Record<string, unkn
 }
 
 /**
- * Index tabs are the fixed tabs of their scope (task overview, the project's
+ * Index tabs are the fixed tabs of their scope (the task itself, the project's
  * page set, every global view). They sort first and cannot be closed from
  * the strip.
  */
 export function isIndexTab(tab: AppTabEntry): boolean {
-  if (tab.viewId === 'task') {
-    const target = tab.params.tab as { kind?: string } | undefined;
-    return !target || target.kind === 'overview';
-  }
+  // A target-less task route IS the task — its own index tab.
+  if (tab.viewId === 'task') return tab.params.tab === undefined;
   // Within a project scope only the overview page is fixed; the other pages
   // (Features, Tasks, Issues, Sessions, Harness, Docs, Settings, …) open on
   // demand and are closeable.
@@ -441,7 +435,7 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
       if (stored.length > 0) return stored;
       const { projectId, taskId } = active.params as { projectId?: string; taskId?: string };
       if (!projectId || !taskId) return stored;
-      const params = { projectId, taskId, tab: { kind: 'overview' } };
+      const params = { projectId, taskId };
       return [{ id: syntheticTabId('task', params), viewId: 'task' as ViewId, params }];
     }
 
@@ -466,11 +460,7 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
    * target-less path so provisioning can establish its initial page.
    */
   openTaskScope(projectId: string, taskId: string, fallbackTarget?: TaskWindowTabTarget): boolean {
-    const scope = tabScopeKey('task', {
-      projectId,
-      taskId,
-      tab: fallbackTarget ?? { kind: 'overview' },
-    });
+    const scope = tabScopeKey('task', { projectId, taskId });
     if (!fallbackTarget) return false;
 
     // A sidebar task click is an explicit scope switch. Sticky activation

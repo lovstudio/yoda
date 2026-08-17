@@ -13,7 +13,6 @@ import { CommandShortcutBinder } from '@renderer/lib/commands/command-shortcut-b
 import { ErrorBoundary } from '@renderer/lib/components/error-boundary';
 import { MonacoKeyboardBridge } from '@renderer/lib/components/monaco-keyboard-bridge';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
-import i18n from '@renderer/lib/i18n';
 import { events, rpc } from '@renderer/lib/ipc';
 import { ModalRenderer } from '@renderer/lib/modal/modal-renderer';
 import {
@@ -197,8 +196,6 @@ const ReadyTaskTabWindow = observer(function ReadyTaskTabWindow({
 
 function resolvedTabMatchesTarget(tab: ResolvedTab, target: TaskWindowTabTarget): boolean {
   switch (target.kind) {
-    case 'overview':
-      return tab.kind === 'overview';
     case 'conversation':
       return tab.kind === 'conversation' && tab.conversationId === target.conversationId;
     case 'room-member':
@@ -212,8 +209,6 @@ function resolvedTabMatchesTarget(tab: ResolvedTab, target: TaskWindowTabTarget)
 
 function formatTaskWindowTabTitle(tab: ResolvedTab): string {
   switch (tab.kind) {
-    case 'overview':
-      return i18n.t('tasks.tabs.overview');
     case 'conversation':
       return (
         formatConversationTitleForDisplay(tab.store.data.runtimeId, tab.store.data.title).trim() ||
@@ -229,8 +224,6 @@ function formatTaskWindowTabTitle(tab: ResolvedTab): string {
 
 function fallbackTaskWindowTabTitle(target: TaskWindowTarget): string {
   switch (target.tab.kind) {
-    case 'overview':
-      return i18n.t('tasks.tabs.overview');
     case 'conversation':
       return target.tab.conversationId;
     case 'room-member':
