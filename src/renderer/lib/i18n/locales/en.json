@@ -5685,7 +5685,7 @@
     "maasUsageTitle": "{{provider}} usage",
     "maasUsageOpenWebsite": "Open {{provider}} website",
     "maasUsageShort": "Usage",
-    "maasUsageDescription": "This session is routed through {{provider}}. Values come directly from the provider.",
+    "maasUsageDescription": "This session routes through the provider; figures come from its own API.",
     "maasUsageSourceZenmux": "Management stats",
     "maasUsageSourceOpenRouter": "Key API",
     "maasUsageSourceNewApi": "Token API",
