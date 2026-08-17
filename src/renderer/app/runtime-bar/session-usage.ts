@@ -30,6 +30,8 @@ export function useRuntimeBarSessionUsage() {
 
   return {
     sessionTokens: activeSessionUsage?.tokens ?? null,
+    /** Priced in main from official list rates — an estimate, not a bill. */
+    sessionCost: activeSessionUsage?.cost ?? null,
     /** Account mode recorded at spawn time — what this session actually spends. */
     sessionAuthProvider: activeSessionUsage?.authProvider ?? null,
     sessionContext,

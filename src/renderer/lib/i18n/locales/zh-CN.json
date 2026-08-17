@@ -4540,6 +4540,11 @@
     "sessionCount": "{{count}} 个会话",
     "sessionCoverage": "有用量 {{available}} / {{total}} · 当前记录 {{transcripts}}",
     "modelMeta": "{{count}} 会话 · 非缓存 {{nonCached}}",
+    "cost": {
+      "hint": "按所用模型的官方定价估算，客户端本身不上报费用。",
+      "partialHint": "按官方定价估算。{{models}} 暂无价格数据，实际花费高于此值。",
+      "atLeast": "{{value}}+"
+    },
     "sourceUnknown": "未记录",
     "topTasks": "Token 消耗 Top 任务",
     "topTasksCount": "Token 消耗 Top 任务（前 {{shown}} / {{total}}）",
@@ -5640,6 +5645,8 @@
     "contextRemainingTokens": "剩余 {{value}} tokens",
     "sessionTokenTotal": "会话累计：{{tokens}}",
     "sessionTokenTotalLabel": "会话累计",
+    "sessionCost": "预估成本：{{cost}}",
+    "sessionCostLabel": "预估成本",
     "contextResets": "上下文已自动压缩 {{count}} 次",
     "contextResetsLabel": "上下文压缩次数",
     "contextLastReset": "最近一次上下文压缩：{{time}}",

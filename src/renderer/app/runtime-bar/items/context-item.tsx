@@ -11,6 +11,7 @@ import {
 } from '@renderer/app/workspace-bar-card';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { LatestReplyScreenshotButton } from '@renderer/features/tasks/conversations/latest-reply-screenshot';
+import { formatUsageCost } from '@renderer/features/usage/format-usage-cost';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@renderer/lib/ui/dropdown-menu';
@@ -34,8 +35,15 @@ export const RuntimeBarContextItem = observer(function RuntimeBarContextItem() {
   const { value: interfaceSettings, update: updateInterfaceSettings } =
     useAppSettingsKey('interface');
   const { runtimeId, activeProjectId, activeTaskId, activeConversationId } = useRuntimeBarSession();
-  const { sessionTokens, sessionContext, contextPercent, contextRemaining, contextTone } =
-    useRuntimeBarSessionUsage();
+  const {
+    sessionTokens,
+    sessionCost,
+    sessionContext,
+    contextPercent,
+    contextRemaining,
+    contextTone,
+  } = useRuntimeBarSessionUsage();
+  const costDisplay = sessionCost ? formatUsageCost(sessionCost, t) : null;
 
   const sessionHistoryDocked = interfaceSettings?.dockSessionHistory ?? true;
   const toggleSessionHistoryDock = () => {
@@ -93,6 +101,7 @@ export const RuntimeBarContextItem = observer(function RuntimeBarContextItem() {
           }),
         ]
       : []),
+    ...(costDisplay ? [t('workspaceRuntime.sessionCost', { cost: costDisplay.value })] : []),
     ...(sessionContext.resetCount > 0
       ? [
           t('workspaceRuntime.contextResets', { count: sessionContext.resetCount }),
@@ -178,6 +187,13 @@ export const RuntimeBarContextItem = observer(function RuntimeBarContextItem() {
               label={t('workspaceRuntime.sessionTokenTotalLabel')}
               value={sessionTokens ? formatCompactNumber(sessionTokens.total) : '—'}
             />
+            {costDisplay ? (
+              <RuntimeMetricRow
+                label={t('workspaceRuntime.sessionCostLabel')}
+                value={costDisplay.value}
+                title={costDisplay.title}
+              />
+            ) : null}
             <RuntimeMetricRow
               label={t('workspaceRuntime.contextCompactionsLabel')}
               value={String(sessionContext.resetCount)}

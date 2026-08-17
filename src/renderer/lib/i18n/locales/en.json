@@ -4540,6 +4540,11 @@
     "sessionCount": "{{count}} sessions",
     "sessionCoverage": "{{available}} / {{total}} with usage · {{transcripts}} transcripts",
     "modelMeta": "{{count}} sessions · {{nonCached}} non-cached",
+    "cost": {
+      "hint": "Estimated from official list prices for the models used. Provider CLIs report no cost of their own.",
+      "partialHint": "Estimated from official list prices. No rate on file for {{models}}, so the real figure is higher.",
+      "atLeast": "{{value}}+"
+    },
     "sourceUnknown": "Untracked",
     "topTasks": "Top tasks by tokens",
     "topTasksCount": "Top tasks by tokens ({{shown}} of {{total}})",
@@ -5640,6 +5645,8 @@
     "contextRemainingTokens": "{{value}} tokens left",
     "sessionTokenTotal": "Session total: {{tokens}}",
     "sessionTokenTotalLabel": "Session total",
+    "sessionCost": "Est. cost: {{cost}}",
+    "sessionCostLabel": "Est. cost",
     "contextResets": "Context compacted {{count}} time(s)",
     "contextResetsLabel": "Context compactions",
     "contextLastReset": "Last context compaction: {{time}}",

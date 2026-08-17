@@ -16,6 +16,17 @@ export type TokenBuckets = {
   total: number;
 };
 
+/**
+ * What a token rollup cost. Provider CLIs write no cost of their own into
+ * their transcripts, so this is priced from the bundled official-rate table —
+ * an estimate, and a floor whenever `unpricedModels` is non-empty.
+ */
+export type UsageCost = {
+  usd: number;
+  /** Model ids with no rate on file; non-empty means `usd` under-reports. */
+  unpricedModels: string[];
+};
+
 /** A provider-reported rolling usage window, such as a subscription quota. */
 export type SessionRateLimit = {
   windowMinutes: number;
@@ -58,6 +69,8 @@ export type ModelUsage = {
   /** Provider-reported model id; null when transcript rows carried none. */
   model: string | null;
   tokens: TokenBuckets;
+  /** Null when this model has no rate on file. */
+  cost: UsageCost | null;
   /** Sessions in which this model appears. */
   sessionCount: number;
 };
@@ -134,6 +147,8 @@ export type ConversationUsageSummary = {
   authProvider: AgentAccountProviderId | null;
   /** Null when the provider has no transcript reader or nothing parsed. */
   tokens: TokenBuckets | null;
+  /** Null when nothing was parseable, or no model in the session had a rate. */
+  cost: UsageCost | null;
   /** Null when the provider transcript does not expose a live context window. */
   context: SessionContextUsage | null;
 };
