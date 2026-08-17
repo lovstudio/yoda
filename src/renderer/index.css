@@ -415,6 +415,16 @@
     color: var(--selection-foreground);
   }
 
+  /* Search hits. Derived from the selection accent so every theme, custom ones
+     included, gets a legible highlight without carrying another token, and the
+     matched run is lifted to full foreground because the text around it is
+     usually passive grey. */
+  .yoda-search-hit {
+    border-radius: 2px;
+    background-color: color-mix(in srgb, var(--selection) 55%, transparent);
+    color: var(--foreground);
+  }
+
   /* Scrollbar styles for light and dark mode */
   * {
     scrollbar-width: thin;

@@ -339,4 +339,65 @@ describe('SkillQuickSearchPopover', () => {
       expect.objectContaining({ id: 'calendar' })
     );
   });
+
+  it('highlights the match and scrolls a late description hit into view', async () => {
+    const lateMatch =
+      'Authentication integration guidance for the platform, including how to cover sessions';
+    const describedSkill: CatalogSkill = {
+      ...localSkill,
+      key: 'skill:local:auth:test',
+      id: 'auth',
+      displayName: 'auth',
+      description: lateMatch,
+      frontmatter: { name: 'auth', description: lateMatch },
+      ref: { ...localSkill.ref, key: 'skill:local:auth:test', id: 'auth' },
+    };
+    const namedSkill: CatalogSkill = {
+      ...localSkill,
+      key: 'skill:local:cover-image:test',
+      id: 'cover-image',
+      displayName: 'cover-image',
+      description: 'Generates article covers',
+      frontmatter: { name: 'cover-image', description: 'Generates article covers' },
+      ref: { ...localSkill.ref, key: 'skill:local:cover-image:test', id: 'cover-image' },
+    };
+    mocks.getCatalog.mockResolvedValue({
+      success: true,
+      data: { ...catalog, skills: [describedSkill, namedSkill] },
+    });
+    const { SkillQuickSearchPopover } = await import(
+      '@renderer/features/skills/components/SkillQuickSearchPopover'
+    );
+    await act(async () =>
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SkillQuickSearchPopover, {
+            runtimeId: 'claude',
+            onInsertSkill: mocks.onInsertSkill,
+            onInstalled: mocks.onInstalled,
+            onManageSkills: mocks.onManageSkills,
+          })
+        )
+      )
+    );
+    await settle();
+
+    const input = host.querySelector<HTMLInputElement>('input');
+    expect(input).not.toBeNull();
+    await act(async () => setInputValue(input!, 'cover'));
+
+    const marks = Array.from(host.querySelectorAll<HTMLElement>('mark.yoda-search-hit'));
+    expect(marks.length).toBeGreaterThan(0);
+    expect(new Set(marks.map((mark) => mark.textContent))).toEqual(new Set(['cover']));
+
+    // The description hit sat past the truncation, so its row shows a windowed
+    // description that leads with an ellipsis instead of the original opening.
+    const options = Array.from(host.querySelectorAll<HTMLElement>('[role="option"]'));
+    const describedRow = options.find((option) => option.textContent?.includes('/auth'));
+    expect(describedRow?.textContent).toContain('…');
+    expect(describedRow?.textContent).not.toContain('Authentication integration');
+    expect(describedRow?.querySelector('mark.yoda-search-hit')).not.toBeNull();
+  });
 });

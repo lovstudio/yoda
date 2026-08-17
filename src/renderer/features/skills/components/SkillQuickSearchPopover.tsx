@@ -23,6 +23,7 @@ import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
 import { DropdownMenuItem } from '@renderer/lib/ui/dropdown-menu';
+import { HighlightedText, windowAroundMatch } from '@renderer/lib/ui/highlighted-text';
 import { Input } from '@renderer/lib/ui/input';
 import { cn } from '@renderer/utils/utils';
 import { filterInstalledSkills, hasInstalledRuntimeName } from '../skill-quick-search';
@@ -242,23 +243,34 @@ export function SkillQuickSearchPopover({
                       <SkillIconRenderer skill={skill} size="xs" />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <span className="truncate text-xs font-medium text-foreground">
-                            {skill.displayName}
-                          </span>
+                          <HighlightedText
+                            className="truncate text-xs font-medium text-foreground"
+                            query={normalizedQuery}
+                            text={skill.displayName}
+                          />
                           {skill.disabled ? (
                             <span className="shrink-0 rounded bg-background-2 px-1 py-0.5 text-[9px] text-foreground-passive">
                               {t('skills.disabled')}
                             </span>
                           ) : null}
                         </div>
+                        {/* Descriptions run long, so a match late in one would sit past
+                            the truncation and the row would read as an unexplained hit. */}
                         <p className="truncate text-[11px] text-foreground-passive">
-                          {skill.description || skill.id}
+                          <HighlightedText
+                            query={normalizedQuery}
+                            text={windowAroundMatch(skill.description || skill.id, normalizedQuery)}
+                          />
                         </p>
                       </div>
                       {command ? (
-                        <span className="shrink-0 truncate font-mono text-[10px] text-foreground-passive">
-                          {command}
-                        </span>
+                        // Also highlighted: a skill whose id differs from its display
+                        // name can match here and nowhere else on the row.
+                        <HighlightedText
+                          className="shrink-0 truncate font-mono text-[10px] text-foreground-passive"
+                          query={normalizedQuery}
+                          text={command}
+                        />
                       ) : null}
                       {isActive ? (
                         <CornerDownLeft
@@ -369,12 +381,15 @@ export function SkillQuickSearchPopover({
                               rel="noopener noreferrer"
                               target="_blank"
                             >
-                              {skill.displayName}
+                              <HighlightedText query={normalizedQuery} text={skill.displayName} />
                             </a>
                             <ExternalLink className="size-3 shrink-0 text-foreground-passive" />
                           </div>
                           <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-foreground-passive">
-                            {skill.description || t('skills.quickSearch.noDescription')}
+                            <HighlightedText
+                              query={normalizedQuery}
+                              text={skill.description || t('skills.quickSearch.noDescription')}
+                            />
                           </p>
                           <div className="mt-1 text-[10px] text-foreground-passive">
                             @{skill.ownerHandle}
