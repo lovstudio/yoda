@@ -1,7 +1,8 @@
 import { Archive, ArrowUpRight, ChartColumn, Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ProjectUsage, TokenBuckets, UsageOverview } from '@shared/stats';
+import type { ProjectUsage, TokenBuckets, UsageCost, UsageOverview } from '@shared/stats';
+import { formatUsageCost } from '@renderer/features/usage/format-usage-cost';
 import { useUsageOverview } from '@renderer/features/usage/useUsageOverview';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
@@ -181,6 +182,7 @@ function TokenUsageContent({
                     count: entry.sessionCount,
                     nonCached: formatCompactNumber(entry.tokens.input + entry.tokens.output),
                   })}
+                  cost={entry.cost}
                   total={entry.tokens.total}
                   maxTotal={overview.byModel[0]!.tokens.total}
                 />
@@ -318,18 +320,30 @@ function BreakdownList({ title, children }: { title: string; children: ReactNode
 function BreakdownRow({
   leading,
   meta,
+  cost,
   total,
   maxTotal,
 }: {
   leading: ReactNode;
   meta?: string;
+  cost?: UsageCost | null;
   total: number;
   maxTotal: number;
 }) {
+  const { t } = useTranslation();
+  const costDisplay = cost ? formatUsageCost(cost, t) : null;
   return (
     <div className="flex items-center gap-2 border-b border-border/40 py-1.5 last:border-b-0">
       <span className="flex min-w-0 flex-1 items-center gap-2">{leading}</span>
       {meta && <span className="shrink-0 text-[11px] text-foreground-passive">{meta}</span>}
+      {costDisplay && (
+        <span
+          className="shrink-0 font-mono text-[11px] tabular-nums text-foreground-passive"
+          title={costDisplay.title}
+        >
+          {costDisplay.value}
+        </span>
+      )}
       <ProportionBar total={total} maxTotal={maxTotal} />
       <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums text-foreground-muted">
         {formatCompactNumber(total)}

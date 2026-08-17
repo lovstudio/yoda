@@ -452,7 +452,18 @@ export type MaasUsageSummary = {
     | 'new-api-token'
     | 'new-api-account';
   quotaUnlimited: boolean | null;
-  accountUsageStatus: 'not-applicable' | 'credential-required' | 'available' | 'error';
+  /**
+   * `credential-rejected` is separated from `error` because it is the one
+   * account-read failure the user can act on: the stored credential is not the
+   * one this platform's dashboard accepts. Everything else — network, rate
+   * limits, upstream faults — is `error` and resolves itself or does not.
+   */
+  accountUsageStatus:
+    | 'not-applicable'
+    | 'credential-required'
+    | 'available'
+    | 'credential-rejected'
+    | 'error';
   accountUsageError: string | null;
   fetchedAt: string | null;
   period: MaasInvocationPage['period'];

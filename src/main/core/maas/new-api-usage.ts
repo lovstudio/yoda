@@ -202,9 +202,15 @@ async function fetchNewApiAccountUsage({
   }
 
   if (!response.ok || body?.success === false) {
+    // New API validates this credential by looking the token up in its own user
+    // table, so a 401/403 means one specific thing: the stored value is not an
+    // account access token this deployment knows. That is worth telling apart
+    // from a transport or upstream fault, because only one of them is the user's
+    // to fix. The upstream text is kept verbatim for diagnostics.
+    const rejected = response.status === 401 || response.status === 403;
     return {
       ...tokenSummary,
-      accountUsageStatus: 'error',
+      accountUsageStatus: rejected ? 'credential-rejected' : 'error',
       accountUsageError:
         response.status === 429
           ? newApiRateLimitError(response).message

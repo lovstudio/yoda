@@ -1,7 +1,7 @@
 import { Archive, ChartColumn, Database, Loader2 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ProjectUsage, TokenBuckets, UsageOverview } from '@shared/stats';
+import type { ProjectUsage, TokenBuckets, UsageCost, UsageOverview } from '@shared/stats';
 import { accountProviderLabelKey } from '@renderer/features/agents/account-provider-label';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
@@ -16,6 +16,7 @@ import {
 } from '@renderer/utils/format-compact-number';
 import { formatDiffLineCount } from '@renderer/utils/format-diff-line-count';
 import { cn } from '@renderer/utils/utils';
+import { formatUsageCost } from '../format-usage-cost';
 import { useUsageOverview } from '../useUsageOverview';
 import { DailyTokenChart } from './DailyTokenChart';
 
@@ -174,6 +175,7 @@ function UsageContent({ overview }: { overview: UsageOverview }) {
                     count: entry.sessionCount,
                     nonCached: formatCompactNumber(entry.tokens.input + entry.tokens.output),
                   })}
+                  cost={entry.cost}
                   tokens={entry.tokens}
                 />
               ))}
@@ -279,17 +281,28 @@ function BreakdownCard({
 function BreakdownRow({
   leading,
   meta,
+  cost,
   tokens,
 }: {
   leading: React.ReactNode;
   meta?: string;
+  cost?: UsageCost | null;
   tokens: TokenBuckets;
 }) {
   const { t } = useTranslation();
+  const costDisplay = cost ? formatUsageCost(cost, t) : null;
   return (
     <div className="flex items-center gap-2 border-b border-border/40 py-2 last:border-b-0">
       <span className="flex min-w-0 flex-1 items-center gap-2">{leading}</span>
       {meta && <span className="shrink-0 text-[11px] text-foreground-passive">{meta}</span>}
+      {costDisplay && (
+        <span
+          className="shrink-0 font-mono text-[11px] tabular-nums text-foreground-passive"
+          title={costDisplay.title}
+        >
+          {costDisplay.value}
+        </span>
+      )}
       <span
         className="shrink-0 font-mono text-xs tabular-nums text-foreground-muted"
         title={tokenBreakdownTitle(tokens, t)}

@@ -2111,7 +2111,16 @@ export class MaasService {
     forceRefresh: boolean,
     fetchSummary: () => Promise<MaasUsageSummary>
   ): Promise<MaasUsageSummary> {
-    const cacheKey = `${platformId}:${connection.endpoint}:${connection.keyFingerprint ?? ''}`;
+    // Both credentials contribute figures, so both belong in the key. Keyed on
+    // the inference key alone, replacing just the account token reused the
+    // previous read — a rejection included — which reads as "I fixed it and
+    // nothing changed".
+    const cacheKey = [
+      platformId,
+      connection.endpoint,
+      connection.keyFingerprint ?? '',
+      connection.accountKeyFingerprint ?? '',
+    ].join(':');
     let cache = this.remoteUsageCacheByConnection.get(cacheKey);
     if (!cache) {
       cache = new TTLCache<MaasUsageSummary>(REMOTE_USAGE_SUMMARY_CACHE_TTL_MS);
