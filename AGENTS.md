@@ -75,8 +75,9 @@ optional_env:
 - 配置文件与仓库规则：`agents/conventions/config-files.md`
 - 复用与实体一致性：`agents/conventions/reuse.md`
 - 禁止 re-export，永远从原始源头 import
-- 会被测试 import 到的模块（logger、util、shared）里禁止 import `electron` 或 `@renderer/lib/ipc`——vitest 没有 electron alias，renderer ipc 的模块作用域直接读 `window.electronAPI`。需要这些能力就用依赖注入：模块导出一个 `setXxx(fn)`，由 `src/main/index.ts` 或 `src/renderer/main.tsx` 在启动时注入。
-- 超时常数必须对照实测开销设定，绝不能落在健康路径的耗时附近。改这类常数时把实测数字写进注释，否则下一个人只会看到一个裸数字。
+- 会被测试 import 的模块（logger、util、shared）里禁止 import `electron` 或 `@renderer/lib/ipc`，需要这些能力就导出 `setXxx(fn)` 由启动入口注入（2026-08-17, a38678e）
+- 超时常数必须对照实测开销设定，并把实测数字写进注释（2026-08-17, a38678e）
+- 改运行中 Yoda 自身的数据走 `node /tmp/yoda-renderer.mjs '<js>'` 调 `window.electronAPI.invoke`，不要直接写 DB，否则事件、版本快照、前端缓存三者不一致（2026-08-17, b1bfc34）
 
 ### 状态守卫约定（renderer stores）
 
