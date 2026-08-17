@@ -1,7 +1,17 @@
-import { gzipSync } from 'node:zlib';
+import { promisify } from 'node:util';
+import { gzip } from 'node:zlib';
 import type { YodaApiErrorPayload } from '@shared/yoda-account';
 import { ACCOUNT_CONFIG } from '../config';
 import { yodaAccountService } from './yoda-account-service';
+
+const gzipAsync = promisify(gzip);
+
+/**
+ * Above this size a session-share body is gzipped for transport. Chosen well below
+ * Vercel's ~4.5 MB function body ceiling so every body that could plausibly hit it is
+ * compressed, while ordinary small shares keep going out as plain JSON.
+ */
+const GZIP_UPLOAD_THRESHOLD_BYTES = 1024 * 1024;
 
 export class LovStudioApiError extends Error {
   constructor(
@@ -10,7 +20,9 @@ export class LovStudioApiError extends Error {
     message: string,
     readonly details?: YodaApiErrorPayload['error']
   ) {
-    super(message);
+    // Electron strips custom properties off an Error rejected across IPC, so status and
+    // code have to ride inside the message to be diagnosable from the renderer.
+    super(`${message} (${status} ${code})`);
   }
 }
 
@@ -58,14 +70,14 @@ export class LovStudioApiClient {
       throw new LovStudioApiError(
         response.status,
         payload?.error.code ?? 'request_failed',
-        payload?.error.message ?? `LovStudio request failed (${response.status})`,
+        payload?.error.message ?? 'LovStudio request failed',
         payload?.error
       );
     }
     return (await response.json()) as T;
   }
 
-  private fetch(
+  private async fetch(
     path: string,
     token: string,
     init: RequestInit,
@@ -75,32 +87,31 @@ export class LovStudioApiClient {
     const signals = [accountSignal, AbortSignal.timeout(timeoutMs)];
     if (init.signal) signals.push(init.signal);
 
-    let body = init.body;
-    let headers: HeadersInit;
-
-    // Compress large session-share uploads — the server gunzips before parsing.
-    // Vercel serverless functions measure the wire body against their 4.5 MB limit,
-    // so gzip bypasses the platform ceiling while staying within the app's semantic limit.
-    if (path === '/api/yoda/session-shares' && init.method === 'POST' && typeof body === 'string') {
-      const compressed = gzipSync(Buffer.from(body, 'utf8'));
-      body = compressed;
-      headers = {
-        Authorization: `Bearer ${token}`,
-        'Content-Encoding': 'gzip',
-        ...init.headers,
-      };
-    } else {
-      headers = {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...init.headers,
-      };
-    }
+    // Compress oversized session-share uploads — the server gunzips before parsing.
+    // Vercel measures the *wire* body against its ~4.5 MB function limit, which no
+    // server-side limit can raise, so gzip is the only way a very long session fits.
+    // Threshold-gated rather than always-on so ordinary shares keep going out as plain
+    // JSON: that keeps the blast radius of the encoding on the few bodies that need it.
+    // Deploy ordering matters — the server must understand `content-encoding: gzip`
+    // before a client that sends it, otherwise such a body reads as invalid JSON.
+    // Content-Type still describes the *decoded* payload, so it stays alongside.
+    const shouldGzip =
+      path === '/api/yoda/session-shares' &&
+      init.method === 'POST' &&
+      typeof init.body === 'string' &&
+      Buffer.byteLength(init.body, 'utf8') > GZIP_UPLOAD_THRESHOLD_BYTES;
+    // Async gzip: a multi-MB compress must not block the Electron main process.
+    const body = shouldGzip ? await gzipAsync(Buffer.from(init.body as string, 'utf8')) : init.body;
 
     return fetch(`${ACCOUNT_CONFIG.authServer.baseUrl}${path}`, {
       ...init,
       body,
-      headers,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...(shouldGzip ? { 'Content-Encoding': 'gzip' } : {}),
+        ...init.headers,
+      },
       signal: AbortSignal.any(signals),
     });
   }

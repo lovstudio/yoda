@@ -53,6 +53,7 @@ import { rpc } from '@renderer/lib/ipc';
 import { useWorkspaceLayoutContext } from '@renderer/lib/layout/layout-provider';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { showModal } from '@renderer/lib/modal/modal-provider';
+import { rpcErrorMessage } from '@renderer/lib/rpc-error';
 import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
 import { isIndexTab, type AppTabEntry } from '@renderer/lib/stores/app-tabs-store';
 import {
@@ -577,28 +578,23 @@ async function shareConversationPublicly(
       error,
     });
 
-    let description = t('tasks.tabs.publicShareFailedDescription');
-    if (
-      error &&
-      typeof error === 'object' &&
-      'status' in error &&
-      'code' in error &&
-      'message' in error
-    ) {
-      const e = error as { status: number; code: string; message: string };
-      description = `${e.message} (${e.status} ${e.code})`;
-    } else if (error instanceof Error) {
-      description = error.message;
-    }
-
+    // Show the server's own reason (it carries the HTTP status and error code) instead
+    // of guessing at sign-in or empty history — those were only ever two of the causes.
+    const reason = rpcErrorMessage(error);
     toast.error(t('tasks.tabs.publicShareFailed'), {
       id: toastId,
-      description,
+      description: reason || t('tasks.tabs.publicShareFailedDescription'),
       action: {
         label: t('common.copy'),
         onClick: () => {
-          const text = typeof description === 'string' ? description : String(description);
-          void rpc.app.clipboardWriteText(text);
+          void rpc.app.clipboardWriteText(
+            [
+              reason || t('tasks.tabs.publicShareFailedDescription'),
+              `project: ${projectId}`,
+              `task: ${taskId}`,
+              `session: ${conversationId}`,
+            ].join('\n')
+          );
         },
       },
     });

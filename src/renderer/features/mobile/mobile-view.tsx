@@ -25,6 +25,7 @@ import {
 } from '@renderer/lib/hooks/useAccount';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
+import { rpcErrorMessage } from '@renderer/lib/rpc-error';
 import { Button } from '@renderer/lib/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/lib/ui/collapsible';
 import { cn } from '@renderer/utils/utils';
@@ -38,8 +39,7 @@ const TAILSCALE_DOWNLOAD_URL = 'https://tailscale.com/download';
 const TAILSCALE_SETUP_URL = 'https://tailscale.com/kb/1017/install';
 
 function userFacingError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/, '');
+  return rpcErrorMessage(error);
 }
 
 async function copyToClipboard(value: string): Promise<void> {

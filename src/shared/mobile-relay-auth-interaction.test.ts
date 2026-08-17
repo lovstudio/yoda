@@ -12,7 +12,8 @@ describe('mobile Relay account recovery interaction', () => {
     expect(source).toContain('await signIn.mutateAsync(undefined)');
     expect(source).toContain('await rpc.mobileGateway.enableRelay()');
     expect(source).toContain("t('sidebar.mobileConnection.signInToEnableRelay')");
-    expect(source).toContain("/^Error invoking remote method '[^']+':");
+    // The Electron RPC wrapper is stripped through the shared helper, not a local regex.
+    expect(source).toContain('rpcErrorMessage(error)');
   });
 
   it('invalidates renderer account and Relay snapshots when main expires the session', () => {
