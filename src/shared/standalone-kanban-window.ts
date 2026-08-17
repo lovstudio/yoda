@@ -1,22 +1,16 @@
-import { SIDEBAR_TASK_PRIORITY_GROUPS, type SidebarTaskPriorityGroup } from '@shared/view-state';
+import { isTaskViewStatus, type TaskViewItem } from '@shared/task-view-options';
 
 export const STANDALONE_KANBAN_WINDOW_TARGET_PARAM = 'standaloneKanbanWindowTarget';
 
 /**
  * One board candidate: the live agent session of a real, persisted task.
  *
- * `status` and `projectName` ride along because the board window mounts only
- * the projects it ends up showing — it cannot resolve either one for a task it
- * has not mounted, and the filter menu has to list every candidate's status and
- * project before that choice is made.
+ * It carries a full `TaskViewItem` because the board window mounts only the
+ * projects it ends up showing — it cannot resolve a task's status, name or
+ * timestamps for a task it has not mounted, and the shared view-options menu
+ * needs all of them for every candidate before that choice is made.
  */
-export type StandaloneKanbanPane = {
-  projectId: string;
-  taskId: string;
-  /** The sidebar priority group this task sits in; drives the status filter. */
-  status: SidebarTaskPriorityGroup;
-  projectName: string;
-};
+export type StandaloneKanbanPane = TaskViewItem & { taskId: string };
 
 /**
  * A detached window that lines up the live agent sessions side by side, ranked
@@ -32,9 +26,10 @@ export type StandaloneKanbanPane = {
  */
 export type StandaloneKanbanWindowTarget = {
   /**
-   * Every ranked candidate, uncapped. The board filters first and applies
-   * `maxPanes` afterwards — capping here would make a status filter reduce an
-   * already-truncated four cards to one, instead of surfacing the next matches.
+   * Every ranked candidate, uncapped. The board filters and sorts first and
+   * applies `maxPanes` afterwards — capping here would make a status filter
+   * reduce an already-truncated four cards to one, instead of surfacing the
+   * next matches.
    */
   panes: StandaloneKanbanPane[];
   maxPanes: StandaloneKanbanMaxPanes;
@@ -99,7 +94,11 @@ function isStandaloneKanbanPane(value: unknown): value is StandaloneKanbanPane {
     isNonEmptyString(value.projectId) &&
     isNonEmptyString(value.taskId) &&
     isNonEmptyString(value.projectName) &&
-    SIDEBAR_TASK_PRIORITY_GROUPS.some((group) => group === value.status)
+    isNonEmptyString(value.name) &&
+    isNonEmptyString(value.createdAt) &&
+    isNonEmptyString(value.lastInteractedAt) &&
+    isNonEmptyString(value.statusChangedAt) &&
+    isTaskViewStatus(value.status)
   );
 }
 

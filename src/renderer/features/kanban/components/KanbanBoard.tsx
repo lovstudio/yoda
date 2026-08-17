@@ -14,12 +14,22 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isKanbanStatus, KANBAN_STATUSES, type KanbanStatus } from '@shared/kanban';
 import { projectDisplayName } from '@shared/projects';
+import {
+  applyTaskViewOptions,
+  DEFAULT_TASK_VIEW_OPTIONS,
+  hasActiveTaskViewFilter,
+  type TaskViewItem,
+  type TaskViewOptions,
+} from '@shared/task-view-options';
 import { getProjectManagerStore } from '@renderer/features/projects/stores/project-selectors';
 import { StatusIcon } from '@renderer/features/tasks/components/lifecycleStatusIndicator';
 import { registeredTaskData } from '@renderer/features/tasks/stores/task';
 import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
+import { taskViewItemFields } from '@renderer/features/tasks/stores/task-view-item';
+import { TaskViewOptionsMenu } from '@renderer/lib/components/task-view-options-menu';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
+import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { Badge } from '@renderer/lib/ui/badge';
 import { cn } from '@renderer/utils/utils';
 import { ColumnHooksPopover } from './ColumnHooksPopover';
@@ -60,6 +70,22 @@ function collectBoardCards(): Record<KanbanStatus, BoardCard[]> {
   return byStatus;
 }
 
+/**
+ * Board cards feed the shared view-options menu like every other task list.
+ * Filtering here is by the task's *live* status (等待输入 / 正在进行 …), which is
+ * orthogonal to the column it sits in — the columns are lifecycle stages.
+ */
+function boardCardViewItem(card: BoardCard): TaskViewItem {
+  return {
+    projectId: card.projectId,
+    ...taskViewItemFields(
+      card.taskStore,
+      sidebarStore.taskPriorityGroup(card.taskStore),
+      card.projectName
+    ),
+  };
+}
+
 function moveCard(card: BoardCard, toStatus: KanbanStatus, failureTitle: string): void {
   const store = getTaskStore(card.projectId, card.task.id);
   const data = store ? registeredTaskData(store) : undefined;
@@ -84,9 +110,23 @@ function moveCard(card: BoardCard, toStatus: KanbanStatus, failureTitle: string)
 export const KanbanBoard = observer(function KanbanBoard() {
   const { t } = useTranslation();
   const [activeCard, setActiveCard] = useState<BoardCard | null>(null);
+  const [viewOptions, setViewOptions] = useState<TaskViewOptions>(DEFAULT_TASK_VIEW_OPTIONS);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
-  const byStatus = collectBoardCards();
+  const allByStatus = collectBoardCards();
+  const allCards = KANBAN_STATUSES.flatMap((status) => allByStatus[status]);
+  // Filter and sort inside each column: a column is a lifecycle stage, so cards
+  // must never migrate between columns because of a view option.
+  const byStatus = Object.fromEntries(
+    KANBAN_STATUSES.map((status) => [
+      status,
+      applyTaskViewOptions(allByStatus[status], viewOptions, boardCardViewItem),
+    ])
+  ) as Record<KanbanStatus, BoardCard[]>;
+  const filteredEmpty =
+    hasActiveTaskViewFilter(viewOptions) &&
+    allCards.length > 0 &&
+    KANBAN_STATUSES.every((status) => byStatus[status].length === 0);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveCard((event.active.data.current as { card: BoardCard } | undefined)?.card ?? null);
@@ -114,7 +154,14 @@ export const KanbanBoard = observer(function KanbanBoard() {
           <Badge variant="secondary" className="text-[10px]">
             Alpha
           </Badge>
-          <span className="text-xs text-foreground-tertiary-passive">{t('kanban.alphaHint')}</span>
+          <span className="min-w-0 flex-1 truncate text-xs text-foreground-tertiary-passive">
+            {filteredEmpty ? t('taskViewOptions.emptyFiltered') : t('kanban.alphaHint')}
+          </span>
+          <TaskViewOptionsMenu
+            items={allCards.map(boardCardViewItem)}
+            options={viewOptions}
+            onChange={setViewOptions}
+          />
         </div>
         <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
           {KANBAN_STATUSES.map((status) => (

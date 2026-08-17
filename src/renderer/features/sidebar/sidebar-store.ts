@@ -30,6 +30,7 @@ import {
   type TaskStore,
 } from '@renderer/features/tasks/stores/task';
 import type { TaskSessionVisibleStatus } from '@renderer/features/tasks/stores/task-selectors';
+import { taskViewItemFields } from '@renderer/features/tasks/stores/task-view-item';
 import type { WorkspaceStore } from '@renderer/features/workspaces/workspace-store';
 import { rpc } from '@renderer/lib/ipc';
 import type { AgentRuntimeStore } from '@renderer/lib/stores/agent-runtime-store';
@@ -492,7 +493,12 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     return statuses.sort((left, right) => priority[left] - priority[right])[0] ?? null;
   }
 
-  private taskPriorityGroup(task: TaskStore): SidebarTaskPriorityGroup {
+  /**
+   * A task's live status, as the product names it. Public because every surface
+   * that lists tasks (sidebar, kanban view, standalone board) must classify a
+   * task identically — see `@shared/task-view-options`.
+   */
+  taskPriorityGroup(task: TaskStore): SidebarTaskPriorityGroup {
     const data = registeredTaskData(task);
     if (data?.archivedAt) return 'archived';
 
@@ -593,10 +599,11 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
    * "has a session", not "is running": a card that vanished the moment its
    * agent finished would defeat the point of watching it.
    *
-   * Deliberately uncapped: the board filters this list and applies its card cap
-   * afterwards, so filtering surfaces the next matching sessions instead of
-   * thinning an already-truncated set. Each entry carries its status and project
-   * name because the board window only mounts the projects it ends up showing.
+   * Deliberately uncapped: the board filters and sorts this list and applies its
+   * card cap afterwards, so filtering surfaces the next matching sessions instead
+   * of thinning an already-truncated set. Each entry carries a full
+   * `TaskViewItem` because the board window only mounts the projects it ends up
+   * showing and cannot resolve those fields itself.
    */
   get standaloneKanbanPanes(): StandaloneKanbanPane[] {
     const panes: StandaloneKanbanPane[] = [];
@@ -604,15 +611,15 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       if (row.kind !== 'task') continue;
       const project = this.projectManager.projects.get(row.projectId);
       if (!project) continue;
+      const projectName =
+        project.state === 'unregistered' ? row.projectId : project.displayName || row.projectId;
       const task = project.mountedProject?.taskManager.tasks.get(row.taskId);
       if (!task || registeredTaskData(task)?.archivedAt) continue;
       if (!Object.values(task.conversationStats).some((count) => count > 0)) continue;
       panes.push({
         projectId: row.projectId,
         taskId: row.taskId,
-        status: this.taskPriorityGroup(task),
-        projectName:
-          project.state === 'unregistered' ? row.projectId : project.displayName || row.projectId,
+        ...taskViewItemFields(task, this.taskPriorityGroup(task), projectName),
       });
     }
     return panes;
