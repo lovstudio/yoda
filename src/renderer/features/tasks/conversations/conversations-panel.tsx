@@ -20,10 +20,12 @@ import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
 import type { FrontendPty } from '@renderer/lib/pty/pty';
+import { isStandaloneKanbanWindowLaunch } from '@renderer/lib/standalone-kanban-window-launch-target';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { log } from '@renderer/utils/logger';
+import { cn } from '@renderer/utils/utils';
 import { taskOpenTransitionStore } from '../task-open-transition-store';
 import type { ConversationManagerStore, ConversationStore } from './conversation-manager';
 import { ConversationSession } from './conversation-session';
@@ -35,9 +37,16 @@ export { getResumeInitialSize } from './conversation-session';
 
 export const ConversationsPanel = observer(function ConversationsPanel({
   forceVisible = false,
+  bare = false,
 }: {
   /** Detached task windows are outside the main workspace route but still own a visible session. */
   forceVisible?: boolean;
+  /**
+   * Show the agent TUI alone, without Yoda's own chrome around it. The
+   * standalone kanban board tiles many sessions at once and each card is meant
+   * to be the terminal itself.
+   */
+  bare?: boolean;
 }) {
   const { projectId, taskId } = useTaskViewContext();
   const { params } = useParams('task');
@@ -146,9 +155,16 @@ export const ConversationsPanel = observer(function ConversationsPanel({
   // PaneSizingProvider only validates resize ownership for the active session.
   // Supplying every open conversation used to resolve every tab before the
   // terminal could mount; one stable O(1) entry is sufficient here.
+  //
+  // The standalone board is an observer: its cards show the session output but
+  // do not resize the backend PTY. Only the main window (or a routed task window)
+  // controls PTY dimensions. This prevents the narrow board cards (420px) from
+  // overriding a wider main-window layout.
+  const effectiveActiveSessionId =
+    !isStandaloneKanbanWindowLaunch && activeSessionId ? activeSessionId : null;
   const paneSessionIds = useMemo(
-    () => (activeSessionId ? [activeSessionId] : []),
-    [activeSessionId]
+    () => (effectiveActiveSessionId ? [effectiveActiveSessionId] : []),
+    [effectiveActiveSessionId]
   );
 
   const isDebugTracing = log.level === 'debug';
@@ -249,7 +265,12 @@ export const ConversationsPanel = observer(function ConversationsPanel({
       data-conversations-panel-root
       className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-[var(--xterm-bg)]"
     >
-      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden px-2 pt-2">
+      <div
+        className={cn(
+          'flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden px-2',
+          bare ? 'py-2' : 'pt-2'
+        )}
+      >
         <div
           ref={containerRef}
           tabIndex={-1}
@@ -261,7 +282,7 @@ export const ConversationsPanel = observer(function ConversationsPanel({
           <PaneSizingProvider
             paneId={`conversations:${projectId}:${taskId}`}
             sessionIds={paneSessionIds}
-            activeSessionId={activeSessionId}
+            activeSessionId={effectiveActiveSessionId}
             registrationEnabled={!isInterfaceSettingsLoading}
           >
             {hasConversationLoadError ? (
@@ -297,7 +318,7 @@ export const ConversationsPanel = observer(function ConversationsPanel({
        * whole screen (duplicate banners in scrollback) and leaves the backend
        * and xterm on different row counts until an unrelated resize.
        */}
-      {!hasConversationLoadError && (isResolvingConversation || activeConversation) ? (
+      {!bare && !hasConversationLoadError && (isResolvingConversation || activeConversation) ? (
         <DockedSessionHistory
           key={activeConversation ? `${taskId}:${activeConversation.data.id}` : `${taskId}:pending`}
           active={

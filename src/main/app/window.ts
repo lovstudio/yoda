@@ -187,7 +187,7 @@ function createAppWindow(
     ...(bounds.x !== undefined && bounds.y !== undefined ? { x: bounds.x, y: bounds.y } : {}),
     minWidth: minSize.width,
     minHeight: minSize.height,
-    title: PRODUCT_NAME,
+    title: isStandaloneKanbanWindow ? 'Yoda 看板' : PRODUCT_NAME,
     backgroundColor: '#111111',
     // In production, electron-builder injects the icon from the app bundle.
     ...(import.meta.env.DEV && { icon: appIcon }),

@@ -110,7 +110,6 @@ export const AppTabStrip = observer(function AppTabStrip() {
   const { t } = useTranslation();
   const { visibleTabs, activeTabId } = appState.appTabs;
   const { navigate } = useNavigate();
-  const showNewConversationModal = useShowModal('newConversationModal');
 
   // The strip is scope-isolated, so the first task/project tab carries the
   // active scope's identity.
@@ -118,29 +117,13 @@ export const AppTabStrip = observer(function AppTabStrip() {
     ?.params as { projectId?: string; taskId?: string } | undefined;
   const projectId = typeof scopeParams?.projectId === 'string' ? scopeParams.projectId : undefined;
   const taskId = typeof scopeParams?.taskId === 'string' ? scopeParams.taskId : undefined;
-  const provisionedTask =
-    projectId && taskId ? asProvisioned(getTaskStore(projectId, taskId)) : undefined;
 
-  // Inside a task, the strip's "+" creates another conversation in that task.
-  // Elsewhere, go to the home draft page for creating a new task.
+  // The strip's "+" always creates a new task in the current project scope.
   const handleNewSession = () => {
-    if (projectId && taskId) {
-      if (!provisionedTask) return;
-      showNewConversationModal({
-        projectId,
-        taskId,
-        onSuccess: ({ conversationIds }) => {
-          const conversationId = conversationIds[0];
-          if (conversationId) provisionedTask.taskView.tabManager.openConversation(conversationId);
-          provisionedTask.taskView.setFocusedRegion('main');
-        },
-      });
-      return;
-    }
     navigate('home', projectId ? { projectId } : undefined);
   };
-  const newSessionLabel = taskId ? t('tasks.tabs.newConversation') : t('sidebar.newTask');
-  const newSessionDisabled = Boolean(taskId && !provisionedTask);
+  const newSessionLabel = t('sidebar.newTask');
+  const newSessionDisabled = false;
 
   // Dropping a pinned entity or shell pin on the strip moves/reopens it here
   // and shows it — same meaning as dropping on the central column.

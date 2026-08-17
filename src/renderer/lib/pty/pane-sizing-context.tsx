@@ -162,6 +162,9 @@ export function PaneSizingProvider({
       lastDimensionsRef.current = dims;
       // Keep dedup per session: pin/unpin can move the active session between
       // panes, and a restarted session gets a new FrontendPty with no prior dims.
+      // When activeSessionId is explicitly null (standalone board observer panes),
+      // xterm still resizes locally but the backend PTY is not touched — only
+      // the pane that owns the session can resize its backend dimensions.
       if (FrontendPty.noteResize(validActiveSessionId, dims.cols, dims.rows)) {
         void rpc.pty.resize(validActiveSessionId, dims.cols, dims.rows);
       }

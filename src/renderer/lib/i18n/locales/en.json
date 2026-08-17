@@ -6705,7 +6705,7 @@
     "loadFailed": "Failed to read hooks",
     "copyError": "Copy error"
   },
-  "standaloneKanban.title": "Agent Board ({{count}})",
+  "standaloneKanban.title": "Yoda Board",
   "standaloneKanban.emptyState": "No active sessions to display",
   "standaloneKanban.cardLoading": "Loading session...",
   "standaloneKanban.openInMainWindow": "Open in main window"
