@@ -1,5 +1,6 @@
 import { comparer, reaction } from 'mobx';
 import { rpc } from '@renderer/lib/ipc';
+import { isStandaloneKanbanWindowLaunch } from '@renderer/lib/standalone-kanban-window-launch-target';
 import { isTaskWindowLaunch } from '@renderer/lib/task-window-launch-target';
 import { viewStateCache } from './view-state-cache';
 
@@ -27,7 +28,10 @@ export class SnapshotRegistry {
     // Warm the cache with the current snapshot value immediately on register.
     viewStateCache.set(key, getSnapshot());
 
-    if (isTaskWindowLaunch) {
+    // Task and board windows read state but never own it. The board in
+    // particular force-opens a conversation tab per card, so letting it persist
+    // would rewrite the user's real tab layout in the main window.
+    if (isTaskWindowLaunch || isStandaloneKanbanWindowLaunch) {
       const disposer = () => {
         viewStateCache.delete(key);
         this.disposers.delete(key);

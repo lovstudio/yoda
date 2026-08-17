@@ -6698,5 +6698,7 @@
     "readOnlyDescription": "Global hooks are owned by the client's own settings file. To disable one for a single task, use that task's Hooks panel.",
     "loadFailed": "Failed to read hooks",
     "copyError": "Copy error"
-  }
+  },
+  "standaloneKanban.title": "Agent Board ({{count}})",
+  "standaloneKanban.emptyState": "No active sessions to display"
 }
