@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { TokenBuckets } from '@shared/stats';
 import { mergeClaudeHistoricalUsage, parseClaudeStatsCache } from './claude-stats-cache';
 
 describe('Claude stats cache', () => {
@@ -40,7 +41,7 @@ describe('Claude stats cache', () => {
     });
   });
 
-  it('adds only tracked daily usage after the cache cutoff', () => {
+  it('adds tracked usage the Claude-only baseline cannot cover', () => {
     const historical = parseClaudeStatsCache(
       JSON.stringify({
         lastComputedDate: '2026-04-28',
@@ -56,33 +57,27 @@ describe('Claude stats cache', () => {
     );
     expect(historical).not.toBeNull();
 
-    const merged = mergeClaudeHistoricalUsage(historical!, [
-      {
-        date: '2026-04-28',
-        tokens: {
-          input: 99,
-          output: 0,
-          cacheRead: 0,
-          cacheCreation: 0,
-          reasoning: 0,
-          total: 99,
-        },
-      },
-      {
-        date: '2026-04-29',
-        tokens: {
-          input: 2,
-          output: 3,
-          cacheRead: 5,
-          cacheCreation: 7,
-          reasoning: 0,
-          total: 17,
-        },
-      },
-    ]);
+    const bucket = (input: number): TokenBuckets => ({
+      input,
+      output: 0,
+      cacheRead: 0,
+      cacheCreation: 0,
+      reasoning: 0,
+      total: input,
+    });
 
-    expect(merged.tokens.total).toBe(27);
-    expect(merged.recentTrackedTokens.total).toBe(17);
+    const merged = mergeClaudeHistoricalUsage(
+      historical!,
+      [
+        // 99 Claude (already in the baseline) + 40 Codex on a pre-cutoff day.
+        { date: '2026-04-28', tokens: bucket(139) },
+        { date: '2026-04-29', tokens: bucket(17) },
+      ],
+      [{ date: '2026-04-28', tokens: bucket(99) }]
+    );
+
+    expect(merged.mergedTrackedTokens.total).toBe(57);
+    expect(merged.tokens.total).toBe(67);
   });
 
   it('rejects caches without a trustworthy cutoff', () => {

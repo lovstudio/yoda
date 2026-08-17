@@ -96,16 +96,45 @@ export async function readClaudeStatsCache(
   }
 }
 
+/**
+ * The Claude cache only covers Claude, so it is a baseline for that runtime
+ * alone. Everything it does not already contain has to come from tracked
+ * daily usage: all runtimes after the cutoff, and every non-Claude runtime
+ * before it. Adding only Claude's own recent days would put the headline
+ * below single-project totals that already count Codex and friends.
+ */
 export function mergeClaudeHistoricalUsage(
   historical: ClaudeHistoricalUsage,
-  trackedDaily: readonly DailyTokenUsage[]
-): { tokens: TokenBuckets; recentTrackedTokens: TokenBuckets } {
+  trackedDaily: readonly DailyTokenUsage[],
+  claudeTrackedDaily: readonly DailyTokenUsage[]
+): { tokens: TokenBuckets; mergedTrackedTokens: TokenBuckets } {
+  const claudeByDate = new Map(claudeTrackedDaily.map((day) => [day.date, day.tokens]));
   const tokens = { ...historical.tokens };
-  const recentTrackedTokens = emptyTokenBuckets();
+  const mergedTrackedTokens = emptyTokenBuckets();
   for (const day of trackedDaily) {
-    if (day.date <= historical.cacheThroughDate) continue;
-    addTokenBuckets(recentTrackedTokens, day.tokens);
+    if (day.date > historical.cacheThroughDate) {
+      addTokenBuckets(mergedTrackedTokens, day.tokens);
+      continue;
+    }
+    // Claude's share of this day is already inside the baseline.
+    const claudeDay = claudeByDate.get(day.date);
+    addTokenBuckets(
+      mergedTrackedTokens,
+      claudeDay ? subtractTokenBuckets(day.tokens, claudeDay) : day.tokens
+    );
   }
-  addTokenBuckets(tokens, recentTrackedTokens);
-  return { tokens, recentTrackedTokens };
+  addTokenBuckets(tokens, mergedTrackedTokens);
+  return { tokens, mergedTrackedTokens };
+}
+
+/** Clamped at zero — the two sources are independent counts, not a ledger. */
+function subtractTokenBuckets(total: TokenBuckets, part: TokenBuckets): TokenBuckets {
+  return {
+    input: Math.max(0, total.input - part.input),
+    output: Math.max(0, total.output - part.output),
+    cacheRead: Math.max(0, total.cacheRead - part.cacheRead),
+    cacheCreation: Math.max(0, total.cacheCreation - part.cacheCreation),
+    reasoning: Math.max(0, total.reasoning - part.reasoning),
+    total: Math.max(0, total.total - part.total),
+  };
 }
