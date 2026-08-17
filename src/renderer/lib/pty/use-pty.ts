@@ -9,6 +9,7 @@ import {
   TERMINAL_LINK_OPEN_CHANGED_EVENT,
   type TerminalLinkOpenSettings,
 } from '@shared/terminal-settings';
+import { openFilePathReportingFailure } from '@renderer/lib/components/file-path-operations';
 import { imagePathMention, isImagePath } from '@renderer/lib/image-path-mention';
 import { events, rpc } from '@renderer/lib/ipc';
 import { log } from '@renderer/utils/logger';
@@ -33,6 +34,7 @@ import {
   shouldPasteToTerminal,
 } from './pty-keybindings';
 import { writeTextToClipboard } from './terminal-clipboard';
+import { reportTerminalFileLinkFailure } from './terminal-file-link-actions';
 import { buildTerminalFileLinkOpenRequest } from './terminal-file-link-open';
 import type { TerminalFileLinkOptions, TerminalFileLinkTarget } from './terminal-file-links';
 import { transformTerminalPasteText } from './terminal-image-paste';
@@ -501,7 +503,10 @@ export function usePty(
       return;
     }
     rpc.app.openExternal(url).catch((error) => {
-      log.warn('Failed to open URL from terminal', { url, error });
+      reportTerminalFileLinkFailure(error instanceof Error ? error.message : String(error), {
+        url,
+        stage: 'open-url',
+      });
     });
   }, []);
 
@@ -509,32 +514,21 @@ export function usePty(
     const options = fileLinksRef.current;
     if (!options) return;
 
-    const openRequest = buildTerminalFileLinkOpenRequest(
-      resolveTerminalFileHandler(linkOpenRef.current, target.absolutePath ?? target.filePath),
-      target,
-      options
+    const handler = resolveTerminalFileHandler(
+      linkOpenRef.current,
+      target.absolutePath ?? target.filePath
     );
+    const openRequest = buildTerminalFileLinkOpenRequest(handler, target, options);
     if (!openRequest) {
       options.onOpen(target);
       return;
     }
 
-    void rpc.app
-      .openIn(openRequest)
-      .then((result) => {
-        if (!result.success) {
-          log.warn('Failed to open terminal smart path externally', {
-            path: target.absolutePath,
-            error: result.error,
-          });
-        }
-      })
-      .catch((error) => {
-        log.warn('Failed to open terminal smart path externally', {
-          path: target.absolutePath,
-          error,
-        });
-      });
+    void openFilePathReportingFailure(openRequest, {
+      handler,
+      text: target.originalText,
+      sshConnectionId: options.sshConnectionId,
+    });
   }, []);
 
   const getLinkTargetAtEvent = useCallback((event: MouseEvent): TerminalLinkTarget | null => {

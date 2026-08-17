@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getAppById, type OpenInRequest } from '@shared/openInApps';
+import { getAppById } from '@shared/openInApps';
 import { openProjectFileTab } from '@renderer/features/project-file/project-file-session';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
@@ -33,7 +33,7 @@ import {
   buildFilePathOpenInRequest,
   type FilePathOpenTarget,
 } from './file-path-open';
-import { executeFilePathOpenRequest } from './file-path-operations';
+import { openFilePathReportingFailure } from './file-path-operations';
 
 /**
  * Context-free file actions for any UI that references a path on disk:
@@ -64,16 +64,13 @@ export function useFilePathActions(target: FilePathTarget) {
         : () => void copyFileContent(target.absolutePath, target.sshConnectionId ?? null, t),
     openFile: isRemote
       ? () =>
-          void openIn(
-            {
-              app: 'terminal',
-              path: target.absolutePath,
-              isRemote: true,
-              sshConnectionId: target.sshConnectionId ?? null,
-            },
-            t
-          )
-      : () => void openIn(buildFilePathDefaultOpenRequest(target), t),
+          void openFilePathReportingFailure({
+            app: 'terminal',
+            path: target.absolutePath,
+            isRemote: true,
+            sshConnectionId: target.sshConnectionId ?? null,
+          })
+      : () => void openFilePathReportingFailure(buildFilePathDefaultOpenRequest(target)),
   };
 }
 
@@ -175,7 +172,7 @@ export function FilePathMenuItems({
           className="whitespace-nowrap"
           onClick={(event) => {
             event.stopPropagation();
-            void openIn(buildFilePathOpenInRequest(app.id, target), t);
+            void openFilePathReportingFailure(buildFilePathOpenInRequest(app.id, target));
             onAfterAction?.();
           }}
         >
@@ -495,16 +492,4 @@ function resultErrorMessage(error: unknown): string | undefined {
   if (typeof record.message === 'string') return record.message;
   if (typeof record.detail === 'string') return record.detail;
   return undefined;
-}
-
-async function openIn(args: OpenInRequest, t: (key: string) => string): Promise<void> {
-  try {
-    await executeFilePathOpenRequest(args);
-  } catch (error) {
-    toast({
-      title: t('fileActions.openFailed'),
-      description: error instanceof Error ? error.message : String(error),
-      variant: 'destructive',
-    });
-  }
 }

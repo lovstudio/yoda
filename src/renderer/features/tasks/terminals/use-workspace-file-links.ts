@@ -4,10 +4,11 @@ import { openProjectFileTab } from '@renderer/features/project-file/project-file
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import type { TaskViewStore } from '@renderer/features/tasks/stores/task-view';
 import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
-import { buildFilePathDefaultOpenRequest } from '@renderer/lib/components/file-path-open';
-import { toast } from '@renderer/lib/hooks/use-toast';
-import i18n from '@renderer/lib/i18n';
 import { rpc } from '@renderer/lib/ipc';
+import {
+  openTerminalFileLinkExternally,
+  reportTerminalFileLinkFailure,
+} from '@renderer/lib/pty/terminal-file-link-actions';
 import {
   getTerminalFileLinkInternalDestination,
   type TerminalFileLinkInternalDestination,
@@ -38,7 +39,7 @@ export function useWorkspaceFileLinks(
       homeDir: typeof homeDir === 'string' ? homeDir : undefined,
       sshConnectionId: remoteConnectionId,
       onOpen: (target) => {
-        const { absolutePath, line, column, isDirectory } = target;
+        const { line, column } = target;
         const destination = getTerminalFileLinkInternalDestination(target, {
           sshConnectionId: remoteConnectionId,
         });
@@ -46,17 +47,7 @@ export function useWorkspaceFileLinks(
           void openFileInTaskSidebar(destination, provisionedTask.taskView, { line, column });
           return;
         }
-        if (absolutePath) {
-          void rpc.app.openIn(
-            buildFilePathDefaultOpenRequest({
-              absolutePath,
-              kind: isDirectory ? 'directory' : 'file',
-              sshConnectionId: remoteConnectionId,
-              line,
-              column,
-            })
-          );
-        }
+        void openTerminalFileLinkExternally(target, { sshConnectionId: remoteConnectionId });
       },
     }),
     [provisionedTask.path, provisionedTask.taskView, projectRoot, remoteConnectionId, homeDir]
@@ -76,11 +67,9 @@ async function openFileInTaskSidebar(
   if (destination.placement === 'global') {
     const result = await rpc.app.authorizeExternalFile(destination.path);
     if (!result.success) {
-      toast({
-        title: i18n.t('fileActions.openFailed'),
-        description: destination.path,
-        variant: 'destructive',
-        debugInfo: { path: destination.path, error: result.error },
+      reportTerminalFileLinkFailure(result.error, {
+        path: destination.path,
+        stage: 'authorize',
       });
       return;
     }
@@ -114,7 +103,8 @@ export function useDefaultWorkspaceFileLinks(
       workspaceRoot: resolvedWorkspaceRoot,
       homeDir: resolvedHomeDir,
       sshConnectionId: remoteConnectionId,
-      onOpen: ({ filePath, absolutePath, line, column, isDirectory }) => {
+      onOpen: (target) => {
+        const { filePath, absolutePath, isDirectory } = target;
         if (!isDirectory && projectId && filePath) {
           openProjectFileTab(projectId, filePath);
           return;
@@ -123,16 +113,7 @@ export function useDefaultWorkspaceFileLinks(
           openProjectFileTab(null, absolutePath);
           return;
         }
-        if (!absolutePath) return;
-        void rpc.app.openIn(
-          buildFilePathDefaultOpenRequest({
-            absolutePath,
-            kind: isDirectory ? 'directory' : 'file',
-            sshConnectionId: remoteConnectionId,
-            line,
-            column,
-          })
-        );
+        void openTerminalFileLinkExternally(target, { sshConnectionId: remoteConnectionId });
       },
     };
   }, [projectId, remoteConnectionId, resolvedHomeDir, resolvedWorkspaceRoot]);

@@ -30,6 +30,7 @@
     "contentCopied": "File content copied",
     "contentCopiedTruncated": "File content copied (truncated — file too large)",
     "openFailed": "Open failed",
+    "openFailedUnresolved": "Could not resolve this path to a file on disk",
     "currentLabel": "{{label}} (current)"
   },
   "externalFileDrop": {

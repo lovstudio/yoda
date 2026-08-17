@@ -31,14 +31,6 @@ export function getTerminalFileLinkInternalDestination(
   return null;
 }
 
-/** Keep terminal surfaces lightweight; load the global file-tab lifecycle only on demand. */
-export async function openTerminalGlobalFileInYoda(filePath: string): Promise<void> {
-  const { openProjectFileTab } = await import(
-    '@renderer/features/project-file/project-file-navigation'
-  );
-  openProjectFileTab(null, filePath);
-}
-
 /**
  * Turn the resolved handler into an OS-level open request, or null when the
  * current surface should keep ownership and open the target inside Yoda.

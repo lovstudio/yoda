@@ -43,6 +43,7 @@
     "contentCopied": "全文已复制",
     "contentCopiedTruncated": "全文已复制（文件过大，已截断）",
     "openFailed": "打开失败",
+    "openFailedUnresolved": "未能定位到这个路径对应的文件",
     "currentLabel": "{{label}}（当前）"
   },
   "externalFileDrop": {
