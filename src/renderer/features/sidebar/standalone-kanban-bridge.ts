@@ -28,10 +28,12 @@ export function startStandaloneKanbanBridge(): () => void {
   });
 
   const reactionDisposer = reaction(
-    () => (isOpen.get() ? appState.sidebar.standaloneKanbanPanes : []),
-    (panes) => {
+    (): StandaloneKanbanWindowTarget => ({
+      panes: isOpen.get() ? appState.sidebar.standaloneKanbanPanes : [],
+      maxPanes: appState.sidebar.standaloneKanbanMaxPanes,
+    }),
+    (target) => {
       if (!isOpen.get()) return;
-      const target: StandaloneKanbanWindowTarget = { panes };
       void rpc.app.updateStandaloneKanbanPanes(target);
     },
     { equals: comparer.structural }

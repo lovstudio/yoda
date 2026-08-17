@@ -6707,5 +6707,10 @@
   "standaloneKanban.title": "Yoda 看板",
   "standaloneKanban.emptyState": "暂无活跃会话",
   "standaloneKanban.cardLoading": "会话加载中",
-  "standaloneKanban.openInMainWindow": "在主窗口打开"
+  "standaloneKanban.openInMainWindow": "在主窗口打开",
+  "standaloneKanban.filter": "筛选",
+  "standaloneKanban.filterByStatus": "按状态",
+  "standaloneKanban.filterByProject": "按项目",
+  "standaloneKanban.filterClear": "清除筛选",
+  "standaloneKanban.emptyFiltered": "没有符合筛选条件的会话"
 }

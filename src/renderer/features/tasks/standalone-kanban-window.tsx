@@ -1,17 +1,23 @@
 import { PanelRightOpen } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { standaloneKanbanPanesChangedChannel } from '@shared/events/appEvents';
 import {
   STANDALONE_KANBAN_MIN_PANE_WIDTH,
-  type StandaloneKanbanPane,
   type StandaloneKanbanWindowTarget,
 } from '@shared/standalone-kanban-window';
 import { openProvisionedTaskTab } from '@renderer/app/open-task-target';
 import { TaskPaneHeader } from '@renderer/features/tasks/components/task-pane-header';
 import { EditorProvider } from '@renderer/features/tasks/editor/editor-provider';
 import { useHostedTaskLifecycle } from '@renderer/features/tasks/hooks/use-hosted-task-lifecycle';
+import {
+  EMPTY_STANDALONE_KANBAN_FILTER,
+  filterStandaloneKanbanPanes,
+  isStandaloneKanbanFilterActive,
+  StandaloneKanbanFilterMenu,
+  type StandaloneKanbanFilter,
+} from '@renderer/features/tasks/standalone-kanban-filter';
 import {
   asProvisioned,
   getTaskStore,
@@ -45,14 +51,20 @@ export const StandaloneKanbanWindow = observer(function StandaloneKanbanWindow({
 }) {
   useTheme();
   const { t } = useTranslation();
-  const [panes, setPanes] = useState<StandaloneKanbanPane[]>(initialTarget.panes);
+  const [target, setTarget] = useState<StandaloneKanbanWindowTarget>(initialTarget);
+  const [filter, setFilter] = useState<StandaloneKanbanFilter>(EMPTY_STANDALONE_KANBAN_FILTER);
   const scrollRef = useHorizontalWheelScroll();
 
   useEffect(() => {
-    return events.on(standaloneKanbanPanesChangedChannel, (target) => {
-      setPanes(target.panes);
-    });
+    return events.on(standaloneKanbanPanesChangedChannel, setTarget);
   }, []);
+
+  // The ranking arrives uncapped so filtering can reach past the cap; the cards
+  // shown are what survives the filter, truncated to the user's card count.
+  const panes = useMemo(
+    () => filterStandaloneKanbanPanes(target.panes, filter, target.maxPanes),
+    [target, filter]
+  );
 
   // Each pane's task lives in its project; mount every distinct project.
   useEffect(() => {
@@ -72,14 +84,19 @@ export const StandaloneKanbanWindow = observer(function StandaloneKanbanWindow({
       <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground">
         <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background-secondary pl-20 pr-2 dark:bg-background [-webkit-app-region:drag]">
           <span className="h-3.5 w-px shrink-0 bg-border" aria-hidden />
-          <span className="min-w-0 truncate text-xs font-medium text-foreground-muted">
-            {t('standaloneKanban.title', { count: panes.length })}
+          <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground-muted">
+            {t('standaloneKanban.title')}
           </span>
+          <StandaloneKanbanFilterMenu panes={target.panes} filter={filter} onChange={setFilter} />
         </div>
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
           {panes.length === 0 ? (
             <div className="flex h-full items-center justify-center">
-              <p className="text-sm text-foreground-muted">{t('standaloneKanban.emptyState')}</p>
+              <p className="text-sm text-foreground-muted">
+                {isStandaloneKanbanFilterActive(filter) && target.panes.length > 0
+                  ? t('standaloneKanban.emptyFiltered')
+                  : t('standaloneKanban.emptyState')}
+              </p>
             </div>
           ) : (
             <div className="flex h-full items-stretch gap-3 p-3">
