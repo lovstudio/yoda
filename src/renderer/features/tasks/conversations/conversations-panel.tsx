@@ -24,6 +24,7 @@ import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { log } from '@renderer/utils/logger';
+import { cn } from '@renderer/utils/utils';
 import { taskOpenTransitionStore } from '../task-open-transition-store';
 import type { ConversationManagerStore, ConversationStore } from './conversation-manager';
 import { ConversationSession } from './conversation-session';
@@ -35,9 +36,16 @@ export { getResumeInitialSize } from './conversation-session';
 
 export const ConversationsPanel = observer(function ConversationsPanel({
   forceVisible = false,
+  bare = false,
 }: {
   /** Detached task windows are outside the main workspace route but still own a visible session. */
   forceVisible?: boolean;
+  /**
+   * Show the agent TUI alone, without Yoda's own chrome around it. The
+   * standalone kanban board tiles many sessions at once and each card is meant
+   * to be the terminal itself.
+   */
+  bare?: boolean;
 }) {
   const { projectId, taskId } = useTaskViewContext();
   const { params } = useParams('task');
@@ -249,7 +257,12 @@ export const ConversationsPanel = observer(function ConversationsPanel({
       data-conversations-panel-root
       className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-[var(--xterm-bg)]"
     >
-      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden px-2 pt-2">
+      <div
+        className={cn(
+          'flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden px-2',
+          bare ? 'py-2' : 'pt-2'
+        )}
+      >
         <div
           ref={containerRef}
           tabIndex={-1}
@@ -297,7 +310,7 @@ export const ConversationsPanel = observer(function ConversationsPanel({
        * whole screen (duplicate banners in scrollback) and leaves the backend
        * and xterm on different row counts until an unrelated resize.
        */}
-      {!hasConversationLoadError && (isResolvingConversation || activeConversation) ? (
+      {!bare && !hasConversationLoadError && (isResolvingConversation || activeConversation) ? (
         <DockedSessionHistory
           key={activeConversation ? `${taskId}:${activeConversation.data.id}` : `${taskId}:pending`}
           active={

@@ -197,7 +197,7 @@ const StandaloneKanbanCard = observer(function StandaloneKanbanCard({
       hosted
     >
       <EditorProvider key={taskId} taskId={taskId} projectId={projectId}>
-        <ConversationsPanel forceVisible />
+        <ConversationsPanel forceVisible bare />
       </EditorProvider>
     </TaskViewWrapper>
   );
