@@ -7,6 +7,7 @@ import {
   FileText,
   IdCard,
   Info,
+  Layers,
   PanelBottom,
   Plug,
   ScrollText,
@@ -32,6 +33,7 @@ import type {
   CodexSessionContext,
   ContextSkill,
 } from '@shared/conversations';
+import { findProjectFacet, formatFacetInstructions } from '@shared/project-facets';
 import { isPromptAvailableForTarget } from '@shared/prompt-library';
 import {
   asMounted,
@@ -52,6 +54,7 @@ import {
 import { getTaskMenuConversation } from '@renderer/features/tasks/components/task-menu-session-info';
 import { getHarnessContextQueryTiming } from '@renderer/features/tasks/harness-context-monitoring';
 import { HooksPanel } from '@renderer/features/tasks/hooks/hooks-panel';
+import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import {
   useRequireProvisionedTask,
   useTaskViewContext,
@@ -486,7 +489,16 @@ function PersonaSection({
   const { t } = useTranslation();
   const provisioned = useRequireProvisionedTask();
   const { data: libraryPrompts } = usePrompts();
-  const projectPrompts = getProjectSettingsStore(provisioned.projectId)?.settings?.promptPrinciples;
+  const projectSettings = getProjectSettingsStore(provisioned.projectId)?.settings;
+  const projectPrompts = projectSettings?.promptPrinciples;
+  // The facet block is appended at spawn from the same place as the prompts
+  // below, so it is shown as what it is: injected context, not task metadata.
+  const taskData = getTaskStore(provisioned.projectId, provisioned.taskId)?.data;
+  const facet =
+    showPromptPrinciples && taskData && 'facetId' in taskData
+      ? findProjectFacet(projectSettings?.facets, taskData.facetId)
+      : undefined;
+  const facetInstructions = facet ? formatFacetInstructions(facet) : undefined;
   const projectWorkspaceId = getProjectStore(provisioned.projectId)?.data?.workspaceId;
   const principles = showPromptPrinciples
     ? [
@@ -545,6 +557,18 @@ function PersonaSection({
           {!base && developerMessages.length === 0 && systemPromptHint ? (
             <Empty>{systemPromptHint}</Empty>
           ) : null}
+        </SubGroup>
+      ) : null}
+
+      {facet && facetInstructions ? (
+        <SubGroup label={t('facets.label')}>
+          <ContextItem
+            icon={<Layers className="size-3.5" />}
+            label={facet.name}
+            meta={formatBytes(facetInstructions.length)}
+            text={facetInstructions}
+            sourcePath={facet.contextFile}
+          />
         </SubGroup>
       ) : null}
 

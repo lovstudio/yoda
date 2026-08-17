@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    // DOM is pulled in for `URL` / `URLSearchParams` only. The package must stay
+    // isomorphic (Electron main, Node service, React Native), so it declares no
+    // `@types/node` dependency and touches no platform APIs beyond WHATWG URL.
+    "lib": ["ES2022", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": [],
+    "strict": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "noEmit": true
+  },
+  // Tests stay out of the package's own contract check: they need node + vitest
+  // types, and the repo-wide `tsc --noEmit` already covers them.
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

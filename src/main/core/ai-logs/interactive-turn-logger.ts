@@ -15,7 +15,13 @@ class InteractiveTurnLogger {
   private openTurns = new Map<string, string>();
   private sessionContexts = new Map<
     string,
-    { authProvider: string; maasPlatformId?: string; maasEffective: boolean }
+    {
+      authProvider: string;
+      maasPlatformId?: string;
+      maasEffective: boolean;
+      /** The `interactive-session` row this session's turns belong to. */
+      sessionLogId?: string;
+    }
   >();
 
   setSessionContext(
@@ -23,6 +29,17 @@ class InteractiveTurnLogger {
     context: { authProvider: string; maasPlatformId?: string; maasEffective: boolean }
   ): void {
     this.sessionContexts.set(conversationId, context);
+  }
+
+  /**
+   * Links subsequent turns to the session row they run inside. Called once the
+   * session's own log row exists, which is later than `setSessionContext` — the
+   * context is resolved while the process is still being prepared.
+   */
+  attachSessionLog(conversationId: string, sessionLogId: string): void {
+    const context = this.sessionContexts.get(conversationId);
+    if (!context) return;
+    this.sessionContexts.set(conversationId, { ...context, sessionLogId });
   }
 
   clearSessionContext(conversationId: string): void {
@@ -49,6 +66,7 @@ class InteractiveTurnLogger {
                   authProvider: context.authProvider,
                   maasEffective: String(context.maasEffective),
                   ...(context.maasPlatformId ? { maasPlatformId: context.maasPlatformId } : {}),
+                  ...(context.sessionLogId ? { sessionLogId: context.sessionLogId } : {}),
                 }
               : {}),
           },

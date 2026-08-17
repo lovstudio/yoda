@@ -1,6 +1,12 @@
+import { AGENT_REPLY_DISPLAY_LEVELS } from '@lovstudio/yoda-protocol/agent-reply-display';
+import { DEFAULT_MOBILE_SYNC_MODE, MOBILE_SYNC_MODES } from '@lovstudio/yoda-protocol/mobile-sync';
 import z from 'zod';
-import { AGENT_REPLY_DISPLAY_LEVELS } from '@shared/agent-reply-display';
-import { customThemeSelectionSchema, customThemesSettingsSchema } from '@shared/custom-theme';
+import {
+  BUILT_IN_THEMES,
+  customThemeSelectionSchema,
+  customThemesSettingsSchema,
+  type BuiltInTheme,
+} from '@shared/custom-theme';
 import {
   DEFAULT_LLM_PROFILE_ACCESS_METHOD,
   DEFAULT_LLM_PROFILE_ID,
@@ -21,6 +27,11 @@ import {
   MAX_CUSTOM_MODEL_PROVIDERS,
   MAX_CUSTOM_MODELS_PER_PROVIDER,
 } from '@shared/model-provider-catalog';
+import {
+  DEFAULT_NOTIFICATION_CENTER_SOURCES,
+  NOTIFICATION_SOURCES,
+  type NotificationSource,
+} from '@shared/notifications';
 import { openInAppIdSchema } from '@shared/openInApps';
 import { LEGACY_RUN_MODES, normalizeLegacyRunMode } from '@shared/paradigms/kinds';
 import { promptPrincipleSchema, taskOutputLanguageValues } from '@shared/project-settings';
@@ -52,15 +63,15 @@ import {
   DEFAULT_HOT_TERMINAL_LIMIT,
   DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
   DEFAULT_TERMINAL_CACHE_MODE,
+  DEFAULT_TERMINAL_LINK_OPEN,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
-  DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE,
   MAX_HOT_TERMINAL_LIMIT,
   MAX_IDLE_SESSION_TIMEOUT_MINUTES,
   MAX_TERMINAL_SCROLLBACK_LINES,
   MIN_HOT_TERMINAL_LIMIT,
   MIN_TERMINAL_SCROLLBACK_LINES,
   TERMINAL_CACHE_MODES,
-  TERMINAL_SMART_PATH_OPEN_MODES,
+  TERMINAL_LINK_URL_HANDLERS,
 } from '@shared/terminal-settings';
 import { DEFAULT_RUNTIME_ID } from './settings-registry';
 
@@ -80,6 +91,13 @@ export const localProjectSettingsSchema = z.object({
   writeAgentConfigToGitIgnore: z.boolean(),
 });
 
+const notificationCenterSourcesSchema = z.object(
+  Object.fromEntries(NOTIFICATION_SOURCES.map((source) => [source, z.boolean()])) as Record<
+    NotificationSource,
+    z.ZodBoolean
+  >
+);
+
 export const notificationSettingsSchema = z.object({
   enabled: z.boolean(),
   sound: z.boolean(),
@@ -91,6 +109,10 @@ export const notificationSettingsSchema = z.object({
   /** Show an in-app action when a Codex account quota reaches the configured threshold. */
   accountUsageWarningEnabled: z.boolean().catch(true),
   accountUsageWarningThreshold: z.number().int().min(1).max(100).catch(95),
+  /** Which producers may enter the in-app notification center. */
+  notificationCenterSources: notificationCenterSourcesSchema.catch(
+    DEFAULT_NOTIFICATION_CENTER_SOURCES
+  ),
 });
 
 const summaryContextSchema = z.object(
@@ -114,6 +136,22 @@ export const taskSettingsSchema = z.object({
   branchNaming: z.enum(['hash', 'ai']).catch('hash'),
   /** Agent that drives task naming. Empty = use the built-in naming Agent. */
   namingAgentId: z.string().catch(''),
+  /** Agent that rewrites the input prompt. Empty = built-in prompt-rewrite Agent. */
+  promptRewriteAgentId: z.string().catch(''),
+  /**
+   * Whether the input prompt is rewritten before it is sent. Optional on
+   * purpose: absent means "never set explicitly", so the value is inferred from
+   * `inputPromptLanguage`, which carried the on/off state before this switch
+   * existed. See resolvePromptRewriteEnabled.
+   */
+  promptRewriteEnabled: z.boolean().optional(),
+  /**
+   * Whether summaries may be generated without an explicit user request — the
+   * post-turn refresh and the panel's own `recent` note. An explicit
+   * regenerate always runs, so turning this off never makes summaries
+   * unreachable, only unprompted.
+   */
+  autoGenerateSummary: z.boolean().catch(true),
   /** Agent that drives session-summary generation. Empty = built-in summary Agent. */
   summaryAgentId: z.string().catch(''),
   /** Target language for rewriting the user's input prompt before sending. */
@@ -125,7 +163,8 @@ export const taskSettingsSchema = z.object({
   /** Which transcript parts feed the `global` summary (defaults to everything). */
   summaryContextGlobal: summaryContextSchema.catch(DEFAULT_SUMMARY_CONTEXT_GLOBAL),
   namingModel: z.string(),
-  namingLanguage: z.enum(taskOutputLanguageValues).catch('skip'),
+  /** Output language for generated task/session names. */
+  namingLanguage: z.enum(taskOutputLanguageValues).catch('app'),
   namingContext: z.object(
     Object.fromEntries(TASK_NAMING_CONTEXT_SOURCE_IDS.map((id) => [id, z.boolean()])) as Record<
       (typeof TASK_NAMING_CONTEXT_SOURCE_IDS)[number],
@@ -325,9 +364,6 @@ export const globalLlmSettingsSchema = z
       defaultProfileId: z.string(),
       namingProfileId: z.string(),
       imageGenerationProfileId: z.string(),
-      promptTranslationEnabled: z.boolean().catch(false),
-      promptTranslationProfileId: z.string(),
-      promptTranslationShowOriginal: z.boolean().catch(true),
     })
   )
   .transform((value) => normalizeLlmSettings(value));
@@ -416,62 +452,85 @@ export const runtimeModelCandidatesSettingsSchema = z.preprocess(
   })
 );
 
-export const terminalSettingsSchema = z.object({
-  fontFamily: z.string().optional(),
-  autoCopyOnSelection: z.boolean(),
-  smartPathOpenMode: z
-    .enum(TERMINAL_SMART_PATH_OPEN_MODES)
-    .catch(DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE)
-    .default(DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE),
-  scrollbackLines: z
-    .number()
-    .int()
-    .min(MIN_TERMINAL_SCROLLBACK_LINES)
-    .max(MAX_TERMINAL_SCROLLBACK_LINES)
-    .catch(DEFAULT_TERMINAL_SCROLLBACK_LINES),
-  hotTerminalMode: z.enum(TERMINAL_CACHE_MODES).catch(DEFAULT_TERMINAL_CACHE_MODE),
-  hotTerminalLimit: z
-    .number()
-    .int()
-    .min(MIN_HOT_TERMINAL_LIMIT)
-    .max(MAX_HOT_TERMINAL_LIMIT)
-    .catch(DEFAULT_HOT_TERMINAL_LIMIT),
-  idleSessionTimeoutMinutes: z
-    .number()
-    .int()
-    .min(0)
-    .max(MAX_IDLE_SESSION_TIMEOUT_MINUTES)
-    .catch(DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES),
+const terminalLinkFileHandlerSchema = z.union([
+  z.literal('yoda'),
+  z.literal('system'),
+  openInAppIdSchema,
+]);
+
+export const terminalLinkOpenSettingsSchema = z.object({
+  file: terminalLinkFileHandlerSchema.catch('yoda').default('yoda'),
+  url: z.enum(TERMINAL_LINK_URL_HANDLERS).catch('yoda').default('yoda'),
+  fileRules: z
+    .array(
+      z.object({
+        extensions: z.array(z.string()).catch([]).default([]),
+        handler: terminalLinkFileHandlerSchema.catch('yoda'),
+      })
+    )
+    .catch([])
+    .default([]),
 });
 
+export const terminalSettingsSchema = z.preprocess(
+  // Migrate the single internal/external switch this replaced: it decided files
+  // and URLs together, so "external" seeds both new handlers. Only a row written
+  // by the old version still carries the key — `z.object` strips it on the next
+  // write — so its presence is the migration signal. The reader merges defaults
+  // in before parsing, which means `linkOpen` is always present here and cannot
+  // be used to detect an already-migrated row.
+  (value) => {
+    if (!value || typeof value !== 'object') return value;
+    if ((value as { smartPathOpenMode?: unknown }).smartPathOpenMode !== 'external') return value;
+    return { ...value, linkOpen: { file: 'system', url: 'system', fileRules: [] } };
+  },
+  z.object({
+    fontFamily: z.string().optional(),
+    autoCopyOnSelection: z.boolean(),
+    linkOpen: terminalLinkOpenSettingsSchema.catch(DEFAULT_TERMINAL_LINK_OPEN).default(
+      // Cloned so a mutation through the settings object cannot reach the shared default.
+      () => ({ ...DEFAULT_TERMINAL_LINK_OPEN, fileRules: [] })
+    ),
+    scrollbackLines: z
+      .number()
+      .int()
+      .min(MIN_TERMINAL_SCROLLBACK_LINES)
+      .max(MAX_TERMINAL_SCROLLBACK_LINES)
+      .catch(DEFAULT_TERMINAL_SCROLLBACK_LINES),
+    hotTerminalMode: z.enum(TERMINAL_CACHE_MODES).catch(DEFAULT_TERMINAL_CACHE_MODE),
+    hotTerminalLimit: z
+      .number()
+      .int()
+      .min(MIN_HOT_TERMINAL_LIMIT)
+      .max(MAX_HOT_TERMINAL_LIMIT)
+      .catch(DEFAULT_HOT_TERMINAL_LIMIT),
+    idleSessionTimeoutMinutes: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_IDLE_SESSION_TIMEOUT_MINUTES)
+      .catch(DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES),
+  })
+);
+
+/** Selections that no longer ship; each maps onto the theme that replaced it. */
+const RETIRED_THEMES = ['emlight', 'emdark', 'ymatrix'] as const;
+
+const RETIRED_THEME_ALIASES: Record<(typeof RETIRED_THEMES)[number], BuiltInTheme> = {
+  emlight: 'ylight',
+  emdark: 'ydark',
+  // 'ymatrix' graduated into the ydark base palette.
+  ymatrix: 'ydark',
+};
+
 const legacyThemeSchema = z
-  .enum([
-    'ylight',
-    'ydark',
-    'ywarm',
-    'ygreen',
-    'ylight2',
-    'ydream',
-    'ydream-arina',
-    'ydream-night',
-    'ydream-fortune',
-    'ydream-scifi',
-    'ydream-clear',
-    'ydream-cosmos',
-    'ydream-purple',
-    'ydream-virtual',
-    'ydream-gold',
-    'ymatrix',
-    'emlight',
-    'emdark',
-  ])
-  .transform((value) => {
-    if (value === 'emlight') return 'ylight' as const;
-    if (value === 'emdark') return 'ydark' as const;
-    // 'ymatrix' graduated into the ydark base palette.
-    if (value === 'ymatrix') return 'ydark' as const;
-    return value;
-  });
+  .enum([...BUILT_IN_THEMES, ...RETIRED_THEMES])
+  .transform(
+    (value): BuiltInTheme =>
+      value in RETIRED_THEME_ALIASES
+        ? RETIRED_THEME_ALIASES[value as (typeof RETIRED_THEMES)[number]]
+        : (value as BuiltInTheme)
+  );
 
 const themeSelectionSchema = z.union([legacyThemeSchema, customThemeSelectionSchema]);
 
@@ -586,6 +645,8 @@ export const interfaceSettingsSchema = z.object({
   newTaskOpenMode: z.enum(['home', 'modal']).catch('home'),
   /** How much of the agent's transcript appears in the Session → Conversation surface. */
   agentReplyDisplayLevel: z.enum(AGENT_REPLY_DISPLAY_LEVELS).catch('concise'),
+  /** Level baked into a public share link, so recipients start at the intended depth. */
+  sessionShareDisplayLevel: z.enum(AGENT_REPLY_DISPLAY_LEVELS).catch('concise'),
   /** Dock the active session's prompt history at the bottom of the conversation pane. */
   dockSessionHistory: z.boolean(),
   /** Number of latest prompts shown after the first prompt in the docked history preview. */
@@ -664,6 +725,9 @@ export const homeDraftSchema = z.preprocess(
     /** When true, image attachments are sent as @path mentions instead of
      *  being pasted natively (clipboard + Ctrl+V) into the agent TUI. */
     attachImagesAsPaths: z.boolean(),
+    /** Project facet the next task should belong to. Facet ids are scoped to a
+     *  project, so this is cleared whenever the composer switches projects. */
+    facetId: z.string().nullable().default(null),
     /** Attachment-token registry backing the inline sentinels in `prompt` —
      *  label → absolute path. Persisted with the draft so tokens survive the
      *  composer remounting on navigation. */
@@ -715,6 +779,11 @@ export const updatesSettingsSchema = z.object({
   proxyUrl: z.string().default(''),
 });
 
+/** Which transports paired phones may use to reach this desktop. */
+export const mobileSyncSettingsSchema = z.object({
+  mode: z.enum(MOBILE_SYNC_MODES).default(DEFAULT_MOBILE_SYNC_MODE),
+});
+
 export const APP_SETTINGS_SCHEMA_MAP = {
   localProject: localProjectSettingsSchema,
   project: projectSettingsSchema,
@@ -742,6 +811,7 @@ export const APP_SETTINGS_SCHEMA_MAP = {
   statusline: statuslineSettingsSchema,
   promptPrinciples: promptPrinciplesSettingsSchema,
   updates: updatesSettingsSchema,
+  mobileSync: mobileSyncSettingsSchema,
 } as const;
 
 export const appSettingsSchema = z.object({
@@ -771,4 +841,5 @@ export const appSettingsSchema = z.object({
   statusline: statuslineSettingsSchema,
   promptPrinciples: promptPrinciplesSettingsSchema,
   updates: updatesSettingsSchema,
+  mobileSync: mobileSyncSettingsSchema,
 });

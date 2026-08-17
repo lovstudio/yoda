@@ -4,7 +4,10 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { openTaskTarget } from '@renderer/app/open-task-target';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
-import { interruptTaskSessions } from '@renderer/features/tasks/interrupt-task-sessions';
+import {
+  interruptConversationSession,
+  interruptTaskSessions,
+} from '@renderer/features/tasks/interrupt-task-sessions';
 import { registeredTaskData, type TaskStore } from '@renderer/features/tasks/stores/task';
 import {
   taskSessionStatusSummary,
@@ -12,12 +15,10 @@ import {
   type TaskSessionStatusSummary,
 } from '@renderer/features/tasks/stores/task-selectors';
 import AgentLogo from '@renderer/lib/components/agent-logo';
-import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { agentConfig } from '@renderer/utils/agentConfig';
-import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
 import { AgentStatusIndicator } from './agent-status-indicator';
 
@@ -67,26 +68,41 @@ export const TaskSessionStatusControl = observer(function TaskSessionStatusContr
 
   const handleInterruptSession = (conversationId: string) => {
     setInterruptingIds((current) => new Set(current).add(conversationId));
-    void rpc.conversations
-      .interruptConversation(taskData.projectId, taskData.id, conversationId)
-      .catch((error: unknown) => {
-        log.warn('TaskSessionStatusControl: failed to interrupt conversation', {
-          projectId: taskData.projectId,
-          taskId: taskData.id,
-          conversationId,
-          error,
-        });
-      })
-      .finally(() => {
-        setInterruptingIds((current) => {
-          const next = new Set(current);
-          next.delete(conversationId);
-          return next;
-        });
+    void interruptConversationSession({
+      projectId: taskData.projectId,
+      taskId: taskData.id,
+      conversationId,
+    }).finally(() => {
+      setInterruptingIds((current) => {
+        const next = new Set(current);
+        next.delete(conversationId);
+        return next;
       });
+    });
   };
 
   const triggerLabel = t('tasks.sessionStatus.manage', { count: summary.totalCount });
+
+  // A task with a single running session has exactly one action worth taking, so
+  // the aggregate popover is pure friction: hand the indicator that session's
+  // identity and it becomes the interrupt control itself (hover swaps the
+  // spinner for a stop icon). Opening the session is already what clicking the
+  // surrounding row does. Multiple sessions still go through the popover, where
+  // each row keeps its own interrupt button.
+  const soleSession = summary.totalCount === 1 ? summary.sessions[0] : undefined;
+  if (soleSession?.status === 'working') {
+    return (
+      <AgentStatusIndicator
+        status="working"
+        boxClassName={cn('rounded-md transition-colors hover:bg-background-tertiary-2', className)}
+        session={{
+          projectId: taskData.projectId,
+          taskId: taskData.id,
+          conversationId: soleSession.conversationId,
+        }}
+      />
+    );
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

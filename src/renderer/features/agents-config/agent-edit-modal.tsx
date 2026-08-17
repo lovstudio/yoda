@@ -1,13 +1,8 @@
+import type { AgentAccessMode } from '@lovstudio/yoda-protocol/access-mode';
 import { AlertTriangle, MousePointer2, Sparkles, X } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  agentToDraft,
-  emptyAgentDraft,
-  type Agent,
-  type AgentAccessMode,
-  type AgentDraft,
-} from '@shared/agents';
+import { agentToDraft, emptyAgentDraft, type Agent, type AgentDraft } from '@shared/agents';
 import { groupSkillFamilies, type SkillFamily } from '@shared/skills/grouping';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import SkillFamilyCount from '@renderer/features/skills/components/SkillFamilyCount';

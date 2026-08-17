@@ -5,17 +5,18 @@ import {
   DEFAULT_HOT_TERMINAL_LIMIT,
   DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
   DEFAULT_TERMINAL_CACHE_MODE,
-  DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE,
   MAX_HOT_TERMINAL_LIMIT,
   MAX_IDLE_SESSION_TIMEOUT_MINUTES,
   MAX_TERMINAL_SCROLLBACK_LINES,
   MIN_HOT_TERMINAL_LIMIT,
   MIN_TERMINAL_SCROLLBACK_LINES,
   normalizeTerminalScrollbackLines,
-  type TerminalSmartPathOpenMode,
+  resolveAutoTerminalCachePolicy,
+  type TerminalCacheCapacity,
 } from '@shared/terminal-settings';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { rpc } from '@renderer/lib/ipc';
+import { getCachedMachineCapacity, loadMachineCapacity } from '@renderer/lib/pty/machine-capacity';
 import { PtySession } from '@renderer/lib/pty/pty-session';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
@@ -29,6 +30,7 @@ import {
 } from '@renderer/lib/ui/select';
 import { Switch } from '@renderer/lib/ui/switch';
 import { SettingRow } from './SettingRow';
+import { TerminalLinkOpenRows } from './TerminalLinkOpenRows';
 
 type FontOption = {
   id: string;
@@ -46,6 +48,8 @@ const POPULAR_FONTS = [
   'Source Code Pro',
   'MesloLGS NF',
 ];
+
+const BYTES_PER_GIB = 1024 ** 3;
 
 const toOptionId = (font: string) =>
   `font-${font
@@ -70,12 +74,32 @@ const TerminalSettingsCard: React.FC = () => {
   const [search, setSearch] = useState<string>('');
   const [installedFonts, setInstalledFonts] = useState<string[] | null>(null);
   const [loadingFonts, setLoadingFonts] = useState<boolean>(false);
+  const [machineCapacity, setMachineCapacity] = useState<TerminalCacheCapacity | null>(
+    getCachedMachineCapacity
+  );
 
   const fontFamily = terminal?.fontFamily ?? '';
   const autoCopyOnSelection = terminal?.autoCopyOnSelection ?? true;
-  const smartPathOpenMode = terminal?.smartPathOpenMode ?? DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE;
   const hotTerminalMode = terminal?.hotTerminalMode ?? DEFAULT_TERMINAL_CACHE_MODE;
   const hotTerminalLimit = terminal?.hotTerminalLimit ?? DEFAULT_HOT_TERMINAL_LIMIT;
+  const autoHotTerminalLimit = useMemo(
+    () => resolveAutoTerminalCachePolicy(machineCapacity ?? {}).limit,
+    [machineCapacity]
+  );
+  // The derived number belongs next to the machine it was derived from, not in
+  // the option label — a bare "自动 (5)" reads like a fixed setting.
+  const hotTerminalMachineSummary = useMemo(() => {
+    const totalMemoryBytes = machineCapacity?.totalMemoryBytes ?? 0;
+    const cpuCount = machineCapacity?.cpuCount ?? 0;
+    if (totalMemoryBytes <= 0 || cpuCount <= 0) {
+      return t('settings.terminal.hotTerminalMachineProbing', { limit: autoHotTerminalLimit });
+    }
+    return t('settings.terminal.hotTerminalMachineSummary', {
+      cores: cpuCount,
+      memory: Math.round(totalMemoryBytes / BYTES_PER_GIB),
+      limit: autoHotTerminalLimit,
+    });
+  }, [autoHotTerminalLimit, machineCapacity, t]);
   const idleSessionTimeoutMinutes =
     terminal?.idleSessionTimeoutMinutes ?? DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES;
   const scrollbackLines = normalizeTerminalScrollbackLines(terminal?.scrollbackLines);
@@ -151,6 +175,16 @@ const TerminalSettingsCard: React.FC = () => {
     setScrollbackDraft(String(scrollbackLines));
   }, [scrollbackLines]);
 
+  useEffect(() => {
+    let active = true;
+    void loadMachineCapacity().then((capacity) => {
+      if (active && capacity) setMachineCapacity(capacity);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const applyFont = useCallback(
     (next: string) => {
       const normalized = next.trim();
@@ -172,24 +206,12 @@ const TerminalSettingsCard: React.FC = () => {
     [update]
   );
 
-  const updateSmartPathOpenMode = useCallback(
-    (next: TerminalSmartPathOpenMode) => {
-      update({ smartPathOpenMode: next });
-      window.dispatchEvent(
-        new CustomEvent('terminal-smart-path-open-mode-changed', {
-          detail: { smartPathOpenMode: next },
-        })
-      );
-    },
-    [update]
-  );
-
   const updateHotTerminalMode = useCallback(
     (next: 'auto' | 'fixed') => {
       update({ hotTerminalMode: next });
-      PtySession.setHotTerminalPolicy(next, hotTerminalLimit);
+      PtySession.setHotTerminalPolicy(next, hotTerminalLimit, machineCapacity);
     },
-    [hotTerminalLimit, update]
+    [hotTerminalLimit, machineCapacity, update]
   );
 
   const updateHotTerminalLimit = useCallback(
@@ -396,35 +418,10 @@ const TerminalSettingsCard: React.FC = () => {
           />
         }
       />
-      <SettingRow
-        title={t('settings.terminal.smartPathOpenMode')}
-        description={t('settings.terminal.smartPathOpenModeDescription')}
-        control={
-          <Select
-            value={smartPathOpenMode}
-            disabled={loading || saving}
-            onValueChange={(value) => updateSmartPathOpenMode(value as TerminalSmartPathOpenMode)}
-          >
-            <SelectTrigger
-              className="h-8 w-[183px]"
-              aria-label={t('settings.terminal.smartPathOpenMode')}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="internal">
-                {t('settings.terminal.smartPathOpenInternal')}
-              </SelectItem>
-              <SelectItem value="external">
-                {t('settings.terminal.smartPathOpenExternal')}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        }
-      />
+      <TerminalLinkOpenRows />
       <SettingRow
         title={t('settings.terminal.hotTerminalLimit')}
-        description={t('settings.terminal.hotTerminalLimitDescription')}
+        description={`${t('settings.terminal.hotTerminalLimitDescription')} ${hotTerminalMachineSummary}`}
         control={
           <div className="flex items-center gap-2">
             <Select
@@ -433,7 +430,7 @@ const TerminalSettingsCard: React.FC = () => {
               onValueChange={(value) => updateHotTerminalMode(value as 'auto' | 'fixed')}
             >
               <SelectTrigger
-                className="h-8 w-[110px]"
+                className="h-8 w-[103px]"
                 aria-label={t('settings.terminal.hotTerminalLimit')}
               >
                 <SelectValue />

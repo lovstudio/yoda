@@ -1,4 +1,9 @@
 import type { RuntimeCustomConfig } from './app-settings';
+import {
+  CC_SWITCH_APP_NAME,
+  CC_SWITCH_REPOSITORY,
+  CC_SWITCH_REPOSITORY_URL,
+} from './cc-switch-integration';
 import type { AgentAccountProviderId, RuntimeId } from './runtime-registry';
 
 export const MAAS_PLATFORM_IDS = [
@@ -11,18 +16,27 @@ export const MAAS_PLATFORM_IDS = [
   'custom',
 ] as const;
 
+/** Local integrations Yoda can install and connect to as a MaaS platform. */
 export const MAAS_MANAGED_GATEWAY_IDS = ['litellm', 'cliproxyapi', 'newapi'] as const;
 
 export type MaasManagedGatewayId = (typeof MAAS_MANAGED_GATEWAY_IDS)[number];
 
-export type MaasManagedGatewayRepository = {
+/**
+ * Everything listed under the local integrations chapter. Companion apps such as
+ * CC Switch have no endpoint of their own, so they are not MaaS platforms.
+ */
+export const MAAS_LOCAL_INTEGRATION_IDS = [...MAAS_MANAGED_GATEWAY_IDS, 'ccswitch'] as const;
+
+export type MaasLocalIntegrationId = (typeof MAAS_LOCAL_INTEGRATION_IDS)[number];
+
+export type MaasLocalIntegrationRepository = {
   repository: string;
   url: string;
 };
 
-export const MAAS_MANAGED_GATEWAY_REPOSITORIES: Record<
-  MaasManagedGatewayId,
-  MaasManagedGatewayRepository
+export const MAAS_LOCAL_INTEGRATION_REPOSITORIES: Record<
+  MaasLocalIntegrationId,
+  MaasLocalIntegrationRepository
 > = {
   litellm: {
     repository: 'BerriAI/litellm',
@@ -36,7 +50,17 @@ export const MAAS_MANAGED_GATEWAY_REPOSITORIES: Record<
     repository: 'QuantumNous/new-api',
     url: 'https://github.com/QuantumNous/new-api',
   },
+  ccswitch: {
+    repository: CC_SWITCH_REPOSITORY,
+    url: CC_SWITCH_REPOSITORY_URL,
+  },
 };
+
+export function getMaasLocalIntegrationName(integrationId: MaasLocalIntegrationId): string {
+  return integrationId === 'ccswitch'
+    ? CC_SWITCH_APP_NAME
+    : getMaasPlatformDefinition(integrationId).name;
+}
 
 export type MaasManagedGatewayStarTrendPoint = {
   date: string;
@@ -51,7 +75,7 @@ export type MaasManagedGatewayStarTrend = {
 };
 
 export type MaasManagedGatewayStarSnapshot = {
-  platformId: MaasManagedGatewayId;
+  platformId: MaasLocalIntegrationId;
   repositoryUrl: string;
   starCount: number | null;
   fetchedAt: string | null;
@@ -428,7 +452,18 @@ export type MaasUsageSummary = {
     | 'new-api-token'
     | 'new-api-account';
   quotaUnlimited: boolean | null;
-  accountUsageStatus: 'not-applicable' | 'credential-required' | 'available' | 'error';
+  /**
+   * `credential-rejected` is separated from `error` because it is the one
+   * account-read failure the user can act on: the stored credential is not the
+   * one this platform's dashboard accepts. Everything else — network, rate
+   * limits, upstream faults — is `error` and resolves itself or does not.
+   */
+  accountUsageStatus:
+    | 'not-applicable'
+    | 'credential-required'
+    | 'available'
+    | 'credential-rejected'
+    | 'error';
   accountUsageError: string | null;
   fetchedAt: string | null;
   period: MaasInvocationPage['period'];

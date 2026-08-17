@@ -10,7 +10,7 @@ Status values: `fact`, `inference`, `assumption`, `open-gap`.
 | E-002 | Yoda 的目标是让人从意图到交付持续控制 Agent 工作 | fact | `README.md`; `src/shared/harness.ts`; Task、Feature、Review、Release 相关实现 | 2026-07-26 | 1, 3, 4 | 产品边界是工作系统，不是模型或单一 Agent |
 | E-003 | 31 种 Agent Client 已接入 | fact | `README.md:67`; `src/shared/runtime-registry.ts` | 2026-07-26 | 6, 7, 9, 14 | 统计口径为 README 当前声明，不等于每个客户端活跃使用 |
 | E-004 | Yoda 覆盖 Task、Feature、Worktree、Diff、Review、PR、Release 主线 | fact | `README.md`; `src/main/core/`; `src/renderer/`; `agents/architecture/overview.md` | 2026-07-26 | 4, 5, 6 | 第 5 页使用真实产品截图 |
-| E-005 | Yoda 支持桌面、移动端、浏览器入口、SSH 与 Relay 连续性 | fact | `README.md`; `apps/mobile/`; `agents/architecture/mobile.md`; Relay package | 2026-07-26 | 6, 12 | Relay 处于商业验证早期 |
+| E-005 | Yoda 支持桌面、移动端、浏览器入口、SSH 与 Relay 连续性 | fact | `README.md`; `lovstudio/yoda-mobile` 仓库; `agents/architecture/mobile.md`; Relay package | 2026-07-26 | 6, 12 | Relay 处于商业验证早期 |
 | E-006 | 实现成本下降时，委托复杂度成为新的控制问题 | inference | E-002–E-005；行业产品演进 | 2026-07-26 | 2, 3 | 趋势图必须标“示意”，不能伪装成统计预测 |
 | E-007 | 创意 AI 已进入大量创作者工作流，同时最终判断仍由人承担 | fact | Adobe, “Creators’ Toolkit Report 2026”, https://news.adobe.com/news/2026/06/creators-toolkit-report-2026 | 2026-07-26 | 8 | deck 使用 75% 与 85% 两项原报告口径 |
 | E-008 | GitHub 当前 54 Stars、18 Forks | fact | GitHub REST API `repos/lovstudio/yoda` | 2026-07-26 | 9 | 公开兴趣信号，不等于用户规模 |

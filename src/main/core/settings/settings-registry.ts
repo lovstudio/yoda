@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { DEFAULT_MOBILE_SYNC_MODE } from '@lovstudio/yoda-protocol/mobile-sync';
 import type { AppSettings, AppSettingsKey } from '@shared/app-settings';
 import {
   createDefaultLlmProfile,
@@ -7,6 +8,7 @@ import {
   DEFAULT_LLM_PROFILE_NAME,
 } from '@shared/global-llm';
 import { MAAS_PLATFORMS } from '@shared/maas';
+import { DEFAULT_NOTIFICATION_CENTER_SOURCES } from '@shared/notifications';
 import type { OpenInAppId } from '@shared/openInApps';
 import {
   DEFAULT_SUMMARY_CONTEXT_GLOBAL,
@@ -23,8 +25,8 @@ import {
   DEFAULT_HOT_TERMINAL_LIMIT,
   DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
   DEFAULT_TERMINAL_CACHE_MODE,
+  DEFAULT_TERMINAL_LINK_OPEN,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
-  DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE,
 } from '@shared/terminal-settings';
 import { getDefaultLocalWorktreeDirectory } from './worktree-defaults';
 
@@ -53,13 +55,19 @@ export const SETTINGS_DEFAULTS = {
     initTaskNameFromSession: true,
     branchNaming: 'hash' as const,
     namingAgentId: '',
+    promptRewriteAgentId: '',
+    autoGenerateSummary: true,
     summaryAgentId: '',
+    // `skip` here is not "off" — the prompt-rewrite switch is
+    // `promptRewriteEnabled`. It stays as the stored default only so that switch,
+    // which has no default of its own, still infers "off" for users who never set
+    // it. See resolvePromptRewriteEnabled.
     inputPromptLanguage: 'skip' as const,
     summaryLanguage: 'app' as const,
     summaryContextRecent: DEFAULT_SUMMARY_CONTEXT_RECENT,
     summaryContextGlobal: DEFAULT_SUMMARY_CONTEXT_GLOBAL,
     namingModel: DEFAULT_TASK_NAMING_MODEL,
-    namingLanguage: 'skip' as const,
+    namingLanguage: 'app' as const,
     namingContext: DEFAULT_TASK_NAMING_CONTEXT,
     namingRecentTaskLimit: DEFAULT_TASK_NAMING_RECENT_TASK_LIMIT,
     namingRequestTimeoutMs: DEFAULT_TASK_NAMING_TIMEOUT_MS,
@@ -93,9 +101,6 @@ export const SETTINGS_DEFAULTS = {
     defaultProfileId: DEFAULT_LLM_PROFILE_ID,
     namingProfileId: DEFAULT_LLM_PROFILE_ID,
     imageGenerationProfileId: DEFAULT_LLM_PROFILE_ID,
-    promptTranslationEnabled: false,
-    promptTranslationProfileId: DEFAULT_LLM_PROFILE_ID,
-    promptTranslationShowOriginal: true,
   },
   modelProviders: {
     automaticUpdatesEnabled: true,
@@ -120,10 +125,11 @@ export const SETTINGS_DEFAULTS = {
     soundFocusMode: 'unfocused' as const,
     accountUsageWarningEnabled: true,
     accountUsageWarningThreshold: 95,
+    notificationCenterSources: DEFAULT_NOTIFICATION_CENTER_SOURCES,
   },
   terminal: {
     autoCopyOnSelection: true,
-    smartPathOpenMode: DEFAULT_TERMINAL_SMART_PATH_OPEN_MODE,
+    linkOpen: { ...DEFAULT_TERMINAL_LINK_OPEN, fileRules: [] },
     scrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
     hotTerminalMode: DEFAULT_TERMINAL_CACHE_MODE,
     hotTerminalLimit: DEFAULT_HOT_TERMINAL_LIMIT,
@@ -150,6 +156,7 @@ export const SETTINGS_DEFAULTS = {
     sidebarStatusBarPrimary: 'product' as const,
     newTaskOpenMode: 'home' as const,
     agentReplyDisplayLevel: 'concise' as const,
+    sessionShareDisplayLevel: 'concise' as const,
     dockSessionHistory: true,
     dockSessionHistoryRows: 3,
     taskAppearance: DEFAULT_TASK_APPEARANCE_SETTINGS,
@@ -169,6 +176,7 @@ export const SETTINGS_DEFAULTS = {
     selectedAgentIds: {},
     expressMode: false,
     attachImagesAsPaths: false,
+    facetId: null,
     promptTokens: [],
     preArchiveCommand: '',
   },
@@ -200,6 +208,9 @@ export const SETTINGS_DEFAULTS = {
     source: 'official' as const,
     proxyMode: 'auto' as const,
     proxyUrl: '',
+  },
+  mobileSync: {
+    mode: DEFAULT_MOBILE_SYNC_MODE,
   },
 } satisfies SettingsDefaultsMap;
 

@@ -1,5 +1,5 @@
+import type { MobileTaskActivityStatus } from '@lovstudio/yoda-protocol/mobile-api';
 import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
-import type { MobileTaskActivityStatus } from '@shared/mobile-api';
 import type { Task, TaskBootstrapStatus } from '@shared/tasks';
 import type { ActiveRuntimeStatusSnapshot } from '@main/core/conversations/getActiveRuntimeStatuses';
 

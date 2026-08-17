@@ -1,5 +1,8 @@
+import {
+  MOBILE_RELAY_BASE_URL,
+  MOBILE_RELAY_HOST_CLOSE_CODE,
+} from '@lovstudio/yoda-protocol/mobile-relay';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MOBILE_RELAY_BASE_URL, MOBILE_RELAY_HOST_CLOSE_CODE } from '@shared/mobile-relay';
 import type {
   MobileRelayCredentials,
   PendingRelayRevocation,

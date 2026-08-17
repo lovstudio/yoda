@@ -35,9 +35,6 @@ export type GlobalLlmSettingsShape = {
   defaultProfileId: string;
   namingProfileId: string;
   imageGenerationProfileId: string;
-  promptTranslationEnabled: boolean;
-  promptTranslationProfileId: string;
-  promptTranslationShowOriginal: boolean;
 };
 
 export type GlobalLlmDebugInput = {
@@ -114,8 +111,6 @@ type LegacyGlobalLlmSettingsShape = {
   agentEnabled?: boolean;
   agentId?: string;
   preferredProvider?: 'maas' | 'agent';
-  promptTranslationEnabled?: boolean;
-  promptTranslationShowOriginal?: boolean;
 };
 
 type PartialProfile = Partial<LlmProfile> & Record<string, unknown>;
@@ -178,17 +173,6 @@ export function normalizeLlmSettings(
       safeProfiles,
       defaultProfileId
     ),
-    promptTranslationEnabled:
-      typeof raw.promptTranslationEnabled === 'boolean' ? raw.promptTranslationEnabled : false,
-    promptTranslationProfileId: normalizeProfileSelection(
-      raw.promptTranslationProfileId,
-      safeProfiles,
-      defaultProfileId
-    ),
-    promptTranslationShowOriginal:
-      typeof raw.promptTranslationShowOriginal === 'boolean'
-        ? raw.promptTranslationShowOriginal
-        : true,
   };
 }
 

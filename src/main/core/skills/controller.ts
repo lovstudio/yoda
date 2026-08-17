@@ -274,7 +274,11 @@ export const skillsController = createRPCController({
         `Skill name: ${skill.frontmatter.name || skill.id}`,
         `Skill description: ${skill.description}`,
       ].join('\n');
-      const payload = await requestUtilityAgentJson({ prompt, cwd: os.homedir() });
+      const payload = await requestUtilityAgentJson({
+        prompt,
+        cwd: os.homedir(),
+        purpose: 'skill-trigger-queries',
+      });
       const queries = parseTriggerQueries(payload.queries);
       if (queries.length === 0) throw new Error('Model returned no trigger queries.');
       return { success: true, data: queries };
@@ -302,7 +306,11 @@ export const skillsController = createRPCController({
         'Current SKILL.md:',
         skill.skillMdContent,
       ].join('\n');
-      const payload = await requestUtilityAgentJson({ prompt, cwd: os.homedir() });
+      const payload = await requestUtilityAgentJson({
+        prompt,
+        cwd: os.homedir(),
+        purpose: 'skill-revision',
+      });
       const content = typeof payload.content === 'string' ? payload.content : '';
       if (!content.trim()) throw new Error('Model returned no revised content.');
       return {

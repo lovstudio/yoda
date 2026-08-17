@@ -233,6 +233,37 @@ describe('Lovcode search result mapping', () => {
       }),
     ]);
   });
+
+  it('orders transcript matches by last activity, archived included', () => {
+    const items = mapLovcodeResults(
+      [
+        conversationRow({
+          id: 'stale',
+          agent_session_id: 'session-stale',
+          last_interacted_at: '2026-07-01T00:00:00.000Z',
+        }),
+        conversationRow({
+          id: 'archived-newest',
+          agent_session_id: 'session-archived',
+          last_interacted_at: '2026-07-30T00:00:00.000Z',
+          conversation_archived_at: '2026-07-30T00:00:00.000Z',
+        }),
+        conversationRow({
+          id: 'fresh',
+          agent_session_id: 'session-fresh',
+          last_interacted_at: '2026-07-20T00:00:00.000Z',
+        }),
+      ],
+      // CLI hit order deliberately disagrees with recency.
+      [
+        { sessionId: 'session-stale', excerpt: 'a' },
+        { sessionId: 'session-archived', excerpt: 'b' },
+        { sessionId: 'session-fresh', excerpt: 'c' },
+      ]
+    );
+
+    expect(items.map((item) => item.id)).toEqual(['archived-newest', 'fresh', 'stale']);
+  });
 });
 
 function conversationRow(overrides: Partial<LovcodeConversationRow> = {}): LovcodeConversationRow {

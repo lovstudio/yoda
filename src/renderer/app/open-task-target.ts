@@ -11,10 +11,7 @@ import {
   getTaskManagerStore,
   getTaskStore,
 } from '@renderer/features/tasks/stores/task-selectors';
-import {
-  OVERVIEW_TAB_ID,
-  type TabManagerStore,
-} from '@renderer/features/tasks/tabs/tab-manager-store';
+import type { TabManagerStore } from '@renderer/features/tasks/tabs/tab-manager-store';
 import { rpc } from '@renderer/lib/ipc';
 import type { NavigateFnTyped } from '@renderer/lib/layout/navigation-provider';
 import { showModal } from '@renderer/lib/modal/modal-provider';
@@ -47,7 +44,8 @@ function conversationOwnerMap(tabManager: TabManagerStore): Map<string, symbol> 
 export function openTaskTopTab(
   projectId: string,
   taskId: string,
-  tab: TaskWindowTabTarget,
+  /** Omitted routes to the task itself — its session surface, not a sub-page. */
+  tab: TaskWindowTabTarget | undefined,
   options?: { activate?: boolean }
 ): void {
   appState.appTabs.openTab('task', { projectId, taskId, tab }, options);
@@ -63,7 +61,7 @@ export function openTaskTopTab(
 export function closeTaskTopTab(tab: AppTabEntry): void {
   const { projectId, taskId } = tab.params as { projectId?: string; taskId?: string };
   const target = tab.params.tab as TaskWindowTabTarget | undefined;
-  if (tab.viewId === 'task' && projectId && taskId && target && target.kind !== 'overview') {
+  if (tab.viewId === 'task' && projectId && taskId && target) {
     const tabManager = asProvisioned(getTaskStore(projectId, taskId))?.taskView.tabManager;
     const internalId = tabManager ? findInternalTabId(tabManager, target) : undefined;
     if (tabManager && internalId) tabManager.closeTab(internalId);
@@ -74,7 +72,7 @@ export function closeTaskTopTab(tab: AppTabEntry): void {
 /**
  * Drop-zone handler shared by the top strip and the central column: a moved
  * entity (task-sidebar pin or shell-pane pin) returns to its scope's strip; a
- * shell view/overview pin reopens its tab there and unpins.
+ * shell view pin reopens its tab there and unpins.
  *
  * Browser semantics: the dropped tab's CONTENT renders immediately, but the
  * tab row stays put — a cross-scope tab is stuck into the current strip
@@ -88,11 +86,10 @@ export function moveDraggedTabToStrip(payload: TabDragPayload): void {
       appState.appTabs.openTab(pin.viewId, pin.params, { activate: false });
       stickWhenBackground(pin.viewId, pin.params);
       appState.appTabs.openTab(pin.viewId, pin.params, { activate: true });
-    } else {
-      const target = { kind: 'overview' } as const;
-      openTaskTopTab(pin.projectId, pin.taskId, target, { activate: false });
-      stickWhenBackground('task', { projectId: pin.projectId, taskId: pin.taskId, tab: target });
-      openTaskTopTab(pin.projectId, pin.taskId, target, { activate: true });
+    } else if (pin.kind === 'task-view') {
+      openTaskTopTab(pin.projectId, pin.taskId, undefined, { activate: false });
+      stickWhenBackground('task', { projectId: pin.projectId, taskId: pin.taskId });
+      openTaskTopTab(pin.projectId, pin.taskId, undefined, { activate: true });
     }
     appState.sidePane.unpin(pin.id);
     return;
@@ -341,11 +338,6 @@ export async function openProvisionedTaskTab(
   if (!shouldApply()) return cancelledResult();
 
   switch (tabTarget.kind) {
-    case 'overview':
-      return applyOrDefer(() => {
-        applyTabMutation(() => provisioned.taskView.tabManager.setActiveTab(OVERVIEW_TAB_ID));
-        provisioned.taskView.setFocusedRegion('main');
-      });
     case 'conversation': {
       const { tabManager } = provisioned.taskView;
       const hadTab = tabManager.hasConversationTab(tabTarget.conversationId);

@@ -11,7 +11,7 @@ describe('stableTaskOpeningMessageKey', () => {
   it('does not let scope restoration supersede a staged task-open target', () => {
     expect(shouldResolveTaskScopeEntry(null, true)).toBe(false);
     expect(shouldResolveTaskScopeEntry(null, false)).toBe(true);
-    expect(shouldResolveTaskScopeEntry({ kind: 'overview' }, false)).toBe(false);
+    expect(shouldResolveTaskScopeEntry({ kind: 'file', path: 'src/a.ts' }, false)).toBe(false);
 
     const taskViewSource = readFileSync(new URL('./view.tsx', import.meta.url), 'utf8');
     expect(taskViewSource).toContain(

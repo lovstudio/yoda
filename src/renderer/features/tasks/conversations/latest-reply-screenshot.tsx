@@ -1,10 +1,9 @@
+import type { MobileSessionTranscriptBlock } from '@lovstudio/yoda-protocol/mobile-api';
 import { Camera, Loader2 } from 'lucide-react';
 import { domToPng } from 'modern-screenshot';
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import type { MobileSessionTranscriptBlock } from '@shared/mobile-api';
-import { getRuntime } from '@shared/runtime-registry';
 import { getUserVisibleAgentReplyText } from '@renderer/features/tasks/session-conversation';
 import { openFilePath } from '@renderer/lib/components/file-path-operations';
 import { useToast } from '@renderer/lib/hooks/use-toast';
@@ -70,7 +69,7 @@ export function LatestReplyScreenshotButton({
       setPayload({
         generatedAt: detail.generatedAt,
         reply: detail.reply,
-        runtimeName: getRuntime(detail.runtimeId)?.name ?? detail.runtimeId,
+        runtimeName: detail.runtimeName,
         sessionTitle: detail.sessionTitle,
       });
       await waitForScreenshotCard();

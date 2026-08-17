@@ -8,6 +8,7 @@
 **/build
 **/.turbo
 **/out
+packages/dsh-runtime-bar/lib
 
 # ignore vite's dependency pre-bundle cache
 .vite

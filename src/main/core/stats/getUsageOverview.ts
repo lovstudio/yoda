@@ -28,6 +28,7 @@ import { listClaudeSessionsForDirectory } from './transcript-readers/claude-sess
 import { TRANSCRIPT_USAGE_PROVIDER_IDS } from './transcript-readers/registry';
 import type { SessionTokenUsage } from './transcript-readers/types';
 import { sessionUsageCache, transcriptKey } from './usage-cache';
+import { computeUsageCost } from './usage-cost';
 
 const TOP_TASKS_LIMIT = 10;
 const LIVE_DIFF_CONCURRENCY = 4;
@@ -231,6 +232,7 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
         byModel.set(model.model, {
           model: model.model,
           tokens: { ...model.tokens },
+          cost: null,
           sessionCount: 1,
         });
       }
@@ -392,6 +394,7 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
     ? (() => {
         const merged = mergeClaudeHistoricalUsage(
           claudeHistorical,
+          daily,
           [...claudeDailyByDate.entries()].map(([date, dayTokens]) => ({
             date,
             tokens: dayTokens,
@@ -400,7 +403,7 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
         return {
           tokens: merged.tokens,
           cacheThroughDate: claudeHistorical.cacheThroughDate,
-          recentTrackedTokens: merged.recentTrackedTokens,
+          mergedTrackedTokens: merged.mergedTrackedTokens,
           sessionCount: claudeHistorical.sessionCount,
         };
       })()
@@ -416,7 +419,11 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
     historical,
     daily,
     byProject: [...byProject.values()].sort((a, b) => b.tokens.total - a.tokens.total),
-    byModel: [...byModel.values()].sort((a, b) => b.tokens.total - a.tokens.total),
+    // Cost is linear in the buckets, so pricing each model's merged total once
+    // here is identical to pricing every session that fed it.
+    byModel: [...byModel.values()]
+      .sort((a, b) => b.tokens.total - a.tokens.total)
+      .map((entry) => ({ ...entry, cost: computeUsageCost([entry]) })),
     byRuntime: [...byRuntime.values()].sort((a, b) => b.tokens.total - a.tokens.total),
     byAuthProvider: [...byAuthProvider.values()].sort((a, b) => b.tokens.total - a.tokens.total),
     topTasks,

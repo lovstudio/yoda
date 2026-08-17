@@ -1,5 +1,4 @@
 import { hostname } from 'node:os';
-import WebSocket from 'ws';
 import {
   createMobileRelayPairingUrl,
   MOBILE_RELAY_BASE_URL,
@@ -7,7 +6,9 @@ import {
   parseMobileRelayHostFrame,
   relayWebSocketUrl,
   type MobileRelayStatus,
-} from '@shared/mobile-relay';
+} from '@lovstudio/yoda-protocol/mobile-relay';
+import { DEFAULT_MOBILE_SYNC_MODE, relaySyncEnabled } from '@lovstudio/yoda-protocol/mobile-sync';
+import WebSocket from 'ws';
 import { yodaAccountService } from '@main/core/account/services/yoda-account-service';
 import { yodaCommerceService } from '@main/core/account/services/yoda-commerce-service';
 import { log } from '@main/lib/logger';
@@ -29,6 +30,7 @@ export class MobileRelayService {
   private shouldReconnect = false;
   private connecting = false;
   private connected = false;
+  private syncEnabled = relaySyncEnabled(DEFAULT_MOBILE_SYNC_MODE);
   private pairingUrl: string | null = null;
   private pairingExpiresAt: string | null = null;
   private lastError: string | null = null;
@@ -285,6 +287,23 @@ export class MobileRelayService {
     this.disconnectSocket();
   }
 
+  /** Turns the Relay transport on or off without touching the stored device
+   *  credentials, so switching back to public sync does not require re-pairing. */
+  setSyncEnabled(enabled: boolean): void {
+    if (this.syncEnabled === enabled) return;
+    this.syncEnabled = enabled;
+    log.info('MobileRelay: sync toggled', { enabled });
+    if (!enabled) {
+      this.disconnectSocket();
+      return;
+    }
+    if (this.credentials) this.connect();
+  }
+
+  isSyncEnabled(): boolean {
+    return this.syncEnabled;
+  }
+
   private disconnectSocket(): void {
     this.shouldReconnect = false;
     this.clearReconnectTimer();
@@ -355,7 +374,7 @@ export class MobileRelayService {
   }
 
   private connect(): void {
-    if (!this.credentials || this.socket || this.connecting) return;
+    if (!this.syncEnabled || !this.credentials || this.socket || this.connecting) return;
     this.shouldReconnect = true;
     this.connecting = true;
     this.lastError = null;

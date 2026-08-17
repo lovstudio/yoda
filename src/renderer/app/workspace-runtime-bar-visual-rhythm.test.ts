@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readRuntimeBarSource } from '@renderer/app/runtime-bar/test-helpers/read-bar-source';
 
 describe('Workspace runtime bar visual rhythm', () => {
-  const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+  const source = readRuntimeBarSource();
   const notificationSource = readFileSync(
     new URL('./workspace-notification-center.tsx', import.meta.url),
     'utf8'
@@ -10,7 +11,7 @@ describe('Workspace runtime bar visual rhythm', () => {
 
   it('uses one consistent compact action geometry', () => {
     expect(source).toContain(
-      'relative flex h-6 w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0'
+      'relative flex h-6 w-7 shrink-0 items-center justify-center gap-0 rounded-md p-0'
     );
     expect(source).toContain('@min-[1441px]:w-auto');
   });
@@ -26,11 +27,27 @@ describe('Workspace runtime bar visual rhythm', () => {
     expect(source).toContain("terminalActive && 'bg-background-2 text-foreground'");
   });
 
-  it('overlays compact counters instead of widening their action buttons', () => {
-    expect(notificationSource).toContain('absolute top-0 right-0');
-    expect(notificationSource).toContain('h-3.5 min-w-3.5');
-    expect(source).toContain('absolute top-0 right-0 inline-flex h-3.5 min-w-3.5');
-    expect(source).toContain('absolute top-1 right-0.5 size-1.5');
+  it('overlays compact counters against the glyph so they never eat the gutter', () => {
+    const indicatorSource = readFileSync(
+      new URL('./workspace-bar-action-indicator.tsx', import.meta.url),
+      'utf8'
+    );
+
+    // The eye measures the gap between ink, not between slots. An indicator
+    // pinned to the slot edge lands in the 2px gutter and makes the row read as
+    // unevenly spaced, so every indicator anchors to the 14px glyph box.
+    expect(indicatorSource).toContain(
+      'relative flex size-3.5 shrink-0 items-center justify-center'
+    );
+    expect(indicatorSource).toContain('absolute -top-1.5 right-0 inline-flex h-3 min-w-3');
+    expect(indicatorSource).toContain('absolute -top-1 right-0 size-1.5 rounded-full');
+    expect(indicatorSource).not.toContain('absolute top-0 right-0');
+
+    for (const barSource of [source, notificationSource]) {
+      expect(barSource).toContain('WorkspaceBarActionGlyph');
+      expect(barSource).not.toContain('absolute top-0 right-0');
+      expect(barSource).not.toContain('absolute top-1 right-0.5');
+    }
     expect(notificationSource).not.toContain('bg-foreground px-1 text-center');
   });
 });

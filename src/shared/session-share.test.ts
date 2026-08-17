@@ -1,5 +1,5 @@
+import type { MobileSessionDetail } from '@lovstudio/yoda-protocol/mobile-api';
 import { describe, expect, it } from 'vitest';
-import type { MobileSessionDetail } from './mobile-api';
 import { createYodaSessionShareUpload } from './session-share';
 
 function detail(overrides: Partial<MobileSessionDetail> = {}): MobileSessionDetail {

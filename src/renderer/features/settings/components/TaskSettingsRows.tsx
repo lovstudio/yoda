@@ -2,7 +2,6 @@ import { Download, RefreshCw } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { TaskOutputLanguage } from '@shared/project-settings';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { AutoTrustWorktreesControl } from '@renderer/features/tasks/components/auto-trust-worktrees-control';
 import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings';
@@ -23,32 +22,54 @@ import { cn } from '@renderer/utils/utils';
 import { ResetToDefaultButton } from './ResetToDefaultButton';
 import { SettingRow } from './SettingRow';
 
-export const AutoGenerateTaskNamesRow: React.FC = () => {
-  const { t } = useTranslation();
+/**
+ * The auto-naming toggle on its own, so it can sit in the control slot of the
+ * row that also folds away the naming configuration.
+ */
+export const AutoGenerateTaskNamesControl: React.FC = observer(() => {
   const taskSettings = useTaskSettings();
 
   return (
-    <SettingRow
-      title={t('settings.tasks.autoGenerateName')}
-      description={t('settings.tasks.autoGenerateNameDescription')}
-      control={
-        <>
-          <ResetToDefaultButton
-            visible={taskSettings.isFieldOverridden('autoGenerateName')}
-            defaultLabel="on"
-            onReset={taskSettings.resetAutoGenerateName}
-            disabled={taskSettings.loading || taskSettings.saving}
-          />
-          <Switch
-            checked={taskSettings.autoGenerateName}
-            disabled={taskSettings.loading || taskSettings.saving}
-            onCheckedChange={taskSettings.updateAutoGenerateName}
-          />
-        </>
-      }
-    />
+    <>
+      <ResetToDefaultButton
+        visible={taskSettings.isFieldOverridden('autoGenerateName')}
+        defaultLabel="on"
+        onReset={taskSettings.resetAutoGenerateName}
+        disabled={taskSettings.loading || taskSettings.saving}
+      />
+      <Switch
+        checked={taskSettings.autoGenerateName}
+        disabled={taskSettings.loading || taskSettings.saving}
+        onCheckedChange={taskSettings.updateAutoGenerateName}
+      />
+    </>
   );
-};
+});
+
+/**
+ * The auto-summary toggle. Withholds unprompted generation only — a summary is
+ * still reachable on demand from the session panel — so the row is a switch
+ * like auto-naming rather than a destructive setting.
+ */
+export const AutoGenerateSummaryControl: React.FC = observer(() => {
+  const taskSettings = useTaskSettings();
+
+  return (
+    <>
+      <ResetToDefaultButton
+        visible={taskSettings.isFieldOverridden('autoGenerateSummary')}
+        defaultLabel="on"
+        onReset={taskSettings.resetAutoGenerateSummary}
+        disabled={taskSettings.loading || taskSettings.saving}
+      />
+      <Switch
+        checked={taskSettings.autoGenerateSummary}
+        disabled={taskSettings.loading || taskSettings.saving}
+        onCheckedChange={taskSettings.updateAutoGenerateSummary}
+      />
+    </>
+  );
+});
 
 export const WorkspacesEnabledRow: React.FC = () => {
   const { t } = useTranslation();
@@ -150,44 +171,30 @@ export const BranchNamingRow: React.FC = observer(() => {
   );
 });
 
-export const InputPromptLanguageRow: React.FC = observer(() => {
+/**
+ * The prompt-rewrite switch, a plain boolean like its two siblings. It is
+ * deliberately separate from the target language: the language used to double as
+ * the switch, which made a switched-off capability impossible to configure.
+ */
+export const PromptRewriteEnabledControl: React.FC = observer(() => {
   const { t } = useTranslation();
   const taskSettings = useTaskSettings();
   const disabled = taskSettings.loading || taskSettings.saving;
 
   return (
-    <SettingRow
-      title={t('settings.tasks.inputPromptLanguageLabel')}
-      description={t('settings.tasks.inputPromptLanguageDescription')}
-      control={
-        <>
-          <ResetToDefaultButton
-            visible={taskSettings.isFieldOverridden('inputPromptLanguage')}
-            defaultLabel={t('settings.tasks.namingLanguageSkip')}
-            onReset={taskSettings.resetInputPromptLanguage}
-            disabled={disabled}
-          />
-          <Select
-            value={taskSettings.inputPromptLanguage}
-            onValueChange={(value) =>
-              taskSettings.updateInputPromptLanguage(value as TaskOutputLanguage)
-            }
-            disabled={taskSettings.loading}
-          >
-            <SelectTrigger className="h-8 w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="skip">{t('settings.tasks.namingLanguageSkip')}</SelectItem>
-              <SelectItem value="app">{t('settings.tasks.namingLanguageApp')}</SelectItem>
-              <SelectItem value="prompt">{t('settings.tasks.namingLanguagePrompt')}</SelectItem>
-              <SelectItem value="zh-CN">{t('settings.tasks.namingLanguageZh')}</SelectItem>
-              <SelectItem value="en">{t('settings.tasks.namingLanguageEn')}</SelectItem>
-            </SelectContent>
-          </Select>
-        </>
-      }
-    />
+    <>
+      <ResetToDefaultButton
+        visible={taskSettings.isFieldOverridden('promptRewriteEnabled')}
+        defaultLabel={t('common.no')}
+        onReset={taskSettings.resetPromptRewriteEnabled}
+        disabled={disabled}
+      />
+      <Switch
+        checked={taskSettings.promptRewriteEnabled}
+        disabled={disabled}
+        onCheckedChange={taskSettings.updatePromptRewriteEnabled}
+      />
+    </>
   );
 });
 

@@ -4,7 +4,6 @@ import {
   Bot,
   ChartColumn,
   CircleDot,
-  Cloud,
   Cpu,
   FileText,
   FlaskConical,
@@ -94,7 +93,6 @@ const VIEW_ICONS: Partial<Record<ViewId, LucideIcon>> = {
   agents: Terminal,
   automation: Workflow,
   mobile: Smartphone,
-  maas: Cloud,
   usage: ChartColumn,
   roadmap: Milestone,
   kanban: SquareKanban,
@@ -279,14 +277,15 @@ const ProjectAddMenu = observer(function ProjectAddMenu({
 
 /**
  * Drag payload for a top-level tab: task entities move across areas; every
- * other tab (views, project pages, the task overview index) copy-pins into
+ * other tab (views, project pages, a task's own index tab) copy-pins into
  * the shell pane on drop.
  */
 function stripDragPayload(tab: AppTabEntry): TabDragPayload {
   if (tab.viewId === 'task') {
     const { projectId, taskId } = tab.params as { projectId?: string; taskId?: string };
-    const target = (tab.params.tab as TaskWindowTabTarget | undefined) ?? { kind: 'overview' };
-    if (projectId && taskId && target.kind !== 'overview') {
+    // No target is the task itself, which is not a movable entity within it.
+    const target = tab.params.tab as TaskWindowTabTarget | undefined;
+    if (projectId && taskId && target) {
       return { kind: 'task-entity', from: 'strip', projectId, taskId, target, appTab: tab };
     }
   }
@@ -507,30 +506,30 @@ function describeTaskTab(
   branchPrefix: string
 ): { label: string; icon: ReactNode } {
   const { projectId, taskId } = tab.params as { projectId?: string; taskId?: string };
-  const target = (tab.params.tab as TaskWindowTabTarget | undefined) ?? { kind: 'overview' };
+  const target = tab.params.tab as TaskWindowTabTarget | undefined;
   const taskStore =
     typeof projectId === 'string' && typeof taskId === 'string'
       ? getTaskStore(projectId, taskId)
       : undefined;
 
+  // No target is the task itself — the index tab, carrying the scope's
+  // identity: "project / branch", falling back to the task name for tasks
+  // without a worktree branch.
+  if (!target) {
+    const projectName =
+      typeof projectId === 'string' ? projectDisplayName(getProjectStore(projectId)) : undefined;
+    const branchName =
+      asProvisioned(taskStore)?.workspace.git.branchName ??
+      (taskStore && 'taskBranch' in taskStore.data ? taskStore.data.taskBranch : undefined);
+    const displayBranch =
+      branchPrefix && branchName?.startsWith(`${branchPrefix}/`)
+        ? branchName.slice(branchPrefix.length + 1)
+        : branchName;
+    const label = [projectName, displayBranch ?? taskStore?.data.name].filter(Boolean).join(' / ');
+    return { label: label || t('appTabs.task'), icon: lucideIcon(LayoutDashboard) };
+  }
+
   switch (target.kind) {
-    case 'overview': {
-      // The index tab carries the scope's identity: "project / branch",
-      // falling back to the task name for tasks without a worktree branch.
-      const projectName =
-        typeof projectId === 'string' ? projectDisplayName(getProjectStore(projectId)) : undefined;
-      const branchName =
-        asProvisioned(taskStore)?.workspace.git.branchName ??
-        (taskStore && 'taskBranch' in taskStore.data ? taskStore.data.taskBranch : undefined);
-      const displayBranch =
-        branchPrefix && branchName?.startsWith(`${branchPrefix}/`)
-          ? branchName.slice(branchPrefix.length + 1)
-          : branchName;
-      const label = [projectName, displayBranch ?? taskStore?.data.name]
-        .filter(Boolean)
-        .join(' / ');
-      return { label: label || t('appTabs.overview'), icon: lucideIcon(LayoutDashboard) };
-    }
     case 'conversation': {
       const provisioned = asProvisioned(taskStore);
       const conversation = provisioned?.conversations.conversations.get(target.conversationId);

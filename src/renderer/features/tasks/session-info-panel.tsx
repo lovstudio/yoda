@@ -1,3 +1,4 @@
+import type { AgentReplyDisplayLevel } from '@lovstudio/yoda-protocol/agent-reply-display';
 import { useQuery } from '@tanstack/react-query';
 import {
   Copy,
@@ -11,7 +12,6 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AgentReplyDisplayLevel } from '@shared/agent-reply-display';
 import type {
   ClaudeSessionPrompt,
   Conversation,
@@ -51,6 +51,8 @@ import {
   type TaskMenuSessionFields,
 } from '@renderer/features/tasks/components/task-menu-session-info';
 import { useConversationPromptRestore } from '@renderer/features/tasks/conversations/use-conversation-prompt-restore';
+import { useConversationTranscriptSubscription } from '@renderer/features/tasks/conversations/use-conversation-transcript-subscription';
+import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import { SessionConversationList } from '@renderer/features/tasks/session-conversation-list';
 import {
@@ -465,6 +467,21 @@ export function useSessionPrompts(active: boolean): {
     })
   );
   const conversationData: SessionConversationData | undefined = conversationQuery.data;
+  // The interval above is the fallback for runtimes with no transcript on disk
+  // (cohub) or a watcher that never attached. When the file *is* watched, this
+  // push is what makes the history track the session instead of trailing it by
+  // up to one refresh interval.
+  useConversationTranscriptSubscription({
+    active,
+    projectId: conversation?.projectId,
+    taskId: conversation?.taskId,
+    conversationId: conversation?.id,
+    onChange: () => {
+      // refetch, not invalidate: it ignores staleTime, so an append arriving
+      // moments after the last poll is not held back by it.
+      void conversationQuery.refetch();
+    },
+  });
   const showSessionPrompts = useShowModal('sessionPromptsModal');
   const { restoringPrompt, requestRestorePrompt: requestConversationPromptRestore } =
     useConversationPromptRestore();
@@ -624,10 +641,19 @@ export function useSessionSummary(
   /** A summary is being (re)generated. The last summary stays visible meanwhile. */
   isGenerating: boolean;
   hasConversation: boolean;
+  /**
+   * This scope would refresh itself, but the auto-summary setting is off — the
+   * empty state says so instead of implying there is nothing to summarize.
+   */
+  autoDisabled: boolean;
   /** Manually run generation for this scope, bypassing the content cache. */
   regenerate: () => void;
 } {
-  const autoGenerate = options?.autoGenerate ?? true;
+  const taskSettings = useTaskSettings();
+  // The auto-summary setting withholds unprompted generation; a regenerate
+  // click still runs, so `force` deliberately bypasses this.
+  const autoDisabled = (options?.autoGenerate ?? true) && !taskSettings.autoGenerateSummary;
+  const autoGenerate = (options?.autoGenerate ?? true) && taskSettings.autoGenerateSummary;
   const { projectId, taskId } = useTaskViewContext();
   const provisionedTask = useRequireProvisionedTask();
   const conversation = getTaskMenuConversation(provisionedTask);
@@ -715,15 +741,27 @@ export function useSessionSummary(
     streamingText,
     isGenerating,
     hasConversation: Boolean(conversation),
+    autoDisabled,
     regenerate,
   };
 }
 
 /** Maps a no-summary outcome to the empty-state copy explaining it. */
-function emptySummaryCopy(status: SessionSummaryStatus | undefined): {
+function emptySummaryCopy(
+  status: SessionSummaryStatus | undefined,
+  autoDisabled: boolean
+): {
   label: string;
   description: string;
 } {
+  // The setting explains the blank far better than "nothing to summarize" —
+  // but a real outcome (running, failed) still takes precedence.
+  if (autoDisabled && (status === undefined || status === 'empty')) {
+    return {
+      label: 'tasks.sessionPanel.summaryAutoDisabled',
+      description: 'tasks.sessionPanel.summaryAutoDisabledDescription',
+    };
+  }
   switch (status) {
     case 'running':
       return {
@@ -841,7 +879,7 @@ export const SessionSummaryContent = observer(function SessionSummaryContent({
         </div>
       );
     }
-    const empty = emptySummaryCopy(summary.status);
+    const empty = emptySummaryCopy(summary.status, summary.autoDisabled);
     return (
       <div className="flex flex-col gap-2 px-2.5 py-3">
         <EmptyState label={t(empty.label)} description={t(empty.description)} />

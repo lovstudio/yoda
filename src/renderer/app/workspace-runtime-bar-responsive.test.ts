@@ -1,8 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readRuntimeBarSource } from '@renderer/app/runtime-bar/test-helpers/read-bar-source';
 
 describe('Workspace runtime bar responsive layout', () => {
-  const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+  const source = readRuntimeBarSource();
+  const registrySource = readFileSync(
+    new URL('./runtime-bar/registry.ts', import.meta.url),
+    'utf8'
+  );
   const skillPopoverSource = readFileSync(
     new URL('./workspace-skill-popover.tsx', import.meta.url),
     'utf8'
@@ -18,28 +23,31 @@ describe('Workspace runtime bar responsive layout', () => {
       "const RUNTIME_BAR_ACTION_LABEL_CLASS = 'hidden @min-[1441px]:inline';"
     );
     expect(source).toContain('className="tabular-nums @max-[1440px]:hidden"');
-    expect(source).toContain("'absolute top-0 right-0 inline-flex h-3.5 min-w-3.5");
-    expect(source).toContain('@min-[1441px]:hidden');
+    expect(source).toContain('WORKSPACE_BAR_ACTION_COUNT_CLASS');
+    expect(source).toContain('@max-[1440px]:hidden');
     expect(source.match(/className=\{RUNTIME_BAR_ACTION_LABEL_CLASS\}/g)).toHaveLength(5);
     expect(source).toContain('triggerLabelClassName={RUNTIME_BAR_ACTION_LABEL_CLASS}');
     expect(skillPopoverSource).toContain('className={triggerLabelClassName}');
   });
 
   it('keeps global configuration as the first footer action and aligns its popover left', () => {
+    // Order along the row belongs to the shared strip; which slot an entry sits
+    // in belongs to Yoda's registry. Neither one is the footer component's
+    // business any more.
     const footerStart = source.indexOf('<footer');
-    const configRender = source.indexOf('{renderConfigPopover()}', footerStart);
-    const runtimeGroup = source.indexOf('{runtimeId ? (', footerStart);
+    const leadSlot = source.indexOf('<SlotItems items={items} slot="lead" />', footerStart);
+    const runtimeGroup = source.indexOf('{sessionActive ? (', footerStart);
+    const groupSpacer = source.indexOf('<span className={theme.spacer} />', footerStart);
     const configStart = source.indexOf(
       '<Popover open={isConfigPopoverOpen} onOpenChange={setIsConfigPopoverOpen}>'
     );
-    const groupSpacer = source.indexOf('<span className="flex-1" />');
     const configEnd = source.indexOf('</Popover>', configStart);
 
-    expect(configRender).toBeGreaterThan(footerStart);
-    expect(configRender).toBeLessThan(runtimeGroup);
-    expect(source.match(/\{renderConfigPopover\(\)\}/g)).toHaveLength(1);
+    expect(leadSlot).toBeGreaterThan(footerStart);
+    expect(leadSlot).toBeLessThan(runtimeGroup);
+    expect(runtimeGroup).toBeLessThan(groupSpacer);
+    expect(registrySource).toMatch(/\{ id: 'config', slot: 'lead'/);
     expect(configStart).toBeGreaterThan(-1);
-    expect(configStart).toBeLessThan(groupSpacer);
     expect(source.slice(configStart, configEnd)).toContain('align="start"');
   });
 

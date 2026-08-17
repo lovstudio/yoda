@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readRuntimeBarSource } from '@renderer/app/runtime-bar/test-helpers/read-bar-source';
 
 describe('Workspace runtime bar Doctor entry', () => {
   it('opens the Doctor dialog from a labeled bottom-bar action', () => {
-    const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+    const source = readRuntimeBarSource();
     const registry = readFileSync(new URL('./modal-registry.ts', import.meta.url), 'utf8');
     const doctor = readFileSync(
       new URL('../features/doctor/doctor-modal.tsx', import.meta.url),

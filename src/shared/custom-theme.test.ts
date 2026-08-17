@@ -154,7 +154,7 @@ describe('custom theme packages', () => {
 
   it('resolves the Dream Skin preset as a light theme', () => {
     expect(
-      resolveThemeMode('ydream', {
+      resolveThemeMode('ydream-arina', {
         systemMode: 'dark',
         systemThemes: { light: 'ylight', dark: 'ydark' },
         customThemes: [],
@@ -180,7 +180,6 @@ describe('custom theme packages', () => {
         positionX: 50,
         positionY: 50,
         zoom: 1,
-        showOverlayCopy: true,
         extendToWorkspace: true,
       },
       decorations: { preset: 'petals', density: 0.55, motion: true },
@@ -223,7 +222,6 @@ describe('custom theme packages', () => {
           zoom: 1.35,
           overlayStrength: 0.52,
           textSide: 'right',
-          showOverlayCopy: false,
         },
         decorations: { preset: 'embers', density: 0.8, motion: false },
         provenance: {
@@ -246,7 +244,6 @@ describe('custom theme packages', () => {
           positionY: 38,
           zoom: 1.35,
           textSide: 'right',
-          showOverlayCopy: false,
         },
         decorations: { preset: 'embers', density: 0.8, motion: false },
         provenance: { source: 'local', rightsConfirmed: true },
@@ -269,44 +266,21 @@ describe('custom theme packages', () => {
     expect(parsed).toMatchObject({ ok: false, reason: 'invalid-theme' });
   });
 
-  it('resolves the bundled night skin as dark', () => {
-    expect(
-      resolveThemeMode('ydream-night', {
-        systemMode: 'light',
-        systemThemes: { light: 'ylight', dark: 'ydark' },
-        customThemes: [],
-      })
-    ).toBe('dark');
-  });
-
   it('ships the Arina Hashimoto custom preset as a native light skin', () => {
     expect(BUILT_IN_DREAM_SKIN_THEMES['ydream-arina']).toMatchObject({
       name: '桥本有菜专属定制',
       mode: 'light',
       skin: {
-        image: 'builtin:dream-bloom',
-        brandSubtitle: '桥本有菜 专属定制皮肤',
-        statusText: 'ARINA CUSTOM ONLINE',
+        image: 'builtin:dream-arina',
+        decorations: { preset: 'petals' },
       },
     });
   });
 
-  it('ships the eight upstream gallery moods as native built-in skins', () => {
-    const galleryThemes = [
-      'ydream',
-      'ydream-fortune',
-      'ydream-scifi',
-      'ydream-clear',
-      'ydream-cosmos',
-      'ydream-purple',
-      'ydream-virtual',
-      'ydream-gold',
-    ] as const;
-
-    expect(galleryThemes.map((id) => BUILT_IN_DREAM_SKIN_THEMES[id].skin?.image)).toEqual(
-      DREAM_SKIN_BUILTIN_IMAGES.filter((image) => image !== 'builtin:dream-portal')
-    );
-    expect(BUILT_IN_DREAM_SKIN_THEMES['ydream-night'].skin?.image).toBe('builtin:dream-portal');
+  it('backs every gallery skin with its own bundled artwork', () => {
+    expect(Object.values(BUILT_IN_DREAM_SKIN_THEMES).map((theme) => theme.skin?.image)).toEqual([
+      ...DREAM_SKIN_BUILTIN_IMAGES,
+    ]);
   });
 
   it('resolves every built-in skin to its declared light or dark mode', () => {

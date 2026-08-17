@@ -23,22 +23,21 @@ import {
   useTaskViewContext,
 } from '@renderer/features/tasks/task-view-context';
 import { useWorkspaceWebLinks } from '@renderer/features/tasks/terminals/use-workspace-web-links';
-import { buildFilePathDefaultOpenRequest } from '@renderer/lib/components/file-path-open';
 import { MarkdownEditorRenderer } from '@renderer/lib/editor/markdown-renderer';
 import { rpc } from '@renderer/lib/ipc';
 import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
 import { PtyPane } from '@renderer/lib/pty/pty-pane';
 import {
-  getTerminalFileLinkInternalDestination,
+  openTerminalFileLinkExternally,
   openTerminalGlobalFileInYoda,
-} from '@renderer/lib/pty/terminal-file-link-open';
+} from '@renderer/lib/pty/terminal-file-link-actions';
+import { getTerminalFileLinkInternalDestination } from '@renderer/lib/pty/terminal-file-link-open';
 import type { TerminalFileLinkOptions } from '@renderer/lib/pty/terminal-file-links';
-import { OverviewPanel } from './overview-panel';
 
 /**
- * Renders the content of a pinned tab (conversation PTY, file editor, diff,
- * or the task overview), filling its host pane — the task sidebar strip or
- * the shell-level side pane.
+ * Renders the content of a pinned tab (conversation PTY, file editor, or
+ * diff), filling its host pane — the task sidebar strip or the shell-level
+ * side pane.
  */
 export const SidebarPinnedContent = observer(function SidebarPinnedContent({
   entry,
@@ -46,14 +45,6 @@ export const SidebarPinnedContent = observer(function SidebarPinnedContent({
   entry: TabEntry;
 }) {
   const { conversations } = useRequireProvisionedTask();
-
-  if (entry.kind === 'overview') {
-    return (
-      <div key={entry.tabId} className="h-full overflow-y-auto">
-        <OverviewPanel />
-      </div>
-    );
-  }
 
   if (entry.kind === 'conversation') {
     const conversation = conversations.conversations.get(entry.conversationId);
@@ -183,7 +174,7 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
       homeDir: typeof homeDir === 'string' ? homeDir : undefined,
       sshConnectionId: remoteConnectionId,
       onOpen: (target) => {
-        const { absolutePath, line, column, isDirectory } = target;
+        const { line, column } = target;
         const destination = getTerminalFileLinkInternalDestination(target, {
           sshConnectionId: remoteConnectionId,
         });
@@ -198,17 +189,7 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
           void openTerminalGlobalFileInYoda(destination.path);
           return;
         }
-        if (absolutePath) {
-          void rpc.app.openIn(
-            buildFilePathDefaultOpenRequest({
-              absolutePath,
-              kind: isDirectory ? 'directory' : 'file',
-              sshConnectionId: remoteConnectionId,
-              line,
-              column,
-            })
-          );
-        }
+        void openTerminalFileLinkExternally(target, { sshConnectionId: remoteConnectionId });
       },
     }),
     [provisioned.path, provisioned.taskView, projectRoot, remoteConnectionId, homeDir]

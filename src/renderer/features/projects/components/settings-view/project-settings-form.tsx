@@ -15,6 +15,7 @@ import { useFeatureFlag } from '@renderer/lib/hooks/useFeatureFlag';
 import { FieldGroup } from '@renderer/lib/ui/field';
 import { ProjectSettingsFooter } from './project-settings-footer';
 import { BaseProjectSettingsSection } from './sections/base-project-settings-section';
+import { FacetsSection } from './sections/facets-section';
 import { PromptPrinciplesSection } from './sections/prompt-principles-section';
 import { ShareableSettingsSection } from './sections/shareable-project-settings-section';
 import { WorkspaceProviderSettingsSection } from './sections/workspace-provider-settings-section';
@@ -92,6 +93,7 @@ export const ProjectSettingsForm = observer(function ProjectSettingsForm({
             form={formModel.form}
             update={formModel.update}
           />
+          <FacetsSection form={formModel.form} update={formModel.update} />
         </FieldGroup>
       </div>
       <ProjectSettingsFooter

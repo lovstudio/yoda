@@ -11,6 +11,9 @@ export interface ResolvedUtilityAgent {
   runtimeId: RuntimeId | null;
   model: string | null;
   systemPrompt: string;
+  /** Which Agent won the resolution — recorded in the AI invocation log. */
+  agentId: string | null;
+  agentName: string | null;
 }
 
 /**
@@ -20,11 +23,14 @@ export interface ResolvedUtilityAgent {
  */
 export async function resolveUtilityAgent(builtinSlug: string): Promise<ResolvedUtilityAgent> {
   const agent = await agentsConfigService.getBySlug(builtinSlug);
-  if (!agent) return { runtimeId: null, model: null, systemPrompt: '' };
+  if (!agent)
+    return { runtimeId: null, model: null, systemPrompt: '', agentId: null, agentName: null };
   return {
     runtimeId: agent.preferredRuntime,
     model: agent.model,
     systemPrompt: agent.systemPrompt,
+    agentId: agent.id,
+    agentName: agent.name,
   };
 }
 
@@ -45,6 +51,8 @@ export async function resolveSelectedUtilityAgent(
         runtimeId: agent.preferredRuntime,
         model: agent.model,
         systemPrompt: agent.systemPrompt,
+        agentId: agent.id,
+        agentName: agent.name,
       };
     }
   }

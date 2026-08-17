@@ -40,4 +40,17 @@ describe('AvatarValue', () => {
     expect(host.querySelector('img')).toBeNull();
     expect(host.textContent).toBe('🔍');
   });
+
+  it('falls back to the initial for a payload no image scheme claims', async () => {
+    // Anything this long is a payload, not a glyph — an unrecognized data URI
+    // scheme, a path, raw markup. Printing it would spill across the caller.
+    await act(async () =>
+      root.render(
+        <AvatarValue name="Implementer" value="<svg viewBox='0 0 27 6'></svg>" className="size-4" />
+      )
+    );
+
+    expect(host.querySelector('img')).toBeNull();
+    expect(host.textContent).toBe('I');
+  });
 });

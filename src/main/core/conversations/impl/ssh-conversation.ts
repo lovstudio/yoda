@@ -20,6 +20,7 @@ import type {
 } from '@main/core/conversations/types';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import { SshFileSystem } from '@main/core/fs/impl/ssh-fs';
+import { captureAgentExitTail, describeAgentExit } from '@main/core/pty/agent-exit-diagnostics';
 import type { Pty } from '@main/core/pty/pty';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { resolveSshCommand } from '@main/core/pty/spawn-utils';
@@ -42,15 +43,14 @@ import {
   cancelConversationHydrationBarrier,
   cancelConversationHydrationBarriersForTask,
 } from '../conversation-hydration-barrier';
-import { withExecutionModeInstructions } from '../execution-mode';
 import {
   recordConversationAuthProvider,
   snapshotConversationUsageOnSessionExit,
   snapshotTaskDiffOnSessionExit,
 } from '../session-stats-hooks';
 import { buildAgentCommand } from './agent-command';
+import { buildAppendSystemPrompt } from './append-system-prompt';
 import { substituteImageMentions } from './image-attachments';
-import { getEnabledPromptPrinciplesText } from './prompt-principles';
 import { classifyLostPtyTransport, type PtyExitClassification } from './pty-exit-classification';
 import { resolveRuntimeEnv, resolveRuntimeTmuxEnv } from './runtime-env';
 import { injectTuiStartupInput } from './tui-startup-input';
@@ -76,6 +76,7 @@ export class SshConversationProvider implements ConversationProvider {
   private readonly resolveProjectPromptPrinciples?: () => Promise<
     ProjectPromptPrinciples | undefined
   >;
+  private readonly resolveFacetInstructions?: () => Promise<string | undefined>;
   private readonly tmuxSessionNames = new Map<string, string>();
   private readonly transportDetachedAt = new Map<string, number>();
   private readonly inputTails = new Map<string, Promise<void>>();
@@ -94,6 +95,7 @@ export class SshConversationProvider implements ConversationProvider {
     proxy,
     connectionId,
     resolveProjectPromptPrinciples,
+    resolveFacetInstructions,
   }: {
     projectId: string;
     sidebarWorkspaceId?: string | null;
@@ -106,6 +108,7 @@ export class SshConversationProvider implements ConversationProvider {
     proxy: SshClientProxy;
     connectionId: string;
     resolveProjectPromptPrinciples?: () => Promise<ProjectPromptPrinciples | undefined>;
+    resolveFacetInstructions?: () => Promise<string | undefined>;
   }) {
     this.projectId = projectId;
     this.sidebarWorkspaceId = sidebarWorkspaceId;
@@ -118,6 +121,7 @@ export class SshConversationProvider implements ConversationProvider {
     this.proxy = proxy;
     this.connectionId = connectionId;
     this.resolveProjectPromptPrinciples = resolveProjectPromptPrinciples;
+    this.resolveFacetInstructions = resolveFacetInstructions;
   }
 
   async startSession(
@@ -193,13 +197,12 @@ export class SshConversationProvider implements ConversationProvider {
           runtimeId: conversation.runtimeId,
         });
       }
-      const appendSystemPrompt = withExecutionModeInstructions(
-        await getEnabledPromptPrinciplesText(await this.resolveProjectPromptPrinciples?.(), {
-          projectId: this.projectId,
-          workspaceId: this.sidebarWorkspaceId,
-        }),
-        conversation.executionMode
-      );
+      const appendSystemPrompt = await buildAppendSystemPrompt({
+        resolveFacetInstructions: this.resolveFacetInstructions,
+        resolveProjectPromptPrinciples: this.resolveProjectPromptPrinciples,
+        target: { projectId: this.projectId, workspaceId: this.sidebarWorkspaceId },
+        executionMode: conversation.executionMode,
+      });
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       const terminalThemeMode = await resolveTerminalThemeMode();
       if (!this.ownsPendingStart(sessionId, startToken)) return;
@@ -376,6 +379,7 @@ export class SshConversationProvider implements ConversationProvider {
             projectId: conversation.projectId,
             taskId: conversation.taskId,
             conversationId: conversation.id,
+            ptySessionId: sessionId,
           })
         );
       }
@@ -386,7 +390,7 @@ export class SshConversationProvider implements ConversationProvider {
       // `working` while the provider CLI is still mid-turn.
       let exitClassification: Promise<PtyExitClassification> | null = null;
       let exitedBeforeCommit = false;
-      pty.onExit(({ exitCode }) => {
+      pty.onExit(({ exitCode, signal }) => {
         if (this.intentionallyDetachedPtys.delete(pty)) {
           this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
           return;
@@ -394,6 +398,12 @@ export class SshConversationProvider implements ConversationProvider {
         if (!startCommitted) exitedBeforeCommit = true;
         this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
         if (this.sessions.get(sessionId) !== pty) return;
+        // A CLI that dies mid-turn writes no API error and no crash report, so
+        // its last screen is the only evidence of why the turn stopped. Exit
+        // finalization clears the replay ring buffer, hence the snapshot here,
+        // synchronously, before the asynchronous tmux probe below.
+        const exitTail = captureAgentExitTail(sessionId);
+        const exitReason = describeAgentExit({ exitCode, signal });
         // The transport is gone either way, so stop routing input into a dead
         // channel before the probe resolves; `sendInput` falls back to headless
         // `tmux send-keys` exactly as it does for an idle detach.
@@ -414,6 +424,13 @@ export class SshConversationProvider implements ConversationProvider {
           // A replacement transport that registered while the probe was in
           // flight owns the run state now.
           if (this.sessions.has(sessionId)) return 'transport-lost';
+          log.warn('SshConversation: agent CLI exited', {
+            sessionId,
+            conversationId: conversation.id,
+            runtimeId: conversation.runtimeId,
+            exitReason,
+            exitTail: exitTail || '(no output captured)',
+          });
           this.sessionInfos.delete(sessionId);
           markRuntimeSessionExited({
             projectId: conversation.projectId,
@@ -615,6 +632,18 @@ export class SshConversationProvider implements ConversationProvider {
             }),
       };
     });
+  }
+
+  /**
+   * Ask the tmux pane — not the attach channel — whether the agent still runs.
+   * A detached transport is Yoda's own doing and says nothing about the agent.
+   */
+  async isAgentBackendAlive(conversationId: string): Promise<boolean> {
+    const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
+    if (this.sessions.has(sessionId)) return true;
+    const tmuxSessionName = this.tmuxSessionNames.get(sessionId);
+    if (!tmuxSessionName) return false;
+    return (await classifyLostPtyTransport(this.ctx, tmuxSessionName)) === 'transport-lost';
   }
 
   /** Release only the current SSH tmux attach channel after registry revalidation. */

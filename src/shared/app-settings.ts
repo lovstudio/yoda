@@ -12,6 +12,7 @@ import {
   type kanbanSettingsSchema,
   type localProjectSettingsSchema,
   type maasSettingsSchema,
+  type mobileSyncSettingsSchema,
   type modelProviderSettingsSchema,
   type notificationSettingsSchema,
   type projectSettingsSchema,
@@ -50,6 +51,7 @@ export type StatuslineTemplate = z.infer<typeof statuslineTemplateSchema>;
 export type StatuslineSettings = z.infer<typeof statuslineSettingsSchema>;
 export type PromptPrinciplesSettings = z.infer<typeof promptPrinciplesSettingsSchema>;
 export type UpdatesSettings = z.infer<typeof updatesSettingsSchema>;
+export type MobileSyncSettings = z.infer<typeof mobileSyncSettingsSchema>;
 export type Theme = ThemeSelection;
 export type SystemThemes = z.infer<typeof systemThemesSchema>;
 export type { CustomTheme, CustomThemesSettings };

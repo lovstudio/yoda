@@ -1,0 +1,16 @@
+{
+  "id": "dsh-external/dsh-runtime-bar",
+  "version": "0.1.0",
+  "main": "./lib/index.js",
+  "description": "会话状态栏：工作目录、运行状态、后台任务、会话数，位于输入框下方。暴露服务供其他插件注册状态栏条目",
+  "engines": {
+    "dsh": ">=0.0.1"
+  },
+  "contributes": {
+    "tools": [],
+    "skills": []
+  },
+  "client": {
+    "main": "./lib/client-registry.js"
+  }
+}

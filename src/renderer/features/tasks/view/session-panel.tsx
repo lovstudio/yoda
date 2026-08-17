@@ -1,3 +1,8 @@
+import {
+  AGENT_REPLY_DISPLAY_LEVELS,
+  isAgentReplyDisplayLevel,
+  type AgentReplyDisplayLevel,
+} from '@lovstudio/yoda-protocol/agent-reply-display';
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import {
   ChevronDown,
@@ -12,11 +17,6 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  AGENT_REPLY_DISPLAY_LEVELS,
-  isAgentReplyDisplayLevel,
-  type AgentReplyDisplayLevel,
-} from '@shared/agent-reply-display';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useRequireProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import {

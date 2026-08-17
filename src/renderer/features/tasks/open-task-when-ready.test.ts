@@ -665,9 +665,6 @@ describe('openTaskWhenReady', () => {
         'task-1',
         conversationTarget
       );
-      expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalledWith('project-1', 'task-1', {
-        kind: 'overview',
-      });
     } finally {
       vi.useRealTimers();
     }
@@ -763,47 +760,46 @@ describe('openTaskWhenReady', () => {
     expect(mocks.toast).not.toHaveBeenCalled();
   });
 
-  it('falls back to overview when the remembered session no longer exists', async () => {
-    mocks.openProvisionedTaskTab
-      .mockResolvedValueOnce(preparedSelection(false))
-      .mockResolvedValueOnce(preparedSelection());
+  // A task IS its session, so there is no page to fall back TO: the route
+  // lands on the task itself and the view renders its own session surface.
+  it('routes to the task itself when the remembered session no longer exists', async () => {
+    mocks.openProvisionedTaskTab.mockResolvedValueOnce(preparedSelection(false));
 
     await expect(openTaskWhenReady('project-1', 'task-1', navigate)).resolves.toBe(true);
 
-    expect(mocks.openProvisionedTaskTab).toHaveBeenNthCalledWith(
-      2,
-      provisioned,
-      { kind: 'overview' },
-      expect.any(Object)
-    );
-    expect(mocks.appTabsOpenTaskScope).toHaveBeenLastCalledWith('project-1', 'task-1', {
-      kind: 'overview',
+    expect(mocks.openProvisionedTaskTab).toHaveBeenCalledOnce();
+    expect(navigate).toHaveBeenLastCalledWith('task', {
+      projectId: 'project-1',
+      taskId: 'task-1',
     });
+    expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
   });
 
   it('replaces a cold task route when its remembered session no longer exists', async () => {
     mocks.getTaskStore.mockReturnValueOnce(undefined).mockReturnValue(provisioned);
-    mocks.openProvisionedTaskTab
-      .mockResolvedValueOnce(preparedSelection(false))
-      .mockResolvedValueOnce(preparedSelection());
+    mocks.openProvisionedTaskTab.mockResolvedValueOnce(preparedSelection(false));
 
     await expect(openTaskWhenReady('project-1', 'task-1', navigate)).resolves.toBe(true);
 
-    expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledOnce();
-    expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledWith('project-1', 'task-1', {
-      kind: 'overview',
+    expect(navigate).toHaveBeenLastCalledWith('task', {
+      projectId: 'project-1',
+      taskId: 'task-1',
     });
+    expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
     expect(taskOpenTransitionStore.isPending('project-1', 'task-1')).toBe(false);
   });
 
-  it('uses overview when the task has no remembered agent session', async () => {
+  it('routes to the task itself when it has no remembered agent session', async () => {
     mocks.resolveLastTaskSessionTarget.mockReturnValueOnce(undefined);
 
     await expect(openTaskWhenReady('project-1', 'task-1', navigate)).resolves.toBe(true);
 
-    expect(mocks.appTabsOpenTaskScope).toHaveBeenCalledWith('project-1', 'task-1', {
-      kind: 'overview',
+    expect(navigate).toHaveBeenLastCalledWith('task', {
+      projectId: 'project-1',
+      taskId: 'task-1',
     });
+    expect(mocks.openProvisionedTaskTab).not.toHaveBeenCalled();
+    expect(mocks.appTabsOpenTaskScope).not.toHaveBeenCalled();
   });
 
   it('keeps an explicit target instead of consulting task history', async () => {

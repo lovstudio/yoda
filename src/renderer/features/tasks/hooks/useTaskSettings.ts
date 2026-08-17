@@ -1,4 +1,9 @@
-import type { TaskOutputLanguage } from '@shared/project-settings';
+import {
+  resolveOutputLanguage,
+  resolvePromptRewriteEnabled,
+  resolvePromptRewriteLanguage,
+  type TaskOutputLanguage,
+} from '@shared/project-settings';
 import {
   DEFAULT_SUMMARY_CONTEXT_GLOBAL,
   DEFAULT_SUMMARY_CONTEXT_RECENT,
@@ -12,7 +17,10 @@ export interface TaskSettingsModel {
   initTaskNameFromSession: boolean;
   branchNaming: 'hash' | 'ai';
   namingAgentId: string;
+  promptRewriteAgentId: string;
+  autoGenerateSummary: boolean;
   summaryAgentId: string;
+  promptRewriteEnabled: boolean;
   inputPromptLanguage: TaskOutputLanguage;
   summaryLanguage: TaskOutputLanguage;
   summaryContextRecent: SummaryContext;
@@ -36,7 +44,10 @@ export interface TaskSettingsModel {
       | 'initTaskNameFromSession'
       | 'branchNaming'
       | 'inputPromptLanguage'
+      | 'promptRewriteEnabled'
       | 'namingAgentId'
+      | 'promptRewriteAgentId'
+      | 'autoGenerateSummary'
       | 'namingModel'
       | 'namingLanguage'
       | 'namingContext'
@@ -48,7 +59,10 @@ export interface TaskSettingsModel {
   updateInitTaskNameFromSession: (next: boolean) => void;
   updateBranchNaming: (next: 'hash' | 'ai') => void;
   updateNamingAgentId: (next: string) => void;
+  updatePromptRewriteAgentId: (next: string) => void;
+  updateAutoGenerateSummary: (next: boolean) => void;
   updateSummaryAgentId: (next: string) => void;
+  updatePromptRewriteEnabled: (next: boolean) => void;
   updateInputPromptLanguage: (next: TaskOutputLanguage) => void;
   updateSummaryLanguage: (next: TaskOutputLanguage) => void;
   updateSummaryContext: (scope: 'recent' | 'global', next: Partial<SummaryContext>) => void;
@@ -60,7 +74,8 @@ export interface TaskSettingsModel {
   resetAutoGenerateName: () => void;
   resetInitTaskNameFromSession: () => void;
   resetBranchNaming: () => void;
-  resetInputPromptLanguage: () => void;
+  resetPromptRewriteEnabled: () => void;
+  resetAutoGenerateSummary: () => void;
   resetAutoTrustWorktrees: () => void;
 }
 
@@ -74,18 +89,26 @@ export function useTaskSettings(): TaskSettingsModel {
     resetField,
   } = useAppSettingsKey('tasks');
 
+  const promptRewriteEnabled = resolvePromptRewriteEnabled(
+    tasks?.promptRewriteEnabled,
+    tasks?.inputPromptLanguage
+  );
+
   return {
     autoGenerateName: tasks?.autoGenerateName ?? false,
     initTaskNameFromSession: tasks?.initTaskNameFromSession ?? true,
     branchNaming: tasks?.branchNaming ?? 'hash',
     namingAgentId: tasks?.namingAgentId ?? '',
+    promptRewriteAgentId: tasks?.promptRewriteAgentId ?? '',
+    autoGenerateSummary: tasks?.autoGenerateSummary ?? true,
     summaryAgentId: tasks?.summaryAgentId ?? '',
-    inputPromptLanguage: tasks?.inputPromptLanguage ?? 'skip',
-    summaryLanguage: tasks?.summaryLanguage ?? 'app',
+    promptRewriteEnabled,
+    inputPromptLanguage: resolvePromptRewriteLanguage(tasks?.inputPromptLanguage),
+    summaryLanguage: resolveOutputLanguage(tasks?.summaryLanguage),
     summaryContextRecent: tasks?.summaryContextRecent ?? DEFAULT_SUMMARY_CONTEXT_RECENT,
     summaryContextGlobal: tasks?.summaryContextGlobal ?? DEFAULT_SUMMARY_CONTEXT_GLOBAL,
     namingModel: tasks?.namingModel ?? '',
-    namingLanguage: tasks?.namingLanguage ?? 'skip',
+    namingLanguage: resolveOutputLanguage(tasks?.namingLanguage),
     namingContext: tasks?.namingContext ?? {
       prompt: true,
       project: true,
@@ -102,8 +125,15 @@ export function useTaskSettings(): TaskSettingsModel {
     updateInitTaskNameFromSession: (next) => update({ initTaskNameFromSession: next }),
     updateBranchNaming: (next) => update({ branchNaming: next }),
     updateNamingAgentId: (next) => update({ namingAgentId: next }),
+    updatePromptRewriteAgentId: (next) => update({ promptRewriteAgentId: next }),
+    updateAutoGenerateSummary: (next) => update({ autoGenerateSummary: next }),
     updateSummaryAgentId: (next) => update({ summaryAgentId: next }),
-    updateInputPromptLanguage: (next) => update({ inputPromptLanguage: next }),
+    updatePromptRewriteEnabled: (next) => update({ promptRewriteEnabled: next }),
+    // Touching the language pins the switch to whatever it reads as right now,
+    // so the legacy inference from the old language-as-switch value can no
+    // longer flip the capability on or off behind the user's back.
+    updateInputPromptLanguage: (next) =>
+      update({ inputPromptLanguage: next, promptRewriteEnabled }),
     updateSummaryLanguage: (next) => update({ summaryLanguage: next }),
     updateSummaryContext: (scope, next) => {
       const key = scope === 'recent' ? 'summaryContextRecent' : 'summaryContextGlobal';
@@ -130,7 +160,8 @@ export function useTaskSettings(): TaskSettingsModel {
     resetAutoGenerateName: () => resetField('autoGenerateName'),
     resetInitTaskNameFromSession: () => resetField('initTaskNameFromSession'),
     resetBranchNaming: () => resetField('branchNaming'),
-    resetInputPromptLanguage: () => resetField('inputPromptLanguage'),
+    resetPromptRewriteEnabled: () => resetField('promptRewriteEnabled'),
+    resetAutoGenerateSummary: () => resetField('autoGenerateSummary'),
     resetAutoTrustWorktrees: () => resetField('autoTrustWorktrees'),
   };
 }

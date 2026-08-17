@@ -39,7 +39,8 @@ describe('mobile Skill catalog', () => {
           }),
           skill({ key: 'disabled', id: 'disabled', disabled: true }),
           skill({ key: 'catalog', id: 'catalog-only', installed: false, scope: 'catalog' }),
-        ])
+        ]),
+        'claude'
       )
     ).toEqual([
       {
@@ -47,8 +48,14 @@ describe('mobile Skill catalog', () => {
         id: 'frontend-design-project',
         displayName: 'frontend-design-project',
         description: 'frontend-design-project description',
+        insertText: '/frontend-design-project',
       },
     ]);
+  });
+
+  it('spells the invocation with the session client prefix', () => {
+    const entry = skill({ key: 'user:design', id: 'frontend-design' });
+    expect(mobileSkillSummaries(catalog([entry]), 'codex')[0]?.insertText).toBe('$frontend-design');
   });
 
   it('respects a session allowlist while retaining plugin-controlled Skills', () => {
@@ -57,7 +64,7 @@ describe('mobile Skill catalog', () => {
     const plugin = skill({ key: 'plugin', id: 'plugin-skill', scope: 'plugin' });
 
     expect(
-      mobileSkillSummaries(catalog([allowed, excluded, plugin]), new Set(['allowed']))
+      mobileSkillSummaries(catalog([allowed, excluded, plugin]), 'claude', new Set(['allowed']))
     ).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ key: 'allowed' }),
@@ -65,7 +72,7 @@ describe('mobile Skill catalog', () => {
       ])
     );
     expect(
-      mobileSkillSummaries(catalog([allowed, excluded, plugin]), new Set(['allowed']))
+      mobileSkillSummaries(catalog([allowed, excluded, plugin]), 'claude', new Set(['allowed']))
     ).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'excluded' })]));
   });
 });

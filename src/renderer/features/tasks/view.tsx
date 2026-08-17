@@ -141,12 +141,15 @@ const TopLevelTabSync = observer(function TopLevelTabSync({
 
     const pending = tabManager.flushPendingTopLevelTarget();
     if (shouldResolveScopeEntry) {
+      // No resolvable target means the task holds no page yet — route to the
+      // task itself and let it render its own session surface.
       openTaskTopTab(
         projectId,
         taskId,
         pending ??
           tabManager.activeTopLevelTarget ??
-          tabManager.preferredConversationTarget ?? { kind: 'overview' }
+          tabManager.preferredConversationTarget ??
+          undefined
       );
       return;
     }

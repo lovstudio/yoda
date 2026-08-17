@@ -1,18 +1,18 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readRuntimeBarSource } from '@renderer/app/runtime-bar/test-helpers/read-bar-source';
 
 describe('MaaS Gateway entry-point wiring', () => {
   it('keeps MaaS as one global surface outside the Agent account popover', () => {
-    const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
-    const officialAccountStart = source.indexOf(
-      '{maasActiveForRuntime || shortAccountWindow || officialCodexAccountAvailable'
-    );
-    const accountEnd = source.indexOf('<span className="flex-1" />', officialAccountStart);
-    const maasPopoverStart = source.indexOf('<WorkspaceMaasPopover', accountEnd);
+    const source = readRuntimeBarSource();
+    const registry = readFileSync(new URL('./runtime-bar/registry.ts', import.meta.url), 'utf8');
+    const accountEntry = registry.indexOf("{ id: 'account-usage', slot: 'session'");
+    const maasEntry = registry.indexOf("{ id: 'maas', slot: 'tray'");
 
-    expect(officialAccountStart).toBeGreaterThanOrEqual(0);
-    expect(accountEnd).toBeGreaterThan(officialAccountStart);
-    expect(maasPopoverStart).toBeGreaterThan(accountEnd);
+    // Account quota belongs to the session; model routing is global. Their
+    // slots keep them apart even when both happen to be visible.
+    expect(accountEntry).toBeGreaterThanOrEqual(0);
+    expect(maasEntry).toBeGreaterThan(accountEntry);
     expect(source.match(/<WorkspaceMaasPopover/g)).toHaveLength(1);
     expect(source).not.toContain('maasAccount');
     expect(source).not.toContain('getWorkspaceMaasAccountPresentation');
@@ -20,7 +20,7 @@ describe('MaaS Gateway entry-point wiring', () => {
   });
 
   it('dismisses the global model access popover when the app window loses focus', () => {
-    const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+    const source = readRuntimeBarSource();
 
     expect(source).toMatch(/usePopoverDismiss\(\s*isMaasPopoverOpen,\s+setIsMaasPopoverOpen\s*\)/);
     expect(source).toMatch(
@@ -31,26 +31,34 @@ describe('MaaS Gateway entry-point wiring', () => {
   });
 
   it('dismisses the global model access popover before opening details or logs', () => {
-    const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+    const source = readRuntimeBarSource();
 
     expect(source).toContain('onManage={openMaasManagement}');
     expect(source).toContain('onOpenLogs={openMaasLogs}');
     expect(source).toMatch(
-      /const openMaasManagement = useCallback\(\(\) => \{\s+dismissMaasPopoverThen\(\(\) => \{\s+appState\.navigation\.navigate\('maas'\);/
+      /const openMaasManagement = useCallback\(\(\) => \{\s+dismissMaasPopoverThen\(maas\.openManagement\);/
+    );
+    // The navigation itself belongs to the shared binding context, so both the
+    // routing entry and the usage entry reach the same Settings tab.
+    expect(source).toMatch(
+      /const openManagement = useCallback\(\(\) => \{\s+appState\.navigation\.navigate\('settings', \{\s+tab: 'maas',/
     );
     expect(source).toMatch(
       /const openMaasLogs = useCallback\(\(\) => \{\s+dismissMaasPopoverThen\(\(\) => \{\s+appState\.sidePane\.pinView\('settings', \{ tab: 'ai-logs' \}\);/
     );
   });
 
-  it('routes the Settings MaaS requirement to Library Extensions', () => {
+  it('keeps model access on the Settings pane instead of a standalone route', () => {
     const source = readFileSync(
       new URL('../features/settings/components/SettingsPage.tsx', import.meta.url),
       'utf8'
     );
 
     expect(source).toMatch(
-      /<MaasView\s+embedded\s+onOpenMarketplace=\{\(\) =>\s+navigate\('library', \{ section: 'extensions' \}\)\s*\}/
+      /<MaasView\s+key=\{focusMaasPlatformId \?\? ''\}\s+embedded\s+requestedPlatformId=\{focusMaasPlatformId\}\s+onOpenMarketplace=\{\(\) =>\s+navigate\('library', \{ section: 'extensions' \}\)\s*\}/
+    );
+    expect(readFileSync(new URL('./view-registry.ts', import.meta.url), 'utf8')).not.toContain(
+      'maas: maasView'
     );
   });
 });

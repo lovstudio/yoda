@@ -5,6 +5,7 @@ import { sessionSummaryAutoRefreshService } from './session-summary-autorefresh'
 const mocks = vi.hoisted(() => ({
   listener: null as ((event: AgentSessionStatusChanged) => void) | null,
   refresh: vi.fn(async () => null),
+  autoEnabled: vi.fn(async () => true),
 }));
 
 vi.mock('@main/lib/events', () => ({
@@ -22,6 +23,9 @@ vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
 vi.mock('./session-summary-context', () => ({
   refreshConversationSummary: mocks.refresh,
 }));
+vi.mock('./session-summary-auto', () => ({
+  isAutoSessionSummaryEnabled: mocks.autoEnabled,
+}));
 
 const event: AgentSessionStatusChanged = {
   projectId: 'project-1',
@@ -34,6 +38,8 @@ describe('session summary auto refresh', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     mocks.refresh.mockClear();
+    mocks.autoEnabled.mockClear();
+    mocks.autoEnabled.mockResolvedValue(true);
     sessionSummaryAutoRefreshService.initialize();
   });
 
@@ -60,6 +66,15 @@ describe('session summary auto refresh', () => {
       },
       'global'
     );
+  });
+
+  it('skips the refresh when automatic summaries are switched off', async () => {
+    mocks.autoEnabled.mockResolvedValue(false);
+
+    mocks.listener?.(event);
+    await vi.advanceTimersByTimeAsync(1_200);
+
+    expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
   it('debounces duplicate completion events for the same conversation', async () => {

@@ -5,7 +5,7 @@ import type {
   ConversationManagerStore,
   ConversationStore,
 } from '@renderer/features/tasks/conversations/conversation-manager';
-import { OVERVIEW_TAB_ID, TabManagerStore } from './tab-manager-store';
+import { TabManagerStore } from './tab-manager-store';
 
 vi.mock('@renderer/lib/ipc', () => ({
   events: {
@@ -101,8 +101,10 @@ describe('TabManagerStore conversation recovery', () => {
   });
 });
 
-describe('TabManagerStore overview tab', () => {
-  it('injects a fixed overview tab at index 0 on default init, keeping the conversation active', () => {
+// A task IS its session: there is no fixed slot-0 page in front of it, so the
+// session tab leads and holding no tab at all is a legal state.
+describe('TabManagerStore task-is-its-session tabs', () => {
+  it('opens the initial conversation as the first and active tab', () => {
     const store = new TabManagerStore(
       makeConversationManager([
         makeConversation('conversation-1', '2026-05-01T00:00:00.000Z', true),
@@ -112,13 +114,21 @@ describe('TabManagerStore overview tab', () => {
 
     store.initializeDefault();
 
-    expect(store.resolvedTabs[0]?.kind).toBe('overview');
-    expect(store.tabOrder[0]).toBe(OVERVIEW_TAB_ID);
-    // Default focus stays on the conversation, not the overview tab.
+    expect(store.resolvedTabs.map((tab) => tab.kind)).toEqual(['conversation']);
     expect(store.activeConversationId).toBe('conversation-1');
   });
 
-  it('resolves a conversation target even when Overview is the only open tab', () => {
+  it('holds no tab at all for a task with no session', () => {
+    const store = new TabManagerStore(makeConversationManager([]), 'workspace-1');
+
+    store.initializeDefault();
+
+    expect(store.resolvedTabs).toEqual([]);
+    expect(store.resolvedActiveTabId).toBeUndefined();
+    expect(store.activeTopLevelTarget).toBeNull();
+  });
+
+  it('still resolves a conversation target once its only tab is closed', () => {
     const store = new TabManagerStore(
       makeConversationManager([
         makeConversation('conversation-1', '2026-05-01T00:00:00.000Z', true),
@@ -131,37 +141,14 @@ describe('TabManagerStore overview tab', () => {
     if (!conversationTabId) throw new Error('Expected a conversation tab');
     store.closeTab(conversationTabId);
 
-    expect(store.resolvedTabs.map((tab) => tab.kind)).toEqual(['overview']);
+    expect(store.resolvedTabs).toEqual([]);
     expect(store.preferredConversationTarget).toEqual({
       kind: 'conversation',
       conversationId: 'conversation-1',
     });
   });
 
-  it('cannot be closed', () => {
-    const store = new TabManagerStore(makeConversationManager([]), 'workspace-1');
-    store.initializeDefault();
-
-    store.closeTab(OVERVIEW_TAB_ID);
-
-    expect(store.tabOrder).toContain(OVERVIEW_TAB_ID);
-  });
-
-  it('is excluded from the persisted snapshot', () => {
-    const store = new TabManagerStore(
-      makeConversationManager([
-        makeConversation('conversation-1', '2026-05-01T00:00:00.000Z', true),
-      ]),
-      'workspace-1'
-    );
-    store.initializeDefault();
-
-    // The overview tab is synthesized per-mount and never serialized.
-    expect(store.snapshot.tabs).toHaveLength(1);
-    expect(store.snapshot.tabs.every((t) => t.kind === 'conversation')).toBe(true);
-  });
-
-  it('is re-injected after restoring a snapshot that never contained it', () => {
+  it('restores exactly the persisted tabs, adding none', () => {
     const store = new TabManagerStore(
       makeConversationManager([
         makeConversation('conversation-1', '2026-05-01T00:00:00.000Z', true),
@@ -181,11 +168,12 @@ describe('TabManagerStore overview tab', () => {
       activeTabId: 'tab-1',
     });
 
-    expect(store.tabOrder[0]).toBe(OVERVIEW_TAB_ID);
+    expect(store.tabOrder).toEqual(['tab-1']);
     expect(store.activeTabId).toBe('tab-1');
+    expect(store.snapshot.tabs).toHaveLength(1);
   });
 
-  it('stays pinned at index 0 when other tabs are reordered', () => {
+  it('lets any tab be dragged into the first slot', () => {
     const store = new TabManagerStore(
       makeConversationManager([
         makeConversation('conversation-1', '2026-05-01T00:00:00.000Z', true),
@@ -195,11 +183,11 @@ describe('TabManagerStore overview tab', () => {
     );
     store.initializeDefault();
     store.openConversation('conversation-2');
+    const [first, second] = store.tabOrder;
 
-    // Attempt to drag a conversation (index 1) into the overview slot (index 0).
     store.reorderTabs(1, 0);
 
-    expect(store.tabOrder[0]).toBe(OVERVIEW_TAB_ID);
+    expect(store.tabOrder).toEqual([second, first]);
   });
 });
 

@@ -1,94 +1,80 @@
 # Mobile
 
-## Structure
+手机客户端**不在本仓库**，在 [`lovstudio/yoda-mobile`](https://github.com/lovstudio/yoda-mobile)（本地一般是
+`../yoda-mobile`）。本仓库负责另外两层：桌面 connector 和公网中继。
 
-- `apps/mobile/`: Expo app for iOS, Android, and web preview.
-- `src/main/core/mobile-gateway/`: desktop HTTP gateway for mobile clients.
-- `src/shared/mobile-api.ts`: shared JSON API contract for the gateway and Expo app.
-- `src/shared/mobile-session-events.ts`: shared SSE framing and session invalidation contract.
+## 三层
 
-## Architecture Rules
+| 层 | 位置 | 职责 |
+| --- | --- | --- |
+| Client | `lovstudio/yoda-mobile` | Expo 应用，只说 wire 协议 |
+| Relay | `services/relay/` | 公网中继，按路由白名单转发 |
+| Connector | `src/main/core/mobile-gateway/` | 桌面 HTTP gateway，唯一能碰项目/任务/PTY 的一层 |
 
-- Keep mobile independent from Electron renderer code. Do not import MobX stores, renderer components, preload IPC, or `window.electronAPI` into `apps/mobile/`.
-- Mobile talks to desktop through the gateway only.
-- When Tailscale is active, connection info prefers its `100.64.0.0/10` address so a paired phone
-  on the same tailnet can connect outside the physical LAN. LAN addresses remain fallbacks.
-- The gateway starts by default and must require a token for non-health endpoints.
-- Pairing is an onboarding action, not a launch action. After the first successful exchange, native
-  clients must restore the saved SecureStore credential before considering inferred Expo/development
-  connections. Only an explicit new pairing deep link may replace the saved connection.
-- Allow explicit disablement through `YODA_MOBILE_GATEWAY_DISABLED=1`, `YODA_MOBILE_GATEWAY_ENABLED=0`, or `YODA_MOBILE_GATEWAY=0`.
-- The desktop sidebar mobile modal must support QR-based install and connection. `YODA_MOBILE_INSTALL_URL` can override the install QR target.
-- Prefer polling snapshots for first-pass mobile workflows. Add server-sent events or WebSocket only when realtime behavior is required.
-- Session detail realtime updates use authenticated server-sent events. The stream sends scoped
-  invalidations only; clients refetch the existing detail endpoint, reconnect with backoff, and keep
-  a low-frequency foreground reconciliation rather than polling every few seconds.
-- Mobile Codex detail reads a bounded rollout tail; do not reintroduce full-file parsing for every
-  live invalidation.
-- Mobile request creation should use narrow desktop operations. Avoid exposing raw RPC or terminal controls over the gateway.
-- Session continuation distinguishes a currently `running`/`acceptsInput` process from a persisted
-  `resumable` conversation. A cold resumable session stays actionable in the composer; the input
-  route opens the project, provisions the task, and resumes the original conversation before text,
-  image, or voice-transcribed input is injected.
-- Mobile image input uploads through `/v1/attachments` in bounded base64 chunks, then passes opaque attachment ids to demand/session input routes. The desktop stores generated filenames under app data and reuses `injectConversationPrompt`; never send phone filenames as trusted desktop paths. Images are local-project-only until the gateway has an explicit SSH transfer path.
-- Voice input is speech-to-editable-text on the phone, not an audio file disguised as an Agent attachment. It uses `expo-localization` preferences negotiated against `expo-speech-recognition.getSupportedLocales()`; never pass an app-region hybrid such as `en-CN` directly to the recognizer. Pass bounded, deduplicated `contextualStrings` containing current project/task/session names plus Yoda's stable product and development vocabulary so native recognition can bias toward domain hot words. Both modules require a native development/production build; Expo Go keeps system-keyboard dictation as its fallback.
-- The new-request attribution selector is a compact input-toolbar badge. Its bounded, scrollable modal sheet first selects a project, then either creates an independent project task or selects an existing task as the parent. Keep long-term tasks easy to identify and near the top; never let a long project/task list push the primary submit action down the page.
-- Project and task picker sheets must keep their search field visible above the scrollable results. Project search covers both display and source names; parent-task search preserves the established long-term, pinned, and recent ordering.
-- The shared mobile input toolbar exposes installed Skills through its expandable tools tray. Skill search is served by the authenticated gateway for the current project or conversation; selecting one inserts the runtime-native explicit command into the visible input so new tasks and follow-up turns use the same editable send path.
-- Every new mobile gateway route must be added to both `src/shared/mobile-relay.ts` and `services/relay/src/route-policy.ts`, with matching allow/reject tests, so direct and Relay connections expose the same bounded API surface.
+契约是 `packages/protocol/`，发布为 npm 包 `@lovstudio/yoda-protocol`：
 
-## Development
+- `mobile-api.ts` —— JSON API 契约
+- `mobile-relay.ts` —— Relay 路由白名单与配对 URL
+- `mobile-session-events.ts` —— SSE 分帧与会话失效契约
 
-Start desktop. In development, the gateway token defaults to `dev-mobile-token` so Expo Go can
-reconnect after desktop restarts:
+改协议要连带发版，客户端才能拿到。协议包必须零 `@shared` / `@main` import，
+`packages/protocol/src/self-contained.test.ts` 守着这条。
+
+## 架构规则
+
+- 协议包是路由白名单的唯一来源。`services/relay/src/route-policy.ts` 从协议包 import 判定函数，
+  **不要**在 relay 侧重新抄一份——新增 gateway 路由只改协议包，加上匹配的 allow/reject 测试。
+- 客户端拿不到桌面 registry，凡是需要桌面知识的东西由 gateway 预计算后随响应下发：
+  权限模式走 `MobileConfigurationSnapshot.accessModePermissionModes`（在
+  `mobile-permission-modes.ts` 算好），Skill 命令走 skill 响应里的 `insertText`（在 `mobile-skills.ts` 算好）。
+  不要把 `runtime-registry.ts` 的概念漏进协议。
+- 手机只能通过 gateway 说话。不要把裸 RPC 或终端控制暴露到 gateway 上。
+- Tailscale 活跃时，连接信息优先给它的 `100.64.0.0/10` 地址，这样同一 tailnet 的手机在物理 LAN 外也能连；
+  LAN 地址作为回退。
+- gateway 默认开启，非 health 端点必须校验 token。允许用
+  `YODA_MOBILE_GATEWAY_DISABLED=1`、`YODA_MOBILE_GATEWAY_ENABLED=0`、`YODA_MOBILE_GATEWAY=0` 显式关掉。
+- 桌面侧栏的移动端弹窗必须支持扫码安装与扫码连接，安装目标可用 `YODA_MOBILE_INSTALL_URL` 覆盖。
+- 会话详情实时更新走带鉴权的 SSE，只发范围化失效通知，客户端重新拉取原有 detail 接口。
+  不要退回几秒一次的轮询。
+- 移动端读 Codex 详情只读有界的 rollout 尾部；不要为每次实时失效重新全文解析。
+- 会话续接要区分「进程还在跑」（`running`/`acceptsInput`）和「会话可恢复」（`resumable`）。
+  冷的可恢复会话在输入框里依然可操作：input 路由负责打开项目、provision 任务、恢复原会话，然后才注入输入。
+- 图片输入走 `/v1/attachments` 分块 base64 上传，桌面把生成的文件名存在应用数据目录下并复用
+  `injectConversationPrompt`；**永远不要**把手机传来的文件名当作可信的桌面路径。
+  在 gateway 有明确的 SSH 传输通道之前，图片只支持本地项目。
+
+## 本地 Metro 自启
+
+开发模式下打开移动端连接视图时，gateway 会懒启动 Expo Metro（Metro 约 450MB RSS，所以不在启动时拉起）。
+客户端源码已不在本仓库，所以必须告诉它 checkout 在哪：
+
+```bash
+YODA_MOBILE_REPO_PATH=/path/to/yoda-mobile pnpm run dev
+```
+
+没设这个变量就跳过自启并 log 一行提示——这是正常的开发配置，不是故障，gateway 照常服务已配对的手机。
+其他开关：`YODA_MOBILE_METRO_DISABLED=1` 彻底关掉自启，`YODA_MOBILE_EXPO_URL` 指向别处已经跑着的 Metro。
+
+也可以直接在客户端仓库里 `pnpm start`。
+
+## 开发
+
+启动桌面。开发模式下 gateway token 默认 `dev-mobile-token`，这样 Expo Go 在桌面重启后还能连上：
 
 ```bash
 pnpm run dev
 ```
 
-Override it with `YODA_MOBILE_GATEWAY_TOKEN=<token>` when needed. Packaged/production builds
-generate a random token unless the environment variable is set.
+需要时用 `YODA_MOBILE_GATEWAY_TOKEN=<token>` 覆盖。打包/生产构建在未设该变量时生成随机 token。
 
-In development, desktop startup also auto-starts local Expo Metro on port `8081` when no Metro is
-already running. Set `YODA_MOBILE_METRO_DISABLED=1` to turn off this auto-start, or set
-`YODA_MOBILE_EXPO_URL` when Metro runs somewhere else.
+iOS 本地联调先用 Expo Go，在 app 里手填网关地址与 token。桌面侧栏的移动端弹窗在开发模式下会给出本地
+Expo Go 二维码（按 `exp://<gateway-host>:8081` 推断）。因为 Expo Go 会吃掉本地 QR 的 query 参数，
+app 在开发模式下还会回退到 `http://<gateway-host>:3879` + `dev-mobile-token`。
 
-Start Expo manually only when you want a separate terminal, tunnel mode, or custom flags:
+`yodamobile://connect` 这种产品化配对需要原生构建，构建命令在客户端仓库里。
 
-```bash
-pnpm mobile
-```
+## 客户端改动的验收
 
-For iOS local testing, use Expo Go first and enter the gateway URL/token manually in the app.
-The desktop sidebar mobile modal shows a local Expo Go QR in development, inferred as
-`exp://<gateway-host>:8081`. Because Expo Go can strip local QR query parameters, the app falls
-back to `http://<gateway-host>:3879` plus `dev-mobile-token` in development. Use
-`YODA_MOBILE_EXPO_URL` if Metro runs on another host or port.
-Use `pnpm mobile:tunnel` when the phone cannot reach the desktop over LAN. Product-style pairing
-through `yodamobile://connect` requires a native development build:
-
-```bash
-pnpm mobile:ios:device
-```
-
-For product-style pairing, open the desktop sidebar mobile modal, scan the install QR, then scan
-the connection QR after installing the native app. The connection QR is needed once per device;
-later launches restore the saved credential automatically unless the user explicitly disconnects or
-the desktop device is revoked.
-
-## Installed App Delivery
-
-- A user-requested mobile feature or fix is complete only after the latest `main` code is installed
-  into the branded `Yoda Mobile` app (`ai.lovstudio.yoda.mobile`) on the user's connected iPhone.
-  A source commit, passing tests, an Expo bundle, or a successful native build alone is not the
-  user-visible completion condition.
-- Merge the change to `main` first, then build a signed Release app from that exact mainline commit,
-  overwrite-install it on the connected device, launch it, and verify the requested behavior there.
-  Overwrite the existing bundle instead of uninstalling it so SecureStore pairing data is retained.
-- Confirm the Release `main.jsbundle` contains a marker from the changed mobile code and use
-  `xcrun devicectl device info apps` plus `xcrun devicectl device process launch` to verify the
-  installed bundle and launch. If Expo reports `Build Succeeded` but stalls while connecting to a
-  newer iOS device, install the generated `.app` directly with
-  `xcrun devicectl device install app`.
-- Treat Expo, Metro, Xcode, and `devicectl` as implementation details. Report completion in terms of
-  what the installed `Yoda Mobile` app on the phone can now do.
+界面和客户端行为的验收条件是「装进手机的 Yoda Mobile 能做什么」，不是本仓库测试通过——
+详见客户端仓库的 `AGENTS.md`。本仓库改 gateway/relay 时，若改动会影响手机上的可见行为，
+同样要在真机上验证一遍。

@@ -18,8 +18,8 @@ import { cn } from '@renderer/utils/utils';
 import { AgentStatusIndicator } from '../components/agent-status-indicator';
 import { usePersistedDisclosure } from '../components/persisted-disclosure';
 import { SessionUsageChip } from '../components/session-usage-chip';
+import type { ProvisionedTask } from '../stores/task';
 import { getConversationIndicatorStatus } from '../stores/task-selectors';
-import { useRequireProvisionedTask, useTaskViewContext } from '../task-view-context';
 import { ConversationDragHandle } from './conversation-drag-handle';
 import type { ConversationStore } from './conversation-manager';
 import { formatConversationTitleForDisplay } from './conversation-title-utils';
@@ -28,7 +28,21 @@ import { reopenArchivedConversation } from './use-archived-conversations';
 
 const MAX_VISUAL_DEPTH = 6;
 
+/**
+ * The task whose sessions the tree renders. Passed explicitly rather than read
+ * from the task-view context: the tree is also hosted outside that tree (the
+ * task details modal), where it may even describe a task that isn't the routed
+ * one. `provisioned` is absent for a task that has no live workspace yet, which
+ * only costs the rows their session-management menu entries.
+ */
+type ConversationTreeOwner = {
+  projectId: string;
+  taskId: string;
+  provisioned?: ProvisionedTask;
+};
+
 export const ConversationTree = observer(function ConversationTree({
+  owner,
   activeConversations,
   archivedConversations,
   activeConversationId,
@@ -36,6 +50,7 @@ export const ConversationTree = observer(function ConversationTree({
   onOpenActive,
   onArchivedRestored,
 }: {
+  owner: ConversationTreeOwner;
   activeConversations: readonly ConversationStore[];
   archivedConversations: readonly Conversation[];
   activeConversationId?: string | null;
@@ -55,6 +70,7 @@ export const ConversationTree = observer(function ConversationTree({
   return (
     <div className="@container min-w-0 rounded-xl border border-border/60 bg-background p-1">
       <ConversationTreeBranch
+        owner={owner}
         nodes={roots}
         activeById={activeById}
         activeConversationId={activeConversationId}
@@ -69,6 +85,7 @@ export const ConversationTree = observer(function ConversationTree({
 });
 
 const ConversationTreeBranch = observer(function ConversationTreeBranch({
+  owner,
   nodes,
   activeById,
   activeConversationId,
@@ -78,6 +95,7 @@ const ConversationTreeBranch = observer(function ConversationTreeBranch({
   depth,
   ancestorTrail,
 }: {
+  owner: ConversationTreeOwner;
   nodes: readonly ConversationTreeNode[];
   activeById: ReadonlyMap<string, ConversationStore>;
   activeConversationId?: string | null;
@@ -95,6 +113,7 @@ const ConversationTreeBranch = observer(function ConversationTreeBranch({
         return (
           <ConversationTreeItem
             key={node.conversation.id}
+            owner={owner}
             node={node}
             activeStore={activeById.get(node.conversation.id)}
             activeById={activeById}
@@ -113,6 +132,7 @@ const ConversationTreeBranch = observer(function ConversationTreeBranch({
 });
 
 const ConversationTreeItem = observer(function ConversationTreeItem({
+  owner,
   node,
   activeStore,
   activeById,
@@ -124,6 +144,7 @@ const ConversationTreeItem = observer(function ConversationTreeItem({
   depth,
   guideTrail,
 }: {
+  owner: ConversationTreeOwner;
   node: ConversationTreeNode;
   activeStore?: ConversationStore;
   activeById: ReadonlyMap<string, ConversationStore>;
@@ -136,8 +157,7 @@ const ConversationTreeItem = observer(function ConversationTreeItem({
   guideTrail: readonly boolean[];
 }) {
   const { t } = useTranslation();
-  const { projectId, taskId } = useTaskViewContext();
-  const provisioned = useRequireProvisionedTask();
+  const { projectId, taskId, provisioned } = owner;
   const showTranscript = useShowModal('archivedSessionTranscriptModal');
   const [busy, setBusy] = useState(false);
   const { conversation } = node;
@@ -287,7 +307,11 @@ const ConversationTreeItem = observer(function ConversationTreeItem({
               {usage ? <SessionUsageChip usage={usage} /> : null}
               <span className="flex shrink-0 items-center text-xs text-foreground-passive">
                 {status ? (
-                  <AgentStatusIndicator status={status} disableTooltip />
+                  <AgentStatusIndicator
+                    status={status}
+                    disableTooltip
+                    session={{ projectId, taskId, conversationId: conversation.id }}
+                  />
                 ) : (
                   <RelativeTime
                     value={
@@ -327,6 +351,7 @@ const ConversationTreeItem = observer(function ConversationTreeItem({
 
       {hasChildren && expanded ? (
         <ConversationTreeBranch
+          owner={owner}
           nodes={node.children}
           activeById={activeById}
           activeConversationId={activeConversationId}

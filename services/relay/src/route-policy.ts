@@ -1,4 +1,5 @@
 import type { IncomingMessage } from 'node:http';
+import { matchMobileRelayRoute } from '@lovstudio/yoda-protocol/mobile-relay';
 
 const DEVICE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const MAX_PATH_LENGTH = 4_096;
@@ -47,101 +48,6 @@ function normalizedPath(segments: string[]): string {
   return `/${segments.map((segment) => encodeURIComponent(segment)).join('/')}`;
 }
 
-function isSessionsPrefix(segments: string[]): boolean {
-  return (
-    segments[0] === 'v1' &&
-    segments[1] === 'projects' &&
-    Boolean(segments[2]) &&
-    segments[3] === 'tasks' &&
-    Boolean(segments[4]) &&
-    segments[5] === 'sessions'
-  );
-}
-
-function isTaskActionsPrefix(segments: string[]): boolean {
-  return (
-    segments[0] === 'v1' &&
-    segments[1] === 'projects' &&
-    Boolean(segments[2]) &&
-    segments[3] === 'tasks' &&
-    Boolean(segments[4]) &&
-    segments[5] === 'actions'
-  );
-}
-
-function isXhsJobsPrefix(segments: string[]): boolean {
-  return segments[0] === 'v1' && segments[1] === 'xhs' && segments[2] === 'jobs';
-}
-
-function assertAllowedUpstreamRoute(method: string, segments: string[]): boolean {
-  if (method === 'GET' && segments.length === 2 && segments[0] === 'v1') {
-    if (
-      segments[1] === 'snapshot' ||
-      segments[1] === 'profile' ||
-      segments[1] === 'configuration' ||
-      segments[1] === 'skills'
-    ) {
-      return false;
-    }
-  }
-  if (method === 'POST' && segments.length === 2 && segments[0] === 'v1') {
-    if (segments[1] === 'demands' || segments[1] === 'attachments') return false;
-  }
-  if (
-    method === 'POST' &&
-    segments.length === 4 &&
-    segments[0] === 'v1' &&
-    segments[1] === 'attachments' &&
-    segments[2] &&
-    ['chunks', 'complete', 'discard'].includes(segments[3] ?? '')
-  ) {
-    return false;
-  }
-  if (
-    method === 'GET' &&
-    segments.length === 4 &&
-    segments[0] === 'v1' &&
-    segments[1] === 'projects' &&
-    Boolean(segments[2]) &&
-    segments[3] === 'skills'
-  ) {
-    return false;
-  }
-
-  if (isXhsJobsPrefix(segments)) {
-    if (method === 'POST' && segments.length === 3) return false;
-    if (method === 'GET' && segments.length === 4 && segments[3]) return false;
-    if (method === 'POST' && segments.length === 5 && segments[3] && segments[4] === 'confirm') {
-      return false;
-    }
-    throw new RoutePolicyError(404, 'not_found', 'Relay endpoint was not found.');
-  }
-
-  if (isTaskActionsPrefix(segments)) {
-    if (method === 'POST' && segments.length === 6) return false;
-    throw new RoutePolicyError(404, 'not_found', 'Relay endpoint was not found.');
-  }
-
-  if (!isSessionsPrefix(segments)) {
-    throw new RoutePolicyError(404, 'not_found', 'Relay endpoint was not found.');
-  }
-  if (method === 'GET' && segments.length === 6) return false;
-  if (method === 'GET' && segments.length === 7 && segments[6]) return false;
-  if (method === 'GET' && segments.length === 8 && segments[6] && segments[7] === 'events') {
-    return true;
-  }
-  if (method === 'GET' && segments.length === 8 && segments[6] && segments[7] === 'skills') {
-    return false;
-  }
-  if (method === 'POST' && segments.length === 8 && segments[6] && segments[7] === 'input') {
-    return false;
-  }
-  if (method === 'POST' && segments.length === 8 && segments[6] && segments[7] === 'config') {
-    return false;
-  }
-  throw new RoutePolicyError(404, 'not_found', 'Relay endpoint was not found.');
-}
-
 export function resolveForwardableMobileRoute(req: IncomingMessage): ForwardableMobileRoute {
   const method = req.method?.toUpperCase() ?? '';
   if (method !== 'GET' && method !== 'POST') {
@@ -166,13 +72,18 @@ export function resolveForwardableMobileRoute(req: IncomingMessage): Forwardable
   if (!isValidDeviceId(deviceId)) {
     throw new RoutePolicyError(400, 'invalid_device_id', 'Device ID is invalid.');
   }
-  const upstreamSegments = rawSegments.slice(3).map(decodeSegment);
-  const isEventStream = assertAllowedUpstreamRoute(method, upstreamSegments);
+  // Decode each segment so traversal and injection attempts are rejected, then
+  // re-encode into the canonical upstream path the allowlist is written against.
+  const upstreamPath = normalizedPath(rawSegments.slice(3).map(decodeSegment));
+  const route = matchMobileRelayRoute(method, upstreamPath);
+  if (!route) {
+    throw new RoutePolicyError(404, 'not_found', 'Relay endpoint was not found.');
+  }
 
   return {
     deviceId,
-    upstreamPath: normalizedPath(upstreamSegments),
-    isEventStream,
+    upstreamPath,
+    isEventStream: route.isEventStream,
   };
 }
 

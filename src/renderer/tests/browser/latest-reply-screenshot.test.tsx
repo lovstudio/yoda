@@ -24,14 +24,16 @@ vi.mock('react-i18next', async (importOriginal) => ({
 
 vi.mock('modern-screenshot', () => ({ domToPng: mocks.domToPng }));
 
-vi.mock('@renderer/lib/hooks/use-toast', () => ({
-  useToast: () => ({
-    toast: Object.assign(mocks.toast, {
-      error: mocks.toastError,
-      success: mocks.toastSuccess,
-    }),
-  }),
-}));
+// `toast` is exported alongside `useToast` and imported directly by
+// file-path-operations, which this component pulls in — a mock missing that
+// named export fails the whole module at import time.
+vi.mock('@renderer/lib/hooks/use-toast', () => {
+  const toast = Object.assign(mocks.toast, {
+    error: mocks.toastError,
+    success: mocks.toastSuccess,
+  });
+  return { toast, useToast: () => ({ toast }) };
+});
 
 vi.mock('@renderer/lib/ipc', () => ({
   rpc: {

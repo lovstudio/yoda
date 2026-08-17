@@ -250,6 +250,22 @@ async function openTaskWhenReadyAfterTrace(
       elapsedMs: Math.round((performance.now() - startedAt) * 10) / 10,
     });
   };
+  /**
+   * Route to the task scope itself, with no tab target. A task IS its session:
+   * when no session tab resolves (a task with zero sessions, or a target that
+   * failed to hydrate) there is no destination page to stage — the view renders
+   * its own session landing surface.
+   */
+  const commitTaskScopeRoute = (): boolean => {
+    if (!isCurrentRequest()) return false;
+    abandonHotRevealForLoading?.();
+    selectionForLoadingRoute = null;
+    _navigate('task', { projectId, taskId });
+    navigationLease = currentNavigationLease();
+    stagedRouteKey = 'task-scope';
+    markTaskOpenTrace(projectId, taskId, 'route-committed', { target: 'task-scope' });
+    return true;
+  };
   const waitForStagingRoute = async (
     stagingTarget: TaskWindowTabTarget,
     selection: DeferredTaskTabSelection
@@ -293,7 +309,8 @@ async function openTaskWhenReadyAfterTrace(
       provisioned.taskView.tabManager,
       projectId,
       taskId
-    ) ?? { kind: 'overview' };
+    );
+    if (!target) return commitTaskScopeRoute();
     markTaskOpenTrace(projectId, taskId, 'target-resolved', { target: target.kind });
     // Attach the rejection handler immediately. The reveal claim below may be
     // pending while hydration fails; that failure must not escape globally.
@@ -348,23 +365,13 @@ async function openTaskWhenReadyAfterTrace(
       }
       if (!isCurrentRequest()) return false;
 
-      let selection = unwrapTaskTargetOpen(
+      const selection = unwrapTaskTargetOpen(
         await waitForTaskOpenStep(selectionPromise, isCurrentRequest, hardDeadline)
       );
       if (!isCurrentRequest()) {
         return false;
       }
-      if (!selection.found) {
-        abandonHotRevealForLoading();
-        target = { kind: 'overview' };
-        selectionForLoadingRoute = null;
-        selection = await openProvisionedTaskTab(provisioned, target, {
-          shouldApply: isCurrentRequest,
-          topLevelMode: 'internal',
-          deferSelection: true,
-        });
-        if (!isCurrentRequest()) return false;
-      }
+      if (!selection.found) return commitTaskScopeRoute();
       selectionForLoadingRoute = selection;
 
       if (
@@ -429,7 +436,7 @@ async function openTaskWhenReadyAfterTrace(
           : 'Failed to open provisioned task target',
         { projectId, taskId, target, error }
       );
-      if (stagedRouteKey !== null && transitionLease) {
+      if (stagedRouteKey !== null && transitionLease && target) {
         taskOpenTransitionStore.fail(projectId, taskId, transitionLease, target, error);
       }
       notifyTaskOpenFailure(projectId, taskId, target, failureStage, error);
@@ -478,10 +485,11 @@ async function openTaskWhenReadyAfterTrace(
       provisioned.taskView.tabManager,
       projectId,
       taskId
-    ) ?? { kind: 'overview' };
+    );
+    if (!target) return commitTaskScopeRoute();
     markTaskOpenTrace(projectId, taskId, 'target-resolved', { target: target.kind });
 
-    let selection = await waitForTaskOpenStep(
+    const selection = await waitForTaskOpenStep(
       openProvisionedTaskTab(provisioned, target, {
         shouldApply: isCurrentRequest,
         topLevelMode: 'internal',
@@ -492,15 +500,7 @@ async function openTaskWhenReadyAfterTrace(
     );
     markTaskOpenTrace(projectId, taskId, 'target-hydrated', { target: target.kind });
     if (!isCurrentRequest()) return false;
-    if (!selection.found) {
-      target = { kind: 'overview' };
-      selection = await openProvisionedTaskTab(provisioned, target, {
-        shouldApply: isCurrentRequest,
-        topLevelMode: 'internal',
-        deferSelection: true,
-      });
-      if (!isCurrentRequest()) return false;
-    }
+    if (!selection.found) return commitTaskScopeRoute();
     selectionForLoadingRoute = selection;
 
     if (target.kind === 'conversation') {

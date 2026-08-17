@@ -1,10 +1,17 @@
-import type { MobileSkillSummary } from '@shared/mobile-api';
+import type { MobileSkillSummary } from '@lovstudio/yoda-protocol/mobile-api';
+import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
+import type { RuntimeId } from '@shared/runtime-registry';
 import { selectSkillFamilyRepresentatives } from '@shared/skills/grouping';
 import type { CatalogIndex } from '@shared/skills/types';
 
-/** Match the desktop composer: installed, enabled, one representative per Skill family. */
+/**
+ * Match the desktop composer: installed, enabled, one representative per Skill
+ * family. `insertText` is resolved here so the phone never needs the runtime
+ * registry to know how a client spells command invocations.
+ */
 export function mobileSkillSummaries(
   catalog: CatalogIndex,
+  runtimeId: RuntimeId,
   allowedSkillKeys: ReadonlySet<string> | null = null
 ): MobileSkillSummary[] {
   return selectSkillFamilyRepresentatives(
@@ -25,5 +32,6 @@ export function mobileSkillSummaries(
       id: skill.id,
       displayName: skill.displayName,
       description: skill.description,
+      insertText: applyAgentCommandPrefix(runtimeId, skill.id),
     }));
 }

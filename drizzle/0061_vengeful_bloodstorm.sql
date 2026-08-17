@@ -1,0 +1,1 @@
+ALTER TABLE `tasks` ADD `facet_id` text;

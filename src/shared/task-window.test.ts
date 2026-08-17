@@ -81,10 +81,24 @@ describe('task window targets', () => {
         })
       )
     ).toBeNull();
+    // Valid target, invalid window id — isolates the sourceWindowId > 0 check.
     expect(
       parseTaskWindowDragPayload(
         JSON.stringify({
           sourceWindowId: 0,
+          target: {
+            projectId: 'project-1',
+            taskId: 'task-1',
+            tab: { kind: 'conversation', conversationId: 'conversation-1' },
+          },
+        })
+      )
+    ).toBeNull();
+    // A retired task-overview target is no longer a tab entity at all.
+    expect(
+      parseTaskWindowDragPayload(
+        JSON.stringify({
+          sourceWindowId: 12,
           target: { projectId: 'project-1', taskId: 'task-1', tab: { kind: 'overview' } },
         })
       )

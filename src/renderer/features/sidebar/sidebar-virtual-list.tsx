@@ -117,10 +117,15 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
     [displayRows]
   );
   const archivedGroupCollapsed = collapsedTaskGroupIds.has(ARCHIVED_PRIORITY_COLLAPSE_ID);
+  // Re-hydrate when the token moves: a project mount or workspace switch resets
+  // the archived scope and releases every hydrated row, and the header count
+  // still comes from the database — so an open group would keep showing only its
+  // disclosure row until the user collapsed and reopened it.
+  const archivedHydrationToken = sidebarStore.sidebarArchivedHydrationToken;
   useEffect(() => {
     if (!archivedGroupPresent || archivedGroupCollapsed) return;
     sidebarStore.ensureSidebarArchivedTasksHydrated();
-  }, [archivedGroupCollapsed, archivedGroupPresent]);
+  }, [archivedGroupCollapsed, archivedGroupPresent, archivedHydrationToken]);
   const pinnedRows = useMemo(
     () =>
       limitPinnedTaskListRows(
@@ -142,11 +147,17 @@ export const SidebarVirtualList = observer(function SidebarVirtualList({
       : null;
   const navigationRows = useMemo(() => {
     const next: SidebarNavigationRow[] = [];
-    if (!taskPriorityMode) {
-      next.push({ kind: 'pinned-header' });
-      if (!pinnedCollapsed) {
-        next.push(...pinnedRows.map((row) => ({ kind: 'pinned-row' as const, row })));
-      }
+    // Priority mode already carries its own grouping, so the pinned/projects
+    // section headers label nothing: the list is one flat sequence of priority
+    // groups. Without the headers there is no collapse toggle either, so the
+    // rows always render.
+    if (taskPriorityMode) {
+      next.push(...renderRows.map((row) => ({ kind: 'project-row' as const, row })));
+      return next;
+    }
+    next.push({ kind: 'pinned-header' });
+    if (!pinnedCollapsed) {
+      next.push(...pinnedRows.map((row) => ({ kind: 'pinned-row' as const, row })));
     }
     next.push({ kind: 'projects-header' });
     if (!projectsCollapsed) {

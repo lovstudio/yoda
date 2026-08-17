@@ -1,4 +1,4 @@
-import { GitCompare, LayoutDashboard, MessageSquare } from 'lucide-react';
+import { GitCompare, MessageSquare } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { TaskWindowBounds, TaskWindowTarget } from '@shared/task-window';
 import { roomMemberTabMeta } from '@renderer/features/agent-room/room-member-detail';
@@ -19,11 +19,6 @@ export function getTabMeta(tab: ResolvedTab): {
   detail?: string;
   title: string;
 } {
-  if (tab.kind === 'overview') {
-    const label = i18n.t('tasks.tabs.overview');
-    return { icon: <LayoutDashboard className="size-3.5" />, label, title: label };
-  }
-
   if (tab.kind === 'conversation') {
     const runtimeId = tab.store.data.runtimeId;
     const config = agentConfig[runtimeId];
@@ -95,8 +90,6 @@ export function buildTaskWindowTarget(
 ): TaskWindowTarget {
   const base = { projectId, taskId };
   switch (tab.kind) {
-    case 'overview':
-      return { ...base, tab: { kind: 'overview' } };
     case 'conversation':
       return { ...base, tab: { kind: 'conversation', conversationId: tab.conversationId } };
     case 'room-member':

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readRuntimeBarSource } from '@renderer/app/runtime-bar/test-helpers/read-bar-source';
 
 describe('shared composer settings surfaces', () => {
   it('keeps Home and the workspace runtime bar on one configuration component', () => {
@@ -8,10 +9,7 @@ describe('shared composer settings surfaces', () => {
       'utf8'
     );
     const home = readFileSync(new URL('./home-view.tsx', import.meta.url), 'utf8');
-    const runtimeBar = readFileSync(
-      new URL('./workspace-runtime-bar.tsx', import.meta.url),
-      'utf8'
-    );
+    const runtimeBar = readRuntimeBarSource();
 
     expect(home).toContain('<ComposerSettingsContent');
     expect(runtimeBar).toContain('<ComposerSettingsContent');
@@ -46,10 +44,7 @@ describe('shared composer settings surfaces', () => {
   });
 
   it('places Config before Prompt and the existing right-side workspace utilities', () => {
-    const runtimeBar = readFileSync(
-      new URL('./workspace-runtime-bar.tsx', import.meta.url),
-      'utf8'
-    );
+    const runtimeBar = readRuntimeBarSource();
     const configDefinitionIndex = runtimeBar.indexOf(
       "aria-label={t('workspaceRuntime.config.title')}"
     );

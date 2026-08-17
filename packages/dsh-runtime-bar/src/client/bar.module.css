@@ -1,0 +1,127 @@
+/*
+ * The bar's own styling. Compiled by lightningcss into a hashed class map and
+ * injected as one <style data-plugin> tag at bundle execution, so nothing here
+ * can reach outside the bar.
+ *
+ * Yoda paints the same layout with Tailwind container queries; this paints it
+ * with native ones. The framework holds the layout, each host holds its look —
+ * which is the whole point of the shared strip taking a theme.
+ */
+
+.strip {
+  /* Widths resolve against the bar itself, not the viewport: the composer
+     column narrows when panels open, and the entries should compact with it. */
+  container-type: inline-size;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  height: 22px;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1;
+  /* No background or border: this band sits under the composer card, where the
+     host already draws the surface. */
+  color: color-mix(in srgb, currentcolor 60%, transparent);
+}
+
+.sessionGroup {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.entry {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  color: inherit;
+}
+
+.button {
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: color-mix(in srgb, currentcolor 12%, transparent);
+  color: color-mix(in srgb, currentcolor 85%, transparent);
+}
+
+.button:focus-visible {
+  outline: 1px solid currentcolor;
+  outline-offset: 1px;
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+}
+
+.icon > svg {
+  width: 100%;
+  height: 100%;
+  /* Dim the icon, not the box: a state dot rides in the same seat and must keep
+     its own colour at full strength. */
+  opacity: 0.75;
+}
+
+.label {
+  flex: none;
+}
+
+.value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentcolor;
+  opacity: 0.4;
+}
+
+.dotRunning {
+  background: #3fb950;
+  opacity: 1;
+}
+
+.dotWaiting {
+  background: #d29922;
+  opacity: 1;
+}
+
+.dotDone {
+  background: #58a6ff;
+  opacity: 1;
+}
+
+/* The labels go first when the column narrows; the glyphs, the figures and the
+   state dot survive to the end. */
+@container (max-width: 560px) {
+  .label {
+    display: none;
+  }
+}

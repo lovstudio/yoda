@@ -54,7 +54,15 @@ import {
   type LegacyRunMode,
 } from '@shared/paradigms/kinds';
 import { paradigmToTeam } from '@shared/paradigms/team-adapter';
-import type { ComposerDefaults, TaskOutputLanguage } from '@shared/project-settings';
+import {
+  resolveOutputLanguage,
+  resolveOutputLanguageOverride,
+  resolvePromptRewriteEnabled,
+  resolvePromptRewriteLanguage,
+  resolvePromptRewriteLanguageOverride,
+  type ComposerDefaults,
+  type TaskOutputLanguage,
+} from '@shared/project-settings';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
 import { taskNameFromPrompt } from '@shared/task-name';
@@ -125,12 +133,7 @@ import {
   type ComposerOverrideScope,
 } from './composer-project-overrides';
 import { ComposerPromptInput, type ComposerPromptInputProps } from './composer-prompt-input';
-import {
-  ComposerSettingsContent,
-  DEFAULT_INPUT_PROMPT_LANGUAGE,
-  DEFAULT_SUMMARY_OUTPUT_LANGUAGE,
-  DEFAULT_TASK_OUTPUT_LANGUAGE,
-} from './composer-settings-content';
+import { ComposerSettingsContent } from './composer-settings-content';
 import {
   branchNeedsCheckout,
   resolveProjectSubmitSourceBranch,
@@ -305,21 +308,11 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
         data-yoda-surface="home-shell"
         className="mx-auto flex min-h-full w-full max-w-6xl flex-1 flex-col px-5 pb-8 pt-14 @2xl:px-8 @5xl:px-10"
       >
-        <div data-yoda-surface="home-masthead" aria-hidden="true">
-          <span className="dream-skin-masthead-copy">
-            <strong />
-            <small />
-          </span>
-        </div>
         <div
           data-yoda-surface="home-stage"
           className="flex flex-1 flex-col justify-center gap-8 py-4"
         >
           <div data-yoda-surface="home-hero" className="text-center">
-            <div className="dream-skin-status" aria-hidden="true">
-              <span />
-              DREAM SKIN ONLINE
-            </div>
             <div className="mb-4 flex items-center justify-center">
               <img
                 key={effectiveTheme}
@@ -333,7 +326,6 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
                 ? t(getGreetingKey(new Date().getHours()), { name: greetingName })
                 : t('home.headline')}
             </h1>
-            <p className="dream-skin-tagline" aria-hidden="true" />
           </div>
 
           <HomeComposer className="mx-auto w-full max-w-4xl" showDreamActions />
@@ -399,8 +391,8 @@ export const HomeComposer = observer(function HomeComposer({
   const setSelectedProjectId = useCallback(
     (next: string | undefined) => {
       if (isProjectLocked) return;
-      // The picked base branch belongs to the previous project — reset it.
-      updateDraft({ selectedProjectId: next ?? null, baseBranch: null });
+      // The picked base branch and facet belong to the previous project — reset both.
+      updateDraft({ selectedProjectId: next ?? null, baseBranch: null, facetId: null });
     },
     [isProjectLocked, updateDraft]
   );
@@ -415,7 +407,7 @@ export const HomeComposer = observer(function HomeComposer({
     if (isProjectLocked) return;
     if (homeProjectId === INTERNAL_PROJECT_ID) {
       if (draftProjectId !== null) {
-        updateDraft({ selectedProjectId: null, baseBranch: null });
+        updateDraft({ selectedProjectId: null, baseBranch: null, facetId: null });
         return;
       }
       setHomeParams({ projectId: undefined });
@@ -425,7 +417,7 @@ export const HomeComposer = observer(function HomeComposer({
     if (!homeRouteProject?.data) return;
     void projectManager.mountProject(homeProjectId).catch(() => {});
     if (homeProjectId !== draftProjectId) {
-      updateDraft({ selectedProjectId: homeProjectId, baseBranch: null });
+      updateDraft({ selectedProjectId: homeProjectId, baseBranch: null, facetId: null });
       return;
     }
     // Keep the navigation-scoped project until the optimistic settings update
@@ -486,6 +478,27 @@ export const HomeComposer = observer(function HomeComposer({
     (parentTaskStore && 'taskBranch' in parentTaskStore.data
       ? parentTaskStore.data.taskBranch
       : undefined);
+
+  // Facet membership for the task about to be created. A subtask starts on its
+  // parent's facet — the same rule the main process applies when no facet is
+  // stated — but stays switchable before launch, so the composer prefills the
+  // draft instead of resolving the fallback at submit time.
+  const projectFacets = projectSettings?.facets ?? [];
+  const parentFacetId =
+    parentTaskStore && 'facetId' in parentTaskStore.data
+      ? (parentTaskStore.data.facetId ?? null)
+      : null;
+  const draftFacetId = draft?.facetId ?? null;
+  useEffect(() => {
+    if (!parentFacetId || draftFacetId) return;
+    updateDraft({ facetId: parentFacetId });
+  }, [parentFacetId, draftFacetId, updateDraft]);
+  const setDraftFacetId = useCallback(
+    (next: string | null) => {
+      updateDraft({ facetId: next });
+    },
+    [updateDraft]
+  );
 
   const repo = selectedProjectId ? getRepositoryStore(selectedProjectId) : undefined;
   const defaultBranch = repo?.defaultBranch;
@@ -889,23 +902,57 @@ export const HomeComposer = observer(function HomeComposer({
     hasProject: hasProjectOverrideTarget,
   });
   const attachImagesAsPaths = attachImagesField.value;
+  // Each AI capability is a switch plus its own configuration. The two are
+  // separate fields on purpose: the language used to double as the switch, which
+  // made a switched-off capability impossible to configure.
+  const globalPromptRewriteEnabled = resolvePromptRewriteEnabled(
+    taskSettings?.promptRewriteEnabled,
+    taskSettings?.inputPromptLanguage
+  );
+  const promptRewriteEnabledField = dualField<boolean>({
+    override: composerDefaults?.promptRewriteEnabled,
+    globalValue: globalPromptRewriteEnabled,
+    setGlobal: (value) => updateTaskSettings({ promptRewriteEnabled: value }),
+    setOverride: (value) => setComposerDefault('promptRewriteEnabled', value),
+    hasProject: hasProjectOverrideTarget,
+  });
   const inputPromptLanguageField = dualField<TaskOutputLanguage>({
-    override: composerDefaults?.inputPromptLanguage,
-    globalValue: taskSettings?.inputPromptLanguage ?? DEFAULT_INPUT_PROMPT_LANGUAGE,
-    setGlobal: (value) => updateTaskSettings({ inputPromptLanguage: value }),
+    override: resolvePromptRewriteLanguageOverride(composerDefaults?.inputPromptLanguage),
+    globalValue: resolvePromptRewriteLanguage(taskSettings?.inputPromptLanguage),
+    // Writing the language also pins the switch, so the legacy inference from
+    // the old language-as-switch value can never flip it afterwards.
+    setGlobal: (value) =>
+      updateTaskSettings({
+        inputPromptLanguage: value,
+        promptRewriteEnabled: globalPromptRewriteEnabled,
+      }),
     setOverride: (value) => setComposerDefault('inputPromptLanguage', value),
     hasProject: hasProjectOverrideTarget,
   });
+  const autoGenerateNameField = dualField<boolean>({
+    override: composerDefaults?.autoGenerateName,
+    globalValue: taskSettings?.autoGenerateName ?? false,
+    setGlobal: (value) => updateTaskSettings({ autoGenerateName: value }),
+    setOverride: (value) => setComposerDefault('autoGenerateName', value),
+    hasProject: hasProjectOverrideTarget,
+  });
   const namingLanguageField = dualField<TaskOutputLanguage>({
-    override: composerDefaults?.namingLanguage,
-    globalValue: taskSettings?.namingLanguage ?? DEFAULT_TASK_OUTPUT_LANGUAGE,
+    override: resolveOutputLanguageOverride(composerDefaults?.namingLanguage),
+    globalValue: resolveOutputLanguage(taskSettings?.namingLanguage),
     setGlobal: (value) => updateTaskSettings({ namingLanguage: value }),
     setOverride: (value) => setComposerDefault('namingLanguage', value),
     hasProject: hasProjectOverrideTarget,
   });
+  const autoGenerateSummaryField = dualField<boolean>({
+    override: composerDefaults?.autoGenerateSummary,
+    globalValue: taskSettings?.autoGenerateSummary ?? true,
+    setGlobal: (value) => updateTaskSettings({ autoGenerateSummary: value }),
+    setOverride: (value) => setComposerDefault('autoGenerateSummary', value),
+    hasProject: hasProjectOverrideTarget,
+  });
   const summaryLanguageField = dualField<TaskOutputLanguage>({
-    override: composerDefaults?.summaryLanguage,
-    globalValue: taskSettings?.summaryLanguage ?? DEFAULT_SUMMARY_OUTPUT_LANGUAGE,
+    override: resolveOutputLanguageOverride(composerDefaults?.summaryLanguage),
+    globalValue: resolveOutputLanguage(taskSettings?.summaryLanguage),
     setGlobal: (value) => updateTaskSettings({ summaryLanguage: value }),
     setOverride: (value) => setComposerDefault('summaryLanguage', value),
     hasProject: hasProjectOverrideTarget,
@@ -922,9 +969,10 @@ export const HomeComposer = observer(function HomeComposer({
     [i18n.language, i18n.resolvedLanguage]
   );
   const inputPromptLanguage = inputPromptLanguageField.value;
+  const promptRewriteEnabled = promptRewriteEnabledField.value;
   const rewriteInputRequirement = useCallback(
     async (value: string) => {
-      if (!value.trim() || inputPromptLanguage === 'skip' || inputPromptLanguage === 'prompt') {
+      if (!value.trim() || !promptRewriteEnabled) {
         return value;
       }
       const result = await rpc.conversations.rewritePrompt({
@@ -936,7 +984,7 @@ export const HomeComposer = observer(function HomeComposer({
       });
       return result.prompt;
     },
-    [appPromptLanguage, inputPromptLanguage, runtimeId, selectedProjectId]
+    [appPromptLanguage, inputPromptLanguage, promptRewriteEnabled, runtimeId, selectedProjectId]
   );
   // A slot can run only when it has an Agent assigned (the Agent supplies the
   // runtime + prompt). Every slot the paradigm declares must be filled.
@@ -1011,10 +1059,7 @@ export const HomeComposer = observer(function HomeComposer({
         imagesAsPaths: attachImagesAsPaths,
       });
       const requirement = serialized.text.trim();
-      const deferInitialPrompt =
-        requirement.length > 0 &&
-        inputPromptLanguage !== 'skip' &&
-        inputPromptLanguage !== 'prompt';
+      const deferInitialPrompt = requirement.length > 0 && promptRewriteEnabled;
       const requirementPromise = deferInitialPrompt
         ? rewriteInputRequirement(requirement).catch((error: unknown) => {
             toast({
@@ -1051,6 +1096,7 @@ export const HomeComposer = observer(function HomeComposer({
         selectedBranch,
         currentBranchName,
         parentTaskId: parentTarget?.taskId,
+        facetId: draftFacetId,
         projectManager,
         queryClient,
         isAutoApproving: permissionModes.isDanger,
@@ -1083,6 +1129,8 @@ export const HomeComposer = observer(function HomeComposer({
             baseDefaultBranch: undefined,
             parentBranchName: null,
             parentTaskId: undefined,
+            // No project of its own to define facets, and no parent to inherit from.
+            facetId: null,
           }),
           params
         );
@@ -1133,6 +1181,8 @@ export const HomeComposer = observer(function HomeComposer({
             currentBranchName: null,
             parentBranchName: null,
             parentTaskId: undefined,
+            // No project of its own to define facets, and no parent to inherit from.
+            facetId: null,
           }),
           params
         );
@@ -1185,7 +1235,8 @@ export const HomeComposer = observer(function HomeComposer({
     selectedBranch,
     promptTokens,
     attachImagesAsPaths,
-    inputPromptLanguage,
+    draftFacetId,
+    promptRewriteEnabled,
     rewriteInputRequirement,
     clearPromptTokens,
     projectSubmitSourceBranch,
@@ -1246,12 +1297,21 @@ export const HomeComposer = observer(function HomeComposer({
       >
         <ComposerSettingsContent
           attachImagesAsPaths={attachImagesAsPaths}
+          promptRewriteEnabled={promptRewriteEnabledField.value}
           inputPromptLanguage={inputPromptLanguageField.value}
+          autoGenerateName={autoGenerateNameField.value}
           namingLanguage={namingLanguageField.value}
+          autoGenerateSummary={autoGenerateSummaryField.value}
           summaryLanguage={summaryLanguageField.value}
+          facets={projectFacets}
+          facetId={draftFacetId}
+          onFacetIdChange={setDraftFacetId}
           onAttachImagesAsPathsChange={attachImagesField.setValue}
+          onPromptRewriteEnabledChange={promptRewriteEnabledField.setValue}
           onInputPromptLanguageChange={inputPromptLanguageField.setValue}
+          onAutoGenerateNameChange={autoGenerateNameField.setValue}
           onNamingLanguageChange={namingLanguageField.setValue}
+          onAutoGenerateSummaryChange={autoGenerateSummaryField.setValue}
           onSummaryLanguageChange={summaryLanguageField.setValue}
           footer={
             <Collapsible

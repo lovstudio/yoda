@@ -1,0 +1,38 @@
+{
+  "name": "@lovstudio/yoda-protocol",
+  "version": "0.1.0",
+  "description": "Wire protocol shared by the Yoda desktop connector, the relay broker, and the Yoda Mobile client.",
+  "license": "MIT",
+  "author": "Lovstudio.AI",
+  "homepage": "https://yoda.lovstudio.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lovstudio/yoda.git",
+    "directory": "packages/protocol"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

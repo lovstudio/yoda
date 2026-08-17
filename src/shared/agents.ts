@@ -1,3 +1,4 @@
+import type { AgentAccessMode } from '@lovstudio/yoda-protocol/access-mode';
 import {
   getRuntimePermissionModes,
   type RuntimeId,
@@ -5,7 +6,6 @@ import {
 } from './runtime-registry';
 
 export type AgentSkillPolicyMode = 'runtime-defaults' | 'allowlist';
-export type AgentAccessMode = 'inherit' | 'plan' | 'write' | 'full-access';
 
 /**
  * A user-configurable Agent: a reusable bundle of a system prompt, a set of
@@ -102,10 +102,6 @@ export function agentToDraft(agent: Agent): AgentDraft {
     reasoningEffort: agent.reasoningEffort,
     accessMode: agent.accessMode,
   };
-}
-
-export function isAgentAccessMode(value: unknown): value is AgentAccessMode {
-  return value === 'inherit' || value === 'plan' || value === 'write' || value === 'full-access';
 }
 
 /**

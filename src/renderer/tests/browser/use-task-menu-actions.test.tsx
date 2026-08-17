@@ -35,6 +35,7 @@ vi.mock('@shared/deep-links', () => ({ buildTaskDeepLink: vi.fn() }));
 vi.mock('@shared/projects', () => ({ INTERNAL_PROJECT_ID: '__drafts__' }));
 vi.mock('@renderer/app/open-new-task', () => ({ openNewTaskFromCurrentContext: vi.fn() }));
 vi.mock('@renderer/features/projects/stores/project-selectors', () => ({
+  getProjectSettingsStore: () => undefined,
   getProjectStore: () => undefined,
   getRepositoryStore: () => undefined,
 }));
@@ -68,7 +69,6 @@ vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
   getTaskStore: () => mocks.task,
   taskChildren: () => [],
 }));
-vi.mock('@renderer/features/tasks/tabs/tab-manager-store', () => ({ OVERVIEW_TAB_ID: 'overview' }));
 vi.mock('@renderer/lib/ipc', () => ({ rpc: { conversations: {} } }));
 vi.mock('@renderer/lib/layout/navigation-provider', () => ({
   useNavigate: () => ({ navigate: mocks.navigate }),

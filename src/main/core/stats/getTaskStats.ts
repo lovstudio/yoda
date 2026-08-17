@@ -6,6 +6,7 @@ import { conversations, projects, tasks } from '@main/db/schema';
 import { resolveConversationUsage } from './session-usage-snapshot';
 import { resolveTaskCwd } from './task-cwd';
 import { getTaskDiffTotals } from './task-diff-snapshot';
+import { computeUsageCost } from './usage-cost';
 
 /**
  * Per-task stats: total code delta (live diff with snapshot fallback) and
@@ -51,6 +52,7 @@ export async function getTaskStats(projectId: string, taskId: string): Promise<T
         runtimeId: conversation.runtime,
         authProvider: conversation.authProvider ?? null,
         tokens: usage?.total ?? null,
+        cost: usage ? computeUsageCost(usage.byModel) : null,
         context: usage?.context ?? null,
       };
     })

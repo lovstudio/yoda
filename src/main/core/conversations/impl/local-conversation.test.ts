@@ -104,6 +104,7 @@ vi.mock('@main/core/ai-logs/ai-log-service', () => ({
 vi.mock('@main/core/ai-logs/interactive-turn-logger', () => ({
   interactiveTurnLogger: {
     setSessionContext: mocks.setInteractiveSessionContext,
+    attachSessionLog: vi.fn(),
     clearSessionContext: vi.fn(),
     onAgentEvent: vi.fn().mockResolvedValue(undefined),
     onSessionExit: vi.fn().mockResolvedValue(undefined),
@@ -893,6 +894,8 @@ describe('LocalConversationProvider', () => {
     expect(mocks.aiLogFinish).toHaveBeenCalledWith('ai-log-id', {
       status: 'failed',
       error: 'Signal SIGTERM',
+      // The dying screen is the only evidence a mid-turn CLI death leaves behind.
+      output: 'immediate output',
     });
     expect(mocks.stopTitle).toHaveBeenCalledWith(conversation.id);
     ptySessionRegistry.unsubscribe(sessionId, consumerId);
@@ -1755,6 +1758,7 @@ describe('LocalConversationProvider', () => {
     );
     expect(mocks.watchClaudeSessionActivity).toHaveBeenCalledWith(
       { conversationId: conversation.id, cwd: '/workspace', processPid: 4321 },
+      expect.any(Function),
       expect.any(Function)
     );
 

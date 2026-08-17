@@ -1,8 +1,8 @@
 import { Archive, ChartColumn, Database, Loader2 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AgentAccountProviderId } from '@shared/runtime-registry';
-import type { ProjectUsage, TokenBuckets, UsageOverview } from '@shared/stats';
+import type { ProjectUsage, TokenBuckets, UsageCost, UsageOverview } from '@shared/stats';
+import { accountProviderLabelKey } from '@renderer/features/agents/account-provider-label';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Badge } from '@renderer/lib/ui/badge';
@@ -16,14 +16,9 @@ import {
 } from '@renderer/utils/format-compact-number';
 import { formatDiffLineCount } from '@renderer/utils/format-diff-line-count';
 import { cn } from '@renderer/utils/utils';
+import { formatUsageCost } from '../format-usage-cost';
 import { useUsageOverview } from '../useUsageOverview';
 import { DailyTokenChart } from './DailyTokenChart';
-
-const AUTH_PROVIDER_LABEL_KEYS: Record<AgentAccountProviderId, string> = {
-  'official-subscription': 'tasks.overview.stats.authProvider.official-subscription',
-  'official-api': 'tasks.overview.stats.authProvider.official-api',
-  'yoda-maas': 'tasks.overview.stats.authProvider.yoda-maas',
-};
 
 /**
  * Lifetime usage dashboard: overview cards, a daily token-burn chart, and
@@ -138,7 +133,7 @@ function UsageContent({ overview }: { overview: UsageOverview }) {
             {t('usage.historyScope', {
               date: overview.historical.cacheThroughDate,
               attributable: formatCompactNumber(overview.tokens?.total ?? 0),
-              recent: formatCompactNumber(overview.historical.recentTrackedTokens.total),
+              recent: formatCompactNumber(overview.historical.mergedTrackedTokens.total),
             })}
           </span>
         </div>
@@ -180,6 +175,7 @@ function UsageContent({ overview }: { overview: UsageOverview }) {
                     count: entry.sessionCount,
                     nonCached: formatCompactNumber(entry.tokens.input + entry.tokens.output),
                   })}
+                  cost={entry.cost}
                   tokens={entry.tokens}
                 />
               ))}
@@ -205,7 +201,7 @@ function UsageContent({ overview }: { overview: UsageOverview }) {
                   leading={
                     <Badge variant="secondary">
                       {entry.authProvider
-                        ? t(AUTH_PROVIDER_LABEL_KEYS[entry.authProvider])
+                        ? t(accountProviderLabelKey(entry.authProvider))
                         : t('usage.sourceUnknown')}
                     </Badge>
                   }
@@ -285,17 +281,28 @@ function BreakdownCard({
 function BreakdownRow({
   leading,
   meta,
+  cost,
   tokens,
 }: {
   leading: React.ReactNode;
   meta?: string;
+  cost?: UsageCost | null;
   tokens: TokenBuckets;
 }) {
   const { t } = useTranslation();
+  const costDisplay = cost ? formatUsageCost(cost, t) : null;
   return (
     <div className="flex items-center gap-2 border-b border-border/40 py-2 last:border-b-0">
       <span className="flex min-w-0 flex-1 items-center gap-2">{leading}</span>
       {meta && <span className="shrink-0 text-[11px] text-foreground-passive">{meta}</span>}
+      {costDisplay && (
+        <span
+          className="shrink-0 font-mono text-[11px] tabular-nums text-foreground-passive"
+          title={costDisplay.title}
+        >
+          {costDisplay.value}
+        </span>
+      )}
       <span
         className="shrink-0 font-mono text-xs tabular-nums text-foreground-muted"
         title={tokenBreakdownTitle(tokens, t)}
@@ -440,7 +447,7 @@ function tokenBreakdownTitle(
   tokens: TokenBuckets,
   t: (key: string, options?: Record<string, unknown>) => string
 ): string {
-  return t('tasks.overview.stats.tokenBreakdown', {
+  return t('tasks.details.stats.tokenBreakdown', {
     input: formatCompactNumber(tokens.input),
     output: formatCompactNumber(tokens.output),
     cache: formatCompactNumber(tokens.cacheRead + tokens.cacheCreation),

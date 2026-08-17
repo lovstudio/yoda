@@ -18,6 +18,7 @@ vi.mock('react-i18next', async (importOriginal) => ({
         'workspaceRuntime.maas.description': 'Global routing for compatible Agent CLIs',
         'workspaceRuntime.maas.profile': 'Profile',
         'workspaceRuntime.maas.manageAccount': 'Manage model access',
+        'workspaceRuntime.maas.openWebsite': 'Open LovBrowser website',
         'workspaceRuntime.maas.openLogs': 'Open AI logs',
         'workspaceRuntime.maas.effective': 'Active',
         'workspaceRuntime.maas.needsAttention': 'Check setup',
@@ -56,9 +57,9 @@ describe('WorkspaceMaasPopover', () => {
     host.remove();
   });
 
-  it('shows one global status and moves logs into the overflow menu', async () => {
+  it('keeps the section to Profile selection and moves both actions into the overflow menu', async () => {
     const onManage = vi.fn();
-    const onManagePlatform = vi.fn();
+    const onOpenWebsite = vi.fn();
     const onOpenLogs = vi.fn();
     const { WorkspaceMaasPopover } = await import('@renderer/app/workspace-maas-popover');
     await act(async () =>
@@ -70,32 +71,37 @@ describe('WorkspaceMaasPopover', () => {
             effective: true,
             runtimeIds: ['codex'],
           },
+          providerName: 'LovBrowser',
+          websiteUrl: 'https://example.test',
           onManage,
-          onManagePlatform,
+          onOpenWebsite,
           onOpenLogs,
         })
       )
     );
 
-    expect(selectorProps).toHaveBeenCalledWith(
-      expect.objectContaining({ showSelectedStatus: false, onManagePlatform })
-    );
+    expect(selectorProps).toHaveBeenCalledWith({ showSelectedStatus: false });
     expect(host.textContent?.match(/Active/g)).toHaveLength(1);
     expect(host.textContent).toContain('Global routing for compatible Agent CLIs');
+    // Both actions live behind the overflow menu — nothing duplicates them inline.
+    expect(host.textContent).not.toContain('Manage model access');
     expect(host.textContent).not.toContain('Open AI logs');
 
-    const manageButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
-      (button) => button.textContent === 'Manage model access'
-    );
-    await userEvent.click(manageButton!);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="More"]')!);
+    const menuItem = (label: string) =>
+      Array.from(document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')).find(
+        (item) => item.textContent?.includes(label)
+      );
+    expect(menuItem('Manage model access')).toBeTruthy();
+    await userEvent.click(menuItem('Manage model access')!);
     expect(onManage).toHaveBeenCalledOnce();
 
     await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="More"]')!);
-    const logsItem = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
-    ).find((item) => item.textContent?.includes('Open AI logs'));
-    expect(logsItem).toBeTruthy();
-    await userEvent.click(logsItem!);
+    await userEvent.click(menuItem('Open LovBrowser website')!);
+    expect(onOpenWebsite).toHaveBeenCalledOnce();
+
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[aria-label="More"]')!);
+    await userEvent.click(menuItem('Open AI logs')!);
     expect(onOpenLogs).toHaveBeenCalledOnce();
   });
 });

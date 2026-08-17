@@ -28,20 +28,37 @@ function useGlobalHooks() {
  * disabling a hook globally means editing the client's own settings file, which
  * stays the client's job — per-task overrides live in the task Hooks panel.
  */
-export function GlobalHooksMainPanel() {
+export function GlobalHooksMainPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useTranslation();
   const { data, isLoading, isFetching, error, refetch } = useGlobalHooks();
 
   return (
-    <div className="@container flex h-full min-h-0 flex-col overflow-y-auto bg-background text-foreground">
-      <div className="mx-auto flex w-full max-w-[1180px] flex-col px-6 py-8 @3xl:px-10 @3xl:py-10">
-        <header className="flex flex-wrap items-start justify-between gap-5">
-          <div className="max-w-2xl">
-            <h1 className="text-2xl font-semibold tracking-tight">{t('hooksLibrary.title')}</h1>
-            <p className="mt-1.5 text-sm leading-6 text-foreground-muted">
-              {t('hooksLibrary.subtitle')}
-            </p>
-          </div>
+    <div
+      className={cn(
+        '@container flex min-h-0 flex-col bg-background text-foreground',
+        !embedded && 'h-full overflow-y-auto'
+      )}
+    >
+      <div
+        className={cn(
+          'flex w-full flex-col',
+          !embedded && 'mx-auto max-w-[1180px] px-6 py-8 @3xl:px-10 @3xl:py-10'
+        )}
+      >
+        <header
+          className={cn(
+            'flex flex-wrap items-start gap-5',
+            embedded ? 'justify-end' : 'justify-between'
+          )}
+        >
+          {!embedded && (
+            <div className="max-w-2xl">
+              <h1 className="text-2xl font-semibold tracking-tight">{t('hooksLibrary.title')}</h1>
+              <p className="mt-1.5 text-sm leading-6 text-foreground-muted">
+                {t('hooksLibrary.subtitle')}
+              </p>
+            </div>
+          )}
           <Button
             type="button"
             variant="outline"

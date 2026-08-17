@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { userEvent } from 'vitest/browser';
+import type { CcSwitchIntegrationStatus } from '@shared/cc-switch-integration';
 import type { CliProxyApiManagedStatus } from '@shared/cliproxyapi-managed';
 import type { LiteLlmManagedStatus } from '@shared/litellm-managed';
 import type {
@@ -75,6 +76,16 @@ const mocks = vi.hoisted(() => ({
     installedVersion: null,
     modelCount: null,
   } as CliProxyApiManagedStatus,
+  ccSwitchStatus: {
+    state: 'not-installed',
+    operation: null,
+    installed: false,
+    appPath: null,
+    installedVersion: null,
+    configured: false,
+    localProxyEnabled: false,
+    installMethod: 'homebrew',
+  } as CcSwitchIntegrationStatus,
   globalBinding: {
     platformId: null,
     enabled: false,
@@ -236,6 +247,14 @@ vi.mock('@renderer/features/maas/useMaas', () => ({
     isPending: false,
     mutateAsync: vi.fn(async () => undefined),
   }),
+  useCcSwitchIntegrationStatus: () => ({
+    data: mocks.ccSwitchStatus,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(async () => undefined),
+  }),
+  useInstallCcSwitch: () => ({ isPending: false, mutateAsync: vi.fn(async () => undefined) }),
+  useOpenCcSwitch: () => ({ isPending: false, mutateAsync: vi.fn(async () => undefined) }),
 }));
 
 vi.mock('@renderer/features/maas/useMaasGatewayExtension', () => ({
@@ -937,7 +956,7 @@ describe('MaaS platform menu', () => {
     );
   });
 
-  it('uses a compact selector for remote Profiles and keeps configuration adjacent', async () => {
+  it('uses a compact selector for remote Profiles and toggles without leaving the surface', async () => {
     mocks.gatewayAvailability = 'not-installed';
     mocks.connections = [
       connection({ platformId: 'custom:first', displayName: 'First Custom' }),
@@ -949,18 +968,10 @@ describe('MaaS platform menu', () => {
       effective: true,
       runtimeIds: ['codex'],
     };
-    const onManagePlatform = vi.fn();
     const { MaasGlobalSelector } = await import(
       '@renderer/features/maas/components/MaasGlobalSelector'
     );
-    await act(async () =>
-      root.render(
-        createElement(MaasGlobalSelector, {
-          onOpenMarketplace: mocks.openMarketplace,
-          onManagePlatform,
-        })
-      )
-    );
+    await act(async () => root.render(createElement(MaasGlobalSelector)));
 
     const selector = host.querySelector<HTMLButtonElement>(
       '[data-slot="dropdown-menu-trigger"][aria-label="maas.global.title"]'
@@ -988,11 +999,9 @@ describe('MaaS platform menu', () => {
       expect.any(Object)
     );
 
-    const manageButton = host.querySelector<HTMLButtonElement>(
-      'button[aria-label="maas.global.manage"]'
-    );
-    await act(async () => manageButton?.click());
-    expect(onManagePlatform).toHaveBeenCalledWith('custom:first');
+    // Configuration lives in Settings → Model access, so the selector carries no
+    // second entry point of its own.
+    expect(host.querySelector('button[aria-label="maas.global.manage"]')).toBeNull();
   });
 });
 

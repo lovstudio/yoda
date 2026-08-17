@@ -8,7 +8,7 @@ import type { TaskStore } from '@renderer/features/tasks/stores/task';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
-  interruptConversation: vi.fn(async () => {}),
+  interruptConversationSession: vi.fn(async () => {}),
   interruptTaskSessions: vi.fn(),
   navigate: vi.fn(),
   openTaskTarget: vi.fn(),
@@ -45,11 +45,27 @@ vi.mock('@renderer/app/open-task-target', () => ({
 }));
 
 vi.mock('@renderer/features/tasks/components/agent-status-indicator', () => ({
-  AgentStatusIndicator: ({ status }: { status: string }) =>
-    createElement('span', { 'data-agent-status': status }, status),
+  AgentStatusIndicator: ({
+    status,
+    session,
+  }: {
+    status: string;
+    session?: { projectId: string; taskId: string; conversationId: string };
+  }) =>
+    createElement(
+      'span',
+      {
+        'data-agent-status': status,
+        'data-session': session
+          ? `${session.projectId}/${session.taskId}/${session.conversationId}`
+          : undefined,
+      },
+      status
+    ),
 }));
 
 vi.mock('@renderer/features/tasks/interrupt-task-sessions', () => ({
+  interruptConversationSession: mocks.interruptConversationSession,
   interruptTaskSessions: mocks.interruptTaskSessions,
 }));
 
@@ -67,7 +83,7 @@ vi.mock('@renderer/lib/components/agent-logo', () => ({
 
 vi.mock('@renderer/lib/ipc', () => ({
   events: { emit: vi.fn(), on: vi.fn(() => () => {}) },
-  rpc: { conversations: { interruptConversation: mocks.interruptConversation } },
+  rpc: { conversations: {} },
 }));
 
 vi.mock('@renderer/lib/layout/navigation-provider', () => ({
@@ -142,12 +158,41 @@ describe('TaskSessionStatusControl', () => {
     );
     await act(async () => interrupt?.click());
 
-    expect(mocks.interruptConversation).toHaveBeenCalledWith(
-      'project-1',
-      'task-1',
-      'working-session'
-    );
+    expect(mocks.interruptConversationSession).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'working-session',
+    });
     expect(mocks.interruptTaskSessions).not.toHaveBeenCalled();
+  });
+
+  it('hands a lone running session to the indicator instead of the aggregate popover', async () => {
+    const { TaskSessionStatusControl } = await import(
+      '@renderer/features/tasks/components/task-session-status-control'
+    );
+    const task = { data: makeTask() } as unknown as TaskStore;
+    const summary = {
+      primaryStatus: 'working' as const,
+      totalCount: 1,
+      attentionCount: 0,
+      workingCount: 1,
+      backgroundJobCount: 0,
+      sessions: [
+        {
+          conversationId: 'working-session',
+          status: 'working' as const,
+          title: 'Implement fix',
+        },
+      ],
+    };
+    await act(async () => root.render(createElement(TaskSessionStatusControl, { task, summary })));
+
+    // No popover trigger: the indicator itself is the interrupt control, so the
+    // shortest hover-then-click path stops the only running session.
+    expect(host.querySelector('button[aria-expanded]')).toBeNull();
+    expect(host.querySelector('[data-agent-status="working"]')?.getAttribute('data-session')).toBe(
+      'project-1/task-1/working-session'
+    );
   });
 });
 

@@ -8,6 +8,10 @@ const alias = {
   '@shared': resolve(__dirname, 'src/shared'),
   '@renderer': resolve(__dirname, 'src/renderer'),
   '@main': resolve(__dirname, 'src/main'),
+  '@runtime-bar': resolve(__dirname, 'packages/runtime-bar/src'),
+  // Resolve the protocol package from source so desktop builds and tests never
+  // depend on packages/protocol/dist being freshly compiled.
+  '@lovstudio/yoda-protocol': resolve(__dirname, 'packages/protocol/src'),
 };
 
 // postinstall builds better-sqlite3 against Electron's ABI; vitest runs in
@@ -32,7 +36,7 @@ export default defineConfig({
         test: {
           name: 'node',
           environment: 'node',
-          include: ['src/**/*.test.ts'],
+          include: ['src/**/*.test.ts', 'packages/protocol/src/**/*.test.ts'],
           exclude: ['**/_*/**', 'src/renderer/tests/browser/**'],
           globalSetup: ['./scripts/vitest-global-setup.ts'],
         },

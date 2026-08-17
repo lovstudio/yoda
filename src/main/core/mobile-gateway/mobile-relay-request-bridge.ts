@@ -1,10 +1,10 @@
-import type WebSocket from 'ws';
 import {
   isAllowedMobileRelayRequest,
   MOBILE_RELAY_PROTOCOL_VERSION,
   type MobileRelayHostFrame,
   type MobileRelayResponseFrame,
-} from '@shared/mobile-relay';
+} from '@lovstudio/yoda-protocol/mobile-relay';
+import type WebSocket from 'ws';
 import { log } from '@main/lib/logger';
 
 const MAX_REQUEST_BODY_BYTES = 128 * 1024;

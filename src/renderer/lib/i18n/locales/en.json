@@ -30,6 +30,7 @@
     "contentCopied": "File content copied",
     "contentCopiedTruncated": "File content copied (truncated — file too large)",
     "openFailed": "Open failed",
+    "openFailedUnresolved": "Could not resolve this path to a file on disk",
     "currentLabel": "{{label}} (current)"
   },
   "externalFileDrop": {
@@ -189,10 +190,10 @@
       "error": "Error",
       "completed": "Completed",
       "interrupted": "Interrupted",
+      "idle": "Idle",
       "working": "In progress",
       "pending-review": "Completed · Review",
       "long-term": "Long-term",
-      "idle": "Dormant",
       "archived": "Archived"
     },
     "pinned": "Pinned",
@@ -307,6 +308,7 @@
       "unchanged": "Name and path are unchanged.",
       "targetExistsTitle": "Target project exists",
       "targetExistsDescription": "This path is already registered as \"{{project}}\". Merge this project into that target instead?",
+      "targetExistsHint": "Tasks, sessions and terminals move into the target project and this project entry disappears. Nothing on disk is moved or deleted.",
       "submit": "Move",
       "saving": "Moving…",
       "mergeSubmit": "Merge",
@@ -547,13 +549,23 @@
       "roadmap": "Roadmap"
     },
     "general": {
-      "description": "Manage your account, privacy settings, notifications, and app updates."
+      "description": "Manage language, privacy settings, and app updates."
     },
     "tasksTab": {
       "description": "Configure how new tasks are created and run."
     },
     "sessionsTab": {
-      "description": "Configure session naming, summaries, archiving, and how sessions run."
+      "description": "Organized by a session's life cycle: created, running, archived."
+    },
+    "sessions": {
+      "createTitle": "Creation",
+      "createDescription": "How a new session starts by default.",
+      "assistanceTitle": "Assisted by agents",
+      "assistanceDescription": "Language, naming, and summaries an agent handles while a session runs.",
+      "eventsTitle": "Alerts and permissions",
+      "eventsDescription": "What a running session needs you to know or approve.",
+      "archiveTitle": "Archiving",
+      "archiveDescription": "What runs when you wrap up a session."
     },
     "account": {
       "description": "Manage your LovStudio account, credits, and Yoda cloud services.",
@@ -735,11 +747,6 @@
       "agentClientDescription": "The client this AI call is attached to, such as Claude Code, Codex, or Code Ace.",
       "accessMethod": "Access method",
       "accessMethodDescription": "Choose official subscription, official API key, or Yoda model access within the current Client.",
-      "access": {
-        "officialSubscription": "Official subscription",
-        "officialApi": "API key",
-        "maas": "Model access"
-      },
       "maasPlatform": "Model access service",
       "maasPlatformDescription": "Only used when the access method is model access. {{count}} service(s) connected; selected service is {{status}}.",
       "maasConnected": "connected",
@@ -789,12 +796,6 @@
       "namingProfileDescription": "Profile used for automatic session and task naming.",
       "imageGenerationProfile": "Image generation Profile",
       "imageGenerationProfileDescription": "Profile used for Yoda AI avatar and other direct image generation calls.",
-      "promptTranslation": "Translate prompt before sending",
-      "promptTranslationDescription": "Reserved global preprocessing switch for translating Chinese prompts to English before sending them to the target Agent.",
-      "promptTranslationProfile": "Prompt translation Profile",
-      "promptTranslationProfileDescription": "Prompt translation uses this Profile, so Chinese preprocessing is not delegated to the target Agent.",
-      "showOriginalPrompt": "Keep original prompt",
-      "showOriginalPromptDescription": "When prompt translation is enabled, keep the user's original Chinese content in UI and debug surfaces.",
       "debugTitle": "Debug",
       "debugPrompt": "Test prompt",
       "debugDefaultPrompt": "Reply in one sentence that the current LLM Profile is working.",
@@ -1052,7 +1053,9 @@
       "sidebarStatusBarPrimary": "Sidebar status bar",
       "sidebarStatusBarPrimaryDescription": "Choose which identity is shown as the primary entry. The other remains available as a compact icon.",
       "sidebarStatusBarProduct": "Product info",
-      "sidebarStatusBarAccount": "Account info"
+      "sidebarStatusBarAccount": "Account info",
+      "sessionShareDisplayLevel": "Share link detail",
+      "sessionShareDisplayLevelDescription": "The level baked into a new public link. Anyone opening it can still switch."
     },
     "taskAppearance": {
       "title": "Task appearance",
@@ -1105,32 +1108,16 @@
       "yodaDark": "Yoda Dark",
       "yodaWarm": "Yoda Warm",
       "yodaDarkGreen": "Yoda Dark Green",
-      "yodaDream": "Blush Custom",
       "yodaDreamArina": "Arina Hashimoto Custom",
-      "yodaDreamNight": "Classic Night",
-      "yodaDreamFortune": "Fortune at Work",
-      "yodaDreamScifi": "Red White Sci-Fi",
-      "yodaDreamClear": "Crystal Clear",
-      "yodaDreamCosmos": "Idea Cosmos",
-      "yodaDreamPurple": "Purple Night",
-      "yodaDreamVirtual": "Future Rhythm",
-      "yodaDreamGold": "Stage Black Gold",
+      "yodaDreamPanther": "Pink Panther",
       "ariaSystem": "Set theme to system preference",
       "ariaLight": "Set theme to Yoda Light",
       "ariaLightGreen": "Set theme to Yoda Light Green",
       "ariaDark": "Set theme to Yoda Dark",
       "ariaWarm": "Set theme to Yoda Warm",
       "ariaDarkGreen": "Set theme to Yoda Dark Green",
-      "ariaDream": "Set theme to Yoda Dream Skin",
       "ariaDreamArina": "Set theme to the Arina Hashimoto custom skin",
-      "ariaDreamNight": "Set theme to Yoda Dream Night Skin",
-      "ariaDreamFortune": "Set theme to Fortune at Work skin",
-      "ariaDreamScifi": "Set theme to Red White Sci-Fi skin",
-      "ariaDreamClear": "Set theme to Crystal Clear skin",
-      "ariaDreamCosmos": "Set theme to Idea Cosmos skin",
-      "ariaDreamPurple": "Set theme to Purple Night skin",
-      "ariaDreamVirtual": "Set theme to Future Rhythm skin",
-      "ariaDreamGold": "Set theme to Stage Black Gold skin",
+      "ariaDreamPanther": "Set theme to the Pink Panther skin",
       "dreamSkinGallery": "Dream Skin gallery",
       "dreamSkinGalleryDescription": "A curated set of distinct, interactive Yoda skins.",
       "activeSkin": "Active",
@@ -1153,16 +1140,11 @@
       "skinUnsupportedType": "Choose a PNG, JPEG, or WebP image.",
       "skinTooLarge": "The image must be no larger than 16 MB.",
       "untitledSkin": "Untitled Skin",
-      "skinDefaultTagline": "Turn the image, palette, and workspace into one creative environment.",
-      "skinDefaultStatus": "DREAM SKIN ONLINE",
       "skinEditorTitle": "Dream Skin editor",
       "skinEditorIdentity": "Identity and copy",
       "skinEditorIdentityHint": "The file name was cleaned automatically; rename it to match the theme.",
       "reanalyzePalette": "Reanalyze palette",
       "skinName": "Skin name",
-      "skinSubtitle": "Brand subtitle",
-      "skinTagline": "Tagline",
-      "skinStatus": "Status label",
       "skinEditorPalette": "Palette and typography",
       "skinMode": "Appearance",
       "skinModeLight": "Light",
@@ -1180,7 +1162,6 @@
       "skinBlur": "Background blur",
       "skinArtOpacity": "Image strength",
       "skinTextRight": "Place copy on the right",
-      "skinOverlayCopy": "Show Yoda overlay copy",
       "skinExtendWorkspace": "Extend the image atmosphere across the IDE",
       "skinEditorDecorations": "Decorations",
       "skinDecoration": "Decoration style",
@@ -1273,11 +1254,11 @@
     "notifications": {
       "title": "Notifications",
       "description": "Get notified when a task finishes or an Agent needs your attention.",
-      "turnCompletion": "Turn completion notifications",
+      "turnCompletion": "Task completion alerts",
       "turnCompletionDescription": "Set when to alert you that a task has finished.",
-      "permissionNotifications": "Enable permission notifications",
+      "permissionNotifications": "Permission alerts",
       "permissionNotificationsDescription": "Show a system banner when an Agent needs permission.",
-      "questionNotifications": "Enable question notifications",
+      "questionNotifications": "Waiting-for-answer alerts",
       "questionNotificationsDescription": "Show a system banner when an Agent is waiting for your answer.",
       "enabled": "On",
       "deliveryModes": {
@@ -1307,14 +1288,20 @@
       "branchNamingAi": "AI semantic name",
       "namingConfigTitle": "Naming",
       "namingConfigDescription": "Target language and context sources used to name sessions and tasks. Model calls are controlled by LLM Profiles.",
+      "autoGenerateSummary": "Auto-generate session summaries",
+      "autoGenerateSummaryDescription": "Refresh a session's summary after each reply. With this off, summaries are still available on demand from the session panel.",
       "summaryConfigTitle": "Session summary",
       "summaryConfigDescription": "The agent used to generate session summaries. Runs on its own client and model, independent of each session's runtime.",
       "namingAgentLabel": "Naming agent",
       "namingAgentHint": "Provides additional system prompt context for auto-naming; the actual Client, access method, and model come from the LLM Profile.",
       "summaryAgentLabel": "Summary agent",
       "summaryAgentHint": "The agent that generates session summaries. It runs entirely on its own client and model, so summaries keep working even if the session's own runtime is unavailable.",
-      "inputPromptLanguageLabel": "Input prompt language",
-      "inputPromptLanguageDescription": "Rewrite the user's prompt into the target language before sending. Skip disables rewriting; Prompt language keeps it as written.",
+      "promptRewriteTitle": "Input prompt rewriting",
+      "promptRewriteAgentLabel": "Rewrite agent",
+      "promptRewriteAgentHint": "The agent that rewrites the input prompt. Its own client and model win when it pins them; otherwise the rewrite follows the client selected for the session.",
+      "inputPromptLanguageLabel": "Rewrite language",
+      "inputPromptLanguageDescription": "Rewrite the input into a target language before sending it to the agent.",
+      "promptRewriteConfigDescription": "The agent that rewrites the input prompt, and the language it rewrites into.",
       "sessionTitleLanguageLabel": "Session title language",
       "summaryLanguageLabel": "Summary language",
       "summaryContext": {
@@ -1379,14 +1366,27 @@
       "linesUnit": "lines",
       "autoCopySelected": "Auto-copy selected text",
       "autoCopySelectedDescription": "Automatically copy text to clipboard when you select it in the terminal.",
-      "smartPathOpenMode": "Default terminal link behavior",
-      "smartPathOpenModeDescription": "Choose whether a single click on terminal URLs and file paths opens them in Yoda or with the system default app.",
-      "smartPathOpenInternal": "Open in Yoda",
-      "smartPathOpenExternal": "Open with default app",
+      "linkOpen": {
+        "fileTitle": "Open files with",
+        "fileDescription": "Handler for a file path clicked in the terminal.",
+        "urlTitle": "Open URLs with",
+        "urlDescription": "Handler for a URL clicked in the terminal.",
+        "rulesTitle": "Per-format overrides",
+        "rulesDescription": "Route specific extensions elsewhere; the first matching rule from the top wins.",
+        "addRule": "Add rule",
+        "removeRule": "Remove rule",
+        "extensionsPlaceholder": "png, jpg, pdf",
+        "yoda": "Open in Yoda",
+        "system": "System default app",
+        "browserYoda": "Yoda browser",
+        "browserSystem": "System browser"
+      },
       "hotTerminalLimit": "Background terminal cache",
-      "hotTerminalLimitDescription": "Auto keeps the four most recent terminal renderers warm and may reclaim more under sustained output or app memory pressure. Evicted sessions retain a bounded scrollback checkpoint.",
-      "hotTerminalAuto": "Auto (4 most recent)",
-      "hotTerminalFixed": "Fixed count",
+      "hotTerminalLimitDescription": "Auto derives how many terminal renderers stay resident from this machine’s memory and CPU cores, and reclaims more under sustained output or app memory pressure. Evicted sessions retain a bounded scrollback checkpoint.",
+      "hotTerminalMachineSummary": "This machine reports {{cores}} cores and {{memory}} GB, so auto resolves to {{limit}}.",
+      "hotTerminalMachineProbing": "Reading this machine’s capacity; using {{limit}} until it arrives.",
+      "hotTerminalAuto": "Auto",
+      "hotTerminalFixed": "Manual",
       "hotTerminalFixedLimit": "Background terminal cache count",
       "idleSessionTimeout": "Idle session hibernation",
       "idleSessionTimeoutDescription": "Release hidden completed or idle tmux agents after this timeout. Set to 0 to keep them.",
@@ -1802,7 +1802,6 @@
       "openInWindow": "Open in separate window",
       "openInWindowFailed": "Failed to open separate window",
       "returnFromWindowFailed": "Failed to return tab",
-      "overview": "Overview",
       "newConversation": "New conversation",
       "archiveConversation": "Archive",
       "archiveConversationDirect": "Archive directly",
@@ -1813,20 +1812,15 @@
       "forkConversationFailed": "Failed to fork conversation",
       "preview": "Preview"
     },
-    "overview": {
+    "details": {
+      "title": "Task details",
+      "openTask": "Open task",
       "sessions": "Sessions ({{count}})",
       "noSessions": "No sessions yet",
-      "archivedSessions": "Archived ({{count}})",
-      "unarchiveFailed": "Failed to unarchive conversation",
       "stats": {
         "linesTitle": "Lines changed by this task (committed + working tree)",
         "tokens": "{{value}} tokens",
-        "tokenBreakdown": "Input {{input}} · Output {{output}} · Cache {{cache}}",
-        "authProvider": {
-          "official-subscription": "Subscription",
-          "official-api": "API Key",
-          "yoda-maas": "Model access"
-        }
+        "tokenBreakdown": "Input {{input}} · Output {{output}} · Cache {{cache}}"
       },
       "subtasks": "Subtasks ({{count}})"
     },
@@ -2408,6 +2402,8 @@
       "summaryFailedDescription": "Summary generation failed. It will retry after the next reply.",
       "summarySkipped": "Summary disabled",
       "summarySkippedDescription": "Summary generation is skipped by the current language setting.",
+      "summaryAutoDisabled": "Not generated yet",
+      "summaryAutoDisabledDescription": "Automatic summaries are off. Generate one for this session whenever you need it.",
       "summaryFromCompaction": "From the agent's compaction summary",
       "summaryGenerated": "Generated from the conversation",
       "agentReplyDisplayControl": "Agent reply display level: {{level}}",
@@ -2415,19 +2411,19 @@
       "agentReplyDisplay": {
         "hidden": {
           "label": "Hidden",
-          "description": "Show user messages only"
+          "description": "Show user prompts only"
         },
         "concise": {
           "label": "Concise",
-          "description": "Show only the final result from each agent reply"
+          "description": "Show the closing reply of each turn"
         },
         "detailed": {
           "label": "Detailed",
-          "description": "Show agent replies without tool calls"
+          "description": "Add the agent's narration and system notices"
         },
         "verbose": {
-          "label": "Verbose",
-          "description": "Show everything, nearly equivalent to the transcript"
+          "label": "Complete",
+          "description": "Add tool calls — the full transcript"
         }
       },
       "transcript": "Transcript",
@@ -2614,10 +2610,6 @@
     }
   },
   "library": {
-    "groups": {
-      "basic": "Basics",
-      "advanced": "Advanced"
-    },
     "sections": {
       "extensions": "Extensions",
       "apps": "Apps",
@@ -2859,6 +2851,7 @@
   },
   "promptLibrary": {
     "title": "Prompts",
+    "subtitle": "Reusable prompts and system instructions your sessions can draw on.",
     "tabs": {
       "ariaLabel": "Prompt configuration scope",
       "global": "Global",
@@ -3433,6 +3426,8 @@
       "installFailed": "Skill installation failed",
       "thirdPartyNotice": "Community skills come from ClawHub. Review their source and permissions before use.",
       "manageAll": "Manage all skills",
+      "insertAria": "Insert {{name}} into the session input",
+      "insertHint": "Arrow keys to move, Enter or click to insert into the session input. Nothing is sent.",
       "reloadTitle": "Reload the current session?",
       "reloadDescription": "{{name}} is installed. Reload this session so it can use the new skill.",
       "reloadConfirm": "Reload session"
@@ -3676,6 +3671,7 @@
     "noDescription": "No description",
     "noDescriptionShort": "No description",
     "duplicate": "Duplicate agent",
+    "forkAgent": "Fork as a template",
     "anyRuntime": "Any client",
     "skillsCount": "{{count}} skills",
     "icon": "Icon",
@@ -3824,7 +3820,7 @@
       "authProviders": {
         "official-subscription": "Official subscription",
         "official-api": "Official API",
-        "yoda-maas": "Yoda model access"
+        "yoda-maas": "Third-party platform"
       },
       "clientDefault": "Client default",
       "agentOverride": "Agent override",
@@ -4543,13 +4539,18 @@
     "sessionCount": "{{count}} sessions",
     "sessionCoverage": "{{available}} / {{total}} with usage · {{transcripts}} transcripts",
     "modelMeta": "{{count}} sessions · {{nonCached}} non-cached",
+    "cost": {
+      "hint": "Estimated from official list prices for the models used. Provider CLIs report no cost of their own.",
+      "partialHint": "Estimated from official list prices. No rate on file for {{models}}, so the real figure is higher.",
+      "atLeast": "{{value}}+"
+    },
     "sourceUnknown": "Untracked",
     "topTasks": "Top tasks by tokens",
     "topTasksCount": "Top tasks by tokens ({{shown}} of {{total}})",
-    "historyScope": "Claude's historical baseline runs through {{date}}, plus {{recent}} of later tracked usage. Project, model, and task rankings use attributable records only (currently {{attributable}}).",
+    "historyScope": "Claude's historical baseline runs through {{date}}, plus {{recent}} of other tracked usage (every runtime after that date, and non-Claude runtimes before it). Project, model, and task rankings use attributable records only (currently {{attributable}}).",
     "caliber": {
       "tasks": "How it's counted: tasks with a non-null archive date (archiving is the completion act). The sub-line is all tasks ever created.",
-      "tokens": "How it's counted: global historical tokens use Claude Code stats-cache.json as a baseline, then add confirmed Claude transcript / Yoda snapshot usage after the cache cutoff. Project, model, and task detail continues to use attributable Claude / Codex transcripts and snapshots. Historical aggregates are never allocated to projects. Total = input + output + cache read + cache write.",
+      "tokens": "How it's counted: global historical tokens use Claude Code stats-cache.json as a baseline (Claude only, and only through the cache cutoff), then add the tracked usage that baseline cannot cover: every runtime after the cutoff, and non-Claude runtimes before it. Project, model, and task detail continues to use attributable Claude / Codex transcripts and snapshots. Historical aggregates are never allocated to projects. Total = input + output + cache read + cache write.",
       "lines": "How it's counted: per task = committed diff vs source branch (merge-base) + uncommitted working-tree changes. Live for active tasks; archived tasks use their last snapshot (tasks archived before this feature shipped have none and count as zero).",
       "activeDays": "How it's counted: local calendar days with any token usage in session transcripts.",
       "dailyChart": "How it's counted: the chart defaults to the last 30 days and can switch between 7, 30, or 90 days. Each session's tokens are bucketed into the local date they were consumed; bar height is relative to the selected period's single-day peak.",
@@ -4562,7 +4563,7 @@
   },
   "aiLogs": {
     "title": "AI Logs",
-    "subtitle": "Every AI invocation the app makes — background CLI runs, API calls, and interactive sessions — with timings and full details for debugging.",
+    "subtitle": "Every AI invocation the app makes — interactive sessions and the turns inside them, background CLI work, API calls — with purpose, account, endpoint, timings and full input/output for debugging.",
     "filter": {
       "all": "All",
       "running": "Running",
@@ -4585,7 +4586,7 @@
     "finished": "Finished",
     "duration": "Duration",
     "command": "Command",
-    "prompt": "Prompt",
+    "prompt": "Input",
     "output": "Output",
     "error": "Error",
     "detailActions": "{{label}} actions",
@@ -4612,7 +4613,105 @@
       "llm-debug": "LLM debug",
       "interactive-session": "Interactive session",
       "interactive-turn": "Chat turn",
-      "utility": "Utility"
+      "utility": "Utility",
+      "avatar-generation": "Avatar generation",
+      "quick-action-compilation": "Quick action compilation",
+      "prompt-rewrite": "Prompt rewrite",
+      "skill-trigger-queries": "Skill trigger test",
+      "skill-revision": "Skill description rewrite"
+    },
+    "categoryLabel": "Category",
+    "category": {
+      "all": "All categories",
+      "conversation": "Conversation",
+      "builtin": "Built-in",
+      "image": "Image",
+      "inspect": "Debug"
+    },
+    "searchPlaceholder": "Search purpose, model, content…",
+    "noMatchTitle": "No matching invocations",
+    "noMatchDescription": "Try another keyword or filter.",
+    "summary": {
+      "total": "{{count}} total",
+      "succeeded": "{{count}} succeeded",
+      "failed": "{{count}} failed",
+      "running": "{{count}} running"
+    },
+    "chip": {
+      "mode": "Mode",
+      "runtime": "Client",
+      "model": "Model",
+      "agent": "Agent",
+      "account": "Account",
+      "endpoint": "Endpoint"
+    },
+    "account": {
+      "unrecorded": "Not recorded",
+      "unrecordedHint": "This invocation did not record where its account came from."
+    },
+    "endpoint": {
+      "clientManaged": "Client-managed",
+      "overriddenHint": "Base URL Yoda injected for this invocation.",
+      "clientHint": "Yoda did not override the base URL — the real endpoint comes from the client's own configuration."
+    },
+    "diagnosis": {
+      "timeoutSilent": "Timed out without printing anything: the selected model is most likely unavailable on the current endpoint (not enabled, unpriced, or throttled), so the request hung until the timeout. Switch to your main model and retry.",
+      "timeout": "The command did not finish within its timeout — the output below shows where it stalled.",
+      "interrupted": "The app quit while this invocation was still running, so its outcome is unknown.",
+      "sessionExited": "The session process exited before this turn finished, so the turn never settled.",
+      "missingCli": "The CLI client could not be found — make sure it is installed and on PATH.",
+      "upstream": "The upstream model service returned an error; see the raw error below."
+    },
+    "metadata": {
+      "projectId": "Project",
+      "taskId": "Task",
+      "conversationId": "Session",
+      "scope": "Scope",
+      "target": "Target",
+      "attempt": "Attempt",
+      "platform": "Platform",
+      "profileId": "Profile"
+    },
+    "trace": {
+      "title": "Process",
+      "loading": "Reading transcript…",
+      "summary": "{{requests}} requests · {{tokens}}",
+      "tokens": "in {{input}} · cached {{cached}} · out {{output}}",
+      "stepTokens": "in {{input}} out {{output}}",
+      "capped": "Showing the first {{shown}} of {{total}} steps",
+      "clipped": "{{count}} characters omitted — see the transcript for the full text",
+      "kind": {
+        "prompt": "Input",
+        "thinking": "Thinking",
+        "text": "Reply",
+        "tool-use": "Tool call",
+        "tool-result": "Tool result",
+        "compact": "Context compacted"
+      },
+      "unavailable": {
+        "unsupported-runtime": "This client's transcript format cannot be parsed yet, so there is no step detail.",
+        "no-conversation": "This invocation belongs to no session — the input and output above are the whole process.",
+        "no-transcript": "No matching transcript file; the worktree may have been removed.",
+        "empty-window": "The transcript has no rows in this time span."
+      }
+    },
+    "purposeDescription": {
+      "interactive-session": "One client process from launch to exit; every chat turn inside it is nested below.",
+      "interactive-turn": "One turn of a session: from your message until the AI stops working.",
+      "task-naming": "Names the task and branch from the first message.",
+      "session-title": "Generates the session title.",
+      "session-summary": "Condenses the session transcript into a delivery summary.",
+      "commit-message": "Writes a commit message from the current changes.",
+      "logo-generation": "Generates a logo image.",
+      "avatar-generation": "Generates an avatar image.",
+      "app-image-edit": "Edits an image in AI Lab.",
+      "maas-chat": "A direct chat from the model-access panel.",
+      "llm-debug": "A connectivity probe started from settings.",
+      "quick-action-compilation": "Compiles a custom quick action into an executable prompt.",
+      "prompt-rewrite": "Rewrites the prompt in the composer as requested.",
+      "skill-trigger-queries": "Generates trigger test queries for a skill.",
+      "skill-revision": "Rewrites a skill description from its evaluation results.",
+      "utility": "A built-in general-purpose AI task."
     }
   },
   "maas": {
@@ -4680,6 +4779,27 @@
         "adminOpened": "Management key copied and CLIProxyAPI console opened",
         "adminOpenedHint": "Paste the key in the console to sign in and add CLI or OAuth accounts",
         "openAdminFailed": "CLIProxyAPI console failed to open"
+      },
+      "ccSwitch": {
+        "managedDescription": "Switch between Claude Code / Codex provider configurations in one click",
+        "detecting": "Detecting CC Switch…",
+        "detectionFailed": "Detection ran into a problem; re-check to continue",
+        "installingDescription": "Installing CC Switch through Homebrew",
+        "installedDescription": "v{{version}} installed · local proxy off",
+        "proxyEnabledDescription": "v{{version}} installed · local proxy on",
+        "installing": "Installing CC Switch…",
+        "installed": "CC Switch installed",
+        "installFailed": "CC Switch installation failed",
+        "download": "Download",
+        "downloadOpened": "CC Switch download page opened",
+        "open": "Open",
+        "opened": "CC Switch opened",
+        "openFailed": "CC Switch failed to open",
+        "checkUpdates": "Check for updates",
+        "sourceRepository": "Source repository",
+        "actions": "CC Switch actions",
+        "manageActions": "Manage CC Switch",
+        "management": "CC Switch management"
       }
     },
     "categories": {
@@ -4870,8 +4990,8 @@
       "apiKeyPlaceholder": "Paste API or management key",
       "managementApiKey": "Management API key",
       "accountUsageCredential": "Account usage credential (optional)",
-      "accountUsageCredentialPlaceholder": "Paste a New API account access token",
-      "accountUsageCredentialHelper": "Used only to read account balance, total quota, and usage progress. It is never passed to Agent CLIs. Available for New API services such as LovBrowser.",
+      "accountUsageCredentialPlaceholder": "Paste an access token from the endpoint's own dashboard",
+      "accountUsageCredentialHelper": "The balance is read from the dashboard behind the endpoint above, so the token must be issued by that same dashboard — a reseller's token is usually unknown upstream. Used only to read account balance, total quota, and usage progress; it is never passed to Agent CLIs.",
       "zenmuxManagementKeyPlaceholder": "Paste ZenMux Management API Key",
       "litellmKeyPlaceholder": "Paste a LiteLLM Virtual Key or Master Key",
       "litellmSetupHelper": "Configure upstream model providers, model names, and routing rules in LiteLLM first. Yoda connects only to the Gateway and forwards Codex requests through /v1/responses.",
@@ -5159,6 +5279,38 @@
       "title": "Config",
       "description": "Adjust common input and Agent options. Manage detailed prompts and instruction files in Library."
     },
+    "sync": {
+      "title": "Sync",
+      "description": "Choose how paired phones reach this desktop.",
+      "statusLabel": "Status",
+      "modes": {
+        "lan": {
+          "label": "Local network",
+          "description": "Phones on the same Wi-Fi connect directly. Nothing leaves the network."
+        },
+        "relay": {
+          "label": "Internet",
+          "description": "Traffic goes through Lovstudio Relay, so the phone works from anywhere."
+        },
+        "both": {
+          "label": "Both",
+          "description": "Prefer the local network, fall back to Relay when the desktop changes networks."
+        }
+      },
+      "lanOff": "Local network sync is off",
+      "lanNoAddress": "No local network address available",
+      "relayOff": "Internet sync is off",
+      "relayConnected": "Relay connected",
+      "relayConnecting": "Connecting to Relay",
+      "relayNotPaired": "Relay not paired yet",
+      "copyLanUrl": "Copy address",
+      "copyRelayError": "Copy error",
+      "relayErrorCopied": "Error copied",
+      "lanUrlCopied": "Address copied",
+      "lanUrlCopyFailed": "Could not copy the address",
+      "refresh": "Refresh",
+      "openPairing": "Pairing settings"
+    },
     "prompt": {
       "label": "Prompts",
       "triggerLabel": "Open {{name}} prompt configuration",
@@ -5244,10 +5396,13 @@
         "resolved": "Resolved"
       },
       "sourceValue": {
-        "toast": "App toast",
+        "app": "App",
         "agent": "Agent",
-        "automation": "Automation",
-        "system": "System"
+        "automation": "Automation"
+      },
+      "sources": {
+        "label": "Recorded sources",
+        "hint": "App covers Yoda's own failures and results. Unchecked sources still reach you elsewhere; they are just not kept here."
       },
       "system": {
         "agentAwaitingInput": "Agent is waiting for input"
@@ -5339,7 +5494,8 @@
       "needsAttention": "Check setup",
       "disabled": "Disabled",
       "manage": "Details & settings",
-      "openLogs": "Open AI logs"
+      "openLogs": "Open AI logs",
+      "openWebsite": "Open {{provider}} website"
     },
     "agents": {
       "title": "Agent activity",
@@ -5488,6 +5644,8 @@
     "contextRemainingTokens": "{{value}} tokens left",
     "sessionTokenTotal": "Session total: {{tokens}}",
     "sessionTokenTotalLabel": "Session total",
+    "sessionCost": "Est. cost: {{cost}}",
+    "sessionCostLabel": "Est. cost",
     "contextResets": "Context compacted {{count}} time(s)",
     "contextResetsLabel": "Context compactions",
     "contextLastReset": "Last context compaction: {{time}}",
@@ -5520,37 +5678,27 @@
     "accountUsageShort": "Account",
     "accountDocs": "Yoda docs",
     "officialAccountUsage": "{{name}} usage",
-    "accountUsageDescription": "CLI account quota windows",
-    "maasUsageTitle": "{{provider}} usage",
-    "maasUsageOpenWebsite": "Open {{provider}} website",
-    "maasUsageShort": "Usage",
-    "maasUsageDescription": "This session is routed through {{provider}}. Values come directly from the provider.",
-    "maasUsageSourceZenmux": "Management stats",
-    "maasUsageSourceOpenRouter": "Key API",
-    "maasUsageSourceNewApi": "Token API",
-    "maasUsageSourceNewApiAccount": "Account API",
-    "maasUsageSourceUnavailable": "Unavailable",
     "maasUsageLoading": "Reading provider usage…",
     "maasUsageUnavailable": "Usage request failed",
     "maasUsageNoReadableApi": "This {{provider}} profile does not declare a readable usage API. OpenAI-compatible inference endpoints do not define a shared billing or balance standard.",
     "maasUsageCopyError": "Copy diagnostics",
     "maasUsageErrorCopied": "Usage diagnostics copied",
-    "maasUsageManage": "Manage model access",
     "maasUsageRemainingCredits": "Available balance",
     "maasUsageTotalCredits": "Total quota",
+    "maasUsageKeyLimit": "Key limit",
     "maasUsageKeyRemaining": "Key limit remaining",
     "maasUsageTotalCost": "Total usage",
     "maasUsageProgress": "Usage progress",
-    "maasUsageUnlimitedToken": "Unlimited token quota",
-    "maasUsageTokenScope": "Token-level quota",
-    "maasUsageAccountCredentialRequired": "Add an account usage credential to read account balance, total quota, and overall usage progress.",
+    "maasUsageLastUpdated": "Last updated",
+    "maasUsageKeyScopeNote": "These figures cover the current API key only. Add an account usage credential to also read account balance, total quota, and overall usage progress.",
+    "maasUsageAccountCredentialRejected": "Account usage credential rejected; this key's own figures remain",
+    "maasUsageAccountCredentialRejectedHint": "The credential must be issued by the same dashboard that serves this endpoint. Tokens from a reseller's own account are usually unknown to the upstream API.",
     "maasUsageAccountUnavailable": "Account balance request failed; token-level usage remains available",
     "maasUsageToday": "Today",
     "maasUsageThisWeek": "This week",
+    "maasUsageThisMonth": "This month",
     "maasUsageInputTokens": "Input tokens",
     "maasUsageOutputTokens": "Output tokens",
-    "maasUsageCurrentAccount": "Current account",
-    "maasUsageUpdatedAt": "Updated {{time}}",
     "accountQuotaReset": "Resets at {{time}}",
     "accountQuotaStatus": "{{remaining}}% remaining · resets {{reset}}",
     "accountQuotaProviderControlled": "Quota resets are controlled by the provider and cannot be reset manually in Yoda.",
@@ -5591,7 +5739,8 @@
       "update": "Update {{name}}",
       "login": "Sign in to {{name}}",
       "doctor": "Diagnose {{name}}"
-    }
+    },
+    "accountUsageCardDescription": "Usage on the account behind this session"
   },
   "openIn": {
     "failed": "Failed to open",
@@ -6096,6 +6245,12 @@
     "emptyActive": "No active projects.",
     "archiveFailed": "Failed to archive project"
   },
+  "facets": {
+    "label": "Facet",
+    "assignToFacet": "Assign to facet",
+    "unassigned": "No facet",
+    "composerHint": "The project facet this task belongs to. Its scope and context file are appended to the session's system prompt."
+  },
   "projects": {
     "selectProject": "Select project",
     "noProject": "Do not use a project",
@@ -6304,6 +6459,15 @@
         "add": "Add project prompt",
         "remove": "Remove prompt"
       },
+      "facets": {
+        "title": "Facets",
+        "description": "Long-lived sub-scopes of this project. A task assigned to a facet gets the facet scope and context file appended to its session prompt.",
+        "namePlaceholder": "Name, e.g. Mobile",
+        "pathsPlaceholder": "Covered paths, one glob per line, e.g. apps/mobile/**",
+        "contextFilePlaceholder": "Context file, e.g. apps/mobile/AGENTS.md",
+        "add": "Add facet",
+        "remove": "Remove facet"
+      },
       "shareable": {
         "fields": {
           "promptPrinciples": {
@@ -6345,6 +6509,10 @@
               "leafLabel": "cloud docs URL",
               "description": "URL of a deployed documentation site, opened in-app on the Docs page."
             }
+          },
+          "facets": {
+            "modalLabel": "Facets",
+            "leafLabel": "facets"
           }
         }
       },

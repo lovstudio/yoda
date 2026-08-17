@@ -333,6 +333,10 @@ export const tasks = sqliteTable(
     parentTaskId: text('parent_task_id').references((): AnySQLiteColumn => tasks.id, {
       onDelete: 'set null',
     }),
+    // Project facet this task belongs to. Deliberately not a foreign key: facets
+    // are value objects inside project settings, not rows — deleting a facet
+    // definition should leave the task intact (it simply reads as unassigned).
+    facetId: text('facet_id'),
     // Which development paradigm drives this task. Before these columns the
     // paradigm was lost the instant a task was created, and the canvas had to
     // guess by looking for a team room or a review orchestration row.

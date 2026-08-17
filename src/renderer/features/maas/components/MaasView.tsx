@@ -49,6 +49,7 @@ import {
   resolveMaasEnvKey,
   type MaasApiKeyKind,
   type MaasConnection,
+  type MaasLocalIntegrationId,
   type MaasManagedGatewayId,
   type MaasPlatformId,
   type MaasPlatformTemplateId,
@@ -96,6 +97,7 @@ import {
   useSetMaasGlobalBinding,
 } from '../useMaas';
 import type { NewMaasProfileDraft } from './AddMaasProfileModal';
+import { CcSwitchIntegrationCard } from './CcSwitchIntegrationCard';
 import { CliProxyApiManagedCard } from './CliProxyApiManagedCard';
 import { LiteLlmManagedCard } from './LiteLlmManagedCard';
 import { ManagedGatewayStarTrend } from './ManagedGatewayStarTrend';
@@ -446,10 +448,10 @@ export const MaasView: React.FC<{
       ),
     [managedGatewayStarsQuery.data]
   );
-  const getManagedGatewayStarCount = (platformId: MaasManagedGatewayId) =>
+  const getManagedGatewayStarCount = (integrationId: MaasLocalIntegrationId) =>
     managedGatewayStarsQuery.isPending
       ? undefined
-      : (managedGatewayStarsById.get(platformId)?.starCount ?? null);
+      : (managedGatewayStarsById.get(integrationId)?.starCount ?? null);
 
   const handlePlatformValueChange = useCallback((value: string) => {
     if (value === '') {
@@ -710,6 +712,7 @@ export const MaasView: React.FC<{
             starCount={getManagedGatewayStarCount('newapi')}
             onOpenManualSettings={() => handleOpenManagedConnection('newapi')}
           />
+          <CcSwitchIntegrationCard starCount={getManagedGatewayStarCount('ccswitch')} />
         </div>
         <ManagedGatewayStarTrend
           snapshots={managedGatewayStarsQuery.data}

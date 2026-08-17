@@ -1,6 +1,10 @@
 import { Loader2, MessageCircleQuestionMark, Square } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { AgentDisplayStatus } from '@shared/agent-background-jobs';
+import {
+  interruptConversationSession,
+  type AgentSessionRef,
+} from '@renderer/features/tasks/interrupt-task-sessions';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 
@@ -12,8 +16,14 @@ interface AgentStatusIndicatorProps {
   /** Overrides the size-6 wrapper box (e.g. `size-4` in the top tab strip's icon slot). */
   boxClassName?: string;
   disableTooltip?: boolean;
-  /** When set and status is `working`, hover swaps the spinner for a stop icon and click interrupts. */
-  onInterrupt?: () => void;
+  /**
+   * The session this indicator stands for. Given one, a `working` indicator
+   * becomes the interrupt control: hover swaps the spinner for a stop icon and
+   * click interrupts that session. Passing the identity rather than a callback
+   * keeps the behavior attached to the indicator itself, so a surface cannot
+   * silently lose the ability to interrupt while still showing `working`.
+   */
+  session?: AgentSessionRef;
 }
 
 export function AgentStatusIndicator({
@@ -21,24 +31,42 @@ export function AgentStatusIndicator({
   className,
   boxClassName,
   disableTooltip,
-  onInterrupt,
+  session,
 }: AgentStatusIndicatorProps) {
   const { t } = useTranslation();
   if (!status || status === 'idle') return null;
   const statusLabel = t(`agentStatus.${status}`);
 
-  if (status === 'working' && onInterrupt) {
+  if (status === 'working' && session) {
     const interruptLabel = t('agentStatus.interrupt');
-    const button = (
-      <button
-        type="button"
+    const interrupt = () => void interruptConversationSession(session);
+    // `role="button"` rather than a real `<button>`: every surface renders this
+    // indicator inside an already-clickable row, tab, or popover trigger, and a
+    // nested `<button>` there is invalid HTML.
+    const control = (
+      <span
+        role="button"
+        tabIndex={0}
         aria-label={interruptLabel}
+        // Surfaces that opt out of the shared tooltip still need the action
+        // named, otherwise the stop icon appears with no explanation.
+        title={disableTooltip ? interruptLabel : undefined}
+        onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
-          onInterrupt();
+          interrupt();
         }}
-        className="group/interrupt size-6 flex items-center justify-center cursor-pointer"
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          event.stopPropagation();
+          interrupt();
+        }}
+        className={cn(
+          'group/interrupt size-6 flex items-center justify-center cursor-pointer rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-ring',
+          boxClassName
+        )}
       >
         <Loader2
           className={cn(
@@ -52,12 +80,12 @@ export function AgentStatusIndicator({
             className
           )}
         />
-      </button>
+      </span>
     );
-    if (disableTooltip) return button;
+    if (disableTooltip) return control;
     return (
       <Tooltip>
-        <TooltipTrigger render={button} />
+        <TooltipTrigger render={control} />
         <TooltipContent>{interruptLabel}</TooltipContent>
       </Tooltip>
     );

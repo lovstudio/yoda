@@ -3,11 +3,11 @@ import { buildTaskDeepLink } from '@shared/deep-links';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { openNewTaskFromCurrentContext } from '@renderer/app/open-new-task';
 import {
+  getProjectSettingsStore,
   getProjectStore,
   getRepositoryStore,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useArchiveTask } from '@renderer/features/tasks/archive-task';
-import { openTaskWhenReady } from '@renderer/features/tasks/open-task-when-ready';
 import { splitViewStore } from '@renderer/features/tasks/split-view/split-view-store';
 import { registeredTaskData } from '@renderer/features/tasks/stores/task';
 import {
@@ -43,6 +43,7 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
   const showArchiveWithNote = useShowModal('archiveTaskWithNoteModal');
   const showCreateSubtask = useShowModal('newSubtaskModal');
   const showSetParent = useShowModal('setParentTaskModal');
+  const showTaskDetails = useShowModal('taskDetailsModal');
   const showCreateParent = useShowModal('createParentTaskModal');
   const showCreateProject = useShowModal('expressCreateProjectModal');
   const moveTaskToProject = useMoveTaskToProject();
@@ -63,6 +64,9 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
       : [];
   const isArchiving = taskManager?.archivingTaskIds.has(taskId) ?? false;
   const canAssignWorkspace = projectId === INTERNAL_PROJECT_ID || task.data.isPinned;
+  // Facets are defined per project, so projectless Drafts tasks have nothing to
+  // belong to.
+  const canAssignFacet = projectId !== INTERNAL_PROJECT_ID && task.state !== 'unregistered';
 
   const project = getProjectStore(projectId);
   const projectName =
@@ -100,11 +104,11 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
   const canMoveToProject =
     !isArchived && task.state !== 'unregistered' && childTaskIds.length === 0;
 
-  // The menu "open details" entry enters the task and activates its fixed
-  // Overview tab (task info / sessions / sub-tasks), distinguishing it from a
-  // plain row click which only enters the task view on the last-active tab.
-  const handleOpenOverview = () => {
-    void openTaskWhenReady(projectId, taskId, navigate, { kind: 'overview' });
+  // A task IS its session, so a row click goes straight to the working surface.
+  // Its own info (identity, stats, session tree, sub-tasks) is a secondary page
+  // reached from here, without entering the task at all.
+  const handleOpenDetails = () => {
+    showTaskDetails({ projectId, taskId });
   };
 
   // Pending acceptance leaves the active-workspace list just like archive.
@@ -151,7 +155,7 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
     projectPath,
     workingDirectory: provisionedTask?.path,
     openDetailsLabel: t('tasks.context.openDetails'),
-    onOpenDetails: isArchived ? undefined : handleOpenOverview,
+    onOpenDetails: isArchived ? undefined : handleOpenDetails,
     onPin: () => void task.setPinned(true),
     onUnpin: () => void task.setPinned(false),
     onFavorite: () => void task.setFavorite(true),
@@ -186,6 +190,13 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
       : undefined,
     onAssignWorkspace: canAssignWorkspace
       ? (workspaceId: string | null) => void task.setSidebarWorkspaceId(workspaceId)
+      : undefined,
+    facets: canAssignFacet
+      ? (getProjectSettingsStore(projectId)?.settings?.facets ?? [])
+      : undefined,
+    currentFacetId: canAssignFacet ? (registeredTaskData(task)?.facetId ?? null) : undefined,
+    onAssignFacet: canAssignFacet
+      ? (facetId: string | null) => void task.setFacet(facetId)
       : undefined,
     // Subtask tree entries — projectless Drafts tasks stay flat for now.
     onCreateSubtask:

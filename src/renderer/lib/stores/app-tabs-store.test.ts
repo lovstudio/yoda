@@ -173,22 +173,20 @@ describe('AppTabsStore task scope entry', () => {
     expect(tabs.openTaskScope('project-1', 'task-1')).toBe(false);
     expect(navigation.navigate).not.toHaveBeenCalled();
 
-    expect(tabs.openTaskScope('project-1', 'task-1', { kind: 'overview' })).toBe(true);
+    const target = { kind: 'conversation' as const, conversationId: 'conversation-1' };
+    expect(tabs.openTaskScope('project-1', 'task-1', target)).toBe(true);
     expect(navigation.navigate).toHaveBeenCalledOnce();
     expect(navigation.navigate).toHaveBeenCalledWith('task', {
       projectId: 'project-1',
       taskId: 'task-1',
-      tab: { kind: 'overview' },
+      tab: target,
     });
     tabs.dispose();
   });
 
   it('does not infer a task target from app-tab history', () => {
-    const overviewParams = {
-      projectId: 'project-1',
-      taskId: 'task-1',
-      tab: { kind: 'overview' },
-    };
+    // No `tab` param IS the task itself; a session is a separate tab entity.
+    const taskParams = { projectId: 'project-1', taskId: 'task-1' };
     const sessionParams = {
       projectId: 'project-1',
       taskId: 'task-1',
@@ -198,14 +196,14 @@ describe('AppTabsStore task scope entry', () => {
     const tabs = new AppTabsStore(navigation);
     tabs.restoreSnapshot({
       tabs: [
-        { id: 'overview-tab', viewId: 'task', params: overviewParams, seq: 2 },
+        { id: 'task-tab', viewId: 'task', params: taskParams, seq: 2 },
         { id: 'session-tab', viewId: 'task', params: sessionParams, seq: 1 },
       ],
-      activeTabId: 'overview-tab',
+      activeTabId: 'task-tab',
     });
 
     expect(tabs.openTaskScope('project-1', 'task-1')).toBe(false);
-    expect(tabs.activeTabId).toBe('overview-tab');
+    expect(tabs.activeTabId).toBe('task-tab');
     expect(navigation.navigate).not.toHaveBeenCalled();
     tabs.dispose();
   });
@@ -244,29 +242,25 @@ describe('AppTabsStore task scope entry', () => {
   );
 
   it('switches tasks through the supplied history targets without a target-less route', () => {
-    const taskAOverview = {
-      projectId: 'project-1',
-      taskId: 'task-a',
-      tab: { kind: 'overview' as const },
-    };
+    const taskAIndex = { projectId: 'project-1', taskId: 'task-a' };
     const taskASession = {
       projectId: 'project-1',
       taskId: 'task-a',
       tab: { kind: 'conversation' as const, conversationId: 'conversation-a' },
     };
-    const taskBOverview = {
+    const taskBSession = {
       projectId: 'project-1',
       taskId: 'task-b',
-      tab: { kind: 'overview' as const },
+      tab: { kind: 'conversation' as const, conversationId: 'conversation-b' },
     };
     const navigation = createReactiveNavigationStub('home', { home: {} });
     const tabs = new AppTabsStore(navigation);
     tabs.restoreSnapshot({
       tabs: [
         { id: 'home-tab', viewId: 'home', params: {}, seq: 1 },
-        { id: 'task-a-overview', viewId: 'task', params: taskAOverview, seq: 2 },
+        { id: 'task-a-index', viewId: 'task', params: taskAIndex, seq: 2 },
         { id: 'task-a-session', viewId: 'task', params: taskASession, seq: 4 },
-        { id: 'task-b-overview', viewId: 'task', params: taskBOverview, seq: 3 },
+        { id: 'task-b-session', viewId: 'task', params: taskBSession, seq: 3 },
       ],
       activeTabId: 'home-tab',
     });
@@ -276,8 +270,8 @@ describe('AppTabsStore task scope entry', () => {
     expect(tabs.activeTabId).toBe('task-a-session');
     expect(navigation.viewParamsStore.task).toEqual(taskASession);
 
-    expect(tabs.openTaskScope('project-1', 'task-b', taskBOverview.tab)).toBe(true);
-    expect(tabs.activeTabId).toBe('task-b-overview');
+    expect(tabs.openTaskScope('project-1', 'task-b', taskBSession.tab)).toBe(true);
+    expect(tabs.activeTabId).toBe('task-b-session');
 
     expect(tabs.openTaskScope('project-1', 'task-a', taskASession.tab)).toBe(true);
     expect(tabs.activeTabId).toBe('task-a-session');
@@ -286,10 +280,10 @@ describe('AppTabsStore task scope entry', () => {
   });
 
   it('restores the task scope session with the latest activation sequence', () => {
-    const overviewParams = {
+    const fileParams = {
       projectId: 'project-1',
       taskId: 'task-1',
-      tab: { kind: 'overview' },
+      tab: { kind: 'file', path: 'src/a.ts' },
     };
     const sessionParams = {
       projectId: 'project-1',
@@ -301,7 +295,7 @@ describe('AppTabsStore task scope entry', () => {
     tabs.restoreSnapshot({
       tabs: [
         { id: 'home-tab', viewId: 'home', params: {}, seq: 3 },
-        { id: 'overview-tab', viewId: 'task', params: overviewParams, seq: 1 },
+        { id: 'file-tab', viewId: 'task', params: fileParams, seq: 1 },
         { id: 'session-tab', viewId: 'task', params: sessionParams, seq: 2 },
       ],
       activeTabId: 'home-tab',

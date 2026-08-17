@@ -6,8 +6,12 @@
 - `src/preload/`: Electron preload bridge — exposes typed `invoke`, `eventSend`, `eventOn` to renderer
 - `src/renderer/`: React UI — views, components, hooks, contexts, typed RPC client
 - `src/shared/`: Provider registry, IPC primitives (RPC + events), MCP types, skills types, shared domain types
-- `apps/mobile/`: Expo app that talks to the desktop through the token-protected mobile gateway
+- `packages/protocol/`: Wire protocol shared with the mobile client, published as `@lovstudio/yoda-protocol`
+- `services/relay/`: Public relay that forwards a bounded route surface between phone and desktop
 - `docs/`: Landing page for yoda.lovstudio.ai (Vite static site, not the docs content) — see `agents/workflows/docs-site.md`
+
+The mobile client itself lives in its own repository (`lovstudio/yoda-mobile`); this repo holds the
+desktop gateway it talks to — see `agents/architecture/mobile.md`.
 
 ## Boot Sequence
 

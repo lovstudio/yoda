@@ -1,12 +1,10 @@
-import { Cloud, ScrollText } from 'lucide-react';
+import { Cloud, ExternalLink, ScrollText, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { MaasGlobalBindingStatus, MaasPlatformId } from '@shared/maas';
+import type { MaasGlobalBindingStatus } from '@shared/maas';
 import { MaasGlobalSelector } from '@renderer/features/maas/components/MaasGlobalSelector';
-import { Button } from '@renderer/lib/ui/button';
 import { DropdownMenuItem } from '@renderer/lib/ui/dropdown-menu';
 import { cn } from '@renderer/utils/utils';
 import {
-  WorkspaceBarCardFooter,
   WorkspaceBarCardHeader,
   WorkspaceBarCardMenu,
   WorkspaceBarCardSection,
@@ -14,13 +12,19 @@ import {
 
 export function WorkspaceMaasPopover({
   binding,
+  providerName,
+  websiteUrl,
   onManage,
-  onManagePlatform,
+  onOpenWebsite,
   onOpenLogs,
 }: {
   binding: MaasGlobalBindingStatus | undefined;
+  /** Bound platform's display name, for the website jump's label. */
+  providerName: string | null;
+  /** Null hides the website jump; also shown as its tooltip. */
+  websiteUrl: string | null;
   onManage: () => void;
-  onManagePlatform: (platformId: MaasPlatformId) => void;
+  onOpenWebsite: () => void;
   onOpenLogs: () => void;
 }) {
   const { t } = useTranslation();
@@ -52,6 +56,18 @@ export function WorkspaceMaasPopover({
         description={t('workspaceRuntime.maas.description')}
         actions={
           <WorkspaceBarCardMenu>
+            <DropdownMenuItem onClick={onManage}>
+              <SlidersHorizontal aria-hidden />
+              {t('workspaceRuntime.maas.manageAccount')}
+            </DropdownMenuItem>
+            {/* The bound platform's own console. This entry owns the platform's
+                identity, so jumps to it live here rather than beside its usage. */}
+            {websiteUrl && providerName ? (
+              <DropdownMenuItem onClick={onOpenWebsite} title={websiteUrl}>
+                <ExternalLink aria-hidden />
+                {t('workspaceRuntime.maas.openWebsite', { provider: providerName })}
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem onClick={onOpenLogs}>
               <ScrollText aria-hidden />
               {t('workspaceRuntime.maas.openLogs')}
@@ -61,14 +77,8 @@ export function WorkspaceMaasPopover({
       />
 
       <WorkspaceBarCardSection label={t('workspaceRuntime.maas.profile')}>
-        <MaasGlobalSelector showSelectedStatus={false} onManagePlatform={onManagePlatform} />
+        <MaasGlobalSelector showSelectedStatus={false} />
       </WorkspaceBarCardSection>
-
-      <WorkspaceBarCardFooter>
-        <Button type="button" size="sm" variant="outline" className="w-full" onClick={onManage}>
-          {t('workspaceRuntime.maas.manageAccount')}
-        </Button>
-      </WorkspaceBarCardFooter>
     </>
   );
 }

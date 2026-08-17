@@ -31,11 +31,6 @@ type EffectiveTheme = 'ylight' | 'ydark';
 
 const DREAM_SKIN_CSS_VARIABLES = [
   '--dream-skin-art',
-  '--dream-skin-brand',
-  '--dream-skin-subtitle',
-  '--dream-skin-tagline',
-  '--dream-skin-status',
-  '--dream-skin-quote',
   '--dream-skin-position-x',
   '--dream-skin-position-y',
   '--dream-skin-zoom',
@@ -88,11 +83,6 @@ export function applyThemeToDocument(
     root.classList.add('ydream');
     root.dataset.dreamShell = effective === 'ydark' ? 'dark' : 'light';
     root.style.setProperty('--dream-skin-art', dreamSkinBackgroundImage(dreamSkin.image));
-    root.style.setProperty('--dream-skin-brand', JSON.stringify(resolvedCustomTheme.name));
-    root.style.setProperty('--dream-skin-subtitle', JSON.stringify(dreamSkin.brandSubtitle));
-    root.style.setProperty('--dream-skin-tagline', JSON.stringify(dreamSkin.tagline));
-    root.style.setProperty('--dream-skin-status', JSON.stringify(dreamSkin.statusText));
-    root.style.setProperty('--dream-skin-quote', JSON.stringify(dreamSkin.quote));
     root.style.setProperty('--dream-skin-position-x', `${dreamSkin.imageTreatment.positionX}%`);
     root.style.setProperty('--dream-skin-position-y', `${dreamSkin.imageTreatment.positionY}%`);
     root.style.setProperty('--dream-skin-zoom', String(dreamSkin.imageTreatment.zoom));
@@ -135,7 +125,6 @@ export function applyThemeToDocument(
     root.dataset.dreamTypography = dreamSkin.typography;
     root.dataset.dreamTextSide = dreamSkin.imageTreatment.textSide;
     root.dataset.dreamExtend = dreamSkin.imageTreatment.extendToWorkspace ? 'on' : 'off';
-    root.dataset.dreamOverlayCopy = dreamSkin.imageTreatment.showOverlayCopy ? 'on' : 'off';
   } else {
     root.removeAttribute('data-dream-shell');
     root.removeAttribute('data-dream-decoration');
@@ -143,7 +132,6 @@ export function applyThemeToDocument(
     root.removeAttribute('data-dream-typography');
     root.removeAttribute('data-dream-text-side');
     root.removeAttribute('data-dream-extend');
-    root.removeAttribute('data-dream-overlay-copy');
     for (const variable of DREAM_SKIN_CSS_VARIABLES) {
       root.style.removeProperty(variable);
     }
@@ -179,7 +167,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     useAppSettingsKey('customThemes');
   const { value: systemThemesValue, isLoading: systemThemesLoading } =
     useAppSettingsKey('systemThemes');
-  const [, setCachedTheme] = useLocalStorage<Theme>('yoda-theme', null);
+  const [cachedTheme, setCachedTheme] = useLocalStorage<Theme>('yoda-theme', null);
 
   // OS appearance, kept reactive so follow-system re-resolves on change.
   const [systemMode, setSystemMode] = useState<EffectiveTheme>(getSystemTheme);
@@ -191,7 +179,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  const theme: Theme = themeValue ?? null;
+  // `undefined` means the main process has not answered yet — not "follow
+  // system". Treating an unanswered read as a real selection is what made a
+  // persisted skin revert to the system default on a slow restart, so fall
+  // back to the cached selection the pre-paint boot script already used.
+  const theme: Theme = themeValue === undefined ? cachedTheme : themeValue;
   const customThemes = customThemesValue?.items ?? [];
   const systemThemes = systemThemesValue ?? { light: 'ylight' as const, dark: 'ydark' as const };
 
@@ -220,10 +212,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     applyThemeToDocument(effectiveTheme, selectedCustomTheme);
   }, [activeSelection, effectiveTheme, selectedCustomTheme, isThemeLoading]);
 
+  // Only an authoritative value may update the pre-paint cache; caching a
+  // fallback would make the next cold boot paint the wrong theme too.
   useEffect(() => {
-    if (isThemeLoading) return;
-    setCachedTheme(theme);
-  }, [theme, isThemeLoading, setCachedTheme]);
+    if (themeValue === undefined) return;
+    setCachedTheme(themeValue);
+  }, [themeValue, setCachedTheme]);
 
   // Re-apply xterm theme after CSS classes have been updated by the effect above.
   useEffect(() => {

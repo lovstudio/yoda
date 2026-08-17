@@ -1,8 +1,8 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { MOBILE_INPUT_ATTACHMENT_CHUNK_BYTES } from '@lovstudio/yoda-protocol/mobile-api';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { MOBILE_INPUT_ATTACHMENT_CHUNK_BYTES } from '@shared/mobile-api';
 import {
   MobileInputAttachmentError,
   MobileInputAttachmentStore,

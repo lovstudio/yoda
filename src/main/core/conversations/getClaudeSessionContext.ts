@@ -1,5 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { unconcludedTurnReplyIndexes, type ReplyTurnKind } from '@shared/agent-reply-turns';
 import type {
   AgentMemory,
   ClaudeSessionContext,
@@ -13,6 +14,7 @@ import {
   resolveClaudeTranscriptPathFromConfigDir,
 } from '@main/core/session-title/claude-title-source';
 import { log } from '@main/lib/logger';
+import { isClaudeNoReplyNotice } from './claude-system-rows';
 import {
   getClaudeCompletedTurnTargets,
   getClaudeCurrentBranchMessageIds,
@@ -167,7 +169,14 @@ function parseClaudeTranscript(raw: string, collectHarness: boolean): ParsedClau
       if (message) messages.push(message);
     }
   }
-  return { tools, mcpServers, prompts, messages, compactions, summary };
+  return {
+    tools,
+    mcpServers,
+    prompts,
+    messages: promoteUnconcludedTurnReplies(messages),
+    compactions,
+    summary,
+  };
 }
 
 /** Prompt-only transcript reader for progressive project-history surfaces. */
@@ -329,12 +338,29 @@ function extractAssistantMessage(
   if (!message || typeof message !== 'object') return null;
   const text = extractUserText((message as Record<string, unknown>).content);
   if (!text) return null;
+  if (isClaudeNoReplyNotice(text)) return null;
   const timestamp = typeof row.timestamp === 'string' ? row.timestamp : null;
   const uuid = typeof row.uuid === 'string' ? row.uuid : `assistant-${index}`;
   const stopReason = (message as Record<string, unknown>).stop_reason;
   const phase =
     typeof stopReason === 'string' && stopReason !== 'tool_use' ? 'final' : 'commentary';
   return { id: uuid, role: 'assistant', text, timestamp, phase };
+}
+
+/** Keeps every turn represented at concise level — see `agent-reply-turns`. */
+function promoteUnconcludedTurnReplies(
+  messages: SessionTranscriptMessage[]
+): SessionTranscriptMessage[] {
+  const promoted = unconcludedTurnReplyIndexes(
+    messages.map((message): ReplyTurnKind => {
+      if (message.role === 'user') return 'turn-start';
+      return message.phase === 'final' ? 'final-reply' : 'reply';
+    })
+  );
+  if (promoted.size === 0) return messages;
+  return messages.map((message, index) =>
+    promoted.has(index) ? { ...message, phase: 'final' as const } : message
+  );
 }
 
 function extractUserText(content: unknown): string | null {

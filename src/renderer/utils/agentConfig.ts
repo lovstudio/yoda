@@ -13,6 +13,7 @@ import continueLogo from '../../assets/images/continue.png';
 import cursorLogoSvg from '../../assets/images/cursor.svg?raw';
 import devinLogo from '../../assets/images/devin.png';
 import factoryLogoSvg from '../../assets/images/droid.svg?raw';
+import dshLogoSvg from '../../assets/images/dsh.svg?raw';
 import geminiLogo from '../../assets/images/gemini.png';
 import copilotLogoSvg from '../../assets/images/gh-copilot.svg?raw';
 import gooseLogo from '../../assets/images/goose.png';
@@ -57,6 +58,7 @@ export const agentConfig: Record<RuntimeId, AgentInfo> = {
   auggie: { name: 'Auggie', logo: augmentLogoSvg, alt: 'Auggie CLI', isSvg: true },
   goose: { name: 'Goose', logo: gooseLogo, alt: 'Goose CLI' },
   grok: { name: 'Grok', logo: grokLogoSvg, alt: 'Grok CLI', isSvg: true, invertInDark: true },
+  dsh: { name: 'dsh-TUI', logo: dshLogoSvg, alt: 'dsh-TUI', isSvg: true },
   kimi: { name: 'Kimi', logo: kimiLogo, alt: 'Kimi CLI' },
   kilocode: { name: 'Kilocode', logo: kilocodeLogo, alt: 'Kilocode CLI' },
   letta: {

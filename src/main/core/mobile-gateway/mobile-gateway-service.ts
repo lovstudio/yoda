@@ -5,11 +5,6 @@ import http from 'node:http';
 import { networkInterfaces } from 'node:os';
 import path from 'node:path';
 import { URL } from 'node:url';
-import { app } from 'electron';
-import { resolveAgentPermissionMode, type Agent } from '@shared/agents';
-import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
-import type { Conversation } from '@shared/conversations';
-import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import {
   canContinueMobileSession,
   createExpoGoPairingUrl,
@@ -52,12 +47,22 @@ import {
   type MobileTaskSessionsResponse,
   type MobileTaskStrategyKind,
   type MobileTaskSummary,
-} from '@shared/mobile-api';
+} from '@lovstudio/yoda-protocol/mobile-api';
 import {
   MOBILE_SESSION_EVENT_VERSION,
   type MobileSessionInvalidationReason,
-} from '@shared/mobile-session-events';
-import { resolveMobileSessionInteraction } from '@shared/mobile-session-interaction';
+} from '@lovstudio/yoda-protocol/mobile-session-events';
+import { resolveMobileSessionInteraction } from '@lovstudio/yoda-protocol/mobile-session-interaction';
+import {
+  DEFAULT_MOBILE_SYNC_MODE,
+  isLoopbackRemoteAddress,
+  lanSyncEnabled,
+} from '@lovstudio/yoda-protocol/mobile-sync';
+import { app } from 'electron';
+import { resolveAgentPermissionMode, type Agent } from '@shared/agents';
+import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
+import type { Conversation } from '@shared/conversations';
+import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import {
   INTERNAL_PROJECT_ID,
   projectDisplayName,
@@ -132,7 +137,10 @@ import {
   MobileInputAttachmentError,
   MobileInputAttachmentStore,
 } from './mobile-input-attachment-store';
-import { mapMobilePermissionMode } from './mobile-permission-modes';
+import {
+  mapMobilePermissionMode,
+  mobileAccessModePermissionModes,
+} from './mobile-permission-modes';
 import {
   ensureMobileConversationInputSession,
   resolveMobileSessionAvailability,
@@ -202,11 +210,40 @@ function metroPidFilePath(): string {
   return path.join(app.getPath('userData'), 'metro-dev-server.pid');
 }
 
-function writeMetroPidFile(pid: number): void {
+/** The pid alone cannot be trusted across runs: the OS recycles pids, and
+ *  killing whatever inherited ours would be worse than leaking an orphan. So the
+ *  spawned command line is recorded next to the pid and has to match before we
+ *  signal anything. */
+type MetroPidRecord = { pid: number; command: string };
+
+function writeMetroPidFile(pid: number, command: string): void {
   try {
-    fs.writeFileSync(metroPidFilePath(), String(pid), 'utf8');
+    fs.writeFileSync(
+      metroPidFilePath(),
+      JSON.stringify({ pid, command } satisfies MetroPidRecord),
+      'utf8'
+    );
   } catch (error) {
     log.warn('MobileGateway: failed to write Metro pid file', { error: String(error) });
+  }
+}
+
+function readMetroPidFile(): MetroPidRecord | null {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(metroPidFilePath(), 'utf8').trim();
+  } catch {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as Partial<MetroPidRecord>;
+    if (!Number.isInteger(parsed.pid) || typeof parsed.command !== 'string') return null;
+    return { pid: parsed.pid as number, command: parsed.command };
+  } catch {
+    // Written by a build that spawned Metro as a workspace filter, before the
+    // mobile client moved to its own repository.
+    const pid = Number.parseInt(raw, 10);
+    return Number.isInteger(pid) ? { pid, command: '@yoda/mobile' } : null;
   }
 }
 
@@ -218,10 +255,10 @@ function removeMetroPidFile(): void {
   }
 }
 
-function isOurMetroProcess(pid: number): boolean {
+function isOurMetroProcess(pid: number, command: string): boolean {
   const result = spawnSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' });
   if (result.status !== 0) return false;
-  return result.stdout.includes('@yoda/mobile');
+  return result.stdout.includes(command);
 }
 
 // A previous Yoda instance that crashed or was force-killed leaves its detached
@@ -231,18 +268,15 @@ function isOurMetroProcess(pid: number): boolean {
 function killStaleMetroFromPidFile(): void {
   if (process.platform === 'win32') return;
 
-  let pid: number;
-  try {
-    pid = Number.parseInt(fs.readFileSync(metroPidFilePath(), 'utf8').trim(), 10);
-  } catch {
-    return;
-  }
-  if (!Number.isInteger(pid) || pid <= 1) {
+  const record = readMetroPidFile();
+  if (!record) return;
+  const { pid, command } = record;
+  if (pid <= 1) {
     removeMetroPidFile();
     return;
   }
 
-  if (isOurMetroProcess(pid)) {
+  if (isOurMetroProcess(pid, command)) {
     log.info('MobileGateway: killing stale Expo Metro from previous run', { pid });
     try {
       process.kill(-pid, 'SIGKILL');
@@ -264,6 +298,44 @@ function shouldAutoStartLocalMetro(): boolean {
   if (!isDevelopment()) return false;
   if (parseBooleanSetting(process.env.YODA_MOBILE_METRO_DISABLED) === true) return false;
   return !process.env.YODA_MOBILE_EXPO_URL?.trim();
+}
+
+/** The mobile client lives in its own repository (`lovstudio/yoda-mobile`), so
+ *  this repo cannot start Metro on its own: the developer has to say where that
+ *  checkout is. Not finding it is an ordinary development setup, not a fault —
+ *  the gateway still serves a paired phone, it just will not spawn a bundler. */
+type MobileRepoResolution =
+  | { kind: 'unset' }
+  | { kind: 'missing'; path: string }
+  | { kind: 'ready'; path: string };
+
+function resolveLocalMobileRepo(): MobileRepoResolution {
+  const configured = process.env.YODA_MOBILE_REPO_PATH?.trim();
+  if (!configured) return { kind: 'unset' };
+  const resolved = path.resolve(configured);
+  if (!fs.existsSync(path.join(resolved, 'package.json'))) {
+    return { kind: 'missing', path: resolved };
+  }
+  return { kind: 'ready', path: resolved };
+}
+
+// Opening the mobile view repeatedly should not repeat the same advice.
+let loggedMobileRepoResolution: string | null = null;
+
+function logMobileRepoResolutionOnce(resolution: MobileRepoResolution): void {
+  const key = resolution.kind === 'unset' ? 'unset' : `${resolution.kind}:${resolution.path}`;
+  if (loggedMobileRepoResolution === key) return;
+  loggedMobileRepoResolution = key;
+
+  if (resolution.kind === 'unset') {
+    log.info(
+      'MobileGateway: not auto-starting Expo Metro because the mobile client lives in its own repository. Set YODA_MOBILE_REPO_PATH=/path/to/yoda-mobile to auto-start it, or run `pnpm start` there yourself.'
+    );
+    return;
+  }
+  log.warn('MobileGateway: YODA_MOBILE_REPO_PATH does not look like a checkout', {
+    path: resolution.path,
+  });
 }
 
 function parsePort(value: string | undefined): number {
@@ -878,6 +950,7 @@ export class MobileGatewayService {
   private token = '';
   private host = '0.0.0.0';
   private port = MOBILE_GATEWAY_DEFAULT_PORT;
+  private lanEnabled = lanSyncEnabled(DEFAULT_MOBILE_SYNC_MODE);
 
   async initialize(): Promise<void> {
     this.lifecycleGeneration += 1;
@@ -965,6 +1038,12 @@ export class MobileGatewayService {
   private async ensureLocalMetro(primaryUrl: string): Promise<void> {
     if (!shouldAutoStartLocalMetro()) return;
 
+    const mobileRepo = resolveLocalMobileRepo();
+    if (mobileRepo.kind !== 'ready') {
+      logMobileRepoResolutionOnce(mobileRepo);
+      return;
+    }
+
     const metroHost = metroHostFromGatewayUrl(primaryUrl);
     if (!metroHost) return;
 
@@ -994,24 +1073,27 @@ export class MobileGatewayService {
       return;
     }
 
-    const child = spawn(
-      pnpmCommand(),
-      ['--filter', '@yoda/mobile', 'start', '--', '--host', 'lan'],
-      {
-        cwd: process.cwd(),
-        detached: process.platform !== 'win32',
-        env: {
-          ...process.env,
-          EXPO_NO_TELEMETRY: '1',
-          REACT_NATIVE_PACKAGER_HOSTNAME: metroHost,
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }
-    );
+    // `--dir` is redundant next to `cwd`, but it puts the checkout path into the
+    // command line, and the command line is all a later run gets to identify
+    // this process by: pids are recycled, and a bare `start -- --host lan` is
+    // not distinctive enough to justify sending SIGKILL to whatever inherited
+    // one. The marker is the argv tail rather than the launcher, because `ps`
+    // prints the resolved `.../pnpm.cjs`, not `pnpm`.
+    const args = ['--dir', mobileRepo.path, 'start', '--', '--host', 'lan'];
+    const child = spawn(pnpmCommand(), args, {
+      cwd: mobileRepo.path,
+      detached: process.platform !== 'win32',
+      env: {
+        ...process.env,
+        EXPO_NO_TELEMETRY: '1',
+        REACT_NATIVE_PACKAGER_HOSTNAME: metroHost,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
     this.metroProcess = child;
     this.metroHost = metroHost;
-    if (child.pid) writeMetroPidFile(child.pid);
+    if (child.pid) writeMetroPidFile(child.pid, args.join(' '));
     pipeMetroLog(child.stdout, 'info', 'MobileGateway: Expo Metro');
     pipeMetroLog(child.stderr, 'warn', 'MobileGateway: Expo Metro');
 
@@ -1075,7 +1157,9 @@ export class MobileGatewayService {
 
   getConnectionInfo(): MobileGatewayConnectionInfo {
     this.ensureLocalMetroLazy();
-    const networkUrls = mobileGatewayNetworkUrls(networkInterfaces(), this.port);
+    const networkUrls = this.lanEnabled
+      ? mobileGatewayNetworkUrls(networkInterfaces(), this.port)
+      : [];
     const urls = networkUrls.map(({ url }) => url);
     const primaryUrl = urls[0] ?? `http://localhost:${this.port}`;
     return {
@@ -1086,11 +1170,12 @@ export class MobileGatewayService {
       port: this.port,
       token: this.token || null,
       urls,
+      lanSyncEnabled: this.lanEnabled,
       connectionKind: networkUrls[0]?.kind ?? 'local',
-      localExpoUrl: this.token ? localExpoUrl(primaryUrl, this.token) : null,
+      localExpoUrl: this.token && urls.length > 0 ? localExpoUrl(primaryUrl, this.token) : null,
       installUrl: mobileInstallUrl(),
       pairingUrl:
-        this.server && this.token
+        this.server && this.token && urls.length > 0
           ? createMobilePairingUrl({ baseUrl: primaryUrl, token: this.token })
           : null,
     };
@@ -1101,7 +1186,29 @@ export class MobileGatewayService {
     return { baseUrl: `http://127.0.0.1:${this.port}`, token: this.token };
   }
 
+  /** Relay-only mode keeps the listener bound but refuses everything that is not
+   *  loopback. Rebinding the socket instead would tear down every in-flight SSE
+   *  stream, and the Relay bridge itself talks to `127.0.0.1`, so it is
+   *  unaffected. */
+  setLanSyncEnabled(enabled: boolean): void {
+    if (this.lanEnabled === enabled) return;
+    this.lanEnabled = enabled;
+    log.info('MobileGateway: LAN sync toggled', { enabled });
+  }
+
+  isLanSyncEnabled(): boolean {
+    return this.lanEnabled;
+  }
+
   private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    if (!this.lanEnabled && !isLoopbackRemoteAddress(req.socket.remoteAddress)) {
+      throw new MobileGatewayError(
+        403,
+        'lan_sync_disabled',
+        'This desktop is set to public sync only. Enable LAN sync on the desktop, or connect through Yoda Relay.'
+      );
+    }
+
     if (req.method === 'OPTIONS') {
       writeJson(res, 204, {});
       return;
@@ -1370,7 +1477,7 @@ export class MobileGatewayService {
     const catalog = await skillsService.getCatalogIndex(projectPath);
     return {
       runtimeId,
-      skills: mobileSkillSummaries(catalog, allowedSkillKeys),
+      skills: mobileSkillSummaries(catalog, runtimeId, allowedSkillKeys),
     };
   }
 
@@ -1390,6 +1497,7 @@ export class MobileGatewayService {
     );
     const permissionModes: MobileConfigurationSnapshot['permissionModes'] = {};
     const defaultPermissionModes: MobileConfigurationSnapshot['defaultPermissionModes'] = {};
+    const accessModePermissionModes: MobileConfigurationSnapshot['accessModePermissionModes'] = {};
     for (const runtimeId of RUNTIME_IDS) {
       permissionModes[runtimeId] = getRuntimePermissionModes(runtimeId).map((mode) =>
         mapMobilePermissionMode(runtimeId, mode)
@@ -1399,6 +1507,7 @@ export class MobileGatewayService {
         legacyAutoApprove: runtimeAutoApproveDefaults,
         runtimeId,
       });
+      accessModePermissionModes[runtimeId] = mobileAccessModePermissionModes(runtimeId);
     }
 
     return {
@@ -1412,6 +1521,7 @@ export class MobileGatewayService {
       agents,
       permissionModes,
       defaultPermissionModes,
+      accessModePermissionModes,
     };
   }
 

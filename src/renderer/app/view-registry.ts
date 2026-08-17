@@ -87,17 +87,6 @@ const marketplaceView = {
   PaneHeaderSlot: deferredExport(marketplaceModule, 'MarketplacePaneHeaderSlot'),
 };
 
-const maasModule = () => import('@renderer/features/maas/maas-view');
-type MaasViewParams = {
-  children: ReactNode;
-  platformId?: MaasPlatformId;
-};
-const maasView = {
-  WrapView: deferredExport<MaasViewParams>(maasModule, 'MaasViewWrapper'),
-  TitlebarSlot: deferredExport(maasModule, 'MaasTitlebar'),
-  MainPanel: deferredExport(maasModule, 'MaasMainPanel'),
-};
-
 const mcpModule = () => import('@renderer/features/mcp/mcp-view');
 const mcpView = {
   TitlebarSlot: deferredExport(mcpModule, 'McpTitlebar'),
@@ -126,6 +115,7 @@ type SettingsViewParams = {
   children: ReactNode;
   tab?: SettingsPageTab;
   runtimeId?: RuntimeId;
+  maasPlatformId?: MaasPlatformId;
 };
 const settingsModule = () => import('@renderer/features/settings/settings-view');
 const settingsView = {
@@ -183,7 +173,6 @@ export const views = {
   agents: agentsView,
   aiLab: aiLabView,
   automation: automationView,
-  maas: maasView,
   usage: usageView,
   library: libraryView,
   marketplace: marketplaceView,

@@ -10,10 +10,13 @@ const mocks = vi.hoisted(() => ({
   getClaudeSessionActivity: vi.fn(),
   getProviderConfig: vi.fn(),
   getRuntimeStatus: vi.fn(),
+  getRuntimeState: vi.fn(),
+  hasInterruptMarker: vi.fn(),
   isProviderTurnConfirmed: vi.fn(),
   isInterruptedSinceLastPrompt: vi.fn(),
   monitorRegistryGet: vi.fn(),
   ptyGet: vi.fn(),
+  ptyGetDiagnostics: vi.fn(),
   readClaudeTurnVerdictFile: vi.fn(),
   readCodexTurnVerdict: vi.fn(),
   resolveTask: vi.fn(),
@@ -25,6 +28,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@main/core/pty/pty-session-registry', () => ({
   ptySessionRegistry: {
     get: mocks.ptyGet,
+    getDiagnostics: mocks.ptyGetDiagnostics,
   },
 }));
 
@@ -48,6 +52,7 @@ vi.mock('@main/db/client', () => ({
 vi.mock('./agent-session-runtime', () => ({
   agentSessionRuntimeStore: {
     getStatus: mocks.getRuntimeStatus,
+    getState: mocks.getRuntimeState,
     isProviderTurnConfirmed: mocks.isProviderTurnConfirmed,
     publishSnapshot: mocks.publishRuntimeSnapshot,
     setProviderTurnConfirmed: mocks.setProviderTurnConfirmed,
@@ -59,9 +64,12 @@ vi.mock('./claude-run-state-source', () => ({
   readClaudeTurnVerdictFile: mocks.readClaudeTurnVerdictFile,
 }));
 
-vi.mock('./claude-session-activity-source', () => ({
-  getClaudeSessionActivity: mocks.getClaudeSessionActivity,
-}));
+vi.mock('./claude-session-activity-source', async (importOriginal) => {
+  // `idleActivitySettlesRunState` is a pure predicate over a record; keep the
+  // real one so this test exercises the same admissibility rule as production.
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return { ...actual, getClaudeSessionActivity: mocks.getClaudeSessionActivity };
+});
 
 vi.mock('./claude-transcript-locator', () => ({
   findClaudeTranscriptPathBySessionId: mocks.findClaudeTranscriptPathBySessionId,
@@ -72,6 +80,7 @@ vi.mock('./codex-run-state-source', () => ({
 }));
 
 vi.mock('./interrupt-marker', () => ({
+  hasInterruptMarker: mocks.hasInterruptMarker,
   isInterruptedSinceLastPrompt: mocks.isInterruptedSinceLastPrompt,
 }));
 
@@ -85,12 +94,13 @@ vi.mock('../projects/utils', () => ({
   resolveTask: mocks.resolveTask,
 }));
 
-function mountedTask(activeConversationIds: string[] = []) {
+function mountedTask(activeConversationIds: string[] = [], agentBackendAlive = false) {
   return {
     conversations: {
       taskPath: '/repo',
       getActiveSessions: () =>
         activeConversationIds.map((conversationId) => ({ conversationId, pid: 4321 })),
+      isAgentBackendAlive: () => Promise.resolve(agentBackendAlive),
     },
   };
 }
@@ -119,6 +129,7 @@ describe('getConversationRunStatus', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getRuntimeStatus.mockReturnValue('idle');
+    mocks.getRuntimeState.mockReturnValue({ status: 'idle', updatedAt: 0 });
     mocks.isProviderTurnConfirmed.mockReturnValue(false);
     mocks.dbSelect.mockReturnValue({
       from: () => ({
@@ -128,8 +139,10 @@ describe('getConversationRunStatus', () => {
     mocks.getProviderConfig.mockResolvedValue(undefined);
     mocks.getClaudeSessionActivity.mockResolvedValue(null);
     mocks.isInterruptedSinceLastPrompt.mockReturnValue(false);
+    mocks.hasInterruptMarker.mockReturnValue(false);
     mocks.monitorRegistryGet.mockReturnValue(undefined);
     mocks.ptyGet.mockReturnValue(undefined);
+    mocks.ptyGetDiagnostics.mockReturnValue(undefined);
   });
 
   it('derives Claude working directly from the active PID activity record', async () => {
@@ -201,6 +214,24 @@ describe('getConversationRunStatus', () => {
       'idle',
       { providerTurnConfirmed: false }
     );
+  });
+
+  it('keeps cached working while the agent survives behind a released transport', async () => {
+    // Reopening a task detaches nothing and attaches a fresh tmux client, so a
+    // momentarily missing PTY must not be read as a finished turn.
+    mocks.getRuntimeStatus.mockReturnValue('working');
+    mocks.resolveTask.mockReturnValue(mountedTask([], true));
+
+    await expect(readStatus()).resolves.toBe('working');
+    expect(mocks.setRuntimeStatus).not.toHaveBeenCalled();
+  });
+
+  it('keeps cached working while a replacement transport is still registering', async () => {
+    mocks.getRuntimeStatus.mockReturnValue('working');
+    mocks.resolveTask.mockReturnValue(mountedTask());
+    mocks.ptyGetDiagnostics.mockReturnValue({ registering: true });
+
+    await expect(readStatus()).resolves.toBe('working');
   });
 
   it('falls back to the stored outcome when nothing running can be observed', async () => {
@@ -276,6 +307,92 @@ describe('getConversationRunStatus', () => {
       { projectId: 'project-1', taskId: 'task-1', conversationId: 'conv-1' },
       true
     );
+  });
+
+  it('keeps a running status when a resumed Claude process boots to an idle prompt', async () => {
+    // The record belongs to a CLI that started after the turn's status was set,
+    // so its prompt is a boot state. Opening the task is what spawns it, and run
+    // state must not follow from being looked at.
+    const now = Date.now();
+    mocks.getRuntimeStatus.mockReturnValue('working');
+    mocks.getRuntimeState.mockReturnValue({ status: 'working', updatedAt: now - 60_000 });
+    mocks.resolveTask.mockReturnValue(mountedTask(['conv-1']));
+    mocks.getClaudeSessionActivity.mockResolvedValue({
+      pid: 4321,
+      sessionId: 'conv-1',
+      cwd: '/repo',
+      status: 'idle',
+      waitingFor: null,
+      updatedAt: now,
+      startedAt: now - 1_000,
+    });
+    mocks.ptyGet.mockReturnValue({});
+
+    await expect(readStatus()).resolves.toBe('working');
+  });
+
+  it('settles a running status from an idle record the same process wrote', async () => {
+    const now = Date.now();
+    mocks.getRuntimeStatus.mockReturnValue('working');
+    mocks.getRuntimeState.mockReturnValue({ status: 'working', updatedAt: now - 60_000 });
+    mocks.resolveTask.mockReturnValue(mountedTask(['conv-1']));
+    mocks.getClaudeSessionActivity.mockResolvedValue({
+      pid: 4321,
+      sessionId: 'conv-1',
+      cwd: '/repo',
+      status: 'idle',
+      waitingFor: null,
+      updatedAt: now,
+      startedAt: now - 600_000,
+    });
+    mocks.ptyGet.mockReturnValue({});
+
+    // The turn ended: an idle record from the process that ran it is the CLI
+    // saying so, which is a stronger statement than "nothing is running".
+    await expect(readStatus()).resolves.toBe('completed');
+  });
+
+  it('settles a stale awaiting-input from an idle record instead of inventing an interrupt', async () => {
+    // The stored outcome here *is* the awaiting-input being overruled, so reading
+    // it back would report a turn the user never cut short — the click-coupled
+    // 等待输入 → 中断 flip.
+    const now = Date.now();
+    mocks.getRuntimeStatus.mockReturnValue('awaiting-input');
+    mocks.getRuntimeState.mockReturnValue({ status: 'awaiting-input', updatedAt: now - 60_000 });
+    mocks.resolveTask.mockReturnValue(mountedTask(['conv-1']));
+    mocks.dbSelect.mockReturnValue({
+      from: () => ({ where: () => Promise.resolve([{ lastRunStatus: 'awaiting-input' }]) }),
+    });
+    mocks.getClaudeSessionActivity.mockResolvedValue({
+      pid: 4321,
+      sessionId: 'conv-1',
+      cwd: '/repo',
+      status: 'idle',
+      waitingFor: null,
+      updatedAt: now,
+      startedAt: now - 600_000,
+    });
+
+    await expect(readStatus()).resolves.toBe('completed');
+  });
+
+  it('reports an interrupt only when a marker says the turn was cut short', async () => {
+    const now = Date.now();
+    mocks.getRuntimeStatus.mockReturnValue('awaiting-input');
+    mocks.getRuntimeState.mockReturnValue({ status: 'awaiting-input', updatedAt: now - 60_000 });
+    mocks.hasInterruptMarker.mockReturnValue(true);
+    mocks.resolveTask.mockReturnValue(mountedTask(['conv-1']));
+    mocks.getClaudeSessionActivity.mockResolvedValue({
+      pid: 4321,
+      sessionId: 'conv-1',
+      cwd: '/repo',
+      status: 'idle',
+      waitingFor: null,
+      updatedAt: now,
+      startedAt: now - 600_000,
+    });
+
+    await expect(readStatus()).resolves.toBe('interrupted');
   });
 
   it('does not downgrade a live completed status when the monitor reports idle', async () => {

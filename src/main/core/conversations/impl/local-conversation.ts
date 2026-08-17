@@ -23,6 +23,7 @@ import { applyHookOverrides } from '@main/core/agent-hooks/inspect/hook-override
 import { hookOverridesStore } from '@main/core/agent-hooks/inspect/hook-overrides-store';
 import { aiLogService } from '@main/core/ai-logs/ai-log-service';
 import { interactiveTurnLogger } from '@main/core/ai-logs/interactive-turn-logger';
+import { describeInvocationEndpoint } from '@main/core/ai-logs/invocation-endpoint';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-reconciler';
 import { createClaudeInterruptSniffer } from '@main/core/conversations/claude-interrupt-sniffer';
@@ -53,6 +54,7 @@ import {
   resolveMaasRuntimeEnv,
   rewriteCodexMaasModelArgs,
 } from '@main/core/maas/runtime-env';
+import { captureAgentExitTail, describeAgentExit } from '@main/core/pty/agent-exit-diagnostics';
 import { spawnLocalPty } from '@main/core/pty/local-pty';
 import type { Pty } from '@main/core/pty/pty';
 import { buildAgentEnv } from '@main/core/pty/pty-env';
@@ -89,7 +91,6 @@ import {
   cancelConversationHydrationBarriersForTask,
 } from '../conversation-hydration-barrier';
 import { getConversationRuntimeStateRoot } from '../conversation-session-source';
-import { withExecutionModeInstructions } from '../execution-mode';
 import { createLocalAgentSessionCatalogId } from '../local-agent-session-catalog';
 import { recordPendingInitialPromptAttempt } from '../pending-initial-prompt-store';
 import { withRuntimeStateRoot } from '../session-state-roots';
@@ -100,8 +101,8 @@ import {
 } from '../session-stats-hooks';
 import { storeConversationSessionSource } from '../stored-conversation-session-source';
 import { buildAgentCommand } from './agent-command';
+import { buildAppendSystemPrompt } from './append-system-prompt';
 import { injectClipboardImagesAndPrompt, substituteImageMentions } from './image-attachments';
-import { getEnabledPromptPrinciplesText } from './prompt-principles';
 import { classifyLostPtyTransport, type PtyExitClassification } from './pty-exit-classification';
 import {
   resolveAgentApiEnvVars,
@@ -133,6 +134,7 @@ export class LocalConversationProvider implements ConversationProvider {
   private readonly resolveProjectPromptPrinciples?: () => Promise<
     ProjectPromptPrinciples | undefined
   >;
+  private readonly resolveFacetInstructions?: () => Promise<string | undefined>;
   private readonly hookConfigWriter: HookConfigWriter;
   private readonly preparedHookProviders = new Map<string, boolean>();
   private readonly tmuxSessionNames = new Map<string, string>();
@@ -157,6 +159,7 @@ export class LocalConversationProvider implements ConversationProvider {
     ctx,
     taskEnvVars = {},
     resolveProjectPromptPrinciples,
+    resolveFacetInstructions,
   }: {
     projectId: string;
     sidebarWorkspaceId?: string | null;
@@ -167,6 +170,7 @@ export class LocalConversationProvider implements ConversationProvider {
     ctx: IExecutionContext;
     taskEnvVars?: Record<string, string>;
     resolveProjectPromptPrinciples?: () => Promise<ProjectPromptPrinciples | undefined>;
+    resolveFacetInstructions?: () => Promise<string | undefined>;
   }) {
     this.projectId = projectId;
     this.sidebarWorkspaceId = sidebarWorkspaceId;
@@ -177,6 +181,7 @@ export class LocalConversationProvider implements ConversationProvider {
     this.ctx = ctx;
     this.taskEnvVars = taskEnvVars;
     this.resolveProjectPromptPrinciples = resolveProjectPromptPrinciples;
+    this.resolveFacetInstructions = resolveFacetInstructions;
     this.hookConfigWriter = new HookConfigWriter(new LocalFileSystem(taskPath), ctx);
   }
 
@@ -506,13 +511,12 @@ export class LocalConversationProvider implements ConversationProvider {
         pendingImagePaths && !useClipboardImagePaste
           ? substituteImageMentions(initialPrompt, pendingImagePaths)
           : initialPrompt;
-      const appendSystemPrompt = withExecutionModeInstructions(
-        await getEnabledPromptPrinciplesText(await this.resolveProjectPromptPrinciples?.(), {
-          projectId: this.projectId,
-          workspaceId: this.sidebarWorkspaceId,
-        }),
-        conversation.executionMode
-      );
+      const appendSystemPrompt = await buildAppendSystemPrompt({
+        resolveFacetInstructions: this.resolveFacetInstructions,
+        resolveProjectPromptPrinciples: this.resolveProjectPromptPrinciples,
+        target: { projectId: this.projectId, workspaceId: this.sidebarWorkspaceId },
+        executionMode: conversation.executionMode,
+      });
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       const terminalThemeMode = await resolveTerminalThemeMode();
       if (!this.ownsPendingStart(sessionId, startToken)) return;
@@ -635,6 +639,7 @@ export class LocalConversationProvider implements ConversationProvider {
       // wrapper around it is launch plumbing, useless for debugging the run).
       // The initial prompt arg is dropped — it's recorded in the prompt field.
       let invocationLogId: string;
+      const invocationEndpoint = describeInvocationEndpoint(providerEnv);
       try {
         invocationLogId = await aiLogService.start({
           purpose: 'interactive-session',
@@ -653,9 +658,11 @@ export class LocalConversationProvider implements ConversationProvider {
             authProvider,
             maasEffective: String(maasEffective),
             ...(maasCredentials ? { maasPlatformId: maasCredentials.platformId } : {}),
+            ...(invocationEndpoint ? { endpoint: invocationEndpoint } : {}),
           },
         });
         invocationLogIdForRollback = invocationLogId;
+        interactiveTurnLogger.attachSessionLog(conversation.id, invocationLogId);
       } catch (error) {
         preparedSettings.cleanup?.();
         preparedSettingsCleanup = undefined;
@@ -865,6 +872,7 @@ export class LocalConversationProvider implements ConversationProvider {
             projectId: conversation.projectId,
             taskId: conversation.taskId,
             conversationId: conversation.id,
+            ptySessionId: sessionId,
           })
         );
       }
@@ -892,22 +900,25 @@ export class LocalConversationProvider implements ConversationProvider {
         this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
         const exitedBySignal = signal !== undefined && signal !== 0;
         const failed = exitedBySignal || (typeof exitCode === 'number' && exitCode !== 0);
-        const finishAsAgentExit = () => {
+        const exitReason = describeAgentExit({ exitCode, signal });
+        const finishAsAgentExit = (exitTail?: string) => {
           if (invocationLogFinished) return;
           invocationLogFinished = true;
           void aiLogService.finish(invocationLogId, {
             status: failed ? 'failed' : 'succeeded',
-            error: exitedBySignal
-              ? `Signal ${String(signal)}`
-              : failed
-                ? `Exit code ${exitCode}`
-                : undefined,
+            error: failed ? exitReason : undefined,
+            output: exitTail || undefined,
           });
         };
         if (this.sessions.get(sessionId) !== pty) {
           finishAsAgentExit();
           return;
         }
+        // A CLI that dies mid-turn writes no API error and no crash report, so
+        // its last screen is the only evidence of why the turn stopped. Exit
+        // finalization clears the replay ring buffer, hence the snapshot here,
+        // synchronously, before the asynchronous tmux probe below.
+        const exitTail = captureAgentExitTail(sessionId);
         // The transport is gone either way, so stop routing input into a dead
         // file descriptor before the probe resolves; `sendInput` falls back to
         // headless `tmux send-keys` exactly as it does for an idle detach.
@@ -919,7 +930,7 @@ export class LocalConversationProvider implements ConversationProvider {
               invocationLogFinished = true;
               void aiLogService.finish(invocationLogId, {
                 status: 'succeeded',
-                output: `Lost Yoda renderer transport (${exitedBySignal ? `signal ${String(signal)}` : `exit code ${exitCode}`}); tmux agent remains running.`,
+                output: `Lost Yoda renderer transport (${exitReason}); tmux agent remains running.`,
               });
             }
             log.warn('LocalConversation: PTY transport died while the tmux agent stayed alive', {
@@ -931,7 +942,17 @@ export class LocalConversationProvider implements ConversationProvider {
             this.cleanupSessionArtifacts(sessionId, pty);
             return verdict;
           }
-          finishAsAgentExit();
+          finishAsAgentExit(exitTail);
+          // The dying screen is the only place a mid-turn CLI death explains
+          // itself; keep it in the main log too so a dev session sees it without
+          // opening the AI log.
+          log.warn('LocalConversation: agent CLI exited', {
+            sessionId,
+            conversationId: conversation.id,
+            runtimeId: conversation.runtimeId,
+            exitReason,
+            exitTail: exitTail || '(no output captured)',
+          });
           // A replacement transport that registered while the probe was in
           // flight owns the run state now; tearing it down here would kill a
           // freshly resumed session.
@@ -1215,8 +1236,10 @@ export class LocalConversationProvider implements ConversationProvider {
           ? { conversationId: conversation.id, cwd: this.taskPath }
           : { conversationId: conversation.id, cwd: this.taskPath, processPid };
       this.runStateWatchers.set(conversation.id, [
-        watchClaudeSessionActivity({ ...activityContext, claudeHomeDir: stateRoot }, (event) =>
-          agentSessionRuntimeStore.dispatch(session, event, 'claude-session-activity')
+        watchClaudeSessionActivity(
+          { ...activityContext, claudeHomeDir: stateRoot },
+          (event) => agentSessionRuntimeStore.dispatch(session, event, 'claude-session-activity'),
+          () => agentSessionRuntimeStore.getState(session)
         ),
       ]);
     }
@@ -1280,6 +1303,18 @@ export class LocalConversationProvider implements ConversationProvider {
             }),
       };
     });
+  }
+
+  /**
+   * Ask the tmux pane — not the attach wrapper — whether the agent still runs.
+   * A detached transport is Yoda's own doing and says nothing about the agent.
+   */
+  async isAgentBackendAlive(conversationId: string): Promise<boolean> {
+    const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
+    if (this.sessions.has(sessionId)) return true;
+    const tmuxSessionName = this.tmuxSessionNames.get(sessionId);
+    if (!tmuxSessionName) return false;
+    return (await classifyLostPtyTransport(this.ctx, tmuxSessionName)) === 'transport-lost';
   }
 
   /**

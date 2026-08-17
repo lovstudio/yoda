@@ -3,7 +3,7 @@ import {
   encodeMobileServerSentEvent,
   MOBILE_SESSION_EVENT_NAME,
   type MobileSessionInvalidation,
-} from '@shared/mobile-session-events';
+} from '@lovstudio/yoda-protocol/mobile-session-events';
 
 export const MOBILE_SESSION_HEARTBEAT_INTERVAL_MS = 15_000;
 export const MOBILE_SESSION_RECONNECT_RETRY_MS = 1_000;

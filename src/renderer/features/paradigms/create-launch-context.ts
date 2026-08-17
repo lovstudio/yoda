@@ -54,6 +54,11 @@ export interface CreateParadigmLaunchContextArgs {
   /** Branch the parent task occupies, when this task continues from one. */
   parentBranchName: string | null;
   parentTaskId: string | undefined;
+  /**
+   * Project facet the new task belongs to. `null` is an explicit "unassigned";
+   * `undefined` lets the parent task's facet carry over.
+   */
+  facetId: string | null | undefined;
   projectManager: ProjectManagerStore;
   queryClient: QueryClient;
   /** Whether the runtime's selected permission tier auto-approves. */
@@ -221,6 +226,7 @@ export function createParadigmLaunchContext(
       sourceBranch: taskSourceBranch(args.strategyKind),
       strategy: taskStrategy(args.strategyKind, taskName),
       parentTaskId: args.parentTaskId,
+      facetId: args.facetId,
       paradigm: args.paradigm,
       quickActionSource: request.quickActionSource
         ? { ...request.quickActionSource, conversationId }
@@ -279,6 +285,7 @@ export function createParadigmLaunchContext(
         sourceBranch: taskSourceBranch(args.strategyKind),
         strategy: taskStrategy(args.strategyKind, taskName),
         parentTaskId: args.parentTaskId,
+        facetId: args.facetId,
         paradigm: args.paradigm,
       });
       return { projectId: project.data.id, taskId, promise };

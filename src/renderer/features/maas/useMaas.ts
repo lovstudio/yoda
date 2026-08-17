@@ -1,6 +1,10 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef, useState } from 'react';
 import type {
+  CcSwitchIntegrationActionResult,
+  CcSwitchIntegrationStatus,
+} from '@shared/cc-switch-integration';
+import type {
   CliProxyApiManagedActionResult,
   CliProxyApiManagedStatus,
 } from '@shared/cliproxyapi-managed';
@@ -49,6 +53,7 @@ export const maasQueryKeys = {
   liteLlmManaged: ['maas', 'litellm-managed'] as const,
   newApiManaged: ['maas', 'new-api-managed'] as const,
   cliProxyApiManaged: ['maas', 'cliproxyapi-managed'] as const,
+  ccSwitchIntegration: ['maas', 'cc-switch-integration'] as const,
   records: (platformId: MaasPlatformId, kind: MaasInvocationFilterKind, refreshSequence = 0) =>
     ['maas', 'records', REAL_USAGE_QUERY_VERSION, platformId, kind, refreshSequence] as const,
   summary: (
@@ -278,6 +283,44 @@ export function useCopyCliProxyApiManagementKey() {
       }
     },
   });
+}
+
+function assertCcSwitchActionSucceeded(
+  result: CcSwitchIntegrationActionResult
+): CcSwitchIntegrationStatus {
+  if (!result.success) {
+    throw new Error(result.error ?? 'CC Switch operation failed.');
+  }
+  return result.status;
+}
+
+export function useCcSwitchIntegrationStatus(enabled = true) {
+  return useQuery<CcSwitchIntegrationStatus>({
+    queryKey: maasQueryKeys.ccSwitchIntegration,
+    queryFn: () => rpc.maas.getCcSwitchIntegrationStatus(),
+    enabled,
+    staleTime: 5_000,
+    refetchInterval: (query) => (query.state.data?.operation ? 1_000 : false),
+    refetchOnWindowFocus: true,
+  });
+}
+
+function useCcSwitchAction(action: () => Promise<CcSwitchIntegrationActionResult>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => assertCcSwitchActionSucceeded(await action()),
+    onSuccess: (status) => {
+      queryClient.setQueryData(maasQueryKeys.ccSwitchIntegration, status);
+    },
+  });
+}
+
+export function useInstallCcSwitch() {
+  return useCcSwitchAction(() => rpc.maas.installCcSwitch());
+}
+
+export function useOpenCcSwitch() {
+  return useCcSwitchAction(() => rpc.maas.openCcSwitch());
 }
 
 export function useMaasRuntimeBindings(platformId?: MaasPlatformId, enabled = true) {

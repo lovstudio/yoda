@@ -182,6 +182,7 @@ function createSchema(sqlite: Database.Database): void {
       workspace_provider_data TEXT,
       sidebar_workspace_id TEXT,
       parent_task_id TEXT,
+      facet_id TEXT,
       paradigm_id TEXT,
       paradigm_kind TEXT,
       paradigm_params TEXT

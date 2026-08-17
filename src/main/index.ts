@@ -23,6 +23,7 @@ import { appService } from './core/app/service';
 import { automationScheduler } from './core/automation/automation-scheduler';
 import { agentSessionRuntimeStore } from './core/conversations/agent-session-runtime';
 import { persistConversationRunOutcome } from './core/conversations/conversation-run-outcome';
+import { runStateReconcilerService } from './core/conversations/run-state-reconciler';
 import { sessionSummaryAutoRefreshService } from './core/conversations/session-summary-autorefresh';
 import { localDependencyManager } from './core/dependencies/dependency-manager';
 import { knownBinDirs } from './core/dependencies/probe';
@@ -34,6 +35,7 @@ import { cliProxyApiManagedService } from './core/maas/cliproxyapi-managed-servi
 import { maasService } from './core/maas/maas-service';
 import { mobileGatewayService } from './core/mobile-gateway/mobile-gateway-service';
 import { mobileRelayService } from './core/mobile-gateway/mobile-relay-service';
+import { initializeMobileSyncMode } from './core/mobile-gateway/mobile-sync-mode';
 import { ensureInternalProject } from './core/projects/operations/ensureInternalProject';
 import { projectManager } from './core/projects/project-manager';
 import { promptLibraryService } from './core/prompt-library/prompt-library-service';
@@ -170,6 +172,7 @@ void app.whenReady().then(async () => {
       log.warn('Failed to restore pending Yoda Build tasks:', error);
     });
     sessionSummaryAutoRefreshService.initialize();
+    runStateReconcilerService.initialize();
     archivedTaskReactivationService.initialize();
     searchService.initialize();
     __bootMark('searchService.initialize done');
@@ -276,9 +279,18 @@ void app.whenReady().then(async () => {
     log.warn('Failed to resume pending team-room turns:', e);
   });
 
-  mobileGatewayService.initialize().catch((e) => {
-    log.error('Failed to start mobile gateway service:', e);
-  });
+  // The sync mode gates which transports answer at all, so it lands before the
+  // gateway starts listening — otherwise a relay-only desktop would briefly be
+  // reachable over the LAN on every launch.
+  initializeMobileSyncMode()
+    .catch((e) => {
+      log.error('Failed to apply the mobile sync mode:', e);
+    })
+    .finally(() => {
+      mobileGatewayService.initialize().catch((e) => {
+        log.error('Failed to start mobile gateway service:', e);
+      });
+    });
 
   automationScheduler.initialize().catch((e) => {
     log.error('Failed to start automation scheduler:', e);
@@ -348,6 +360,7 @@ function prepareShutdown(mode: TeardownMode): Promise<void> {
     try {
       agentHookService.dispose();
       sessionSummaryAutoRefreshService.dispose();
+      runStateReconcilerService.dispose();
       archivedTaskReactivationService.dispose();
       agentSessionRuntimeStore.dispose();
       aiLabService.dispose();
