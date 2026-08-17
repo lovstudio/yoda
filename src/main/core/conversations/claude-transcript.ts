@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import type {
   MobileSessionTranscriptAgentPhase,
   MobileSessionTranscriptBlock,
@@ -93,6 +94,24 @@ export function loadClaudeTranscript({
   sessionId: string;
 }): Promise<MobileSessionTranscriptBlock[] | null> {
   return claudeTranscriptReader.readFile(resolveClaudeTranscriptPath(cwd, sessionId));
+}
+
+/**
+ * Whole-history read for one-off consumers that must not drop earlier turns —
+ * today the public session share. The cached reader keeps only a resident window
+ * (`MAX_RETAINED_CONTENT_CHARS`) because it is polled several times a second, so
+ * a share cannot go through it: it parses the file directly, once, uncached.
+ */
+export async function loadFullClaudeTranscript({
+  cwd,
+  sessionId,
+}: {
+  cwd: string;
+  sessionId: string;
+}): Promise<MobileSessionTranscriptBlock[] | null> {
+  const raw = await readFile(resolveClaudeTranscriptPath(cwd, sessionId), 'utf8');
+  const transcript = parseClaudeTranscript(raw);
+  return transcript.length > 0 ? transcript : null;
 }
 
 export function parseClaudeTranscript(raw: string): MobileSessionTranscriptBlock[] {

@@ -84,9 +84,12 @@ import {
 import { yodaCommerceService } from '@main/core/account/services/yoda-commerce-service';
 import { agentsConfigService } from '@main/core/agents-config/agents-config-service';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
-import { loadClaudeTranscript } from '@main/core/conversations/claude-transcript';
 import {
-  loadCodexRolloutShareImagesTailForConversation,
+  loadClaudeTranscript,
+  loadFullClaudeTranscript,
+} from '@main/core/conversations/claude-transcript';
+import {
+  loadCodexRolloutShareSourceForConversation,
   loadCodexRolloutTerminalHistoryTailForConversation,
   loadCodexRolloutTranscriptTailForConversation,
   type CodexRolloutShareImageGroup,
@@ -360,25 +363,54 @@ function removeTerminalChrome(value: string): string {
     .trim();
 }
 
-function tailSessionContent(value: string): {
+/**
+ * How much of a session a detail read is allowed to return.
+ *
+ * `tail` is the mobile contract: the phone polls, so the response is bounded.
+ * `full` is the public-share contract: the snapshot stands in for the whole
+ * conversation, so a long session must not come out shortened.
+ */
+type SessionDetailScope = 'tail' | 'full';
+
+const SESSION_DETAIL_LIMITS: Record<
+  SessionDetailScope,
+  { contentChars: number; transcriptChars: number }
+> = {
+  tail: {
+    contentChars: MOBILE_SESSION_CONTENT_MAX_CHARS,
+    transcriptChars: MOBILE_SESSION_TRANSCRIPT_MAX_CHARS,
+  },
+  full: {
+    contentChars: Number.POSITIVE_INFINITY,
+    transcriptChars: Number.POSITIVE_INFINITY,
+  },
+};
+
+function tailSessionContent(
+  value: string,
+  maxChars: number
+): {
   content: string;
   contentLength: number;
   truncated: boolean;
 } {
   const content = removeTerminalChrome(stripTerminalControlSequences(value));
-  const truncated = content.length > MOBILE_SESSION_CONTENT_MAX_CHARS;
+  const truncated = content.length > maxChars;
   return {
-    content: truncated ? content.slice(-MOBILE_SESSION_CONTENT_MAX_CHARS) : content,
+    content: truncated ? content.slice(-maxChars) : content,
     contentLength: content.length,
     truncated,
   };
 }
 
-function tailSessionTranscript(blocks: MobileSessionTranscriptBlock[]): {
+function tailSessionTranscript(
+  blocks: MobileSessionTranscriptBlock[],
+  maxChars: number
+): {
   transcript: MobileSessionTranscriptBlock[];
   truncated: boolean;
 } {
-  let remaining = MOBILE_SESSION_TRANSCRIPT_MAX_CHARS;
+  let remaining = maxChars;
   const transcript: MobileSessionTranscriptBlock[] = [];
 
   for (let index = blocks.length - 1; index >= 0; index -= 1) {
@@ -1615,28 +1647,25 @@ export class MobileGatewayService {
     cwd: string;
     embeddedImages: CodexRolloutShareImageGroup[];
   }> {
-    const source = await this.loadSessionDetailSource(projectId, taskId, conversationId);
-    const embeddedImages =
-      source.conversation.runtimeId === 'codex'
-        ? await loadCodexRolloutShareImagesTailForConversation({
-            conversation: source.conversation,
-            cwd: source.cwd,
-          }).catch((error: unknown) => {
-            log.warn('MobileGateway: failed to load embedded session images', {
-              conversationId: source.conversation.id,
-              error: String(error),
-            });
-            return [];
-          })
-        : [];
-    return { detail: source.detail, cwd: source.cwd, embeddedImages };
+    const source = await this.loadSessionDetailSource(projectId, taskId, conversationId, 'full');
+    return {
+      detail: source.detail,
+      cwd: source.cwd,
+      embeddedImages: source.embeddedImages,
+    };
   }
 
   private async loadSessionDetailSource(
     projectId: string,
     taskId: string,
-    conversationId: string
-  ): Promise<{ detail: MobileSessionDetail; cwd: string; conversation: Conversation }> {
+    conversationId: string,
+    scope: SessionDetailScope = 'tail'
+  ): Promise<{
+    detail: MobileSessionDetail;
+    cwd: string;
+    conversation: Conversation;
+    embeddedImages: CodexRolloutShareImageGroup[];
+  }> {
     const data = await this.loadTaskSessionData(projectId, taskId);
     const conversation = data.conversations.find((item) => item.id === conversationId);
     const session = data.sessions.find((item) => item.id === conversationId);
@@ -1645,14 +1674,16 @@ export class MobileGatewayService {
       throw new MobileGatewayError(404, 'session_not_found', 'Mobile session was not found.');
     }
 
+    const limits = SESSION_DETAIL_LIMITS[scope];
     const ptySessionId = makePtySessionId(projectId, taskId, conversationId);
-    const [output, transcript, runtimeConfiguration] = await Promise.all([
+    const [output, transcriptSource, runtimeConfiguration] = await Promise.all([
       this.readConversationOutput(conversation, data.cwd, ptySessionId),
-      this.readConversationTranscript(conversation, data.cwd, session.sessionId),
+      this.readConversationTranscript(conversation, data.cwd, session.sessionId, scope),
       this.resolveSessionRuntimeConfiguration(conversation, data.cwd, session.sessionId),
     ]);
-    const tailed = tailSessionContent(output.content);
-    const tailedTranscript = tailSessionTranscript(transcript);
+    const transcript = transcriptSource.blocks;
+    const tailed = tailSessionContent(output.content, limits.contentChars);
+    const tailedTranscript = tailSessionTranscript(transcript, limits.transcriptChars);
     const pendingInteraction = resolveMobileSessionInteraction({
       content: tailed.content,
       runtimeId: session.runtimeId,
@@ -1663,6 +1694,7 @@ export class MobileGatewayService {
     return {
       cwd: data.cwd,
       conversation,
+      embeddedImages: transcriptSource.embeddedImages,
       detail: {
         generatedAt: new Date().toISOString(),
         session: {
@@ -1675,7 +1707,7 @@ export class MobileGatewayService {
         truncated: tailed.truncated,
         source: output.source,
         transcript: tailedTranscript.transcript,
-        transcriptTruncated: tailedTranscript.truncated,
+        transcriptTruncated: tailedTranscript.truncated || transcriptSource.truncated,
         pendingInteraction,
       },
     };
@@ -2095,23 +2127,51 @@ export class MobileGatewayService {
   private async readConversationTranscript(
     conversation: Conversation,
     cwd: string,
-    sessionId: string
-  ): Promise<MobileSessionTranscriptBlock[]> {
+    sessionId: string,
+    scope: SessionDetailScope
+  ): Promise<{
+    blocks: MobileSessionTranscriptBlock[];
+    embeddedImages: CodexRolloutShareImageGroup[];
+    truncated: boolean;
+  }> {
+    const blocksOnly = (blocks: MobileSessionTranscriptBlock[] | null) => ({
+      blocks: blocks ?? [],
+      embeddedImages: [],
+      truncated: false,
+    });
+
     if (conversation.runtimeId === 'claude') {
-      const transcript = await loadClaudeTranscript({
-        cwd,
-        sessionId,
-      }).catch((error: unknown) => {
+      const transcript = await (
+        scope === 'full'
+          ? loadFullClaudeTranscript({ cwd, sessionId })
+          : loadClaudeTranscript({ cwd, sessionId })
+      ).catch((error: unknown) => {
         log.warn('MobileGateway: failed to load Claude session transcript', {
           conversationId: conversation.id,
           error: String(error),
         });
         return null;
       });
-      return transcript ?? [];
+      return blocksOnly(transcript);
     }
 
-    if (conversation.runtimeId !== 'codex') return [];
+    if (conversation.runtimeId !== 'codex') return blocksOnly(null);
+
+    if (scope === 'full') {
+      const share = await loadCodexRolloutShareSourceForConversation({
+        conversation,
+        cwd,
+      }).catch((error: unknown) => {
+        log.warn('MobileGateway: failed to load full session transcript', {
+          conversationId: conversation.id,
+          error: String(error),
+        });
+        return null;
+      });
+      return share
+        ? { blocks: share.transcript, embeddedImages: share.images, truncated: share.truncated }
+        : blocksOnly(null);
+    }
 
     const transcript = await loadCodexRolloutTranscriptTailForConversation({
       conversation,
@@ -2124,7 +2184,7 @@ export class MobileGatewayService {
       return null;
     });
 
-    return transcript ?? [];
+    return blocksOnly(transcript);
   }
 
   private async resolveMobileAgent(agentId: string | null | undefined): Promise<Agent | null> {
