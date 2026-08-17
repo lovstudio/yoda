@@ -36,6 +36,10 @@ import {
   measureDimensions,
   TERMINAL_FIT_GUARD_COLUMNS,
 } from '@renderer/lib/pty/pty-dimensions';
+import {
+  resizeBackendPty,
+  resizeBackendPtyForRenderer,
+} from '@renderer/lib/pty/pty-resize-authority';
 import { PtySession } from '@renderer/lib/pty/pty-session';
 import { publishAgentRuntimeStatusPreview } from '@renderer/lib/stores/agent-runtime-status-bridge';
 import { log } from '@renderer/utils/logger';
@@ -909,7 +913,7 @@ export class ConversationManagerStore {
         generation: number,
         dimensions: { cols: number; rows: number }
       ): Promise<boolean> => {
-        const resized = await rpc.pty.resizeForRenderer(
+        const resized = await resizeBackendPtyForRenderer(
           sessionId,
           generation,
           dimensions.cols,
@@ -950,7 +954,7 @@ export class ConversationManagerStore {
           store.data.runtimeId === 'codex' &&
           !store.session.pty?.hasCanonicalSurfaceFence(existingState.generation);
         if (mountedSize && !options.requireGenerationBoundResize && !needsCodexSurfaceFence) {
-          void rpc.pty.resize(sessionId, mountedSize.cols, mountedSize.rows);
+          resizeBackendPty(sessionId, mountedSize.cols, mountedSize.rows);
         }
         if (!needsCodexSurfaceFence) return true;
         // A staging timeout can hand a live Codex PTY to the mounted surface
@@ -1026,7 +1030,7 @@ export class ConversationManagerStore {
       }
       store.markSessionRunning(generation ?? 0);
       if (mountedSize && !options.requireGenerationBoundResize && !shouldBindSurfaceFence) {
-        void rpc.pty.resize(sessionId, mountedSize.cols, mountedSize.rows);
+        resizeBackendPty(sessionId, mountedSize.cols, mountedSize.rows);
       }
       return true;
     } catch (error) {
@@ -1134,7 +1138,7 @@ export class ConversationManagerStore {
         generation: number
       ): Promise<'ready' | 'retry' | 'stopped'> => {
         const resized = await waitForStagingStep(
-          rpc.pty.resizeForRenderer(sessionId, generation, initialSize.cols, initialSize.rows),
+          resizeBackendPtyForRenderer(sessionId, generation, initialSize.cols, initialSize.rows),
           canContinue,
           deadline
         );
@@ -1403,7 +1407,7 @@ export class ConversationManagerStore {
       }
       if (effectiveSize) {
         const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
-        void rpc.pty.resize(sessionId, effectiveSize.cols, effectiveSize.rows);
+        resizeBackendPty(sessionId, effectiveSize.cols, effectiveSize.rows);
       }
     } catch (error) {
       store.markSessionExited();

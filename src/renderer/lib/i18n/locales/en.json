@@ -6708,5 +6708,10 @@
   "standaloneKanban.title": "Yoda Board",
   "standaloneKanban.emptyState": "No active sessions to display",
   "standaloneKanban.cardLoading": "Loading session...",
-  "standaloneKanban.openInMainWindow": "Open in main window"
+  "standaloneKanban.openInMainWindow": "Open in main window",
+  "standaloneKanban.filter": "Filter",
+  "standaloneKanban.filterByStatus": "By status",
+  "standaloneKanban.filterByProject": "By project",
+  "standaloneKanban.filterClear": "Clear filters",
+  "standaloneKanban.emptyFiltered": "No sessions match the current filters"
 }

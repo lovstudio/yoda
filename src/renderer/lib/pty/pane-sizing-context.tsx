@@ -38,9 +38,9 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
-import { rpc } from '@renderer/lib/ipc';
 import { FrontendPty } from './pty';
 import { measureDimensions, type TerminalDimensions } from './pty-dimensions';
+import { resizeBackendPty } from './pty-resize-authority';
 
 const MIN_TERMINAL_COLS = 2;
 const MIN_TERMINAL_ROWS = 1;
@@ -166,7 +166,7 @@ export function PaneSizingProvider({
       // xterm still resizes locally but the backend PTY is not touched — only
       // the pane that owns the session can resize its backend dimensions.
       if (FrontendPty.noteResize(validActiveSessionId, dims.cols, dims.rows)) {
-        void rpc.pty.resize(validActiveSessionId, dims.cols, dims.rows);
+        resizeBackendPty(validActiveSessionId, dims.cols, dims.rows);
       }
     },
     [validActiveSessionId]

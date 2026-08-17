@@ -106,6 +106,7 @@ export const SidebarModeMenu = observer(function SidebarModeMenu() {
           onClick={() => {
             void rpc.app.openStandaloneKanbanWindow({
               panes: sidebarStore.standaloneKanbanPanes,
+              maxPanes: sidebarStore.standaloneKanbanMaxPanes,
             });
           }}
         >

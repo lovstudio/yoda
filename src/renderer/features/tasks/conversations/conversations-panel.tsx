@@ -20,7 +20,7 @@ import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
 import type { FrontendPty } from '@renderer/lib/pty/pty';
-import { isStandaloneKanbanWindowLaunch } from '@renderer/lib/standalone-kanban-window-launch-target';
+import { canResizeBackendPty } from '@renderer/lib/pty/pty-resize-authority';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
@@ -160,8 +160,7 @@ export const ConversationsPanel = observer(function ConversationsPanel({
   // do not resize the backend PTY. Only the main window (or a routed task window)
   // controls PTY dimensions. This prevents the narrow board cards (420px) from
   // overriding a wider main-window layout.
-  const effectiveActiveSessionId =
-    !isStandaloneKanbanWindowLaunch && activeSessionId ? activeSessionId : null;
+  const effectiveActiveSessionId = canResizeBackendPty && activeSessionId ? activeSessionId : null;
   const paneSessionIds = useMemo(
     () => (effectiveActiveSessionId ? [effectiveActiveSessionId] : []),
     [effectiveActiveSessionId]

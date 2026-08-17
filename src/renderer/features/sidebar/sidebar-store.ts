@@ -584,26 +584,36 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   }
 
   /**
-   * The standalone agent board's pane list: kanban-ranked tasks that already
-   * have at least one agent session, capped at `standaloneKanbanMaxPanes`.
+   * Every candidate for the standalone agent board: kanban-ranked tasks that
+   * already have at least one agent session.
    *
    * Ranked by `priorityGroupedRows()` regardless of the sidebar's current mode —
    * the board is an action, not a sidebar mode, so its contents must not shift
    * when the user switches the sidebar back to the standard list. Membership is
    * "has a session", not "is running": a card that vanished the moment its
    * agent finished would defeat the point of watching it.
+   *
+   * Deliberately uncapped: the board filters this list and applies its card cap
+   * afterwards, so filtering surfaces the next matching sessions instead of
+   * thinning an already-truncated set. Each entry carries its status and project
+   * name because the board window only mounts the projects it ends up showing.
    */
   get standaloneKanbanPanes(): StandaloneKanbanPane[] {
     const panes: StandaloneKanbanPane[] = [];
     for (const row of this.priorityGroupedRows()) {
       if (row.kind !== 'task') continue;
-      const task = this.projectManager.projects
-        .get(row.projectId)
-        ?.mountedProject?.taskManager.tasks.get(row.taskId);
+      const project = this.projectManager.projects.get(row.projectId);
+      if (!project) continue;
+      const task = project.mountedProject?.taskManager.tasks.get(row.taskId);
       if (!task || registeredTaskData(task)?.archivedAt) continue;
       if (!Object.values(task.conversationStats).some((count) => count > 0)) continue;
-      panes.push({ projectId: row.projectId, taskId: row.taskId });
-      if (panes.length >= this.standaloneKanbanMaxPanes) break;
+      panes.push({
+        projectId: row.projectId,
+        taskId: row.taskId,
+        status: this.taskPriorityGroup(task),
+        projectName:
+          project.state === 'unregistered' ? row.projectId : project.displayName || row.projectId,
+      });
     }
     return panes;
   }

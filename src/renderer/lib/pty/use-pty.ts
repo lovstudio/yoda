@@ -33,6 +33,7 @@ import {
   shouldMapShiftEnterToCtrlJ,
   shouldPasteToTerminal,
 } from './pty-keybindings';
+import { resizeBackendPty } from './pty-resize-authority';
 import { writeTextToClipboard } from './terminal-clipboard';
 import { reportTerminalFileLinkFailure } from './terminal-file-link-actions';
 import { buildTerminalFileLinkOpenRequest } from './terminal-file-link-open';
@@ -302,7 +303,7 @@ export function usePty(
       if (last?.cols === c && last?.rows === r) return;
       lastSentResizeRef.current = { cols: c, rows: r };
       FrontendPty.noteResize(sessionId, c, r);
-      void rpc.pty.resize(sessionId, c, r);
+      resizeBackendPty(sessionId, c, r);
     },
     [sessionId]
   );
