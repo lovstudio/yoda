@@ -38,7 +38,13 @@ import { Input } from '@renderer/lib/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { Switch } from '@renderer/lib/ui/switch';
 import { cn } from '@renderer/utils/utils';
-import { ContextProgressBar, RuntimeBarSeparator, RuntimeMetricRow } from '../bar-chrome';
+import {
+  ContextProgressBar,
+  RUNTIME_BAR_METRIC_ACTION_CLASS,
+  RUNTIME_BAR_METRIC_LABEL_CLASS,
+  RuntimeBarSeparator,
+  RuntimeMetricRow,
+} from '../bar-chrome';
 import {
   formatAbsoluteDateTime,
   formatAccountResetCreditExpiry,
@@ -304,11 +310,13 @@ export const RuntimeBarAccountUsageItem = observer(function RuntimeBarAccountUsa
       >
         <PopoverTrigger
           aria-label={usageTriggerLabel}
-          className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+          className={cn(RUNTIME_BAR_METRIC_ACTION_CLASS, 'shrink-0 text-foreground-passive')}
           title={usageTriggerLabel}
         >
           <Gauge aria-hidden className="size-3.5" />
-          <span className="@max-[1120px]:hidden">{t('workspaceRuntime.accountUsageShort')}</span>
+          <span className={RUNTIME_BAR_METRIC_LABEL_CLASS}>
+            {t('workspaceRuntime.accountUsageShort')}
+          </span>
           {shortAccountWindow ? (
             <ContextProgressBar
               compact

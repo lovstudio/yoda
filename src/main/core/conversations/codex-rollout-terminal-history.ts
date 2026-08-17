@@ -20,6 +20,8 @@ const MAX_COMMAND_OUTPUT_CHARS = 16 * 1024;
 const MAX_HISTORY_CHARS = 2 * 1024 * 1024;
 const MAX_CACHED_ROLLOUTS = 3;
 const MOBILE_ROLLOUT_TAIL_MAX_BYTES = 8 * 1024 * 1024;
+/** Ceiling for the whole-history share read — a JS-string limit, not a history budget. */
+const SHARE_ROLLOUT_MAX_BYTES = 128 * 1024 * 1024;
 const SURFACE_ANCHOR_MAX_SEGMENTS = 2;
 const SURFACE_ANCHOR_MAX_SEGMENT_CHARS = 160;
 const SURFACE_ANCHOR_MAX_TOTAL_CHARS = 240;
@@ -29,7 +31,6 @@ const SURFACE_ANCHOR_SHORT_FINAL_VISIBLE_CHARS = 24;
 type RolloutFileSnapshot = { raw: string; signature: string };
 type CachedValue<T> = { signature: string; value: Promise<T> };
 
-const rolloutReads = new Map<string, CachedValue<RolloutFileSnapshot>>();
 const rolloutTailReads = new Map<string, CachedValue<RolloutFileSnapshot>>();
 const historyCache = new Map<string, CachedValue<string | null>>();
 const transcriptTailCache = new Map<string, CachedValue<CodexRolloutTranscriptEntry[] | null>>();
@@ -95,27 +96,40 @@ export async function loadCodexRolloutTerminalHistoryForConversation({
   return loadTerminalHistory(context);
 }
 
-export async function loadCodexRolloutTranscriptForConversation({
+/**
+ * Whole-history share reader: a public session share must carry the conversation
+ * as it happened, so this reads the rollout in full rather than the mobile tail,
+ * and derives transcript and embedded images from that single read.
+ *
+ * `SHARE_ROLLOUT_MAX_BYTES` is not a history budget — it is the point past which
+ * a rollout no longer fits in one JS string. Hitting it reports `truncated`
+ * rather than quietly handing back a shortened history.
+ */
+export async function loadCodexRolloutShareSourceForConversation({
   conversation,
   cwd,
 }: {
   conversation: Conversation;
   cwd: string;
-}): Promise<CodexRolloutTranscriptEntry[] | null> {
-  if (conversation.runtimeId !== 'codex') return null;
-
+}): Promise<{
+  transcript: CodexRolloutTranscriptEntry[];
+  images: CodexRolloutShareImageGroup[];
+  truncated: boolean;
+}> {
   const context = await resolveCodexRolloutContext(conversation, cwd);
-  if (!context?.rolloutPath) return null;
+  if (!context?.rolloutPath) return { transcript: [], images: [], truncated: false };
 
-  let snapshot: RolloutFileSnapshot;
-  try {
-    snapshot = await readRolloutSnapshot(context.rolloutPath);
-  } catch {
-    return null;
-  }
+  const metadata = await stat(context.rolloutPath);
+  const truncated = metadata.size > SHARE_ROLLOUT_MAX_BYTES;
+  const raw = truncated
+    ? await readRolloutTail(context.rolloutPath, metadata.size, SHARE_ROLLOUT_MAX_BYTES)
+    : await readFile(context.rolloutPath, 'utf8');
 
-  const transcript = parseCodexRolloutTranscript(snapshot.raw);
-  return transcript.length > 0 ? transcript : null;
+  return {
+    transcript: parseCodexRolloutTranscript(raw),
+    images: parseCodexRolloutShareImages(raw),
+    truncated,
+  };
 }
 
 /** Bounded mobile history reader: active rollouts never require a full-file scan. */
@@ -275,48 +289,13 @@ export async function loadCodexRolloutSurfaceAnchorForConversation({
   }
 }
 
-export async function loadCodexRolloutShareImagesTailForConversation({
-  conversation,
-  cwd,
-}: {
-  conversation: Conversation;
-  cwd: string;
-}): Promise<CodexRolloutShareImageGroup[]> {
-  const context = await resolveCodexRolloutContext(conversation, cwd);
-  if (!context) return [];
-
-  let snapshot: RolloutFileSnapshot;
-  try {
-    snapshot = await readRolloutTailSnapshot(context.rolloutPath);
-  } catch {
-    return [];
-  }
-  return parseCodexRolloutShareImages(snapshot.raw);
-}
-
-async function readRolloutSnapshot(rolloutPath: string): Promise<RolloutFileSnapshot> {
-  const metadata = await stat(rolloutPath);
-  const signature = `${metadata.size}:${metadata.mtimeMs}`;
-  const existing = rolloutReads.get(rolloutPath);
-  if (existing?.signature === signature) return existing.value;
-
-  const value = readFile(rolloutPath, 'utf8')
-    .then((raw) => ({ raw, signature }))
-    .finally(() => {
-      const current = rolloutReads.get(rolloutPath);
-      if (current?.value === value) rolloutReads.delete(rolloutPath);
-    });
-  rolloutReads.set(rolloutPath, { signature, value });
-  return value;
-}
-
 async function readRolloutTailSnapshot(rolloutPath: string): Promise<RolloutFileSnapshot> {
   const metadata = await stat(rolloutPath);
   const signature = `${metadata.size}:${metadata.mtimeMs}`;
   const existing = rolloutTailReads.get(rolloutPath);
   if (existing?.signature === signature) return existing.value;
 
-  const value = readRolloutTail(rolloutPath, metadata.size)
+  const value = readRolloutTail(rolloutPath, metadata.size, MOBILE_ROLLOUT_TAIL_MAX_BYTES)
     .then((raw) => ({ raw, signature }))
     .finally(() => {
       const current = rolloutTailReads.get(rolloutPath);
@@ -326,8 +305,12 @@ async function readRolloutTailSnapshot(rolloutPath: string): Promise<RolloutFile
   return value;
 }
 
-async function readRolloutTail(rolloutPath: string, size: number): Promise<string> {
-  const start = Math.max(0, size - MOBILE_ROLLOUT_TAIL_MAX_BYTES);
+async function readRolloutTail(
+  rolloutPath: string,
+  size: number,
+  maxBytes: number
+): Promise<string> {
+  const start = Math.max(0, size - maxBytes);
   const length = Math.max(0, size - start);
   const file = await open(rolloutPath, 'r');
   try {
