@@ -11,12 +11,15 @@ import type {
   SidebarSnapshot,
 } from '@shared/view-state';
 import { captureException } from '@renderer/_legacy/errorTracking';
+import { startStandaloneKanbanBridge } from '@renderer/features/sidebar/standalone-kanban-bridge';
 import { wireSessionOpenPerformanceBridge } from '@renderer/features/tasks/session-open-performance-bridge';
-import { isAiLabWindowLaunch } from '@renderer/lib/ai-lab-window-launch-target';
 import { setupAppCommandProvider } from '@renderer/lib/commands/app-commands';
 import { setupViewCommandProvider } from '@renderer/lib/commands/registry';
 import { wireCommitHistoryInvalidation } from '@renderer/lib/commit-history-invalidation';
-import { isComparisonWindowLaunch } from '@renderer/lib/comparison-window-launch-target';
+import {
+  isDetachedWindowLaunch,
+  isPrimaryAppWindowLaunch,
+} from '@renderer/lib/detached-window-launch';
 import { rpc } from '@renderer/lib/ipc';
 import { wireModelRegistryInvalidation } from '@renderer/lib/monaco/invalidation-bridges';
 import { codeEditorPool } from '@renderer/lib/monaco/monaco-code-pool';
@@ -26,13 +29,16 @@ import { wirePrCacheInvalidation } from '@renderer/lib/pr-cache-invalidation';
 import { loadTerminalSettings } from '@renderer/lib/pty/terminal-settings-cache';
 import type { AgentRuntimeSnapshot } from '@renderer/lib/stores/agent-runtime-store';
 import { viewStateCache } from '@renderer/lib/stores/view-state-cache';
-import {
-  getTaskWindowLaunchTarget,
-  isTaskWindowLaunch,
-} from '@renderer/lib/task-window-launch-target';
-import { log } from '@renderer/utils/logger';
+import { getTaskWindowLaunchTarget } from '@renderer/lib/task-window-launch-target';
+import { log, setRendererLogForwarder } from '@renderer/utils/logger';
 import { initSoundPlayer } from '@renderer/utils/soundPlayer';
 import { appState } from './lib/stores/app-state';
+
+// Before anything else can fail: warnings and errors go to the log file too, so
+// a stuck surface is diagnosable after the window is gone.
+setRendererLogForwarder((record) => {
+  void rpc.app.reportRendererLog(record).catch(() => {});
+});
 
 async function bootstrap() {
   // Wire invalidation bridges so FS and git events flow into the model registry.
@@ -48,15 +54,14 @@ async function bootstrap() {
   void loadTerminalSettings().catch((error: unknown) => {
     log.warn('[terminal-settings] bootstrap preload failed', { error });
   });
-  const isPrimaryAppWindow =
-    !isTaskWindowLaunch && !isComparisonWindowLaunch && !isAiLabWindowLaunch;
-  if (isPrimaryAppWindow) {
+  if (isPrimaryAppWindowLaunch) {
     // Keep main-process resume/spawn/first-output stages in the same DevTools
     // stream as renderer click/canonical-frame/paint timing.
+    startStandaloneKanbanBridge();
     wireSessionOpenPerformanceBridge();
   }
   const launchTarget = getTaskWindowLaunchTarget();
-  if (isPrimaryAppWindow) {
+  if (isPrimaryAppWindowLaunch) {
     // Subscribe happens during AppState construction. Hydrate the primary shell
     // immediately, but keep warm/detached windows from duplicating the scan.
     void appState.agentRuntime.hydrateActiveSessions();
@@ -66,7 +71,7 @@ async function bootstrap() {
   // costs ~1s and a window may not even show a code/diff tab. Editor consumers
   // (useMonacoLease, StickyDiffEditor) await the pool on demand, so deferring is
   // safe and lets the window paint ~1s sooner.
-  const monacoInit = isPrimaryAppWindow
+  const monacoInit = isPrimaryAppWindowLaunch
     ? Promise.all([
         codeEditorPool.init(0).catch((error: unknown) => {
           log.warn('[monaco-code-pool] init failed:', error);
@@ -78,17 +83,17 @@ async function bootstrap() {
     : Promise.resolve();
 
   const [navResult, sidebarResult, allViewState] = await Promise.all([
-    isPrimaryAppWindow
+    isPrimaryAppWindowLaunch
       ? (rpc.viewState.get('navigation') as Promise<NavigationSnapshot> | null)
       : Promise.resolve(null),
-    isPrimaryAppWindow ? rpc.viewState.get('sidebar') : Promise.resolve(null),
-    isPrimaryAppWindow ? rpc.viewState.getAll() : Promise.resolve({}),
-    isPrimaryAppWindow ? appState.projects.load() : Promise.resolve(),
-    isPrimaryAppWindow ? appState.workspaces.load() : Promise.resolve(),
+    isPrimaryAppWindowLaunch ? rpc.viewState.get('sidebar') : Promise.resolve(null),
+    isPrimaryAppWindowLaunch ? rpc.viewState.getAll() : Promise.resolve({}),
+    isPrimaryAppWindowLaunch ? appState.projects.load() : Promise.resolve(),
+    isPrimaryAppWindowLaunch ? appState.workspaces.load() : Promise.resolve(),
   ]);
   void monacoInit;
 
-  if (isPrimaryAppWindow) {
+  if (isPrimaryAppWindowLaunch) {
     viewStateCache.populate(allViewState as Record<string, unknown>);
 
     const agentRuntimeResult = (allViewState as Record<string, unknown>)?.agentRuntime;
@@ -108,12 +113,12 @@ async function bootstrap() {
         },
       },
     });
-  } else if (navResult && !isComparisonWindowLaunch && !isAiLabWindowLaunch) {
+  } else if (navResult && !isDetachedWindowLaunch) {
     appState.navigation.restoreSnapshot(navResult);
   }
-  // Detached windows are not the app-tab surface — comparison windows tile their
-  // own panes, while task and AI Lab windows are single-route, so skip restore.
-  if (!launchTarget && !isComparisonWindowLaunch && !isAiLabWindowLaunch) {
+  // Detached windows are not the app-tab surface — comparison and board windows
+  // tile their own panes, while task and AI Lab windows are single-route.
+  if (!isDetachedWindowLaunch) {
     const appTabsResult = (allViewState as Record<string, unknown>)?.appTabs;
     if (appTabsResult) {
       appState.appTabs.restoreSnapshot(appTabsResult as Partial<AppTabsSnapshot>);
@@ -126,7 +131,7 @@ async function bootstrap() {
   appState.appTabs.start();
   setupAppCommandProvider();
   setupViewCommandProvider();
-  if (isPrimaryAppWindow) {
+  if (isPrimaryAppWindowLaunch) {
     if (sidebarResult) {
       appState.sidebar.restoreSnapshot(sidebarResult as Partial<SidebarSnapshot>);
     } else {
@@ -134,7 +139,7 @@ async function bootstrap() {
     }
     appState.projects.mountInitialProjects().catch(() => {});
   }
-  if (isPrimaryAppWindow) {
+  if (isPrimaryAppWindowLaunch) {
     for (const project of appState.projects.projects.values()) {
       const projectData = project.data;
       if (projectData?.type === 'ssh') {

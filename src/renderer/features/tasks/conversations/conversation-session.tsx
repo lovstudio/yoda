@@ -40,7 +40,30 @@ import {
 
 const AUTO_RESUME_RETRY_DELAY_MS = 150;
 const AUTO_RESUME_MAX_ATTEMPTS = 2;
-const RESUME_ATTEMPT_TIMEOUT_MS = 2_000;
+/**
+ * How long one resume attempt may run before the renderer stops waiting on it.
+ *
+ * This is not a health threshold — the main process keeps resuming past it, and
+ * on timeout the renderer gives up for good: it marks the session exited and
+ * pins the attempt counter at the maximum, so no further auto-resume fires. It
+ * used to be 2 s, which is *below* the measured cost of a healthy cold open on
+ * this machine (~3.4 s to subscribe, ~3.9 s more to the first frame), so a
+ * perfectly fine session could be declared dead while it was still starting —
+ * and the surface it left behind had no way out but a restart. Keep it clear of
+ * measured healthy latency; a genuinely dead resume costs only the extra wait.
+ */
+const RESUME_ATTEMPT_TIMEOUT_MS = 12_000;
+/**
+ * How long a visible conversation may sit on a non-ready session before the
+ * opening surface grows a manual way out.
+ *
+ * Crossing it is not a failure — resume may still be in flight — but until this
+ * existed, a session that never reported an error and never reached `ready`
+ * rendered a surface with no terminal, no retry and no explanation, forever;
+ * reloading reproduced it and only restarting the app escaped. Keep it clear of
+ * a measured healthy cold open (~9 s) and of one resume attempt.
+ */
+const SESSION_PENDING_NOTICE_MS = 20_000;
 /**
  * A canonical frame legitimately takes seconds: a cold open pays the PTY
  * subscribe round-trip and then xterm's parse of the restored snapshot, and a
@@ -183,6 +206,8 @@ export const ConversationSession = observer(function ConversationSession({
     count: 0,
   });
   const [autoResumeRetryRevision, setAutoResumeRetryRevision] = useState(0);
+  const [sessionPendingTooLong, setSessionPendingTooLong] = useState(false);
+  const [sessionPendingRetryRevision, setSessionPendingRetryRevision] = useState(0);
   const suppressNextAutoResumeRef = useRef(false);
 
   useEffect(() => {
@@ -769,15 +794,59 @@ export const ConversationSession = observer(function ConversationSession({
   const frameVerificationElapsedMs = hasSlowFrameVerification
     ? slowFrameVerification?.elapsedMs
     : undefined;
+  const hasStartError = Boolean(session?.connectionError);
+  // The terminal can only render once the pty session exists and is `ready`.
+  // Anything else is still opening, whatever stage it stalled at.
+  const readySessionPty = sessionId && sessionStatus === 'ready' ? sessionPty : null;
+  const isSessionPending = !readySessionPty;
+  useEffect(() => {
+    if (!isSessionPending || !isVisible || hasStartError) {
+      setSessionPendingTooLong(false);
+      return;
+    }
+    // Count only while visible — a hidden pane is not demanded to connect, so
+    // its wait is not evidence of anything. A visibility flip restarts the
+    // countdown, which errs toward staying quiet.
+    const timer = setTimeout(() => {
+      setSessionPendingTooLong(true);
+      // Read through the store, not the render-time snapshot: the interesting
+      // fact is which stage it is stuck at now, 20 s later.
+      const current = conversation.session;
+      log.warn('[conversation-session] session still not ready, offering manual retry', {
+        projectId,
+        taskId,
+        conversationId: conversation.data.id,
+        waitedMs: SESSION_PENDING_NOTICE_MS,
+        sessionId: current?.sessionId ?? null,
+        sessionStatus: current?.status ?? null,
+        hasPty: Boolean(current?.pty),
+      });
+    }, SESSION_PENDING_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [
+    conversation,
+    hasStartError,
+    isSessionPending,
+    isVisible,
+    projectId,
+    sessionPendingRetryRevision,
+    taskId,
+  ]);
+  const hasPendingNotice = isSessionPending && !hasStartError && sessionPendingTooLong;
   // TaskMainPanel's full-panel opening surface would otherwise cover this
   // pane's own detail surface. Reporting here is what makes it yield, so the
   // slow *notice* has to use the same channel as a genuine error even though it
   // is not one; the tone and copy below are what keep the two distinguishable.
   useLayoutEffect(() => {
     const owner = frameVerificationOwner.current;
-    taskOpenTransitionStore.reportSessionError(projectId, taskId, owner, hasSlowFrameVerification);
+    taskOpenTransitionStore.reportSessionError(
+      projectId,
+      taskId,
+      owner,
+      hasSlowFrameVerification || hasPendingNotice
+    );
     return () => taskOpenTransitionStore.clearSessionError(projectId, taskId, owner);
-  }, [hasSlowFrameVerification, projectId, taskId]);
+  }, [hasPendingNotice, hasSlowFrameVerification, projectId, taskId]);
   const isExternalWriter = conversation.sessionResumeBlockReason === 'external-writer';
   const allowAtomicLiveFrame = Boolean(
     conversation.providerTurnConfirmed &&
@@ -797,7 +866,9 @@ export const ConversationSession = observer(function ConversationSession({
     const lines = [
       hasSlowFrameVerification
         ? 'Yoda — agent session terminal frame verification is slow'
-        : 'Yoda — agent session terminal preparation failed',
+        : hasPendingNotice
+          ? 'Yoda — agent session did not finish preparing in time'
+          : 'Yoda — agent session terminal preparation failed',
       `time: ${new Date().toISOString()}`,
       `runtime: ${agentConfig[data.runtimeId]?.name ?? data.runtimeId} (${data.runtimeId})`,
       `conversation: ${data.id}`,
@@ -823,6 +894,18 @@ export const ConversationSession = observer(function ConversationSession({
     startDebugCopyResetRef.current = setTimeout(() => setStartDebugCopied(false), 1500);
   };
   const handleRetryStart = () => {
+    // `connect()` short-circuits when a FrontendPty already exists, so it cannot
+    // rescue a session whose pty was built but never reached `ready` — the exact
+    // shape of the pending stall. Rebuilding the view disposes that pty and
+    // reconnects from scratch, which also gives auto-resume a fresh lease.
+    if (hasPendingNotice) {
+      // Back to the plain opening surface, and re-arm the watchdog so a retry
+      // that does not take is reported again instead of leaving a dead button.
+      setSessionPendingTooLong(false);
+      setSessionPendingRetryRevision((revision) => revision + 1);
+      void conversations.reloadConversationView(conversation.data.id);
+      return;
+    }
     void session.connect().catch(() => {});
   };
   const handleRetryFrameVerification = () => {
@@ -833,10 +916,9 @@ export const ConversationSession = observer(function ConversationSession({
   // Keep the terminal shell mounted while route visibility catches up. The
   // effects above still gate connect/resume demand on isVisible, so a brief
   // route transition cannot blank and remount the visual surface.
-  const hasStartError = Boolean(session?.connectionError);
   const hasSessionDetailError = hasStartError || hasSlowFrameVerification;
-  if (!sessionId || session?.status !== 'ready' || !session.pty) {
-    if (!hasStartError && loadingSurface === 'external') {
+  if (!readySessionPty) {
+    if (!hasStartError && !hasPendingNotice && loadingSurface === 'external') {
       return (
         <div
           ref={containerRef}
@@ -853,16 +935,21 @@ export const ConversationSession = observer(function ConversationSession({
         heading={
           hasStartError
             ? t('tasks.conversations.startingErrorTitle')
-            : t('tasks.conversations.startingTitle')
+            : hasPendingNotice
+              ? t('tasks.conversations.startingSlowTitle')
+              : t('tasks.conversations.startingTitle')
         }
         description={
           hasStartError
             ? t('tasks.conversations.startingErrorDescription')
-            : t('tasks.conversations.startingDescription')
+            : hasPendingNotice
+              ? t('tasks.conversations.startingStalledDescription')
+              : t('tasks.conversations.startingDescription')
         }
         error={
-          hasStartError
+          hasStartError || hasPendingNotice
             ? {
+                tone: hasStartError ? 'error' : 'notice',
                 retryLabel: t('common.retry'),
                 onRetry: handleRetryStart,
                 copyDebugLabel: t('common.copyDebugInfo'),
@@ -899,7 +986,7 @@ export const ConversationSession = observer(function ConversationSession({
         <PtyPane
           ref={terminalRef}
           sessionId={sessionId}
-          pty={session.pty}
+          pty={readySessionPty}
           className="h-full w-full min-w-0"
           onEnterPress={onEnterPress}
           onSubmittedInput={onSubmittedInput}

@@ -1,6 +1,12 @@
 import { computed, makeAutoObservable, observable, reaction, runInAction } from 'mobx';
 import { type LocalProject, type SshProject } from '@shared/projects';
 import {
+  DEFAULT_STANDALONE_KANBAN_MAX_PANES,
+  parseStandaloneKanbanMaxPanes,
+  type StandaloneKanbanMaxPanes,
+  type StandaloneKanbanPane,
+} from '@shared/standalone-kanban-window';
+import {
   DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT,
   DEFAULT_SIDEBAR_TASK_PRIORITY_ORDER,
   SIDEBAR_TASK_GROUP_VISIBLE_LIMIT_OPTIONS,
@@ -316,6 +322,8 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   /** True once the user reorders a group by hand — see `SidebarSnapshot`. */
   taskPriorityOrderCustomized = false;
   taskGroupVisibleLimit = DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT;
+  /** Card cap for the standalone agent board — see `standaloneKanbanPanes`. */
+  standaloneKanbanMaxPanes: StandaloneKanbanMaxPanes = DEFAULT_STANDALONE_KANBAN_MAX_PANES;
   taskBranchDisplay: SidebarBranchDisplay = 'compact';
   redactTaskContent = false;
   /**
@@ -364,6 +372,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       collapsedTaskGroupIds: false,
       redactionExemptProjectIds: false,
       sidebarRows: computed,
+      standaloneKanbanPanes: computed,
       pinnedSidebarEntries: computed,
     });
 
@@ -572,6 +581,31 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       default:
         return this.projectGroupedRows();
     }
+  }
+
+  /**
+   * The standalone agent board's pane list: kanban-ranked tasks that already
+   * have at least one agent session, capped at `standaloneKanbanMaxPanes`.
+   *
+   * Ranked by `priorityGroupedRows()` regardless of the sidebar's current mode —
+   * the board is an action, not a sidebar mode, so its contents must not shift
+   * when the user switches the sidebar back to the standard list. Membership is
+   * "has a session", not "is running": a card that vanished the moment its
+   * agent finished would defeat the point of watching it.
+   */
+  get standaloneKanbanPanes(): StandaloneKanbanPane[] {
+    const panes: StandaloneKanbanPane[] = [];
+    for (const row of this.priorityGroupedRows()) {
+      if (row.kind !== 'task') continue;
+      const task = this.projectManager.projects
+        .get(row.projectId)
+        ?.mountedProject?.taskManager.tasks.get(row.taskId);
+      if (!task || registeredTaskData(task)?.archivedAt) continue;
+      if (!Object.values(task.conversationStats).some((count) => count > 0)) continue;
+      panes.push({ projectId: row.projectId, taskId: row.taskId });
+      if (panes.length >= this.standaloneKanbanMaxPanes) break;
+    }
+    return panes;
   }
 
   private priorityGroupedRows(): SidebarRow[] {
@@ -919,6 +953,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       taskPriorityOrder: [...this.taskPriorityOrder],
       taskPriorityOrderCustomized: this.taskPriorityOrderCustomized,
       taskGroupVisibleLimit: this.taskGroupVisibleLimit,
+      standaloneKanbanMaxPanes: this.standaloneKanbanMaxPanes,
       taskBranchDisplay: this.taskBranchDisplay,
       redactTaskContent: this.redactTaskContent,
       redactionExemptProjectIds: [...this.redactionExemptProjectIds],
@@ -979,6 +1014,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     if (snapshot.taskGroupVisibleLimit !== undefined) {
       const v = parseSidebarTaskGroupVisibleLimit(snapshot.taskGroupVisibleLimit);
       if (v !== undefined) this.taskGroupVisibleLimit = v;
+    }
+    if (snapshot.standaloneKanbanMaxPanes !== undefined) {
+      const v = parseStandaloneKanbanMaxPanes(snapshot.standaloneKanbanMaxPanes);
+      if (v !== undefined) this.standaloneKanbanMaxPanes = v;
     }
     if (snapshot.taskBranchDisplay !== undefined) {
       const v = parseSidebarBranchDisplay(snapshot.taskBranchDisplay);
@@ -1477,6 +1516,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   setTaskGroupVisibleLimit(limit: SidebarTaskGroupVisibleLimit): void {
     this.taskGroupVisibleLimit = limit;
+  }
+
+  setStandaloneKanbanMaxPanes(max: StandaloneKanbanMaxPanes): void {
+    this.standaloneKanbanMaxPanes = max;
   }
 
   setProjectOrder(ids: string[]): void {

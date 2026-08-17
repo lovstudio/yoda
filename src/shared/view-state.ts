@@ -1,4 +1,5 @@
 import type { GitChangeStatus, GitObjectRef } from '@shared/git';
+import type { StandaloneKanbanMaxPanes } from '@shared/standalone-kanban-window';
 
 export type TabViewSnapshot = {
   tabOrder: string[];
@@ -227,6 +228,8 @@ export type SidebarSnapshot = {
    */
   taskPriorityOrderCustomized?: boolean;
   taskGroupVisibleLimit?: SidebarTaskGroupVisibleLimit;
+  /** How many cards the standalone agent board opens at most (kanban order wins). */
+  standaloneKanbanMaxPanes?: StandaloneKanbanMaxPanes;
   taskBranchDisplay?: SidebarBranchDisplay;
   /** Lightly blur project and task metadata in the sidebar for privacy-conscious captures. */
   redactTaskContent?: boolean;

@@ -13,8 +13,8 @@ import { appState } from '@renderer/lib/stores/app-state';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
 import { Toaster } from '@renderer/lib/ui/toaster';
 import { cn } from '@renderer/utils/utils';
+import { TaskPaneHeader } from './components/task-pane-header';
 import { SelfContainedTaskPane } from './split-view/tiled-task-grid';
-import { getTaskStore } from './stores/task-selectors';
 
 /**
  * Detached window that tiles several compared tasks side by side. Each pane is a
@@ -140,16 +140,9 @@ const ComparisonPaneHeader = observer(function ComparisonPaneHeader({
   taskId: string;
 }) {
   const { t } = useTranslation();
-  const name = getTaskStore(projectId, taskId)?.data.name ?? taskId.slice(0, 8);
 
   return (
-    <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border bg-background-1/50 pl-2 pr-1">
-      <span
-        className="min-w-0 flex-1 truncate text-xs font-medium text-foreground-muted"
-        title={name}
-      >
-        {name}
-      </span>
+    <TaskPaneHeader projectId={projectId} taskId={taskId}>
       <button
         type="button"
         aria-label={t('comparison.openInMainWindow')}
@@ -159,6 +152,6 @@ const ComparisonPaneHeader = observer(function ComparisonPaneHeader({
       >
         <PanelRightOpen className="size-3.5" />
       </button>
-    </div>
+    </TaskPaneHeader>
   );
 });

@@ -172,6 +172,11 @@
     "projectsOverview": "Projects overview",
     "tasks": "Tasks",
     "prioritySection": "Kanban",
+    "modeMenu": "Sidebar mode",
+    "modeStandard": "Standard sidebar",
+    "modeKanban": "Kanban sidebar",
+    "openStandaloneKanban": "Open agent board",
+    "standaloneKanbanMaxPanes": "Max cards",
     "priorityMode": "Kanban mode",
     "priorityModeEnable": "Enable kanban mode",
     "priorityModeDisable": "Disable kanban mode",
@@ -1765,6 +1770,7 @@
       "startingErrorDescription": "The terminal did not finish preparing. Retry, or copy debug info if it happens again.",
       "startingSlowTitle": "Still preparing the conversation",
       "startingSlowDescription": "Verifying the terminal frame is taking longer than usual and is still running. Wait a moment, or retry.",
+      "startingStalledDescription": "Preparation is taking longer than usual and is still running. Wait a moment, or retry.",
       "externalWriter": "In use by another Codex window",
       "sessionStopped": "Session stopped",
       "continueConversation": "Continue",
@@ -6698,5 +6704,9 @@
     "readOnlyDescription": "Global hooks are owned by the client's own settings file. To disable one for a single task, use that task's Hooks panel.",
     "loadFailed": "Failed to read hooks",
     "copyError": "Copy error"
-  }
+  },
+  "standaloneKanban.title": "Agent Board ({{count}})",
+  "standaloneKanban.emptyState": "No active sessions to display",
+  "standaloneKanban.cardLoading": "Loading session...",
+  "standaloneKanban.openInMainWindow": "Open in main window"
 }

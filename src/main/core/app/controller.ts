@@ -8,10 +8,13 @@ import type {
 import type { ComparisonWindowTarget } from '@shared/comparison-window';
 import type { TaskWindowReturnPayload } from '@shared/events/appEvents';
 import { createRPCController } from '@shared/ipc/rpc';
+import type { RendererLogRecord } from '@shared/logger';
 import type { OpenInRequest } from '@shared/openInApps';
+import type { StandaloneKanbanWindowTarget } from '@shared/standalone-kanban-window';
 import type { TaskWindowTarget } from '@shared/task-window';
 import { deepLinkService } from '@main/app/deep-link';
 import type { TaskStripDropZone } from '@main/app/task-window-dock';
+import { appendLogLine } from '@main/lib/log-file';
 import { telemetryService } from '@main/lib/telemetry';
 import { appService, type SaveTextFileDialogArgs } from './service';
 import type { TriggerVoiceInputArgs } from './voice-input';
@@ -113,6 +116,27 @@ export const appController = createRPCController({
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   },
+  openStandaloneKanbanWindow: async (target: StandaloneKanbanWindowTarget) => {
+    try {
+      appService.openStandaloneKanbanWindow(target);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  updateStandaloneKanbanPanes: async (target: StandaloneKanbanWindowTarget) => {
+    try {
+      appService.updateStandaloneKanbanPanes(target);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  isStandaloneKanbanWindowOpen: async () => appService.isStandaloneKanbanWindowOpen(),
+  closeStandaloneKanbanWindow: async () => {
+    appService.closeStandaloneKanbanWindow();
+    return { success: true };
+  },
   focusTaskInMainWindow: async (target: { projectId: string; taskId: string }) => {
     try {
       appService.focusTaskInMainWindow(target);
@@ -187,6 +211,10 @@ export const appController = createRPCController({
   cleanupReclaimableTmuxSessions: () => appService.cleanupReclaimableTmuxSessions(),
   reportRendererPerformance: (sample: RendererPerformanceSample) => {
     appService.reportRendererPerformance(sample);
+    return { success: true };
+  },
+  reportRendererLog: (record: RendererLogRecord) => {
+    appendLogLine('renderer', record.level, [record.message]);
     return { success: true };
   },
   getElectronVersion: () => process.versions.electron,

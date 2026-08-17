@@ -19,6 +19,8 @@ import {
   appRedoChannel,
   appUndoChannel,
   notificationFocusTaskChannel,
+  standaloneKanbanPanesChangedChannel,
+  standaloneKanbanWindowStateChannel,
   taskWindowReturnedToTabChannel,
   type TaskWindowReturnPayload,
 } from '@shared/events/appEvents';
@@ -31,6 +33,10 @@ import {
   type PlatformConfig,
   type PlatformKey,
 } from '@shared/openInApps';
+import {
+  isStandaloneKanbanWindowTarget,
+  type StandaloneKanbanWindowTarget,
+} from '@shared/standalone-kanban-window';
 import { isTaskWindowTarget, type TaskWindowTarget } from '@shared/task-window';
 import { externalFileOpenService } from '@main/app/external-file-open';
 import { setLeftSidebarMenuChecked } from '@main/app/menu';
@@ -41,7 +47,14 @@ import {
   type TaskStripDropZone,
 } from '@main/app/task-window-dock';
 import { openTaskWindowFromPool } from '@main/app/task-window-pool';
-import { createAiLabWindow, createComparisonWindow, getMainWindow } from '@main/app/window';
+import {
+  createAiLabWindow,
+  createComparisonWindow,
+  createStandaloneKanbanWindow,
+  focusStandaloneKanbanWindow,
+  getMainWindow,
+  getStandaloneKanbanWindow,
+} from '@main/app/window';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import {
@@ -505,6 +518,43 @@ class AppService implements IInitializable, IDisposable {
   openAiLabWindow(target: AiLabWindowTarget): void {
     if (!isAiLabWindowTarget(target)) throw new Error('Invalid AI Lab window target');
     createAiLabWindow(target);
+  }
+
+  /**
+   * Open (or re-focus) the singleton agent board. The caller owns the ranking, so
+   * a repeat open just refreshes the pane list of the window already on screen.
+   */
+  openStandaloneKanbanWindow(target: StandaloneKanbanWindowTarget): void {
+    if (!isStandaloneKanbanWindowTarget(target)) {
+      throw new Error('Invalid standalone kanban window target');
+    }
+    if (getStandaloneKanbanWindow()) {
+      focusStandaloneKanbanWindow();
+      events.emit(standaloneKanbanPanesChangedChannel, target);
+      return;
+    }
+    createStandaloneKanbanWindow(target).on('closed', () => {
+      events.emit(standaloneKanbanWindowStateChannel, { open: false });
+    });
+    events.emit(standaloneKanbanWindowStateChannel, { open: true });
+  }
+
+  /** Republish the ranked pane list to an already-open board window. */
+  updateStandaloneKanbanPanes(target: StandaloneKanbanWindowTarget): void {
+    if (!isStandaloneKanbanWindowTarget(target)) {
+      throw new Error('Invalid standalone kanban window target');
+    }
+    if (!getStandaloneKanbanWindow()) return;
+    events.emit(standaloneKanbanPanesChangedChannel, target);
+  }
+
+  /** Lets a reloaded main window learn whether it should keep ranking sessions. */
+  isStandaloneKanbanWindowOpen(): boolean {
+    return getStandaloneKanbanWindow() !== null;
+  }
+
+  closeStandaloneKanbanWindow(): void {
+    getStandaloneKanbanWindow()?.close();
   }
 
   /** From a comparison pane: route the main window to one of the compared tasks. */

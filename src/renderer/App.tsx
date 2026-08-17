@@ -13,6 +13,7 @@ import { IntegrationsProvider } from './features/integrations/integrations-provi
 import { Onboarding } from './features/onboarding/onboarding';
 import { getOnboardingSteps, type OnboardingStep } from './features/onboarding/onboarding-steps';
 import { ComparisonWindow } from './features/tasks/comparison-window';
+import { StandaloneKanbanWindow } from './features/tasks/standalone-kanban-window';
 import { TaskTabWindow } from './features/tasks/task-window';
 import { WorkspaceSettingsAgent } from './features/workspaces/workspace-settings-agent';
 import { getAiLabWindowLaunchTarget, isAiLabWindowLaunch } from './lib/ai-lab-window-launch-target';
@@ -20,6 +21,7 @@ import {
   getComparisonWindowLaunchTarget,
   isComparisonWindowLaunch,
 } from './lib/comparison-window-launch-target';
+import { isDetachedWindowLaunch } from './lib/detached-window-launch';
 import { useAccountSession } from './lib/hooks/useAccount';
 import { WorkspaceLayoutContextProvider } from './lib/layout/layout-provider';
 import { WorkspaceViewProvider } from './lib/layout/provider';
@@ -28,6 +30,10 @@ import { GithubContextProvider } from './lib/providers/github-context-provider';
 import { ThemeProvider } from './lib/providers/theme-provider';
 import { TerminalPoolProvider } from './lib/pty/pty-pool-provider';
 import { queryClient } from './lib/query-client';
+import {
+  getStandaloneKanbanWindowLaunchTarget,
+  isStandaloneKanbanWindowLaunch,
+} from './lib/standalone-kanban-window-launch-target';
 import { isTaskWindowLaunch } from './lib/task-window-launch-target';
 import { RightSidebarProvider } from './lib/ui/right-sidebar';
 import { TooltipProvider } from './lib/ui/tooltip';
@@ -44,11 +50,9 @@ const AppContent = observer(function AppContent() {
   const { data: session, isLoading: sessionLoading } = useAccountSession();
   const isLoading = sessionLoading;
 
-  // Boot splash: main/full-app windows only — detached task/comparison/AI Lab windows
-  // pop open instantly without the kernel boot screen.
-  const [bootScreenDone, setBootScreenDone] = useState(
-    isTaskWindowLaunch || isComparisonWindowLaunch || isAiLabWindowLaunch
-  );
+  // Boot splash: main/full-app windows only — detached windows pop open
+  // instantly without the kernel boot screen.
+  const [bootScreenDone, setBootScreenDone] = useState(isDetachedWindowLaunch);
 
   // Computed once when queries first resolve while in onboarding. Never updated
   // after that so query refetches mid-onboarding cannot shrink the step list
@@ -73,7 +77,7 @@ const AppContent = observer(function AppContent() {
   };
 
   const handleOpenSettingsFromMenu = useCallback(() => {
-    if (isTaskWindowLaunch || isComparisonWindowLaunch || isAiLabWindowLaunch) return false;
+    if (isDetachedWindowLaunch) return false;
     if (view === 'onboarding' && stepsNeeded.length > 0) return false;
     setView('workspace');
     return true;
@@ -87,6 +91,10 @@ const AppContent = observer(function AppContent() {
     if (isComparisonWindowLaunch) {
       const target = getComparisonWindowLaunchTarget();
       return target ? <ComparisonWindow target={target} /> : null;
+    }
+    if (isStandaloneKanbanWindowLaunch) {
+      const target = getStandaloneKanbanWindowLaunchTarget();
+      return target ? <StandaloneKanbanWindow initialTarget={target} /> : null;
     }
     if (isTaskWindowLaunch) {
       return <TaskTabWindow />;
@@ -113,9 +121,7 @@ const AppContent = observer(function AppContent() {
             <IntegrationsProvider>
               <WorkspaceViewProvider>
                 <AppMenuEvents onOpenSettings={handleOpenSettingsFromMenu} />
-                {!isTaskWindowLaunch && !isComparisonWindowLaunch && !isAiLabWindowLaunch && (
-                  <AiLabBuildEvents />
-                )}
+                {!isDetachedWindowLaunch && <AiLabBuildEvents />}
                 <RightSidebarProvider>
                   <ThemeProvider>
                     {renderContent()}
