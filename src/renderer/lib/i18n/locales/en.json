@@ -1770,6 +1770,7 @@
       "startingErrorDescription": "The terminal did not finish preparing. Retry, or copy debug info if it happens again.",
       "startingSlowTitle": "Still preparing the conversation",
       "startingSlowDescription": "Verifying the terminal frame is taking longer than usual and is still running. Wait a moment, or retry.",
+      "startingStalledDescription": "Preparation is taking longer than usual and is still running. Wait a moment, or retry.",
       "externalWriter": "In use by another Codex window",
       "sessionStopped": "Session stopped",
       "continueConversation": "Continue",

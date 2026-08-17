@@ -56,6 +56,7 @@ import { updateService } from './core/updates/update-service';
 import { viewStateService } from './core/view-state/view-state-service';
 import type { TeardownMode } from './core/workspaces/workspace-registry';
 import { initializeDatabase } from './db/initialize';
+import { setLogDirectory } from './lib/log-file';
 import { log } from './lib/logger';
 import { telemetryService } from './lib/telemetry';
 import { rpcRouter } from './rpc';
@@ -82,6 +83,10 @@ app.setName(PRODUCT_NAME);
 
 const yodaUserData = join(app.getPath('appData'), 'yoda');
 app.setPath('userData', yodaUserData);
+
+// From here on `log.warn`/`log.error` (main and renderer alike) also land on
+// disk, so a stuck session leaves evidence instead of vanishing with devtools.
+setLogDirectory(app.getPath('logs'));
 
 function createMainWindowWithDeepLinkReset(): BrowserWindow {
   deepLinkService.markRendererNotReady();

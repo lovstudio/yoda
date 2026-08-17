@@ -8,11 +8,13 @@ import type {
 import type { ComparisonWindowTarget } from '@shared/comparison-window';
 import type { TaskWindowReturnPayload } from '@shared/events/appEvents';
 import { createRPCController } from '@shared/ipc/rpc';
+import type { RendererLogRecord } from '@shared/logger';
 import type { OpenInRequest } from '@shared/openInApps';
 import type { StandaloneKanbanWindowTarget } from '@shared/standalone-kanban-window';
 import type { TaskWindowTarget } from '@shared/task-window';
 import { deepLinkService } from '@main/app/deep-link';
 import type { TaskStripDropZone } from '@main/app/task-window-dock';
+import { appendLogLine } from '@main/lib/log-file';
 import { telemetryService } from '@main/lib/telemetry';
 import { appService, type SaveTextFileDialogArgs } from './service';
 import type { TriggerVoiceInputArgs } from './voice-input';
@@ -209,6 +211,10 @@ export const appController = createRPCController({
   cleanupReclaimableTmuxSessions: () => appService.cleanupReclaimableTmuxSessions(),
   reportRendererPerformance: (sample: RendererPerformanceSample) => {
     appService.reportRendererPerformance(sample);
+    return { success: true };
+  },
+  reportRendererLog: (record: RendererLogRecord) => {
+    appendLogLine('renderer', record.level, [record.message]);
     return { success: true };
   },
   getElectronVersion: () => process.versions.electron,
