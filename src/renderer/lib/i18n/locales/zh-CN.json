@@ -6708,9 +6708,18 @@
   "standaloneKanban.emptyState": "暂无活跃会话",
   "standaloneKanban.cardLoading": "会话加载中",
   "standaloneKanban.openInMainWindow": "在主窗口打开",
-  "standaloneKanban.filter": "筛选",
-  "standaloneKanban.filterByStatus": "按状态",
-  "standaloneKanban.filterByProject": "按项目",
-  "standaloneKanban.filterClear": "清除筛选",
-  "standaloneKanban.emptyFiltered": "没有符合筛选条件的会话"
+  "taskViewOptions.menu": "筛选与排序",
+  "taskViewOptions.filterByStatus": "按状态筛选",
+  "taskViewOptions.filterByProject": "按项目筛选",
+  "taskViewOptions.sortBy": "排序方式",
+  "taskViewOptions.sortDefault": "默认顺序",
+  "taskViewOptions.sortUpdatedAt": "最近使用",
+  "taskViewOptions.sortCreatedAt": "创建时间",
+  "taskViewOptions.sortStatusChangedAt": "状态变更时间",
+  "taskViewOptions.sortName": "名称",
+  "taskViewOptions.sortDescending": "倒序",
+  "taskViewOptions.sortAscending": "正序",
+  "taskViewOptions.reset": "恢复默认",
+  "taskViewOptions.resetSort": "恢复默认排序",
+  "taskViewOptions.emptyFiltered": "没有符合筛选条件的任务"
 }

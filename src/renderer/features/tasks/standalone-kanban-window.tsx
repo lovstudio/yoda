@@ -7,17 +7,16 @@ import {
   STANDALONE_KANBAN_MIN_PANE_WIDTH,
   type StandaloneKanbanWindowTarget,
 } from '@shared/standalone-kanban-window';
+import {
+  applyTaskViewOptions,
+  DEFAULT_TASK_VIEW_OPTIONS,
+  hasActiveTaskViewFilter,
+  type TaskViewOptions,
+} from '@shared/task-view-options';
 import { openProvisionedTaskTab } from '@renderer/app/open-task-target';
 import { TaskPaneHeader } from '@renderer/features/tasks/components/task-pane-header';
 import { EditorProvider } from '@renderer/features/tasks/editor/editor-provider';
 import { useHostedTaskLifecycle } from '@renderer/features/tasks/hooks/use-hosted-task-lifecycle';
-import {
-  EMPTY_STANDALONE_KANBAN_FILTER,
-  filterStandaloneKanbanPanes,
-  isStandaloneKanbanFilterActive,
-  StandaloneKanbanFilterMenu,
-  type StandaloneKanbanFilter,
-} from '@renderer/features/tasks/standalone-kanban-filter';
 import {
   asProvisioned,
   getTaskStore,
@@ -27,6 +26,7 @@ import { TaskViewWrapper } from '@renderer/features/tasks/task-view-context';
 import { CommandShortcutBinder } from '@renderer/lib/commands/command-shortcut-binder';
 import { ErrorBoundary } from '@renderer/lib/components/error-boundary';
 import { MonacoKeyboardBridge } from '@renderer/lib/components/monaco-keyboard-bridge';
+import { TaskViewOptionsMenu } from '@renderer/lib/components/task-view-options-menu';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { events, rpc } from '@renderer/lib/ipc';
 import { ModalRenderer } from '@renderer/lib/modal/modal-renderer';
@@ -52,7 +52,7 @@ export const StandaloneKanbanWindow = observer(function StandaloneKanbanWindow({
   useTheme();
   const { t } = useTranslation();
   const [target, setTarget] = useState<StandaloneKanbanWindowTarget>(initialTarget);
-  const [filter, setFilter] = useState<StandaloneKanbanFilter>(EMPTY_STANDALONE_KANBAN_FILTER);
+  const [viewOptions, setViewOptions] = useState<TaskViewOptions>(DEFAULT_TASK_VIEW_OPTIONS);
   const scrollRef = useHorizontalWheelScroll();
 
   useEffect(() => {
@@ -60,10 +60,11 @@ export const StandaloneKanbanWindow = observer(function StandaloneKanbanWindow({
   }, []);
 
   // The ranking arrives uncapped so filtering can reach past the cap; the cards
-  // shown are what survives the filter, truncated to the user's card count.
+  // shown are what survives the filter and sort, truncated to the card count.
+  // Panes are already TaskViewItems, so no projection is needed.
   const panes = useMemo(
-    () => filterStandaloneKanbanPanes(target.panes, filter, target.maxPanes),
-    [target, filter]
+    () => applyTaskViewOptions(target.panes, viewOptions, (pane) => pane).slice(0, target.maxPanes),
+    [target, viewOptions]
   );
 
   // Each pane's task lives in its project; mount every distinct project.
@@ -87,14 +88,18 @@ export const StandaloneKanbanWindow = observer(function StandaloneKanbanWindow({
           <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground-muted">
             {t('standaloneKanban.title')}
           </span>
-          <StandaloneKanbanFilterMenu panes={target.panes} filter={filter} onChange={setFilter} />
+          <TaskViewOptionsMenu
+            items={target.panes}
+            options={viewOptions}
+            onChange={setViewOptions}
+          />
         </div>
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
           {panes.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm text-foreground-muted">
-                {isStandaloneKanbanFilterActive(filter) && target.panes.length > 0
-                  ? t('standaloneKanban.emptyFiltered')
+                {hasActiveTaskViewFilter(viewOptions) && target.panes.length > 0
+                  ? t('taskViewOptions.emptyFiltered')
                   : t('standaloneKanban.emptyState')}
               </p>
             </div>

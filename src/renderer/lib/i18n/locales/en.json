@@ -6708,9 +6708,18 @@
   "standaloneKanban.emptyState": "No active sessions to display",
   "standaloneKanban.cardLoading": "Loading session...",
   "standaloneKanban.openInMainWindow": "Open in main window",
-  "standaloneKanban.filter": "Filter",
-  "standaloneKanban.filterByStatus": "By status",
-  "standaloneKanban.filterByProject": "By project",
-  "standaloneKanban.filterClear": "Clear filters",
-  "standaloneKanban.emptyFiltered": "No sessions match the current filters"
+  "taskViewOptions.menu": "Filter and sort",
+  "taskViewOptions.filterByStatus": "Filter by status",
+  "taskViewOptions.filterByProject": "Filter by project",
+  "taskViewOptions.sortBy": "Sort by",
+  "taskViewOptions.sortDefault": "Default order",
+  "taskViewOptions.sortUpdatedAt": "Last used",
+  "taskViewOptions.sortCreatedAt": "Created",
+  "taskViewOptions.sortStatusChangedAt": "Status changed",
+  "taskViewOptions.sortName": "Name",
+  "taskViewOptions.sortDescending": "Descending",
+  "taskViewOptions.sortAscending": "Ascending",
+  "taskViewOptions.reset": "Reset to default",
+  "taskViewOptions.resetSort": "Reset sort",
+  "taskViewOptions.emptyFiltered": "No tasks match the current filters"
 }
