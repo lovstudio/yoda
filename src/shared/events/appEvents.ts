@@ -7,6 +7,7 @@ import type {
   NotificationStatus,
 } from '@shared/notifications';
 import type { RuntimeId } from '@shared/runtime-registry';
+import type { StandaloneKanbanWindowTarget } from '@shared/standalone-kanban-window';
 import type { TaskWindowTarget } from '@shared/task-window';
 
 // App editing actions (renderer → main, no payload)
@@ -113,6 +114,23 @@ export const taskWindowDockRequestChannel = defineEvent<TaskWindowReturnPayload>
  */
 export const taskWindowAssignTargetChannel = defineEvent<TaskWindowTarget>(
   'task-window:assign-target'
+);
+
+/**
+ * Main → all renderers: the standalone board's pane list changed. Only the main
+ * window can rank sessions the way the kanban sidebar does, so it resolves the
+ * list and republishes it here for the board window to render.
+ */
+export const standaloneKanbanPanesChangedChannel = defineEvent<StandaloneKanbanWindowTarget>(
+  'standalone-kanban:panes-changed'
+);
+
+/**
+ * Main → all renderers: whether a standalone board window exists. The main
+ * window only keeps its ranking reaction alive while one is open.
+ */
+export const standaloneKanbanWindowStateChannel = defineEvent<{ open: boolean }>(
+  'standalone-kanban:window-state'
 );
 
 export const ptyStartedChannel = defineEvent<{

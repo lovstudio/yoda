@@ -9,6 +9,7 @@ import type { ComparisonWindowTarget } from '@shared/comparison-window';
 import type { TaskWindowReturnPayload } from '@shared/events/appEvents';
 import { createRPCController } from '@shared/ipc/rpc';
 import type { OpenInRequest } from '@shared/openInApps';
+import type { StandaloneKanbanWindowTarget } from '@shared/standalone-kanban-window';
 import type { TaskWindowTarget } from '@shared/task-window';
 import { deepLinkService } from '@main/app/deep-link';
 import type { TaskStripDropZone } from '@main/app/task-window-dock';
@@ -112,6 +113,27 @@ export const appController = createRPCController({
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
+  },
+  openStandaloneKanbanWindow: async (target: StandaloneKanbanWindowTarget) => {
+    try {
+      appService.openStandaloneKanbanWindow(target);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  updateStandaloneKanbanPanes: async (target: StandaloneKanbanWindowTarget) => {
+    try {
+      appService.updateStandaloneKanbanPanes(target);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  isStandaloneKanbanWindowOpen: async () => appService.isStandaloneKanbanWindowOpen(),
+  closeStandaloneKanbanWindow: async () => {
+    appService.closeStandaloneKanbanWindow();
+    return { success: true };
   },
   focusTaskInMainWindow: async (target: { projectId: string; taskId: string }) => {
     try {

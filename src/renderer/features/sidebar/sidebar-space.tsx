@@ -1,10 +1,6 @@
 import { PanelLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import {
-  NavButtons,
-  NavIconButton,
-  TaskPriorityModeButton,
-} from '@renderer/lib/components/nav-buttons';
+import { NavButtons, NavIconButton, SidebarModeMenu } from '@renderer/lib/components/nav-buttons';
 import { useWorkspaceLayoutContext } from '@renderer/lib/layout/layout-provider';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
@@ -17,7 +13,7 @@ export function SidebarSpace() {
     <div className="[-webkit-app-region:drag] flex h-10 w-full items-center gap-1 px-2">
       <div className="min-w-0 flex-1" aria-hidden="true" />
       <NavButtons>
-        <TaskPriorityModeButton />
+        <SidebarModeMenu />
         <ProjectsSettingsMenu renderTrigger={(props) => <NavIconButton {...props} />} />
         <Tooltip>
           <TooltipTrigger

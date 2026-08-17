@@ -1,11 +1,28 @@
-import { ArrowLeft, ArrowRight, SquareKanban } from 'lucide-react';
+import { ArrowLeft, ArrowRight, SquareArrowOutUpRight, SquareKanban } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { type ComponentProps, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  parseStandaloneKanbanMaxPanes,
+  STANDALONE_KANBAN_MAX_PANE_OPTIONS,
+} from '@shared/standalone-kanban-window';
 import { getTaskView } from '@renderer/features/tasks/stores/task-selectors';
+import { rpc } from '@renderer/lib/ipc';
 import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
 import type { HistoryEntry } from '@renderer/lib/stores/navigation-history-store';
 import { Button } from '@renderer/lib/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
@@ -42,27 +59,84 @@ export function applyHistoryEntry(entry: HistoryEntry): void {
   }
 }
 
-export const TaskPriorityModeButton = observer(function TaskPriorityModeButton() {
+/**
+ * Sidebar mode entry: the two sidebar layouts are a radio pair, while the
+ * standalone agent board is an action below the separator — it opens a separate
+ * window and leaves the sidebar exactly as it was, so it is not a third mode.
+ */
+export const SidebarModeMenu = observer(function SidebarModeMenu() {
   const { t } = useTranslation();
-  const enabled = sidebarStore.taskPriorityMode;
+  const priorityMode = sidebarStore.taskPriorityMode;
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <NavIconButton
-            aria-label={t('sidebar.priorityMode')}
-            aria-pressed={enabled}
-            className="aria-pressed:text-foreground aria-pressed:before:bg-background-tertiary-3"
-            onClick={() => sidebarStore.toggleTaskPriorityMode()}
-          />
-        }
-      >
-        <SquareKanban className="h-4 w-4" />
-      </TooltipTrigger>
-      <TooltipContent side="bottom" sideOffset={8}>
-        {enabled ? t('sidebar.priorityModeDisable') : t('sidebar.priorityModeEnable')}
-      </TooltipContent>
-    </Tooltip>
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <DropdownMenuTrigger
+              render={
+                <NavIconButton
+                  aria-label={t('sidebar.modeMenu')}
+                  aria-pressed={priorityMode}
+                  className="aria-pressed:text-foreground aria-pressed:before:bg-background-tertiary-3"
+                />
+              }
+            />
+          }
+        >
+          <SquareKanban className="h-4 w-4" />
+        </TooltipTrigger>
+        <TooltipContent side="bottom" sideOffset={8}>
+          {t('sidebar.modeMenu')}
+        </TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuRadioGroup
+          value={priorityMode ? 'kanban' : 'standard'}
+          onValueChange={(next) => sidebarStore.setTaskPriorityMode(next === 'kanban')}
+        >
+          <DropdownMenuRadioItem value="standard" closeOnClick>
+            {t('sidebar.modeStandard')}
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="kanban" closeOnClick>
+            {t('sidebar.modeKanban')}
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => {
+            void rpc.app.openStandaloneKanbanWindow({
+              panes: sidebarStore.standaloneKanbanPanes,
+            });
+          }}
+        >
+          {t('sidebar.openStandaloneKanban')}
+          <SquareArrowOutUpRight className="ml-auto text-foreground-muted" />
+        </DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            {t('sidebar.standaloneKanbanMaxPanes')}
+            <span className="ml-auto pl-2 text-xs text-foreground-muted">
+              {sidebarStore.standaloneKanbanMaxPanes}
+            </span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuRadioGroup
+              value={sidebarStore.standaloneKanbanMaxPanes}
+              onValueChange={(next) => {
+                const parsed = parseStandaloneKanbanMaxPanes(next);
+                if (parsed) sidebarStore.setStandaloneKanbanMaxPanes(parsed);
+              }}
+            >
+              {STANDALONE_KANBAN_MAX_PANE_OPTIONS.map((option) => (
+                <DropdownMenuRadioItem key={option} value={option} closeOnClick>
+                  {option}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 });
 

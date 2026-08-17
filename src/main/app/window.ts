@@ -13,6 +13,13 @@ import {
   type ComparisonWindowTarget,
 } from '@shared/comparison-window';
 import {
+  encodeStandaloneKanbanWindowTarget,
+  STANDALONE_KANBAN_MIN_WINDOW_HEIGHT,
+  STANDALONE_KANBAN_MIN_WINDOW_WIDTH,
+  STANDALONE_KANBAN_WINDOW_TARGET_PARAM,
+  type StandaloneKanbanWindowTarget,
+} from '@shared/standalone-kanban-window';
+import {
   encodeTaskWindowTarget,
   TASK_WINDOW_TARGET_PARAM,
   TASK_WINDOW_WARM_PARAM,
@@ -91,6 +98,37 @@ export function createAiLabWindow(aiLab: AiLabWindowTarget): BrowserWindow {
   return createAppWindow({ aiLab });
 }
 
+/**
+ * The standalone agent board is a singleton: it mirrors one ranked list of live
+ * sessions, so a second copy would just be the same board again. Repeat opens
+ * focus the existing window and the caller republishes its pane list.
+ */
+let standaloneKanbanWindow: BrowserWindow | null = null;
+
+export function getStandaloneKanbanWindow(): BrowserWindow | null {
+  if (standaloneKanbanWindow?.isDestroyed()) standaloneKanbanWindow = null;
+  return standaloneKanbanWindow;
+}
+
+export function createStandaloneKanbanWindow(
+  standaloneKanban: StandaloneKanbanWindowTarget
+): BrowserWindow {
+  const win = createAppWindow({ standaloneKanban });
+  standaloneKanbanWindow = win;
+  win.on('closed', () => {
+    if (standaloneKanbanWindow === win) standaloneKanbanWindow = null;
+  });
+  return win;
+}
+
+export function focusStandaloneKanbanWindow(): void {
+  const win = getStandaloneKanbanWindow();
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
+  win.focus();
+}
+
 /** Spawn an empty, hidden task window that boots its renderer shell and parks. */
 export function createWarmTaskWindow(): BrowserWindow {
   return createAppWindow({ warm: true });
@@ -112,31 +150,43 @@ function createAppWindow(
     target?: TaskWindowTarget;
     comparison?: ComparisonWindowTarget;
     aiLab?: AiLabWindowTarget;
+    standaloneKanban?: StandaloneKanbanWindowTarget;
     warm?: boolean;
   } = {}
 ): BrowserWindow {
   const isComparisonWindow = Boolean(options.comparison);
   const isAiLabWindow = Boolean(options.aiLab);
+  const isStandaloneKanbanWindow = Boolean(options.standaloneKanban);
   const isTaskWindow = Boolean(options.target) || options.warm === true;
   // Comparison windows are detached surfaces like task windows (no app-tab strip)
   // but want a larger default footprint to fit several tiled panes.
-  const isDetachedWindow = isTaskWindow || isComparisonWindow || isAiLabWindow;
+  const isDetachedWindow =
+    isTaskWindow || isComparisonWindow || isAiLabWindow || isStandaloneKanbanWindow;
   const bounds = isComparisonWindow
     ? resolveComparisonWindowBounds()
-    : isAiLabWindow
-      ? resolveTaskWindowBounds(undefined)
-      : isTaskWindow && !options.warm
-        ? resolveTaskWindowBounds(options.target?.bounds)
-        : isTaskWindow
-          ? resolveTaskWindowBounds(undefined)
-          : { width: 1400, height: 900, x: undefined, y: undefined };
+    : isStandaloneKanbanWindow
+      ? resolveStandaloneKanbanWindowBounds()
+      : isAiLabWindow
+        ? resolveTaskWindowBounds(undefined)
+        : isTaskWindow && !options.warm
+          ? resolveTaskWindowBounds(options.target?.bounds)
+          : isTaskWindow
+            ? resolveTaskWindowBounds(undefined)
+            : { width: 1400, height: 900, x: undefined, y: undefined };
+  // The board's cards have a width floor and the window scrolls rather than
+  // shrinking them, so it carries a larger minimum than other detached windows.
+  const minSize = isStandaloneKanbanWindow
+    ? { width: STANDALONE_KANBAN_MIN_WINDOW_WIDTH, height: STANDALONE_KANBAN_MIN_WINDOW_HEIGHT }
+    : isDetachedWindow
+      ? { width: 480, height: 320 }
+      : { width: 700, height: 500 };
 
   const win = new BrowserWindow({
     width: bounds.width,
     height: bounds.height,
     ...(bounds.x !== undefined && bounds.y !== undefined ? { x: bounds.x, y: bounds.y } : {}),
-    minWidth: isDetachedWindow ? 480 : 700,
-    minHeight: isDetachedWindow ? 320 : 500,
+    minWidth: minSize.width,
+    minHeight: minSize.height,
     title: PRODUCT_NAME,
     backgroundColor: '#111111',
     // In production, electron-builder injects the icon from the app bundle.
@@ -255,6 +305,7 @@ function rendererUrl(options: {
   target?: TaskWindowTarget;
   comparison?: ComparisonWindowTarget;
   aiLab?: AiLabWindowTarget;
+  standaloneKanban?: StandaloneKanbanWindowTarget;
   warm?: boolean;
 }): string {
   const base = import.meta.env.DEV
@@ -273,6 +324,12 @@ function rendererUrl(options: {
   if (options.aiLab) {
     url.searchParams.set(AI_LAB_WINDOW_TARGET_PARAM, encodeAiLabWindowTarget(options.aiLab));
   }
+  if (options.standaloneKanban) {
+    url.searchParams.set(
+      STANDALONE_KANBAN_WINDOW_TARGET_PARAM,
+      encodeStandaloneKanbanWindowTarget(options.standaloneKanban)
+    );
+  }
   if (options.warm) {
     url.searchParams.set(TASK_WINDOW_WARM_PARAM, '1');
   }
@@ -288,6 +345,24 @@ function resolveComparisonWindowBounds(): {
   const workArea = screen.getPrimaryDisplay().workAreaSize;
   const width = clamp(1280, 700, Math.max(700, workArea.width - 64));
   const height = clamp(820, 500, Math.max(500, workArea.height - 64));
+  return { width, height, x: undefined, y: undefined };
+}
+
+/**
+ * The board wants as much horizontal room as the display gives it — every extra
+ * pixel is another visible column of a session's TUI.
+ */
+function resolveStandaloneKanbanWindowBounds(): {
+  width: number;
+  height: number;
+  x?: number;
+  y?: number;
+} {
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  const minWidth = STANDALONE_KANBAN_MIN_WINDOW_WIDTH;
+  const minHeight = STANDALONE_KANBAN_MIN_WINDOW_HEIGHT;
+  const width = clamp(1600, minWidth, Math.max(minWidth, workArea.width - 64));
+  const height = clamp(900, minHeight, Math.max(minHeight, workArea.height - 64));
   return { width, height, x: undefined, y: undefined };
 }
 
