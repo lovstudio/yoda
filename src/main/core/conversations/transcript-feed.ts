@@ -42,6 +42,22 @@ export interface ConversationTranscript {
 const EMPTY_TRANSCRIPT: ConversationTranscript = { filePath: null, totalLines: 0, lines: [] };
 type TranscriptChangeListener = () => void;
 
+/**
+ * Monotonic per-conversation counter, bumped on every observed transcript
+ * write. Cached transcript readers fold it into their cache key so a read
+ * triggered *by* a change event can never be served a value computed before
+ * that write — a TTL alone would keep serving the pre-write parse.
+ *
+ * Kept for the process lifetime (one integer per conversation ever watched):
+ * dropping it when the watch stops would restart the count and let a surviving
+ * cache entry look current again.
+ */
+const transcriptRevisions = new Map<string, number>();
+
+export function conversationTranscriptRevision(conversationId: string): number {
+  return transcriptRevisions.get(conversationId) ?? 0;
+}
+
 function transcriptWatchKey(projectId: string, taskId: string, conversationId: string): string {
   return `${projectId}\0${taskId}\0${conversationId}`;
 }
@@ -174,6 +190,12 @@ class TranscriptWatch {
     this.debounceTimer = setTimeout(() => {
       this.debounceTimer = undefined;
       if (this.stopped) return;
+      // Bump before notifying: every listener that reads as a result of this
+      // event must miss any cache entry built from the previous revision.
+      transcriptRevisions.set(
+        this.conversationId,
+        conversationTranscriptRevision(this.conversationId) + 1
+      );
       for (const listener of this.listeners) {
         try {
           listener();

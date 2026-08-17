@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ClaudeSessionPrompt, Conversation } from '@shared/conversations';
 import { getTaskMenuConversation } from '@renderer/features/tasks/components/task-menu-session-info';
 import {
@@ -16,6 +16,7 @@ import {
   type SessionPromptTree,
 } from './session-prompt-tree-model';
 import { useArchivedConversations } from './use-archived-conversations';
+import { useConversationTranscriptSubscription } from './use-conversation-transcript-subscription';
 
 type PromptHistoryState = {
   lineageKey: string;
@@ -50,6 +51,22 @@ export function useSessionPromptTree(active: boolean): {
     .join('|');
   const [state, setState] = useState<PromptHistoryState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  /**
+   * Set by the loader effect below. The transcript push and the visible-refresh
+   * interval drive the same reload, so both go through this one slot instead of
+   * duplicating the load.
+   */
+  const refreshCurrentRef = useRef<(() => Promise<void>) | null>(null);
+
+  useConversationTranscriptSubscription({
+    active: active && Boolean(currentConversation),
+    projectId,
+    taskId,
+    conversationId: currentConversation?.id,
+    onChange: () => {
+      void refreshCurrentRef.current?.();
+    },
+  });
 
   useEffect(() => {
     if (!active || !currentConversation || !lineageKey) return;
@@ -81,9 +98,11 @@ export function useSessionPromptTree(active: boolean): {
     };
 
     void loadAll();
+    refreshCurrentRef.current = refreshCurrent;
     const stopRefresh = startVisibleSessionRefresh(refreshCurrent, { runImmediately: false });
     return () => {
       cancelled = true;
+      refreshCurrentRef.current = null;
       stopRefresh();
     };
     // The primitive lineage key intentionally represents the freshly derived array.
