@@ -83,6 +83,27 @@ export const TaskSessionStatusControl = observer(function TaskSessionStatusContr
 
   const triggerLabel = t('tasks.sessionStatus.manage', { count: summary.totalCount });
 
+  // A task with a single running session has exactly one action worth taking, so
+  // the aggregate popover is pure friction: hand the indicator that session's
+  // identity and it becomes the interrupt control itself (hover swaps the
+  // spinner for a stop icon). Opening the session is already what clicking the
+  // surrounding row does. Multiple sessions still go through the popover, where
+  // each row keeps its own interrupt button.
+  const soleSession = summary.totalCount === 1 ? summary.sessions[0] : undefined;
+  if (soleSession?.status === 'working') {
+    return (
+      <AgentStatusIndicator
+        status="working"
+        boxClassName={cn('rounded-md transition-colors hover:bg-background-tertiary-2', className)}
+        session={{
+          projectId: taskData.projectId,
+          taskId: taskData.id,
+          conversationId: soleSession.conversationId,
+        }}
+      />
+    );
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
