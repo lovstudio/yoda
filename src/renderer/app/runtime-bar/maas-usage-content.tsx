@@ -6,7 +6,13 @@ import { Button } from '@renderer/lib/ui/button';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
 import { ContextProgressBar, RuntimeMetricRow } from './bar-chrome';
-import { formatPopoverTime, formatUsagePeriod, formatUsd, getUsageTone } from './display';
+import {
+  formatAbsoluteDateTime,
+  formatRelativeTimeSince,
+  formatUsagePeriod,
+  formatUsd,
+  getUsageTone,
+} from './display';
 
 /**
  * The usage half of the account card when a third-party platform is routing the
@@ -94,11 +100,8 @@ export function WorkspaceMaasUsageContent({
                 <RuntimeMetricRow
                   key={metric.labelKey}
                   label={t(metric.labelKey)}
-                  value={
-                    metric.format === 'usd'
-                      ? formatUsd(metric.value)
-                      : formatCompactNumber(metric.value)
-                  }
+                  value={metric.value}
+                  title={metric.title}
                 />
               ))}
             </div>
@@ -106,19 +109,15 @@ export function WorkspaceMaasUsageContent({
         )}
       </WorkspaceBarCardSection>
 
-      {/* A partial read — token figures answered, account figures not — changes
-          what the numbers above mean, so it is worth a line. A wholly failed
-          read already said so above and does not need explaining twice. */}
+      {/* A partial read — this key's own figures, the account balance still
+          unread — changes what the numbers above cover, so it is worth a line.
+          Whether the key carries a quota of its own is not that line's subject:
+          such a key is still bounded by the account balance, so calling it
+          "unlimited" beside a four-figure spend claims a budget nobody has. A
+          wholly failed read already said so above. */}
       {error ? null : usage?.accountUsageStatus === 'credential-required' ? (
         <WorkspaceBarCardSection className="text-[11px] leading-relaxed text-foreground-passive">
-          <span className="font-medium text-foreground-muted">
-            {t(
-              usage.quotaUnlimited
-                ? 'workspaceRuntime.maasUsageUnlimitedToken'
-                : 'workspaceRuntime.maasUsageTokenScope'
-            )}
-          </span>
-          <span> {t('workspaceRuntime.maasUsageAccountCredentialRequired')}</span>
+          {t('workspaceRuntime.maasUsageKeyScopeNote')}
         </WorkspaceBarCardSection>
       ) : usage?.accountUsageStatus === 'error' && usage.accountUsageError ? (
         <WorkspaceBarCardSection className="text-[11px] leading-relaxed">
@@ -140,23 +139,14 @@ export function WorkspaceMaasUsageContent({
       ) : null}
 
       <WorkspaceBarCardFooter>
-        <div className="flex items-center justify-between gap-3 text-[11px] text-foreground-passive">
-          <span className="min-w-0 truncate">
-            {usage?.period
-              ? formatUsagePeriod(usage.period.startingAt, usage.period.endingAt)
-              : null}
-          </span>
-          <span className="shrink-0 font-mono tabular-nums">
-            {usage?.fetchedAt
-              ? t('workspaceRuntime.maasUsageUpdatedAt', {
-                  time: formatPopoverTime(usage.fetchedAt),
-                })
-              : '—'}
-          </span>
-        </div>
+        {usage?.period ? (
+          <div className="truncate text-[11px] text-foreground-passive">
+            {formatUsagePeriod(usage.period.startingAt, usage.period.endingAt)}
+          </div>
+        ) : null}
         <Button
           type="button"
-          className="mt-2 w-full"
+          className={cn('w-full', usage?.period && 'mt-2')}
           size="sm"
           variant="outline"
           disabled={loading || refreshing}
@@ -177,28 +167,49 @@ export function WorkspaceMaasUsageContent({
 
 type UsageMetric = {
   labelKey: string;
-  value: number;
-  format: 'usd' | 'count';
+  value: string;
+  /** Full timestamp behind an abbreviated reading. */
+  title?: string;
 };
 
 /**
- * The figures a platform actually answered, in reading order: what is left
- * before what was spent, money before tokens. Absent fields drop out rather
- * than rendering as a zero the platform never reported.
+ * The figures a platform actually answered, in reading order: what is left, when
+ * it was read, then what was spent — money before tokens. Absent fields drop out
+ * rather than rendering as a zero the platform never reported.
  */
 function readUsageMetrics(usage: MaasUsageSummary | null): UsageMetric[] {
   if (!usage || usage.source === 'none') return [];
-  const candidates: Array<[string, number | null | undefined, UsageMetric['format']]> = [
-    ['workspaceRuntime.maasUsageRemainingCredits', usage.remainingCreditsUsd, 'usd'],
-    ['workspaceRuntime.maasUsageTotalCredits', usage.totalCreditsUsd, 'usd'],
-    ['workspaceRuntime.maasUsageKeyRemaining', usage.keyLimitRemainingUsd, 'usd'],
-    ['workspaceRuntime.maasUsageTotalCost', usage.totalCostUsd, 'usd'],
-    ['workspaceRuntime.maasUsageToday', usage.usageDailyUsd, 'usd'],
-    ['workspaceRuntime.maasUsageThisWeek', usage.usageWeeklyUsd, 'usd'],
-    ['workspaceRuntime.maasUsageInputTokens', usage.totalInputTokens, 'count'],
-    ['workspaceRuntime.maasUsageOutputTokens', usage.totalOutputTokens, 'count'],
+
+  const usd = (labelKey: string, value: number | null | undefined): UsageMetric[] =>
+    value == null ? [] : [{ labelKey, value: formatUsd(value) }];
+  const count = (labelKey: string, value: number | null | undefined): UsageMetric[] =>
+    value == null ? [] : [{ labelKey, value: formatCompactNumber(value) }];
+
+  const balances = [
+    ...usd('workspaceRuntime.maasUsageRemainingCredits', usage.remainingCreditsUsd),
+    ...usd('workspaceRuntime.maasUsageTotalCredits', usage.totalCreditsUsd),
+    ...usd('workspaceRuntime.maasUsageKeyRemaining', usage.keyLimitRemainingUsd),
   ];
-  return candidates.flatMap(([labelKey, value, format]) =>
-    value == null ? [] : [{ labelKey, value, format }]
-  );
+  const spend = [
+    ...usd('workspaceRuntime.maasUsageTotalCost', usage.totalCostUsd),
+    ...usd('workspaceRuntime.maasUsageToday', usage.usageDailyUsd),
+    ...usd('workspaceRuntime.maasUsageThisWeek', usage.usageWeeklyUsd),
+    ...count('workspaceRuntime.maasUsageInputTokens', usage.totalInputTokens),
+    ...count('workspaceRuntime.maasUsageOutputTokens', usage.totalOutputTokens),
+  ];
+  if (balances.length === 0 && spend.length === 0) return [];
+
+  // How stale the reading is qualifies every figure below it, so it sits between
+  // the balances and the spend rather than in the footer.
+  const readAt: UsageMetric[] = usage.fetchedAt
+    ? [
+        {
+          labelKey: 'workspaceRuntime.maasUsageLastUpdated',
+          value: formatRelativeTimeSince(usage.fetchedAt),
+          title: formatAbsoluteDateTime(usage.fetchedAt),
+        },
+      ]
+    : [];
+
+  return [...balances, ...readAt, ...spend];
 }
