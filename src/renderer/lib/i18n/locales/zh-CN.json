@@ -6705,7 +6705,7 @@
     "loadFailed": "读取 hooks 失败",
     "copyError": "复制错误"
   },
-  "standaloneKanban.title": "智能体看板（{{count}} 个）",
+  "standaloneKanban.title": "Yoda 看板",
   "standaloneKanban.emptyState": "暂无活跃会话",
   "standaloneKanban.cardLoading": "会话加载中",
   "standaloneKanban.openInMainWindow": "在主窗口打开"
