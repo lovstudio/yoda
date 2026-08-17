@@ -48,29 +48,67 @@ function writeConsole(writer: () => void): void {
   }
 }
 
-export function createLogger(args?: { envLevel?: string; debugFlag?: boolean }) {
+function formatLogValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value instanceof Error) return value.stack ?? `${value.name}: ${value.message}`;
+  if (typeof value !== 'object' || value === null) return String(value);
+
+  const seen = new WeakSet<object>();
+  try {
+    return (
+      JSON.stringify(value, (_key, entry: unknown) => {
+        if (entry instanceof Error) {
+          return { name: entry.name, message: entry.message, stack: entry.stack };
+        }
+        if (typeof entry !== 'object' || entry === null) return entry;
+        if (seen.has(entry)) return '[Circular]';
+        seen.add(entry);
+        return entry;
+      }) ?? String(value)
+    );
+  } catch {
+    return String(value);
+  }
+}
+
+/** Flatten logger arguments into one line, keeping Error stacks intact. */
+export function formatLogArgs(input: unknown[]): string {
+  return input.map(formatLogValue).join(' ');
+}
+
+/** Extra destination for log records that already passed the level check. */
+export type LogSink = (level: Level, input: unknown[]) => void;
+
+/** A renderer log record forwarded to the main process for persistence. */
+export type RendererLogRecord = { level: Level; message: string };
+
+export function createLogger(args?: { envLevel?: string; debugFlag?: boolean; sink?: LogSink }) {
   const level = resolveLogLevel({
     envLevel: args?.envLevel ?? import.meta.env.VITE_LOG_LEVEL,
     debugFlag: args?.debugFlag,
   });
+  const sink = args?.sink;
 
   function enabled(target: Level): boolean {
     return ORDER[target] >= ORDER[level];
   }
 
+  function emit(target: Level, input: unknown[], writer: () => void): void {
+    if (!enabled(target)) return;
+    writeConsole(writer);
+    if (!sink) return;
+    try {
+      sink(target, input);
+    } catch {
+      // A log destination must never break the call site that was logging.
+    }
+  }
+
   return {
     level,
-    debug: (...input: unknown[]) => {
-      if (enabled('debug')) writeConsole(() => console.debug(...input));
-    },
-    info: (...input: unknown[]) => {
-      if (enabled('info')) writeConsole(() => console.info(...input));
-    },
-    warn: (...input: unknown[]) => {
-      if (enabled('warn')) writeConsole(() => console.warn(...input));
-    },
-    error: (...input: unknown[]) => {
-      writeConsole(() => console.error(...input));
-    },
+    debug: (...input: unknown[]) => emit('debug', input, () => console.debug(...input)),
+    info: (...input: unknown[]) => emit('info', input, () => console.info(...input)),
+    warn: (...input: unknown[]) => emit('warn', input, () => console.warn(...input)),
+    error: (...input: unknown[]) => emit('error', input, () => console.error(...input)),
   };
 }

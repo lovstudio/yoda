@@ -30,9 +30,15 @@ import { loadTerminalSettings } from '@renderer/lib/pty/terminal-settings-cache'
 import type { AgentRuntimeSnapshot } from '@renderer/lib/stores/agent-runtime-store';
 import { viewStateCache } from '@renderer/lib/stores/view-state-cache';
 import { getTaskWindowLaunchTarget } from '@renderer/lib/task-window-launch-target';
-import { log } from '@renderer/utils/logger';
+import { log, setRendererLogForwarder } from '@renderer/utils/logger';
 import { initSoundPlayer } from '@renderer/utils/soundPlayer';
 import { appState } from './lib/stores/app-state';
+
+// Before anything else can fail: warnings and errors go to the log file too, so
+// a stuck surface is diagnosable after the window is gone.
+setRendererLogForwarder((record) => {
+  void rpc.app.reportRendererLog(record).catch(() => {});
+});
 
 async function bootstrap() {
   // Wire invalidation bridges so FS and git events flow into the model registry.

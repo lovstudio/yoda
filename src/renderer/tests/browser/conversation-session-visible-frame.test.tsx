@@ -824,7 +824,7 @@ describe('ConversationSession visible-frame generation retry', () => {
       expect(markSessionExited).not.toHaveBeenCalled();
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1_999);
+        await vi.advanceTimersByTimeAsync(11_999);
       });
       expect(markSessionExited).not.toHaveBeenCalled();
 
