@@ -1,7 +1,7 @@
 import { observer } from 'mobx-react-lite';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
+import { buildAgentCommandInsertion } from '@shared/agent-command-prefix';
 import type { CatalogSkill } from '@shared/skills/types';
 import { WorkspaceSkillPopover } from '@renderer/app/workspace-skill-popover';
 import { rpc } from '@renderer/lib/ipc';
@@ -65,7 +65,7 @@ export const RuntimeBarSkillItem = observer(function RuntimeBarSkillItem() {
         });
         return;
       }
-      void rpc.pty.sendInput(sessionId, applyAgentCommandPrefix(runtimeId, skill.id));
+      void rpc.pty.sendInput(sessionId, buildAgentCommandInsertion(runtimeId, skill.id));
       conversation?.session.pty?.terminal.focus();
     },
     [activeConversationId, provisionedTask, runtimeId]
