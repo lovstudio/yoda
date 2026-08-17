@@ -124,3 +124,5 @@ optional_env:
 
 ## 注意
 - 我正在以开发模式运行与迭代 yoda，不要打开我已安装的 yoda
+- Electron IPC 会丢弃 Error 的自定义属性、只保留 message：主进程要把 status/code 传到 renderer 必须编进 message，否则 renderer 里 `'status' in error` 是死代码（2026-08-17, 3cade15）
+- 会话分享的体量上限分散在 web 仓库四层（zod blocks.max / 路由字节检查 / 表 CHECK 约束 / Vercel 线路字节），只放开一层会换一种错误码而非修好（2026-08-17, 3cade15）
