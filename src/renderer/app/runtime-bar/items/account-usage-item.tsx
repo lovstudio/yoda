@@ -26,6 +26,7 @@ import { shouldReadOfficialAccountUsage } from '@renderer/app/workspace-runtime-
 import { accountProviderLabelKey } from '@renderer/features/agents/account-provider-label';
 import { useMaasUsageSummary } from '@renderer/features/maas/useMaas';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
+import { usePopoverDismiss } from '@renderer/lib/hooks/use-popover-dismiss';
 import { copyTextToClipboard, useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -59,6 +60,12 @@ export const RuntimeBarAccountUsageItem = observer(function RuntimeBarAccountUsa
   const { t } = useTranslation();
   const { toast } = useToast();
   const showConfirmActionModal = useShowModal('confirmActionModal');
+  const [isAccountUsagePopoverOpen, setIsAccountUsagePopoverOpen] = useState(false);
+  const {
+    actionsRef: accountUsageActionsRef,
+    dismiss: dismissAccountUsagePopover,
+    dismissThen: dismissAccountUsagePopoverThen,
+  } = usePopoverDismiss(isAccountUsagePopoverOpen, setIsAccountUsagePopoverOpen);
   const [isResettingAccountUsage, setIsResettingAccountUsage] = useState(false);
   const [accountUsageWarningThresholdDraft, setAccountUsageWarningThresholdDraft] = useState('95');
   const notifiedAccountUsageWindowsRef = useRef(new Set<string>());
@@ -124,12 +131,22 @@ export const RuntimeBarAccountUsageItem = observer(function RuntimeBarAccountUsa
     : sessionAuthProvider;
   const usageTriggerLabel = t('workspaceRuntime.accountUsage');
 
+  // Every exit that navigates or leaves the window dismisses first: a
+  // synchronous view change can abort the popup's exit animation, and Base UI
+  // then never unmounts it — leaving a card whose own state reads closed, so
+  // Escape and outside presses no longer reach it.
   const manageAccount = () => {
     if (!runtimeId || connectionId) return;
-    appState.sidePane.pinView('settings', { tab: 'clis-models', runtimeId });
+    dismissAccountUsagePopoverThen(() =>
+      appState.sidePane.pinView('settings', { tab: 'clis-models', runtimeId })
+    );
+  };
+  const openExternalUrl = (url: string) => {
+    dismissAccountUsagePopoverThen(() => void rpc.app.openExternal(url));
   };
 
   const handleAccountUsagePopoverOpen = (open: boolean) => {
+    setIsAccountUsagePopoverOpen(open);
     if (open && officialCodexAccountAvailable) {
       void refreshAccountUsageQuery();
     }
@@ -194,7 +211,10 @@ export const RuntimeBarAccountUsageItem = observer(function RuntimeBarAccountUsa
     toast,
   ]);
 
+  // Also reached from the threshold toast, where no popover is open; dismissing
+  // an already-closed one is a no-op.
   const confirmAccountUsageReset = useCallback(() => {
+    dismissAccountUsagePopover();
     showConfirmActionModal({
       title: t('workspaceRuntime.confirmAccountUsageResetTitle'),
       description: nextAccountResetCredit?.expiresAt
@@ -206,7 +226,13 @@ export const RuntimeBarAccountUsageItem = observer(function RuntimeBarAccountUsa
       variant: 'default',
       onSuccess: () => void resetAccountUsage(),
     });
-  }, [nextAccountResetCredit?.expiresAt, resetAccountUsage, showConfirmActionModal, t]);
+  }, [
+    dismissAccountUsagePopover,
+    nextAccountResetCredit?.expiresAt,
+    resetAccountUsage,
+    showConfirmActionModal,
+    t,
+  ]);
 
   const commitAccountUsageWarningThreshold = () => {
     const threshold = Number(accountUsageWarningThresholdDraft);
@@ -271,7 +297,11 @@ export const RuntimeBarAccountUsageItem = observer(function RuntimeBarAccountUsa
   return (
     <>
       <RuntimeBarSeparator />
-      <Popover onOpenChange={handleAccountUsagePopoverOpen}>
+      <Popover
+        open={isAccountUsagePopoverOpen}
+        onOpenChange={handleAccountUsagePopoverOpen}
+        actionsRef={accountUsageActionsRef}
+      >
         <PopoverTrigger
           aria-label={usageTriggerLabel}
           className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
@@ -306,14 +336,12 @@ export const RuntimeBarAccountUsageItem = observer(function RuntimeBarAccountUsa
             description={t('workspaceRuntime.accountUsageCardDescription')}
             actions={
               <WorkspaceBarCardMenu>
-                <DropdownMenuItem
-                  onClick={() => void rpc.app.openExternal(YODA_ACCOUNT_USAGE_DOC_URL)}
-                >
+                <DropdownMenuItem onClick={() => openExternalUrl(YODA_ACCOUNT_USAGE_DOC_URL)}>
                   <ExternalLink aria-hidden />
                   {t('workspaceRuntime.accountDocs')}
                 </DropdownMenuItem>
                 {!maasActiveForRuntime && officialUsageUrl ? (
-                  <DropdownMenuItem onClick={() => void rpc.app.openExternal(officialUsageUrl)}>
+                  <DropdownMenuItem onClick={() => openExternalUrl(officialUsageUrl)}>
                     <ExternalLink aria-hidden />
                     {t('workspaceRuntime.officialAccountUsage', {
                       name: runtime?.name ?? runtimeId,
