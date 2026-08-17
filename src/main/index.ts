@@ -23,6 +23,7 @@ import { appService } from './core/app/service';
 import { automationScheduler } from './core/automation/automation-scheduler';
 import { agentSessionRuntimeStore } from './core/conversations/agent-session-runtime';
 import { persistConversationRunOutcome } from './core/conversations/conversation-run-outcome';
+import { runStateReconcilerService } from './core/conversations/run-state-reconciler';
 import { sessionSummaryAutoRefreshService } from './core/conversations/session-summary-autorefresh';
 import { localDependencyManager } from './core/dependencies/dependency-manager';
 import { knownBinDirs } from './core/dependencies/probe';
@@ -171,6 +172,7 @@ void app.whenReady().then(async () => {
       log.warn('Failed to restore pending Yoda Build tasks:', error);
     });
     sessionSummaryAutoRefreshService.initialize();
+    runStateReconcilerService.initialize();
     archivedTaskReactivationService.initialize();
     searchService.initialize();
     __bootMark('searchService.initialize done');
@@ -358,6 +360,7 @@ function prepareShutdown(mode: TeardownMode): Promise<void> {
     try {
       agentHookService.dispose();
       sessionSummaryAutoRefreshService.dispose();
+      runStateReconcilerService.dispose();
       archivedTaskReactivationService.dispose();
       agentSessionRuntimeStore.dispose();
       aiLabService.dispose();

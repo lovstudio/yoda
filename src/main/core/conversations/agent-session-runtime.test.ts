@@ -464,3 +464,37 @@ describe('AgentSessionRuntimeStore watchdog', () => {
     expect(agentSessionRuntimeStore.getStatus(session)).toBe('idle');
   });
 });
+
+describe('AgentSessionRuntimeStore running-session listing', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+  });
+
+  afterEach(() => {
+    agentSessionRuntimeStore.dispose();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it('lists only running statuses that have stood still long enough to re-check', () => {
+    agentSessionRuntimeStore.dispatch(
+      session,
+      { kind: 'turn-started', at: 0, force: true },
+      'test'
+    );
+    const fresh: AgentSessionKey = { ...session, conversationId: 'conversation-fresh' };
+    const done: AgentSessionKey = { ...session, conversationId: 'conversation-done' };
+    vi.advanceTimersByTime(20_000);
+    agentSessionRuntimeStore.dispatch(
+      fresh,
+      { kind: 'turn-started', at: 20_000, force: true },
+      't'
+    );
+    agentSessionRuntimeStore.dispatch(done, { kind: 'turn-completed', at: 20_000 }, 'test');
+
+    expect(agentSessionRuntimeStore.listRunningSessions({ settledForMs: 10_000 })).toEqual([
+      session,
+    ]);
+  });
+});

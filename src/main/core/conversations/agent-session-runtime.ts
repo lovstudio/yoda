@@ -491,6 +491,25 @@ class AgentSessionRuntimeStore {
     return result;
   }
 
+  /**
+   * Running sessions whose status has stood unchanged for `settledForMs`.
+   *
+   * For the periodic run-state reconciler: a `working` / `awaiting-input` that no
+   * source has touched in a while is exactly the state that has nothing left to
+   * contradict it. A young one is skipped because an optimistic submit mirror is
+   * expected to run ahead of the CLI's own first report.
+   */
+  listRunningSessions(options: { settledForMs: number }): AgentSessionKey[] {
+    const settledBefore = Date.now() - options.settledForMs;
+    const result: AgentSessionKey[] = [];
+    for (const { session, state } of this.entries.values()) {
+      if (!isAgentSessionRunningStatus(state.status)) continue;
+      if (state.updatedAt > settledBefore) continue;
+      result.push(session);
+    }
+    return result;
+  }
+
   /** Main-process-only status subscription for services such as the mobile SSE gateway. */
   subscribe(session: AgentSessionKey, listener: RuntimeStateListener): () => void {
     const key = keyFor(session);
