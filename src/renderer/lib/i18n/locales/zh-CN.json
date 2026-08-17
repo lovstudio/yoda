@@ -747,11 +747,6 @@
       "agentClientDescription": "这次 AI 调用实际依附的客户端，例如 Claude Code、Codex 或 Code Ace。",
       "accessMethod": "接入方式",
       "accessMethodDescription": "在当前 Client 内选择官网订阅、官方 API Key 或 Yoda 模型接入。",
-      "access": {
-        "officialSubscription": "官网订阅",
-        "officialApi": "API Key",
-        "maas": "模型接入"
-      },
       "maasPlatform": "模型接入服务",
       "maasPlatformDescription": "仅在接入方式为模型接入时生效。当前已连接 {{count}} 个服务，所选服务{{status}}。",
       "maasConnected": "已连接",
@@ -1826,12 +1821,7 @@
       "stats": {
         "linesTitle": "本任务代码变更（已提交 + 工作区）",
         "tokens": "{{value}} tokens",
-        "tokenBreakdown": "输入 {{input}} · 输出 {{output}} · 缓存 {{cache}}",
-        "authProvider": {
-          "official-subscription": "订阅",
-          "official-api": "API Key",
-          "yoda-maas": "模型接入"
-        }
+        "tokenBreakdown": "输入 {{input}} · 输出 {{output}} · 缓存 {{cache}}"
       },
       "subtasks": "子任务（{{count}}）"
     },
@@ -3829,9 +3819,9 @@
       "config": "配置",
       "auth": "认证",
       "authProviders": {
-        "official-subscription": "官方订阅",
-        "official-api": "官方 API",
-        "yoda-maas": "Yoda 模型接入"
+        "official-subscription": "官网订阅",
+        "official-api": "官网 API",
+        "yoda-maas": "第三方平台"
       },
       "clientDefault": "客户端默认",
       "agentOverride": "Agent 覆盖",
@@ -5500,7 +5490,8 @@
       "needsAttention": "需检查",
       "disabled": "未启用",
       "manage": "详情与配置",
-      "openLogs": "查看 AI 日志"
+      "openLogs": "查看 AI 日志",
+      "openWebsite": "打开 {{provider}} 官网"
     },
     "agents": {
       "title": "Agent 运行状态",
@@ -5681,22 +5672,11 @@
     "accountUsageShort": "账号",
     "accountDocs": "Yoda 文档",
     "officialAccountUsage": "{{name}} 官网用量",
-    "accountUsageDescription": "当前 CLI 账号的额度窗口",
-    "maasUsageTitle": "{{provider}} 用量",
-    "maasUsageOpenWebsite": "打开 {{provider}} 官网",
-    "maasUsageShort": "用量",
-    "maasUsageDescription": "当前会话经该服务商路由，数值由服务商接口返回。",
-    "maasUsageSourceZenmux": "管理统计",
-    "maasUsageSourceOpenRouter": "Key API",
-    "maasUsageSourceNewApi": "Token API",
-    "maasUsageSourceNewApiAccount": "账户 API",
-    "maasUsageSourceUnavailable": "未接入",
     "maasUsageLoading": "正在读取服务商用量…",
     "maasUsageUnavailable": "用量读取失败",
     "maasUsageNoReadableApi": "{{provider}} Profile 未声明可读取的用量接口。OpenAI-compatible 推理接口本身不包含统一的账单或余额标准。",
     "maasUsageCopyError": "复制诊断",
     "maasUsageErrorCopied": "用量诊断已复制",
-    "maasUsageManage": "管理模型接入",
     "maasUsageRemainingCredits": "可用余额",
     "maasUsageTotalCredits": "总额度",
     "maasUsageKeyRemaining": "Key 可用额度",
@@ -5710,7 +5690,6 @@
     "maasUsageThisWeek": "本周费用",
     "maasUsageInputTokens": "输入 Tokens",
     "maasUsageOutputTokens": "输出 Tokens",
-    "maasUsageCurrentAccount": "当前账号",
     "maasUsageUpdatedAt": "{{time}} 更新",
     "accountQuotaReset": "{{time}} 重置",
     "accountQuotaStatus": "剩余 {{remaining}}% · {{reset}} 重置",
@@ -5752,7 +5731,8 @@
       "update": "更新 {{name}}",
       "login": "登录 {{name}}",
       "doctor": "诊断 {{name}}"
-    }
+    },
+    "accountUsageCardDescription": "当前会话所用账号的用量"
   },
   "openIn": {
     "failed": "打开失败",

@@ -30,6 +30,8 @@ export function useRuntimeBarSessionUsage() {
 
   return {
     sessionTokens: activeSessionUsage?.tokens ?? null,
+    /** Account mode recorded at spawn time — what this session actually spends. */
+    sessionAuthProvider: activeSessionUsage?.authProvider ?? null,
     sessionContext,
     contextPercent,
     contextRemaining: sessionContext
