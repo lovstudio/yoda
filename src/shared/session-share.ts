@@ -3,6 +3,7 @@ import type {
   MobileSessionDetail,
   MobileSessionTranscriptBlock,
 } from '@lovstudio/yoda-protocol/mobile-api';
+import type { TokenBuckets } from './stats';
 
 export const YODA_SESSION_SHARE_KIND = 'yoda-session-share' as const;
 export const YODA_SESSION_SHARE_VERSION = 1 as const;
@@ -32,6 +33,19 @@ export type YodaSessionShareAssetUpload = {
   dataBase64: string;
 };
 
+/**
+ * What the shared session burned. Provider CLIs write no cost into their
+ * transcripts, so `costUsd` is priced from the bundled list-rate table: an
+ * estimate, and a floor when `costPartial` is true because some model had no
+ * rate on file. Null cost means "nothing could be priced", which is different
+ * from a genuine zero.
+ */
+export type YodaSessionShareUsage = {
+  tokens: TokenBuckets;
+  costUsd: number | null;
+  costPartial: boolean;
+};
+
 export type YodaSessionShareUpload = {
   kind: typeof YODA_SESSION_SHARE_KIND;
   version: typeof YODA_SESSION_SHARE_VERSION;
@@ -42,6 +56,8 @@ export type YodaSessionShareUpload = {
   truncated: boolean;
   assets: YodaSessionShareAssetUpload[];
   omittedAssetCount: number;
+  /** Absent when the runtime exposes no usage, or the transcript is gone. */
+  usage?: YodaSessionShareUsage;
 };
 
 export type YodaSessionShareResponse = {
@@ -72,7 +88,10 @@ function normalizedTimestamp(value: string | null | undefined): string | null {
   return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString();
 }
 
-export function createYodaSessionShareUpload(detail: MobileSessionDetail): YodaSessionShareUpload {
+export function createYodaSessionShareUpload(
+  detail: MobileSessionDetail,
+  usage?: YodaSessionShareUsage | null
+): YodaSessionShareUpload {
   const blocks = detail.transcript
     .filter((block) => block.content.trim().length > 0)
     .map((block, index) => ({
@@ -105,5 +124,6 @@ export function createYodaSessionShareUpload(detail: MobileSessionDetail): YodaS
     truncated: detail.transcript.length > 0 ? detail.transcriptTruncated : detail.truncated,
     assets: [],
     omittedAssetCount: 0,
+    ...(usage ? { usage } : {}),
   };
 }

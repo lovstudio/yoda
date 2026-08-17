@@ -6,6 +6,7 @@ import {
 import { lovStudioApiClient } from '@main/core/account/services/lovstudio-api-client';
 import { mobileGatewayService } from '@main/core/mobile-gateway/mobile-gateway-service';
 import { appSettingsService } from '@main/core/settings/settings-service';
+import { getConversationShareUsage } from '@main/core/stats/conversation-usage';
 import { attachLocalSessionAssets } from './session-share-assets';
 
 export async function createSessionShare(
@@ -13,13 +14,14 @@ export async function createSessionShare(
   taskId: string,
   conversationId: string
 ): Promise<YodaSessionShareResponse> {
-  const { detail, cwd, embeddedImages } = await mobileGatewayService.getSessionShareSource(
-    projectId,
-    taskId,
-    conversationId
-  );
+  const [{ detail, cwd, embeddedImages }, usage] = await Promise.all([
+    mobileGatewayService.getSessionShareSource(projectId, taskId, conversationId),
+    // Usage is a nice-to-have on the share page: a runtime with no transcript
+    // parser, or a transcript that has been cleaned up, must not block the share.
+    getConversationShareUsage(projectId, taskId, conversationId).catch(() => null),
+  ]);
   const upload = await attachLocalSessionAssets(
-    createYodaSessionShareUpload(detail),
+    createYodaSessionShareUpload(detail, usage),
     cwd,
     embeddedImages
   );
