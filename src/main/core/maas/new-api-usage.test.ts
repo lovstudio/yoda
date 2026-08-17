@@ -188,7 +188,9 @@ describe('New API usage', () => {
     ).resolves.toMatchObject({
       totalCostUsd: 3,
       remainingCreditsUsd: 7,
-      accountUsageStatus: 'error',
+      // A rejected credential is the one account-read failure the user can fix,
+      // so it is its own status rather than a generic error.
+      accountUsageStatus: 'credential-rejected',
       accountUsageError: 'New API account usage returned 401: Invalid access token',
       source: 'new-api-token',
     });
