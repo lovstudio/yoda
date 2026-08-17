@@ -129,7 +129,15 @@ const ConversationRow = observer(function ConversationRow({
           <span className="min-w-0 flex-1 truncate">{displayTitle}</span>
           <span className="shrink-0">
             {status ? (
-              <AgentStatusIndicator status={status} disableTooltip />
+              <AgentStatusIndicator
+                status={status}
+                disableTooltip
+                session={{
+                  projectId: conversation.data.projectId,
+                  taskId: conversation.data.taskId,
+                  conversationId,
+                }}
+              />
             ) : (
               <RelativeTime
                 value={conversation.data.lastInteractedAt ?? ''}

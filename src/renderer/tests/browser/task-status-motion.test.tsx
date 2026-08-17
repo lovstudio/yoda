@@ -8,6 +8,12 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+const mocks = vi.hoisted(() => ({ interruptConversationSession: vi.fn() }));
+
+vi.mock('@renderer/features/tasks/interrupt-task-sessions', () => ({
+  interruptConversationSession: mocks.interruptConversationSession,
+}));
+
 type MediaQueryController = {
   mediaQueryList: MediaQueryList;
   setMatches: (matches: boolean) => void;
@@ -163,23 +169,28 @@ describe('task status motion', () => {
     expect(awaitingIcon?.classList.contains('motion-safe:animate-pulse')).toBe(true);
     expect(awaitingIcon?.classList.contains('animate-pulse')).toBe(false);
 
-    const onInterrupt = vi.fn();
+    // A `working` indicator given its session identity is the interrupt
+    // control: it keeps the spinner until hover, and clicking interrupts that
+    // session. Nested inside already-clickable rows, so it is a `role="button"`
+    // span rather than a `<button>`.
+    const session = { projectId: 'project-1', taskId: 'task-1', conversationId: 'conversation-1' };
     await act(async () =>
       root?.render(
         createElement(AgentStatusIndicator, {
           status: 'working',
           disableTooltip: true,
-          onInterrupt,
+          session,
         })
       )
     );
 
-    const interruptButton = host.querySelector<HTMLButtonElement>('button');
-    expect(interruptButton?.getAttribute('aria-label')).toBe('agentStatus.interrupt');
+    const interruptControl = host.querySelector<HTMLElement>('[role="button"]');
+    expect(interruptControl?.tagName).toBe('SPAN');
+    expect(interruptControl?.getAttribute('aria-label')).toBe('agentStatus.interrupt');
     expect(
-      interruptButton?.querySelector('svg')?.classList.contains('motion-safe:animate-spin')
+      interruptControl?.querySelector('svg')?.classList.contains('motion-safe:animate-spin')
     ).toBe(true);
-    await act(async () => interruptButton?.click());
-    expect(onInterrupt).toHaveBeenCalledOnce();
+    await act(async () => interruptControl?.click());
+    expect(mocks.interruptConversationSession).toHaveBeenCalledWith(session);
   });
 });

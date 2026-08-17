@@ -8,7 +8,7 @@ import type { TaskStore } from '@renderer/features/tasks/stores/task';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
-  interruptConversation: vi.fn(async () => {}),
+  interruptConversationSession: vi.fn(async () => {}),
   interruptTaskSessions: vi.fn(),
   navigate: vi.fn(),
   openTaskTarget: vi.fn(),
@@ -50,6 +50,7 @@ vi.mock('@renderer/features/tasks/components/agent-status-indicator', () => ({
 }));
 
 vi.mock('@renderer/features/tasks/interrupt-task-sessions', () => ({
+  interruptConversationSession: mocks.interruptConversationSession,
   interruptTaskSessions: mocks.interruptTaskSessions,
 }));
 
@@ -67,7 +68,7 @@ vi.mock('@renderer/lib/components/agent-logo', () => ({
 
 vi.mock('@renderer/lib/ipc', () => ({
   events: { emit: vi.fn(), on: vi.fn(() => () => {}) },
-  rpc: { conversations: { interruptConversation: mocks.interruptConversation } },
+  rpc: { conversations: {} },
 }));
 
 vi.mock('@renderer/lib/layout/navigation-provider', () => ({
@@ -142,11 +143,11 @@ describe('TaskSessionStatusControl', () => {
     );
     await act(async () => interrupt?.click());
 
-    expect(mocks.interruptConversation).toHaveBeenCalledWith(
-      'project-1',
-      'task-1',
-      'working-session'
-    );
+    expect(mocks.interruptConversationSession).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'working-session',
+    });
     expect(mocks.interruptTaskSessions).not.toHaveBeenCalled();
   });
 });

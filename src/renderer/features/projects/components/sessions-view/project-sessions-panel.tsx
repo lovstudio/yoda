@@ -121,7 +121,15 @@ const ProjectSessionRow = observer(function ProjectSessionRow({
       </span>
       <span className="flex min-w-12 shrink-0 justify-end text-xs text-foreground-passive">
         {status ? (
-          <AgentStatusIndicator status={status} disableTooltip />
+          <AgentStatusIndicator
+            status={status}
+            disableTooltip
+            session={{
+              projectId: conversation.projectId,
+              taskId: conversation.taskId,
+              conversationId: conversation.id,
+            }}
+          />
         ) : (
           <RelativeTime value={interactedAt} compact />
         )}

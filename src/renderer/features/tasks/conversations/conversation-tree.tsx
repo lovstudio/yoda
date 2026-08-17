@@ -287,7 +287,11 @@ const ConversationTreeItem = observer(function ConversationTreeItem({
               {usage ? <SessionUsageChip usage={usage} /> : null}
               <span className="flex shrink-0 items-center text-xs text-foreground-passive">
                 {status ? (
-                  <AgentStatusIndicator status={status} disableTooltip />
+                  <AgentStatusIndicator
+                    status={status}
+                    disableTooltip
+                    session={{ projectId, taskId, conversationId: conversation.id }}
+                  />
                 ) : (
                   <RelativeTime
                     value={

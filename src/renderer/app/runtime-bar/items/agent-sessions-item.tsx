@@ -402,6 +402,11 @@ export const RuntimeBarAgentSessionsItem = observer(function RuntimeBarAgentSess
                             status={session.status}
                             disableTooltip
                             boxClassName="size-3.5"
+                            session={{
+                              projectId: session.projectId,
+                              taskId: session.taskId,
+                              conversationId: session.conversationId,
+                            }}
                           />
                           {t(`agentStatus.${session.status}`)}
                         </span>
