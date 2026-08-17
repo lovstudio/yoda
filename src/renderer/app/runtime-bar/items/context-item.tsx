@@ -18,7 +18,13 @@ import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popove
 import { Switch } from '@renderer/lib/ui/switch';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
-import { ContextProgressBar, RuntimeBarSeparator, RuntimeMetricRow } from '../bar-chrome';
+import {
+  ContextProgressBar,
+  RUNTIME_BAR_METRIC_ACTION_CLASS,
+  RUNTIME_BAR_METRIC_LABEL_CLASS,
+  RuntimeBarSeparator,
+  RuntimeMetricRow,
+} from '../bar-chrome';
 import { formatPopoverTime } from '../display';
 import { useRuntimeBarSession } from '../session-context';
 import { useRuntimeBarSessionUsage } from '../session-usage';
@@ -117,11 +123,13 @@ export const RuntimeBarContextItem = observer(function RuntimeBarContextItem() {
             limit: formatCompactNumber(sessionContext.limitTokens),
             percent: contextPercent,
           })}
-          className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+          className={cn(RUNTIME_BAR_METRIC_ACTION_CLASS, 'shrink-0 text-foreground-passive')}
           title={contextTitle}
         >
           <Brain className="size-3.5" />
-          <span className="@max-[1120px]:hidden">{t('workspaceRuntime.contextUsageShort')}</span>
+          <span className={RUNTIME_BAR_METRIC_LABEL_CLASS}>
+            {t('workspaceRuntime.contextUsageShort')}
+          </span>
           <ContextProgressBar percent={contextPercent} tone={contextTone} compact />
         </PopoverTrigger>
         <PopoverContent

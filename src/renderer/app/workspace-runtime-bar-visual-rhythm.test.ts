@@ -16,6 +16,16 @@ describe('Workspace runtime bar visual rhythm', () => {
     expect(source).toContain('@min-[1441px]:w-auto');
   });
 
+  it('extends every trigger hit area to the full row height', () => {
+    // A 24px chip in a 32px row leaves 4px of dead ground top and bottom, which
+    // reads as the trigger ignoring a press. Both geometries share one
+    // extension, so no entry can be the odd one out.
+    expect(source).toContain(
+      "before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']"
+    );
+    expect(source).not.toContain('className="flex h-5 ');
+  });
+
   it('uses fixed spacing without inserting an oversized group break', () => {
     expect(source).toContain('items-center gap-0.5 overflow-hidden whitespace-nowrap');
     expect(source).not.toContain('workspace-runtime-group-divider');
