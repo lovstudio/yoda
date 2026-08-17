@@ -46,6 +46,29 @@ export function formatResetCountdown(value: string): string {
   return formatter.format(Math.ceil(remainingHours / 24), 'day');
 }
 
+/**
+ * Past-facing counterpart to {@link formatResetCountdown}: how long ago a
+ * reading was taken. Seconds are worth their own step — a just-refreshed figure
+ * should read as "now", not as "1 minute ago".
+ */
+export function formatRelativeTimeSince(value: string): string {
+  const elapsedSeconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000));
+  const formatter = new Intl.RelativeTimeFormat(i18n.language, {
+    numeric: 'auto',
+    style: 'short',
+  });
+
+  if (elapsedSeconds < 60) return formatter.format(-elapsedSeconds, 'second');
+
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+  if (elapsedMinutes < 60) return formatter.format(-elapsedMinutes, 'minute');
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 48) return formatter.format(-elapsedHours, 'hour');
+
+  return formatter.format(-Math.floor(elapsedHours / 24), 'day');
+}
+
 export function formatAccountResetCreditExpiry(value: string): string {
   return new Intl.DateTimeFormat(i18n.language, {
     month: 'short',
