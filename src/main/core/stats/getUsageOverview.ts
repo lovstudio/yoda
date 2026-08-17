@@ -392,6 +392,7 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
     ? (() => {
         const merged = mergeClaudeHistoricalUsage(
           claudeHistorical,
+          daily,
           [...claudeDailyByDate.entries()].map(([date, dayTokens]) => ({
             date,
             tokens: dayTokens,
@@ -400,7 +401,7 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
         return {
           tokens: merged.tokens,
           cacheThroughDate: claudeHistorical.cacheThroughDate,
-          recentTrackedTokens: merged.recentTrackedTokens,
+          mergedTrackedTokens: merged.mergedTrackedTokens,
           sessionCount: claudeHistorical.sessionCount,
         };
       })()

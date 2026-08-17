@@ -4553,10 +4553,10 @@
     "sourceUnknown": "Untracked",
     "topTasks": "Top tasks by tokens",
     "topTasksCount": "Top tasks by tokens ({{shown}} of {{total}})",
-    "historyScope": "Claude's historical baseline runs through {{date}}, plus {{recent}} of later tracked usage. Project, model, and task rankings use attributable records only (currently {{attributable}}).",
+    "historyScope": "Claude's historical baseline runs through {{date}}, plus {{recent}} of other tracked usage (every runtime after that date, and non-Claude runtimes before it). Project, model, and task rankings use attributable records only (currently {{attributable}}).",
     "caliber": {
       "tasks": "How it's counted: tasks with a non-null archive date (archiving is the completion act). The sub-line is all tasks ever created.",
-      "tokens": "How it's counted: global historical tokens use Claude Code stats-cache.json as a baseline, then add confirmed Claude transcript / Yoda snapshot usage after the cache cutoff. Project, model, and task detail continues to use attributable Claude / Codex transcripts and snapshots. Historical aggregates are never allocated to projects. Total = input + output + cache read + cache write.",
+      "tokens": "How it's counted: global historical tokens use Claude Code stats-cache.json as a baseline (Claude only, and only through the cache cutoff), then add the tracked usage that baseline cannot cover: every runtime after the cutoff, and non-Claude runtimes before it. Project, model, and task detail continues to use attributable Claude / Codex transcripts and snapshots. Historical aggregates are never allocated to projects. Total = input + output + cache read + cache write.",
       "lines": "How it's counted: per task = committed diff vs source branch (merge-base) + uncommitted working-tree changes. Live for active tasks; archived tasks use their last snapshot (tasks archived before this feature shipped have none and count as zero).",
       "activeDays": "How it's counted: local calendar days with any token usage in session transcripts.",
       "dailyChart": "How it's counted: the chart defaults to the last 30 days and can switch between 7, 30, or 90 days. Each session's tokens are bucketed into the local date they were consumed; bar height is relative to the selected period's single-day peak.",
