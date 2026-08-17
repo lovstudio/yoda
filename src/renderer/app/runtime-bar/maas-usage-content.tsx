@@ -42,10 +42,7 @@ export function WorkspaceMaasUsageContent({
 }) {
   const { t } = useTranslation();
   const metrics = readUsageMetrics(usage);
-  const usageProgressPercent =
-    usage?.totalCostUsd != null && usage.totalCreditsUsd != null && usage.totalCreditsUsd > 0
-      ? Math.round((usage.totalCostUsd / usage.totalCreditsUsd) * 100)
-      : null;
+  const usageProgressPercent = readUsageProgressPercent(usage);
 
   return (
     <>
@@ -173,6 +170,24 @@ type UsageMetric = {
 };
 
 /**
+ * Spend against a ceiling. The account's own credits answer first, but a key
+ * carrying its own limit is a real ceiling too — a $25 key with $7 left is
+ * exactly the reading the bar is for, and leaving it out rendered a card that
+ * could only ever say how much was spent.
+ */
+function readUsageProgressPercent(usage: MaasUsageSummary | null): number | null {
+  if (!usage) return null;
+  if (usage.totalCostUsd != null && usage.totalCreditsUsd != null && usage.totalCreditsUsd > 0) {
+    return Math.round((usage.totalCostUsd / usage.totalCreditsUsd) * 100);
+  }
+  if (usage.keyLimitUsd != null && usage.keyLimitUsd > 0 && usage.keyLimitRemainingUsd != null) {
+    const spent = Math.max(0, usage.keyLimitUsd - usage.keyLimitRemainingUsd);
+    return Math.round((spent / usage.keyLimitUsd) * 100);
+  }
+  return null;
+}
+
+/**
  * The figures a platform actually answered, in reading order: what is left, when
  * it was read, then what was spent — money before tokens. Absent fields drop out
  * rather than rendering as a zero the platform never reported.
@@ -188,12 +203,14 @@ function readUsageMetrics(usage: MaasUsageSummary | null): UsageMetric[] {
   const balances = [
     ...usd('workspaceRuntime.maasUsageRemainingCredits', usage.remainingCreditsUsd),
     ...usd('workspaceRuntime.maasUsageTotalCredits', usage.totalCreditsUsd),
+    ...usd('workspaceRuntime.maasUsageKeyLimit', usage.keyLimitUsd),
     ...usd('workspaceRuntime.maasUsageKeyRemaining', usage.keyLimitRemainingUsd),
   ];
   const spend = [
     ...usd('workspaceRuntime.maasUsageTotalCost', usage.totalCostUsd),
     ...usd('workspaceRuntime.maasUsageToday', usage.usageDailyUsd),
     ...usd('workspaceRuntime.maasUsageThisWeek', usage.usageWeeklyUsd),
+    ...usd('workspaceRuntime.maasUsageThisMonth', usage.usageMonthlyUsd),
     ...count('workspaceRuntime.maasUsageInputTokens', usage.totalInputTokens),
     ...count('workspaceRuntime.maasUsageOutputTokens', usage.totalOutputTokens),
   ];
