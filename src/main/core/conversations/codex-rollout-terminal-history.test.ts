@@ -5,6 +5,7 @@ import Database from 'better-sqlite3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   formatCodexRolloutTerminalHistory,
+  loadCodexRolloutShareSourceForConversation,
   loadCodexRolloutTerminalHistoryForConversation,
   loadCodexRolloutTranscriptTailForConversation,
   parseCodexRolloutShareImages,
@@ -330,6 +331,87 @@ describe('formatCodexRolloutTerminalHistory', () => {
       expect(transcript?.map((entry) => entry.content)).toContain('Selected session content');
       expect(transcript?.map((entry) => entry.content)).not.toContain('Other session content');
       expect(mocks.getReservedCodexThreadIds).toHaveBeenCalledWith('selected-conversation');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('shares the whole rollout even past the bound mobile reads stop at', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'yoda-codex-share-full-history-'));
+    const statePath = join(directory, 'state_5.sqlite');
+    const rolloutPath = join(directory, 'rollout.jsonl');
+    const conversation = {
+      id: 'shared-conversation',
+      projectId: 'project-1',
+      taskId: 'task-1',
+      runtimeId: 'codex' as const,
+      title: 'Long session',
+      createdAt: '2026-08-10 01:00:00',
+      lastInteractedAt: '2026-08-10T02:00:00.000Z',
+      isInitialConversation: true,
+      sessionSource: {
+        catalogId: 'catalog-1',
+        runtimeId: 'codex' as const,
+        sessionId: 'long-thread',
+        stateRoot: directory,
+      },
+    };
+
+    try {
+      createStateDb(statePath);
+      // Filler pushes the opening turn beyond the 8 MiB tail every mobile read
+      // is bounded to, which is what used to cut a shared session's history.
+      const filler = 'x'.repeat(64 * 1024);
+      writeFileSync(
+        rolloutPath,
+        [
+          {
+            timestamp: '2026-08-10T01:00:00.000Z',
+            type: 'session_meta',
+            payload: { id: 'long-thread', cwd: '/repo' },
+          },
+          {
+            timestamp: '2026-08-10T01:00:01.000Z',
+            type: 'event_msg',
+            payload: { type: 'user_message', message: 'Opening turn' },
+          },
+          ...Array.from({ length: 160 }, (_, index) => ({
+            timestamp: '2026-08-10T01:30:00.000Z',
+            type: 'event_msg',
+            payload: { type: 'agent_message', message: `${index} ${filler}` },
+          })),
+          {
+            timestamp: '2026-08-10T02:00:00.000Z',
+            type: 'event_msg',
+            payload: { type: 'agent_message', message: 'Closing turn' },
+          },
+        ]
+          .map((row) => JSON.stringify(row))
+          .join('\n')
+      );
+      insertThread(statePath, {
+        id: 'long-thread',
+        rolloutPath,
+        createdAtMs: Date.parse('2026-08-10T01:00:00.000Z'),
+        updatedAtMs: Date.parse('2026-08-10T02:00:00.000Z'),
+      });
+
+      const tail = await loadCodexRolloutTranscriptTailForConversation({
+        cwd: '/repo',
+        conversation,
+      });
+      expect(tail?.map((entry) => entry.content)).not.toContain('Opening turn');
+
+      const share = await loadCodexRolloutShareSourceForConversation({
+        cwd: '/repo',
+        conversation,
+      });
+      const contents = share.transcript.map((entry) => entry.content);
+      expect(contents).toContain('Opening turn');
+      // Consecutive agent messages fold into one block, so the closing turn is
+      // the tail of the last one rather than an entry of its own.
+      expect(contents.at(-1)?.endsWith('Closing turn')).toBe(true);
+      expect(share.truncated).toBe(false);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
