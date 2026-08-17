@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getProviderConfig: vi.fn(),
   getRuntimeStatus: vi.fn(),
   getRuntimeState: vi.fn(),
+  hasInterruptMarker: vi.fn(),
   isProviderTurnConfirmed: vi.fn(),
   isInterruptedSinceLastPrompt: vi.fn(),
   monitorRegistryGet: vi.fn(),
@@ -79,6 +80,7 @@ vi.mock('./codex-run-state-source', () => ({
 }));
 
 vi.mock('./interrupt-marker', () => ({
+  hasInterruptMarker: mocks.hasInterruptMarker,
   isInterruptedSinceLastPrompt: mocks.isInterruptedSinceLastPrompt,
 }));
 
@@ -137,6 +139,7 @@ describe('getConversationRunStatus', () => {
     mocks.getProviderConfig.mockResolvedValue(undefined);
     mocks.getClaudeSessionActivity.mockResolvedValue(null);
     mocks.isInterruptedSinceLastPrompt.mockReturnValue(false);
+    mocks.hasInterruptMarker.mockReturnValue(false);
     mocks.monitorRegistryGet.mockReturnValue(undefined);
     mocks.ptyGet.mockReturnValue(undefined);
     mocks.ptyGetDiagnostics.mockReturnValue(undefined);
@@ -344,7 +347,52 @@ describe('getConversationRunStatus', () => {
     });
     mocks.ptyGet.mockReturnValue({});
 
-    await expect(readStatus()).resolves.toBe('idle');
+    // The turn ended: an idle record from the process that ran it is the CLI
+    // saying so, which is a stronger statement than "nothing is running".
+    await expect(readStatus()).resolves.toBe('completed');
+  });
+
+  it('settles a stale awaiting-input from an idle record instead of inventing an interrupt', async () => {
+    // The stored outcome here *is* the awaiting-input being overruled, so reading
+    // it back would report a turn the user never cut short — the click-coupled
+    // 等待输入 → 中断 flip.
+    const now = Date.now();
+    mocks.getRuntimeStatus.mockReturnValue('awaiting-input');
+    mocks.getRuntimeState.mockReturnValue({ status: 'awaiting-input', updatedAt: now - 60_000 });
+    mocks.resolveTask.mockReturnValue(mountedTask(['conv-1']));
+    mocks.dbSelect.mockReturnValue({
+      from: () => ({ where: () => Promise.resolve([{ lastRunStatus: 'awaiting-input' }]) }),
+    });
+    mocks.getClaudeSessionActivity.mockResolvedValue({
+      pid: 4321,
+      sessionId: 'conv-1',
+      cwd: '/repo',
+      status: 'idle',
+      waitingFor: null,
+      updatedAt: now,
+      startedAt: now - 600_000,
+    });
+
+    await expect(readStatus()).resolves.toBe('completed');
+  });
+
+  it('reports an interrupt only when a marker says the turn was cut short', async () => {
+    const now = Date.now();
+    mocks.getRuntimeStatus.mockReturnValue('awaiting-input');
+    mocks.getRuntimeState.mockReturnValue({ status: 'awaiting-input', updatedAt: now - 60_000 });
+    mocks.hasInterruptMarker.mockReturnValue(true);
+    mocks.resolveTask.mockReturnValue(mountedTask(['conv-1']));
+    mocks.getClaudeSessionActivity.mockResolvedValue({
+      pid: 4321,
+      sessionId: 'conv-1',
+      cwd: '/repo',
+      status: 'idle',
+      waitingFor: null,
+      updatedAt: now,
+      startedAt: now - 600_000,
+    });
+
+    await expect(readStatus()).resolves.toBe('interrupted');
   });
 
   it('does not downgrade a live completed status when the monitor reports idle', async () => {

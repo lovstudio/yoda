@@ -15,7 +15,7 @@ import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-se
 import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
 import { resolveTask } from '../projects/utils';
-import { agentSessionRuntimeStore } from './agent-session-runtime';
+import { agentSessionRuntimeStore, type AgentSessionKey } from './agent-session-runtime';
 import { readClaudeTurnVerdictFile } from './claude-run-state-source';
 import {
   getClaudeSessionActivity,
@@ -30,7 +30,7 @@ import {
   runtimeStatusFromRunOutcome,
 } from './conversation-run-outcome';
 import { parseConversationSessionSource } from './conversation-session-source';
-import { isInterruptedSinceLastPrompt } from './interrupt-marker';
+import { hasInterruptMarker, isInterruptedSinceLastPrompt } from './interrupt-marker';
 import { runtimeStatusMonitorRegistry } from './runtime-status-monitor-registry';
 import type { ConversationProvider } from './types';
 
@@ -102,6 +102,31 @@ export async function getConversationRunStatus(args: {
   lastRunStatus?: PersistedRunStatus | null;
 }): Promise<AgentSessionRuntimeStatus> {
   return deriveStatus(args);
+}
+
+/**
+ * Re-derive one conversation's run state and self-heal the cache.
+ *
+ * Identical derivation to every other reader — what differs is *when* it runs.
+ * Every other correction path hangs off looking at something: the RPC above fires
+ * when a task view mounts, the tailers and their reconcilers exist only while a
+ * session is attached. A status nothing contradicts therefore used to resolve at
+ * the moment the user clicked the task, which is indistinguishable from the click
+ * having changed it. On a timer, the same rules reach the same verdict with no
+ * user action involved.
+ */
+export async function reconcileConversationRunState(session: AgentSessionKey): Promise<void> {
+  const row = (await loadConversationRows([session.conversationId])).get(session.conversationId);
+  if (!row) return;
+  await deriveStatus({
+    ...session,
+    provider: row.runtime ?? undefined,
+    createdAt: row.createdAt,
+    title: row.title,
+    sessionSource: row.sessionSource,
+    lastRunStatus: row.lastRunStatus,
+    cwd: resolveTask(session.projectId, session.taskId)?.conversations.taskPath,
+  });
 }
 
 async function deriveStatus(args: {
@@ -282,12 +307,22 @@ async function deriveStatus(args: {
     }
   }
 
-  // Nothing is running and nothing above could say why. The reducer's memory and
-  // every provider truth source only describe this process's lifetime, so after a
-  // restart they can only report absence — which is how a finished or cut-short
-  // session used to decay into "nothing known". The stored outcome is the one
-  // record that survives, and it is strictly more informative than `idle`.
-  if (derived === 'idle') {
+  if (derived === 'idle' && truth === 'idle' && isAgentSessionRunningStatus(memory)) {
+    // A truth source affirmatively reports the CLI at rest while the live status
+    // still claimed a turn was in flight. The stored outcome must NOT decide this
+    // one: what is stored *is* that running status (`rememberStatus` writes every
+    // non-idle transition), so reading it back would turn the very claim being
+    // overruled into evidence that someone cut the turn short. Only an interrupt
+    // marker can make that claim — the same rule the activity tailer's reconciler
+    // applies to the same record, so both surfaces settle a stale running status
+    // identically instead of one saying 中断 and the other 已完成.
+    derived = hasInterruptMarker(conversationId) ? 'interrupted' : 'completed';
+  } else if (derived === 'idle') {
+    // Nothing is running and nothing above could say why. The reducer's memory and
+    // every provider truth source only describe this process's lifetime, so after a
+    // restart they can only report absence — which is how a finished or cut-short
+    // session used to decay into "nothing known". The stored outcome is the one
+    // record that survives, and it is strictly more informative than `idle`.
     const stored =
       lastRunStatus === undefined
         ? await readConversationRunOutcome(conversationId).catch(() => undefined)
