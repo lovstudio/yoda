@@ -123,6 +123,7 @@ optional_env:
 - `docs/` 里的落地页与 Electron renderer 相互独立，默认端口同为 `3000`。对外文档内容不在本仓库——见 `agents/workflows/docs-site.md`。
 - renderer 里改后端 PTY 尺寸只能走 `src/renderer/lib/pty/pty-resize-authority.ts`，禁止直接调 `rpc.pty.resize` / `resizeForRenderer`：一个 PTY 只有一份 grid，观察者窗口（独立看板）改了会连带改窄主窗口的 TUI（2026-08-18, c429a81）。
 - 列表既有筛选又有数量上限时，必须先筛后截断，跨窗口推送的候选列表保持不截断（2026-08-18, c429a81）。
+- 任务列表 surface 的筛选/排序只能走 `@shared/task-view-options` + `TaskViewOptionsMenu`，禁止在单个 surface 里另写一份（2026-08-18, 7d40aff）。
 
 ## 注意
 - 我正在以开发模式运行与迭代 yoda，不要打开我已安装的 yoda
