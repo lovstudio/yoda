@@ -1,13 +1,36 @@
 import { cn } from '@renderer/utils/utils';
 
 /**
+ * Vertical hit-area extension for a bar trigger.
+ *
+ * The row is 32px tall and a trigger's chip is 24px, so the 4px strip above and
+ * below the chip belongs to the row — a press there reads as aiming at the
+ * trigger and does nothing at all. Measured on the account-usage entry: of the
+ * 32px the bar offers, only the middle 20px answered a click. A transparent
+ * pseudo-element takes those presses without changing a painted pixel, and
+ * stops exactly at the row's edges so it never reaches over the content above.
+ */
+const RUNTIME_BAR_HIT_AREA_CLASS =
+  "before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']";
+
+/**
  * The bar's one action geometry. Every entry trigger uses it so the row reads as
  * a single rhythm: a fixed icon slot until the bar is wide enough for labels.
  */
-export const RUNTIME_BAR_ACTION_CLASS =
-  'relative flex h-6 w-7 shrink-0 items-center justify-center gap-0 rounded-md p-0 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border @min-[1441px]:w-auto @min-[1441px]:gap-1 @min-[1441px]:px-1.5';
+export const RUNTIME_BAR_ACTION_CLASS = `relative flex h-6 w-7 shrink-0 items-center justify-center gap-0 rounded-md p-0 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border @min-[1441px]:w-auto @min-[1441px]:gap-1 @min-[1441px]:px-1.5 ${RUNTIME_BAR_HIT_AREA_CLASS}`;
 
 export const RUNTIME_BAR_ACTION_LABEL_CLASS = 'hidden @min-[1441px]:inline';
+
+/**
+ * Geometry for the entries that carry a reading rather than a bare glyph — a
+ * label, a meter, a model name. Same height, focus ring and hit area as the icon
+ * slot above; it grows with its content instead of sitting in a fixed 28px box,
+ * and falls back to that box when the content compacts down to the glyph.
+ */
+export const RUNTIME_BAR_METRIC_ACTION_CLASS = `relative flex h-6 min-w-7 items-center justify-center gap-1 rounded-md px-1.5 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border ${RUNTIME_BAR_HIT_AREA_CLASS}`;
+
+/** Reading labels go before the icon slots do — they cost the most width. */
+export const RUNTIME_BAR_METRIC_LABEL_CLASS = '@max-[1120px]:hidden';
 
 /**
  * The session group's separator. An entry that needs one renders it as its own

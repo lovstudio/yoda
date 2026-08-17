@@ -10,6 +10,8 @@ import type { SessionModelSettings } from '@renderer/lib/components/agent-select
 import { rpc } from '@renderer/lib/ipc';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
+import { cn } from '@renderer/utils/utils';
+import { RUNTIME_BAR_METRIC_ACTION_CLASS } from '../bar-chrome';
 import { useRuntimeBarMaas } from '../maas-context';
 import { useRuntimeBarSession } from '../session-context';
 
@@ -77,7 +79,7 @@ export const RuntimeBarRuntimeItem = observer(function RuntimeBarRuntimeItem() {
         aria-label={t('workspaceRuntime.currentSessionTitle', {
           name: runtime?.name ?? runtimeId,
         })}
-        className="flex h-5 min-w-0 items-center gap-1.5 rounded-sm px-1 text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+        className={cn(RUNTIME_BAR_METRIC_ACTION_CLASS, 'min-w-0 gap-1.5 text-foreground-muted')}
         title={t('workspaceRuntime.currentSessionTitle', {
           name: runtime?.name ?? runtimeId,
         })}
