@@ -17,12 +17,13 @@ describe('Workspace runtime bar visual rhythm', () => {
   });
 
   it('extends every trigger hit area to the full row height', () => {
-    // A 24px chip in a 32px row leaves 4px of dead ground top and bottom, which
-    // reads as the trigger ignoring a press. Both geometries share one
-    // extension, so no entry can be the odd one out.
+    // A 24px chip in a 32px row leaves dead ground top and bottom, which reads as
+    // the trigger ignoring a press. Both geometries share one extension, so no
+    // entry can be the odd one out, and the row's own clip clamps it.
     expect(source).toContain(
-      "before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']"
+      "before:absolute before:inset-x-0 before:-inset-y-1.5 before:content-['']"
     );
+    expect(source).toContain('flex h-full min-w-0 items-center gap-0.5 overflow-hidden');
     expect(source).not.toContain('className="flex h-5 ');
   });
 

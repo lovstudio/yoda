@@ -3,15 +3,21 @@ import { cn } from '@renderer/utils/utils';
 /**
  * Vertical hit-area extension for a bar trigger.
  *
- * The row is 32px tall and a trigger's chip is 24px, so the 4px strip above and
- * below the chip belongs to the row — a press there reads as aiming at the
- * trigger and does nothing at all. Measured on the account-usage entry: of the
- * 32px the bar offers, only the middle 20px answered a click. A transparent
- * pseudo-element takes those presses without changing a painted pixel, and
- * stops exactly at the row's edges so it never reaches over the content above.
+ * The row is 32px tall and a trigger's chip is 24px, so the strip above and below
+ * the chip belongs to the row — a press there reads as aiming at the trigger and
+ * does nothing at all. Measured on the account-usage entry before this existed:
+ * of the 32px the bar offers, only the middle 20px answered a click, over a
+ * 22px-wide target. A transparent pseudo-element takes those presses without
+ * changing a painted pixel.
+ *
+ * It deliberately overshoots the row, because the strip and the session group
+ * both clip their overflow: the clip is what clamps the extension to exactly the
+ * row, so no trigger reaches over the content above it. A group that hugs its
+ * children instead of filling the row would clip the extension away entirely —
+ * that is why `sessionGroup` carries `h-full`.
  */
 const RUNTIME_BAR_HIT_AREA_CLASS =
-  "before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']";
+  "before:absolute before:inset-x-0 before:-inset-y-1.5 before:content-['']";
 
 /**
  * The bar's one action geometry. Every entry trigger uses it so the row reads as
