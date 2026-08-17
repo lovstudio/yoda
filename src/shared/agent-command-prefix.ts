@@ -29,6 +29,20 @@ export function applyAgentCommandPrefix(runtimeId: RuntimeId, text: string): str
   return `${commandPrefix}${trimmed}`;
 }
 
+/**
+ * Command text to stage in an agent's input line. The trailing space dismisses
+ * the TUI's command autocomplete and leaves the caret ready for arguments,
+ * matching what the composer already inserts.
+ *
+ * Separate from `applyAgentCommandPrefix` because that result is also rendered
+ * as a label and used as prompt and task-title text, where a trailing space is
+ * either meaningless or wrong.
+ */
+export function buildAgentCommandInsertion(runtimeId: RuntimeId, text: string): string {
+  const command = applyAgentCommandPrefix(runtimeId, text);
+  return command ? `${command} ` : '';
+}
+
 export function getAgentCommandSubmitSuffix(runtimeId: RuntimeId, text: string): string {
   const trimmed = text.trim();
   const provider = getRuntime(runtimeId);

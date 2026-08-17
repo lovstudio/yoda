@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyAgentCommandPrefix,
+  buildAgentCommandInsertion,
   buildPromptInjectionPayload,
   getAgentCommandSubmitDelayMs,
   getAgentCommandSubmitInput,
@@ -45,6 +46,26 @@ describe('applyAgentCommandPrefix', () => {
 
   it('leaves providers without a command prefix unchanged', () => {
     expect(applyAgentCommandPrefix('gemini', '/help')).toBe('/help');
+  });
+});
+
+describe('buildAgentCommandInsertion', () => {
+  it('leaves a trailing space so the caret is ready for arguments', () => {
+    expect(buildAgentCommandInsertion('claude', 'skill-creator')).toBe('/skill-creator ');
+    expect(buildAgentCommandInsertion('codex', 'skill-creator')).toBe('$skill-creator ');
+  });
+
+  it('does not stack spaces on input that already ends with one', () => {
+    expect(buildAgentCommandInsertion('claude', 'skill-creator  ')).toBe('/skill-creator ');
+  });
+
+  it('stays empty for blank input', () => {
+    expect(buildAgentCommandInsertion('claude', '   ')).toBe('');
+  });
+
+  it('still reads as a bare command when deciding submission', () => {
+    const insertion = buildAgentCommandInsertion('codex', 'skill-creator');
+    expect(getAgentCommandSubmitSuffix('codex', insertion)).toBe(' ');
   });
 });
 
