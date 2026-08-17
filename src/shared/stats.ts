@@ -92,8 +92,11 @@ export type HistoricalUsage = {
   tokens: TokenBuckets;
   /** Last local date already included in the provider-maintained aggregate. */
   cacheThroughDate: string;
-  /** Tracked transcript/snapshot usage added after `cacheThroughDate`. */
-  recentTrackedTokens: TokenBuckets;
+  /**
+   * Tracked usage merged on top of the baseline: every runtime after
+   * `cacheThroughDate`, plus non-Claude runtimes before it.
+   */
+  mergedTrackedTokens: TokenBuckets;
   /** Provider-reported historical session count, when present. */
   sessionCount: number | null;
 };

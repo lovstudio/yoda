@@ -138,7 +138,7 @@ function UsageContent({ overview }: { overview: UsageOverview }) {
             {t('usage.historyScope', {
               date: overview.historical.cacheThroughDate,
               attributable: formatCompactNumber(overview.tokens?.total ?? 0),
-              recent: formatCompactNumber(overview.historical.recentTrackedTokens.total),
+              recent: formatCompactNumber(overview.historical.mergedTrackedTokens.total),
             })}
           </span>
         </div>
