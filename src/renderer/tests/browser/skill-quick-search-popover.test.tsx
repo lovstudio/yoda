@@ -49,6 +49,7 @@ const catalog: CatalogIndex = {
 const mocks = vi.hoisted(() => ({
   getCatalog: vi.fn(),
   installClawHub: vi.fn(),
+  onInsertSkill: vi.fn(),
   onInstalled: vi.fn(),
   onManageSkills: vi.fn(),
   searchClawHub: vi.fn(),
@@ -147,6 +148,7 @@ describe('SkillQuickSearchPopover', () => {
           QueryClientProvider,
           { client: queryClient },
           createElement(SkillQuickSearchPopover, {
+            onInsertSkill: mocks.onInsertSkill,
             onInstalled: mocks.onInstalled,
             onManageSkills: mocks.onManageSkills,
           })
@@ -209,6 +211,7 @@ describe('SkillQuickSearchPopover', () => {
             QueryClientProvider,
             { client: queryClient },
             createElement(SkillQuickSearchPopover, {
+              onInsertSkill: mocks.onInsertSkill,
               onInstalled: mocks.onInstalled,
               onManageSkills: mocks.onManageSkills,
             })
@@ -240,6 +243,7 @@ describe('SkillQuickSearchPopover', () => {
           key: `skill:local:bulk-${index}:test`,
           id: `bulk-${index}`,
           displayName: `Bulk ${index}`,
+          frontmatter: { name: `bulk-${index}`, description: 'Manage meetings' },
           ref: {
             ...localSkill.ref,
             key: `skill:local:bulk-${index}:test`,
@@ -255,6 +259,7 @@ describe('SkillQuickSearchPopover', () => {
           QueryClientProvider,
           { client: queryClient },
           createElement(SkillQuickSearchPopover, {
+            onInsertSkill: mocks.onInsertSkill,
             onInstalled: mocks.onInstalled,
             onManageSkills: mocks.onManageSkills,
           })
@@ -265,5 +270,73 @@ describe('SkillQuickSearchPopover', () => {
 
     expect(host.querySelectorAll('[data-testid="skill-icon"]')).toHaveLength(40);
     expect(host.textContent).toContain('skills.quickSearch.moreLocalHint');
+  });
+
+  it('navigates results with the arrow keys and inserts the active one on Enter', async () => {
+    const notesSkill: CatalogSkill = {
+      ...localSkill,
+      key: 'skill:local:notes:test',
+      id: 'notes',
+      displayName: 'Notes',
+      description: 'Write drafts',
+      frontmatter: { name: 'notes', description: 'Write drafts' },
+      ref: { ...localSkill.ref, key: 'skill:local:notes:test', id: 'notes' },
+    };
+    mocks.getCatalog.mockResolvedValue({
+      success: true,
+      data: { ...catalog, skills: [localSkill, notesSkill] },
+    });
+    const { SkillQuickSearchPopover } = await import(
+      '@renderer/features/skills/components/SkillQuickSearchPopover'
+    );
+    await act(async () =>
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SkillQuickSearchPopover, {
+            runtimeId: 'claude',
+            onInsertSkill: mocks.onInsertSkill,
+            onInstalled: mocks.onInstalled,
+            onManageSkills: mocks.onManageSkills,
+          })
+        )
+      )
+    );
+    await settle();
+
+    const options = () => Array.from(host.querySelectorAll<HTMLElement>('[role="option"]'));
+    expect(options().map((option) => option.getAttribute('aria-selected'))).toEqual([
+      'true',
+      'false',
+    ]);
+    expect(host.textContent).toContain('/calendar');
+
+    const input = host.querySelector<HTMLInputElement>('input');
+    expect(input).not.toBeNull();
+    const press = async (key: string, isComposing = false) =>
+      act(async () => {
+        input?.dispatchEvent(
+          new KeyboardEvent('keydown', { key, bubbles: true, isComposing } as KeyboardEventInit)
+        );
+      });
+
+    await press('ArrowDown');
+    expect(options().map((option) => option.getAttribute('aria-selected'))).toEqual([
+      'false',
+      'true',
+    ]);
+
+    // An IME candidate is being accepted, not a result.
+    await press('Enter', true);
+    expect(mocks.onInsertSkill).not.toHaveBeenCalled();
+
+    await press('Enter');
+    expect(mocks.onInsertSkill).toHaveBeenCalledWith(expect.objectContaining({ id: 'notes' }));
+
+    await act(async () => options()[0]?.click());
+    expect(mocks.onInsertSkill).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'calendar' })
+    );
   });
 });
