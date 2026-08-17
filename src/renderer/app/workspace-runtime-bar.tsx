@@ -12,7 +12,10 @@ import { useRuntimeBarSession } from './runtime-bar/session-context';
 const YODA_RUNTIME_BAR_THEME: RuntimeBarTheme = {
   strip:
     '@container flex h-8 min-w-0 shrink-0 items-center gap-0.5 overflow-hidden whitespace-nowrap border-t border-border bg-background-secondary px-1.5 text-[11px] text-foreground-muted',
-  sessionGroup: 'flex min-w-0 items-center gap-0.5 overflow-hidden @min-[1121px]:gap-1.5',
+  // `h-full` is load-bearing: the group clips its overflow to compact
+  // horizontally, and a group that hugged its 24px children would clip each
+  // trigger's hit-area extension away with it.
+  sessionGroup: 'flex h-full min-w-0 items-center gap-0.5 overflow-hidden @min-[1121px]:gap-1.5',
   spacer: 'flex-1',
 };
 
