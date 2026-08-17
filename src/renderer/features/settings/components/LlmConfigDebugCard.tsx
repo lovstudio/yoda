@@ -38,6 +38,7 @@ import {
   type AgentAccountProviderId,
   type RuntimeId,
 } from '@shared/runtime-registry';
+import { accountProviderLabelKey } from '@renderer/features/agents/account-provider-label';
 import { useMaasConnections } from '@renderer/features/maas/useMaas';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
@@ -859,15 +860,7 @@ function ProfileSelect({
 }
 
 function accessMethodLabel(t: TFunction, id: AgentAccountProviderId): string {
-  switch (id) {
-    case 'official-api':
-      return t('settings.llm.access.officialApi');
-    case 'yoda-maas':
-      return t('settings.llm.access.maas');
-    case 'official-subscription':
-    default:
-      return t('settings.llm.access.officialSubscription');
-  }
+  return t(accountProviderLabelKey(id));
 }
 
 function runtimeLabel(runtimeId: RuntimeId | null): string {

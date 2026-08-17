@@ -747,11 +747,6 @@
       "agentClientDescription": "The client this AI call is attached to, such as Claude Code, Codex, or Code Ace.",
       "accessMethod": "Access method",
       "accessMethodDescription": "Choose official subscription, official API key, or Yoda model access within the current Client.",
-      "access": {
-        "officialSubscription": "Official subscription",
-        "officialApi": "API key",
-        "maas": "Model access"
-      },
       "maasPlatform": "Model access service",
       "maasPlatformDescription": "Only used when the access method is model access. {{count}} service(s) connected; selected service is {{status}}.",
       "maasConnected": "connected",
@@ -1826,12 +1821,7 @@
       "stats": {
         "linesTitle": "Lines changed by this task (committed + working tree)",
         "tokens": "{{value}} tokens",
-        "tokenBreakdown": "Input {{input}} · Output {{output}} · Cache {{cache}}",
-        "authProvider": {
-          "official-subscription": "Subscription",
-          "official-api": "API Key",
-          "yoda-maas": "Model access"
-        }
+        "tokenBreakdown": "Input {{input}} · Output {{output}} · Cache {{cache}}"
       },
       "subtasks": "Subtasks ({{count}})"
     },
@@ -3831,7 +3821,7 @@
       "authProviders": {
         "official-subscription": "Official subscription",
         "official-api": "Official API",
-        "yoda-maas": "Yoda model access"
+        "yoda-maas": "Third-party platform"
       },
       "clientDefault": "Client default",
       "agentOverride": "Agent override",
@@ -5500,7 +5490,8 @@
       "needsAttention": "Check setup",
       "disabled": "Disabled",
       "manage": "Details & settings",
-      "openLogs": "Open AI logs"
+      "openLogs": "Open AI logs",
+      "openWebsite": "Open {{provider}} website"
     },
     "agents": {
       "title": "Agent activity",
@@ -5681,22 +5672,11 @@
     "accountUsageShort": "Account",
     "accountDocs": "Yoda docs",
     "officialAccountUsage": "{{name}} usage",
-    "accountUsageDescription": "CLI account quota windows",
-    "maasUsageTitle": "{{provider}} usage",
-    "maasUsageOpenWebsite": "Open {{provider}} website",
-    "maasUsageShort": "Usage",
-    "maasUsageDescription": "This session routes through the provider; figures come from its own API.",
-    "maasUsageSourceZenmux": "Management stats",
-    "maasUsageSourceOpenRouter": "Key API",
-    "maasUsageSourceNewApi": "Token API",
-    "maasUsageSourceNewApiAccount": "Account API",
-    "maasUsageSourceUnavailable": "Unavailable",
     "maasUsageLoading": "Reading provider usage…",
     "maasUsageUnavailable": "Usage request failed",
     "maasUsageNoReadableApi": "This {{provider}} profile does not declare a readable usage API. OpenAI-compatible inference endpoints do not define a shared billing or balance standard.",
     "maasUsageCopyError": "Copy diagnostics",
     "maasUsageErrorCopied": "Usage diagnostics copied",
-    "maasUsageManage": "Manage model access",
     "maasUsageRemainingCredits": "Available balance",
     "maasUsageTotalCredits": "Total quota",
     "maasUsageKeyRemaining": "Key limit remaining",
@@ -5710,7 +5690,6 @@
     "maasUsageThisWeek": "This week",
     "maasUsageInputTokens": "Input tokens",
     "maasUsageOutputTokens": "Output tokens",
-    "maasUsageCurrentAccount": "Current account",
     "maasUsageUpdatedAt": "Updated {{time}}",
     "accountQuotaReset": "Resets at {{time}}",
     "accountQuotaStatus": "{{remaining}}% remaining · resets {{reset}}",
@@ -5752,7 +5731,8 @@
       "update": "Update {{name}}",
       "login": "Sign in to {{name}}",
       "doctor": "Diagnose {{name}}"
-    }
+    },
+    "accountUsageCardDescription": "Usage on the account behind this session"
   },
   "openIn": {
     "failed": "Failed to open",
