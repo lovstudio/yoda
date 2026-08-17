@@ -83,8 +83,8 @@ export const StandaloneKanbanWindow = observer(function StandaloneKanbanWindow({
               {panes.map((pane) => (
                 <div
                   key={`${pane.projectId}:${pane.taskId}`}
-                  className="shrink-0 overflow-hidden rounded-lg border border-border bg-background-1"
-                  style={{ width: STANDALONE_KANBAN_MIN_PANE_WIDTH }}
+                  className="flex-1 basis-0 overflow-hidden rounded-lg border border-border bg-background-1"
+                  style={{ minWidth: STANDALONE_KANBAN_MIN_PANE_WIDTH }}
                 >
                   <ErrorBoundary variant="inline" componentName="StandaloneKanbanCard">
                     <StandaloneKanbanCard projectId={pane.projectId} taskId={pane.taskId} />
@@ -115,6 +115,7 @@ const StandaloneKanbanCard = observer(function StandaloneKanbanCard({
   projectId: string;
   taskId: string;
 }) {
+  const { t } = useTranslation();
   const taskStore = getTaskStore(projectId, taskId);
   const kind = taskViewKind(taskStore, projectId);
   const provisioned = asProvisioned(taskStore);
@@ -133,7 +134,7 @@ const StandaloneKanbanCard = observer(function StandaloneKanbanCard({
   if (kind !== 'ready' || !provisioned) {
     return (
       <div className="flex h-full items-center justify-center p-4">
-        <p className="text-xs text-foreground-muted">Loading...</p>
+        <p className="text-xs text-foreground-muted">{t('standaloneKanban.cardLoading')}</p>
       </div>
     );
   }

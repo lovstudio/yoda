@@ -172,6 +172,11 @@
     "projectsOverview": "Projects overview",
     "tasks": "Tasks",
     "prioritySection": "Kanban",
+    "modeMenu": "Sidebar mode",
+    "modeStandard": "Standard sidebar",
+    "modeKanban": "Kanban sidebar",
+    "openStandaloneKanban": "Open agent board",
+    "standaloneKanbanMaxPanes": "Max cards",
     "priorityMode": "Kanban mode",
     "priorityModeEnable": "Enable kanban mode",
     "priorityModeDisable": "Disable kanban mode",
@@ -6700,5 +6705,6 @@
     "copyError": "Copy error"
   },
   "standaloneKanban.title": "Agent Board ({{count}})",
-  "standaloneKanban.emptyState": "No active sessions to display"
+  "standaloneKanban.emptyState": "No active sessions to display",
+  "standaloneKanban.cardLoading": "Loading session..."
 }

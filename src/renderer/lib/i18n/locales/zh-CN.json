@@ -172,6 +172,11 @@
     "projectsOverview": "项目总览",
     "tasks": "任务",
     "prioritySection": "看板",
+    "modeMenu": "侧边栏模式",
+    "modeStandard": "标准侧边栏",
+    "modeKanban": "看板侧边栏",
+    "openStandaloneKanban": "打开独立看板",
+    "standaloneKanbanMaxPanes": "最多显示",
     "priorityMode": "看板模式",
     "priorityModeEnable": "开启看板模式",
     "priorityModeDisable": "关闭看板模式",
@@ -6700,5 +6705,6 @@
     "copyError": "复制错误"
   },
   "standaloneKanban.title": "智能体看板（{{count}} 个）",
-  "standaloneKanban.emptyState": "暂无活跃会话"
+  "standaloneKanban.emptyState": "暂无活跃会话",
+  "standaloneKanban.cardLoading": "会话加载中"
 }

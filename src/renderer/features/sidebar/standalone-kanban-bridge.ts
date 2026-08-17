@@ -1,4 +1,4 @@
-import { comparer, reaction } from 'mobx';
+import { comparer, observable, reaction } from 'mobx';
 import { standaloneKanbanWindowStateChannel } from '@shared/events/appEvents';
 import type { StandaloneKanbanWindowTarget } from '@shared/standalone-kanban-window';
 import { events, rpc } from '@renderer/lib/ipc';
@@ -15,20 +15,22 @@ import { appState } from '@renderer/lib/stores/app-state';
  * it, keeping the board window lightweight like the comparison window.
  */
 export function startStandaloneKanbanBridge(): () => void {
-  let isOpen = false;
+  // Observable so opening the board re-runs the reaction immediately, instead of
+  // waiting for the next ordering change to notice the window exists.
+  const isOpen = observable.box(false);
 
   const openDisposer = events.on(standaloneKanbanWindowStateChannel, ({ open }) => {
-    isOpen = open;
+    isOpen.set(open);
   });
 
   void rpc.app.isStandaloneKanbanWindowOpen().then((open) => {
-    isOpen = open;
+    isOpen.set(open);
   });
 
   const reactionDisposer = reaction(
-    () => (isOpen ? appState.sidebar.standaloneKanbanPanes : []),
+    () => (isOpen.get() ? appState.sidebar.standaloneKanbanPanes : []),
     (panes) => {
-      if (!isOpen) return;
+      if (!isOpen.get()) return;
       const target: StandaloneKanbanWindowTarget = { panes };
       void rpc.app.updateStandaloneKanbanPanes(target);
     },
