@@ -124,3 +124,6 @@ optional_env:
 
 ## 注意
 - 我正在以开发模式运行与迭代 yoda，不要打开我已安装的 yoda
+- 排序键 locale collation 陷阱：未排序哨兵必须是字母（如 'z'），不能是标点（ICU 将标点排在数字前，会使未排序项浮到顶部）（2026-08-18, 359a1b9）
+- dnd-kit 测试每个指针步骤必须独立 act()：拖拽开始后 droppable rects 在 effect 里测量，批量手势会在 over 变为非 null 前结束（2026-08-18, 359a1b9）
+- Base UI 弹层退场动画：卸载前必须先关闭弹层（Esc + 250ms 等待），否则全局 bookkeeping 认为菜单还开着，下次 trigger 拒绝打开（2026-08-18, 359a1b9）
