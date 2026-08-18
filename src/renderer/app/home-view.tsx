@@ -152,12 +152,22 @@ type HomeRunMode = LegacyRunMode;
 type RunHostKind = 'local' | 'ssh';
 
 type HomeComposerSubmitTarget =
-  | { kind: 'new-task'; parentTask?: { projectId: string; taskId: string } }
+  | {
+      kind: 'new-task';
+      parentTask?: { projectId: string; taskId: string };
+      /**
+       * Quick-action capture: locks the composer to this project and always runs
+       * in quick-action mode, so the finished task is judged for promotion into
+       * the project's quick-action list.
+       */
+      quickActionProjectId?: string;
+    }
   | { kind: 'existing-task'; projectId: string; taskId: string };
 
-export type HomeComposerSubmitResult =
+export type HomeComposerSubmitResult = { requirement: string } & (
   | { kind: 'task'; projectId: string; taskId: string }
-  | { kind: 'conversation'; projectId: string; taskId: string; conversationIds: string[] };
+  | { kind: 'conversation'; projectId: string; taskId: string; conversationIds: string[] }
+);
 
 function branchLabel(branch: Branch | undefined, fallback = 'main'): string {
   if (!branch) return fallback;
@@ -359,6 +369,8 @@ export const HomeComposer = observer(function HomeComposer({
   // Subtask mode: still creates tasks, but locked to the parent's project and
   // linked via parentTaskId; new branches fork off the parent's branch.
   const parentTarget = submitTarget.kind === 'new-task' ? (submitTarget.parentTask ?? null) : null;
+  const quickActionProjectId =
+    submitTarget.kind === 'new-task' ? (submitTarget.quickActionProjectId ?? null) : null;
 
   const projectManager = getProjectManagerStore();
   const showAddProjectModal = useShowModal('addProjectModal');
@@ -381,9 +393,10 @@ export const HomeComposer = observer(function HomeComposer({
   const { value: draft, update: updateDraft } = useAppSettingsKey('homeDraft');
   const { value: taskSettings, update: updateTaskSettings } = useAppSettingsKey('tasks');
 
-  const isProjectLocked = !!(taskScopedTarget || parentTarget);
+  const isProjectLocked = !!(taskScopedTarget || parentTarget || quickActionProjectId);
   const selectedProjectId = resolveHomeProjectId({
-    lockedProjectId: taskScopedTarget?.projectId ?? parentTarget?.projectId,
+    lockedProjectId:
+      taskScopedTarget?.projectId ?? parentTarget?.projectId ?? quickActionProjectId ?? undefined,
     homeProjectId,
     navigationProjectId: navProjectId,
     draftProjectId: draft?.selectedProjectId,
@@ -792,7 +805,10 @@ export const HomeComposer = observer(function HomeComposer({
     [updateDraft]
   );
   const [promptTokens, setPromptTokens] = useState<PromptToken[]>([]);
-  const [quickActionMode, setQuickActionMode] = useState(false);
+  const [quickActionModeEnabled, setQuickActionModeEnabled] = useState(false);
+  // Capture hosts (the new-quick-action modal) exist to produce a quick action,
+  // so the mode is the host's contract rather than a toggle the user can drop.
+  const quickActionMode = !!quickActionProjectId || quickActionModeEnabled;
   const clearPromptTokens = useCallback(() => {
     setPromptTokens((prev) => {
       for (const token of prev) {
@@ -1010,7 +1026,7 @@ export const HomeComposer = observer(function HomeComposer({
     projectData?.type === 'local' &&
     (runtimeId === 'codex' || runtimeId === 'claude');
   useEffect(() => {
-    if (!quickActionModeAvailable) setQuickActionMode(false);
+    if (!quickActionModeAvailable) setQuickActionModeEnabled(false);
   }, [quickActionModeAvailable]);
   // A worktree-requiring mode on a repo without a base commit can't fork until
   // one exists. This covers both an unborn repo (git init, no commit) and a
@@ -1103,10 +1119,10 @@ export const HomeComposer = observer(function HomeComposer({
         t,
         focusTask: (projectId: string, taskId: string) => {
           navigate('task', { projectId, taskId });
-          onSubmitted?.({ kind: 'task', projectId, taskId });
+          onSubmitted?.({ kind: 'task', projectId, taskId, requirement });
         },
         onConversationsStarted: (projectId: string, taskId: string, conversationIds: string[]) => {
-          onSubmitted?.({ kind: 'conversation', projectId, taskId, conversationIds });
+          onSubmitted?.({ kind: 'conversation', projectId, taskId, conversationIds, requirement });
         },
         resetComposer: () => {
           promptInputRef.current?.setValue('');
@@ -1510,7 +1526,7 @@ export const HomeComposer = observer(function HomeComposer({
           canSubmit={canSubmit}
           quickActionMode={quickActionMode}
           quickActionModeDisabled={!quickActionModeAvailable}
-          onQuickActionModeChange={setQuickActionMode}
+          onQuickActionModeChange={quickActionProjectId ? undefined : setQuickActionModeEnabled}
           onSubmit={submit}
           autoFocus
         />

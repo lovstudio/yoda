@@ -1,30 +1,15 @@
 import { Loader2, Package, TerminalSquare, WandSparkles } from 'lucide-react';
-import { observer } from 'mobx-react-lite';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Branch } from '@shared/git';
 import type { QuickAction } from '@shared/project-settings';
 import type { ProjectPackageScript } from '@shared/quick-actions';
 import { taskNameFromPrompt } from '@shared/task-name';
-import { ComposerPromptInput } from '@renderer/app/composer-prompt-input';
-import {
-  serializePromptWithTokens,
-  type PromptToken,
-} from '@renderer/app/prompt-attachment-tokens';
-import { promptInvokesSkill } from '@renderer/features/projects/quick-action-source';
+import { HomeComposer, type HomeComposerSubmitResult } from '@renderer/app/home-view';
 import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import { saveProjectQuickAction } from '@renderer/features/projects/save-project-quick-action';
-import {
-  asMounted,
-  getProjectSettingsStore,
-  getProjectStore,
-  getRepositoryStore,
-} from '@renderer/features/projects/stores/project-selectors';
-import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
-import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
+import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
-import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
@@ -53,46 +38,27 @@ function genId(): string {
   return crypto.randomUUID();
 }
 
-export const CaptureProjectAutomationModal = observer(function CaptureProjectAutomationModal({
+export function CaptureProjectAutomationModal({
   projectId,
   projectName,
   onSuccess,
   onClose,
 }: Props) {
   const { t } = useTranslation();
-  const { navigate } = useNavigate();
   const [scriptsLoading, setScriptsLoading] = useState(true);
   const [scriptsFailed, setScriptsFailed] = useState(false);
   const [scripts, setScripts] = useState<ProjectPackageScript[]>([]);
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
-  const [branchLoading, setBranchLoading] = useState(true);
-  const [defaultBranch, setDefaultBranch] = useState<Branch | undefined>();
   const [inputMode, setInputMode] = useState<InputMode>('natural');
   const [commandSource, setCommandSource] = useState<CommandSource>('package');
-  const [intent, setIntent] = useState('');
-  const [intentTokens, setIntentTokens] = useState<PromptToken[]>([]);
   const [manualCommand, setManualCommand] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const mountedProject = asMounted(getProjectStore(projectId));
-  const projectData = mountedProject?.data;
-  const repository = getRepositoryStore(projectId);
-  const settingsStore = getProjectSettingsStore(projectId);
-  const connectionId = projectData?.type === 'ssh' ? projectData.connectionId : undefined;
-  const { value: homeDraft } = useAppSettingsKey('homeDraft');
-  const runtimeOverrideValue =
-    settingsStore?.settings?.composerDefaults?.runtimeId ?? homeDraft?.runtimeOverride ?? null;
-  const ignoreRuntimeOverride = useCallback(() => {}, []);
-  const { runtimeId, createDisabled } = useEffectiveRuntime(connectionId, {
-    value: runtimeOverrideValue,
-    set: ignoreRuntimeOverride,
-  });
-
+  // The modal is mounted per project, so discovery runs once and the initial
+  // state is already the loading state — no synchronous reset needed here.
   useEffect(() => {
     let cancelled = false;
-    setScriptsLoading(true);
-    setScriptsFailed(false);
     void rpc.quickActions
       .discover(projectId)
       .then((items) => {
@@ -112,34 +78,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     };
   }, [projectId]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setBranchLoading(true);
-    setDefaultBranch(undefined);
-    if (!repository) {
-      setBranchLoading(false);
-      return;
-    }
-    void Promise.all([repository.localData.load(), repository.remoteData.load()])
-      .then(() => {
-        if (!cancelled) setDefaultBranch(repository.defaultBranch);
-      })
-      .catch(() => {
-        if (!cancelled) setDefaultBranch(undefined);
-      })
-      .finally(() => {
-        if (!cancelled) setBranchLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [repository]);
-
   const selectedScript = scripts.find((script) => script.id === selectedScriptId) ?? null;
-  const serializedIntent = useMemo(
-    () => serializePromptWithTokens(intent, intentTokens, { imagesAsPaths: true }).text.trim(),
-    [intent, intentTokens]
-  );
   const cleanedManualCommand = manualCommand.trim();
   const selectedCommand =
     commandSource === 'package' ? (selectedScript?.command ?? '') : cleanedManualCommand;
@@ -172,58 +111,22 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     [projectId, t]
   );
 
-  const handleNaturalLanguage = () => {
-    if (submitting) return;
-    if (!serializedIntent) {
-      setError(t('sidebar.captureAutomation.intentRequired'));
-      return;
-    }
-    const project = asMounted(getProjectStore(projectId));
-    if (!project || !runtimeId || !defaultBranch || createDisabled) {
-      setError(t('sidebar.captureAutomation.skillExecutionUnavailable'));
-      return;
-    }
-
-    setSubmitting(true);
-    setError(null);
-    let enteredTask = false;
-    const action: QuickAction = {
-      id: genId(),
-      label: taskNameFromPrompt(serializedIntent),
-      command: serializedIntent,
-      kind: 'skill',
-      sourceIntent: serializedIntent,
-    };
-    const execution = runProjectQuickAction({
-      project,
-      action,
-      runtimeId,
-      defaultBranch,
-      quickActionSource: {
-        prompt: serializedIntent,
-        invokedSkill: promptInvokesSkill(serializedIntent),
-      },
-      onTaskCreated: (taskId) => {
-        enteredTask = true;
-        onSuccess();
-        navigate('task', { projectId, taskId });
-      },
-    });
-    void execution
-      .then(() => saveExecutedQuickAction(action))
-      .catch((submitError) => {
-        if (enteredTask) showAsyncFailure(submitError);
-        else
-          setError(
-            t('sidebar.captureAutomation.submitFailed', {
-              error: submitError instanceof Error ? submitError.message : String(submitError),
-            })
-          );
-      })
-      .finally(() => {
-        if (!enteredTask) setSubmitting(false);
+  // The composer launches and focuses the task itself; the modal only records
+  // the requirement as a re-runnable quick action and steps out of the way.
+  const handleComposerSubmitted = useCallback(
+    (result: HomeComposerSubmitResult) => {
+      onSuccess();
+      if (!result.requirement) return;
+      void saveExecutedQuickAction({
+        id: genId(),
+        label: taskNameFromPrompt(result.requirement),
+        command: result.requirement,
+        kind: 'skill',
+        sourceIntent: result.requirement,
       });
-  };
+    },
+    [onSuccess, saveExecutedQuickAction]
+  );
 
   const handleCommand = () => {
     if (submitting || !selectedCommand) return;
@@ -241,16 +144,13 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
       command: selectedCommand,
       kind: 'command',
     };
-    const execution = runProjectQuickAction({ project, action, runtimeId });
+    const execution = runProjectQuickAction({ project, action });
     onSuccess();
     void execution.then(() => saveExecutedQuickAction(action), showAsyncFailure);
   };
 
-  const primaryDisabled =
-    submitting ||
-    (inputMode === 'natural'
-      ? !serializedIntent || branchLoading || !defaultBranch || !runtimeId || createDisabled
-      : !selectedCommand || (commandSource === 'package' && scriptsLoading));
+  const commandDisabled =
+    submitting || !selectedCommand || (commandSource === 'package' && scriptsLoading);
 
   return (
     <>
@@ -279,40 +179,17 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
           </TabsList>
 
           <TabsPanel value="natural">
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="quick-action-intent">
-                  {t('sidebar.captureAutomation.intentLabel')}
-                </FieldLabel>
-                <ComposerPromptInput
-                  textareaId="quick-action-intent"
-                  value={intent}
-                  onChange={setIntent}
-                  tokens={intentTokens}
-                  onTokensChange={setIntentTokens}
-                  runtimeId={runtimeId}
-                  projectId={projectId}
-                  projectPath={projectData?.path}
-                  imagesAsPaths
-                  runHostKind={projectData?.type === 'ssh' ? 'ssh' : 'local'}
-                  disabled={submitting}
-                  placeholder={t('sidebar.captureAutomation.intentPlaceholder')}
-                  autoFocus
-                  canSubmit={!primaryDisabled}
-                  showSubmitButton={false}
-                  onSubmit={handleNaturalLanguage}
-                  textareaClassName="min-h-28 text-sm"
-                />
-                <FieldDescription>
-                  {t('sidebar.captureAutomation.naturalDescription')}
-                </FieldDescription>
-                {!branchLoading && (!defaultBranch || !runtimeId || createDisabled) ? (
-                  <FieldDescription className="text-destructive">
-                    {t('sidebar.captureAutomation.skillExecutionUnavailable')}
-                  </FieldDescription>
-                ) : null}
-              </Field>
-            </FieldGroup>
+            {/* Same composer as New task, locked to this project and pinned to
+                quick-action mode — a captured action is a task like any other. */}
+            <div className="flex flex-col gap-2">
+              <HomeComposer
+                submitTarget={{ kind: 'new-task', quickActionProjectId: projectId }}
+                onSubmitted={handleComposerSubmitted}
+              />
+              <FieldDescription>
+                {t('sidebar.captureAutomation.naturalDescription')}
+              </FieldDescription>
+            </div>
           </TabsPanel>
 
           <TabsPanel value="command">
@@ -412,17 +289,13 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
         <Button variant="outline" onClick={onClose}>
           {t('common.cancel')}
         </Button>
-        <ConfirmButton
-          onClick={inputMode === 'natural' ? handleNaturalLanguage : handleCommand}
-          disabled={primaryDisabled}
-        >
-          {inputMode === 'natural'
-            ? branchLoading
-              ? t('sidebar.captureAutomation.preparingTask')
-              : t('sidebar.captureAutomation.startTask')
-            : t('sidebar.captureAutomation.runCommand')}
-        </ConfirmButton>
+        {/* Natural language submits through the composer's own send button. */}
+        {inputMode === 'command' ? (
+          <ConfirmButton onClick={handleCommand} disabled={commandDisabled}>
+            {t('sidebar.captureAutomation.runCommand')}
+          </ConfirmButton>
+        ) : null}
       </DialogFooter>
     </>
   );
-});
+}
