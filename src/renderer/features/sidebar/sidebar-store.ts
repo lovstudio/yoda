@@ -1522,7 +1522,16 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     const target = index + direction;
     if (index < 0 || target < 0 || target >= movable.length) return;
     [movable[index], movable[target]] = [movable[target]!, movable[index]!];
-    this.taskPriorityOrder = [...movable, 'archived'];
+    this.setTaskPriorityOrder(movable);
+  }
+
+  /**
+   * The whole ranking at once — what a drag produces. Normalizing keeps
+   * `archived` pinned last and splices back any group the caller dropped, so a
+   * partial list can never delete a status from the sidebar.
+   */
+  setTaskPriorityOrder(order: readonly SidebarTaskPriorityGroup[]): void {
+    this.taskPriorityOrder = normalizeSidebarTaskPriorityOrder([...order], true);
     this.taskPriorityOrderCustomized = true;
   }
 
