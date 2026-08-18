@@ -187,6 +187,7 @@
     "priorityOrderGroups": "Task status",
     "priorityReset": "Reset",
     "priorityReorder": "Reorder {{group}}",
+    "priorityDragHandle": "Drag {{group}} to reorder",
     "priorityMoveUp": "Move up",
     "priorityMoveDown": "Move down",
     "priorityArchivedLink": "Fixed",
@@ -6714,6 +6715,8 @@
   "taskViewOptions.filterByProject": "Filter by project",
   "taskViewOptions.sortBy": "Sort by",
   "taskViewOptions.sortDefault": "Default order",
+  "taskViewOptions.sortStatus": "Status ranking",
+  "taskViewOptions.sortProject": "Project ranking",
   "taskViewOptions.sortUpdatedAt": "Last used",
   "taskViewOptions.sortCreatedAt": "Created",
   "taskViewOptions.sortStatusChangedAt": "Status changed",
@@ -6722,5 +6725,7 @@
   "taskViewOptions.sortAscending": "Ascending",
   "taskViewOptions.reset": "Reset to default",
   "taskViewOptions.resetSort": "Reset sort",
+  "taskViewOptions.reorder": "Drag to reorder",
+  "taskViewOptions.reorderHint": "Drag the handle to rank these",
   "taskViewOptions.emptyFiltered": "No tasks match the current filters"
 }
