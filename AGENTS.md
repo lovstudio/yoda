@@ -130,3 +130,4 @@ optional_env:
 - Electron IPC 会丢弃 Error 的自定义属性、只保留 message：主进程要把 status/code 传到 renderer 必须编进 message，否则 renderer 里 `'status' in error` 是死代码（2026-08-17, 3cade15）
 - 会话分享的体量上限分散在 web 仓库四层（zod blocks.max / 路由字节检查 / 表 CHECK 约束 / Vercel 线路字节），只放开一层会换一种错误码而非修好（2026-08-17, 3cade15）
 - 分享载荷加字段必须同步改 web 仓库 `sessionShareBaseSchema`：它是 `.strict()`，多一个未声明字段整个上传报 400 invalid_session_share（2026-08-18, 99c4f5e）
+- 访问 `http://localhost:3000` 仅能看到 Yoda 静态 splash 而没有 Electron preload/RPC 时，停止用 ego-browser 继续操作该 renderer，改用当前开发实例的原生 IPC/可回读存储验证（2026-08-18, b40ff86）。
