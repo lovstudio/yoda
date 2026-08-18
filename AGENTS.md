@@ -131,3 +131,6 @@ optional_env:
 - 会话分享的体量上限分散在 web 仓库四层（zod blocks.max / 路由字节检查 / 表 CHECK 约束 / Vercel 线路字节），只放开一层会换一种错误码而非修好（2026-08-17, 3cade15）
 - 分享载荷加字段必须同步改 web 仓库 `sessionShareBaseSchema`：它是 `.strict()`，多一个未声明字段整个上传报 400 invalid_session_share（2026-08-18, 99c4f5e）
 - 访问 `http://localhost:3000` 仅能看到 Yoda 静态 splash 而没有 Electron preload/RPC 时，停止用 ego-browser 继续操作该 renderer，改用当前开发实例的原生 IPC/可回读存储验证（2026-08-18, b40ff86）。
+- 排序键 locale collation 陷阱：未排序哨兵必须是字母（如 'z'），不能是标点（ICU 将标点排在数字前，会使未排序项浮到顶部）（2026-08-18, 359a1b9）
+- dnd-kit 测试每个指针步骤必须独立 act()：拖拽开始后 droppable rects 在 effect 里测量，批量手势会在 over 变为非 null 前结束（2026-08-18, 359a1b9）
+- Base UI 弹层退场动画：卸载前必须先关闭弹层（Esc + 250ms 等待），否则全局 bookkeeping 认为菜单还开着，下次 trigger 拒绝打开（2026-08-18, 359a1b9）

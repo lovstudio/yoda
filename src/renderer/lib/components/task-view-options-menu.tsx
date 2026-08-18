@@ -208,6 +208,7 @@ export function TaskViewOptionsMenu({
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
+                  closeOnClick={false}
                   onClick={() => onChange({ ...options, sortDescending: !options.sortDescending })}
                 >
                   {t(
