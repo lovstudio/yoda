@@ -199,7 +199,7 @@ export function TaskViewOptionsMenu({
               }}
             >
               {TASK_VIEW_SORT_MODES.map((mode) => (
-                <DropdownMenuRadioItem key={mode} value={mode} closeOnClick>
+                <DropdownMenuRadioItem key={mode} value={mode} closeOnClick={false}>
                   {t(SORT_LABEL_KEYS[mode])}
                 </DropdownMenuRadioItem>
               ))}
