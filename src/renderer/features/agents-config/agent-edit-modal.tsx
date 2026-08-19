@@ -33,6 +33,7 @@ import {
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
 import { AgentModelCombobox } from './agent-model-combobox';
+import { AgentModelSuffixCombobox } from './agent-model-suffix-combobox';
 import { useAgents } from './use-agents';
 
 type Props = BaseModalProps<Agent> & { agent?: Agent };
@@ -319,12 +320,20 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
                 <Label htmlFor="agent-model" className="text-xs">
                   <OptionalLabel>{t('agentManager.model')}</OptionalLabel>
                 </Label>
-                <AgentModelCombobox
-                  id="agent-model"
-                  value={draft.model}
-                  onChange={(value) => set('model', value)}
-                  className="h-9 text-sm"
-                />
+                <div className="flex items-center gap-1.5">
+                  <AgentModelCombobox
+                    id="agent-model"
+                    value={draft.model}
+                    onChange={(value) => set('model', value)}
+                    className="h-9 min-w-0 flex-1 text-sm"
+                  />
+                  <AgentModelSuffixCombobox
+                    id="agent-model-suffix"
+                    value={draft.modelSuffix}
+                    onChange={(value) => set('modelSuffix', value)}
+                    className="h-9 w-24 shrink-0 text-sm"
+                  />
+                </div>
                 <p className="text-[10px] leading-relaxed text-muted-foreground">
                   {t('agentManager.modelSuffixHint')}
                 </p>

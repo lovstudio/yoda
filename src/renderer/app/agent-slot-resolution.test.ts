@@ -15,6 +15,7 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
     skillPolicyMode: 'runtime-defaults',
     preferredRuntime: 'codex',
     model: null,
+    modelSuffix: null,
     reasoningEffort: null,
     accessMode: 'inherit',
     source: 'local',

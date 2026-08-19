@@ -98,6 +98,7 @@ function fixtureAgent(id: string, name: string, icon: string): Agent {
     skillPolicyMode: 'runtime-defaults',
     preferredRuntime: 'codex',
     model: null,
+    modelSuffix: null,
     reasoningEffort: null,
     accessMode: 'inherit',
     source: 'local',

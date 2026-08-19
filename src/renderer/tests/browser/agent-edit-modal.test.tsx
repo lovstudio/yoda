@@ -168,6 +168,7 @@ function fixtureAgent(): Agent {
     skillPolicyMode: 'runtime-defaults',
     preferredRuntime: 'codex',
     model: null,
+    modelSuffix: null,
     reasoningEffort: 'high',
     accessMode: 'write',
     source: 'local',

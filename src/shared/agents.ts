@@ -43,6 +43,12 @@ export interface Agent {
   preferredRuntime: RuntimeId | null;
   /** Optional model hint (e.g. 'claude-opus-4-8'); null = runtime default. */
   model: string | null;
+  /**
+   * Optional suffix appended to `model` verbatim (e.g. '[1m]'), decoupled from
+   * the model list so a suffixed variant doesn't need its own catalog entry.
+   * null = no suffix.
+   */
+  modelSuffix: string | null;
   /** Optional client-specific reasoning depth; null = inherit the client default. */
   reasoningEffort: string | null;
   /** Product-level access tier, mapped to the selected client's native permission mode. */
@@ -66,6 +72,7 @@ export interface AgentDraft {
   skillPolicyMode: AgentSkillPolicyMode;
   preferredRuntime: RuntimeId | null;
   model: string | null;
+  modelSuffix: string | null;
   reasoningEffort: string | null;
   accessMode: AgentAccessMode;
 }
@@ -83,6 +90,7 @@ export function emptyAgentDraft(): AgentDraft {
     skillPolicyMode: 'runtime-defaults',
     preferredRuntime: null,
     model: null,
+    modelSuffix: null,
     reasoningEffort: null,
     accessMode: 'inherit',
   };
@@ -99,9 +107,22 @@ export function agentToDraft(agent: Agent): AgentDraft {
     skillPolicyMode: agent.skillPolicyMode,
     preferredRuntime: agent.preferredRuntime,
     model: agent.model,
+    modelSuffix: agent.modelSuffix,
     reasoningEffort: agent.reasoningEffort,
     accessMode: agent.accessMode,
   };
+}
+
+/**
+ * The model actually sent to the runtime for this Agent: `model` with
+ * `modelSuffix` appended verbatim (no separator), falling back to null when no
+ * base model is set. This is the single place a suffix is applied.
+ */
+export function resolveAgentModel(agent: Agent | null | undefined): string | null {
+  const model = agent?.model;
+  if (!model) return null;
+  const suffix = agent?.modelSuffix?.trim();
+  return suffix ? `${model}${suffix}` : model;
 }
 
 /**

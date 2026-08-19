@@ -6,7 +6,7 @@ import {
   type AgentTeamMember,
   type TeamRouting,
 } from '@shared/agent-team';
-import { DEFAULT_AGENT_ICON, resolveAgentPermissionMode } from '@shared/agents';
+import { DEFAULT_AGENT_ICON, resolveAgentModel, resolveAgentPermissionMode } from '@shared/agents';
 import type { RuntimeId } from '@shared/runtime-registry';
 import type { SkillSelectionInput } from '@shared/skills/types';
 import type { TeamCommunicationConfig } from '@shared/team-communication';
@@ -142,7 +142,7 @@ async function resolveMemberSeedProfile(member: AgentTeamMember): Promise<Member
           autoSkillKeys: agent.enabledSkillIds,
           manualSkillKeys: agent.manualSkillIds,
         },
-        model: agent.model,
+        model: resolveAgentModel(agent),
         reasoningEffort: agent.reasoningEffort,
         permissionMode:
           agent.accessMode === 'inherit'

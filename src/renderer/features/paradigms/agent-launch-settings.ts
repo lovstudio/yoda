@@ -1,4 +1,4 @@
-import { resolveAgentPermissionMode, type Agent } from '@shared/agents';
+import { resolveAgentModel, resolveAgentPermissionMode, type Agent } from '@shared/agents';
 import { withSystemPrompt } from '@shared/prompt-format';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { normalizeSkillSelection } from '@shared/skills/selection';
@@ -24,7 +24,7 @@ export function agentRuntimeSettings(agent: Agent | null, runtimeId: RuntimeId) 
           icon: agent.icon,
         }
       : undefined,
-    model: agent?.model,
+    model: resolveAgentModel(agent),
     reasoningEffort: runtimeId === 'codex' ? agent?.reasoningEffort : undefined,
     permissionMode: agent ? resolveAgentPermissionMode(runtimeId, agent.accessMode) : undefined,
   };

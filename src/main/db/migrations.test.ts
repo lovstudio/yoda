@@ -111,6 +111,7 @@ describe('runBundledMigrations', () => {
         INSERT INTO conversations (id) VALUES ('existing-conversation');
         CREATE TABLE tasks (id text PRIMARY KEY NOT NULL);
         INSERT INTO tasks (id) VALUES ('existing-task');
+        CREATE TABLE agents (id text PRIMARY KEY NOT NULL);
       `);
 
       runBundledMigrations(db);
@@ -149,6 +150,7 @@ describe('runBundledMigrations', () => {
       createMigrationTable(db);
       insertAppliedMigrationRows(db, 21);
       createPartialWorkspaceSchema(db);
+      db.exec('CREATE TABLE agents (id text PRIMARY KEY NOT NULL);');
 
       expect(() => runBundledMigrations(db)).not.toThrow();
 
@@ -207,6 +209,7 @@ describe('runBundledMigrations', () => {
         CREATE TABLE prompts (id text PRIMARY KEY NOT NULL);
         CREATE TABLE tasks (id text PRIMARY KEY NOT NULL);
         CREATE TABLE projects (id text PRIMARY KEY NOT NULL);
+        CREATE TABLE agents (id text PRIMARY KEY NOT NULL);
       `);
 
       expect(() => runBundledMigrations(db)).not.toThrow();
@@ -241,6 +244,7 @@ describe('runBundledMigrations', () => {
         -- Only the newest bundled migration runs here, so every table it alters
         -- must exist for the tail of the journal to apply.
         CREATE TABLE tasks (id text PRIMARY KEY NOT NULL);
+        CREATE TABLE agents (id text PRIMARY KEY NOT NULL);
       `);
 
       runBundledMigrations(db);

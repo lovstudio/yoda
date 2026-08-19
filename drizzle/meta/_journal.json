@@ -435,6 +435,13 @@
       "when": 1786899946828,
       "tag": "0061_vengeful_bloodstorm",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "6",
+      "when": 1787138773419,
+      "tag": "0062_careless_santa_claus",
+      "breakpoints": true
     }
   ]
 }

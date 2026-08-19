@@ -105,6 +105,7 @@ export function rosterAgent(member: AgentTeamMember, agents: Agent[]): Agent | n
     skillPolicyMode: base.skillPolicyMode,
     preferredRuntime: base.preferredRuntime,
     model: base.model,
+    modelSuffix: null,
     reasoningEffort: null,
     accessMode: 'inherit',
     source: 'local',
