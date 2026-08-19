@@ -136,3 +136,4 @@ optional_env:
 - Base UI 弹层退场动画：卸载前必须先关闭弹层（Esc + 250ms 等待），否则全局 bookkeeping 认为菜单还开着，下次 trigger 拒绝打开（2026-08-18, 359a1b9）
 - Base UI Tabs 只挂载激活面板：测试里断言非激活 tab 的内容必须先点 tab 再 waitFor（2026-08-18, 8c3195a）
 - 去掉组件的 `observer` 包裹会让 react-hooks/set-state-in-effect 等规则突然开始生效，原有 effect 里的同步 setState 会新报 lint（2026-08-18, 8c3195a）
+- base-ui 弹层不能互相嵌套：DropdownMenu(Menu.Root) 嵌进 ContextMenu 会让内层菜单 parent.type 判成 context-menu、trigger 点不开；同一元素上要叠加左键下拉就改用 Popover（PopoverRoot 是独立树，且 Popover 默认 click 开、Menu 默认 mousedown 开；非 button 元素 trigger 要加 `nativeButton={false}`）（2026-08-19, 6e70b60f）
