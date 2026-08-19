@@ -141,6 +141,7 @@ App 内几乎所有 surface 都不是整窗宽：侧边栏、可 pin 的 side pa
 - 一个组件会被多种宿主复用（composer 弹层、settings modal）时，在组件自己的根上标 `@container`，让断点跟随组件实际宽度。参考 `ModeConfigurationPanel`
 - 视口断点只允许出现在真正跟视口走的元素上：modal/dialog 尺寸（`agent-edit-modal` 的 `sm:grid-cols-2` 是合法的）
 - 工具条/chip 行禁止 `min-w-max` + `overflow-x-auto`：macOS overlay 滚动条不可见，超宽内容会被静默裁切，用户不知道右边还有控件。用 `flex-wrap` 换行（参考 home composer 工具条）
+- 弹窗内嵌共享 `HomeComposer` 必须给容器加 `data-yoda-composer-modal`：`.ydream` 皮肤的 `-12rem` 负 margin 只该作用在首页 hero 上，漏标会让 composer 上叠压住弹窗头部（2026-08-19, 74bbd4e4cd）
 - 横向溢出验收：把窗口/pane 压到 ~440px，所有控件必须可见或换行，不允许裁切
 
 ## 产品控件语法（先于视觉润色）
