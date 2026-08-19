@@ -75,10 +75,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
@@ -435,7 +435,15 @@ function lucideIcon(Icon: LucideIcon): ReactNode {
  * identity without navigating, plus the few project operations that make sense
  * from the strip. Right-click (AppTabContextMenu) and middle-click close stay
  * on the underlying AppTab, untouched.
+ *
+ * A Popover (not DropdownMenu) is used on purpose: the index tab already sits
+ * inside the right-click ContextMenu, and nesting a second Menu.Root under it
+ * makes the inner menu resolve to `parent.type === 'context-menu'`, which the
+ * trigger's click handler misinterprets. PopoverRoot is a separate tree.
  */
+const MENU_ITEM_CLASS =
+  'flex min-h-8 w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-hidden select-none hover:bg-background-quaternary-1 focus:bg-background-quaternary-1 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-4';
+
 const IndexTabProjectDropdown = observer(function IndexTabProjectDropdown({
   projectId,
   taskId,
@@ -458,47 +466,49 @@ const IndexTabProjectDropdown = observer(function IndexTabProjectDropdown({
   };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger nativeButton={false} render={<AppTab {...tabProps} />} />
-      <DropdownMenuContent align="start" className="w-72">
-        <DropdownMenuLabel className="flex flex-col gap-0.5">
+    <Popover>
+      <PopoverTrigger nativeButton={false} render={<AppTab {...tabProps} />} />
+      <PopoverContent align="start" className="w-72 p-1.5">
+        <div className="flex flex-col gap-0.5 px-2 py-1.5">
           <span className="truncate text-sm font-medium text-foreground">{projectName}</span>
           {projectPath ? (
             <span className="truncate text-xs text-foreground-muted" dir="rtl">
               {projectPath}
             </span>
           ) : null}
-        </DropdownMenuLabel>
+        </div>
         {taskActions ? (
           <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="flex flex-col gap-0.5">
-              <span className="truncate">{taskActions.taskName}</span>
+            <div className="mx-1 my-1 h-px bg-border" />
+            <div className="flex flex-col gap-0.5 px-2 py-1.5">
+              <span className="truncate text-xs text-foreground-muted">{taskActions.taskName}</span>
               {taskActions.branchName ? (
-                <span className="truncate text-xs">{taskActions.branchName}</span>
+                <span className="truncate text-xs text-foreground-muted">
+                  {taskActions.branchName}
+                </span>
               ) : null}
-            </DropdownMenuLabel>
+            </div>
           </>
         ) : null}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleOpenSettings}>
+        <div className="mx-1 my-1 h-px bg-border" />
+        <button type="button" className={MENU_ITEM_CLASS} onClick={handleOpenSettings}>
           <Settings className="size-4" />
           {t('common.settings')}
-        </DropdownMenuItem>
+        </button>
         {onRename ? (
-          <DropdownMenuItem onClick={onRename}>
+          <button type="button" className={MENU_ITEM_CLASS} onClick={onRename}>
             <Pencil className="size-4" />
             {t('common.rename')}
-          </DropdownMenuItem>
+          </button>
         ) : null}
         {projectPath ? (
-          <DropdownMenuItem onClick={handleCopyPath}>
+          <button type="button" className={MENU_ITEM_CLASS} onClick={handleCopyPath}>
             <Copy className="size-4" />
             {t('tasks.tabs.copyPath')}
-          </DropdownMenuItem>
+          </button>
         ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverContent>
+    </Popover>
   );
 });
 
