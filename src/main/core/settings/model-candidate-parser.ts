@@ -1,3 +1,5 @@
+import { isValidModelId } from '@shared/model-provider-catalog';
+
 const MAX_CANDIDATES = 40;
 
 const MODEL_CONTEXT_PATTERN = /\bmodels?\b/i;
@@ -146,10 +148,13 @@ export function hasExplicitModelList(input: string): boolean {
 }
 
 function normalizeCandidate(value: string | undefined): string | null {
-  const candidate = value
-    ?.trim()
-    .replace(/^[<([{"'`]+/, '')
-    .replace(/[>\])}"'`,:;.!?]+$/, '');
+  let candidate = value?.trim();
+  if (!candidate) return null;
+  candidate = candidate.replace(/^[<([{"'`]+/, '').replace(/[>})"'`,:;.!?]+$/, '');
+  // 结尾 ] 若为模型后缀（如 [1m]）的一部分则保留，仅剥离孤立闭括号
+  if (candidate.endsWith(']') && !candidate.includes('[')) {
+    candidate = candidate.slice(0, -1);
+  }
   return candidate || null;
 }
 
@@ -160,7 +165,7 @@ function isLikelyCandidate(value: string, allowPlainAlias: boolean): boolean {
   if (/^\d+(?:\.\d+)*$/.test(lower)) return false;
   if (/^--?/.test(lower)) return false;
   if (/^https?:/.test(lower) || lower.includes('.com')) return false;
-  if (!/^[a-z0-9][a-z0-9._:/+-]*$/i.test(value)) return false;
+  if (!isValidModelId(value)) return false;
 
   const hasModelShape = /[0-9/_:+.]/.test(value) || (allowPlainAlias && value.includes('-'));
   if (hasModelShape) return true;

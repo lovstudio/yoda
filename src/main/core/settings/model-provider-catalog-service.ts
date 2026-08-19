@@ -2,6 +2,7 @@ import type { ModelProviderSettings } from '@shared/app-settings';
 import {
   getModelProviderDefinition,
   isReservedModelProviderId,
+  isValidModelId,
   MAX_CUSTOM_MODEL_PROVIDERS,
   MAX_CUSTOM_MODELS_PER_PROVIDER,
   MODEL_PROVIDER_AUTO_REFRESH_INTERVAL_MS,
@@ -352,7 +353,7 @@ function normalizeCustomModels(
   const normalized: string[] = [];
   for (const model of models) {
     const modelId = normalizeModelIdForProvider(providerId, model);
-    if (!modelId || !isValidCatalogModelId(modelId)) {
+    if (!modelId || !isValidModelId(modelId)) {
       if (strict) throw new Error(`Model ID does not belong to provider "${providerId}".`);
       continue;
     }
@@ -365,16 +366,12 @@ function normalizeCatalogModelIds(models: readonly string[]): string[] {
   const normalized: string[] = [];
   for (const model of models) {
     const modelId = model.trim();
-    if (!isValidCatalogModelId(modelId) || normalized.includes(modelId)) {
+    if (!isValidModelId(modelId) || normalized.includes(modelId)) {
       continue;
     }
     normalized.push(modelId);
   }
   return normalized;
-}
-
-function isValidCatalogModelId(modelId: string): boolean {
-  return modelId.length >= 2 && modelId.length <= 100 && /^[a-z0-9][a-z0-9._:/+-]*$/i.test(modelId);
 }
 
 function toCatalogGroup(

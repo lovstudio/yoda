@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   isReservedModelProviderId,
+  isValidModelId,
   MAX_CUSTOM_MODEL_PROVIDERS,
   MAX_CUSTOM_MODELS_PER_PROVIDER,
   MODEL_PROVIDER_DEFINITIONS,
@@ -659,15 +660,6 @@ function formatCatalogDate(value: string | null): string {
     dateStyle: 'medium',
     timeStyle: value.includes('T00:00:00.000Z') ? undefined : 'short',
   }).format(date);
-}
-
-function isValidModelId(value: string): boolean {
-  return (
-    value.length >= 2 &&
-    value.length <= 100 &&
-    // 可选后缀形如 [1m]/[2m]/[200k]，如 claude-sonnet-4-5[1m]
-    /^[a-z0-9][a-z0-9._:/+-]*(?:\[\d+[km]?\])?$/i.test(value)
-  );
 }
 
 function suggestProviderId(value: string): string {

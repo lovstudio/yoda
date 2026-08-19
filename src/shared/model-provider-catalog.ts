@@ -192,6 +192,15 @@ export function normalizeModelIdForProvider(providerId: string, modelId: string)
   return `${prefix}/${normalized}`;
 }
 
+export function isValidModelId(value: string): boolean {
+  return (
+    value.length >= 2 &&
+    value.length <= 100 &&
+    // 允许可选上下文窗口后缀，如 claude-sonnet-4-5[1m]
+    /^[a-z0-9][a-z0-9._:/+-]*(?:\[\d+[km]?\])?$/i.test(value)
+  );
+}
+
 export function normalizeCustomModelProviderId(providerId: string): string | null {
   const normalized = providerId.trim().toLowerCase();
   return /^[a-z0-9][a-z0-9._-]{0,59}$/.test(normalized) ? normalized : null;
