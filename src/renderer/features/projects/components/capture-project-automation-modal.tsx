@@ -180,8 +180,10 @@ export function CaptureProjectAutomationModal({
 
           <TabsPanel value="natural">
             {/* Same composer as New task, locked to this project and pinned to
-                quick-action mode — a captured action is a task like any other. */}
-            <div className="flex flex-col gap-2">
+                quick-action mode — a captured action is a task like any other. The
+                composer-modal marker restores the compact tray layout on top of the
+                dream-skin home margins. */}
+            <div data-yoda-composer-modal className="flex min-h-0 flex-1 flex-col gap-2">
               <HomeComposer
                 submitTarget={{ kind: 'new-task', quickActionProjectId: projectId }}
                 onSubmitted={handleComposerSubmitted}
