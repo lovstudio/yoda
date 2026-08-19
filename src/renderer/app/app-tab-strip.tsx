@@ -459,7 +459,7 @@ const IndexTabProjectDropdown = observer(function IndexTabProjectDropdown({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<AppTab {...tabProps} />} />
+      <DropdownMenuTrigger nativeButton={false} render={<AppTab {...tabProps} />} />
       <DropdownMenuContent align="start" className="w-72">
         <DropdownMenuLabel className="flex flex-col gap-0.5">
           <span className="truncate text-sm font-medium text-foreground">{projectName}</span>
