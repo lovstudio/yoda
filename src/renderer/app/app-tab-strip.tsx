@@ -4,6 +4,7 @@ import {
   Bot,
   ChartColumn,
   CircleDot,
+  Copy,
   Cpu,
   FileText,
   FlaskConical,
@@ -17,6 +18,7 @@ import {
   Loader2,
   MessageSquare,
   Milestone,
+  Pencil,
   Plus,
   Puzzle,
   Server,
@@ -30,7 +32,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import type { ReactNode } from 'react';
+import { forwardRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TaskWindowTabTarget } from '@shared/task-window';
 import { AppTabContextMenu } from '@renderer/app/app-tab-context-menu';
@@ -49,8 +51,10 @@ import {
   projectDisplayName,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
+import { useProjectMenuActions } from '@renderer/features/sidebar/use-project-menu-actions';
 import { archiveConversationFlow } from '@renderer/features/tasks/archive-task';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
+import { useTaskMenuActions } from '@renderer/features/tasks/components/use-task-menu-actions';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import {
   asProvisioned,
@@ -59,6 +63,7 @@ import {
 } from '@renderer/features/tasks/stores/task-selectors';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { FileIcon } from '@renderer/lib/editor/file-icon';
+import { copyTextToClipboard } from '@renderer/lib/hooks/use-toast';
 import { appState } from '@renderer/lib/stores/app-state';
 import {
   isIndexTab,
@@ -70,6 +75,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
@@ -147,21 +153,29 @@ export const AppTabStrip = observer(function AppTabStrip() {
     >
       {visibleTabs.map((tab) => {
         const dismiss = describeDismiss(tab, t);
+        const isTaskIndexTab = tab.viewId === 'task' && tab.params.tab === undefined;
+        const { projectId, taskId } = tab.params as { projectId?: string; taskId?: string };
+        // Shared tab props; the index tab swaps `onSelect` (navigate) for a
+        // project-info dropdown, so onSelect is added per-branch below.
+        const tabProps = {
+          tab,
+          isActive: tab.id === activeTabId,
+          // Sticky tabs are closeable even when index-kind: closing just
+          // un-sticks them from the strip.
+          closeable: !isIndexTab(tab) || appState.appTabs.isSticky(tab.id),
+          closeLabel: dismiss.label,
+          closeIcon: dismiss.icon,
+          closePending: dismiss.pending,
+          onClose: dismiss.onDismiss,
+          drag: tabDragSource(() => stripDragPayload(tab)),
+        };
         return (
           <AppTabContextMenu key={tab.id} tab={tab}>
-            <AppTab
-              tab={tab}
-              isActive={tab.id === activeTabId}
-              // Sticky tabs are closeable even when index-kind: closing just
-              // un-sticks them from the strip.
-              closeable={!isIndexTab(tab) || appState.appTabs.isSticky(tab.id)}
-              closeLabel={dismiss.label}
-              closeIcon={dismiss.icon}
-              closePending={dismiss.pending}
-              onSelect={() => appState.appTabs.activateTab(tab.id)}
-              onClose={dismiss.onDismiss}
-              drag={tabDragSource(() => stripDragPayload(tab))}
-            />
+            {isTaskIndexTab && typeof projectId === 'string' && typeof taskId === 'string' ? (
+              <IndexTabProjectDropdown projectId={projectId} taskId={taskId} {...tabProps} />
+            ) : (
+              <AppTab {...tabProps} onSelect={() => appState.appTabs.activateTab(tab.id)} />
+            )}
           </AppTabContextMenu>
         );
       })}
@@ -316,94 +330,177 @@ function describeDismiss(
   return { label: t('appTabs.closeTab'), pending: false, onDismiss: () => closeTaskTopTab(tab) };
 }
 
-const AppTab = observer(function AppTab({
-  tab,
-  isActive,
-  closeable,
-  closeLabel,
-  closeIcon,
-  closePending = false,
-  onSelect,
-  onClose,
-  drag,
-}: {
+type AppTabProps = {
   tab: AppTabEntry;
   isActive: boolean;
   closeable: boolean;
   closeLabel: string;
   closeIcon?: ReactNode;
   closePending?: boolean;
-  onSelect: () => void;
+  onSelect?: () => void;
   onClose: () => void;
   drag?: TabDragSourceProps;
-}) {
-  const { t } = useTranslation();
-  // Branch prefix is display noise on the index tab ("yoda / yoda/feat-x" →
-  // "yoda / feat-x"), so describeTab strips it from branch labels.
-  const { value: projectSettings } = useAppSettingsKey('project');
-  const { label, icon } = describeTab(tab, t, projectSettings?.branchPrefix ?? '');
+};
 
-  return (
-    <div
-      role="tab"
-      aria-selected={isActive}
-      tabIndex={0}
-      title={label}
-      {...drag}
-      className={cn(
-        'group flex h-7 max-w-44 min-w-0 cursor-default select-none items-center gap-1.5 rounded-md border border-transparent py-1 px-2 text-xs [-webkit-app-region:no-drag]',
-        isActive
-          ? 'border-border bg-background-1 text-foreground'
-          : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
-      )}
-      onClick={onSelect}
-      onAuxClick={(event) => {
-        if (event.button === 1 && closeable) onClose();
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') onSelect();
-      }}
-    >
-      {/* One leading slot: the icon morphs into the close action on hover —
+const AppTab = observer(
+  forwardRef<HTMLDivElement, AppTabProps>(function AppTab(
+    {
+      tab,
+      isActive,
+      closeable,
+      closeLabel,
+      closeIcon,
+      closePending = false,
+      onSelect,
+      onClose,
+      drag,
+      ...rest
+    },
+    ref
+  ) {
+    const { t } = useTranslation();
+    // Branch prefix is display noise on the index tab ("yoda / yoda/feat-x" →
+    // "yoda / feat-x"), so describeTab strips it from branch labels.
+    const { value: projectSettings } = useAppSettingsKey('project');
+    const { label, icon } = describeTab(tab, t, projectSettings?.branchPrefix ?? '');
+
+    return (
+      <div
+        ref={ref}
+        role="tab"
+        aria-selected={isActive}
+        tabIndex={0}
+        title={label}
+        {...drag}
+        className={cn(
+          'group flex h-7 max-w-44 min-w-0 cursor-default select-none items-center gap-1.5 rounded-md border border-transparent py-1 px-2 text-xs [-webkit-app-region:no-drag]',
+          isActive
+            ? 'border-border bg-background-1 text-foreground'
+            : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
+        )}
+        onClick={onSelect}
+        onAuxClick={(event) => {
+          if (event.button === 1 && closeable) onClose();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') onSelect?.();
+        }}
+        {...rest}
+      >
+        {/* One leading slot: the icon morphs into the close action on hover —
           or persistently while dismissal is pending (e.g. a session being
           archived) — so tabs never spend an extra slot on a trailing ×. */}
-      <span className="relative flex size-4 shrink-0 items-center justify-center">
-        <span
-          className={cn(
-            'flex items-center justify-center',
-            closeable && 'group-hover:invisible',
-            closePending && 'invisible'
-          )}
-        >
-          {icon}
-        </span>
-        {closeable ? (
-          <button
-            type="button"
-            aria-label={closeLabel}
-            title={closeLabel}
-            disabled={closePending}
+        <span className="relative flex size-4 shrink-0 items-center justify-center">
+          <span
             className={cn(
-              'absolute inset-0 items-center justify-center rounded-sm text-foreground-passive hover:bg-background-2 hover:text-foreground',
-              closePending ? 'flex' : 'hidden group-hover:flex'
+              'flex items-center justify-center',
+              closeable && 'group-hover:invisible',
+              closePending && 'invisible'
             )}
-            onClick={(event) => {
-              event.stopPropagation();
-              onClose();
-            }}
           >
-            {closeIcon ?? <X className="size-3" />}
-          </button>
-        ) : null}
-      </span>
-      <span className="min-w-0 truncate">{label}</span>
-    </div>
-  );
-});
+            {icon}
+          </span>
+          {closeable ? (
+            <button
+              type="button"
+              aria-label={closeLabel}
+              title={closeLabel}
+              disabled={closePending}
+              className={cn(
+                'absolute inset-0 items-center justify-center rounded-sm text-foreground-passive hover:bg-background-2 hover:text-foreground',
+                closePending ? 'flex' : 'hidden group-hover:flex'
+              )}
+              onClick={(event) => {
+                event.stopPropagation();
+                onClose();
+              }}
+            >
+              {closeIcon ?? <X className="size-3" />}
+            </button>
+          ) : null}
+        </span>
+        <span className="min-w-0 truncate">{label}</span>
+      </div>
+    );
+  })
+);
 
 function lucideIcon(Icon: LucideIcon): ReactNode {
   return <Icon className="size-3.5" />;
 }
+
+/**
+ * Left-click dropdown for a task's index tab — the tab IS the project (Codex
+ * project-selector style). It surfaces the project identity and the task's
+ * identity without navigating, plus the few project operations that make sense
+ * from the strip. Right-click (AppTabContextMenu) and middle-click close stay
+ * on the underlying AppTab, untouched.
+ */
+const IndexTabProjectDropdown = observer(function IndexTabProjectDropdown({
+  projectId,
+  taskId,
+  ...tabProps
+}: { projectId: string; taskId: string } & Omit<AppTabProps, 'onSelect'>) {
+  const { t } = useTranslation();
+  const project = getProjectStore(projectId);
+  const taskActions = useTaskMenuActions(projectId, taskId);
+  const projectBundle = useProjectMenuActions(projectId);
+
+  const projectName = project?.displayName ?? projectId;
+  const projectPath = project?.data?.path;
+  const onRename = projectBundle?.actions.onRename;
+
+  const handleOpenSettings = () => {
+    appState.appTabs.openTab('project', { projectId, view: 'settings' });
+  };
+  const handleCopyPath = () => {
+    if (projectPath) void copyTextToClipboard(projectPath);
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<AppTab {...tabProps} />} />
+      <DropdownMenuContent align="start" className="w-72">
+        <DropdownMenuLabel className="flex flex-col gap-0.5">
+          <span className="truncate text-sm font-medium text-foreground">{projectName}</span>
+          {projectPath ? (
+            <span className="truncate text-xs text-foreground-muted" dir="rtl">
+              {projectPath}
+            </span>
+          ) : null}
+        </DropdownMenuLabel>
+        {taskActions ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="flex flex-col gap-0.5">
+              <span className="truncate">{taskActions.taskName}</span>
+              {taskActions.branchName ? (
+                <span className="truncate text-xs">{taskActions.branchName}</span>
+              ) : null}
+            </DropdownMenuLabel>
+          </>
+        ) : null}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={handleOpenSettings}>
+          <Settings className="size-4" />
+          {t('common.settings')}
+        </DropdownMenuItem>
+        {onRename ? (
+          <DropdownMenuItem onClick={onRename}>
+            <Pencil className="size-4" />
+            {t('common.rename')}
+          </DropdownMenuItem>
+        ) : null}
+        {projectPath ? (
+          <DropdownMenuItem onClick={handleCopyPath}>
+            <Copy className="size-4" />
+            {t('tasks.tabs.copyPath')}
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+});
 
 /** Label + icon for any top-level tab entry. Shared with the shell side pane's chips. */
 export function describeTab(
