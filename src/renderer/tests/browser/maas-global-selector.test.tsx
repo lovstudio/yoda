@@ -118,7 +118,7 @@ describe('MaasGlobalSelector', () => {
     );
   });
 
-  it('blocks an unverified Profile from being enabled at all', async () => {
+  it('allows enabling a configured Profile even when its connection test failed', async () => {
     mocks.binding = { platformId: null, enabled: false, effective: false, runtimeIds: [] };
     mocks.connections = [
       connection({
@@ -144,14 +144,15 @@ describe('MaasGlobalSelector', () => {
       document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
     ).find((item) => item.textContent?.includes('First Custom'));
 
-    expect(profile?.hasAttribute('data-disabled')).toBe(true);
-    expect(profile?.textContent).toContain('maas.global.needsSuccessfulTest');
+    expect(profile?.hasAttribute('data-disabled')).toBe(false);
     const enableSwitch = profile?.querySelector<HTMLElement>('[data-slot="switch"]');
-    expect(enableSwitch?.hasAttribute('data-disabled')).toBe(true);
-    expect(enableSwitch?.getAttribute('title')).toBe('maas.global.needsSuccessfulTest');
+    expect(enableSwitch?.hasAttribute('data-disabled')).toBe(false);
 
     await userEvent.click(profile!.querySelector<HTMLElement>('span')!);
-    expect(mocks.setBinding).not.toHaveBeenCalled();
+    expect(mocks.setBinding).toHaveBeenCalledWith(
+      { platformId: 'custom:first', enabled: true },
+      expect.any(Object)
+    );
   });
 });
 

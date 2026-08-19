@@ -1035,13 +1035,6 @@ export class MaasService {
       return { success: false, error: 'Unsupported MaaS platform.' };
     }
     const settings = await appSettingsService.get('maas');
-    const connection = getConnectedPlatform(settings, input.platformId);
-    if (input.enabled && connection && connection.lastTest?.ok !== true) {
-      return {
-        success: false,
-        error: 'Pass the MaaS connection test before enabling it.',
-      };
-    }
     const inferenceCredentials = input.enabled
       ? await this.getInferenceCredentials(input.platformId)
       : undefined;
@@ -1229,13 +1222,6 @@ export class MaasService {
           return {
             success: false,
             error: 'Only one MaaS platform can be active at a time.',
-          };
-        }
-        const connection = getConnectedPlatform(settings, input.platformId);
-        if (connection && connection.lastTest?.ok !== true) {
-          return {
-            success: false,
-            error: 'Pass the MaaS connection test before enabling a Client.',
           };
         }
         const inferenceCredentials = await this.getInferenceCredentials(input.platformId);

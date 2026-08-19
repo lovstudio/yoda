@@ -572,7 +572,7 @@ export const MaasView: React.FC<{
           const platformConfigured = Boolean(
             connection.connected && hasMaasInferenceCredential(connection)
           );
-          const enableAvailable = platformConfigured && connection.lastTest?.ok === true;
+          const enableAvailable = platformConfigured;
           const enablePending = Boolean(
             setGlobalBinding.isPending &&
               setGlobalBinding.variables?.platformId === connection.platformId
@@ -903,9 +903,7 @@ const PlatformAccordionItem: React.FC<
     });
   };
 
-  const enableUnavailableReason = connection.lastTest?.ok
-    ? t('maas.global.needsConfiguration')
-    : t('maas.global.needsSuccessfulTest');
+  const enableUnavailableReason = t('maas.global.needsConfiguration');
 
   return (
     <AccordionPrimitive.Item

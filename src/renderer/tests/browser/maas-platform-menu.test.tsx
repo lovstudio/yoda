@@ -690,7 +690,7 @@ describe('MaaS platform menu', () => {
     );
   });
 
-  it('requires a successful connection test before enabling a Profile from either surface', async () => {
+  it('allows enabling a Profile from either surface even when its connection test failed', async () => {
     mocks.connections = [
       connection({
         platformId: 'custom:first',
@@ -710,8 +710,7 @@ describe('MaaS platform menu', () => {
     const enableSwitch = host.querySelector<HTMLElement>(
       '[data-slot="switch"][aria-label="maas.global.enableAria"]'
     );
-    expect(enableSwitch?.hasAttribute('data-disabled')).toBe(true);
-    expect(enableSwitch?.getAttribute('title')).toBe('maas.global.needsSuccessfulTest');
+    expect(enableSwitch?.hasAttribute('data-disabled')).toBe(false);
 
     const { MaasGlobalSelector } = await import(
       '@renderer/features/maas/components/MaasGlobalSelector'
@@ -727,8 +726,7 @@ describe('MaaS platform menu', () => {
       document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
     ).find((item) => item.textContent?.includes('First Custom'));
     const profileSwitch = profileOption?.querySelector<HTMLElement>('[data-slot="switch"]');
-    expect(profileSwitch?.hasAttribute('data-disabled')).toBe(true);
-    expect(profileOption?.textContent).toContain('maas.global.needsSuccessfulTest');
+    expect(profileSwitch?.hasAttribute('data-disabled')).toBe(false);
   });
 
   it('groups Profile duplication, documentation, usage, and remove actions in one menu', async () => {

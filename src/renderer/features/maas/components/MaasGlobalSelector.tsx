@@ -41,12 +41,10 @@ export const MaasGlobalSelector: React.FC<{
     const platformConfigured = Boolean(
       connection?.connected && hasMaasInferenceCredential(connection)
     );
-    const available = platformConfigured && connection?.lastTest?.ok === true;
+    const available = platformConfigured;
     const selected = Boolean(binding.data?.enabled && binding.data.platformId === nextPlatformId);
     const effective = selected && binding.data?.effective;
-    const unavailableReason = connection?.lastTest?.ok
-      ? t('maas.global.needsConfiguration')
-      : t('maas.global.needsSuccessfulTest');
+    const unavailableReason = t('maas.global.needsConfiguration');
     const status = effective
       ? t('maas.global.effective', {
           count: binding.data?.runtimeIds.length ?? 0,

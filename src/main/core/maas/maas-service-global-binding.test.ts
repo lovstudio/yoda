@@ -1064,7 +1064,8 @@ describe('stored MaaS keys', () => {
     });
   });
 
-  it('rejects activation until the saved Profile passes its connection test', async () => {
+  it('rejects activation when no inference credentials are configured', async () => {
+    mocks.secrets = {};
     const result = await new MaasService().setGlobalBinding({
       platformId: 'zenmux',
       enabled: true,
@@ -1072,7 +1073,7 @@ describe('stored MaaS keys', () => {
 
     expect(result).toEqual({
       success: false,
-      error: 'Pass the MaaS connection test before enabling it.',
+      error: 'Connect the MaaS platform and save an API key before enabling it.',
     });
     expect(mocks.settings.runtimeBindings).toEqual([]);
     expect(mocks.codexAuthEnable).not.toHaveBeenCalled();
