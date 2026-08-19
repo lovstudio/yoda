@@ -414,6 +414,21 @@ describe('tmux session discovery', () => {
     await expect(listTmuxSessionMarkersStrict(ctx)).resolves.toEqual([]);
   });
 
+  it('treats a missing tmux binary (spawn ENOENT) as an empty marker set for strict cleanup too', async () => {
+    const ctx = {
+      root: undefined,
+      supportsLocalSpawn: true,
+      exec: vi
+        .fn()
+        .mockRejectedValue(Object.assign(new Error('spawn tmux ENOENT'), { code: 'ENOENT' })),
+      execStreaming: vi.fn(),
+      dispose: vi.fn(),
+    };
+
+    await expect(listTmuxSessionMarkers(ctx)).resolves.toEqual([]);
+    await expect(listTmuxSessionMarkersStrict(ctx)).resolves.toEqual([]);
+  });
+
   it('keeps transport and timeout failures observable to strict cleanup callers', async () => {
     const ctx = {
       root: undefined,

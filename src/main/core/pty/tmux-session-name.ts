@@ -232,10 +232,13 @@ export async function listTmuxSessionMarkersStrict(
       error instanceof Error ? error.message : String(error),
       typeof error === 'object' && error && 'stderr' in error ? String(error.stderr) : '',
     ].join('\n');
+    const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
     if (
+      code === 'ENOENT' ||
       /no server running(?: on )?/i.test(detail) ||
       /(?:error|failed) connecting to .*no such file or directory/i.test(detail)
     ) {
+      // No tmux binary on PATH means there can be no live Yoda tmux sessions.
       return [];
     }
     throw error;
