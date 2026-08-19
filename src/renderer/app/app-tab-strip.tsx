@@ -34,6 +34,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TaskWindowTabTarget } from '@shared/task-window';
 import { AppTabContextMenu } from '@renderer/app/app-tab-context-menu';
+import { openNewTaskFromPreference } from '@renderer/app/open-new-task';
 import { closeTaskTopTab, moveDraggedTabToStrip } from '@renderer/app/open-task-target';
 import {
   tabDragSource,
@@ -58,7 +59,6 @@ import {
 } from '@renderer/features/tasks/stores/task-selectors';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { FileIcon } from '@renderer/lib/editor/file-icon';
-import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import {
   isIndexTab,
@@ -108,7 +108,6 @@ const VIEW_ICONS: Partial<Record<ViewId, LucideIcon>> = {
 export const AppTabStrip = observer(function AppTabStrip() {
   const { t } = useTranslation();
   const { visibleTabs, activeTabId } = appState.appTabs;
-  const { navigate } = useNavigate();
 
   // The strip is scope-isolated, so the first task/project tab carries the
   // active scope's identity.
@@ -117,9 +116,10 @@ export const AppTabStrip = observer(function AppTabStrip() {
   const projectId = typeof scopeParams?.projectId === 'string' ? scopeParams.projectId : undefined;
   const taskId = typeof scopeParams?.taskId === 'string' ? scopeParams.taskId : undefined;
 
-  // The strip's "+" always creates a new task in the current project scope.
+  // The strip's "+" always creates a new task in the current project scope,
+  // opening it the way the persisted "new task" preference (home vs modal) says.
   const handleNewSession = () => {
-    navigate('home', projectId ? { projectId } : undefined);
+    void openNewTaskFromPreference(projectId);
   };
   const newSessionLabel = t('sidebar.newTask');
   const newSessionDisabled = false;
@@ -203,7 +203,6 @@ const ProjectAddMenu = observer(function ProjectAddMenu({
   newTaskLabel: string;
 }) {
   const { t } = useTranslation();
-  const { navigate } = useNavigate();
 
   const openViews = new Set(
     appState.appTabs.visibleTabs
@@ -248,7 +247,7 @@ const ProjectAddMenu = observer(function ProjectAddMenu({
           );
         })}
         {candidates.length > 0 ? <DropdownMenuSeparator /> : null}
-        <DropdownMenuItem onClick={() => navigate('home', { projectId })}>
+        <DropdownMenuItem onClick={() => void openNewTaskFromPreference(projectId)}>
           <Plus className="size-4" />
           {newTaskLabel}
         </DropdownMenuItem>
