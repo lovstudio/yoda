@@ -3670,6 +3670,7 @@
     "modelCandidates": "打开模型候选",
     "modelCustom": "自定义",
     "modelCustomHint": "输入任意模型名称以使用自定义模型",
+    "modelSuffixHint": "模型 ID 可携带可选后缀，例如 [1m]",
     "reasoningEffort": "推理深度",
     "reasoningDefault": "跟随客户端",
     "reasoningClientHint": "选择 Codex 后可单独设置推理深度。",

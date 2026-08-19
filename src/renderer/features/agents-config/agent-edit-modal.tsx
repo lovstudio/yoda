@@ -325,6 +325,9 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
                   onChange={(value) => set('model', value)}
                   className="h-9 text-sm"
                 />
+                <p className="text-[10px] leading-relaxed text-muted-foreground">
+                  {t('agentManager.modelSuffixHint')}
+                </p>
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">

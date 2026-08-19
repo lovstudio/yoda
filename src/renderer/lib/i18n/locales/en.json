@@ -3670,6 +3670,7 @@
     "modelCandidates": "Open model suggestions",
     "modelCustom": "Custom",
     "modelCustomHint": "Type any model name to use a custom model",
+    "modelSuffixHint": "Model IDs may carry an optional suffix, e.g. [1m]",
     "reasoningEffort": "Reasoning effort",
     "reasoningDefault": "Use client default",
     "reasoningClientHint": "Choose Codex to configure reasoning effort for this agent.",
