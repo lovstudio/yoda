@@ -136,3 +136,4 @@ optional_env:
 - Base UI 弹层退场动画：卸载前必须先关闭弹层（Esc + 250ms 等待），否则全局 bookkeeping 认为菜单还开着，下次 trigger 拒绝打开（2026-08-18, 359a1b9）
 - Base UI Tabs 只挂载激活面板：测试里断言非激活 tab 的内容必须先点 tab 再 waitFor（2026-08-18, 8c3195a）
 - 去掉组件的 `observer` 包裹会让 react-hooks/set-state-in-effect 等规则突然开始生效，原有 effect 里的同步 setState 会新报 lint（2026-08-18, 8c3195a）
+- 新增 drizzle 迁移改变 journal 尾部时，`migrations.test.ts` 里只 apply `count-1`/部分历史的 skip-ahead fixture 必须为新 tail 迁移创建目标表，否则 `runBundledMigrations` 在 `ALTER TABLE` 时报 "no such table"（2026-08-19, 1363a59）
