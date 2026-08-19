@@ -20,6 +20,7 @@ import type { MaasGatewayAvailability } from '@renderer/features/maas/maas-gatew
 const mocks = vi.hoisted(() => ({
   showZenmuxUsage: vi.fn(),
   showAddProfile: vi.fn(),
+  showConnectionTest: vi.fn(),
   showConfirm: vi.fn(),
   clearCodexClientSync: vi.fn(),
   setCodexClientSync: vi.fn(),
@@ -288,7 +289,9 @@ vi.mock('@renderer/lib/modal/modal-provider', () => ({
         }
       : id === 'addMaasProfileModal'
         ? mocks.showAddProfile
-        : mocks.showZenmuxUsage,
+        : id === 'maasConnectionTestModal'
+          ? mocks.showConnectionTest
+          : mocks.showZenmuxUsage,
 }));
 
 describe('MaaS platform menu', () => {
@@ -527,7 +530,7 @@ describe('MaaS platform menu', () => {
     );
   });
 
-  it('keeps the Profile header focused on its name, last valid check, switch, and actions', async () => {
+  it('keeps the Profile header focused on its name, test status marker, switch, and actions', async () => {
     mocks.connections = [
       connection({
         lastCheckedAt: '2026-08-12T03:30:00.000Z',
@@ -549,16 +552,16 @@ describe('MaaS platform menu', () => {
 
     const profile = host.querySelector<HTMLElement>('[data-maas-platform-id="zenmux"]');
     expect(profile?.textContent).toContain('ZenMux');
-    expect(profile?.textContent).toContain('maas.connection.lastVerified');
-    expect(profile?.textContent).toContain('maas.connection.testSpeed');
+    expect(profile?.textContent).not.toContain('maas.connection.lastVerified');
+    expect(profile?.textContent).not.toContain('maas.connection.testSpeed');
     expect(profile?.textContent).not.toContain('maas.platforms.zenmux.description');
     expect(profile?.textContent).not.toContain('maas.global.enabled');
     expect(profile?.textContent).not.toContain('maas.global.disabled');
     expect(
-      profile?.querySelector('[data-testid="maas-profile-last-activity"] time')
+      profile?.querySelector('[data-testid="maas-profile-test-marker"][data-status="ok"]')
     ).not.toBeNull();
     expect(profile?.querySelector('[data-slot="switch"]')).not.toBeNull();
-    expect(profile?.querySelector('[aria-label="maas.connection.test"]')).not.toBeNull();
+    expect(profile?.querySelector('[aria-label="maas.connection.testDialogTitle"]')).not.toBeNull();
     expect(profile?.querySelector('[aria-label="maas.profile.actions"]')).not.toBeNull();
 
     const profileTrigger = profile?.querySelector<HTMLButtonElement>('h3 > button');
@@ -608,9 +611,8 @@ describe('MaaS platform menu', () => {
     expect(getTestButton()?.disabled).toBe(false);
     expect(getSaveButton()).toBeNull();
     await act(async () => getTestButton()?.click());
-    expect(mocks.checkConnection).toHaveBeenCalledWith(
-      'zenmux',
-      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
+    expect(mocks.showConnectionTest).toHaveBeenCalledWith(
+      expect.objectContaining({ platformId: 'zenmux' })
     );
 
     await act(async () => setInputValue(nameInput!, ''));

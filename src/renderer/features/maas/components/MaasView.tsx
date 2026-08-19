@@ -78,13 +78,11 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from '@renderer/lib/ui/input-group';
-import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import { getVisibleMaasPlatformIds } from '../maas-platform-list';
 import {
-  useCheckMaasConnection,
   useCodexClientSyncStatus,
   useConnectMaasPlatform,
   useDisconnectMaasPlatform,
@@ -132,54 +130,6 @@ function findConnection(
     }
   );
 }
-
-function formatDateTime(value: string | null): string {
-  if (!value) return '';
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value));
-}
-
-const ProfileLastActivity: React.FC<{ connection: MaasConnection }> = ({ connection }) => {
-  const { t } = useTranslation();
-  const checkedAt = connection.lastTest?.checkedAt ?? connection.lastCheckedAt;
-
-  if (!checkedAt) {
-    return (
-      <span
-        data-testid="maas-profile-last-activity"
-        className="shrink-0 text-[11px] text-foreground-muted"
-      >
-        {t('maas.connection.neverChecked')}
-      </span>
-    );
-  }
-
-  const failed = connection.lastTest?.ok === false;
-  return (
-    <span
-      data-testid="maas-profile-last-activity"
-      title={formatDateTime(checkedAt)}
-      className={cn(
-        'shrink-0 text-[11px] tabular-nums',
-        failed ? 'text-amber-600 dark:text-amber-400' : 'text-foreground-muted'
-      )}
-    >
-      <span>{t(failed ? 'maas.connection.lastCheckFailed' : 'maas.connection.lastVerified')} </span>
-      <RelativeTime value={checkedAt} />
-      {connection.lastTest?.averageLatencyMs != null ? (
-        <span>
-          {t('maas.connection.testSpeed', {
-            latency: connection.lastTest.averageLatencyMs,
-          })}
-        </span>
-      ) : null}
-    </span>
-  );
-};
 
 function formatMaskedApiKey(fingerprint: string | null): string {
   const value = fingerprint?.trim();
@@ -407,6 +357,7 @@ export const MaasView: React.FC<{
   const managedGatewayStarsQuery = useMaasManagedGatewayStars();
   const showZenmuxUsage = useShowModal('zenmuxUsageModal');
   const showAddProfile = useShowModal('addMaasProfileModal');
+  const showConnectionTest = useShowModal('maasConnectionTestModal');
   const [initialRequestedPlatformId] = useState<MaasPlatformId | undefined>(() =>
     requestedPlatformId === 'custom' ? createMaasProfileId() : requestedPlatformId
   );
@@ -581,6 +532,11 @@ export const MaasView: React.FC<{
             connection,
             onOpenUsage:
               templateId === 'zenmux' ? () => showZenmuxUsage({ platformId }) : undefined,
+            onOpenTest: () =>
+              showConnectionTest({
+                platformId,
+                onConfigure: () => setExpandedPlatformId(platformId),
+              }),
             onCancelDraft: isDraft ? () => handleCancelDraft(platformId) : undefined,
             onConnected: () => handlePlatformConnected(platformId),
             onDuplicated: (duplicate: MaasConnection) =>
@@ -808,6 +764,7 @@ const EMPTY_CONNECTION_EDITOR_STATE: ConnectionEditorState = {
 type PlatformAccordionItemProps = {
   connection: MaasConnection;
   onOpenUsage?: () => void;
+  onOpenTest: () => void;
   onCancelDraft?: () => void;
   onConnected: () => void;
   onDuplicated: (connection: MaasConnection) => void;
@@ -828,6 +785,7 @@ const PlatformAccordionItem: React.FC<
 > = ({
   connection,
   onOpenUsage,
+  onOpenTest,
   onCancelDraft,
   onConnected,
   onDuplicated,
@@ -844,7 +802,6 @@ const PlatformAccordionItem: React.FC<
   const { toast } = useToast();
   const disconnectMutation = useDisconnectMaasPlatform();
   const duplicateMutation = useDuplicateMaasProfile();
-  const checkMutation = useCheckMaasConnection();
   const platform = getMaasPlatformDefinition(connection.platformId);
   const templateId = getMaasPlatformTemplateId(connection.platformId);
   const formId = `maas-profile-form-${useId()}`;
@@ -884,25 +841,6 @@ const PlatformAccordionItem: React.FC<
     );
   };
 
-  const handleCheckConnection = () => {
-    checkMutation.mutate(connection.platformId, {
-      onSuccess: (result) => {
-        if (result.ok) return;
-        toast({
-          title: t('maas.connection.testFailed'),
-          description: result.error ?? t('maas.connection.testFailed'),
-          variant: 'destructive',
-        });
-      },
-      onError: (error) =>
-        toast({
-          title: t('maas.connection.testFailed'),
-          description: error instanceof Error ? error.message : String(error),
-          variant: 'destructive',
-        }),
-    });
-  };
-
   const enableUnavailableReason = t('maas.global.needsConfiguration');
 
   return (
@@ -939,11 +877,8 @@ const PlatformAccordionItem: React.FC<
               <Layers className="h-3.5 w-3.5 text-muted-foreground" />
             )}
           </span>
-          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-0.5">
-            <span className="truncate text-sm font-medium text-foreground">
-              {connection.displayName}
-            </span>
-            <ProfileLastActivity connection={connection} />
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+            {connection.displayName}
           </span>
         </AccordionPrimitive.Trigger>
         <HeaderActionToolbar label={t('maas.connection.profileActions')}>
@@ -966,23 +901,24 @@ const PlatformAccordionItem: React.FC<
           ) : null}
           <HeaderActionButton
             type="button"
-            label={
-              checkMutation.isPending ? t('maas.connection.testing') : t('maas.connection.test')
-            }
-            disabled={
-              !connection.connected ||
-              editorState.dirty ||
-              editorState.saving ||
-              checkMutation.isPending
-            }
-            onClick={handleCheckConnection}
+            label={t('maas.connection.testDialogTitle')}
+            disabled={!connection.connected || editorState.dirty || editorState.saving}
+            onClick={onOpenTest}
             data-testid="maas-profile-test"
           >
-            {checkMutation.isPending ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
+            <span className="relative inline-flex">
               <Activity className="size-3.5" />
-            )}
+              {connection.lastTest != null ? (
+                <span
+                  data-testid="maas-profile-test-marker"
+                  data-status={connection.lastTest.ok ? 'ok' : 'failed'}
+                  className={cn(
+                    'absolute -right-[3px] -top-[3px] size-[7px] rounded-full ring-2 ring-background',
+                    connection.lastTest.ok ? 'bg-emerald-500' : 'bg-amber-500'
+                  )}
+                />
+              ) : null}
+            </span>
           </HeaderActionButton>
         </HeaderActionToolbar>
         <div className="flex shrink-0 items-center px-1">

@@ -7,6 +7,7 @@ import { CommandPaletteModal } from '@renderer/features/command-palette/command-
 import { DoctorModal } from '@renderer/features/doctor/doctor-modal';
 import { IntegrationSetupModal } from '@renderer/features/integrations/integration-setup-modal';
 import { AddMaasProfileModal } from '@renderer/features/maas/components/AddMaasProfileModal';
+import { MaasConnectionTestModal } from '@renderer/features/maas/components/MaasConnectionTestModal';
 import { ZenmuxUsageModal } from '@renderer/features/maas/components/ZenmuxUsageModal';
 import { McpModal } from '@renderer/features/mcp/components/McpModal';
 import { AddProjectModal } from '@renderer/features/projects/components/add-project-modal/add-project-modal';
@@ -85,6 +86,7 @@ export const modalRegistry = {
   confirmActionModal: createModal(ConfirmActionDialog, { size: 'xs' }),
   feedbackModal: createModal(FeedbackModal),
   addMaasProfileModal: createModal(AddMaasProfileModal, { size: 'sm' }),
+  maasConnectionTestModal: createModal(MaasConnectionTestModal, { size: 'md' }),
   zenmuxUsageModal: createModal(ZenmuxUsageModal, { size: 'lg' }),
   mcpServerModal: createModal(McpModal),
   createSkillModal: createModal(CreateSkillModal),
