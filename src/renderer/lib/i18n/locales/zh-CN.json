@@ -4842,7 +4842,6 @@
       "disabled": "未启用",
       "notEnabled": "可启用",
       "needsConfiguration": "需要先配置 API Key",
-      "needsSuccessfulTest": "测试连接通过后才可启用",
       "needsGateway": "需要先安装并启用 Yoda 模型网关",
       "toggleAria": "全局启用 {{platform}}",
       "enableAria": "启用 {{platform}}",

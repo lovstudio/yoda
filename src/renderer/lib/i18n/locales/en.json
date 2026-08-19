@@ -4842,7 +4842,6 @@
       "disabled": "Disabled",
       "notEnabled": "Available",
       "needsConfiguration": "Configure an API key first",
-      "needsSuccessfulTest": "Pass the connection test before enabling",
       "needsGateway": "Install and enable Yoda Model Gateway first",
       "toggleAria": "Enable {{platform}} globally",
       "enableAria": "Enable {{platform}}",
